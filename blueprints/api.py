@@ -1,10 +1,11 @@
 import os
 import stripe
-import requests as http_requests
+from datetime import date, timedelta
 from flask import Blueprint, request, jsonify
 from models import Booking, Client
 from extensions import db
 from pricing import calculate_price, SERVICES, EXTRAS, FREQUENCY_LABELS, DEPOSIT_AMOUNT
+from notifications import send_email, send_sms
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -22,6 +23,40 @@ def add_cors(response, origin):
     response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     return response
+
+
+# ── Public config (Stripe publishable key) ───────────────────────────────────
+
+@api_bp.route('/config', methods=['GET', 'OPTIONS'])
+def get_config():
+    origin = request.headers.get('Origin', '')
+    if request.method == 'OPTIONS':
+        return add_cors(jsonify({}), origin), 200
+    resp = jsonify({'stripe_pk': os.environ.get('STRIPE_PUBLISHABLE_KEY', '')})
+    return add_cors(resp, origin), 200
+
+
+# ── 24-hour reminder sender (call from a cron or Railway scheduled job) ───────
+
+@api_bp.route('/reminders', methods=['POST'])
+def send_reminders():
+    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
+    expected = os.environ.get('REMINDER_API_KEY', '')
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    bookings = Booking.query.filter(
+        Booking.preferred_date == tomorrow,
+        Booking.status.in_(['pending', 'confirmed']),
+    ).all()
+
+    count = 0
+    for b in bookings:
+        _send_reminder(b)
+        count += 1
+
+    return jsonify({'ok': True, 'reminders_sent': count})
 
 
 # ── Pricing calculator endpoint ──────────────────────────────────────────────
@@ -189,79 +224,59 @@ def stripe_webhook():
     return jsonify({'ok': True}), 200
 
 
-# ── Email helper ───────────────────────────────────────────────────────────────
-
-def _send_email(api_key, from_email, from_name, to_email, to_name, subject, html):
-    try:
-        http_requests.post(
-            'https://api.brevo.com/v3/smtp/email',
-            headers={'api-key': api_key, 'Content-Type': 'application/json'},
-            json={
-                'sender': {'name': from_name, 'email': from_email},
-                'to': [{'email': to_email, 'name': to_name}],
-                'subject': subject,
-                'htmlContent': html,
-            },
-            timeout=10,
-        )
-    except Exception:
-        pass
-
+# ── Notification helpers ───────────────────────────────────────────────────────
 
 def _send_confirmation(booking: Booking):
-    api_key = os.environ.get('BREVO_API_KEY')
-    from_email = os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
     notify_email = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
-    if not api_key:
-        return
-
     freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')
     extras_text = f"<p><strong>Add-ons:</strong> {booking.extras}</p>" if booking.extras else ''
     date_text = booking.preferred_date or 'Flexible'
     time_text = booking.preferred_time or 'Flexible'
 
     # Email to customer
-    _send_email(
-        api_key=api_key,
-        from_email=from_email,
-        from_name='Dazzle & Shine Maids',
+    send_email(
         to_email=booking.email,
         to_name=booking.name,
         subject='Your booking is confirmed — Dazzle & Shine Maids',
         html=f"""
-<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333;">
-  <h2 style="color:#b98a33;">Booking Confirmed!</h2>
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">Booking Confirmed!</h2>
   <p>Hi {booking.name},</p>
   <p>Your $50 deposit has been received. Here's your booking summary:</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0;" />
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <p><strong>Service:</strong> {booking.service_label}</p>
   <p><strong>Frequency:</strong> {freq_label}</p>
   <p><strong>Bedrooms:</strong> {booking.bedrooms} &nbsp; <strong>Bathrooms:</strong> {booking.bathrooms}</p>
   {extras_text}
   <p><strong>Date:</strong> {date_text} &nbsp; <strong>Time:</strong> {time_text}</p>
   <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0;" />
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <p><strong>Total price:</strong> ${booking.price:.2f}</p>
   <p><strong>Deposit paid:</strong> $50.00</p>
   <p><strong>Balance due after cleaning:</strong> ${booking.balance_due:.2f}</p>
-  <p style="font-size:0.88rem;color:#9a95ad;">Deposit is non-refundable. You may reschedule your date at any time.</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0;" />
+  <p style="font-size:0.88rem;color:#9a95ad">Deposit is non-refundable. You may reschedule at any time.</p>
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <p>Questions? Call or text <strong>(407) 743-1944</strong> or reply to this email.</p>
-  <p style="color:#9a95ad;font-size:14px;">Dazzle &amp; Shine Maids · Orlando, FL</p>
-</div>
-""",
+  <p style="color:#9a95ad;font-size:14px">Dazzle &amp; Shine Maids · Orlando, FL</p>
+</div>""",
+    )
+
+    # SMS to customer
+    send_sms(
+        booking.phone,
+        f"Hi {booking.name.split()[0]}! Your Dazzle & Shine cleaning is confirmed for {date_text}. "
+        f"Deposit received. Balance due: ${booking.balance_due:.2f}. "
+        f"Questions? Call (407) 743-1944. Reply STOP to opt out.",
     )
 
     # Notification to owner
-    _send_email(
-        api_key=api_key,
-        from_email=from_email,
-        from_name='Dazzle & Shine Bookings',
+    send_email(
         to_email=notify_email,
         to_name='Dazzle & Shine Maids',
+        from_name='Dazzle & Shine Bookings',
         subject=f'New booking + deposit paid: {booking.name} — {booking.service_label}',
         html=f"""
-<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333;">
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <h2>New Booking — $50 Deposit Received</h2>
   <p><strong>Name:</strong> {booking.name}</p>
   <p><strong>Email:</strong> {booking.email}</p>
@@ -274,6 +289,36 @@ def _send_confirmation(booking: Booking):
   <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
   <p><strong>Total:</strong> ${booking.price:.2f} &nbsp; <strong>Balance due:</strong> ${booking.balance_due:.2f}</p>
   <p><strong>Notes:</strong> {booking.notes or '—'}</p>
-</div>
-""",
+</div>""",
+    )
+
+
+def _send_reminder(booking: Booking):
+    freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')
+    date_text = booking.preferred_date or 'Tomorrow'
+    time_text = booking.preferred_time or 'your scheduled time'
+
+    send_email(
+        to_email=booking.email,
+        to_name=booking.name,
+        subject='Your cleaning is tomorrow — Dazzle & Shine Maids',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">See you tomorrow!</h2>
+  <p>Hi {booking.name}, just a friendly reminder about your upcoming cleaning:</p>
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
+  <p><strong>Service:</strong> {booking.service_label}</p>
+  <p><strong>Date:</strong> {date_text} at {time_text}</p>
+  <p><strong>Address:</strong> {booking.address}, {booking.city}</p>
+  <p><strong>Balance due after cleaning:</strong> ${booking.balance_due:.2f}</p>
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
+  <p>Need to reschedule? Call or text <strong>(407) 743-1944</strong> as soon as possible.</p>
+  <p style="color:#9a95ad;font-size:14px">Dazzle &amp; Shine Maids · Orlando, FL</p>
+</div>""",
+    )
+
+    send_sms(
+        booking.phone,
+        f"Hi {booking.name.split()[0]}! Reminder: your Dazzle & Shine cleaning is tomorrow at {time_text}. "
+        f"Balance due: ${booking.balance_due:.2f}. Need to reschedule? Call (407) 743-1944. Reply STOP to opt out.",
     )

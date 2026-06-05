@@ -237,8 +237,14 @@
       <a href="{{ url_for('bookings.index') }}" class="{{ 'active' if request.blueprint == 'bookings' and request.endpoint != 'bookings.clients' and request.endpoint != 'bookings.client_detail' }}">
         <span class="icon">📋</span> Bookings
       </a>
+      <a href="{{ url_for('bookings.calendar') }}" class="{{ 'active' if request.endpoint == 'bookings.calendar' }}">
+        <span class="icon">📅</span> Calendar
+      </a>
       <a href="{{ url_for('bookings.clients') }}" class="{{ 'active' if request.endpoint in ['bookings.clients','bookings.client_detail'] }}">
         <span class="icon">👥</span> Clients
+      </a>
+      <a href="{{ url_for('staff.index') }}" class="{{ 'active' if request.blueprint == 'staff' }}">
+        <span class="icon">🧹</span> Team
       </a>
       <a href="{{ url_for('settings.pricing') }}" class="{{ 'active' if request.blueprint == 'settings' }}">
         <span class="icon">⚙️</span> Settings

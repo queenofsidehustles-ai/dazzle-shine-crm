@@ -62,6 +62,18 @@
           <input type="text" name="preferred_time" placeholder="e.g. 10:00 AM" value="{{ booking.preferred_time or '' }}" />
         </div>
         <div class="form-group">
+          <label>Assigned Cleaner</label>
+          <select name="assigned_cleaner">
+            <option value="">— Unassigned —</option>
+            {% for s in staff %}
+            <option value="{{ s.name }}" {{ 'selected' if booking.assigned_cleaner == s.name }}>{{ s.name }}</option>
+            {% endfor %}
+            {% if booking.assigned_cleaner and booking.assigned_cleaner not in (staff | map(attribute='name') | list) %}
+            <option value="{{ booking.assigned_cleaner }}" selected>{{ booking.assigned_cleaner }}</option>
+            {% endif %}
+          </select>
+        </div>
+        <div class="form-group">
           <label>Internal Notes</label>
           <textarea name="internal_notes" placeholder="Notes for your team only...">{{ booking.internal_notes or '' }}</textarea>
         </div>

@@ -1,0 +1,54 @@
+{% extends "base_admin.html" %}
+{% block title %}Team — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Team / Cleaners{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('staff.new') }}" class="btn btn-gold" style="padding:7px 16px;font-size:0.88rem">+ Add Team Member</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  {% if staff %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in staff %}
+        <tr>
+          <td>
+            <span style="display:inline-flex;align-items:center;gap:8px">
+              <span style="width:11px;height:11px;border-radius:50%;background:{{ s.color }};flex-shrink:0"></span>
+              <strong>{{ s.name }}</strong>
+            </span>
+          </td>
+          <td>{{ s.phone or '—' }}</td>
+          <td>{{ s.email or '—' }}</td>
+          <td>
+            {% if s.is_active %}
+              <span class="status status-confirmed">Active</span>
+            {% else %}
+              <span class="status status-cancelled">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('staff.edit', staff_id=s.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+    No team members yet. <a href="{{ url_for('staff.new') }}" style="color:#d3a84f">Add your first cleaner →</a>
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

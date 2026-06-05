@@ -1,0 +1,69 @@
+{% extends "base_admin.html" %}
+{% block title %}Calendar — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Calendar{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('bookings.index') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">List View</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <!-- Month Navigation -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px">
+    <a href="{{ url_for('bookings.calendar', year=prev_year, month=prev_month) }}"
+       class="btn btn-outline" style="padding:7px 16px">← Prev</a>
+    <h2 style="font-size:1.3rem;font-weight:700;color:#1f1333">{{ month_name }} {{ year }}</h2>
+    <a href="{{ url_for('bookings.calendar', year=next_year, month=next_month) }}"
+       class="btn btn-outline" style="padding:7px 16px">Next →</a>
+  </div>
+
+  <!-- Day headers -->
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">
+    {% for day_name in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] %}
+    <div style="text-align:center;font-size:0.72rem;font-weight:700;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;padding:6px 0">{{ day_name }}</div>
+    {% endfor %}
+  </div>
+
+  <!-- Calendar grid -->
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+    {% for week in cal %}
+      {% for day in week %}
+        {% if day == 0 %}
+        <div style="min-height:90px;background:#f6f5fb;border-radius:8px"></div>
+        {% else %}
+          {% set day_bookings = bookings_by_day.get(day, []) %}
+          {% set is_today = (year == today.year and month == today.month and day == today.day) %}
+        <div style="min-height:90px;background:white;border-radius:8px;padding:6px;border:1px solid {{ '#d3a84f' if is_today else '#e4dfef' }};{{ 'box-shadow:0 0 0 2px rgba(211,168,79,0.2)' if is_today }}">
+          <div style="font-size:0.8rem;font-weight:700;color:{{ '#d3a84f' if is_today else '#5f5878' }};margin-bottom:4px">{{ day }}</div>
+          {% for b in day_bookings %}
+          <a href="{{ url_for('bookings.detail', booking_id=b.id) }}"
+             title="{{ b.name }} — {{ b.service_label }}"
+             style="display:block;font-size:0.7rem;padding:2px 5px;border-radius:4px;margin-bottom:2px;
+                    text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                    {% if b.status == 'confirmed' %}background:#dbeafe;color:#1e40af;
+                    {% elif b.status == 'completed' %}background:#d1fae5;color:#065f46;
+                    {% elif b.status == 'cancelled' %}background:#fee2e2;color:#991b1b;
+                    {% else %}background:#fef3c7;color:#92400e;{% endif %}">
+            {{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </div>
+
+  <!-- Legend -->
+  <div style="display:flex;gap:18px;margin-top:16px;flex-wrap:wrap;padding-top:14px;border-top:1px solid #e4dfef">
+    {% for label, bg, border in [
+      ('Pending',   '#fef3c7', '#f59e0b'),
+      ('Confirmed', '#dbeafe', '#3b82f6'),
+      ('Completed', '#d1fae5', '#10b981'),
+    ] %}
+    <span style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:#5f5878">
+      <span style="width:12px;height:12px;border-radius:3px;background:{{ bg }};border:1px solid {{ border }}"></span>
+      {{ label }}
+    </span>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
