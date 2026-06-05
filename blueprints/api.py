@@ -1,5 +1,5 @@
 import os
-import resend
+import requests
 from flask import Blueprint, request, jsonify
 from models import Booking, Client
 from extensions import db
@@ -79,15 +79,30 @@ def create_booking():
     return add_cors(resp, origin), 201
 
 
+def _send_email(api_key, from_email, from_name, to_email, to_name, subject, html):
+    try:
+        requests.post(
+            'https://api.brevo.com/v3/smtp/email',
+            headers={'api-key': api_key, 'Content-Type': 'application/json'},
+            json={
+                'sender': {'name': from_name, 'email': from_email},
+                'to': [{'email': to_email, 'name': to_name}],
+                'subject': subject,
+                'htmlContent': html,
+            },
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
 def _send_confirmation(booking: Booking):
-    api_key = os.environ.get('RESEND_API_KEY')
+    api_key = os.environ.get('BREVO_API_KEY')
     from_email = os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
     notify_email = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
 
     if not api_key:
         return
-
-    resend.api_key = api_key
 
     extras_text = ''
     if booking.extras:
@@ -97,12 +112,14 @@ def _send_confirmation(booking: Booking):
     time_text = booking.preferred_time or 'Flexible'
 
     # Confirmation to customer
-    try:
-        resend.Emails.send({
-            'from': f'Dazzle & Shine Maids <{from_email}>',
-            'to': booking.email,
-            'subject': 'Your booking request was received — Dazzle & Shine Maids',
-            'html': f"""
+    _send_email(
+        api_key=api_key,
+        from_email=from_email,
+        from_name='Dazzle & Shine Maids',
+        to_email=booking.email,
+        to_name=booking.name,
+        subject='Your booking request was received — Dazzle & Shine Maids',
+        html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333;">
   <h2 style="color:#b98a33;">We got your request!</h2>
   <p>Hi {booking.name},</p>
@@ -119,17 +136,17 @@ def _send_confirmation(booking: Booking):
   <p style="color:#9a95ad;font-size:14px;">Dazzle &amp; Shine Maids · Orlando, FL</p>
 </div>
 """,
-        })
-    except Exception:
-        pass
+    )
 
     # Notification to owner
-    try:
-        resend.Emails.send({
-            'from': f'Dazzle & Shine Bookings <{from_email}>',
-            'to': notify_email,
-            'subject': f'New booking: {booking.name} — {booking.service_label}',
-            'html': f"""
+    _send_email(
+        api_key=api_key,
+        from_email=from_email,
+        from_name='Dazzle & Shine Bookings',
+        to_email=notify_email,
+        to_name='Dazzle & Shine Maids',
+        subject=f'New booking: {booking.name} — {booking.service_label}',
+        html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333;">
   <h2>New Booking Request</h2>
   <p><strong>Name:</strong> {booking.name}</p>
@@ -143,6 +160,4 @@ def _send_confirmation(booking: Booking):
   <p><strong>Notes:</strong> {booking.notes or '—'}</p>
 </div>
 """,
-        })
-    except Exception:
-        pass
+    )
