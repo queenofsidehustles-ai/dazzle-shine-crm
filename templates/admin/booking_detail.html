@@ -1,0 +1,80 @@
+{% extends "base_admin.html" %}
+{% block title %}Booking #{{ booking.id }} — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Booking #{{ booking.id }}{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('bookings.index') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← All Bookings</a>
+{% endblock %}
+
+{% block content %}
+<div class="detail-grid">
+
+  <!-- LEFT: Client & Service Info -->
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Client Info</h2>
+      <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ booking.name }}</span></div>
+      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ booking.email }}" style="color:#5d4f7d">{{ booking.email }}</a></span></div>
+      <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ booking.phone }}" style="color:#5d4f7d">{{ booking.phone }}</a></span></div>
+      <div class="detail-row"><span class="dl">Address</span><span class="dv">{{ booking.address }}{% if booking.city %}, {{ booking.city }}{% endif %} {{ booking.zip_code }}</span></div>
+      {% if booking.notes %}
+      <div class="detail-row"><span class="dl">Customer Notes</span><span class="dv" style="color:#5f5878">{{ booking.notes }}</span></div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Service Details</h2>
+      <div class="detail-row"><span class="dl">Service</span><span class="dv">{{ booking.service_label }}</span></div>
+      <div class="detail-row"><span class="dl">Bedrooms</span><span class="dv">{{ booking.bedrooms or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Bathrooms</span><span class="dv">{{ booking.bathrooms or '—' }}</span></div>
+      {% if booking.extras %}
+      <div class="detail-row"><span class="dl">Add-ons</span><span class="dv">{{ booking.extras }}</span></div>
+      {% endif %}
+      <div class="detail-row"><span class="dl">Requested Date</span><span class="dv">{{ booking.preferred_date or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Requested Time</span><span class="dv">{{ booking.preferred_time or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Received</span><span class="dv" style="color:#9a95ad;font-size:0.88rem">{{ booking.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Edit Status & Notes -->
+  <div>
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Manage Booking</h2>
+      <form method="POST">
+        <div class="form-group">
+          <label>Status</label>
+          <select name="status">
+            <option value="pending" {{ 'selected' if booking.status == 'pending' }}>Pending</option>
+            <option value="confirmed" {{ 'selected' if booking.status == 'confirmed' }}>Confirmed</option>
+            <option value="completed" {{ 'selected' if booking.status == 'completed' }}>Completed</option>
+            <option value="cancelled" {{ 'selected' if booking.status == 'cancelled' }}>Cancelled</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Price ($)</label>
+          <input type="number" name="price" step="0.01" placeholder="e.g. 150" value="{{ booking.price or '' }}" />
+        </div>
+        <div class="form-group">
+          <label>Confirmed Date</label>
+          <input type="date" name="preferred_date" value="{{ booking.preferred_date or '' }}" />
+        </div>
+        <div class="form-group">
+          <label>Confirmed Time</label>
+          <input type="text" name="preferred_time" placeholder="e.g. 10:00 AM" value="{{ booking.preferred_time or '' }}" />
+        </div>
+        <div class="form-group">
+          <label>Internal Notes</label>
+          <textarea name="internal_notes" placeholder="Notes for your team only...">{{ booking.internal_notes or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save Changes</button>
+      </form>
+
+      <form method="POST" action="{{ url_for('bookings.delete', booking_id=booking.id) }}"
+            onsubmit="return confirm('Delete this booking permanently?')"
+            style="margin-top:12px">
+        <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">Delete Booking</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

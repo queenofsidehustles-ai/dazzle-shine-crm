@@ -1,0 +1,83 @@
+{% extends "base_admin.html" %}
+{% block title %}Dashboard — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Pending</div>
+    <div class="value" style="color:#92400e">{{ pending }}</div>
+    <div class="sub">Need confirmation</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Confirmed</div>
+    <div class="value" style="color:#1e40af">{{ confirmed }}</div>
+    <div class="sub">Upcoming jobs</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Completed</div>
+    <div class="value" style="color:#065f46">{{ completed }}</div>
+    <div class="sub">All time</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Total Clients</div>
+    <div class="value">{{ total_clients }}</div>
+    <div class="sub">In your database</div>
+  </div>
+</div>
+
+{% if today_bookings %}
+<div class="card" style="margin-bottom:22px">
+  <div class="section-header">
+    <h2>Today's Jobs</h2>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Client</th><th>Service</th><th>Time</th><th>Address</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for b in today_bookings %}
+        <tr>
+          <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}">{{ b.name }}</a><br><small style="color:#9a95ad">{{ b.phone }}</small></td>
+          <td>{{ b.service_label }}</td>
+          <td>{{ b.preferred_time or '—' }}</td>
+          <td style="color:#5f5878;font-size:0.88rem">{{ b.address }}</td>
+          <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
+          <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="section-header">
+    <h2>Recent Bookings</h2>
+    <a href="{{ url_for('bookings.index') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">See all</a>
+  </div>
+  {% if recent %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Client</th><th>Service</th><th>Date</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for b in recent %}
+        <tr>
+          <td>
+            <a href="{{ url_for('bookings.detail', booking_id=b.id) }}">{{ b.name }}</a>
+            <br><small style="color:#9a95ad">{{ b.email }}</small>
+          </td>
+          <td>{{ b.service_label }}</td>
+          <td style="color:#5f5878">{{ b.preferred_date or '—' }}</td>
+          <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
+          <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="color:#9a95ad;text-align:center;padding:30px 0">No bookings yet. They'll appear here once customers fill out the form.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base_admin.html" %}
+{% block title %}{{ client.name }} — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}{{ client.name }}{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('bookings.clients') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← All Clients</a>
+{% endblock %}
+
+{% block content %}
+<div class="detail-grid">
+  <div>
+    <div class="card" style="margin-bottom:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
+      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ client.email }}" style="color:#5d4f7d">{{ client.email }}</a></span></div>
+      <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ client.phone }}" style="color:#5d4f7d">{{ client.phone or '—' }}</a></span></div>
+      <div class="detail-row"><span class="dl">Address</span><span class="dv">{{ client.address or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">City</span><span class="dv">{{ client.city or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Client Since</span><span class="dv" style="color:#9a95ad">{{ client.created_at.strftime('%B %d, %Y') }}</span></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Booking History ({{ client.total_bookings }})</h2>
+      {% if client.bookings %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Service</th><th>Date</th><th>Status</th><th>Price</th></tr></thead>
+          <tbody>
+            {% for b in client.bookings | sort(attribute='created_at', reverse=True) %}
+            <tr>
+              <td style="color:#9a95ad;font-size:0.85rem">#{{ b.id }}</td>
+              <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}">{{ b.service_label }}</a></td>
+              <td style="color:#5f5878">{{ b.preferred_date or '—' }}</td>
+              <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
+              <td style="color:#5f5878">{{ ('$%.0f' % b.price) if b.price else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p style="color:#9a95ad">No bookings yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

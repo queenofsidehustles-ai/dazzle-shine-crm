@@ -1,0 +1,57 @@
+{% extends "base_admin.html" %}
+{% block title %}Bookings — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Bookings{% endblock %}
+
+{% block content %}
+<div class="filter-tabs">
+  <a href="{{ url_for('bookings.index') }}" class="filter-tab {{ 'active' if not status_filter }}">All ({{ counts.all }})</a>
+  <a href="{{ url_for('bookings.index', status='pending') }}" class="filter-tab {{ 'active' if status_filter == 'pending' }}">Pending ({{ counts.pending }})</a>
+  <a href="{{ url_for('bookings.index', status='confirmed') }}" class="filter-tab {{ 'active' if status_filter == 'confirmed' }}">Confirmed ({{ counts.confirmed }})</a>
+  <a href="{{ url_for('bookings.index', status='completed') }}" class="filter-tab {{ 'active' if status_filter == 'completed' }}">Completed ({{ counts.completed }})</a>
+  <a href="{{ url_for('bookings.index', status='cancelled') }}" class="filter-tab {{ 'active' if status_filter == 'cancelled' }}">Cancelled ({{ counts.cancelled }})</a>
+</div>
+
+<div class="card">
+  {% if bookings %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Client</th>
+          <th>Service</th>
+          <th>Beds / Baths</th>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Status</th>
+          <th>Price</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in bookings %}
+        <tr>
+          <td style="color:#9a95ad;font-size:0.85rem">#{{ b.id }}</td>
+          <td>
+            <a href="{{ url_for('bookings.detail', booking_id=b.id) }}">{{ b.name }}</a>
+            <br><small style="color:#9a95ad">{{ b.phone }}</small>
+          </td>
+          <td>{{ b.service_label }}</td>
+          <td style="color:#5f5878">{{ b.bedrooms or '—' }} bd / {{ b.bathrooms or '—' }} ba</td>
+          <td style="color:#5f5878">{{ b.preferred_date or '—' }}</td>
+          <td style="color:#5f5878">{{ b.preferred_time or '—' }}</td>
+          <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
+          <td style="color:#5f5878">{{ ('$%.0f' % b.price) if b.price else '—' }}</td>
+          <td>
+            <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="color:#9a95ad;text-align:center;padding:40px 0">No bookings found.</p>
+  {% endif %}
+</div>
+{% endblock %}

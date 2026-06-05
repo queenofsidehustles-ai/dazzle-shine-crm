@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — Dazzle &amp; Shine CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Inter",sans-serif;background:radial-gradient(circle at top left,#2a1a55,#1f1333 60%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .login-card{background:#fff;border-radius:20px;padding:40px 36px;width:100%;max-width:380px;box-shadow:0 40px 80px rgba(0,0,0,0.3)}
+    .brand{text-align:center;margin-bottom:28px}
+    .brand .script{font-family:"Allura",cursive;font-size:2.4rem;color:#b98a33;display:block;line-height:1}
+    .brand .sub{font-size:0.72rem;letter-spacing:0.22em;text-transform:uppercase;color:#9a95ad;margin-top:4px}
+    label{display:block;font-weight:600;font-size:0.85rem;color:#5f5878;margin-bottom:5px}
+    input{width:100%;padding:10px 13px;border:1px solid #e4dfef;border-radius:10px;font-size:0.97rem;font-family:inherit;color:#1f1333;outline:none;margin-bottom:14px}
+    input:focus{border-color:#d3a84f;box-shadow:0 0 0 3px rgba(211,168,79,0.15)}
+    .error{background:#fee2e2;color:#991b1b;border-radius:9px;padding:10px 13px;font-size:0.88rem;font-weight:600;margin-bottom:14px}
+    button{width:100%;padding:12px;border:none;border-radius:999px;background:linear-gradient(135deg,#f4d07a,#d3a84f);color:#1a1225;font-size:1rem;font-weight:700;cursor:pointer;box-shadow:0 12px 32px rgba(211,168,79,0.4)}
+    button:hover{filter:brightness(1.04)}
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="brand">
+      <span class="script">Dazzle &amp; Shine</span>
+      <span class="sub">Back Office</span>
+    </div>
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="POST">
+      <label>Username</label>
+      <input type="text" name="username" autocomplete="username" autofocus required />
+      <label>Password</label>
+      <input type="password" name="password" autocomplete="current-password" required />
+      <button type="submit">Sign In</button>
+    </form>
+  </div>
+</body>
+</html>

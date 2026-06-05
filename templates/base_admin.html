@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Dazzle & Shine CRM{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --gold: #d3a84f;
+      --gold-deep: #b98a33;
+      --gold-soft: rgba(211,168,79,0.12);
+      --purple: #1f1333;
+      --purple-mid: #3b2b6b;
+      --purple-light: #5d4f7d;
+      --bg: #f6f5fb;
+      --sidebar-w: 220px;
+      --text: #1f1333;
+      --muted: #5f5878;
+      --softer: #9a95ad;
+      --border: #e4dfef;
+      --white: #ffffff;
+      --radius: 14px;
+      --shadow: 0 4px 24px rgba(15,7,40,0.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.6; display: flex; min-height: 100vh; }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--purple);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      z-index: 10;
+    }
+    .sidebar-brand {
+      padding: 20px 18px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .sidebar-brand .script {
+      font-family: "Allura", cursive;
+      font-size: 1.7rem;
+      color: var(--gold);
+      line-height: 1;
+      display: block;
+    }
+    .sidebar-brand .sub {
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+      margin-top: 3px;
+    }
+    .sidebar nav { padding: 12px 0; flex: 1; }
+    .sidebar nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 18px;
+      color: rgba(255,255,255,0.7);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+    .sidebar nav a:hover, .sidebar nav a.active {
+      color: #fff;
+      background: rgba(255,255,255,0.06);
+      border-left-color: var(--gold);
+    }
+    .sidebar nav a .icon { font-size: 1.1rem; width: 20px; text-align: center; }
+    .sidebar-footer {
+      padding: 14px 18px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .sidebar-footer a {
+      color: rgba(255,255,255,0.5);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }
+    .sidebar-footer a:hover { color: #fff; }
+
+    /* MAIN CONTENT */
+    .main-wrap {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .topbar {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .topbar h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .topbar .badge-pending {
+      background: var(--gold-soft);
+      color: var(--gold-deep);
+      border-radius: 999px;
+      padding: 3px 11px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .content { padding: 26px 28px; flex: 1; }
+
+    /* CARDS */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 26px;
+    }
+    .stat-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
+    }
+    .stat-card .label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--softer); font-weight: 600; margin-bottom: 6px; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; color: var(--text); line-height: 1; }
+    .stat-card .sub { font-size: 0.82rem; color: var(--muted); margin-top: 4px; }
+
+    /* TABLE */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
+    th { text-align: left; padding: 10px 14px; color: var(--softer); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; border-bottom: 1px solid var(--border); }
+    td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #faf9ff; }
+    td a { color: var(--purple-light); text-decoration: none; font-weight: 600; }
+    td a:hover { text-decoration: underline; }
+
+    /* STATUS BADGES */
+    .status {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .status-pending { background: #fef3c7; color: #92400e; }
+    .status-confirmed { background: #dbeafe; color: #1e40af; }
+    .status-completed { background: #d1fae5; color: #065f46; }
+    .status-cancelled { background: #fee2e2; color: #991b1b; }
+
+    /* BUTTONS */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 18px; border-radius: 999px; border: none;
+      font-size: 0.92rem; font-weight: 700; cursor: pointer; text-decoration: none;
+      transition: all 0.1s;
+    }
+    .btn-gold { background: linear-gradient(135deg,#f4d07a,#d3a84f); color: #1a1225; box-shadow: 0 8px 24px rgba(211,168,79,0.35); }
+    .btn-gold:hover { filter: brightness(1.05); }
+    .btn-dark { background: var(--purple); color: #fff; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .btn-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+    /* FORM INPUTS */
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-weight: 600; font-size: 0.88rem; color: var(--muted); margin-bottom: 5px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 9px 13px;
+      border: 1px solid var(--border); border-radius: 9px;
+      font-size: 0.95rem; font-family: inherit; color: var(--text);
+      background: var(--white); outline: none;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(211,168,79,0.15);
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+
+    /* FLASH MESSAGES */
+    .flash { padding: 11px 16px; border-radius: 10px; margin-bottom: 18px; font-weight: 600; font-size: 0.92rem; }
+    .flash-success { background: #d1fae5; color: #065f46; }
+    .flash-error { background: #fee2e2; color: #991b1b; }
+
+    /* FILTER TABS */
+    .filter-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+    .filter-tab {
+      padding: 6px 16px; border-radius: 999px;
+      font-size: 0.85rem; font-weight: 600; text-decoration: none;
+      background: var(--white); border: 1px solid var(--border); color: var(--muted);
+    }
+    .filter-tab:hover { border-color: var(--gold); color: var(--text); }
+    .filter-tab.active { background: var(--purple); color: #fff; border-color: var(--purple); }
+
+    /* SECTION HEADER */
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; flex-wrap: wrap; }
+    .section-header h2 { font-size: 1.1rem; font-weight: 700; }
+
+    /* DETAIL GRID */
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    @media (max-width: 768px) { .detail-grid { grid-template-columns: 1fr; } }
+    .detail-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
+    .detail-row .dl { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--softer); font-weight: 600; }
+    .detail-row .dv { font-weight: 600; color: var(--text); }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="script">Dazzle &amp; Shine</span>
+      <span class="sub">Back Office</span>
+    </div>
+    <nav>
+      <a href="{{ url_for('admin.dashboard') }}" class="{{ 'active' if request.endpoint == 'admin.dashboard' }}">
+        <span class="icon">🏠</span> Dashboard
+      </a>
+      <a href="{{ url_for('bookings.index') }}" class="{{ 'active' if request.blueprint == 'bookings' and request.endpoint != 'bookings.clients' and request.endpoint != 'bookings.client_detail' }}">
+        <span class="icon">📋</span> Bookings
+      </a>
+      <a href="{{ url_for('bookings.clients') }}" class="{{ 'active' if request.endpoint in ['bookings.clients','bookings.client_detail'] }}">
+        <span class="icon">👥</span> Clients
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="{{ url_for('admin.logout') }}">Sign out</a>
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+    <div class="topbar">
+      <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+      <div>{% block topbar_right %}{% endblock %}</div>
+    </div>
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, msg in messages %}
+          <div class="flash flash-{{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</body>
+</html>
