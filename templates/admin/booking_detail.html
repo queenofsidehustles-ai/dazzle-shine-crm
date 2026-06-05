@@ -86,7 +86,66 @@
         <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">Delete Booking</button>
       </form>
     </div>
+
+    <!-- Balance Collection Card -->
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Balance Collection</h2>
+      <div class="detail-row"><span class="dl">Total Price</span><span class="dv">${{ '%.2f' % (booking.price or 0) }}</span></div>
+      <div class="detail-row"><span class="dl">Deposit Paid</span><span class="dv">$50.00 {% if booking.deposit_paid %}<span style="color:#065f46">✓</span>{% endif %}</span></div>
+      <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:#1f1333">${{ '%.2f' % (booking.balance_due or 0) }}</span></div>
+
+      {% if booking.balance_collected %}
+      <div style="background:#d1fae5;color:#065f46;padding:11px 14px;border-radius:9px;font-weight:700;font-size:0.9rem;margin-top:10px">
+        Balance collected ✓
+      </div>
+      {% elif booking.stripe_payment_method_id %}
+      <button onclick="chargeBalance({{ booking.id }}, {{ booking.balance_due or 0 }})"
+              id="charge-btn" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px">
+        Charge ${{ '%.2f' % (booking.balance_due or 0) }} Now
+      </button>
+      <p id="charge-msg" style="display:none;margin-top:8px;font-size:0.85rem;font-weight:600;border-radius:8px;padding:9px 12px"></p>
+      <p style="font-size:0.78rem;color:#9a95ad;margin-top:6px">Card saved — also auto-charges on the morning of the cleaning.</p>
+      {% else %}
+      <div style="background:#fef3c7;color:#92400e;padding:11px 14px;border-radius:9px;font-size:0.88rem;font-weight:600;margin-top:10px">
+        No card on file — collect balance manually or by cash.
+      </div>
+      {% endif %}
+    </div>
   </div>
 
 </div>
+
+<script>
+async function chargeBalance(bookingId, balanceDue) {
+  const btn = document.getElementById('charge-btn');
+  const msg = document.getElementById('charge-msg');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+  try {
+    const res = await fetch(`/bookings/${bookingId}/charge-balance`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      btn.style.display = 'none';
+      msg.textContent = '✓ Payment successful! Balance collected.';
+      msg.style.background = '#d1fae5';
+      msg.style.color = '#065f46';
+      msg.style.display = 'block';
+    } else {
+      btn.disabled = false;
+      btn.textContent = `Charge $${balanceDue.toFixed(2)} Now`;
+      msg.textContent = 'Error: ' + (data.error || 'Unknown error');
+      msg.style.background = '#fee2e2';
+      msg.style.color = '#991b1b';
+      msg.style.display = 'block';
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = `Charge $${balanceDue.toFixed(2)} Now`;
+    msg.textContent = 'Something went wrong. Please try again.';
+    msg.style.background = '#fee2e2';
+    msg.style.color = '#991b1b';
+    msg.style.display = 'block';
+  }
+}
+</script>
 {% endblock %}

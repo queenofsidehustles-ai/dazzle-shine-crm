@@ -34,8 +34,26 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _migrate_db()
 
     return app
+
+
+def _migrate_db():
+    """Add new columns to existing tables safely (idempotent)."""
+    from sqlalchemy import text
+    new_cols = [
+        ('booking', 'stripe_customer_id',       'VARCHAR(100)'),
+        ('booking', 'stripe_payment_method_id', 'VARCHAR(100)'),
+        ('staff',   'color',                    "VARCHAR(7) DEFAULT '#7c3aed'"),
+    ]
+    with db.engine.connect() as conn:
+        for table, col, col_type in new_cols:
+            try:
+                conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN {col} {col_type}'))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
 
 
 if __name__ == '__main__':

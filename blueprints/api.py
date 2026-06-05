@@ -59,6 +59,34 @@ def send_reminders():
     return jsonify({'ok': True, 'reminders_sent': count})
 
 
+# ── Auto-charge balances (cron — runs every morning) ─────────────────────────
+
+@api_bp.route('/charge-balances', methods=['POST'])
+def charge_balances():
+    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
+    expected = os.environ.get('REMINDER_API_KEY', '')
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    from payment_service import charge_balance as do_charge
+    today = date.today().isoformat()
+    bookings = Booking.query.filter(
+        Booking.preferred_date == today,
+        Booking.status.in_(['confirmed', 'pending']),
+        Booking.balance_collected == False,
+        Booking.stripe_customer_id != None,
+        Booking.stripe_payment_method_id != None,
+    ).all()
+
+    results = []
+    for b in bookings:
+        ok, err = do_charge(b)
+        results.append({'booking_id': b.id, 'name': b.name, 'ok': ok, 'error': err})
+    db.session.commit()
+
+    return jsonify({'ok': True, 'charged': len([r for r in results if r['ok']]), 'results': results})
+
+
 # ── Pricing calculator endpoint ──────────────────────────────────────────────
 
 @api_bp.route('/price', methods=['POST', 'OPTIONS'])
@@ -106,9 +134,17 @@ def create_payment_intent():
     )
 
     try:
+        # Create a Stripe Customer so we can save the card for the balance charge later
+        customer = stripe.Customer.create(
+            name=data.get('name', ''),
+            email=data.get('email', ''),
+            phone=data.get('phone', ''),
+        )
         intent = stripe.PaymentIntent.create(
-            amount=int(DEPOSIT_AMOUNT * 100),  # cents
+            amount=int(DEPOSIT_AMOUNT * 100),
             currency='usd',
+            customer=customer.id,
+            setup_future_usage='off_session',  # saves the card for future off-session charges
             metadata={
                 'service_type': data.get('service_type', ''),
                 'total_price': str(total),
@@ -120,6 +156,7 @@ def create_payment_intent():
         resp = jsonify({
             'ok': True,
             'client_secret': intent.client_secret,
+            'stripe_customer_id': customer.id,
             'total': total,
             'deposit': DEPOSIT_AMOUNT,
             'balance_due': round(total - DEPOSIT_AMOUNT, 2),
@@ -185,6 +222,8 @@ def create_booking():
         zip_code=data.get('zip_code', '').strip(),
         notes=data.get('notes', '').strip(),
         stripe_payment_intent=data.get('payment_intent_id', ''),
+        stripe_customer_id=data.get('stripe_customer_id', ''),
+        stripe_payment_method_id=data.get('stripe_payment_method_id', ''),
         deposit_paid=True if data.get('payment_intent_id') else False,
         price=total,
         balance_due=round(total - DEPOSIT_AMOUNT, 2),

@@ -95,6 +95,17 @@ def detail(booking_id):
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff)
 
 
+@bookings_bp.route('/<int:booking_id>/charge-balance', methods=['POST'])
+@login_required
+def charge_balance(booking_id):
+    from flask import jsonify
+    from payment_service import charge_balance as do_charge
+    booking = Booking.query.get_or_404(booking_id)
+    ok, error = do_charge(booking)
+    db.session.commit()
+    return jsonify({'ok': ok, 'error': error})
+
+
 @bookings_bp.route('/<int:booking_id>/delete', methods=['POST'])
 @login_required
 def delete(booking_id):

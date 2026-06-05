@@ -54,6 +54,8 @@ class Booking(db.Model):
 
     # Payment
     stripe_payment_intent = db.Column(db.String(100))
+    stripe_customer_id = db.Column(db.String(100))
+    stripe_payment_method_id = db.Column(db.String(100))
     deposit_paid = db.Column(db.Boolean, default=False)
     balance_due = db.Column(db.Float)
     balance_collected = db.Column(db.Boolean, default=False)
