@@ -10,7 +10,10 @@ def create_app():
     app = Flask(__name__)
 
     # Database
-    db_url = os.environ.get('DATABASE_URL', 'sqlite:///dazzle.db')
+    db_url = os.environ.get('DATABASE_URL', '')
+    # Fall back to SQLite if URL is missing or unresolved template
+    if not db_url or db_url.startswith('$') or '://' not in db_url:
+        db_url = 'sqlite:///dazzle.db'
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
     if db_url.startswith('postgresql://') and '+psycopg2' not in db_url:
