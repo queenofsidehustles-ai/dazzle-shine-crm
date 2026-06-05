@@ -4,6 +4,7 @@ from extensions import db
 from blueprints.admin import admin_bp
 from blueprints.bookings import bookings_bp
 from blueprints.api import api_bp
+from blueprints.settings import settings_bp
 
 
 def create_app():
@@ -27,6 +28,7 @@ def create_app():
     app.register_blueprint(admin_bp)
     app.register_blueprint(bookings_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(settings_bp)
 
     with app.app_context():
         db.create_all()

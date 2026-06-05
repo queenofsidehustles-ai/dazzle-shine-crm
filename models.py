@@ -1,5 +1,6 @@
 from extensions import db
 from datetime import datetime
+import json
 
 
 class Client(db.Model):
@@ -36,6 +37,9 @@ class Booking(db.Model):
     bathrooms = db.Column(db.String(10))
     extras = db.Column(db.String(200))  # comma-separated: oven, fridge, laundry
 
+    # Frequency
+    frequency = db.Column(db.String(20), default='one_time')  # one_time, weekly, biweekly, monthly
+
     # Scheduling
     preferred_date = db.Column(db.String(50))
     preferred_time = db.Column(db.String(50))
@@ -48,10 +52,17 @@ class Booking(db.Model):
     city = db.Column(db.String(50))
     zip_code = db.Column(db.String(10))
 
+    # Payment
+    stripe_payment_intent = db.Column(db.String(100))
+    deposit_paid = db.Column(db.Boolean, default=False)
+    balance_due = db.Column(db.Float)
+    balance_collected = db.Column(db.Boolean, default=False)
+
     # Admin fields
     notes = db.Column(db.Text)
     internal_notes = db.Column(db.Text)
-    status = db.Column(db.String(20), default='pending')  # pending, confirmed, completed, cancelled
+    assigned_cleaner = db.Column(db.String(100))
+    status = db.Column(db.String(20), default='pending')  # pending, confirmed, in_progress, completed, cancelled
     price = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -78,3 +89,51 @@ class Booking(db.Model):
     @property
     def status_color(self):
         return self.STATUS_COLORS.get(self.status, '#9ca3af')
+
+
+class PricingSetting(db.Model):
+    """Stores pricing overrides set via the CRM admin UI."""
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    value = db.Column(db.String(200), nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @staticmethod
+    def get(key, default=None):
+        row = PricingSetting.query.filter_by(key=key).first()
+        if row:
+            try:
+                return float(row.value)
+            except ValueError:
+                return row.value
+        return default
+
+    @staticmethod
+    def set(key, value):
+        row = PricingSetting.query.filter_by(key=key).first()
+        if row:
+            row.value = str(value)
+        else:
+            row = PricingSetting(key=key, value=str(value))
+            db.session.add(row)
+
+
+class BusinessSetting(db.Model):
+    """General business config — name, phone, address, etc."""
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    value = db.Column(db.Text)
+
+    @staticmethod
+    def get(key, default=''):
+        row = BusinessSetting.query.filter_by(key=key).first()
+        return row.value if row else default
+
+    @staticmethod
+    def set(key, value):
+        row = BusinessSetting.query.filter_by(key=key).first()
+        if row:
+            row.value = str(value)
+        else:
+            row = BusinessSetting(key=key, value=str(value))
+            db.session.add(row)
