@@ -210,8 +210,11 @@ test.describe('CRM Admin — Navigation (requires credentials)', () => {
     await page.fill('input[name="code"]', code);
     await page.selectOption('select[name="discount_type"]', 'percent');
     await page.fill('input[name="discount_value"]', '10');
-    await page.click('button[type="submit"]');
-    await expect(page.locator('text=' + code)).toBeVisible();
+    await Promise.all([
+      page.waitForURL('**/discounts/**', { timeout: 10000 }),
+      page.click('button[type="submit"]'),
+    ]);
+    await expect(page.locator('td strong', { hasText: code }).first()).toBeVisible({ timeout: 8000 });
     console.log('  Discount code created ✓');
   });
 
