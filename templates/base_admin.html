@@ -240,6 +240,9 @@
       <a href="{{ url_for('bookings.calendar') }}" class="{{ 'active' if request.endpoint == 'bookings.calendar' }}">
         <span class="icon">📅</span> Calendar
       </a>
+      <a href="{{ url_for('admin.reports') }}" class="{{ 'active' if request.endpoint == 'admin.reports' }}">
+        <span class="icon">📊</span> Reports
+      </a>
       <a href="{{ url_for('bookings.clients') }}" class="{{ 'active' if request.endpoint in ['bookings.clients','bookings.client_detail'] }}">
         <span class="icon">👥</span> Clients
       </a>
