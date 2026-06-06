@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify
 from models import Booking, Client
 from extensions import db
 from pricing import calculate_price, SERVICES, EXTRAS, FREQUENCY_LABELS, DEPOSIT_AMOUNT
-from notifications import send_email, send_sms
+from notifications import send_email, send_sms, add_to_mailerlite
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -122,6 +122,7 @@ def capture_quote():
     db.session.commit()
 
     _send_quote_email(lead, total)
+    add_to_mailerlite(lead.email, lead.name)
     resp = jsonify({'ok': True, 'total': total, 'deposit': DEPOSIT_AMOUNT,
                     'balance_due': round(total - DEPOSIT_AMOUNT, 2)})
     return add_cors(resp, origin), 201

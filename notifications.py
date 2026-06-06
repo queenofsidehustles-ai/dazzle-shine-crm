@@ -28,6 +28,30 @@ def send_email(to_email, to_name, subject, html, from_name=None):
         pass
 
 
+def add_to_mailerlite(email, name, group_id=None):
+    api_key = os.environ.get('MAILERLITE_API_KEY')
+    if not group_id:
+        group_id = os.environ.get('MAILERLITE_GROUP_ID', '189490896944760797')
+    if not api_key:
+        return
+    try:
+        http_requests.post(
+            'https://connect.mailerlite.com/api/subscribers',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'email': email,
+                'fields': {'name': name},
+                'groups': [group_id],
+            },
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
 def send_sms(to_phone, message):
     account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
     auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
