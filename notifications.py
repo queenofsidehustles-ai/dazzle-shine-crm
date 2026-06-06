@@ -3,7 +3,7 @@ import requests as http_requests
 
 
 def send_email(to_email, to_name, subject, html, from_name=None):
-    api_key = os.environ.get('BREVO_API_KEY')
+    api_key = os.environ.get('RESEND_API_KEY')
     from_email = os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
     if not from_name:
         from_name = os.environ.get('FROM_NAME', 'Dazzle & Shine Maids')
@@ -11,13 +11,16 @@ def send_email(to_email, to_name, subject, html, from_name=None):
         return
     try:
         http_requests.post(
-            'https://api.brevo.com/v3/smtp/email',
-            headers={'api-key': api_key, 'Content-Type': 'application/json'},
+            'https://api.resend.com/emails',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+            },
             json={
-                'sender': {'name': from_name, 'email': from_email},
-                'to': [{'email': to_email, 'name': to_name}],
+                'from': f'{from_name} <{from_email}>',
+                'to': [to_email],
                 'subject': subject,
-                'htmlContent': html,
+                'html': html,
             },
             timeout=10,
         )
