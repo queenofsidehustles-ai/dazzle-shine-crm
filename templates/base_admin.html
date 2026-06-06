@@ -249,6 +249,9 @@
       <a href="{{ url_for('leads.index') }}" class="{{ 'active' if request.blueprint == 'leads' }}">
         <span class="icon">💡</span> Leads
       </a>
+      <a href="{{ url_for('quotes.index') }}" class="{{ 'active' if request.blueprint == 'quotes' }}">
+        <span class="icon">📄</span> Quotes
+      </a>
       <a href="{{ url_for('workorders.templates') }}" class="{{ 'active' if request.blueprint == 'workorders' }}">
         <span class="icon">📝</span> Checklists
       </a>

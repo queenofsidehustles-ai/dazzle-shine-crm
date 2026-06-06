@@ -1,0 +1,57 @@
+{% extends "base_admin.html" %}
+{% block title %}Commercial Quotes — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Commercial Quotes{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('quotes.new') }}" class="btn btn-gold" style="padding:7px 16px;font-size:0.88rem">+ New Quote</a>
+{% endblock %}
+
+{% block content %}
+<div class="filter-tabs">
+  {% for s, label in [('','All'),('draft','Draft'),('sent','Sent'),('accepted','Accepted'),('declined','Declined')] %}
+  <a href="{{ url_for('quotes.index', status=s) }}"
+     class="filter-tab {{ 'active' if status_filter == s }}">
+    {{ label }} ({{ counts['all' if not s else s] }})
+  </a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  {% if quotes %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Company</th><th>Contact</th><th>Type</th><th>Monthly Value</th><th>Status</th><th>Date</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for q in quotes %}
+        <tr>
+          <td><strong>{{ q.company }}</strong><br><span style="font-size:0.8rem;color:#9a95ad">{{ q.property_address }}</span></td>
+          <td>{{ q.contact_name }}<br><span style="font-size:0.8rem;color:#9a95ad">{{ q.email }}</span></td>
+          <td style="font-size:0.85rem;color:#9a95ad">{{ q.property_type }}</td>
+          <td style="font-weight:700">${{ '%,.2f' % (q.monthly_price or 0) }}/mo</td>
+          <td>
+            {% set colors = {'draft':'status-pending','sent':'status-confirmed','accepted':'status-completed','declined':'status-cancelled'} %}
+            <span class="status {{ colors.get(q.status,'status-pending') }}">{{ q.status }}</span>
+          </td>
+          <td style="font-size:0.82rem;color:#9a95ad">{{ q.created_at.strftime('%b %d') }}</td>
+          <td style="display:flex;gap:6px">
+            <a href="{{ url_for('quotes.detail', quote_id=q.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a>
+            {% if q.status == 'draft' %}
+            <form method="POST" action="{{ url_for('quotes.send_quote', quote_id=q.id) }}">
+              <button type="submit" class="btn btn-gold" style="padding:5px 12px;font-size:0.82rem">Send</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+    No commercial quotes yet.
+    <a href="{{ url_for('quotes.new') }}" style="color:#d3a84f">Create your first quote →</a>
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

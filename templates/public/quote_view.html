@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cleaning Proposal — Dazzle & Shine Maids</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; }
+    .header { background: #1f1333; padding: 24px; text-align: center; }
+    .header .script { font-family: "Allura", cursive; font-size: 2.2rem; color: #d3a84f; }
+    .header .sub { font-size: 0.75rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.2em; margin-top: 4px; }
+    .wrap { max-width: 680px; margin: 0 auto; padding: 30px 16px 60px; }
+    .card { background: #fff; border-radius: 14px; border: 1px solid #e4dfef; padding: 28px; margin-bottom: 18px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); }
+    h2 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #9a95ad; margin-bottom: 16px; }
+    .row { display: flex; gap: 8px; margin-bottom: 10px; }
+    .row .label { font-size: 0.82rem; color: #9a95ad; font-weight: 600; min-width: 140px; }
+    .row .val { font-weight: 600; color: #1f1333; }
+    .service-list { display: flex; flex-direction: column; gap: 8px; }
+    .service-item { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+    .service-item::before { content: '✓'; color: #d3a84f; font-weight: 700; }
+    .price-box { background: linear-gradient(135deg,#1f1333,#3b2b6b); border-radius: 12px; padding: 24px; text-align: center; color: #fff; margin: 20px 0; }
+    .price-box .amount { font-size: 2.4rem; font-weight: 700; color: #d3a84f; }
+    .price-box .sub { font-size: 0.85rem; color: rgba(255,255,255,0.6); margin-top: 4px; }
+    .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }
+    .btn-accept { background: linear-gradient(135deg,#d3a84f,#b98a33); color: #1a1225; padding: 16px; border-radius: 12px; font-size: 1rem; font-weight: 700; border: none; cursor: pointer; width: 100%; }
+    .btn-decline { background: #fee2e2; color: #991b1b; padding: 16px; border-radius: 12px; font-size: 1rem; font-weight: 700; border: none; cursor: pointer; width: 100%; }
+    .status-banner { padding: 18px 24px; border-radius: 12px; text-align: center; font-weight: 700; font-size: 1.1rem; margin-top: 20px; }
+    .status-accepted { background: #d1fae5; color: #065f46; }
+    .status-declined { background: #fee2e2; color: #991b1b; }
+    @media (max-width: 480px) { .action-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="script">Dazzle &amp; Shine</div>
+    <div class="sub">Commercial Cleaning Proposal</div>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <h2>Prepared For</h2>
+      <div class="row"><span class="label">Company</span><span class="val">{{ q.company }}</span></div>
+      <div class="row"><span class="label">Contact</span><span class="val">{{ q.contact_name }}</span></div>
+      <div class="row"><span class="label">Property Type</span><span class="val">{{ q.property_type }}</span></div>
+      <div class="row"><span class="label">Address</span><span class="val">{{ q.property_address }}</span></div>
+      {% if q.units %}<div class="row"><span class="label">Units</span><span class="val">{{ q.units }}</span></div>{% endif %}
+      {% if q.sqft %}<div class="row"><span class="label">Square Footage</span><span class="val">{{ q.sqft }} sq ft</span></div>{% endif %}
+    </div>
+
+    <div class="card">
+      <h2>Services Included</h2>
+      <div class="service-list">
+        {% for svc in services_list %}
+        <div class="service-item">{{ svc }}</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Schedule & Terms</h2>
+      <div class="row"><span class="label">Frequency</span><span class="val">{{ freq_label }}</span></div>
+      <div class="row"><span class="label">Contract Term</span><span class="val">{{ term_label }}</span></div>
+      {% if q.scope_notes %}
+      <div style="background:#f6f5fb;border-radius:9px;padding:14px;margin-top:12px;font-size:0.9rem;line-height:1.7;color:#5f5878">
+        {{ q.scope_notes }}
+      </div>
+      {% endif %}
+    </div>
+
+    {% if q.monthly_price or q.price_per_visit %}
+    <div class="price-box">
+      {% if q.monthly_price %}
+      <div class="amount">${{ '%,.2f' % q.monthly_price }}<span style="font-size:1rem;font-weight:500">/mo</span></div>
+      {% endif %}
+      {% if q.price_per_visit %}
+      <div class="sub">${{ '%,.2f' % q.price_per_visit }} per visit</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if q.status == 'accepted' %}
+    <div class="status-banner status-accepted">You accepted this proposal ✓<br><span style="font-size:0.85rem;font-weight:500">We'll be in touch shortly to confirm your start date.</span></div>
+    {% elif q.status == 'declined' %}
+    <div class="status-banner status-declined">You declined this proposal.<br><span style="font-size:0.85rem;font-weight:500">Questions? Call us at (407) 743-1944.</span></div>
+    {% else %}
+    <div class="action-row">
+      <form method="POST" action="{{ url_for('quotes.accept', token=q.token) }}">
+        <button type="submit" class="btn-accept">Accept This Proposal</button>
+      </form>
+      <form method="POST" action="{{ url_for('quotes.decline', token=q.token) }}"
+            onsubmit="return confirm('Are you sure you want to decline this proposal?')">
+        <button type="submit" class="btn-decline">Decline</button>
+      </form>
+    </div>
+    <p style="text-align:center;font-size:0.8rem;color:#9a95ad;margin-top:14px">Questions before deciding? Call (407) 743-1944 or email us — we're happy to adjust.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

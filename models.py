@@ -208,6 +208,29 @@ class ContentPost(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class CommercialQuote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    company = db.Column(db.String(150), nullable=False)
+    contact_name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    phone = db.Column(db.String(20))
+    property_type = db.Column(db.String(100))
+    property_address = db.Column(db.String(200))
+    units = db.Column(db.String(20))
+    sqft = db.Column(db.String(20))
+    services = db.Column(db.Text)
+    frequency = db.Column(db.String(50))
+    contract_term = db.Column(db.String(50))
+    price_per_visit = db.Column(db.Float)
+    monthly_price = db.Column(db.Float)
+    scope_notes = db.Column(db.Text)
+    status = db.Column(db.String(20), default='draft')  # draft, sent, accepted, declined
+    token = db.Column(db.String(64), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    sent_at = db.Column(db.DateTime)
+    responded_at = db.Column(db.DateTime)
+
+
 class Staff(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
