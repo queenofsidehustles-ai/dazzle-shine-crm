@@ -57,13 +57,12 @@ def _migrate_db():
         ('staff',   'color',                    "VARCHAR(7) DEFAULT '#7c3aed'"),
         # Pricing & business settings tables (created fresh by create_all if missing)
     ]
-    with db.engine.connect() as conn:
-        for table, col, col_type in new_cols:
-            try:
+    for table, col, col_type in new_cols:
+        try:
+            with db.engine.begin() as conn:  # each gets its own transaction
                 conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN {col} {col_type}'))
-                conn.commit()
-            except Exception:
-                pass  # column already exists — safe to ignore
+        except Exception:
+            pass  # column already exists — safe to ignore
 
 
 if __name__ == '__main__':
