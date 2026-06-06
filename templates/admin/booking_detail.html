@@ -74,6 +74,10 @@
           </select>
         </div>
         <div class="form-group">
+          <label>Hours Worked <span style="font-weight:400;color:#9a95ad">(for payroll)</span></label>
+          <input type="number" name="hours_worked" step="0.25" placeholder="e.g. 2.5" value="{{ booking.hours_worked or '' }}" />
+        </div>
+        <div class="form-group">
           <label>Internal Notes</label>
           <textarea name="internal_notes" placeholder="Notes for your team only...">{{ booking.internal_notes or '' }}</textarea>
         </div>

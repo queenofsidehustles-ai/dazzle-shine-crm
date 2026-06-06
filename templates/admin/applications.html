@@ -1,0 +1,48 @@
+{% extends "base_admin.html" %}
+{% block title %}Applications — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Contractor Applications{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('contractors.apply') }}" target="_blank" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">View Application Form →</a>
+{% endblock %}
+
+{% block content %}
+<div class="filter-tabs">
+  {% for s, label in [('','All'),('new','New'),('reviewing','Reviewing'),('hired','Hired'),('rejected','Rejected')] %}
+  <a href="{{ url_for('contractors.applications', status=s) }}"
+     class="filter-tab {{ 'active' if status_filter == s }}">
+    {{ label }} ({{ counts['all' if not s else s] }})
+  </a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  {% if apps %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Experience</th><th>Availability</th><th>Has Car</th><th>Status</th><th>Applied</th><th></th></tr></thead>
+      <tbody>
+        {% for a in apps %}
+        <tr>
+          <td><strong>{{ a.name }}</strong><br><span style="font-size:0.8rem;color:#9a95ad">{{ a.email }}</span></td>
+          <td style="font-size:0.88rem">{{ a.years_experience }}</td>
+          <td style="font-size:0.82rem;color:#9a95ad">{{ a.availability or '—' }}</td>
+          <td>{{ '✓' if a.has_transportation else '—' }}</td>
+          <td>
+            {% set colors = {'new':'status-pending','reviewing':'status-confirmed','hired':'status-completed','rejected':'status-cancelled'} %}
+            <span class="status {{ colors.get(a.status,'status-pending') }}">{{ a.status }}</span>
+          </td>
+          <td style="font-size:0.82rem;color:#9a95ad">{{ a.created_at.strftime('%b %d') }}</td>
+          <td><a href="{{ url_for('contractors.application_detail', app_id=a.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Review</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+    No applications yet. Share your application link to start receiving them:<br>
+    <strong style="color:#5d4f7d">{{ request.host_url }}contractors/apply</strong>
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

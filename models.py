@@ -63,6 +63,8 @@ class Booking(db.Model):
     # Discount
     discount_code = db.Column(db.String(50))
     discount_amount = db.Column(db.Float, default=0)
+    # Payroll
+    hours_worked = db.Column(db.Float)
 
     # Admin fields
     notes = db.Column(db.Text)
@@ -254,6 +256,25 @@ class DiscountCode(db.Model):
         return f'${self.discount_value:.2f} off'
 
 
+class ContractorApplication(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    phone = db.Column(db.String(20))
+    years_experience = db.Column(db.String(20))
+    services = db.Column(db.Text)           # comma-separated
+    availability = db.Column(db.Text)       # comma-separated days
+    has_transportation = db.Column(db.Boolean, default=True)
+    has_supplies = db.Column(db.Boolean, default=False)
+    has_references = db.Column(db.Boolean, default=False)
+    background_check_consent = db.Column(db.Boolean, default=False)
+    agrees_to_ic_terms = db.Column(db.Boolean, default=False)
+    why_interested = db.Column(db.Text)
+    status = db.Column(db.String(20), default='new')  # new, reviewing, hired, rejected
+    admin_notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class CommercialQuote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company = db.Column(db.String(150), nullable=False)
@@ -284,7 +305,43 @@ class Staff(db.Model):
     email = db.Column(db.String(120))
     color = db.Column(db.String(7), default='#7c3aed')
     is_active = db.Column(db.Boolean, default=True)
+    # Pay settings
+    pay_type = db.Column(db.String(20), default='percent')  # percent, hourly
+    pay_rate = db.Column(db.Float, default=40.0)            # % of job or $/hr
+    experience_level = db.Column(db.String(20), default='new')  # new, experienced, senior
+    # Profile
+    emergency_contact_name = db.Column(db.String(100))
+    emergency_contact_phone = db.Column(db.String(20))
+    has_transportation = db.Column(db.Boolean, default=True)
+    has_supplies = db.Column(db.Boolean, default=False)
+    onboarding_steps = db.Column(db.Text, default='[]')  # JSON list of completed step keys
+    notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    ONBOARDING_STEPS = [
+        ('phone_interview',  'Phone interview completed'),
+        ('background_check', 'Background check cleared'),
+        ('ic_agreement',     'IC agreement signed'),
+        ('orientation',      'Orientation / training done'),
+        ('supply_kit',       'Supply kit issued'),
+        ('first_job',        'First job assigned'),
+    ]
+
+    def get_onboarding(self):
+        try:
+            return json.loads(self.onboarding_steps or '[]')
+        except Exception:
+            return []
+
+    def pay_label(self):
+        if self.pay_type == 'hourly':
+            return f'${self.pay_rate:.2f}/hr'
+        return f'{self.pay_rate:.0f}% of job'
+
+    def calc_pay(self, job_price=0, hours_worked=0):
+        if self.pay_type == 'hourly':
+            return round((hours_worked or 0) * (self.pay_rate or 0), 2)
+        return round((job_price or 0) * ((self.pay_rate or 0) / 100), 2)
 
 
 class BusinessSetting(db.Model):

@@ -264,6 +264,15 @@
       <a href="{{ url_for('discounts.index') }}" class="{{ 'active' if request.blueprint == 'discounts' }}">
         <span class="icon">🏷️</span> Discounts
       </a>
+      <a href="{{ url_for('contractors.team') }}" class="{{ 'active' if request.blueprint == 'contractors' and request.endpoint != 'contractors.applications' and request.endpoint != 'contractors.payroll' }}">
+        <span class="icon">🧹</span> Team
+      </a>
+      <a href="{{ url_for('contractors.applications') }}" class="{{ 'active' if request.endpoint in ('contractors.applications','contractors.application_detail') }}">
+        <span class="icon">📥</span> Applications
+      </a>
+      <a href="{{ url_for('contractors.payroll') }}" class="{{ 'active' if request.endpoint == 'contractors.payroll' }}">
+        <span class="icon">💰</span> Payroll
+      </a>
       <a href="{{ url_for('settings.pricing') }}" class="{{ 'active' if request.blueprint == 'settings' }}">
         <span class="icon">⚙️</span> Settings
       </a>

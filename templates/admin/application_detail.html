@@ -1,0 +1,92 @@
+{% extends "base_admin.html" %}
+{% block title %}Application: {{ a.name }} — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Application: {{ a.name }}{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('contractors.applications') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Applications</a>
+{% endblock %}
+
+{% block content %}
+<div class="detail-grid">
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contact</h2>
+      <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ a.name }}</span></div>
+      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ a.email }}" style="color:#5d4f7d">{{ a.email }}</a></span></div>
+      <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ a.phone }}" style="color:#5d4f7d">{{ a.phone }}</a></span></div>
+      <div class="detail-row"><span class="dl">Applied</span><span class="dv" style="color:#9a95ad">{{ a.created_at.strftime('%B %d, %Y') }}</span></div>
+    </div>
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Qualifications</h2>
+      <div class="detail-row"><span class="dl">Experience</span><span class="dv">{{ a.years_experience }}</span></div>
+      <div class="detail-row"><span class="dl">Services</span><span class="dv" style="font-size:0.88rem">{{ a.services or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Availability</span><span class="dv" style="font-size:0.88rem">{{ a.availability or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Has car</span><span class="dv">{{ '✓ Yes' if a.has_transportation else '✗ No' }}</span></div>
+      <div class="detail-row"><span class="dl">Has supplies</span><span class="dv">{{ '✓ Yes' if a.has_supplies else '✗ No' }}</span></div>
+      <div class="detail-row"><span class="dl">Has references</span><span class="dv">{{ '✓ Yes' if a.has_references else '✗ No' }}</span></div>
+      {% if a.why_interested %}
+      <div class="detail-row"><span class="dl">Why interested</span><span class="dv" style="font-size:0.88rem;color:#5f5878">{{ a.why_interested }}</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Decision</h2>
+      <form method="POST">
+        <div class="form-group">
+          <label>Status</label>
+          <select name="status">
+            {% for s in ['new','reviewing','hired','rejected'] %}
+            <option value="{{ s }}" {{ 'selected' if a.status == s }}>{{ s.title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea name="admin_notes" placeholder="Interview notes, observations...">{{ a.admin_notes or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save</button>
+      </form>
+    </div>
+
+    {% if a.status in ('new','reviewing') %}
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Hire as Contractor</h2>
+      <form method="POST" action="{{ url_for('contractors.hire', app_id=a.id) }}">
+        <div class="form-group">
+          <label>Experience Level</label>
+          <select name="experience_level">
+            <option value="new">New Cleaner — 40% split (default)</option>
+            <option value="experienced">Experienced — 45% split (default)</option>
+            <option value="senior">Senior — 50% split (default)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Pay Type</label>
+          <select name="pay_type" id="pay-type" onchange="updateRateLabel()">
+            <option value="percent">% of job price</option>
+            <option value="hourly">Hourly rate ($/hr)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label id="rate-label">Rate (%)</label>
+          <input type="number" name="pay_rate" step="0.5" value="40" min="0" />
+          <span id="rate-hint" style="font-size:0.78rem;color:#9a95ad">e.g. 40 means cleaner earns 40% of each job</span>
+        </div>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">
+          Hire {{ a.name }} →
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function updateRateLabel() {
+  const t = document.getElementById('pay-type').value;
+  document.getElementById('rate-label').textContent = t === 'hourly' ? 'Hourly Rate ($/hr)' : 'Percentage (%)';
+  document.getElementById('rate-hint').textContent = t === 'hourly' ? 'e.g. 15 means cleaner earns $15/hr' : 'e.g. 40 means cleaner earns 40% of each job';
+}
+</script>
+{% endblock %}

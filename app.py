@@ -12,6 +12,7 @@ from blueprints.content import content_bp
 from blueprints.quotes import quotes_bp
 from blueprints.ratings import ratings_bp
 from blueprints.discounts import discounts_bp
+from blueprints.contractors import contractors_bp
 
 
 def create_app():
@@ -43,6 +44,7 @@ def create_app():
     app.register_blueprint(quotes_bp)
     app.register_blueprint(ratings_bp)
     app.register_blueprint(discounts_bp)
+    app.register_blueprint(contractors_bp)
 
     with app.app_context():
         db.create_all()
@@ -67,6 +69,16 @@ def _migrate_db():
         ('booking', 'stripe_payment_method_id', 'VARCHAR(100)'),
         ('booking', 'discount_code',            'VARCHAR(50)'),
         ('booking', 'discount_amount',          'FLOAT DEFAULT 0'),
+        ('booking', 'hours_worked',             'FLOAT'),
+        ('staff',   'pay_type',                 "VARCHAR(20) DEFAULT 'percent'"),
+        ('staff',   'pay_rate',                 'FLOAT DEFAULT 40'),
+        ('staff',   'experience_level',         "VARCHAR(20) DEFAULT 'new'"),
+        ('staff',   'emergency_contact_name',   'VARCHAR(100)'),
+        ('staff',   'emergency_contact_phone',  'VARCHAR(20)'),
+        ('staff',   'has_transportation',       'BOOLEAN DEFAULT TRUE'),
+        ('staff',   'has_supplies',             'BOOLEAN DEFAULT FALSE'),
+        ('staff',   'onboarding_steps',         "TEXT DEFAULT '[]'"),
+        ('staff',   'notes',                    'TEXT'),
         # Staff table
         ('staff',   'color',                    "VARCHAR(7) DEFAULT '#7c3aed'"),
         # Pricing & business settings tables (created fresh by create_all if missing)

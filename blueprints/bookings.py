@@ -82,6 +82,8 @@ def detail(booking_id):
         booking.preferred_time = request.form.get('preferred_time', booking.preferred_time)
         booking.internal_notes = request.form.get('internal_notes', booking.internal_notes)
         booking.assigned_cleaner = request.form.get('assigned_cleaner', booking.assigned_cleaner)
+        hours_raw = request.form.get('hours_worked', '').strip()
+        booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
 
         if booking.status == 'completed' and old_status != 'completed':
             _send_followup_email(booking)

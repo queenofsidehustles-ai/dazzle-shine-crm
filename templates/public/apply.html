@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join Our Team — Dazzle & Shine Maids</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; }
+    .header { background: #1f1333; padding: 22px 20px; text-align: center; }
+    .header .script { font-family: "Allura", cursive; font-size: 2rem; color: #d3a84f; }
+    .header .sub { font-size: 0.75rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.2em; margin-top: 3px; }
+    .wrap { max-width: 600px; margin: 0 auto; padding: 30px 16px 60px; }
+    .card { background: #fff; border-radius: 14px; border: 1px solid #e4dfef; padding: 28px; margin-bottom: 18px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); }
+    h2 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #9a95ad; margin-bottom: 16px; }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-weight: 600; font-size: 0.88rem; color: #5f5878; margin-bottom: 5px; }
+    input[type=text], input[type=email], input[type=tel], select, textarea {
+      width: 100%; padding: 10px 13px; border: 1px solid #e4dfef; border-radius: 9px;
+      font-size: 0.95rem; font-family: inherit; color: #1f1333; background: #fff; outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: #d3a84f; box-shadow: 0 0 0 3px rgba(211,168,79,0.15); }
+    textarea { resize: vertical; min-height: 80px; }
+    .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .check-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; font-weight: 500; }
+    .check-item input { width: auto; }
+    .terms-box { background: #f6f5fb; border-radius: 9px; padding: 14px; font-size: 0.82rem; color: #5f5878; line-height: 1.7; margin-bottom: 14px; }
+    .btn { width: 100%; padding: 14px; background: linear-gradient(135deg,#f4d07a,#d3a84f); color: #1a1225; border: none; border-radius: 999px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="script">Dazzle &amp; Shine</div>
+    <div class="sub">Contractor Application</div>
+  </div>
+
+  <div class="wrap">
+    <div class="card" style="text-align:center;padding:20px 28px">
+      <p style="font-weight:700;font-size:1.1rem;margin-bottom:6px">Join Our Cleaning Team in Orlando 🌟</p>
+      <p style="color:#5f5878;font-size:0.9rem">Flexible schedule, competitive pay, and a great team. Fill out the application below and we'll be in touch within 2 business days.</p>
+    </div>
+
+    <form method="POST">
+      <div class="card">
+        <h2>Personal Info</h2>
+        <div class="form-group"><label>Full Name *</label><input type="text" name="name" required placeholder="Maria Rodriguez" /></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group"><label>Email *</label><input type="email" name="email" required placeholder="maria@email.com" /></div>
+          <div class="form-group"><label>Phone *</label><input type="tel" name="phone" required placeholder="(407) 555-0000" /></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Experience</h2>
+        <div class="form-group">
+          <label>Years of Cleaning Experience</label>
+          <select name="years_experience">
+            <option value="Less than 1 year">Less than 1 year</option>
+            <option value="1-2 years">1–2 years</option>
+            <option value="3-5 years">3–5 years</option>
+            <option value="5+ years">5+ years</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Services You Can Perform</label>
+          <div class="check-grid" style="margin-top:6px">
+            {% for svc in ['Standard Cleaning','Deep Cleaning','Move-Out Cleaning','Airbnb / Vacation Rental','Office Cleaning','Carpet Cleaning'] %}
+            <label class="check-item"><input type="checkbox" name="services" value="{{ svc }}" /> {{ svc }}</label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Availability</h2>
+        <div class="check-grid">
+          {% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}
+          <label class="check-item"><input type="checkbox" name="availability" value="{{ day }}" /> {{ day }}</label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Logistics</h2>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label class="check-item"><input type="checkbox" name="has_transportation" /> I have reliable personal transportation</label>
+          <label class="check-item"><input type="checkbox" name="has_supplies" /> I have my own cleaning supplies and equipment</label>
+          <label class="check-item"><input type="checkbox" name="has_references" /> I can provide professional references</label>
+          <label class="check-item"><input type="checkbox" name="background_check_consent" required /> I consent to a background check if hired</label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Tell Us About Yourself</h2>
+        <div class="form-group">
+          <label>Why do you want to join Dazzle & Shine? (optional)</label>
+          <textarea name="why_interested" placeholder="Tell us a bit about yourself and why you're interested..."></textarea>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Independent Contractor Terms</h2>
+        <div class="terms-box">
+          By submitting this application I understand that:<br><br>
+          • I will work as an <strong>independent contractor</strong>, not an employee of Dazzle & Shine Maids.<br>
+          • I am responsible for my own taxes and insurance.<br>
+          • My pay rate will be agreed upon before my first job.<br>
+          • I must maintain professional standards of quality and punctuality.<br>
+          • Either party may end the working relationship at any time.
+        </div>
+        <label class="check-item" style="font-weight:600">
+          <input type="checkbox" name="agrees_to_ic_terms" required />
+          I have read and agree to the independent contractor terms above.
+        </label>
+      </div>
+
+      <button type="submit" class="btn">Submit Application</button>
+    </form>
+  </div>
+</body>
+</html>
