@@ -60,6 +60,10 @@ class Booking(db.Model):
     balance_due = db.Column(db.Float)
     balance_collected = db.Column(db.Boolean, default=False)
 
+    # Discount
+    discount_code = db.Column(db.String(50))
+    discount_amount = db.Column(db.Float, default=0)
+
     # Admin fields
     notes = db.Column(db.Text)
     internal_notes = db.Column(db.Text)
@@ -206,6 +210,48 @@ class ContentPost(db.Model):
     scheduled_date = db.Column(db.String(20))
     status = db.Column(db.String(20), default='draft')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class BookingRating(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=False)
+    token = db.Column(db.String(64), unique=True, nullable=False)
+    rating = db.Column(db.Integer)  # 1-5, None until submitted
+    comment = db.Column(db.Text)
+    rated_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    booking = db.relationship('Booking', backref='rating_requests')
+
+
+class DiscountCode(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True, nullable=False)
+    discount_type = db.Column(db.String(20), default='percent')  # percent, fixed
+    discount_value = db.Column(db.Float, nullable=False)
+    max_uses = db.Column(db.Integer)  # None = unlimited
+    times_used = db.Column(db.Integer, default=0)
+    expires_at = db.Column(db.DateTime)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def check_valid(self):
+        if not self.is_active:
+            return False, 'This code is inactive.'
+        if self.max_uses and self.times_used >= self.max_uses:
+            return False, 'This code has reached its usage limit.'
+        if self.expires_at and datetime.utcnow() > self.expires_at:
+            return False, 'This code has expired.'
+        return True, 'Valid'
+
+    def apply(self, price):
+        if self.discount_type == 'percent':
+            return round(price * (1 - self.discount_value / 100), 2)
+        return max(0, round(price - self.discount_value, 2))
+
+    def discount_label(self):
+        if self.discount_type == 'percent':
+            return f'{self.discount_value:.0f}% off'
+        return f'${self.discount_value:.2f} off'
 
 
 class CommercialQuote(db.Model):

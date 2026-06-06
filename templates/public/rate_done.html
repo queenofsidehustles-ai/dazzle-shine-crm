@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thank You — Dazzle & Shine Maids</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 48px 36px; max-width: 460px; width: 100%; text-align: center; box-shadow: 0 8px 40px rgba(15,7,40,0.09); }
+    .script { font-family: "Allura", cursive; font-size: 1.8rem; color: #d3a84f; display: block; margin-bottom: 20px; }
+    .stars { font-size: 2rem; margin: 14px 0; }
+    .btn-google { display: inline-block; background: #4285f4; color: #fff; padding: 13px 28px; border-radius: 999px; text-decoration: none; font-weight: 700; font-size: 0.95rem; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="script">Thank You!</span>
+
+    {% if just_rated %}
+      {% if r.rating == 5 %}
+      <div style="font-size:2.5rem;margin-bottom:10px">🌟</div>
+      <h1 style="font-size:1.4rem;font-weight:700;margin-bottom:8px">You're amazing!</h1>
+      <p style="color:#5f5878;margin-bottom:6px">We're thrilled you had a 5-star experience, {{ r.booking.name.split()[0] }}!</p>
+      <p style="color:#5f5878;font-size:0.9rem">Would you mind sharing your experience on Google? It takes 60 seconds and helps us so much.</p>
+      <a href="https://g.page/r/dazzle-and-shine-maids/review" class="btn-google" target="_blank">⭐ Leave a Google Review</a>
+      <p style="font-size:0.78rem;color:#9a95ad;margin-top:16px">No pressure — just a link if you're feeling generous 😊</p>
+      {% else %}
+      <div style="font-size:2.5rem;margin-bottom:10px">💛</div>
+      <h1 style="font-size:1.4rem;font-weight:700;margin-bottom:8px">Thank you for your feedback!</h1>
+      <div class="stars">{% for i in range(r.rating) %}⭐{% endfor %}</div>
+      <p style="color:#5f5878">We appreciate you letting us know, {{ r.booking.name.split()[0] }}. We'll use your feedback to keep improving.</p>
+      {% if r.rating <= 3 %}
+      <p style="color:#5f5878;margin-top:12px;font-size:0.9rem">Not satisfied? Please call us at <strong>(407) 743-1944</strong> — we'd love the chance to make it right.</p>
+      {% endif %}
+      {% endif %}
+    {% else %}
+      <p style="color:#5f5878">You've already submitted your rating. Thank you!</p>
+      <div class="stars">{% for i in range(r.rating or 0) %}⭐{% endfor %}</div>
+    {% endif %}
+  </div>
+</body>
+</html>

@@ -158,6 +158,37 @@ def send_drips():
     return jsonify({'ok': True, 'drips_sent': count})
 
 
+# ── Validate promo code ────────────────────────────────────────────────────────
+
+@api_bp.route('/validate-code', methods=['POST', 'OPTIONS'])
+def validate_code():
+    origin = request.headers.get('Origin', '')
+    if request.method == 'OPTIONS':
+        return add_cors(jsonify({}), origin), 200
+    from models import DiscountCode
+    data = request.get_json(silent=True) or {}
+    code_str = data.get('code', '').strip().upper()
+    price = float(data.get('price', 0))
+    if not code_str:
+        return add_cors(jsonify({'ok': False, 'error': 'No code entered'}), origin), 400
+    c = DiscountCode.query.filter_by(code=code_str).first()
+    if not c:
+        resp = jsonify({'ok': False, 'error': 'Code not found'})
+        return add_cors(resp, origin), 404
+    valid, msg = c.check_valid()
+    if not valid:
+        return add_cors(jsonify({'ok': False, 'error': msg}), origin), 400
+    discounted = c.apply(price)
+    resp = jsonify({
+        'ok': True, 'code': c.code,
+        'label': c.discount_label(),
+        'original_price': price,
+        'discounted_price': discounted,
+        'savings': round(price - discounted, 2),
+    })
+    return add_cors(resp, origin), 200
+
+
 # ── Pricing calculator endpoint ──────────────────────────────────────────────
 
 @api_bp.route('/price', methods=['POST', 'OPTIONS'])
@@ -295,6 +326,8 @@ def create_booking():
         stripe_payment_intent=data.get('payment_intent_id', ''),
         stripe_customer_id=data.get('stripe_customer_id', ''),
         stripe_payment_method_id=data.get('stripe_payment_method_id', ''),
+        discount_code=data.get('discount_code', ''),
+        discount_amount=float(data.get('discount_amount', 0) or 0),
         deposit_paid=True if data.get('payment_intent_id') else False,
         price=total,
         balance_due=round(total - DEPOSIT_AMOUNT, 2),

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rate Your Cleaning — Dazzle & Shine Maids</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 40px 32px; max-width: 480px; width: 100%; text-align: center; box-shadow: 0 8px 40px rgba(15,7,40,0.09); }
+    .script { font-family: "Allura", cursive; font-size: 1.8rem; color: #d3a84f; display: block; margin-bottom: 4px; }
+    .stars { display: flex; justify-content: center; gap: 10px; margin: 28px 0 20px; }
+    .star { font-size: 2.8rem; cursor: pointer; transition: transform 0.1s; user-select: none; filter: grayscale(1); opacity: 0.4; }
+    .star:hover, .star.selected { filter: none; opacity: 1; transform: scale(1.15); }
+    textarea { width: 100%; padding: 12px 14px; border: 1px solid #e4dfef; border-radius: 10px; font-size: 0.95rem; font-family: inherit; color: #1f1333; resize: vertical; min-height: 80px; margin-bottom: 18px; outline: none; }
+    textarea:focus { border-color: #d3a84f; box-shadow: 0 0 0 3px rgba(211,168,79,0.15); }
+    .btn { width: 100%; padding: 14px; background: linear-gradient(135deg,#f4d07a,#d3a84f); color: #1a1225; border: none; border-radius: 999px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="script">Dazzle &amp; Shine</span>
+    <p style="font-size:0.78rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px">How did we do?</p>
+    <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:6px">Rate Your Cleaning</h1>
+    <p style="color:#5f5878;font-size:0.9rem">Hi {{ r.booking.name.split()[0] }}, your feedback means everything to us.</p>
+
+    <form method="POST">
+      <div class="stars" id="stars">
+        {% for i in range(1,6) %}
+        <span class="star" data-val="{{ i }}" onclick="pick({{ i }})" title="{{ i }} star{{ 's' if i > 1 }}">⭐</span>
+        {% endfor %}
+      </div>
+      <input type="hidden" name="stars" id="stars-input" value="0" />
+      <textarea name="comment" placeholder="Tell us more (optional) — what did you love or what can we improve?"></textarea>
+      <button type="submit" class="btn" id="submit-btn" disabled>Submit Rating</button>
+    </form>
+  </div>
+
+  <script>
+    function pick(val) {
+      document.getElementById('stars-input').value = val;
+      document.getElementById('submit-btn').disabled = false;
+      document.querySelectorAll('.star').forEach((s, i) => {
+        s.classList.toggle('selected', i < val);
+      });
+    }
+  </script>
+</body>
+</html>

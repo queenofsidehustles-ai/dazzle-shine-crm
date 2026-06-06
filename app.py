@@ -10,6 +10,8 @@ from blueprints.leads import leads_bp
 from blueprints.workorders import workorders_bp
 from blueprints.content import content_bp
 from blueprints.quotes import quotes_bp
+from blueprints.ratings import ratings_bp
+from blueprints.discounts import discounts_bp
 
 
 def create_app():
@@ -39,6 +41,8 @@ def create_app():
     app.register_blueprint(workorders_bp)
     app.register_blueprint(content_bp)
     app.register_blueprint(quotes_bp)
+    app.register_blueprint(ratings_bp)
+    app.register_blueprint(discounts_bp)
 
     with app.app_context():
         db.create_all()
@@ -61,6 +65,8 @@ def _migrate_db():
         ('booking', 'balance_collected',        'BOOLEAN DEFAULT FALSE'),
         ('booking', 'stripe_customer_id',       'VARCHAR(100)'),
         ('booking', 'stripe_payment_method_id', 'VARCHAR(100)'),
+        ('booking', 'discount_code',            'VARCHAR(50)'),
+        ('booking', 'discount_amount',          'FLOAT DEFAULT 0'),
         # Staff table
         ('staff',   'color',                    "VARCHAR(7) DEFAULT '#7c3aed'"),
         # Pricing & business settings tables (created fresh by create_all if missing)

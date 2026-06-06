@@ -85,6 +85,7 @@ def detail(booking_id):
 
         if booking.status == 'completed' and old_status != 'completed':
             _send_followup_email(booking)
+            _send_rating_request(booking)
             _create_next_recurring(booking)
 
         db.session.commit()
@@ -131,6 +132,34 @@ def client_detail(client_id):
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _send_rating_request(booking):
+    import secrets as _secrets
+    from models import BookingRating
+    token = _secrets.token_urlsafe(32)
+    r = BookingRating(booking_id=booking.id, token=token)
+    db.session.add(r)
+    db.session.flush()
+    from notifications import send_email
+    base = 'https://dazzle-shine-crm-production.up.railway.app'
+    stars_html = ''.join(
+        f'<a href="{base}/rate/{token}/{i}" style="font-size:2.2rem;text-decoration:none;margin:0 4px">⭐</a>'
+        for i in range(1, 6)
+    )
+    send_email(
+        to_email=booking.email, to_name=booking.name,
+        subject='How was your cleaning? — Dazzle & Shine Maids',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333;text-align:center">
+  <h2 style="color:#b98a33;margin-bottom:6px">How did we do?</h2>
+  <p style="color:#5f5878;margin-bottom:24px">Hi {booking.name.split()[0]}, your cleaning is complete! Tap a star to rate your experience:</p>
+  <div style="margin:20px 0">{stars_html}</div>
+  <p style="font-size:0.82rem;color:#9a95ad">Takes 5 seconds. Your feedback helps us improve.</p>
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
+  <p style="color:#9a95ad;font-size:13px">Dazzle &amp; Shine Maids · Orlando, FL</p>
+</div>""",
+    )
+
 
 def _send_followup_email(booking):
     from notifications import send_email
