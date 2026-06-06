@@ -49,6 +49,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         _migrate_db()
+        _seed_checklists()
 
     return app
 
@@ -89,6 +90,106 @@ def _migrate_db():
                 conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN {col} {col_type}'))
         except Exception:
             pass  # column already exists — safe to ignore
+
+
+def _seed_checklists():
+    """Create default checklist templates if they don't exist yet."""
+    import json as _json
+    from models import ChecklistTemplate
+
+    defaults = [
+        ('Standard Cleaning', 'standard', [
+            'Dust all surfaces (shelves, furniture, baseboards)',
+            'Wipe down countertops and kitchen surfaces',
+            'Clean stovetop and microwave exterior',
+            'Wipe appliance exteriors',
+            'Clean sink(s)',
+            'Scrub toilets, tubs, and showers',
+            'Wipe bathroom mirrors and fixtures',
+            'Vacuum all floors and rugs',
+            'Mop hard floors',
+            'Empty trash cans and replace liners',
+            'Make beds / straighten linens',
+            'Wipe light switches and door handles',
+        ]),
+        ('Deep Cleaning', 'deep', [
+            'Everything in Standard Cleaning',
+            'Scrub baseboards throughout',
+            'Wipe door frames and doors',
+            'Clean window sills and blinds',
+            'Scrub grout in bathroom tiles',
+            'Clean behind and under appliances',
+            'Wipe cabinet fronts inside and out',
+            'Clean ceiling fans and light fixtures',
+            'Vacuum furniture and upholstery',
+            'Wipe walls for scuff marks',
+            'Detail clean shower/tub (remove soap scum buildup)',
+            'Clean interior of microwave',
+        ]),
+        ('Move-Out / Move-In Cleaning', 'moveout', [
+            'Everything in Deep Cleaning',
+            'Wipe inside all cabinets and drawers',
+            'Clean inside oven (full detail)',
+            'Clean inside refrigerator',
+            'Wipe all walls top to bottom',
+            'Clean inside closets',
+            'Remove any remaining trash or debris',
+            'Clean all windows (interior)',
+            'Scrub all bathrooms top to bottom',
+            'Vacuum and mop all rooms',
+            'Final walkthrough — photo ready',
+        ]),
+        ('Airbnb / Vacation Rental Turnover', 'airbnb', [
+            'Strip and replace all bed linens',
+            'Replace towels (bath, hand, kitchen)',
+            'Restock toiletries (soap, shampoo, toilet paper)',
+            'Restock paper towels and cleaning supplies',
+            'Clean all bathrooms',
+            'Wipe kitchen surfaces and appliances',
+            'Empty and clean trash cans',
+            'Run dishwasher / hand wash dishes',
+            'Vacuum and mop all floors',
+            'Straighten furniture and décor',
+            'Check and replace light bulbs if needed',
+            'Check for guest left-behind items',
+            'Take photos when complete',
+        ]),
+        ('Apartment / Condo Cleaning', 'apartment', [
+            'Dust all surfaces',
+            'Wipe kitchen counters and stovetop',
+            'Clean microwave interior and exterior',
+            'Clean sink and faucets',
+            'Scrub toilet, tub, and shower',
+            'Wipe bathroom mirror and counter',
+            'Vacuum all areas',
+            'Mop hard floors',
+            'Empty trash',
+            'Straighten bedding',
+        ]),
+        ('Luxury Home Cleaning', 'luxury', [
+            'Dust all surfaces with microfiber — no streaks',
+            'Wipe all furniture (wood treatment where applicable)',
+            'Clean all bathrooms — white-glove detail',
+            'Polish fixtures and hardware',
+            'Clean kitchen appliances inside and out',
+            'Wipe cabinet fronts and handles',
+            'Vacuum furniture and upholstery',
+            'Vacuum and mop all floors',
+            'Clean ceiling fans and chandeliers',
+            'Wipe baseboards, door frames, and trim',
+            'Clean all mirrors — streak free',
+            'Make all beds with hotel-style finish',
+            'Arrange décor and artwork straight',
+            'Final walkthrough with checklist sign-off',
+        ]),
+    ]
+
+    for name, svc_type, items in defaults:
+        exists = ChecklistTemplate.query.filter_by(name=name).first()
+        if not exists:
+            t = ChecklistTemplate(name=name, service_type=svc_type, items=_json.dumps(items))
+            db.session.add(t)
+    db.session.commit()
 
 
 if __name__ == '__main__':

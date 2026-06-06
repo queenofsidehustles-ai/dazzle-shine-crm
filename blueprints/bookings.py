@@ -90,6 +90,11 @@ def detail(booking_id):
             _send_rating_request(booking)
             _create_next_recurring(booking)
 
+        # Send cleaner notification when a cleaner is newly assigned
+        new_cleaner = request.form.get('assigned_cleaner', '').strip()
+        if new_cleaner and new_cleaner != (old_status and booking.assigned_cleaner or ''):
+            _notify_cleaner(booking)
+
         db.session.commit()
         flash('Booking updated.', 'success')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
@@ -131,6 +136,30 @@ def clients():
 def client_detail(client_id):
     client = Client.query.get_or_404(client_id)
     return render_template('admin/client_detail.html', client=client)
+
+
+# ── Cleaner accept / decline ────────────────────────────────────────────────────
+
+@bookings_bp.route('/<int:booking_id>/cleaner-response', methods=['GET'])
+def cleaner_response(booking_id):
+    """Public link — cleaner accepts or declines a job."""
+    booking = Booking.query.get_or_404(booking_id)
+    action = request.args.get('action', '')
+    token = request.args.get('token', '')
+    import hashlib, os
+    expected = hashlib.sha256(f"{booking_id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
+    if token != expected:
+        return 'Invalid link.', 400
+    if action == 'accept':
+        booking.internal_notes = (booking.internal_notes or '') + '\n[Cleaner accepted job]'
+        db.session.commit()
+        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#065f46">✅ Job accepted! We\'ll see you on ' + (booking.preferred_date or 'the scheduled date') + '.</h2>'
+    elif action == 'decline':
+        booking.internal_notes = (booking.internal_notes or '') + '\n[Cleaner declined job — needs reassignment]'
+        booking.assigned_cleaner = ''
+        db.session.commit()
+        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#991b1b">Job declined. We\'ve been notified and will reassign. Thank you for letting us know.</h2>'
+    return 'Unknown action.', 400
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -225,3 +254,56 @@ def _create_next_recurring(booking):
         balance_due=booking.balance_due,
     )
     db.session.add(next_booking)
+
+
+def _notify_cleaner(booking):
+    """Email the assigned cleaner with job details, earnings, and accept/decline links."""
+    import hashlib, os
+    from models import Staff
+    from notifications import send_email
+    from pricing import SERVICES
+
+    cleaner_name = booking.assigned_cleaner or ''
+    staff = Staff.query.filter(Staff.name.ilike(f'%{cleaner_name.split()[0]}%')).first() if cleaner_name else None
+    if not staff or not staff.email:
+        return  # No email on file — skip
+
+    # Calculate cleaner earnings
+    price = booking.price or 0
+    if staff.pay_type == 'percent':
+        earnings = round(price * staff.pay_rate / 100, 2)
+        pay_label = f'{staff.pay_rate:.0f}% of ${price:.2f}'
+    else:
+        hours = booking.hours_worked or 0
+        earnings = round(hours * staff.pay_rate, 2)
+        pay_label = f'{hours}h × ${staff.pay_rate:.2f}/hr'
+
+    base = 'https://dazzle-shine-crm-production.up.railway.app'
+    token = hashlib.sha256(f"{booking.id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
+    accept_url = f"{base}/bookings/{booking.id}/cleaner-response?action=accept&token={token}"
+    decline_url = f"{base}/bookings/{booking.id}/cleaner-response?action=decline&token={token}"
+    svc_label = SERVICES.get(booking.service_type, {}).get('label', booking.service_type.title())
+
+    send_email(
+        to_email=staff.email, to_name=staff.name,
+        subject=f'New Job Assigned — {booking.preferred_date or "TBD"} · Dazzle & Shine',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">You have a new job! 🧹</h2>
+  <p>Hi {staff.name.split()[0]}, a job has been assigned to you. Please confirm below.</p>
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:16px 0"/>
+  <table style="width:100%;font-size:0.95rem;border-collapse:collapse">
+    <tr><td style="padding:6px 0;color:#5f5878;width:40%">Date</td><td style="font-weight:700">{booking.preferred_date or 'TBD'}</td></tr>
+    <tr><td style="padding:6px 0;color:#5f5878">Time</td><td style="font-weight:700">{booking.preferred_time or 'To be confirmed'}</td></tr>
+    <tr><td style="padding:6px 0;color:#5f5878">Service</td><td style="font-weight:700">{svc_label}</td></tr>
+    <tr><td style="padding:6px 0;color:#5f5878">Address</td><td style="font-weight:700">{booking.address or ''}{', ' + booking.city if booking.city else ''}</td></tr>
+    <tr><td style="padding:6px 0;color:#5f5878">Your Earnings</td><td style="font-weight:700;color:#065f46;font-size:1.1rem">${earnings:.2f} <span style="font-size:0.8rem;color:#9a95ad">({pay_label})</span></td></tr>
+  </table>
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <a href="{accept_url}" style="background:#065f46;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700;font-size:0.95rem">✅ Accept Job</a>
+    <a href="{decline_url}" style="background:#fee2e2;color:#991b1b;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700;font-size:0.95rem">❌ Decline</a>
+  </div>
+  <p style="color:#9a95ad;font-size:12px;margin-top:20px">Questions? Call Monica at (407) 743-1944 · Dazzle &amp; Shine Maids</p>
+</div>""",
+    )
