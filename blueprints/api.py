@@ -1,6 +1,6 @@
 import os
 import stripe
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from flask import Blueprint, request, jsonify
 from models import Booking, Client
 from extensions import db
@@ -85,6 +85,76 @@ def charge_balances():
     db.session.commit()
 
     return jsonify({'ok': True, 'charged': len([r for r in results if r['ok']]), 'results': results})
+
+
+# ── Lead quote capture (from website) ─────────────────────────────────────────
+
+@api_bp.route('/quote', methods=['POST', 'OPTIONS'])
+def capture_quote():
+    origin = request.headers.get('Origin', '')
+    if request.method == 'OPTIONS':
+        return add_cors(jsonify({}), origin), 200
+
+    data = request.get_json(silent=True) or {}
+    if not data.get('name') or not data.get('email'):
+        resp = jsonify({'ok': False, 'error': 'Name and email required'})
+        return add_cors(resp, origin), 400
+
+    total = calculate_price(
+        service_type=data.get('service_type', ''),
+        bedrooms=data.get('bedrooms', 1),
+        bathrooms=data.get('bathrooms', 1),
+        extras=data.get('extras', ''),
+        frequency=data.get('frequency', 'one_time'),
+    )
+
+    from models import Lead
+    lead = Lead(
+        name=data['name'].strip(), email=data['email'].lower().strip(),
+        phone=data.get('phone', '').strip(), service_type=data.get('service_type', ''),
+        bedrooms=data.get('bedrooms', ''), bathrooms=data.get('bathrooms', ''),
+        extras=data.get('extras', ''), frequency=data.get('frequency', 'one_time'),
+        address=data.get('address', '').strip(), city=data.get('city', '').strip(),
+        zip_code=data.get('zip_code', '').strip(),
+        quoted_price=total, source='website', status='new', drip_step=1,
+    )
+    db.session.add(lead)
+    db.session.commit()
+
+    _send_quote_email(lead, total)
+    resp = jsonify({'ok': True, 'total': total, 'deposit': DEPOSIT_AMOUNT,
+                    'balance_due': round(total - DEPOSIT_AMOUNT, 2)})
+    return add_cors(resp, origin), 201
+
+
+# ── Lead drip emails (cron — use same REMINDER_API_KEY) ───────────────────────
+
+@api_bp.route('/send-drips', methods=['POST'])
+def send_drips():
+    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
+    expected = os.environ.get('REMINDER_API_KEY', '')
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    from models import Lead
+    today = date.today()
+    step2 = Lead.query.filter(Lead.drip_step == 1, Lead.status == 'new',
+                               Lead.created_at <= today - timedelta(days=2)).all()
+    step3 = Lead.query.filter(Lead.drip_step == 2, Lead.status == 'new',
+                               Lead.last_drip_at <= today - timedelta(days=3)).all()
+    count = 0
+    for lead in step2:
+        _send_drip_followup(lead)
+        lead.drip_step = 2
+        lead.last_drip_at = datetime.utcnow()
+        count += 1
+    for lead in step3:
+        _send_drip_lastchance(lead)
+        lead.drip_step = 3
+        lead.last_drip_at = datetime.utcnow()
+        count += 1
+    db.session.commit()
+    return jsonify({'ok': True, 'drips_sent': count})
 
 
 # ── Pricing calculator endpoint ──────────────────────────────────────────────
@@ -360,4 +430,58 @@ def _send_reminder(booking: Booking):
         booking.phone,
         f"Hi {booking.name.split()[0]}! Reminder: your Dazzle & Shine cleaning is tomorrow at {time_text}. "
         f"Balance due: ${booking.balance_due:.2f}. Need to reschedule? Call (407) 743-1944. Reply STOP to opt out.",
+    )
+
+
+def _send_quote_email(lead, total):
+    send_email(
+        to_email=lead.email, to_name=lead.name,
+        subject='Your Free Quote — Dazzle & Shine Maids',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">Your Free Quote ✨</h2>
+  <p>Hi {lead.name},</p>
+  <p>Thanks for reaching out! Here's your personalized cleaning quote:</p>
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
+  <p><strong>Service:</strong> {lead.service_label}</p>
+  <p><strong>Bedrooms:</strong> {lead.bedrooms} &nbsp; <strong>Bathrooms:</strong> {lead.bathrooms}</p>
+  <p style="font-size:1.5rem;font-weight:700;color:#b98a33;margin:14px 0">Estimated Total: ${total:.2f}</p>
+  <p>Lock in your spot with just a <strong>$50 deposit</strong> — the rest is due after your cleaning.</p>
+  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
+  <p><a href="https://www.dazzleandshinemaids.com/#book" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Book Now →</a></p>
+  <p style="color:#9a95ad;font-size:13px;margin-top:20px">Questions? Call or text (407) 743-1944 · Dazzle &amp; Shine Maids · Orlando, FL</p>
+</div>""",
+    )
+
+
+def _send_drip_followup(lead):
+    send_email(
+        to_email=lead.email, to_name=lead.name,
+        subject='Still thinking about it? — Dazzle & Shine Maids',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">Still thinking about it?</h2>
+  <p>Hi {lead.name}, just following up on your quote of <strong>${lead.quoted_price:.2f}</strong>.</p>
+  <p>We'd love to help you reclaim your time! Booking takes less than 2 minutes and only requires a $50 deposit to hold your spot.</p>
+  <p><a href="https://www.dazzleandshinemaids.com/#book" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Book Now →</a></p>
+  <p style="color:#9a95ad;font-size:13px">Questions? Reply to this email or call (407) 743-1944 · Dazzle &amp; Shine Maids · Orlando, FL</p>
+</div>""",
+    )
+
+
+def _send_drip_lastchance(lead):
+    discounted = round((lead.quoted_price or 0) * 0.90, 2)
+    send_email(
+        to_email=lead.email, to_name=lead.name,
+        subject='10% off your first cleaning — Dazzle & Shine Maids',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">A Special Offer — Just for You 🎁</h2>
+  <p>Hi {lead.name}, we'd love to earn your business!</p>
+  <p><strong>10% off your first cleaning:</strong></p>
+  <p><s style="color:#9a95ad">${lead.quoted_price:.2f}</s> &rarr; <span style="font-size:1.3rem;font-weight:700;color:#b98a33">${discounted:.2f}</span></p>
+  <p>Just mention this email when you book and we'll honor the discount. Offer expires in 48 hours.</p>
+  <p><a href="https://www.dazzleandshinemaids.com/#book" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Claim My 10% Off →</a></p>
+  <p style="color:#9a95ad;font-size:12px">New customers only. Dazzle &amp; Shine Maids · Orlando, FL</p>
+</div>""",
     )

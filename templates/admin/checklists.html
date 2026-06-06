@@ -1,0 +1,46 @@
+{% extends "base_admin.html" %}
+{% block title %}Checklists — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Checklists{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('workorders.new_template') }}" class="btn btn-gold" style="padding:7px 16px;font-size:0.88rem">+ New Template</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  {% if templates %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Template Name</th><th>Service Type</th><th>Items</th><th></th></tr></thead>
+      <tbody>
+        {% for t in templates %}
+        <tr>
+          <td><strong>{{ t.name }}</strong></td>
+          <td style="color:#9a95ad">{{ t.service_type.title() if t.service_type else 'All services' }}</td>
+          <td style="color:#9a95ad">{{ t.get_items()|length }} items</td>
+          <td><a href="{{ url_for('workorders.edit_template', template_id=t.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+    No checklist templates yet.
+    <a href="{{ url_for('workorders.new_template') }}" style="color:#d3a84f">Create your first one →</a>
+  </p>
+  {% endif %}
+</div>
+
+<div style="margin-top:16px">
+  <p style="font-size:0.85rem;color:#9a95ad">
+    Quick-start: Create a template for each service type. When you send a work order from a booking, the right checklist is attached automatically.
+  </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+    {% for svc in ['standard','deep','moveout','airbnb','apartment','luxury'] %}
+    <a href="{{ url_for('workorders.new_template', service_type=svc) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.82rem">
+      + {{ svc.title() }} template
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

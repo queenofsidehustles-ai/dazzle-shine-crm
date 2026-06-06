@@ -246,6 +246,15 @@
       <a href="{{ url_for('staff.index') }}" class="{{ 'active' if request.blueprint == 'staff' }}">
         <span class="icon">🧹</span> Team
       </a>
+      <a href="{{ url_for('leads.index') }}" class="{{ 'active' if request.blueprint == 'leads' }}">
+        <span class="icon">💡</span> Leads
+      </a>
+      <a href="{{ url_for('workorders.templates') }}" class="{{ 'active' if request.blueprint == 'workorders' }}">
+        <span class="icon">📝</span> Checklists
+      </a>
+      <a href="{{ url_for('content.index') }}" class="{{ 'active' if request.blueprint == 'content' }}">
+        <span class="icon">✨</span> Content
+      </a>
       <a href="{{ url_for('settings.pricing') }}" class="{{ 'active' if request.blueprint == 'settings' }}">
         <span class="icon">⚙️</span> Settings
       </a>

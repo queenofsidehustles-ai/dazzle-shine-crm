@@ -87,6 +87,31 @@
       </form>
     </div>
 
+    <!-- Work Order Card -->
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Work Order / Checklist</h2>
+      {% set templates = [] %}
+      <form method="POST" action="{{ url_for('workorders.send_workorder', booking_id=booking.id) }}" style="display:flex;gap:8px;flex-wrap:wrap">
+        <select name="template_id" style="flex:1;padding:9px 13px;border:1px solid #e4dfef;border-radius:9px;font-size:0.9rem">
+          <option value="">Default checklist for {{ booking.service_label }}</option>
+        </select>
+        <button type="submit" class="btn btn-dark" style="white-space:nowrap">Send to Cleaner</button>
+      </form>
+      {% if booking.job_checklists %}
+      <div style="margin-top:12px">
+        {% for jc in booking.job_checklists|sort(attribute='sent_at', reverse=True) %}
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid #f0edf8;font-size:0.85rem">
+          <span style="color:#5f5878">{{ jc.template_name }} — sent {{ jc.sent_at.strftime('%b %d') }}</span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:{{ '#065f46' if jc.completion_percent == 100 else '#9a95ad' }};font-weight:700">{{ jc.completion_percent }}%</span>
+            <a href="{{ url_for('workorders.view_checklist', token=jc.token) }}" target="_blank" style="color:#5d4f7d;font-weight:600">View →</a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
     <!-- Balance Collection Card -->
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Balance Collection</h2>

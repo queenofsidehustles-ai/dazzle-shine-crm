@@ -1,0 +1,42 @@
+{% extends "base_admin.html" %}
+{% block title %}{{ 'Edit' if template else 'New' }} Checklist — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}{{ 'Edit' if template else 'New' }} Checklist Template{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('workorders.templates') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Back</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:560px">
+  <div class="card">
+    <form method="POST">
+      <div class="form-group">
+        <label>Template Name *</label>
+        <input type="text" name="name" required value="{{ template.name if template else '' }}" placeholder="e.g. Standard Clean Checklist" />
+      </div>
+      <div class="form-group">
+        <label>Service Type</label>
+        <select name="service_type">
+          <option value="">All services</option>
+          {% for svc in ['standard','deep','moveout','airbnb','apartment','luxury'] %}
+          <option value="{{ svc }}" {{ 'selected' if template and template.service_type == svc }}>{{ svc.title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Checklist Items <span style="font-weight:400;color:#9a95ad">(one per line)</span></label>
+        <textarea name="items" rows="14" style="font-size:0.9rem;line-height:1.7" placeholder="Each line = one checklist item">{{ default_items }}</textarea>
+      </div>
+      <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">
+        {{ 'Save Changes' if template else 'Create Template' }}
+      </button>
+    </form>
+
+    {% if template %}
+    <form method="POST" action="{{ url_for('workorders.delete_template', template_id=template.id) }}"
+          onsubmit="return confirm('Delete this template?')" style="margin-top:12px">
+      <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">Delete Template</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base_admin.html" %}
+{% block title %}Lead: {{ lead.name }} — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Lead: {{ lead.name }}{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('leads.index') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← All Leads</a>
+{% endblock %}
+
+{% block content %}
+<div class="detail-grid">
+
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
+      <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ lead.name }}</span></div>
+      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ lead.email }}" style="color:#5d4f7d">{{ lead.email }}</a></span></div>
+      <div class="detail-row"><span class="dl">Phone</span><span class="dv">{{ lead.phone or '—' }}</span></div>
+      {% if lead.address %}
+      <div class="detail-row"><span class="dl">Address</span><span class="dv">{{ lead.address }}, {{ lead.city }} {{ lead.zip_code }}</span></div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Quote Details</h2>
+      <div class="detail-row"><span class="dl">Service</span><span class="dv">{{ lead.service_label }}</span></div>
+      <div class="detail-row"><span class="dl">Bedrooms</span><span class="dv">{{ lead.bedrooms or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Bathrooms</span><span class="dv">{{ lead.bathrooms or '—' }}</span></div>
+      {% if lead.extras %}
+      <div class="detail-row"><span class="dl">Add-ons</span><span class="dv">{{ lead.extras }}</span></div>
+      {% endif %}
+      <div class="detail-row"><span class="dl">Quoted Price</span><span class="dv" style="font-size:1.3rem;font-weight:700;color:#b98a33">${{ '%.2f' % (lead.quoted_price or 0) }}</span></div>
+      <div class="detail-row"><span class="dl">Drip Step</span><span class="dv" style="color:#9a95ad">{{ lead.drip_step }} of 3 emails sent</span></div>
+      <div class="detail-row"><span class="dl">Received</span><span class="dv" style="color:#9a95ad;font-size:0.88rem">{{ lead.created_at.strftime('%B %d, %Y') }}</span></div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Manage Lead</h2>
+      <form method="POST">
+        <div class="form-group">
+          <label>Status</label>
+          <select name="status">
+            {% for s in ['new','contacted','converted','lost'] %}
+            <option value="{{ s }}" {{ 'selected' if lead.status == s }}>{{ s.title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea name="notes" placeholder="Follow-up notes...">{{ lead.notes or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save</button>
+      </form>
+    </div>
+
+    {% if lead.status != 'converted' %}
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:12px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Convert to Booking</h2>
+      <p style="font-size:0.88rem;color:#5f5878;margin-bottom:14px">Creates a new booking and client from this lead. No deposit required — you can confirm dates and collect payment separately.</p>
+      <form method="POST" action="{{ url_for('leads.convert', lead_id=lead.id) }}"
+            onsubmit="return confirm('Convert this lead to a booking?')">
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Convert to Booking →</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <form method="POST" action="{{ url_for('leads.delete', lead_id=lead.id) }}"
+            onsubmit="return confirm('Delete this lead permanently?')">
+        <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">Delete Lead</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

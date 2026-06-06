@@ -120,6 +120,94 @@ class PricingSetting(db.Model):
             db.session.add(row)
 
 
+class Lead(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    phone = db.Column(db.String(20))
+    service_type = db.Column(db.String(50))
+    bedrooms = db.Column(db.String(10))
+    bathrooms = db.Column(db.String(10))
+    extras = db.Column(db.String(200))
+    frequency = db.Column(db.String(20), default='one_time')
+    address = db.Column(db.String(200))
+    city = db.Column(db.String(50))
+    zip_code = db.Column(db.String(10))
+    quoted_price = db.Column(db.Float)
+    status = db.Column(db.String(20), default='new')  # new, contacted, converted, lost
+    source = db.Column(db.String(50), default='website')
+    notes = db.Column(db.Text)
+    drip_step = db.Column(db.Integer, default=1)
+    last_drip_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    SERVICE_LABELS = {
+        'standard': 'Standard House Cleaning', 'deep': 'Deep Cleaning',
+        'moveout': 'Move-Out / Move-In Cleaning', 'airbnb': 'Airbnb / Vacation Rental',
+        'apartment': 'Apartment & Condo Cleaning', 'luxury': 'Luxury Home Cleaning',
+    }
+
+    @property
+    def service_label(self):
+        return self.SERVICE_LABELS.get(self.service_type or '', self.service_type or '—')
+
+
+class ChecklistTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    service_type = db.Column(db.String(50))
+    items = db.Column(db.Text, default='[]')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def get_items(self):
+        try:
+            return json.loads(self.items or '[]')
+        except Exception:
+            return []
+
+
+class JobChecklist(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=False)
+    template_name = db.Column(db.String(100))
+    items = db.Column(db.Text, default='[]')
+    completed_items = db.Column(db.Text, default='[]')
+    token = db.Column(db.String(64), unique=True, nullable=False)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+    booking = db.relationship('Booking', backref='job_checklists')
+
+    def get_items(self):
+        try:
+            return json.loads(self.items or '[]')
+        except Exception:
+            return []
+
+    def get_completed(self):
+        try:
+            return set(json.loads(self.completed_items or '[]'))
+        except Exception:
+            return set()
+
+    @property
+    def completion_percent(self):
+        items = self.get_items()
+        if not items:
+            return 0
+        return int(len(self.get_completed()) / len(items) * 100)
+
+
+class ContentPost(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_type = db.Column(db.String(50))
+    platform = db.Column(db.String(50))
+    caption = db.Column(db.Text)
+    context = db.Column(db.Text)
+    scheduled_date = db.Column(db.String(20))
+    status = db.Column(db.String(20), default='draft')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class Staff(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)

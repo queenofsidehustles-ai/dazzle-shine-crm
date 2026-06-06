@@ -1,0 +1,47 @@
+{% extends "base_admin.html" %}
+{% block title %}Leads — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Leads{% endblock %}
+
+{% block content %}
+<div class="filter-tabs">
+  {% for s, label in [('','All'),('new','New'),('contacted','Contacted'),('converted','Converted'),('lost','Lost')] %}
+  <a href="{{ url_for('leads.index', status=s) }}"
+     class="filter-tab {{ 'active' if status_filter == s }}">
+    {{ label }} ({{ counts['all' if not s else s] }})
+  </a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  {% if leads %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Name</th><th>Service</th><th>Quote</th><th>Source</th><th>Status</th><th>Date</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for lead in leads %}
+        <tr>
+          <td>
+            <strong>{{ lead.name }}</strong><br>
+            <span style="font-size:0.82rem;color:#9a95ad">{{ lead.email }}</span>
+          </td>
+          <td>{{ lead.service_label }}</td>
+          <td>${{ '%.2f' % (lead.quoted_price or 0) }}</td>
+          <td style="font-size:0.85rem;color:#9a95ad">{{ lead.source or 'website' }}</td>
+          <td>
+            {% set colors = {'new':'status-pending','contacted':'status-confirmed','converted':'status-completed','lost':'status-cancelled'} %}
+            <span class="status {{ colors.get(lead.status, 'status-pending') }}">{{ lead.status }}</span>
+          </td>
+          <td style="font-size:0.82rem;color:#9a95ad">{{ lead.created_at.strftime('%b %d') }}</td>
+          <td><a href="{{ url_for('leads.detail', lead_id=lead.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:40px 0">No leads yet. They'll appear here when someone requests a quote from your website.</p>
+  {% endif %}
+</div>
+{% endblock %}
