@@ -158,6 +158,64 @@ def send_drips():
     return jsonify({'ok': True, 'drips_sent': count})
 
 
+# ── Contractor application (from website) ─────────────────────────────────────
+
+@api_bp.route('/apply', methods=['POST', 'OPTIONS'])
+def contractor_apply():
+    origin = request.headers.get('Origin', '')
+    if request.method == 'OPTIONS':
+        return add_cors(jsonify({}), origin), 200
+
+    data = request.get_json(silent=True) or {}
+
+    if not data.get('name') or not data.get('email'):
+        return add_cors(jsonify({'ok': False, 'error': 'Name and email required'}), origin), 400
+
+    from models import ContractorApplication
+
+    def to_bool(v):
+        return v in (True, 'true', 'on', '1', 1)
+
+    a = ContractorApplication(
+        name=data.get('name', '').strip(),
+        email=data.get('email', '').strip(),
+        phone=data.get('phone', '').strip(),
+        years_experience=data.get('years_experience', ''),
+        services=data.get('services', ''),
+        availability=data.get('availability', ''),
+        has_transportation=to_bool(data.get('has_transportation')),
+        has_supplies=to_bool(data.get('has_supplies')),
+        has_references=to_bool(data.get('has_references')),
+        background_check_consent=to_bool(data.get('background_check_consent')),
+        agrees_to_ic_terms=to_bool(data.get('agrees_to_ic_terms')),
+        why_interested=data.get('why_interested', '').strip(),
+        status='new',
+    )
+    db.session.add(a)
+    db.session.commit()
+
+    notify = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+    send_email(
+        to_email=notify, to_name='Dazzle & Shine Maids',
+        from_name='Dazzle & Shine Hiring',
+        subject=f'New Cleaner Application: {a.name}',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">New Contractor Application</h2>
+  <p><strong>Name:</strong> {a.name} &nbsp; <strong>Phone:</strong> {a.phone}</p>
+  <p><strong>Email:</strong> {a.email}</p>
+  <p><strong>Experience:</strong> {a.years_experience}</p>
+  <p><strong>Services:</strong> {a.services or '—'}</p>
+  <p><strong>Availability:</strong> {a.availability or '—'}</p>
+  <p><strong>Has car:</strong> {'Yes' if a.has_transportation else 'No'}</p>
+  <p><strong>Why interested:</strong> {a.why_interested or '—'}</p>
+</div>""",
+    )
+
+    resp = jsonify({'ok': True})
+    return add_cors(resp, origin), 201
+
+
 # ── Validate promo code ────────────────────────────────────────────────────────
 
 @api_bp.route('/validate-code', methods=['POST', 'OPTIONS'])
