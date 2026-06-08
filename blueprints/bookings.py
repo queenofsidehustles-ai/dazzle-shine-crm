@@ -304,6 +304,6 @@ def _notify_cleaner(booking):
     <a href="{accept_url}" style="background:#065f46;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700;font-size:0.95rem">✅ Accept Job</a>
     <a href="{decline_url}" style="background:#fee2e2;color:#991b1b;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700;font-size:0.95rem">❌ Decline</a>
   </div>
-  <p style="color:#9a95ad;font-size:12px;margin-top:20px">Questions? Call Monica at (407) 743-1944 · Dazzle &amp; Shine Maids</p>
+  <p style="color:#9a95ad;font-size:12px;margin-top:20px">Questions? Call Monica at (689) 999-0194 · Dazzle &amp; Shine Maids</p>
 </div>""",
     )

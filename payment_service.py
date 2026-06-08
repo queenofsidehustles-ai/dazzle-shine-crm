@@ -78,5 +78,5 @@ def _notify_failed(booking, notify_email, error_msg):
     send_sms(
         booking.phone,
         f"Hi {booking.name.split()[0]}, your Dazzle & Shine balance payment of ${booking.balance_due:.2f} "
-        f"didn't go through. Please call us at (407) 743-1944. Thank you!",
+        f"didn't go through. Please call us at (689) 999-0194. Thank you!",
     )

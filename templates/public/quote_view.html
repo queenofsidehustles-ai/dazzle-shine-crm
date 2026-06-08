@@ -83,7 +83,7 @@
     {% if q.status == 'accepted' %}
     <div class="status-banner status-accepted">You accepted this proposal ✓<br><span style="font-size:0.85rem;font-weight:500">We'll be in touch shortly to confirm your start date.</span></div>
     {% elif q.status == 'declined' %}
-    <div class="status-banner status-declined">You declined this proposal.<br><span style="font-size:0.85rem;font-weight:500">Questions? Call us at (407) 743-1944.</span></div>
+    <div class="status-banner status-declined">You declined this proposal.<br><span style="font-size:0.85rem;font-weight:500">Questions? Call us at (689) 999-0194.</span></div>
     {% else %}
     <div class="action-row">
       <form method="POST" action="{{ url_for('quotes.accept', token=q.token) }}">
@@ -94,7 +94,7 @@
         <button type="submit" class="btn-decline">Decline</button>
       </form>
     </div>
-    <p style="text-align:center;font-size:0.8rem;color:#9a95ad;margin-top:14px">Questions before deciding? Call (407) 743-1944 or email us — we're happy to adjust.</p>
+    <p style="text-align:center;font-size:0.8rem;color:#9a95ad;margin-top:14px">Questions before deciding? Call (689) 999-0194 or email us — we're happy to adjust.</p>
     {% endif %}
   </div>
 </body>

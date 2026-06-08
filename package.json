@@ -1,0 +1,24 @@
+{
+  "name": "dazzle-shine-crm",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/queenofsidehustles-ai/dazzle-shine-crm.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/queenofsidehustles-ai/dazzle-shine-crm/issues"
+  },
+  "homepage": "https://github.com/queenofsidehustles-ai/dazzle-shine-crm#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

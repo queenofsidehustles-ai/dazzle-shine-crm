@@ -457,7 +457,7 @@ def _send_confirmation(booking: Booking):
   <p><strong>Balance due after cleaning:</strong> ${booking.balance_due:.2f}</p>
   <p style="font-size:0.88rem;color:#9a95ad">Deposit is non-refundable. You may reschedule at any time.</p>
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p>Questions? Call or text <strong>(407) 743-1944</strong> or reply to this email.</p>
+  <p>Questions? Call or text <strong>(689) 999-0194</strong> or reply to this email.</p>
   <p style="color:#9a95ad;font-size:14px">Dazzle &amp; Shine Maids · Orlando, FL</p>
 </div>""",
     )
@@ -467,7 +467,7 @@ def _send_confirmation(booking: Booking):
         booking.phone,
         f"Hi {booking.name.split()[0]}! Your Dazzle & Shine cleaning is confirmed for {date_text}. "
         f"Deposit received. Balance due: ${booking.balance_due:.2f}. "
-        f"Questions? Call (407) 743-1944. Reply STOP to opt out.",
+        f"Questions? Call (689) 999-0194. Reply STOP to opt out.",
     )
 
     # Notification to owner
@@ -513,7 +513,7 @@ def _send_reminder(booking: Booking):
   <p><strong>Address:</strong> {booking.address}, {booking.city}</p>
   <p><strong>Balance due after cleaning:</strong> ${booking.balance_due:.2f}</p>
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p>Need to reschedule? Call or text <strong>(407) 743-1944</strong> as soon as possible.</p>
+  <p>Need to reschedule? Call or text <strong>(689) 999-0194</strong> as soon as possible.</p>
   <p style="color:#9a95ad;font-size:14px">Dazzle &amp; Shine Maids · Orlando, FL</p>
 </div>""",
     )
@@ -521,7 +521,7 @@ def _send_reminder(booking: Booking):
     send_sms(
         booking.phone,
         f"Hi {booking.name.split()[0]}! Reminder: your Dazzle & Shine cleaning is tomorrow at {time_text}. "
-        f"Balance due: ${booking.balance_due:.2f}. Need to reschedule? Call (407) 743-1944. Reply STOP to opt out.",
+        f"Balance due: ${booking.balance_due:.2f}. Need to reschedule? Call (689) 999-0194. Reply STOP to opt out.",
     )
 
 
@@ -541,7 +541,7 @@ def _send_quote_email(lead, total):
   <p>Lock in your spot with just a <strong>$50 deposit</strong> — the rest is due after your cleaning.</p>
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <p><a href="https://www.dazzleandshinemaids.com/#book" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Book Now →</a></p>
-  <p style="color:#9a95ad;font-size:13px;margin-top:20px">Questions? Call or text (407) 743-1944 · Dazzle &amp; Shine Maids · Orlando, FL</p>
+  <p style="color:#9a95ad;font-size:13px;margin-top:20px">Questions? Call or text (689) 999-0194 · Dazzle &amp; Shine Maids · Orlando, FL</p>
 </div>""",
     )
 
@@ -556,7 +556,7 @@ def _send_drip_followup(lead):
   <p>Hi {lead.name}, just following up on your quote of <strong>${lead.quoted_price:.2f}</strong>.</p>
   <p>We'd love to help you reclaim your time! Booking takes less than 2 minutes and only requires a $50 deposit to hold your spot.</p>
   <p><a href="https://www.dazzleandshinemaids.com/#book" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Book Now →</a></p>
-  <p style="color:#9a95ad;font-size:13px">Questions? Reply to this email or call (407) 743-1944 · Dazzle &amp; Shine Maids · Orlando, FL</p>
+  <p style="color:#9a95ad;font-size:13px">Questions? Reply to this email or call (689) 999-0194 · Dazzle &amp; Shine Maids · Orlando, FL</p>
 </div>""",
     )
 

@@ -162,7 +162,7 @@ def send_quote(quote_id):
     </div>
     <p style="font-size:0.85rem;color:#9a95ad;text-align:center">You can review the full proposal, accept, or decline at the link above.</p>
     <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-    <p style="font-size:0.85rem;color:#9a95ad">Questions? Contact us at (407) 743-1944 or reply to this email.<br>Dazzle &amp; Shine Maids · Orlando, FL</p>
+    <p style="font-size:0.85rem;color:#9a95ad">Questions? Contact us at (689) 999-0194 or reply to this email.<br>Dazzle &amp; Shine Maids · Orlando, FL</p>
   </div>
 </div>""",
     )
