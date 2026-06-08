@@ -19,3 +19,9 @@ venv/
 # IDE
 .vscode/
 .idea/
+
+# Node / Testing
+node_modules/
+package-lock.json
+test-results/
+playwright-report/
