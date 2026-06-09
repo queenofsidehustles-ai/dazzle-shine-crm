@@ -82,7 +82,17 @@ def _migrate_db():
         ('staff',   'notes',                    'TEXT'),
         # Staff table
         ('staff',   'color',                    "VARCHAR(7) DEFAULT '#7c3aed'"),
-        # Pricing & business settings tables (created fresh by create_all if missing)
+        # CommercialQuote columns added after initial deploy
+        ('commercial_quote', 'sent_at',         'TIMESTAMP'),
+        ('commercial_quote', 'responded_at',    'TIMESTAMP'),
+        ('commercial_quote', 'units',           'VARCHAR(20)'),
+        ('commercial_quote', 'sqft',            'VARCHAR(20)'),
+        ('commercial_quote', 'contract_term',   'VARCHAR(50)'),
+        ('commercial_quote', 'monthly_price',   'FLOAT'),
+        ('commercial_quote', 'scope_notes',     'TEXT'),
+        # Contractor columns
+        ('contractor_application', 'experience_years', 'VARCHAR(20)'),
+        ('contractor_application', 'availability',     'VARCHAR(50)'),
     ]
     for table, col, col_type in new_cols:
         try:
