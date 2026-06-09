@@ -34,24 +34,20 @@ CONTRACT_TERMS = [
 @quotes_bp.route('/')
 @login_required
 def index():
-    try:
-        status_filter = request.args.get('status', '')
-        query = CommercialQuote.query.order_by(CommercialQuote.created_at.desc())
-        if status_filter:
-            query = query.filter_by(status=status_filter)
-        all_quotes = query.all()
-        counts = {
-            'all': CommercialQuote.query.count(),
-            'draft': CommercialQuote.query.filter_by(status='draft').count(),
-            'sent': CommercialQuote.query.filter_by(status='sent').count(),
-            'accepted': CommercialQuote.query.filter_by(status='accepted').count(),
-            'declined': CommercialQuote.query.filter_by(status='declined').count(),
-        }
-        return render_template('admin/quotes.html', quotes=all_quotes,
-                               counts=counts, status_filter=status_filter)
-    except Exception as e:
-        import traceback
-        return f"<pre>QUOTES ERROR:\n{traceback.format_exc()}</pre>", 500
+    status_filter = request.args.get('status', '')
+    query = CommercialQuote.query.order_by(CommercialQuote.created_at.desc())
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+    all_quotes = query.all()
+    counts = {
+        'all': CommercialQuote.query.count(),
+        'draft': CommercialQuote.query.filter_by(status='draft').count(),
+        'sent': CommercialQuote.query.filter_by(status='sent').count(),
+        'accepted': CommercialQuote.query.filter_by(status='accepted').count(),
+        'declined': CommercialQuote.query.filter_by(status='declined').count(),
+    }
+    return render_template('admin/quotes.html', quotes=all_quotes,
+                           counts=counts, status_filter=status_filter)
 
 
 @quotes_bp.route('/new', methods=['GET', 'POST'])
