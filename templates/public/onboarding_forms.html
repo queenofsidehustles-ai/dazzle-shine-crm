@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Onboarding Forms — {{ biz }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; min-height: 100vh; padding: 32px 16px; }
+    .wrap { max-width: 560px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 28px; }
+    .header .script { font-family: "Allura", cursive; font-size: 2rem; color: #d3a84f; display: block; margin-bottom: 4px; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 28px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); margin-bottom: 16px; }
+    .step { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .step-num { width: 28px; height: 28px; border-radius: 50%; background: #d3a84f; color: #1f1333; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    label { display: block; font-weight: 600; font-size: 0.88rem; margin-bottom: 6px; color: #1f1333; }
+    input, select, textarea { width: 100%; padding: 11px 14px; border: 2px solid #e4dfef; border-radius: 8px; font-size: 0.95rem; font-family: "Inter", sans-serif; color: #1f1333; margin-bottom: 14px; transition: border-color 0.2s; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #d3a84f; }
+    .btn { background: linear-gradient(135deg,#d3a84f,#b98a33); color: #1f1333; border: none; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; width: 100%; margin-top: 8px; }
+    .btn:hover { opacity: 0.9; }
+    .notice { font-size: 0.78rem; color: #9a95ad; text-align: center; margin-top: 12px; line-height: 1.6; }
+    .progress { display: flex; gap: 6px; margin-bottom: 24px; }
+    .progress-step { flex: 1; height: 6px; border-radius: 999px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <span class="script">{{ biz }}</span>
+      <h1 style="font-size:1.3rem;font-weight:700;color:#1f1333">Onboarding Forms</h1>
+      <p style="color:#9a95ad;font-size:0.88rem;margin-top:6px">Hi {{ s.name.split()[0] }}, just a few quick details and you're ready to go!</p>
+    </div>
+
+    <div class="progress">
+      <div class="progress-step" style="background:#d3a84f"></div>
+      <div class="progress-step" style="background:#d3a84f"></div>
+      <div class="progress-step" style="background:#e4dfef"></div>
+    </div>
+
+    <div class="card">
+      <form method="POST">
+
+        <h3 style="font-size:0.95rem;font-weight:700;color:#3b2460;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #f0edf8">
+          Emergency Contact
+        </h3>
+        <label>Emergency Contact Name</label>
+        <input type="text" name="emergency_contact_name"
+               value="{{ s.emergency_contact_name or '' }}"
+               placeholder="Full name" />
+        <label>Emergency Contact Phone</label>
+        <input type="tel" name="emergency_contact_phone"
+               value="{{ s.emergency_contact_phone or '' }}"
+               placeholder="(407) 000-0000" />
+
+        <h3 style="font-size:0.95rem;font-weight:700;color:#3b2460;margin:20px 0 16px;padding-bottom:10px;border-bottom:1px solid #f0edf8">
+          Uniform & Gear
+        </h3>
+        <label>T-Shirt Size</label>
+        <select name="shirt_size" required>
+          <option value="">-- Select your size --</option>
+          {% for size in ['XS','S','M','L','XL','2XL','3XL'] %}
+          <option value="{{ size }}" {{ 'selected' if s.shirt_size == size }}>{{ size }}</option>
+          {% endfor %}
+        </select>
+
+        <h3 style="font-size:0.95rem;font-weight:700;color:#3b2460;margin:20px 0 16px;padding-bottom:10px;border-bottom:1px solid #f0edf8">
+          How Would You Like to Be Paid?
+        </h3>
+        <label>Payment Preference</label>
+        <select name="payment_pref" required>
+          <option value="">-- Select --</option>
+          <option value="Zelle" {{ 'selected' if s.payment_pref == 'Zelle' }}>Zelle</option>
+          <option value="Direct Deposit" {{ 'selected' if s.payment_pref == 'Direct Deposit' }}>Direct Deposit</option>
+          <option value="Check" {{ 'selected' if s.payment_pref == 'Check' }}>Check</option>
+          <option value="Cash App" {{ 'selected' if s.payment_pref == 'Cash App' }}>Cash App</option>
+        </select>
+        <label>Your Zelle Phone/Email or Notes</label>
+        <input type="text" name="payment_notes"
+               value="{{ s.payment_notes or '' }}"
+               placeholder="e.g. (407) 555-1234 or payments@email.com" />
+
+        <button type="submit" class="btn">Submit My Onboarding Forms</button>
+        <p class="notice">This information is kept confidential and used only for payroll and emergency contact purposes.</p>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

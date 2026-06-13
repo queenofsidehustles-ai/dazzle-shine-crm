@@ -278,6 +278,15 @@
       <a href="{{ url_for('contractors.payroll') }}" class="{{ 'active' if request.endpoint == 'contractors.payroll' }}">
         <span class="icon">💰</span> Payroll
       </a>
+      <a href="{{ url_for('scripts.index') }}" class="{{ 'active' if request.blueprint == 'scripts' }}">
+        <span class="icon">📋</span> VA Scripts
+      </a>
+      <a href="{{ url_for('sops.index') }}" class="{{ 'active' if request.blueprint == 'sops' }}">
+        <span class="icon">📄</span> SOP Library
+      </a>
+      <a href="{{ url_for('email_templates.index') }}" class="{{ 'active' if request.blueprint == 'email_templates' }}">
+        <span class="icon">✉️</span> Email Templates
+      </a>
       <a href="{{ url_for('settings.pricing') }}" class="{{ 'active' if request.blueprint == 'settings' }}">
         <span class="icon">⚙️</span> Settings
       </a>

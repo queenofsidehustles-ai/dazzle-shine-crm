@@ -1,0 +1,46 @@
+{% extends "base_admin.html" %}
+{% block title %}{{ 'Edit' if sop else 'Add' }} SOP — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}{{ 'Edit' if sop else 'New' }} SOP{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('sops.index', cat=category) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Back to SOPs</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:720px">
+  <div class="card">
+    <form method="POST">
+      <div class="form-group">
+        <label>Category</label>
+        <select name="category">
+          {% for cat, label in categories %}
+          <option value="{{ cat }}" {{ 'selected' if (sop and sop.category == cat) or (not sop and category == cat) }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>SOP Title</label>
+        <input type="text" name="title" required placeholder="e.g. Post-Construction Cleaning Procedure"
+               value="{{ sop.title if sop else '' }}" />
+      </div>
+      <div class="form-group">
+        <label>Procedure Content</label>
+        <textarea name="content" rows="20" required
+                  style="font-family:monospace;font-size:0.88rem;line-height:1.7"
+                  placeholder="Write each step clearly. Use numbered steps, ALL CAPS for warnings, and [BRACKETS] for fill-in spots.">{{ sop.content if sop else '' }}</textarea>
+        <span style="font-size:0.78rem;color:#9a95ad">Tip: Use numbered steps. Line breaks are preserved exactly as typed.</span>
+      </div>
+      <div class="form-group" style="max-width:160px">
+        <label>Sort Order</label>
+        <input type="number" name="sort_order" value="{{ sop.sort_order if sop else 0 }}" min="0" />
+        <span style="font-size:0.78rem;color:#9a95ad">Lower numbers appear first.</span>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button type="submit" class="btn btn-gold" style="flex:1;justify-content:center">
+          {{ 'Save Changes' if sop else 'Add SOP' }}
+        </button>
+        <a href="{{ url_for('sops.index', cat=category) }}" class="btn btn-outline" style="flex:1;justify-content:center;text-align:center">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

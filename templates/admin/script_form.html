@@ -1,0 +1,46 @@
+{% extends "base_admin.html" %}
+{% block title %}{{ 'Edit' if script else 'Add' }} Script — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}{{ 'Edit' if script else 'New' }} Script{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('scripts.index', cat=category) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Back to Scripts</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:720px">
+  <div class="card">
+    <form method="POST">
+      <div class="form-group">
+        <label>Category</label>
+        <select name="category">
+          {% for cat, label in categories %}
+          <option value="{{ cat }}" {{ 'selected' if (script and script.category == cat) or (not script and category == cat) }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Script Title</label>
+        <input type="text" name="title" required placeholder="e.g. Inbound — New Client Inquiry"
+               value="{{ script.title if script else '' }}" />
+      </div>
+      <div class="form-group">
+        <label>Script Content</label>
+        <textarea name="content" rows="18" required
+                  style="font-family:monospace;font-size:0.88rem;line-height:1.7"
+                  placeholder="Paste your full script here...">{{ script.content if script else '' }}</textarea>
+        <span style="font-size:0.78rem;color:#9a95ad">Use [BRACKETS] for fill-in spots. Line breaks are preserved.</span>
+      </div>
+      <div class="form-group" style="max-width:160px">
+        <label>Sort Order</label>
+        <input type="number" name="sort_order" value="{{ script.sort_order if script else 0 }}" min="0" />
+        <span style="font-size:0.78rem;color:#9a95ad">Lower numbers appear first.</span>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button type="submit" class="btn btn-gold" style="flex:1;justify-content:center">
+          {{ 'Save Changes' if script else 'Add Script' }}
+        </button>
+        <a href="{{ url_for('scripts.index', cat=category) }}" class="btn btn-outline" style="flex:1;justify-content:center;text-align:center">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "base_admin.html" %}
+{% block title %}Edit Email Template — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Edit: {{ t.name }}{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('email_templates.index', cat=t.category) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Back</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:760px">
+  <div style="background:#f0edf8;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:0.82rem;color:#3b2460">
+    <strong>Trigger:</strong> <code style="background:#e4dfef;padding:2px 6px;border-radius:4px">{{ t.trigger }}</code>
+    &nbsp;·&nbsp; <strong>Fires when:</strong> {{ t.description }}
+  </div>
+
+  {% if variables %}
+  <div style="background:#fff9e6;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:0.82rem;color:#856404">
+    <strong>Variables you can use in subject or body:</strong><br>
+    <div style="margin-top:8px">
+    {% for v in variables %}
+      <code style="background:#fff3cd;padding:2px 7px;border-radius:4px;margin:3px;display:inline-block;cursor:pointer"
+            onclick="insertVar('{{ v }}')" title="Click to copy">{{ v }}</code>
+    {% endfor %}
+    </div>
+    <p style="margin-top:8px;margin-bottom:0;font-size:0.77rem">Click any variable to copy it, then paste it into the subject or body below.</p>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <form method="POST">
+      <div class="form-group">
+        <label>Email Subject Line</label>
+        <input type="text" id="subject" name="subject" required value="{{ t.subject }}" />
+      </div>
+      <div class="form-group">
+        <label>Email Body</label>
+        <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:8px">
+          Write in plain text. Use a blank line between paragraphs. Start lines with "- " for bullet points.
+          The CRM automatically wraps this in a clean branded email layout.
+        </p>
+        <textarea id="body" name="body" rows="20"
+                  style="font-family:monospace;font-size:0.88rem;line-height:1.7"
+                  required>{{ t.body }}</textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+          <input type="checkbox" name="is_active" style="width:auto" {{ 'checked' if t.is_active }} />
+          Active — this email will fire automatically
+        </label>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button type="submit" class="btn btn-gold" style="flex:1;justify-content:center">Save Template</button>
+        <a href="{{ url_for('email_templates.index', cat=t.category) }}" class="btn btn-outline" style="flex:1;justify-content:center;text-align:center">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function insertVar(v) {
+  navigator.clipboard.writeText(v).then(() => {
+    // briefly highlight
+    event.target.style.background = '#d4edda';
+    setTimeout(() => event.target.style.background = '', 800);
+  });
+}
+</script>
+{% endblock %}

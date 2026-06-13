@@ -315,16 +315,30 @@ class Staff(db.Model):
     has_transportation = db.Column(db.Boolean, default=True)
     has_supplies = db.Column(db.Boolean, default=False)
     onboarding_steps = db.Column(db.Text, default='[]')  # JSON list of completed step keys
+    agreement_token = db.Column(db.String(64), unique=True)
+    agreement_signature = db.Column(db.String(100))
+    agreement_signed_at = db.Column(db.DateTime)
+    shirt_size = db.Column(db.String(10))
+    payment_pref = db.Column(db.String(50))   # Zelle, Direct Deposit, Check
+    payment_notes = db.Column(db.String(200)) # Zelle email/phone or notes
+    welcome_forms_at = db.Column(db.DateTime)
+    orientation_token = db.Column(db.String(64), unique=True)
+    orientation_completed_at = db.Column(db.DateTime)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     ONBOARDING_STEPS = [
-        ('phone_interview',  'Phone interview completed'),
-        ('background_check', 'Background check cleared'),
-        ('ic_agreement',     'IC agreement signed'),
-        ('orientation',      'Orientation / training done'),
-        ('supply_kit',       'Supply kit issued'),
-        ('first_job',        'First job assigned'),
+        ('phone_interview',   'Phone interview completed'),
+        ('background_check',  'Background check cleared'),
+        ('welcome_email',     'Welcome email sent'),
+        ('ic_agreement',      'Work agreement signed'),
+        ('welcome_forms',     'Onboarding forms completed'),
+        ('payment_info',      'Payment / direct deposit info collected'),
+        ('uniform_size',      'Shirt size & uniform noted'),
+        ('orientation',       'Orientation / training completed'),
+        ('supply_kit',        'Supply kit issued'),
+        ('shadow_job',        'Shadow job / trial shift completed'),
+        ('first_solo_job',    'First solo job assigned'),
     ]
 
     def get_onboarding(self):
@@ -342,6 +356,75 @@ class Staff(db.Model):
         if self.pay_type == 'hourly':
             return round((hours_worked or 0) * (self.pay_rate or 0), 2)
         return round((job_price or 0) * ((self.pay_rate or 0) / 100), 2)
+
+
+class EmailTemplate(db.Model):
+    """Editable email templates — each trigger key maps to one automated email."""
+    id = db.Column(db.Integer, primary_key=True)
+    trigger = db.Column(db.String(50), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)         # human label
+    description = db.Column(db.String(200))                  # when does this fire?
+    category = db.Column(db.String(40), default='client')    # client, lead, cleaner, owner
+    subject = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=False)                 # plain text with {{variables}}
+    is_active = db.Column(db.Boolean, default=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    CATEGORIES = [
+        ('client',  'Client Emails'),
+        ('lead',    'Lead Emails'),
+        ('cleaner', 'Cleaner Emails'),
+        ('owner',   'Owner Alerts'),
+    ]
+
+    VARIABLES = {
+        'client':  ['{{first_name}}', '{{full_name}}', '{{business_name}}', '{{booking_date}}',
+                    '{{booking_time}}', '{{service_type}}', '{{address}}', '{{price}}',
+                    '{{deposit}}', '{{balance}}', '{{cleaner_name}}', '{{phone}}'],
+        'lead':    ['{{first_name}}', '{{full_name}}', '{{business_name}}', '{{service_type}}',
+                    '{{quote_amount}}', '{{phone}}', '{{booking_link}}', '{{discount_code}}'],
+        'cleaner': ['{{first_name}}', '{{full_name}}', '{{business_name}}', '{{job_date}}',
+                    '{{job_address}}', '{{service_type}}', '{{earnings}}', '{{sign_link}}'],
+        'owner':   ['{{applicant_name}}', '{{client_name}}', '{{business_name}}',
+                    '{{amount}}', '{{error}}'],
+    }
+
+
+class SOP(db.Model):
+    """Standard Operating Procedures — step-by-step how-to guides for cleaners and staff."""
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(50), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    CATEGORIES = [
+        ('cleaning',    'Cleaning Procedures'),
+        ('commercial',  'Commercial Services'),
+        ('leads',       'Lead & Phone Handling'),
+        ('quality',     'Quality Control'),
+        ('operations',  'Operations & Admin'),
+    ]
+
+
+class Script(db.Model):
+    """VA scripts library — organized by call/situation type."""
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(50), nullable=False)   # inbound, outbound, followup, objection, closing, general
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    CATEGORIES = [
+        ('inbound',   'Inbound Calls'),
+        ('outbound',  'Outbound Calls'),
+        ('followup',  'Follow-Up'),
+        ('objection', 'Objection Handling'),
+        ('closing',   'Closing Scripts'),
+        ('general',   'General Outreach'),
+    ]
 
 
 class BusinessSetting(db.Model):

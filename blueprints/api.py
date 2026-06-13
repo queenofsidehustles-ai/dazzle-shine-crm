@@ -430,36 +430,28 @@ def stripe_webhook():
 def _send_confirmation(booking: Booking):
     notify_email = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
     freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')
-    extras_text = f"<p><strong>Add-ons:</strong> {booking.extras}</p>" if booking.extras else ''
     date_text = booking.preferred_date or 'Flexible'
     time_text = booking.preferred_time or 'Flexible'
 
-    # Email to customer
-    send_email(
+    from notifications import send_triggered_email
+    send_triggered_email(
+        trigger='booking_confirmed',
         to_email=booking.email,
         to_name=booking.name,
-        subject='Your booking is confirmed — Dazzle & Shine Maids',
-        html=f"""
-<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2 style="color:#b98a33">Booking Confirmed!</h2>
-  <p>Hi {booking.name},</p>
-  <p>Your $50 deposit has been received. Here's your booking summary:</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p><strong>Service:</strong> {booking.service_label}</p>
-  <p><strong>Frequency:</strong> {freq_label}</p>
-  <p><strong>Bedrooms:</strong> {booking.bedrooms} &nbsp; <strong>Bathrooms:</strong> {booking.bathrooms}</p>
-  {extras_text}
-  <p><strong>Date:</strong> {date_text} &nbsp; <strong>Time:</strong> {time_text}</p>
-  <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p><strong>Total price:</strong> ${booking.price:.2f}</p>
-  <p><strong>Deposit paid:</strong> $50.00</p>
-  <p><strong>Balance due after cleaning:</strong> ${booking.balance_due:.2f}</p>
-  <p style="font-size:0.88rem;color:#9a95ad">Deposit is non-refundable. You may reschedule at any time.</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p>Questions? Call or text <strong>(689) 999-0194</strong> or reply to this email.</p>
-  <p style="color:#9a95ad;font-size:14px">Dazzle &amp; Shine Maids · Orlando, FL</p>
-</div>""",
+        variables={
+            'service_type': booking.service_label,
+            'frequency': freq_label,
+            'beds': booking.bedrooms,
+            'baths': booking.bathrooms,
+            'extras': booking.extras or '',
+            'booking_date': date_text,
+            'booking_time': time_text,
+            'address': f'{booking.address}, {booking.city} {booking.zip_code}',
+            'price': f'{booking.price:.2f}',
+            'deposit': '50.00',
+            'balance': f'{booking.balance_due:.2f}',
+            'notes': booking.notes or '',
+        }
     )
 
     # SMS to customer
@@ -495,85 +487,69 @@ def _send_confirmation(booking: Booking):
 
 
 def _send_reminder(booking: Booking):
-    freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')
     date_text = booking.preferred_date or 'Tomorrow'
     time_text = booking.preferred_time or 'your scheduled time'
 
-    send_email(
+    from notifications import send_triggered_email
+    send_triggered_email(
+        trigger='booking_reminder_24h',
         to_email=booking.email,
         to_name=booking.name,
-        subject='Your cleaning is tomorrow — Dazzle & Shine Maids',
-        html=f"""
-<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2 style="color:#b98a33">See you tomorrow!</h2>
-  <p>Hi {booking.name}, just a friendly reminder about your upcoming cleaning:</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p><strong>Service:</strong> {booking.service_label}</p>
-  <p><strong>Date:</strong> {date_text} at {time_text}</p>
-  <p><strong>Address:</strong> {booking.address}, {booking.city}</p>
-  <p><strong>Balance due after cleaning:</strong> ${booking.balance_due:.2f}</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p>Need to reschedule? Call or text <strong>(689) 999-0194</strong> as soon as possible.</p>
-  <p style="color:#9a95ad;font-size:14px">Dazzle &amp; Shine Maids · Orlando, FL</p>
-</div>""",
+        variables={
+            'service_type': booking.service_label,
+            'booking_date': date_text,
+            'booking_time': time_text,
+            'address': f'{booking.address}, {booking.city}',
+            'balance': f'{booking.balance_due:.2f}',
+        }
     )
 
     send_sms(
         booking.phone,
-        f"Hi {booking.name.split()[0]}! Reminder: your Dazzle & Shine cleaning is tomorrow at {time_text}. "
-        f"Balance due: ${booking.balance_due:.2f}. Need to reschedule? Call (689) 999-0194. Reply STOP to opt out.",
+        f"Hi {booking.name.split()[0]}! Reminder: your cleaning is tomorrow at {time_text}. "
+        f"Balance due: ${booking.balance_due:.2f}. Need to reschedule? Call {{phone}}. Reply STOP to opt out.",
     )
 
 
 def _send_quote_email(lead, total):
-    send_email(
-        to_email=lead.email, to_name=lead.name,
-        subject='Your Free Quote — Dazzle & Shine Maids',
-        html=f"""
-<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2 style="color:#b98a33">Your Free Quote ✨</h2>
-  <p>Hi {lead.name},</p>
-  <p>Thanks for reaching out! Here's your personalized cleaning quote:</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p><strong>Service:</strong> {lead.service_label}</p>
-  <p><strong>Bedrooms:</strong> {lead.bedrooms} &nbsp; <strong>Bathrooms:</strong> {lead.bathrooms}</p>
-  <p style="font-size:1.5rem;font-weight:700;color:#b98a33;margin:14px 0">Estimated Total: ${total:.2f}</p>
-  <p>Lock in your spot with just a <strong>$50 deposit</strong> — the rest is due after your cleaning.</p>
-  <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p><a href="https://www.dazzleandshinemaids.com/#book" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Book Now →</a></p>
-  <p style="color:#9a95ad;font-size:13px;margin-top:20px">Questions? Call or text (689) 999-0194 · Dazzle &amp; Shine Maids · Orlando, FL</p>
-</div>""",
+    from notifications import send_triggered_email
+    send_triggered_email(
+        trigger='lead_quote',
+        to_email=lead.email,
+        to_name=lead.name,
+        variables={
+            'service_type': lead.service_label,
+            'beds': lead.bedrooms,
+            'baths': lead.bathrooms,
+            'quote_amount': f'{total:.2f}',
+        }
     )
 
 
 def _send_drip_followup(lead):
-    send_email(
-        to_email=lead.email, to_name=lead.name,
-        subject='Still thinking about it? — Dazzle & Shine Maids',
-        html=f"""
-<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2 style="color:#b98a33">Still thinking about it?</h2>
-  <p>Hi {lead.name}, just following up on your quote of <strong>${lead.quoted_price:.2f}</strong>.</p>
-  <p>We'd love to help you reclaim your time! Booking takes less than 2 minutes and only requires a $50 deposit to hold your spot.</p>
-  <p><a href="https://www.dazzleandshinemaids.com/#book" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Book Now →</a></p>
-  <p style="color:#9a95ad;font-size:13px">Questions? Reply to this email or call (689) 999-0194 · Dazzle &amp; Shine Maids · Orlando, FL</p>
-</div>""",
+    from notifications import send_triggered_email
+    send_triggered_email(
+        trigger='lead_drip_day2',
+        to_email=lead.email,
+        to_name=lead.name,
+        variables={
+            'quote_amount': f'{lead.quoted_price:.2f}',
+            'booking_link': '',
+        }
     )
 
 
 def _send_drip_lastchance(lead):
     discounted = round((lead.quoted_price or 0) * 0.90, 2)
-    send_email(
-        to_email=lead.email, to_name=lead.name,
-        subject='10% off your first cleaning — Dazzle & Shine Maids',
-        html=f"""
-<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2 style="color:#b98a33">A Special Offer — Just for You 🎁</h2>
-  <p>Hi {lead.name}, we'd love to earn your business!</p>
-  <p><strong>10% off your first cleaning:</strong></p>
-  <p><s style="color:#9a95ad">${lead.quoted_price:.2f}</s> &rarr; <span style="font-size:1.3rem;font-weight:700;color:#b98a33">${discounted:.2f}</span></p>
-  <p>Just mention this email when you book and we'll honor the discount. Offer expires in 48 hours.</p>
-  <p><a href="https://www.dazzleandshinemaids.com/#book" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Claim My 10% Off →</a></p>
-  <p style="color:#9a95ad;font-size:12px">New customers only. Dazzle &amp; Shine Maids · Orlando, FL</p>
-</div>""",
+    from notifications import send_triggered_email
+    send_triggered_email(
+        trigger='lead_drip_lastchance',
+        to_email=lead.email,
+        to_name=lead.name,
+        variables={
+            'quote_amount': f'{lead.quoted_price:.2f}',
+            'discount_code': 'WELCOME10',
+            'discounted_price': f'{discounted:.2f}',
+            'booking_link': '',
+        }
     )

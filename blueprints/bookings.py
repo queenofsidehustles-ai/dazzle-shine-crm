@@ -284,6 +284,24 @@ def _notify_cleaner(booking):
     decline_url = f"{base}/bookings/{booking.id}/cleaner-response?action=decline&token={token}"
     svc_label = SERVICES.get(booking.service_type, {}).get('label', booking.service_type.title())
 
+    from notifications import send_triggered_email
+    sent = send_triggered_email(
+        trigger='cleaner_job_assigned',
+        to_email=staff.email,
+        to_name=staff.name,
+        variables={
+            'job_date': booking.preferred_date or 'TBD',
+            'booking_time': booking.preferred_time or 'TBD',
+            'service_type': svc_label,
+            'job_address': f'{booking.address}, {booking.city}' if booking.address else 'See work order',
+            'earnings': f'{earnings:.2f}',
+            'beds': booking.bedrooms,
+            'baths': booking.bathrooms,
+        }
+    )
+    if sent:
+        return
+
     send_email(
         to_email=staff.email, to_name=staff.name,
         subject=f'New Job Assigned — {booking.preferred_date or "TBD"} · Dazzle & Shine',

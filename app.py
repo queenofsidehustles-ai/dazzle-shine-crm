@@ -13,6 +13,9 @@ from blueprints.quotes import quotes_bp
 from blueprints.ratings import ratings_bp
 from blueprints.discounts import discounts_bp
 from blueprints.contractors import contractors_bp
+from blueprints.scripts import scripts_bp
+from blueprints.sops import sops_bp
+from blueprints.email_templates import email_templates_bp
 
 
 def create_app():
@@ -45,11 +48,17 @@ def create_app():
     app.register_blueprint(ratings_bp)
     app.register_blueprint(discounts_bp)
     app.register_blueprint(contractors_bp)
+    app.register_blueprint(scripts_bp)
+    app.register_blueprint(sops_bp)
+    app.register_blueprint(email_templates_bp)
 
     with app.app_context():
         db.create_all()
         _migrate_db()
         _seed_checklists()
+        _seed_scripts()
+        _seed_sops()
+        _seed_email_templates()
 
     return app
 
@@ -79,6 +88,15 @@ def _migrate_db():
         ('staff',   'has_transportation',       'BOOLEAN DEFAULT TRUE'),
         ('staff',   'has_supplies',             'BOOLEAN DEFAULT FALSE'),
         ('staff',   'onboarding_steps',         "TEXT DEFAULT '[]'"),
+        ('staff',   'agreement_token',          'VARCHAR(64)'),
+        ('staff',   'agreement_signature',      'VARCHAR(100)'),
+        ('staff',   'agreement_signed_at',      'TIMESTAMP'),
+        ('staff',   'shirt_size',               'VARCHAR(10)'),
+        ('staff',   'payment_pref',             'VARCHAR(50)'),
+        ('staff',   'payment_notes',            'VARCHAR(200)'),
+        ('staff',   'welcome_forms_at',         'TIMESTAMP'),
+        ('staff',   'orientation_token',        'VARCHAR(64)'),
+        ('staff',   'orientation_completed_at', 'TIMESTAMP'),
         ('staff',   'notes',                    'TEXT'),
         # Staff table
         ('staff',   'color',                    "VARCHAR(7) DEFAULT '#7c3aed'"),
@@ -207,6 +225,773 @@ def _seed_checklists():
         if not exists:
             t = ChecklistTemplate(name=name, service_type=svc_type, items=_json.dumps(items))
             db.session.add(t)
+    db.session.commit()
+
+
+def _seed_scripts():
+    """Seed placeholder VA scripts if none exist yet."""
+    from models import Script
+    if Script.query.count() > 0:
+        return
+
+    seeds = [
+        # ── Inbound ──────────────────────────────────────────────
+        ('inbound', 'Inbound — New Client Inquiry', 0, """Thank you for calling [Business Name], this is [Your Name]. How can I help you today?
+
+[Listen to their need]
+
+Great! We'd love to help with that. Can I get a few quick details?
+- Your name?
+- Your address and zip code?
+- What type of cleaning are you looking for? (Standard, Deep Clean, Move-Out, etc.)
+- How many bedrooms and bathrooms?
+- Any pets or special instructions?
+
+Based on that, I can give you a quote right now / I'll have our team follow up within [X hours].
+
+Do you have a preferred date and time in mind?
+
+[Book or pencil in]
+
+Perfect! You'll receive a confirmation email shortly. Is there anything else I can help you with?
+
+Thank you for choosing [Business Name] — we look forward to making your home sparkle!"""),
+
+        ('inbound', 'Inbound — Existing Client Reschedule', 1, """Thank you for calling [Business Name], this is [Your Name].
+
+May I get your name and address to pull up your account?
+
+[Look up booking]
+
+Of course! I see your appointment is scheduled for [Date/Time]. Let's find a new time that works for you.
+
+[Offer 2–3 available slots]
+
+I've updated your appointment to [New Date/Time]. You'll receive a confirmation email. Is there anything else I can help with?"""),
+
+        # ── Outbound ─────────────────────────────────────────────
+        ('outbound', 'Outbound — New Lead Follow-Up Call', 0, """Hi, may I speak with [Client Name]?
+
+Hi [Client Name]! This is [Your Name] calling from [Business Name]. You recently submitted a request for a cleaning quote on our website — I just wanted to follow up and answer any questions!
+
+[If interested] Wonderful! Let me get a few details to finalize your quote…
+[If not a good time] No problem at all! When would be a better time for me to call back?
+
+[Get: service type, beds/baths, preferred dates]
+
+Based on that, your estimate is $[Price]. We have openings on [Date 1] and [Date 2] — which works best for you?
+
+[Book it]
+
+Perfect! You'll receive a confirmation email at [Email]. We're excited to take cleaning off your plate!"""),
+
+        ('outbound', 'Outbound — Inactive Client Win-Back', 1, """Hi, may I speak with [Client Name]?
+
+Hi [Client Name]! This is [Your Name] from [Business Name]. We noticed it's been a while since your last cleaning and we wanted to check in!
+
+We're currently offering [Discount/Promo] for returning clients. Would you be interested in scheduling a fresh clean?
+
+[If yes] Wonderful! Let's get you back on the schedule…
+[If not now] Totally understand! Can I send you a reminder in [X weeks]?
+
+Either way, we're so grateful for your past support and hope to serve you again soon!"""),
+
+        # ── Follow-Up ─────────────────────────────────────────────
+        ('followup', 'Follow-Up — After Quote (No Response)', 0, """Hi [Client Name], this is [Your Name] from [Business Name].
+
+I'm following up on the cleaning quote we sent over on [Date]. I wanted to make sure you received it and answer any questions you might have!
+
+[Pause — let them respond]
+
+[If questions] Happy to go over that with you right now…
+[If not ready] No worries at all! When would be a good time to circle back?
+[If ready] Fantastic! Let's get you on the calendar. We have [Date 1] and [Date 2] available…
+
+We'd love to earn your business. Is there anything that would make you feel more comfortable moving forward?"""),
+
+        ('followup', 'Follow-Up — After Completed Job', 1, """Hi [Client Name]! This is [Your Name] from [Business Name].
+
+I'm calling to follow up after your cleaning on [Date]. How did everything go? Were you happy with the results?
+
+[If happy] Wonderful! We'd love to keep the momentum going. Would you like to schedule your next cleaning? We also have a recurring discount if you'd like to set up a regular schedule…
+[If issue] I'm so sorry to hear that. Can you tell me more about what happened? We want to make this right for you…
+
+Thank you so much for your feedback — it truly helps us improve. Have a great day!"""),
+
+        # ── Objection Handling ────────────────────────────────────
+        ('objection', 'Objection — "It\'s Too Expensive"', 0, """I completely understand — budget is always important!
+
+A few things I'd love to share:
+- Our prices include [list what's included: supplies, insurance, background-checked cleaners, etc.]
+- We offer a recurring discount of [X%] when you schedule regularly — that brings it down to $[Lower Price] per visit.
+- We also have a one-time Deep Clean option to get started, and many clients find it's worth every penny.
+
+Would it help if I customized a package to better fit your budget?"""),
+
+        ('objection', 'Objection — "I Need to Think About It"', 1, """Absolutely, take all the time you need!
+
+Can I ask — is there a specific concern I can help address right now? Sometimes I can clear things up quickly.
+
+[Listen]
+
+That makes total sense. How about I follow up with you on [Specific Date]? And in the meantime, I'll send over some reviews from clients in your area so you can see what others are saying.
+
+Does that sound good?"""),
+
+        ('objection', 'Objection — "I Already Have a Cleaner"', 2, """That\'s great — it sounds like you\'re already taking care of your home!
+
+May I ask — are you fully happy with your current service, or is there anything you wish was different?
+
+[Listen]
+
+I understand. Many of our best clients switched after a one-time trial with us. We\'re not asking you to cancel anyone — just give us one chance to show you the difference.
+
+Would you be open to booking a single Deep Clean so you can compare?"""),
+
+        # ── Closing ───────────────────────────────────────────────
+        ('closing', 'Closing — "Pencil You In" Script', 0, """I totally get it if you\'re not 100% ready to commit yet — and that\'s perfectly okay!
+
+What I can do is pencil you in for [Date/Time] so the spot is held for you. There\'s no obligation and no charge until we confirm.
+
+If something changes, just give us a call by [Deadline] and we\'ll adjust. Does that work for you?
+
+[If yes] Perfect! I\'ve got you down for [Date/Time]. I\'ll send a soft hold confirmation to [Email]. We\'ll follow up to confirm closer to the date!"""),
+
+        # ── General Outreach ──────────────────────────────────────
+        ('general', 'General — Nextdoor / Facebook DM Outreach', 0, """Hi [Name]! I saw your post looking for a cleaning recommendation and I\'d love to help!
+
+I work with [Business Name] — we\'re a local cleaning company serving [City/Area]. We\'re fully insured, background-checked, and our clients love us!
+
+We\'d love to offer you a free quote. You can book online at [Website] or I can get your info here and have someone reach out.
+
+Would that work for you?"""),
+    ]
+
+    for cat, title, order, content in seeds:
+        s = Script(category=cat, title=title, sort_order=order, content=content.strip())
+        db.session.add(s)
+    db.session.commit()
+
+
+def _seed_email_templates():
+    """Seed all automated email templates if none exist."""
+    from models import EmailTemplate
+    if EmailTemplate.query.count() > 0:
+        return
+
+    templates = [
+        # ── Client Emails ─────────────────────────────────────────
+        ('booking_confirmed', 'client', 'Booking Confirmation',
+         'Sent immediately when a client books and pays deposit',
+         'Your booking is confirmed — {{business_name}}',
+         """Hi {{first_name}},
+
+Your ${{deposit}} deposit has been received and your cleaning is confirmed. Here are your booking details:
+
+Service: {{service_type}}
+Date: {{booking_date}}
+Time: {{booking_time}}
+Address: {{address}}
+
+Total price: ${{price}}
+Deposit paid: ${{deposit}}
+Balance due after cleaning: ${{balance}}
+
+The balance will be automatically collected on the day of your cleaning. No need to do anything!
+
+Need to reschedule? Call or text us at {{phone}} as soon as possible. Deposits are non-refundable but you may reschedule at any time.
+
+We can't wait to make your home sparkle!"""),
+
+        ('booking_reminder_24h', 'client', '24-Hour Reminder',
+         'Sent automatically the day before every scheduled cleaning',
+         "Your cleaning is tomorrow — {{business_name}}",
+         """Hi {{first_name}},
+
+Just a friendly reminder that your cleaning is scheduled for tomorrow!
+
+Service: {{service_type}}
+Date: {{booking_date}} at {{booking_time}}
+Address: {{address}}
+Balance due after cleaning: ${{balance}}
+
+Please make sure your home is accessible at your scheduled time. If you need to reschedule, please call us at {{phone}} as soon as possible.
+
+See you tomorrow!"""),
+
+        ('balance_collected', 'client', 'Balance Payment Received',
+         'Sent after the balance is successfully charged post-cleaning',
+         'Payment received — thank you! — {{business_name}}',
+         """Hi {{first_name}},
+
+Your balance of ${{balance}} has been successfully collected. Thank you!
+
+We hope your home is looking and feeling amazing. If you have any questions about your payment, please don't hesitate to reach out at {{phone}}.
+
+We'd love to keep your home this clean — ask us about our recurring cleaning discounts!"""),
+
+        # ── Lead Emails ───────────────────────────────────────────
+        ('lead_quote', 'lead', 'Instant Quote Email',
+         'Sent immediately when a lead submits the quick quote form',
+         'Your free cleaning quote — {{business_name}}',
+         """Hi {{first_name}},
+
+Thank you for reaching out! Here's your personalized cleaning quote:
+
+Service: {{service_type}}
+Bedrooms: {{beds}} | Bathrooms: {{baths}}
+Estimated Total: ${{quote_amount}}
+
+Ready to book? All we need is a $50 deposit to hold your spot — the rest is due after your cleaning.
+
+You can book online at {{booking_link}} or call us at {{phone}} and we'll get you scheduled in minutes.
+
+Questions? Just reply to this email — we're happy to help!"""),
+
+        ('lead_drip_day2', 'lead', 'Day 2 Follow-Up',
+         'Sent 2 days after the quote if the lead has not booked',
+         "Still thinking about it? — {{business_name}}",
+         """Hi {{first_name}},
+
+Just following up on your cleaning quote of ${{quote_amount}}!
+
+We'd love to help you reclaim your time. Here's what you get when you book with {{business_name}}:
+
+- Background-checked, insured cleaners
+- Satisfaction guaranteed — if something's missed we'll come back
+- Only a $50 deposit to hold your spot
+- The balance is due after your cleaning, not before
+
+Booking takes less than 2 minutes: {{booking_link}}
+
+Or call us at {{phone}} and we'll handle everything for you.
+
+Hope to hear from you soon!"""),
+
+        ('lead_drip_lastchance', 'lead', 'Last Chance Offer',
+         'Sent ~5 days after quote — final follow-up with a discount',
+         '10% off your first cleaning — {{business_name}}',
+         """Hi {{first_name}},
+
+We'd really love to earn your business, so here's a special offer just for you:
+
+10% off your first cleaning!
+
+Your original quote: ${{quote_amount}}
+Your discounted price: ${{discounted_price}}
+
+Just mention this email when you book and we'll honor the discount. This offer expires in 48 hours.
+
+Book now: {{booking_link}}
+Or call us at {{phone}}.
+
+This is a one-time offer for new clients only. We hope to see you soon!"""),
+
+        # ── Cleaner Emails ────────────────────────────────────────
+        ('cleaner_orientation', 'cleaner', 'Orientation & Training Email',
+         'Auto-fires when a cleaner signs their work agreement — sends training resources',
+         'Next step: complete your orientation — {{business_name}}',
+         """Hi {{first_name}},
+
+Your agreement is signed — congratulations, you are officially part of the {{business_name}} team!
+
+Here are your next two steps:
+
+STEP 1 — COMPLETE YOUR ONBOARDING FORMS
+Fill in your shirt size, payment preference, and emergency contact:
+{{forms_link}}
+
+STEP 2 — COMPLETE YOUR ORIENTATION
+Review all of our training materials, quality standards, and cleaning checklists. Once you've finished, click the link below to confirm and let us know you're ready:
+{{orientation_link}}
+
+What to review during orientation:
+- Our standard cleaning checklist (available in the CRM when you're assigned jobs)
+- Quality expectations and client communication guidelines
+- Our scheduling and punctuality policy
+- Supply usage and safety guidelines
+
+Once you've completed both steps above, we'll schedule your shadow job and you'll be ready for your first assignment!
+
+Questions? Call us at {{phone}} — we're here to help.
+
+Welcome to the family!"""),
+
+        ('cleaner_welcome', 'cleaner', 'Cleaner Welcome Email',
+         'Sent when a contractor application is approved and they are hired',
+         'Welcome to the {{business_name}} team, {{first_name}}!',
+         """Hi {{first_name}},
+
+We are so excited to have you on the {{business_name}} team! Welcome aboard!
+
+Here's what happens next:
+
+1. Sign your work agreement — use the link we emailed you
+2. Complete your onboarding forms — payment info, shirt size, emergency contact
+3. Complete orientation — review our training materials and quality checklists
+4. Complete your shadow shift — you'll go out with an experienced team member first
+5. Get your supply kit — we'll confirm pickup details with you
+
+Once all steps are complete, you'll be ready for your first solo job!
+
+Questions? Reply to this email or call us at {{phone}}.
+
+We're excited to build something great together."""),
+
+        ('cleaner_job_assigned', 'cleaner', 'Job Assignment Notification',
+         'Sent when a cleaner is assigned to a booking',
+         'New job assigned — {{booking_date}} — {{business_name}}',
+         """Hi {{first_name}},
+
+You have a new job assignment! Here are the details:
+
+Date: {{job_date}}
+Service: {{service_type}}
+Address: {{job_address}}
+Your estimated earnings: ${{earnings}}
+
+Please review the work order checklist in the CRM before arriving. Arrive on time and complete all checklist items before leaving.
+
+Have questions about this job? Call us at {{phone}}.
+
+Thank you — let's make it a great one!"""),
+
+        # ── Owner Alerts ──────────────────────────────────────────
+        ('owner_new_booking', 'owner', 'New Booking Alert',
+         'Sent to the owner when a new booking and deposit are received',
+         'New booking: {{client_name}} — {{business_name}}',
+         """New booking received!
+
+Client: {{client_name}}
+Amount: ${{amount}}
+
+Log in to the CRM to view full details and assign a cleaner."""),
+
+        ('owner_new_application', 'owner', 'New Cleaner Application',
+         'Sent to the owner when someone submits the contractor application form',
+         'New cleaner application: {{applicant_name}} — {{business_name}}',
+         """A new contractor application has been submitted.
+
+Applicant: {{applicant_name}}
+
+Log in to the CRM → Applications to review and take action."""),
+
+        ('owner_payment_failed', 'owner', 'Payment Failed Alert',
+         'Sent to the owner when a balance charge fails',
+         'PAYMENT FAILED: {{client_name}} — ${{amount}}',
+         """A balance payment failed and requires your attention.
+
+Client: {{client_name}}
+Amount: ${{amount}}
+Error: {{error}}
+
+Log in to the CRM to resolve this manually."""),
+    ]
+
+    for trigger, cat, name, desc, subject, body in templates:
+        t = EmailTemplate(trigger=trigger, category=cat, name=name,
+                          description=desc, subject=subject, body=body.strip())
+        db.session.add(t)
+    db.session.commit()
+
+
+def _seed_sops():
+    """Seed placeholder SOPs based on class document titles."""
+    from models import SOP
+    if SOP.query.count() > 0:
+        return
+
+    seeds = [
+        # ── Cleaning Procedures ───────────────────────────────────
+        ('cleaning', 'Standard Cleaning — Room-by-Room SOP', 0, """STANDARD CLEANING PROCEDURE
+
+BEFORE YOU START
+1. Review the client's booking notes and any special instructions in the work order.
+2. Do a quick walk-through of the home before touching anything. Note any damage or unusual mess — photo it.
+3. Set up your supplies at the front door. Never leave products in a client's home.
+
+KITCHEN
+1. Clear and wipe all countertops (remove items, clean under them, replace).
+2. Clean stovetop — remove grates, scrub burners, wipe down surface.
+3. Wipe exterior of all appliances (microwave, fridge, dishwasher, oven).
+4. Clean interior of microwave.
+5. Scrub sink — disinfect, shine faucet.
+6. Wipe cabinet fronts.
+7. Clean inside of trash can if needed.
+8. Sweep and mop floor last.
+
+BATHROOMS (do all bathrooms before moving on)
+1. Apply toilet bowl cleaner — let sit while you clean the rest.
+2. Wipe mirror and glass surfaces.
+3. Clean and disinfect sink and faucet.
+4. Wipe vanity, countertop, soap dish.
+5. Scrub tub/shower — walls, door/curtain, fixtures.
+6. Scrub and disinfect toilet (bowl, under rim, seat, lid, base, behind base).
+7. Wipe baseboards and door.
+8. Sweep and mop floor.
+
+BEDROOMS
+1. Make bed with hotel-style tuck.
+2. Dust all surfaces — nightstands, dressers, shelves (move items, dust under).
+3. Wipe light switches and door handles.
+4. Vacuum floors including under bed and in closet doorway.
+
+LIVING AREAS
+1. Dust all surfaces, shelves, entertainment units.
+2. Wipe light switches, remotes staging, door handles.
+3. Vacuum sofa cushions and under cushions.
+4. Vacuum carpet or sweep/mop hardwood.
+
+FINISH
+1. Do a final walk-through using your checklist.
+2. Replace everything exactly as it was.
+3. Take before/after photos if required.
+4. Lock up per client's instructions.
+5. Mark job complete in the CRM."""),
+
+        ('cleaning', 'Deep Clean — Additional Steps SOP', 1, """DEEP CLEAN — ADDITIONAL STEPS
+(Perform all Standard Cleaning steps PLUS the following)
+
+KITCHEN DEEP EXTRAS
+1. Clean inside of oven (use oven cleaner, allow to soak per instructions).
+2. Clean inside of refrigerator — remove all items, wipe all shelves and drawers.
+3. Clean range hood filter — soak in degreaser if needed.
+4. Degrease backsplash thoroughly.
+5. Wipe interior cabinet shelves (if client requested).
+
+BATHROOM DEEP EXTRAS
+1. Scrub grout lines with grout brush.
+2. Remove and clean soap scum from glass doors with razor blade scraper if needed.
+3. Disinfect all handles, knobs, and light switches with hospital-grade disinfectant.
+
+WHOLE HOME DEEP EXTRAS
+1. Wipe all baseboards throughout the home.
+2. Wipe all door frames and light switch plates.
+3. Clean all window sills and tracks.
+4. Dust ceiling fans and light fixtures.
+5. Vacuum upholstery and under cushions on all furniture.
+6. Wipe all interior door surfaces.
+
+CHECKLIST SIGN-OFF
+Complete and photograph the deep clean checklist before leaving."""),
+
+        ('cleaning', 'Post-Construction Cleaning SOP', 2, """POST-CONSTRUCTION CLEANING PROCEDURE
+
+WARNING: Post-construction jobs require extra time and supplies. Always confirm scope and pricing before starting.
+
+SUPPLIES NEEDED
+- Heavy-duty vacuum (NOT a standard residential vacuum — debris will damage it)
+- Microfiber cloths (many — replace frequently, do not re-use on different surfaces)
+- Painter's tape scraper / razor blade
+- Construction-grade all-purpose cleaner
+- Glass cleaner
+- Grout brush
+- Floor mop and bucket (dedicated for construction jobs)
+
+PHASE 1 — ROUGH CLEAN
+1. Remove all large debris: wood scraps, plastic wrap, cardboard, tape.
+2. Vacuum all surfaces — walls, windowsills, cabinets (inside and out), counters.
+3. Sweep all floors to remove construction dust and debris.
+4. Remove paint drips and adhesive from hard surfaces using scraper (gentle, test first).
+
+PHASE 2 — DETAIL CLEAN
+1. Wipe all surfaces with damp microfiber — walls, cabinets, shelves, doors.
+2. Clean all windows inside (construction dust on glass): spray, wipe, buff streak-free.
+3. Clean all window tracks and sills — use brush to remove packed-in dust.
+4. Clean all light fixtures and ceiling fans.
+5. Clean all outlets and switch plates.
+6. Scrub bathrooms completely — grout, fixtures, tubs, sinks.
+7. Clean kitchen — cabinets, counters, appliances.
+
+PHASE 3 — FLOOR FINISH
+1. Vacuum all floors a second time.
+2. Mop hard floors with appropriate cleaner.
+3. Spot-clean carpet if applicable (note: full carpet cleaning may require a specialist).
+
+FINAL CHECK
+1. Walk room by room with your checklist.
+2. Look up — check ceilings and ceiling fans.
+3. Look down — check baseboards and floor edges.
+4. Photograph completed areas.
+5. Mark complete in CRM and note any items outside scope."""),
+
+        ('cleaning', 'Move-Out / Move-In Cleaning SOP', 3, """MOVE-OUT / MOVE-IN CLEANING PROCEDURE
+
+NOTE: These jobs require the home to be fully empty of furniture. If items remain, note it and check with client before proceeding.
+
+PRIORITY ORDER (top to bottom, back to front of home)
+1. Start in the furthest room and work toward the exit.
+2. Always clean top-to-bottom within each room (ceilings/fans → walls → counters → floors).
+
+EVERY ROOM
+1. Wipe all ceiling fans and light fixtures.
+2. Wipe all walls — spot-clean scuffs and marks.
+3. Clean all windows (inside) and window sills/tracks.
+4. Wipe all baseboards.
+5. Wipe all door frames, doors, and handles.
+6. Vacuum then mop all floors.
+
+KITCHEN (same as deep clean extras)
+- Inside of oven, fridge, all cabinets and drawers (inside and out).
+- Degrease hood, backsplash, all surfaces.
+
+BATHROOMS
+- Scrub everything — grout, fixtures, tub, toilet, vanity.
+- Check under the sink for residue or staining.
+
+CLOSETS
+- Wipe shelves and rods.
+- Vacuum or sweep floor.
+- Check for leftover items.
+
+FINAL
+1. Complete move-out checklist.
+2. Photograph every room.
+3. Note any pre-existing damage in writing."""),
+
+        # ── Commercial ────────────────────────────────────────────
+        ('commercial', 'Commercial Walkthrough SOP', 0, """COMMERCIAL PROPERTY WALKTHROUGH SOP
+
+PURPOSE: Use this before quoting OR before starting a new commercial account to document the property and set client expectations.
+
+BEFORE THE WALKTHROUGH
+1. Confirm appointment with decision-maker (property manager or business owner).
+2. Bring: measuring tape, notepad, phone (camera), quote form.
+3. Review any notes from the initial inquiry.
+
+DURING THE WALKTHROUGH
+DOCUMENT THE FOLLOWING:
+- Total square footage (ask or estimate room by room)
+- Number of restrooms and their condition
+- Flooring types throughout (carpet, tile, hardwood, etc.)
+- Break room / kitchen details
+- Number of offices, conference rooms, common areas
+- Special areas: server rooms, medical areas, high-traffic zones
+- Current cleaning frequency and pain points ("what's not getting done?")
+- Access information: key, code, after-hours or before-hours schedule
+- Any special cleaning products required (e.g., no fragrance, hospital-grade disinfectant)
+
+PHOTOS TO TAKE
+- Entrance / lobby
+- Each restroom
+- Kitchen/break room
+- Any problem areas the client points out
+
+AFTER THE WALKTHROUGH
+1. Note scope of work and any extra services needed.
+2. Build the commercial quote in the CRM within 24 hours.
+3. Send quote for review using the commercial quote link.
+4. Follow up within 3 business days if no response."""),
+
+        ('commercial', 'Commercial Restroom Cleaning SOP', 1, """COMMERCIAL RESTROOM CLEANING SOP
+
+FREQUENCY: Perform at every scheduled cleaning visit.
+TIME ESTIMATE: 10–15 min per restroom depending on size.
+
+SUPPLIES
+- Commercial-grade disinfectant (EPA-registered)
+- Toilet brush
+- Microfiber cloths (color-coded: red = toilet only, blue = everything else)
+- Mop and bucket (dedicated to restrooms)
+- Paper products for restocking
+
+PROCEDURE
+1. Restock paper products first (toilet paper, paper towels, soap) — note shortages.
+2. Apply toilet bowl cleaner — let sit.
+3. Spray and wipe all dispensers, door handles, light switches.
+4. Clean mirrors — spray, wipe, buff.
+5. Clean and disinfect sinks and faucets.
+6. Wipe vanity surfaces and soap dispensers.
+7. Clean and disinfect toilet — bowl (scrub under rim), seat both sides, lid, tank, base.
+8. Wipe partition walls and door handles (inside stalls).
+9. Empty trash, replace liner.
+10. Sweep then mop floor using disinfectant solution.
+
+FINAL CHECK
+- No streaks on mirrors.
+- Toilet paper installed correctly (over the top).
+- Floor dry before leaving or wet floor sign in place."""),
+
+        # ── Lead & Phone Handling ─────────────────────────────────
+        ('leads', 'Lead Phone Call SOP', 0, """LEAD PHONE CALL — STANDARD OPERATING PROCEDURE
+
+PURPOSE: Respond to every new lead within 2 hours of submission. Speed = conversion. The first company to call usually gets the job.
+
+STEP 1 — BEFORE YOU CALL
+1. Open the lead in the CRM. Read all submitted details.
+2. Note their service type, beds/baths, and any notes.
+3. Have the pricing guide open so you can quote on the spot.
+4. Call from the business number (not a personal cell).
+
+STEP 2 — THE CALL
+- Use the VA Inbound or Outbound Call Script from the Scripts Library.
+- Goal: give a quote AND secure a booking date in one call.
+- If no answer: leave a voicemail (see voicemail script), send a follow-up text.
+
+STEP 3 — VOICEMAIL (if no answer)
+"Hi, this message is for [Name]. This is [Your Name] calling from [Business Name]. You recently requested a cleaning quote and I'd love to help! I'll try you again shortly, or feel free to call us back at [Phone]. We look forward to hearing from you!"
+
+STEP 4 — TEXT FOLLOW-UP (immediately after voicemail)
+"Hi [Name]! This is [Business Name] following up on your cleaning quote request. We'd love to help! Reply here or call [Phone] to get scheduled. 😊"
+
+STEP 5 — AFTER THE CALL
+1. Update the lead status in the CRM (Contacted / Converted / Lost).
+2. Add a note with call summary: answered/voicemail, quoted price, next step.
+3. If booked: create the booking in CRM immediately.
+4. If not booked: schedule a follow-up reminder for 24–48 hours.
+
+FOLLOW-UP CADENCE (if no response)
+- Day 0: Call + voicemail + text
+- Day 1: Call again (different time of day)
+- Day 3: Final follow-up call or email
+- Day 7: Mark as Lost if still no response"""),
+
+        ('leads', 'New Inquiry Email Response SOP', 1, """NEW INQUIRY EMAIL RESPONSE SOP
+
+PURPOSE: Respond to email inquiries within 1 hour during business hours.
+
+STEP 1 — READ THE INQUIRY
+Note: service type, urgency, location, any questions asked.
+
+STEP 2 — SEND A RESPONSE WITHIN 1 HOUR
+Use this template as a starting point:
+
+---
+Subject: Re: Your Cleaning Quote Request — [Business Name]
+
+Hi [Name],
+
+Thank you for reaching out to [Business Name]! We'd love to help keep your home spotless.
+
+Based on what you shared, here's a quick estimate:
+[Service Type] — [Beds/Baths] — $[Price Range]
+
+To confirm your exact quote, I have a couple of quick questions:
+1. [Any clarifying question]
+2. Do you have any preferred dates in mind?
+
+You can also book directly at [Website] or reply here and I'll get everything set up for you!
+
+Looking forward to hearing from you.
+
+[Your Name]
+[Business Name] | [Phone] | [Website]
+---
+
+STEP 3 — LOG IN CRM
+Update the lead status to "Contacted" and add a note.
+
+STEP 4 — FOLLOW UP
+If no reply within 24 hours, call the phone number on the inquiry."""),
+
+        # ── Quality Control ───────────────────────────────────────
+        ('quality', 'Post-Job Quality Check SOP', 0, """POST-JOB QUALITY CHECK SOP
+
+PURPOSE: Ensure every job meets [Business Name] standards before the cleaner leaves.
+
+WHO DOES THIS: The cleaner performs a self-check before leaving. A supervisor spot-checks remotely using photos.
+
+STEP 1 — CLEANER SELF-CHECK (before leaving the property)
+Go room by room and verify:
+□ All surfaces dusted and wiped
+□ Mirrors streak-free
+□ Floors vacuumed and mopped (no footprints on mopped floors)
+□ Beds made hotel-style
+□ Toilets clean inside, outside, and behind
+□ Sinks and faucets shining
+□ No products or cloths left behind
+□ Client's items returned to original positions
+□ Trash emptied and new liner in place
+□ Home locked up per instructions
+
+STEP 2 — PHOTO DOCUMENTATION
+Take photos of:
+- Each bathroom (toilet, sink, mirror)
+- Kitchen (counters, sink, stovetop)
+- Each bedroom (made bed)
+- Living area (vacuumed floors/carpet)
+Upload to the work order in the CRM.
+
+STEP 3 — MARK COMPLETE
+Mark the job complete in the CRM work order checklist.
+
+STEP 4 — CLIENT RATING
+The CRM will automatically send a rating request to the client. If the client rates below 4 stars, flag it for manager review immediately."""),
+
+        ('quality', 'Client Complaint Resolution SOP', 1, """CLIENT COMPLAINT RESOLUTION SOP
+
+PURPOSE: Handle complaints quickly and professionally to protect our reputation and retain the client.
+
+RULE: Never argue. Never make excuses. Always apologize first.
+
+STEP 1 — RECEIVE THE COMPLAINT
+- If by phone: listen fully before responding. Do not interrupt.
+- If by email/text: respond within 1 hour.
+- Log the complaint in the CRM under the client's booking.
+
+STEP 2 — ACKNOWLEDGE AND APOLOGIZE
+Script: "I'm so sorry to hear that, [Name]. That is absolutely not the experience we want for you. I want to make this right."
+
+STEP 3 — ASSESS THE SITUATION
+Ask: "Can you tell me specifically what was missed or what happened?"
+Take notes. Do not dismiss or minimize.
+
+STEP 4 — OFFER A SOLUTION
+Options (use judgment based on severity):
+- Minor issue: "I'd love to send someone back to touch up that area at no charge."
+- Major issue: "I want to offer you a complimentary re-clean on [Date]."
+- Extreme issue: Escalate to owner immediately.
+
+STEP 5 — FOLLOW THROUGH
+1. Schedule the re-clean or callback immediately — don't promise without confirming.
+2. Assign the same cleaner if possible (they know the home) OR a senior cleaner.
+3. After the resolution, follow up with the client to confirm they're satisfied.
+4. Log resolution in CRM notes.
+
+STEP 6 — INTERNAL REVIEW
+1. Debrief with the cleaner privately — what happened?
+2. Identify if it's a training issue, supplies issue, or one-off.
+3. Update training or SOPs if needed."""),
+
+        # ── Operations ────────────────────────────────────────────
+        ('operations', 'New Client Setup SOP', 0, """NEW CLIENT SETUP SOP
+
+PURPOSE: Ensure every new client is properly set up in the system before their first cleaning.
+
+STEP 1 — AFTER BOOKING IS CONFIRMED
+1. Verify all booking details are complete in the CRM: name, address, service type, date, time, price.
+2. Confirm deposit has been collected (Stripe).
+3. Assign a cleaner based on availability and the client's area.
+
+STEP 2 — SEND CONFIRMATION EMAIL
+The CRM sends this automatically. Verify it went out. If not, send manually.
+
+STEP 3 — ADD CLIENT NOTES
+In the client's profile, note:
+- Gate codes, alarm codes, parking instructions
+- Pets (type, name, location during cleaning)
+- Areas to avoid
+- Any allergies to cleaning products
+- Preferred products or methods
+- Key pickup/lockbox instructions
+
+STEP 4 — 24-HOUR REMINDER
+The CRM sends this automatically the day before. Verify it's scheduled.
+
+STEP 5 — DAY-OF PREP
+1. Confirm the assigned cleaner has the work order.
+2. Text the cleaner the client's address and any special notes.
+3. Text the client: "We're looking forward to your cleaning tomorrow! Your cleaner [Name] will arrive between [Time Window]."
+
+STEP 6 — AFTER THE CLEANING
+1. Mark complete in CRM.
+2. CRM auto-charges the balance and sends a rating request.
+3. If the client is on recurring service, confirm the next appointment is scheduled."""),
+    ]
+
+    for cat, title, order, content in seeds:
+        s = SOP(category=cat, title=title, sort_order=order, content=content.strip())
+        db.session.add(s)
     db.session.commit()
 
 

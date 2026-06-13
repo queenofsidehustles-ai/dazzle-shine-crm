@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orientation — {{ biz }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 48px 36px; max-width: 480px; width: 100%; text-align: center; box-shadow: 0 8px 40px rgba(15,7,40,0.09); }
+    .script { font-family: "Allura", cursive; font-size: 1.8rem; color: #d3a84f; display: block; margin-top: 24px; }
+    .badge { display: inline-block; background: #d4edda; color: #155724; padding: 4px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; margin-bottom: 16px; }
+    .btn { background: linear-gradient(135deg,#d3a84f,#b98a33); color: #1f1333; border: none; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; width: 100%; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% if already_done %}
+      <div style="font-size:3rem;margin-bottom:16px">✅</div>
+      <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:10px">Already Completed</h1>
+      <p style="color:#5f5878;line-height:1.7">Your orientation was already marked complete. You're good to go!</p>
+
+    {% elif confirm_mode %}
+      <div style="font-size:3rem;margin-bottom:16px">📚</div>
+      <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:10px">Confirm Orientation Complete</h1>
+      <p style="color:#5f5878;line-height:1.7;margin-bottom:20px">
+        Hi <strong>{{ s.name.split()[0] }}</strong>, click the button below once you've finished reviewing all training materials and feel ready for your first job.
+      </p>
+      <div style="background:#f0edf8;border-radius:10px;padding:16px;text-align:left;margin-bottom:20px">
+        <p style="font-weight:700;font-size:0.88rem;color:#3b2460;margin-bottom:8px">Before confirming, make sure you've reviewed:</p>
+        <p style="font-size:0.85rem;color:#5f5878;line-height:2">
+          ☐ Standard cleaning checklist<br>
+          ☐ Quality standards and expectations<br>
+          ☐ Client communication guidelines<br>
+          ☐ Supply usage and safety<br>
+          ☐ Scheduling and punctuality policy
+        </p>
+      </div>
+      <form method="POST">
+        <button type="submit" class="btn">I've Completed Orientation ✓</button>
+      </form>
+
+    {% else %}
+      <div style="font-size:3rem;margin-bottom:16px">🎓</div>
+      <span class="badge">Orientation Complete!</span>
+      <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:10px">You're Ready, {{ s.name.split()[0] }}!</h1>
+      <p style="color:#5f5878;line-height:1.7;margin-bottom:16px">
+        Your orientation is confirmed. Your manager has been notified and will be in touch to schedule your shadow job.
+      </p>
+      <div style="background:#f0edf8;border-radius:10px;padding:16px;text-align:left">
+        <p style="font-weight:700;font-size:0.88rem;color:#3b2460;margin-bottom:8px">Your onboarding status:</p>
+        <p style="font-size:0.85rem;color:#5f5878;line-height:2">
+          ✅ Agreement signed<br>
+          ✅ Onboarding forms submitted<br>
+          ✅ Orientation complete<br>
+          ⏳ Shadow job — coming soon!
+        </p>
+      </div>
+    {% endif %}
+    <span class="script">{{ biz }}</span>
+  </div>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Your Agreement — {{ biz }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; min-height: 100vh; padding: 32px 16px; }
+    .wrap { max-width: 680px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 28px; }
+    .header .script { font-family: "Allura", cursive; font-size: 2rem; color: #d3a84f; display: block; margin-bottom: 4px; }
+    .header h1 { font-size: 1.3rem; font-weight: 700; color: #1f1333; }
+    .header p { color: #9a95ad; font-size: 0.88rem; margin-top: 6px; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 32px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); margin-bottom: 20px; }
+    .agreement-text { font-size: 0.86rem; line-height: 1.9; color: #3b2460; white-space: pre-wrap; font-family: "Inter", sans-serif; max-height: 420px; overflow-y: auto; border: 1px solid #e4dfef; border-radius: 10px; padding: 20px; background: #faf9fd; }
+    label { display: block; font-weight: 600; font-size: 0.88rem; margin-bottom: 8px; color: #1f1333; }
+    input[type="text"] { width: 100%; padding: 12px 14px; border: 2px solid #e4dfef; border-radius: 8px; font-size: 1rem; font-family: "Inter", sans-serif; color: #1f1333; transition: border-color 0.2s; }
+    input[type="text"]:focus { outline: none; border-color: #d3a84f; }
+    .btn { background: linear-gradient(135deg,#d3a84f,#b98a33); color: #1f1333; border: none; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; width: 100%; margin-top: 16px; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .notice { font-size: 0.78rem; color: #9a95ad; text-align: center; margin-top: 12px; line-height: 1.6; }
+    .flash { background: #ffeaea; border: 1px solid #e0b0b0; color: #c0392b; padding: 10px 16px; border-radius: 8px; font-size: 0.88rem; margin-bottom: 16px; }
+    .scroll-hint { font-size: 0.76rem; color: #9a95ad; text-align: right; margin-top: 4px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <span class="script">{{ biz }}</span>
+      <h1>{{ agreement_label }}</h1>
+      <p>Please read the full agreement below, then type your name to sign.</p>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="flash">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card">
+      <p style="font-size:0.88rem;color:#5f5878;margin-bottom:16px">
+        Hi <strong>{{ s.name }}</strong>, welcome to <strong>{{ biz }}</strong>!
+        Please read this agreement carefully before signing.
+      </p>
+      <div class="agreement-text">{{ agreement_text }}</div>
+      <p class="scroll-hint">Scroll to read the full agreement ↑</p>
+
+      <form method="POST" onsubmit="return validateForm()">
+        <div style="margin-top:8px">
+          <label for="signature">Type your full legal name to sign:</label>
+          <input type="text" id="signature" name="signature"
+                 placeholder="e.g. {{ s.name }}"
+                 autocomplete="off" required />
+        </div>
+        <button type="submit" class="btn">I Agree &amp; Sign This Agreement</button>
+        <p class="notice">
+          By clicking "I Agree &amp; Sign," you confirm that you have read and understood<br>
+          this {{ agreement_label }} and agree to its terms.<br>
+          Date: <strong id="today"></strong>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('today').textContent = new Date().toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
+    function validateForm() {
+      const name = document.getElementById('signature').value.trim();
+      if (name.length < 3) { alert('Please enter your full name to sign.'); return false; }
+      return true;
+    }
+  </script>
+</body>
+</html>

@@ -202,8 +202,18 @@ def accept(token):
     if q.status not in ('sent', 'draft'):
         return redirect(url_for('quotes.view', token=token))
     q.status = 'accepted'
-    q.responded_at = datetime.utcnow()
-    db.session.commit()
+    try:
+        q.responded_at = datetime.utcnow()
+    except Exception:
+        pass
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        db.session.execute(__import__('sqlalchemy').text(
+            "UPDATE commercial_quote SET status='accepted' WHERE token=:t"
+        ), {'t': token})
+        db.session.commit()
     notify_email = __import__('os').environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
     send_email(
         to_email=notify_email, to_name='Dazzle & Shine Maids',
@@ -228,8 +238,18 @@ def decline(token):
     if q.status not in ('sent', 'draft'):
         return redirect(url_for('quotes.view', token=token))
     q.status = 'declined'
-    q.responded_at = datetime.utcnow()
-    db.session.commit()
+    try:
+        q.responded_at = datetime.utcnow()
+    except Exception:
+        pass
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        db.session.execute(__import__('sqlalchemy').text(
+            "UPDATE commercial_quote SET status='declined' WHERE token=:t"
+        ), {'t': token})
+        db.session.commit()
     notify_email = __import__('os').environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
     send_email(
         to_email=notify_email, to_name='Dazzle & Shine Maids',

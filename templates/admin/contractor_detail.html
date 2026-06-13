@@ -49,9 +49,9 @@
         <input type="hidden" name="name" value="{{ s.name }}" />
         <div class="form-group">
           <label>Experience Level</label>
-          <select name="experience_level">
+          <select name="experience_level" onchange="autoFillRate(this)">
             {% for val, label, default_pct in exp_levels %}
-            <option value="{{ val }}" {{ 'selected' if s.experience_level == val }}>{{ label }} (default {{ default_pct }}%)</option>
+            <option value="{{ val }}" data-pct="{{ default_pct }}" {{ 'selected' if s.experience_level == val }}>{{ label }} (default {{ default_pct }}%)</option>
             {% endfor %}
           </select>
         </div>
@@ -74,6 +74,106 @@
 
   <!-- Right: Onboarding + Jobs -->
   <div style="display:flex;flex-direction:column;gap:18px">
+
+    <!-- Onboarding Quick Links -->
+    {% if s.agreement_token and (not s.welcome_forms_at or not s.orientation_completed_at) %}
+    <div class="card" style="background:#fffbef;border-color:#ffc107">
+      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:12px;color:#856404;text-transform:uppercase;letter-spacing:0.1em">Pending Steps — Send These Links</h2>
+      {% if not s.welcome_forms_at %}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+        <span style="font-size:0.85rem;color:#856404">📋 Onboarding Forms</span>
+        <button onclick="copyLink('{{ url_for('contractors.onboarding_forms', token=s.agreement_token, _external=True) }}')"
+                class="btn btn-outline" style="padding:5px 12px;font-size:0.75rem;flex-shrink:0">Copy Link</button>
+      </div>
+      {% endif %}
+      {% if s.orientation_token and not s.orientation_completed_at %}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span style="font-size:0.85rem;color:#856404">🎓 Orientation Complete</span>
+        <button onclick="copyLink('{{ url_for('contractors.orientation_complete', token=s.orientation_token, _external=True) }}')"
+                class="btn btn-outline" style="padding:5px 12px;font-size:0.75rem;flex-shrink:0">Copy Link</button>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Agreement Status -->
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Work Agreement</h2>
+      {% if s.agreement_signed_at %}
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#d4edda;border-radius:8px;margin-bottom:12px">
+          <span style="font-size:1.2rem">✅</span>
+          <div>
+            <p style="font-weight:700;color:#155724;font-size:0.9rem">Signed</p>
+            <p style="font-size:0.8rem;color:#1e7e34">
+              "{{ s.agreement_signature }}" &nbsp;·&nbsp; {{ s.agreement_signed_at.strftime('%b %d, %Y %I:%M %p') }}
+            </p>
+          </div>
+        </div>
+      {% else %}
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fff3cd;border-radius:8px;margin-bottom:12px">
+          <span style="font-size:1.2rem">⏳</span>
+          <div>
+            <p style="font-weight:700;color:#856404;font-size:0.9rem">Not Yet Signed</p>
+            <p style="font-size:0.8rem;color:#856404">Waiting for {{ s.name.split()[0] }} to sign</p>
+          </div>
+        </div>
+        {% if s.agreement_token %}
+          <div style="margin-bottom:10px">
+            <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:6px">Signing link:</p>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="text" readonly
+                     value="{{ url_for('contractors.sign_agreement', token=s.agreement_token, _external=True) }}"
+                     style="flex:1;font-size:0.72rem;padding:7px 10px;border:1px solid #e4dfef;border-radius:6px;color:#5f5878;background:#faf9fd"
+                     onclick="this.select()" />
+              <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
+                      class="btn btn-outline" style="padding:6px 12px;font-size:0.75rem;flex-shrink:0">Copy</button>
+            </div>
+          </div>
+        {% endif %}
+        {% if s.email %}
+          <form method="POST" action="{{ url_for('contractors.resend_agreement', staff_id=s.id) }}">
+            <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.82rem;padding:8px">
+              Resend Agreement Email
+            </button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <!-- Forms & Orientation Status -->
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Onboarding Details</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:0.84rem;margin-bottom:14px">
+        <div>
+          <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Forms</p>
+          <p style="font-weight:600;color:{{ '#155724' if s.welcome_forms_at else '#856404' }}">
+            {{ '✅ Submitted' if s.welcome_forms_at else '⏳ Pending' }}
+          </p>
+        </div>
+        <div>
+          <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Orientation</p>
+          <p style="font-weight:600;color:{{ '#155724' if s.orientation_completed_at else '#856404' }}">
+            {{ '✅ Complete' if s.orientation_completed_at else '⏳ Pending' }}
+          </p>
+        </div>
+        {% if s.shirt_size %}
+        <div>
+          <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Shirt Size</p>
+          <p style="font-weight:600">{{ s.shirt_size }}</p>
+        </div>
+        {% endif %}
+        {% if s.payment_pref %}
+        <div>
+          <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Paid Via</p>
+          <p style="font-weight:600">{{ s.payment_pref }}</p>
+        </div>
+        {% endif %}
+      </div>
+      {% if s.payment_notes %}
+      <p style="font-size:0.8rem;color:#5f5878"><strong>Payment notes:</strong> {{ s.payment_notes }}</p>
+      {% endif %}
+    </div>
+
     <div class="card">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Onboarding Checklist</h2>
       {% set completed = s.get_onboarding() %}
@@ -116,6 +216,17 @@
 </div>
 
 <script>
+function autoFillRate(sel) {
+  const pct = sel.options[sel.selectedIndex].dataset.pct;
+  if (pct) document.querySelector('input[name="pay_rate"]').value = pct;
+}
+function copyLink(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    event.target.textContent = 'Copied!';
+    event.target.style.color = '#155724';
+    setTimeout(() => { event.target.textContent = 'Copy Link'; event.target.style.color = ''; }, 2000);
+  });
+}
 async function toggleStep(key, el) {
   const res = await fetch(window.location.href, {
     method: 'POST',

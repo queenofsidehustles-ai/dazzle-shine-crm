@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agreement Signed — {{ biz }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 48px 36px; max-width: 460px; width: 100%; text-align: center; box-shadow: 0 8px 40px rgba(15,7,40,0.09); }
+    .script { font-family: "Allura", cursive; font-size: 1.8rem; color: #d3a84f; display: block; margin-top: 24px; }
+    .signature-display { font-family: "Allura", cursive; font-size: 1.6rem; color: #3b2460; margin: 16px 0 4px; }
+    .badge { display: inline-block; background: #d4edda; color: #155724; padding: 4px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% if already_signed %}
+      <div style="font-size:3rem;margin-bottom:16px">✅</div>
+      <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:10px">Already Signed</h1>
+      <p style="color:#5f5878;line-height:1.7">
+        Hi <strong>{{ s.name.split()[0] }}</strong>, your {{ agreement_label }} was already signed on
+        <strong>{{ s.agreement_signed_at.strftime('%B %d, %Y') }}</strong>.
+      </p>
+      <p style="color:#9a95ad;font-size:0.85rem;margin-top:14px">No further action needed. You're all set!</p>
+    {% else %}
+      <div style="font-size:3rem;margin-bottom:16px">🎉</div>
+      <span class="badge">Agreement Signed</span>
+      <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:10px">You're All Set, {{ s.name.split()[0] }}!</h1>
+      <p style="color:#5f5878;line-height:1.7">
+        Your {{ agreement_label }} has been signed and recorded.
+      </p>
+      <div class="signature-display">{{ s.agreement_signature }}</div>
+      <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:20px">
+        Signed on {{ s.agreement_signed_at.strftime('%B %d, %Y') }}
+      </p>
+      <p style="color:#5f5878;font-size:0.9rem;line-height:1.7;margin-bottom:20px">
+        Next: complete your onboarding forms (shirt size, payment info, emergency contact).
+      </p>
+      {% if forms_url %}
+      <a href="{{ forms_url }}"
+         style="display:block;background:linear-gradient(135deg,#d3a84f,#b98a33);color:#1f1333;padding:13px 24px;border-radius:8px;font-weight:700;text-decoration:none;font-size:0.95rem">
+        Complete My Onboarding Forms →
+      </a>
+      {% endif %}
+    {% endif %}
+    <span class="script">{{ biz }}</span>
+  </div>
+</body>
+</html>

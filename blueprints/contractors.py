@@ -1,8 +1,9 @@
 import json
+import secrets
 from datetime import datetime, date, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from auth import login_required
-from models import Staff, ContractorApplication, Booking
+from models import Staff, ContractorApplication, Booking, BusinessSetting
 from extensions import db
 from notifications import send_email
 
@@ -66,9 +67,53 @@ def hire(app_id):
         has_supplies=a.has_supplies,
         color=default_color, is_active=True,
     )
+    token = secrets.token_urlsafe(32)
+    s.agreement_token = token
     db.session.add(s)
     a.status = 'hired'
     db.session.commit()
+
+    if s.email:
+        import os
+        biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+        owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+        sign_url = url_for('contractors.sign_agreement', token=token, _external=True)
+        worker_model = BusinessSetting.get('worker_model', 'contractor')
+        agreement_label = 'Independent Contractor Agreement' if worker_model == 'contractor' else 'Employment Agreement'
+        send_email(
+            to_email=s.email, to_name=s.name,
+            from_name=f'{biz} Hiring',
+            subject=f'Welcome to the {biz} Team, {s.name.split()[0]}!',
+            html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:32px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#d3a84f;margin:0;font-size:1.6rem">Welcome to the Team!</h1>
+    <p style="color:#c9b8e8;margin:8px 0 0">You've been approved to work with {biz}</p>
+  </div>
+  <div style="background:#fff;padding:32px;border-radius:0 0 12px 12px;border:1px solid #e4dfef">
+    <p style="margin-top:0">Hi {s.name.split()[0]},</p>
+    <p>We're excited to have you on board! Here's what happens next:</p>
+    <ol style="line-height:2;color:#3b2460">
+      <li><strong>Sign your {agreement_label}</strong> — use the button below</li>
+      <li><strong>Complete your onboarding forms</strong> — payment info, shirt size, emergency contact</li>
+      <li><strong>Complete orientation</strong> — watch our training materials and review the quality checklist</li>
+      <li><strong>Complete your shadow / trial shift</strong> — you'll go out with an experienced team member first</li>
+      <li><strong>Get your supply kit</strong> — we'll confirm pickup details with you</li>
+    </ol>
+    <div style="text-align:center;margin:28px 0">
+      <a href="{sign_url}" style="background:#d3a84f;color:#1f1333;padding:14px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:1rem;display:inline-block">
+        Sign My {agreement_label} →
+      </a>
+    </div>
+    <p style="font-size:0.82rem;color:#9a95ad">Link not working? Copy and paste: {sign_url}</p>
+    <p>Questions? Reply to this email or call us directly. We're here to set you up for success.</p>
+    <p style="margin-bottom:0">Welcome aboard,<br>
+    <strong style="color:#b98a33">{biz}</strong><br>
+    <a href="mailto:{owner_email}" style="color:#7c3aed">{owner_email}</a></p>
+  </div>
+</div>""",
+        )
+
     flash(f'{a.name} has been added to your team!', 'success')
     return redirect(url_for('contractors.staff_detail', staff_id=s.id))
 
@@ -201,3 +246,246 @@ def apply():
         )
         return render_template('public/apply_done.html', name=a.name)
     return render_template('public/apply.html')
+
+
+# ── Agreement sign-off (public — no login required) ────────────────────────────
+
+@contractors_bp.route('/sign-agreement/<token>', methods=['GET', 'POST'])
+def sign_agreement(token):
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    worker_model = BusinessSetting.get('worker_model', 'contractor')
+    agreement_label = 'Independent Contractor Agreement' if worker_model == 'contractor' else 'Employment Agreement'
+    agreement_text = BusinessSetting.get('agreement_template') or _default_agreement(biz, worker_model)
+
+    if s.agreement_signed_at:
+        return render_template('public/sign_done.html',
+                               s=s, biz=biz, already_signed=True,
+                               agreement_label=agreement_label)
+
+    if request.method == 'POST':
+        typed_name = request.form.get('signature', '').strip()
+        if not typed_name:
+            flash('Please type your full name to sign.', 'error')
+            return render_template('public/sign_agreement.html',
+                                   s=s, biz=biz, agreement_text=agreement_text,
+                                   agreement_label=agreement_label)
+        s.agreement_signature = typed_name
+        s.agreement_signed_at = datetime.utcnow()
+        # Generate orientation token for later completion link
+        if not s.orientation_token:
+            s.orientation_token = secrets.token_urlsafe(32)
+        # Auto-complete the agreement onboarding step
+        steps = s.get_onboarding()
+        if 'ic_agreement' not in steps:
+            steps.append('ic_agreement')
+            s.onboarding_steps = json.dumps(steps)
+        db.session.commit()
+
+        # Auto-fire orientation email with training resources link
+        if s.email:
+            forms_url = url_for('contractors.onboarding_forms', token=s.agreement_token, _external=True)
+            orientation_done_url = url_for('contractors.orientation_complete', token=s.orientation_token, _external=True)
+            from notifications import send_triggered_email
+            send_triggered_email(
+                trigger='cleaner_orientation',
+                to_email=s.email,
+                to_name=s.name,
+                variables={
+                    'forms_link': forms_url,
+                    'orientation_link': orientation_done_url,
+                }
+            )
+
+        return render_template('public/sign_done.html',
+                               s=s, biz=biz, already_signed=False,
+                               agreement_label=agreement_label,
+                               forms_url=url_for('contractors.onboarding_forms',
+                                                 token=s.agreement_token, _external=True))
+
+    return render_template('public/sign_agreement.html',
+                           s=s, biz=biz, agreement_text=agreement_text,
+                           agreement_label=agreement_label)
+
+
+@contractors_bp.route('/team/<int:staff_id>/resend-agreement', methods=['POST'])
+@login_required
+def resend_agreement(staff_id):
+    import os
+    s = Staff.query.get_or_404(staff_id)
+    if not s.email:
+        flash('No email on file for this team member.', 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+    if not s.agreement_token:
+        s.agreement_token = secrets.token_urlsafe(32)
+        db.session.commit()
+    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    worker_model = BusinessSetting.get('worker_model', 'contractor')
+    agreement_label = 'Independent Contractor Agreement' if worker_model == 'contractor' else 'Employment Agreement'
+    sign_url = url_for('contractors.sign_agreement', token=s.agreement_token, _external=True)
+    send_email(
+        to_email=s.email, to_name=s.name,
+        from_name=f'{biz} Hiring',
+        subject=f'Action Required: Sign Your {agreement_label}',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:28px;border-radius:12px 12px 0 0;text-align:center">
+    <h2 style="color:#d3a84f;margin:0">Agreement Signature Required</h2>
+  </div>
+  <div style="background:#fff;padding:28px;border-radius:0 0 12px 12px;border:1px solid #e4dfef">
+    <p>Hi {s.name.split()[0]},</p>
+    <p>We're still waiting on your signed {agreement_label}. Please sign it at your earliest convenience using the link below.</p>
+    <div style="text-align:center;margin:24px 0">
+      <a href="{sign_url}" style="background:#d3a84f;color:#1f1333;padding:14px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:1rem;display:inline-block">
+        Sign My {agreement_label} →
+      </a>
+    </div>
+    <p style="font-size:0.82rem;color:#9a95ad">Link: {sign_url}</p>
+    <p style="margin-bottom:0">— <strong>{biz}</strong></p>
+  </div>
+</div>""",
+    )
+    flash(f'Agreement link resent to {s.email}', 'success')
+    return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+
+# ── Welcome Forms (public) ─────────────────────────────────────────────────────
+
+@contractors_bp.route('/onboarding-forms/<token>', methods=['GET', 'POST'])
+def onboarding_forms(token):
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+
+    if s.welcome_forms_at:
+        return render_template('public/onboarding_forms_done.html', s=s, biz=biz, already_done=True)
+
+    if request.method == 'POST':
+        s.emergency_contact_name = request.form.get('emergency_contact_name', '').strip() or s.emergency_contact_name
+        s.emergency_contact_phone = request.form.get('emergency_contact_phone', '').strip() or s.emergency_contact_phone
+        s.shirt_size = request.form.get('shirt_size', '').strip()
+        s.payment_pref = request.form.get('payment_pref', '').strip()
+        s.payment_notes = request.form.get('payment_notes', '').strip()
+        s.welcome_forms_at = datetime.utcnow()
+        # Auto-complete three onboarding steps at once
+        steps = s.get_onboarding()
+        for step in ('welcome_forms', 'payment_info', 'uniform_size'):
+            if step not in steps:
+                steps.append(step)
+        s.onboarding_steps = json.dumps(steps)
+        db.session.commit()
+
+        # Notify owner that forms are done
+        import os
+        owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', '')
+        if owner_email:
+            send_email(
+                to_email=owner_email, to_name=biz,
+                from_name=f'{biz} Onboarding',
+                subject=f'{s.name} completed their onboarding forms — {biz}',
+                html=f"""<div style="font-family:Inter,sans-serif;max-width:500px;margin:0 auto;color:#1f1333">
+  <h3 style="color:#b98a33">Onboarding Forms Received</h3>
+  <p><strong>{s.name}</strong> just completed their onboarding forms.</p>
+  <p><strong>Shirt size:</strong> {s.shirt_size or '—'}</p>
+  <p><strong>Payment preference:</strong> {s.payment_pref or '—'}</p>
+  <p><strong>Payment notes:</strong> {s.payment_notes or '—'}</p>
+  <p><strong>Emergency contact:</strong> {s.emergency_contact_name or '—'} — {s.emergency_contact_phone or '—'}</p>
+  <p>Log in to the CRM to continue their onboarding.</p>
+</div>""",
+            )
+        return render_template('public/onboarding_forms_done.html', s=s, biz=biz, already_done=False)
+
+    return render_template('public/onboarding_forms.html', s=s, biz=biz)
+
+
+# ── Orientation completion (public) ────────────────────────────────────────────
+
+@contractors_bp.route('/orientation-complete/<token>', methods=['GET', 'POST'])
+def orientation_complete(token):
+    s = Staff.query.filter_by(orientation_token=token).first_or_404()
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+
+    if s.orientation_completed_at:
+        return render_template('public/orientation_done.html', s=s, biz=biz, already_done=True)
+
+    if request.method == 'POST':
+        s.orientation_completed_at = datetime.utcnow()
+        steps = s.get_onboarding()
+        if 'orientation' not in steps:
+            steps.append('orientation')
+            s.onboarding_steps = json.dumps(steps)
+        db.session.commit()
+
+        # Notify owner that orientation is done
+        import os
+        owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', '')
+        if owner_email:
+            send_email(
+                to_email=owner_email, to_name=biz,
+                from_name=f'{biz} Onboarding',
+                subject=f'{s.name} completed orientation — ready to schedule! — {biz}',
+                html=f"""<div style="font-family:Inter,sans-serif;max-width:500px;margin:0 auto;color:#1f1333">
+  <h3 style="color:#b98a33">Orientation Complete!</h3>
+  <p><strong>{s.name}</strong> has confirmed they completed their orientation and training.</p>
+  <p>They are ready to be scheduled for a shadow job. Log in to the CRM to assign them.</p>
+</div>""",
+            )
+        return render_template('public/orientation_done.html', s=s, biz=biz, already_done=False)
+
+    return render_template('public/orientation_done.html', s=s, biz=biz, already_done=False,
+                           confirm_mode=True)
+
+
+def _default_agreement(biz_name, worker_model):
+    if worker_model == 'employee':
+        return f"""OFFER OF EMPLOYMENT — {biz_name.upper()}
+
+This letter confirms your offer of employment with {biz_name} ("the Company").
+
+POSITION & DUTIES
+You are being hired as a Cleaning Technician. Your duties include performing residential and/or commercial cleaning services as assigned, following all company standards, checklists, and quality guidelines.
+
+COMPENSATION
+Your pay rate will be provided separately by your manager. Pay periods are [weekly/bi-weekly]. Direct deposit is available.
+
+SCHEDULE
+Your schedule will be assigned by {biz_name} management. Availability requirements were discussed during your interview.
+
+CONDUCT & STANDARDS
+You are expected to maintain professional conduct at all times, treat clients and their property with care and respect, and follow all company policies, safety procedures, and quality checklists.
+
+CONFIDENTIALITY
+You agree to keep all client information, business processes, and pricing confidential during and after your employment.
+
+AT-WILL EMPLOYMENT
+Employment with {biz_name} is at-will. Either party may end the employment relationship at any time with or without cause or notice.
+
+ACKNOWLEDGMENT
+By signing below, you confirm that you have read and understood this agreement and agree to its terms."""
+    else:
+        return f"""INDEPENDENT CONTRACTOR AGREEMENT — {biz_name.upper()}
+
+This Independent Contractor Agreement ("Agreement") is entered into between {biz_name} ("Company") and the Contractor identified below.
+
+1. INDEPENDENT CONTRACTOR STATUS
+You are engaged as an independent contractor, not an employee. You are responsible for your own taxes, insurance, and equipment unless otherwise agreed. You will receive a 1099 form at year-end if applicable.
+
+2. SERVICES
+You agree to provide residential and/or commercial cleaning services as assigned by {biz_name}, following all company quality standards, checklists, and client expectations.
+
+3. COMPENSATION
+Your pay rate (percentage of job or hourly) was communicated during onboarding. Payment is issued [weekly/bi-weekly] after jobs are marked complete.
+
+4. SCHEDULING
+Jobs will be offered to you based on availability. You may accept or decline jobs, but consistent availability is expected. Last-minute cancellations must be communicated immediately.
+
+5. CONDUCT & QUALITY
+You agree to: arrive on time, maintain professional appearance and communication, follow all cleaning checklists, treat client homes and belongings with the utmost care, and never solicit clients directly.
+
+6. CONFIDENTIALITY & NON-SOLICITATION
+You agree to keep all client information, pricing, and business processes strictly confidential. For 12 months after this agreement ends, you agree not to solicit or accept direct business from any {biz_name} client.
+
+7. TERMINATION
+Either party may terminate this agreement at any time with or without cause.
+
+ACKNOWLEDGMENT
+By signing below, you confirm that you have read and understood this Agreement and agree to its terms as an independent contractor."""

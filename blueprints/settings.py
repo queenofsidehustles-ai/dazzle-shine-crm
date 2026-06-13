@@ -52,13 +52,18 @@ def pricing():
 @settings_bp.route('/business', methods=['GET', 'POST'])
 @login_required
 def business():
-    fields = ['business_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'website']
+    fields = ['business_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'website',
+              'worker_model', 'reception_model', 'agreement_template']
     if request.method == 'POST':
         for f in fields:
             BusinessSetting.set(f, request.form.get(f, ''))
         db.session.commit()
-        flash('Business info updated!', 'success')
+        flash('Business settings updated!', 'success')
         return redirect(url_for('settings.business'))
 
     current = {f: BusinessSetting.get(f) for f in fields}
+    if not current['worker_model']:
+        current['worker_model'] = 'contractor'
+    if not current['reception_model']:
+        current['reception_model'] = 'va'
     return render_template('admin/settings_business.html', current=current)
