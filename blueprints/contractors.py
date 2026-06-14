@@ -42,12 +42,26 @@ def applications():
 def application_detail(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
     if request.method == 'POST':
-        a.status = request.form.get('status', a.status)
-        a.admin_notes = request.form.get('admin_notes', a.admin_notes)
+        action = request.form.get('action', 'notes')
+        if action == 'interview':
+            a.phone_interview_completed = bool(request.form.get('phone_interview_completed'))
+            if a.phone_interview_completed and not a.phone_interview_at:
+                a.phone_interview_at = datetime.utcnow()
+            a.phone_interview_notes = request.form.get('phone_interview_notes', a.phone_interview_notes)
+            if a.status == 'new':
+                a.status = 'reviewing'
+            flash('Phone interview notes saved.', 'success')
+        elif action == 'bgcheck':
+            a.background_check_status = request.form.get('background_check_status', a.background_check_status)
+            a.background_check_notes = request.form.get('background_check_notes', a.background_check_notes)
+            if a.background_check_status == 'ordered' and not a.background_check_at:
+                a.background_check_at = datetime.utcnow()
+            flash('Background check updated.', 'success')
+        else:
+            a.status = request.form.get('status', a.status)
+            a.admin_notes = request.form.get('admin_notes', a.admin_notes)
+            flash('Application updated.', 'success')
         db.session.commit()
-        flash('Application updated.', 'success')
-        if a.status == 'hired':
-            return redirect(url_for('contractors.hire', app_id=app_id))
         return redirect(url_for('contractors.application_detail', app_id=app_id))
     return render_template('admin/application_detail.html', a=a)
 
@@ -59,12 +73,16 @@ def hire(app_id):
     exp = request.form.get('experience_level', 'new')
     pay_type = request.form.get('pay_type', 'percent')
     pay_rate = float(request.form.get('pay_rate', 40))
+    import os as _os
+    worker_model = request.form.get('worker_model',
+        BusinessSetting.get('worker_model') or _os.environ.get('WORKER_MODEL', 'contractor'))
     default_color = '#7c3aed'
     s = Staff(
         name=a.name, email=a.email, phone=a.phone,
         pay_type=pay_type, pay_rate=pay_rate, experience_level=exp,
         has_transportation=a.has_transportation,
         has_supplies=a.has_supplies,
+        worker_model=worker_model,
         color=default_color, is_active=True,
     )
     token = secrets.token_urlsafe(32)

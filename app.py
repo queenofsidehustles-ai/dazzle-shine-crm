@@ -116,9 +116,17 @@ def _migrate_db():
         ('commercial_quote', 'status',           "VARCHAR(20) DEFAULT 'draft'"),
         ('commercial_quote', 'sent_at',          'TIMESTAMP'),
         ('commercial_quote', 'responded_at',     'TIMESTAMP'),
-        # Contractor columns
-        ('contractor_application', 'experience_years', 'VARCHAR(20)'),
-        ('contractor_application', 'availability',     'VARCHAR(50)'),
+        # Staff worker model
+        ('staff', 'worker_model', "VARCHAR(20) DEFAULT 'contractor'"),
+        # Contractor application hiring pipeline
+        ('contractor_application', 'experience_years',             'VARCHAR(20)'),
+        ('contractor_application', 'availability',                 'VARCHAR(50)'),
+        ('contractor_application', 'phone_interview_completed',    'BOOLEAN DEFAULT FALSE'),
+        ('contractor_application', 'phone_interview_at',           'TIMESTAMP'),
+        ('contractor_application', 'phone_interview_notes',        'TEXT'),
+        ('contractor_application', 'background_check_status',      "VARCHAR(20) DEFAULT 'not_started'"),
+        ('contractor_application', 'background_check_notes',       'TEXT'),
+        ('contractor_application', 'background_check_at',          'TIMESTAMP'),
     ]
     for table, col, col_type in new_cols:
         try:

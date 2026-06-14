@@ -270,8 +270,15 @@ class ContractorApplication(db.Model):
     background_check_consent = db.Column(db.Boolean, default=False)
     agrees_to_ic_terms = db.Column(db.Boolean, default=False)
     why_interested = db.Column(db.Text)
-    status = db.Column(db.String(20), default='new')  # new, reviewing, hired, rejected
+    status = db.Column(db.String(20), default='new')  # new, reviewing, phone_screen, bg_check, hired, rejected
     admin_notes = db.Column(db.Text)
+    # Hiring pipeline tracking
+    phone_interview_completed = db.Column(db.Boolean, default=False)
+    phone_interview_at = db.Column(db.DateTime)
+    phone_interview_notes = db.Column(db.Text)
+    background_check_status = db.Column(db.String(20), default='not_started')  # not_started, ordered, cleared, failed
+    background_check_notes = db.Column(db.Text)
+    background_check_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -314,6 +321,7 @@ class Staff(db.Model):
     emergency_contact_phone = db.Column(db.String(20))
     has_transportation = db.Column(db.Boolean, default=True)
     has_supplies = db.Column(db.Boolean, default=False)
+    worker_model = db.Column(db.String(20), default='contractor')  # contractor, employee
     onboarding_steps = db.Column(db.Text, default='[]')  # JSON list of completed step keys
     agreement_token = db.Column(db.String(64), unique=True)
     agreement_signature = db.Column(db.String(100))
@@ -334,18 +342,27 @@ class Staff(db.Model):
         ('ic_agreement',      'Work agreement signed'),
         ('welcome_forms',     'Onboarding forms completed'),
         ('payment_info',      'Payment / direct deposit info collected'),
-        ('uniform_size',      'Shirt size & uniform noted'),
+        ('uniform_size',      'Shirt size & uniform issued'),
         ('orientation',       'Orientation / training completed'),
         ('supply_kit',        'Supply kit issued'),
         ('shadow_job',        'Shadow job / trial shift completed'),
         ('first_solo_job',    'First solo job assigned'),
     ]
+    # Steps that only apply to employees (not independent contractors)
+    EMPLOYEE_ONLY_STEPS = {'uniform_size', 'supply_kit'}
 
     def get_onboarding(self):
         try:
             return json.loads(self.onboarding_steps or '[]')
         except Exception:
             return []
+
+    def get_applicable_steps(self):
+        """Return steps relevant to this worker's model (contractor vs employee)."""
+        model = self.worker_model or 'contractor'
+        if model == 'employee':
+            return self.ONBOARDING_STEPS
+        return [(k, v) for k, v in self.ONBOARDING_STEPS if k not in self.EMPLOYEE_ONLY_STEPS]
 
     def pay_label(self):
         if self.pay_type == 'hourly':

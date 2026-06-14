@@ -6,8 +6,34 @@
 {% endblock %}
 
 {% block content %}
+
+<!-- Hiring Pipeline Banner -->
+<div style="display:flex;gap:0;margin-bottom:24px;border-radius:12px;overflow:hidden;border:1px solid #e4dfef">
+  {% set stages = [
+    ('new',          '1. Application',    a.status not in ('reviewing','phone_screen','bg_check','hired','rejected')),
+    ('reviewing',    '2. Phone Screen',   a.phone_interview_completed),
+    ('bg_check',     '3. Background Chk', a.background_check_status == 'cleared'),
+    ('hired',        '4. Hired',          a.status == 'hired'),
+  ] %}
+  {% for key, label, done in stages %}
+  <div style="flex:1;padding:10px 8px;text-align:center;font-size:0.78rem;font-weight:700;
+              background:{{ '#d4edda' if done else ('#fff3cd' if loop.index == 2 and a.status == 'reviewing' else '#f8f9fa') }};
+              color:{{ '#155724' if done else ('#856404' if loop.index == 2 and a.status == 'reviewing' else '#9a95ad') }};
+              border-right:{{ '1px solid #e4dfef' if not loop.last else 'none' }}">
+    {{ '✅' if done else ('⏳' if (loop.index == 2 and a.status == 'reviewing') else '○') }} {{ label }}
+  </div>
+  {% endfor %}
+  <div style="flex:1;padding:10px 8px;text-align:center;font-size:0.78rem;font-weight:700;
+              background:{{ '#f8d7da' if a.status == 'rejected' else '#f8f9fa' }};
+              color:{{ '#842029' if a.status == 'rejected' else '#9a95ad' }}">
+    {{ '❌ Rejected' if a.status == 'rejected' else '○ Rejected' }}
+  </div>
+</div>
+
 <div class="detail-grid">
+  <!-- Left column -->
   <div style="display:flex;flex-direction:column;gap:18px">
+
     <div class="card">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contact</h2>
       <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ a.name }}</span></div>
@@ -15,24 +41,83 @@
       <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ a.phone }}" style="color:#5d4f7d">{{ a.phone }}</a></span></div>
       <div class="detail-row"><span class="dl">Applied</span><span class="dv" style="color:#9a95ad">{{ a.created_at.strftime('%B %d, %Y') }}</span></div>
     </div>
+
     <div class="card">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Qualifications</h2>
-      <div class="detail-row"><span class="dl">Experience</span><span class="dv">{{ a.years_experience }}</span></div>
-      <div class="detail-row"><span class="dl">Services</span><span class="dv" style="font-size:0.88rem">{{ a.services or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Experience</span><span class="dv">{{ a.years_experience or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Availability</span><span class="dv" style="font-size:0.88rem">{{ a.availability or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Has car</span><span class="dv">{{ '✓ Yes' if a.has_transportation else '✗ No' }}</span></div>
       <div class="detail-row"><span class="dl">Has supplies</span><span class="dv">{{ '✓ Yes' if a.has_supplies else '✗ No' }}</span></div>
       <div class="detail-row"><span class="dl">Has references</span><span class="dv">{{ '✓ Yes' if a.has_references else '✗ No' }}</span></div>
+      <div class="detail-row"><span class="dl">BG consent</span><span class="dv">{{ '✓ Yes' if a.background_check_consent else '✗ No' }}</span></div>
       {% if a.why_interested %}
-      <div class="detail-row"><span class="dl">Why interested</span><span class="dv" style="font-size:0.88rem;color:#5f5878">{{ a.why_interested }}</span></div>
+      <div style="margin-top:10px;background:#f6f5fb;border-radius:8px;padding:10px 12px;font-size:0.85rem;color:#5f5878">
+        <strong style="color:#3b2460">Why interested:</strong><br>{{ a.why_interested }}
+      </div>
       {% endif %}
     </div>
+
+    <!-- Phone Interview -->
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+        Phone Interview
+        {% if a.phone_interview_completed %}<span style="margin-left:8px;background:#d4edda;color:#155724;padding:2px 10px;border-radius:999px;font-size:0.72rem">Done</span>{% endif %}
+      </h2>
+      <form method="POST">
+        <input type="hidden" name="action" value="interview" />
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem">
+            <input type="checkbox" name="phone_interview_completed" style="width:auto;accent-color:#d3a84f"
+                   {{ 'checked' if a.phone_interview_completed }} />
+            Interview completed
+          </label>
+          {% if a.phone_interview_at %}
+          <span style="font-size:0.78rem;color:#9a95ad">{{ a.phone_interview_at.strftime('%b %d, %Y') }}</span>
+          {% endif %}
+        </div>
+        <div class="form-group">
+          <label>Interview notes (impressions, red flags, strengths)</label>
+          <textarea name="phone_interview_notes" rows="4" placeholder="How did the call go? Note anything important...">{{ a.phone_interview_notes or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.85rem">Save Interview Notes</button>
+      </form>
+    </div>
+
+    <!-- Background Check -->
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Background Check</h2>
+      <form method="POST">
+        <input type="hidden" name="action" value="bgcheck" />
+        <div class="form-group">
+          <label>Status</label>
+          <select name="background_check_status">
+            <option value="not_started" {{ 'selected' if a.background_check_status == 'not_started' }}>Not Started</option>
+            <option value="ordered"     {{ 'selected' if a.background_check_status == 'ordered'     }}>Ordered / In Progress</option>
+            <option value="cleared"     {{ 'selected' if a.background_check_status == 'cleared'     }}>✅ Cleared</option>
+            <option value="failed"      {{ 'selected' if a.background_check_status == 'failed'      }}>❌ Failed</option>
+          </select>
+        </div>
+        {% if a.background_check_at %}
+        <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:8px">Ordered: {{ a.background_check_at.strftime('%b %d, %Y') }}</p>
+        {% endif %}
+        <div class="form-group">
+          <label>Notes (provider, case number, result details)</label>
+          <textarea name="background_check_notes" rows="3" placeholder="Checkr, Sterling, etc. — any notes here...">{{ a.background_check_notes or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.85rem">Save Background Check</button>
+      </form>
+    </div>
+
   </div>
 
+  <!-- Right column -->
   <div style="display:flex;flex-direction:column;gap:18px">
+
+    <!-- General Notes & Status -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Decision</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Overall Decision</h2>
       <form method="POST">
+        <input type="hidden" name="action" value="notes" />
         <div class="form-group">
           <label>Status</label>
           <select name="status">
@@ -42,49 +127,82 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Notes</label>
-          <textarea name="admin_notes" placeholder="Interview notes, observations...">{{ a.admin_notes or '' }}</textarea>
+          <label>General Notes</label>
+          <textarea name="admin_notes" rows="4" placeholder="Overall impressions, follow-up items...">{{ a.admin_notes or '' }}</textarea>
         </div>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save</button>
       </form>
     </div>
 
-    {% if a.status in ('new','reviewing') %}
+    {% if a.status != 'rejected' %}
+    <!-- Checklist before hiring -->
+    <div class="card" style="background:#fffbef;border-color:#ffc107">
+      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:10px;color:#856404;text-transform:uppercase;letter-spacing:0.1em">Pre-Hire Checklist</h2>
+      <div style="font-size:0.84rem;line-height:2;color:#856404">
+        {{ '✅' if a.phone_interview_completed else '⬜' }} Phone interview completed<br>
+        {{ '✅' if a.background_check_status == 'cleared' else '⬜' }} Background check cleared<br>
+        {{ '✅' if a.has_references else '⬜' }} References verified<br>
+        {{ '✅' if a.background_check_consent else '⬜' }} IC agreement consent given
+      </div>
+    </div>
+
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Hire as Contractor</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+        Hire {{ a.name.split()[0] }}
+      </h2>
       <form method="POST" action="{{ url_for('contractors.hire', app_id=a.id) }}">
         <div class="form-group">
+          <label>Worker Type</label>
+          <select name="worker_model">
+            <option value="contractor">Independent Contractor (1099)</option>
+            <option value="employee">Employee (W-2)</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>Experience Level</label>
-          <select name="experience_level">
-            <option value="new">New Cleaner — 40% split (default)</option>
-            <option value="experienced">Experienced — 45% split (default)</option>
-            <option value="senior">Senior — 50% split (default)</option>
+          <select name="experience_level" onchange="autoFillRate(this)">
+            <option value="new"         data-pct="40">New Cleaner — 40% (default)</option>
+            <option value="experienced" data-pct="45">Experienced — 45% (default)</option>
+            <option value="senior"      data-pct="50">Senior — 50% (default)</option>
           </select>
         </div>
         <div class="form-group">
           <label>Pay Type</label>
-          <select name="pay_type" id="pay-type" onchange="updateRateLabel()">
+          <select name="pay_type" onchange="updateRateLabel()">
             <option value="percent">% of job price</option>
             <option value="hourly">Hourly rate ($/hr)</option>
           </select>
         </div>
         <div class="form-group">
           <label id="rate-label">Rate (%)</label>
-          <input type="number" name="pay_rate" step="0.5" value="40" min="0" />
+          <input type="number" name="pay_rate" id="pay-rate" step="0.5" value="40" min="0" />
           <span id="rate-hint" style="font-size:0.78rem;color:#9a95ad">e.g. 40 means cleaner earns 40% of each job</span>
         </div>
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">
-          Hire {{ a.name }} →
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:4px">
+          Hire &amp; Send Welcome Email →
         </button>
       </form>
     </div>
     {% endif %}
+
+    {% if a.status == 'hired' %}
+    <div class="card" style="background:#d4edda;border-color:#a3cfbb">
+      <p style="font-weight:700;color:#155724;font-size:0.95rem;margin-bottom:6px">✅ Hired!</p>
+      <p style="font-size:0.85rem;color:#1e7e34">{{ a.name }} is now in your team. Welcome email + agreement was sent automatically.</p>
+      <a href="{{ url_for('contractors.team') }}" style="display:inline-block;margin-top:10px;font-size:0.85rem;color:#155724;text-decoration:underline">View Team →</a>
+    </div>
+    {% endif %}
+
   </div>
 </div>
 
 <script>
+function autoFillRate(sel) {
+  const pct = sel.options[sel.selectedIndex].dataset.pct;
+  if (pct) document.getElementById('pay-rate').value = pct;
+}
 function updateRateLabel() {
-  const t = document.getElementById('pay-type').value;
+  const t = document.getElementById('pay-type') ? document.querySelector('select[name="pay_type"]').value : 'percent';
   document.getElementById('rate-label').textContent = t === 'hourly' ? 'Hourly Rate ($/hr)' : 'Percentage (%)';
   document.getElementById('rate-hint').textContent = t === 'hourly' ? 'e.g. 15 means cleaner earns $15/hr' : 'e.g. 40 means cleaner earns 40% of each job';
 }

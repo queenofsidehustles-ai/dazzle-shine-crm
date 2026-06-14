@@ -177,13 +177,14 @@
     <div class="card">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Onboarding Checklist</h2>
       {% set completed = s.get_onboarding() %}
-      {% set total = s.ONBOARDING_STEPS|length %}
-      {% set done = completed|length %}
+      {% set steps = s.get_applicable_steps() %}
+      {% set total = steps|length %}
+      {% set done = steps|selectattr('0','in',completed)|list|length %}
       <div style="background:#e4dfef;border-radius:999px;height:8px;margin-bottom:12px">
-        <div style="background:linear-gradient(90deg,#d3a84f,#b98a33);border-radius:999px;height:8px;width:{{ (done/total*100)|int }}%"></div>
+        <div style="background:linear-gradient(90deg,#d3a84f,#b98a33);border-radius:999px;height:8px;width:{{ (done/total*100)|int if total else 0 }}%"></div>
       </div>
       <p style="font-size:0.8rem;color:#9a95ad;margin-bottom:14px">{{ done }} of {{ total }} steps complete</p>
-      {% for key, label in s.ONBOARDING_STEPS %}
+      {% for key, label in steps %}
       {% set is_done = key in completed %}
       <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #f0edf8;cursor:pointer"
            onclick="toggleStep('{{ key }}', this)">

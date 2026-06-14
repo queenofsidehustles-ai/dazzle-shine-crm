@@ -3,62 +3,241 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Orientation — {{ biz }}</title>
+  <title>Orientation Training — {{ biz }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 48px 36px; max-width: 480px; width: 100%; text-align: center; box-shadow: 0 8px 40px rgba(15,7,40,0.09); }
-    .script { font-family: "Allura", cursive; font-size: 1.8rem; color: #d3a84f; display: block; margin-top: 24px; }
-    .badge { display: inline-block; background: #d4edda; color: #155724; padding: 4px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; margin-bottom: 16px; }
-    .btn { background: linear-gradient(135deg,#d3a84f,#b98a33); color: #1f1333; border: none; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; width: 100%; margin-top: 16px; }
+    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; min-height: 100vh; padding: 24px 16px 48px; }
+    .page-wrap { max-width: 680px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 28px; }
+    .biz-name { font-family: "Allura", cursive; font-size: 2rem; color: #d3a84f; display: block; margin-bottom: 6px; }
+    h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { color: #5f5878; font-size: 0.92rem; line-height: 1.6; }
+    .section-card { background: #fff; border-radius: 14px; border: 1px solid #e4dfef; margin-bottom: 12px; overflow: hidden; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; cursor: pointer; user-select: none; }
+    .section-head:hover { background: #faf9fd; }
+    .section-title { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.95rem; }
+    .section-body { padding: 4px 18px 18px; border-top: 1px solid #f0edf8; display: none; }
+    .section-card.open .section-body { display: block; }
+    .section-card.open .chevron { transform: rotate(180deg); }
+    .chevron { transition: transform 0.2s; color: #9a95ad; font-size: 0.85rem; }
+    .policy-list { list-style: none; padding: 0; margin-top: 10px; }
+    .policy-list li { padding: 7px 0 7px 22px; border-bottom: 1px solid #f6f5fb; font-size: 0.88rem; color: #3b2460; line-height: 1.55; position: relative; }
+    .policy-list li:last-child { border-bottom: none; }
+    .policy-list li::before { content: "•"; position: absolute; left: 6px; color: #d3a84f; font-weight: 700; }
+    .confirm-card { background: #fff; border-radius: 14px; border: 2px solid #d3a84f; padding: 24px; margin-top: 18px; }
+    .check-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f0edf8; cursor: pointer; }
+    .check-row:last-of-type { border-bottom: none; }
+    .check-row input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; accent-color: #d3a84f; flex-shrink: 0; cursor: pointer; }
+    .check-label { font-size: 0.88rem; color: #3b2460; line-height: 1.5; cursor: pointer; }
+    .btn { display: block; width: 100%; padding: 15px; background: linear-gradient(135deg,#d3a84f,#b98a33); color: #1f1333; border: none; border-radius: 10px; font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 18px; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .simple-card { background: #fff; border-radius: 14px; border: 1px solid #e4dfef; padding: 40px 28px; text-align: center; }
+    .badge { display: inline-block; background: #d4edda; color: #155724; padding: 4px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; margin-bottom: 14px; }
   </style>
 </head>
 <body>
-  <div class="card">
-    {% if already_done %}
-      <div style="font-size:3rem;margin-bottom:16px">✅</div>
-      <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:10px">Already Completed</h1>
-      <p style="color:#5f5878;line-height:1.7">Your orientation was already marked complete. You're good to go!</p>
+<div class="page-wrap">
 
-    {% elif confirm_mode %}
-      <div style="font-size:3rem;margin-bottom:16px">📚</div>
-      <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:10px">Confirm Orientation Complete</h1>
-      <p style="color:#5f5878;line-height:1.7;margin-bottom:20px">
-        Hi <strong>{{ s.name.split()[0] }}</strong>, click the button below once you've finished reviewing all training materials and feel ready for your first job.
-      </p>
-      <div style="background:#f0edf8;border-radius:10px;padding:16px;text-align:left;margin-bottom:20px">
-        <p style="font-weight:700;font-size:0.88rem;color:#3b2460;margin-bottom:8px">Before confirming, make sure you've reviewed:</p>
-        <p style="font-size:0.85rem;color:#5f5878;line-height:2">
-          ☐ Standard cleaning checklist<br>
-          ☐ Quality standards and expectations<br>
-          ☐ Client communication guidelines<br>
-          ☐ Supply usage and safety<br>
-          ☐ Scheduling and punctuality policy
-        </p>
-      </div>
-      <form method="POST">
-        <button type="submit" class="btn">I've Completed Orientation ✓</button>
-      </form>
-
-    {% else %}
-      <div style="font-size:3rem;margin-bottom:16px">🎓</div>
-      <span class="badge">Orientation Complete!</span>
-      <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:10px">You're Ready, {{ s.name.split()[0] }}!</h1>
-      <p style="color:#5f5878;line-height:1.7;margin-bottom:16px">
-        Your orientation is confirmed. Your manager has been notified and will be in touch to schedule your shadow job.
-      </p>
-      <div style="background:#f0edf8;border-radius:10px;padding:16px;text-align:left">
-        <p style="font-weight:700;font-size:0.88rem;color:#3b2460;margin-bottom:8px">Your onboarding status:</p>
-        <p style="font-size:0.85rem;color:#5f5878;line-height:2">
-          ✅ Agreement signed<br>
-          ✅ Onboarding forms submitted<br>
-          ✅ Orientation complete<br>
-          ⏳ Shadow job — coming soon!
-        </p>
-      </div>
-    {% endif %}
-    <span class="script">{{ biz }}</span>
+  {% if already_done %}
+  <div class="simple-card">
+    <div style="font-size:3rem;margin-bottom:14px">✅</div>
+    <h1 style="margin-bottom:10px">Already Completed</h1>
+    <p class="subtitle">Your orientation was already marked complete{% if s.orientation_completed_at %} on {{ s.orientation_completed_at.strftime('%B %d, %Y') }}{% endif %}. You're all set!</p>
+    <span class="biz-name" style="margin-top:24px">{{ biz }}</span>
   </div>
+
+  {% elif confirm_mode %}
+  <div class="header">
+    <span class="biz-name">{{ biz }}</span>
+    <h1>Welcome to the Team, {{ s.name.split()[0] }}! 🎉</h1>
+    <p class="subtitle">Read through each training section below, then check all boxes and confirm at the bottom.</p>
+  </div>
+
+  <!-- Section 1 -->
+  <div class="section-card" id="s1">
+    <div class="section-head" onclick="toggleSection('s1')">
+      <div class="section-title"><span>✨</span> Service Standards</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <ul class="policy-list">
+        <li>Arrive 5–10 minutes early to every job — never be late to a client's home.</li>
+        <li>Ring the doorbell or knock before entering, even when you have a key.</li>
+        <li>Wear shoe covers or remove shoes at the front door.</li>
+        <li>Move furniture carefully — never drag items; lift and replace.</li>
+        <li>Use the correct product for each surface (no bleach on stone, no ammonia on hardwood).</li>
+        <li>Leave no streaks or product residue — buff surfaces dry.</li>
+        <li>Do a final walk-through of every room before leaving the property.</li>
+        <li>Take a before-and-after photo of each room and log it in your job notes.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Section 2 -->
+  <div class="section-card" id="s2">
+    <div class="section-head" onclick="toggleSection('s2')">
+      <div class="section-title"><span>💬</span> Client Communication</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <ul class="policy-list">
+        <li>Be friendly, professional, and respectful in every client's home at all times.</li>
+        <li>Text the office when you arrive at a job and again when you leave — every single job.</li>
+        <li>If the client is not home, complete the job and immediately text the office when done.</li>
+        <li>Never discuss pricing, discounts, or other clients with anyone.</li>
+        <li>Do not use the client's Wi-Fi, eat their food, or use any personal items.</li>
+        <li>If a client makes you feel uncomfortable or unsafe, leave and call the office immediately.</li>
+        <li>Do not accept cash or gifts from clients without notifying the office.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Section 3 -->
+  <div class="section-card" id="s3">
+    <div class="section-head" onclick="toggleSection('s3')">
+      <div class="section-title"><span>⚠️</span> If Something Breaks or Goes Wrong</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <ul class="policy-list">
+        <li>If you accidentally break or damage something — stop immediately. Do not hide it.</li>
+        <li>Take a clear photo of the damage right away before touching or moving anything.</li>
+        <li>Call or text the office right away — do NOT handle it with the client directly.</li>
+        <li>If you notice pre-existing damage when you arrive, photograph it before you start cleaning and notify the office.</li>
+        <li>Never agree to pay a client out-of-pocket — all damage claims go through the office.</li>
+        <li>Document every incident in your job notes the same day it happens.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Section 4 -->
+  <div class="section-card" id="s4">
+    <div class="section-head" onclick="toggleSection('s4')">
+      <div class="section-title"><span>📅</span> Scheduling &amp; Punctuality</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <ul class="policy-list">
+        <li>Confirm every job the night before — text the office by 8 PM to confirm you're on for tomorrow.</li>
+        <li>Running late? Text the office immediately — we handle notifying the client.</li>
+        <li>Need to cancel or reschedule? Give at least 24 hours notice so we can rebook.</li>
+        <li>A no-call / no-show (without notice) is grounds for immediate removal from the schedule.</li>
+        <li>Three last-minute cancellations may result in contract termination.</li>
+        <li>Never contact clients directly to reschedule — all scheduling goes through the office.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Section 5 -->
+  <div class="section-card" id="s5">
+    <div class="section-head" onclick="toggleSection('s5')">
+      <div class="section-title"><span>💰</span> Pay &amp; Your Responsibilities as a Contractor</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <ul class="policy-list">
+        <li>As an independent contractor, you are responsible for your own taxes — we do not withhold.</li>
+        <li>Track your mileage for tax purposes — use a free app like MileIQ or Stride.</li>
+        <li>Pay is processed on the schedule provided by the office. Ask if you're unsure when payday is.</li>
+        <li>You must mark your jobs as complete on the same day to be paid for them.</li>
+        <li>Never quote prices or negotiate rates directly with clients — all pricing is set by the office.</li>
+        <li>Questions about invoices or pay go to the office, not the client.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Section 6 -->
+  <div class="section-card" id="s6">
+    <div class="section-head" onclick="toggleSection('s6')">
+      <div class="section-title"><span>🧴</span> Supplies &amp; Safety</div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <ul class="policy-list">
+        <li>As an independent contractor, you bring your own supplies and equipment to every job.</li>
+        <li>Keep all products properly labeled — never mix chemicals (e.g., bleach + ammonia = toxic).</li>
+        <li>If a client requests a specific product, check with the office before using anything new.</li>
+        <li>Always wear gloves when using cleaning chemicals — protect your skin.</li>
+        <li>Dispose of trash bags, soiled rags, and waste properly before leaving each property.</li>
+        <li>Do not use a client's vacuum, mop, or tools without explicit permission.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Confirmation form -->
+  <div class="confirm-card">
+    <p style="font-weight:700;font-size:0.95rem;margin-bottom:4px;color:#3b2460">Confirm you've read everything:</p>
+    <p style="font-size:0.82rem;color:#9a95ad;margin-bottom:16px">Check each box, then submit.</p>
+    <form method="POST" id="orientation-form">
+      <div class="check-row">
+        <input type="checkbox" id="c1" onchange="checkAll()" />
+        <label class="check-label" for="c1">I've read and understood the <strong>Service Standards</strong></label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="c2" onchange="checkAll()" />
+        <label class="check-label" for="c2">I understand the <strong>Client Communication</strong> rules</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="c3" onchange="checkAll()" />
+        <label class="check-label" for="c3">I know what to do <strong>if something breaks or goes wrong</strong></label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="c4" onchange="checkAll()" />
+        <label class="check-label" for="c4">I understand the <strong>Scheduling &amp; Punctuality</strong> expectations</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="c5" onchange="checkAll()" />
+        <label class="check-label" for="c5">I understand my <strong>Pay &amp; Tax</strong> responsibilities</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="c6" onchange="checkAll()" />
+        <label class="check-label" for="c6">I've reviewed the <strong>Supplies &amp; Safety</strong> guidelines</label>
+      </div>
+      <p id="check-hint" style="display:none;font-size:0.8rem;color:#d97706;margin-top:12px">Please check all boxes before confirming.</p>
+      <button type="submit" class="btn" id="submit-btn" disabled>I've Completed My Orientation ✓</button>
+    </form>
+  </div>
+
+  {% else %}
+  <!-- Success state -->
+  <div class="simple-card">
+    <div style="font-size:3rem;margin-bottom:14px">🎓</div>
+    <span class="badge">Orientation Complete!</span>
+    <h1 style="margin-bottom:10px">You're Ready, {{ s.name.split()[0] }}!</h1>
+    <p class="subtitle" style="margin-bottom:20px">
+      Your orientation is confirmed and your manager has been notified. You'll be contacted soon to schedule your first job.
+    </p>
+    <div style="background:#f0edf8;border-radius:10px;padding:16px;text-align:left">
+      <p style="font-weight:700;font-size:0.88rem;color:#3b2460;margin-bottom:10px">Your onboarding progress:</p>
+      <p style="font-size:0.85rem;color:#5f5878;line-height:2.2">
+        ✅ Agreement signed<br>
+        ✅ Onboarding forms submitted<br>
+        ✅ Orientation complete<br>
+        ⏳ First job assignment — coming soon!
+      </p>
+    </div>
+    <span class="biz-name" style="margin-top:24px">{{ biz }}</span>
+  </div>
+  {% endif %}
+
+</div>
+<script>
+function toggleSection(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+function checkAll() {
+  const boxes = document.querySelectorAll('#orientation-form input[type="checkbox"]');
+  const allChecked = Array.from(boxes).every(b => b.checked);
+  document.getElementById('submit-btn').disabled = !allChecked;
+}
+document.getElementById('orientation-form')?.addEventListener('submit', function(e) {
+  const boxes = document.querySelectorAll('#orientation-form input[type="checkbox"]');
+  if (!Array.from(boxes).every(b => b.checked)) {
+    e.preventDefault();
+    document.getElementById('check-hint').style.display = 'block';
+  }
+});
+</script>
 </body>
 </html>
