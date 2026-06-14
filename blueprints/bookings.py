@@ -76,6 +76,7 @@ def detail(booking_id):
     booking = Booking.query.get_or_404(booking_id)
     if request.method == 'POST':
         old_status = booking.status
+        old_cleaner = booking.assigned_cleaner or ''
         booking.status = request.form.get('status', booking.status)
         booking.price = request.form.get('price') or None
         booking.preferred_date = request.form.get('preferred_date', booking.preferred_date)
@@ -90,13 +91,18 @@ def detail(booking_id):
             _send_rating_request(booking)
             _create_next_recurring(booking)
 
-        # Send cleaner notification when a cleaner is newly assigned
+        # Notify cleaner when newly assigned (compare against old value, not new)
         new_cleaner = request.form.get('assigned_cleaner', '').strip()
-        if new_cleaner and new_cleaner != (old_status and booking.assigned_cleaner or ''):
-            _notify_cleaner(booking)
+        if new_cleaner and new_cleaner != old_cleaner:
+            notified = _notify_cleaner(booking)
+            if notified:
+                flash(f'Booking updated — notification sent to {new_cleaner}.', 'success')
+            else:
+                flash(f'Booking updated — ⚠️ no email on file for {new_cleaner}, notify them manually.', 'warning')
+        else:
+            flash('Booking updated.', 'success')
 
         db.session.commit()
-        flash('Booking updated.', 'success')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     active_staff = Staff.query.filter_by(is_active=True).order_by(Staff.name).all()
@@ -266,7 +272,7 @@ def _notify_cleaner(booking):
     cleaner_name = booking.assigned_cleaner or ''
     staff = Staff.query.filter(Staff.name.ilike(f'%{cleaner_name.split()[0]}%')).first() if cleaner_name else None
     if not staff or not staff.email:
-        return  # No email on file — skip
+        return False  # No email on file
 
     # Calculate cleaner earnings
     price = booking.price or 0
@@ -300,7 +306,7 @@ def _notify_cleaner(booking):
         }
     )
     if sent:
-        return
+        return True
 
     send_email(
         to_email=staff.email, to_name=staff.name,
@@ -325,3 +331,4 @@ def _notify_cleaner(booking):
   <p style="color:#9a95ad;font-size:12px;margin-top:20px">Questions? Call Monica at (689) 999-0194 · Dazzle &amp; Shine Maids</p>
 </div>""",
     )
+    return True

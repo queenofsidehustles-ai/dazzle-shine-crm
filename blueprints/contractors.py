@@ -113,10 +113,10 @@ def hire(app_id):
     <p>We're excited to have you on board! Here's what happens next:</p>
     <ol style="line-height:2;color:#3b2460">
       <li><strong>Sign your {agreement_label}</strong> — use the button below</li>
-      <li><strong>Complete your onboarding forms</strong> — payment info, shirt size, emergency contact</li>
-      <li><strong>Complete orientation</strong> — watch our training materials and review the quality checklist</li>
-      <li><strong>Complete your shadow / trial shift</strong> — you'll go out with an experienced team member first</li>
-      <li><strong>Get your supply kit</strong> — we'll confirm pickup details with you</li>
+      <li><strong>Complete your onboarding forms</strong> — payment info, emergency contact</li>
+      <li><strong>Complete orientation training</strong> — review all policies, then confirm</li>
+      <li><strong>Shadow job / trial shift</strong> — you'll go out on a job with an experienced team member first</li>
+      {'<li><strong>Receive your supply kit</strong> — we will confirm pickup details with you</li>' if worker_model == 'employee' else '<li><strong>First solo job</strong> — bring your own supplies and equipment</li>'}
     </ol>
     <div style="text-align:center;margin:28px 0">
       <a href="{sign_url}" style="background:#d3a84f;color:#1f1333;padding:14px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:1rem;display:inline-block">
@@ -420,12 +420,14 @@ def onboarding_forms(token):
 @contractors_bp.route('/orientation-complete/<token>', methods=['GET', 'POST'])
 def orientation_complete(token):
     s = Staff.query.filter_by(orientation_token=token).first_or_404()
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
-
-    if s.orientation_completed_at:
-        return render_template('public/orientation_done.html', s=s, biz=biz, already_done=True)
+    biz = BusinessSetting.get('business_name') or 'Dazzle & Shine Maids'
+    already_done = bool(s.orientation_completed_at)
 
     if request.method == 'POST':
+        if already_done:
+            # Already done — just show the materials again (review mode), no re-submit needed
+            return render_template('public/orientation_done.html', s=s, biz=biz,
+                                   already_done=True, confirm_mode=False)
         s.orientation_completed_at = datetime.utcnow()
         steps = s.get_onboarding()
         if 'orientation' not in steps:
@@ -433,7 +435,6 @@ def orientation_complete(token):
             s.onboarding_steps = json.dumps(steps)
         db.session.commit()
 
-        # Notify owner that orientation is done
         import os
         owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', '')
         if owner_email:
@@ -444,13 +445,29 @@ def orientation_complete(token):
                 html=f"""<div style="font-family:Inter,sans-serif;max-width:500px;margin:0 auto;color:#1f1333">
   <h3 style="color:#b98a33">Orientation Complete!</h3>
   <p><strong>{s.name}</strong> has confirmed they completed their orientation and training.</p>
-  <p>They are ready to be scheduled for a shadow job. Log in to the CRM to assign them.</p>
+  <p>They are ready to be scheduled for their first job. Log in to the CRM to assign them.</p>
 </div>""",
             )
-        return render_template('public/orientation_done.html', s=s, biz=biz, already_done=False)
+        return render_template('public/orientation_done.html', s=s, biz=biz,
+                               already_done=False, confirm_mode=False)
 
-    return render_template('public/orientation_done.html', s=s, biz=biz, already_done=False,
-                           confirm_mode=True)
+    # GET — always show training materials; already_done disables the submit button
+    return render_template('public/orientation_done.html', s=s, biz=biz,
+                           already_done=already_done, confirm_mode=True)
+
+
+@contractors_bp.route('/team/<int:staff_id>/reset-orientation', methods=['POST'])
+@login_required
+def reset_orientation(staff_id):
+    s = Staff.query.get_or_404(staff_id)
+    s.orientation_completed_at = None
+    steps = s.get_onboarding()
+    if 'orientation' in steps:
+        steps.remove('orientation')
+        s.onboarding_steps = json.dumps(steps)
+    db.session.commit()
+    flash(f'Orientation reset for {s.name} — they can re-complete training via their link.', 'success')
+    return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
 
 
 def _default_agreement(biz_name, worker_model):

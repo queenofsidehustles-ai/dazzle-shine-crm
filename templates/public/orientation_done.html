@@ -50,8 +50,13 @@
   {% elif confirm_mode %}
   <div class="header">
     <span class="biz-name">{{ biz }}</span>
+    {% if already_done %}
+    <h1>Training Materials 📚</h1>
+    <p class="subtitle">Hi {{ s.name.split()[0] }}, you've already completed orientation. Here are your training materials to review anytime.</p>
+    {% else %}
     <h1>Welcome to the Team, {{ s.name.split()[0] }}! 🎉</h1>
     <p class="subtitle">Read through each training section below, then check all boxes and confirm at the bottom.</p>
+    {% endif %}
   </div>
 
   <!-- Section 1 -->
@@ -167,8 +172,13 @@
 
   <!-- Confirmation form -->
   <div class="confirm-card">
+    {% if already_done %}
+    <p style="font-weight:700;font-size:0.95rem;margin-bottom:4px;color:#155724">✅ Orientation previously completed on {{ s.orientation_completed_at.strftime('%B %d, %Y') }}</p>
+    <p style="font-size:0.82rem;color:#9a95ad;margin-bottom:16px">These materials are here for your reference anytime.</p>
+    {% else %}
     <p style="font-weight:700;font-size:0.95rem;margin-bottom:4px;color:#3b2460">Confirm you've read everything:</p>
     <p style="font-size:0.82rem;color:#9a95ad;margin-bottom:16px">Check each box, then submit.</p>
+    {% endif %}
     <form method="POST" id="orientation-form">
       <div class="check-row">
         <input type="checkbox" id="c1" onchange="checkAll()" />
@@ -195,7 +205,13 @@
         <label class="check-label" for="c6">I've reviewed the <strong>Supplies &amp; Safety</strong> guidelines</label>
       </div>
       <p id="check-hint" style="display:none;font-size:0.8rem;color:#d97706;margin-top:12px">Please check all boxes before confirming.</p>
+      {% if already_done %}
+      <div style="background:#f0edf8;border-radius:8px;padding:12px;text-align:center;margin-top:16px;font-size:0.85rem;color:#5f5878">
+        Need to retake orientation? Ask your manager to reset your training record.
+      </div>
+      {% else %}
       <button type="submit" class="btn" id="submit-btn" disabled>I've Completed My Orientation ✓</button>
+      {% endif %}
     </form>
   </div>
 

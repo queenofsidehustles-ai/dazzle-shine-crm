@@ -142,7 +142,17 @@
 
     <!-- Forms & Orientation Status -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Onboarding Details</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <h2 style="font-size:1rem;font-weight:700;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Onboarding Details</h2>
+        {% if s.orientation_completed_at %}
+        <form method="POST" action="{{ url_for('contractors.reset_orientation', staff_id=s.id) }}"
+              onsubmit="return confirm('Reset orientation for {{ s.name.split()[0] }}? They will need to re-complete training.')">
+          <button type="submit" class="btn btn-outline" style="padding:4px 10px;font-size:0.72rem;color:#991b1b;border-color:#f5c2c7">
+            Reset Orientation
+          </button>
+        </form>
+        {% endif %}
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:0.84rem;margin-bottom:14px">
         <div>
           <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Forms</p>
