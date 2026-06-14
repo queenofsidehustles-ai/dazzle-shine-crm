@@ -70,6 +70,8 @@ class Booking(db.Model):
     notes = db.Column(db.Text)
     internal_notes = db.Column(db.Text)
     assigned_cleaner = db.Column(db.String(100))
+    cleaner_notified_at = db.Column(db.DateTime)        # when job notification was last sent
+    cleaner_response = db.Column(db.String(20))         # accepted, declined, None
     status = db.Column(db.String(20), default='pending')  # pending, confirmed, in_progress, completed, cancelled
     price = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

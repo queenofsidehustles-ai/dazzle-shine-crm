@@ -116,6 +116,9 @@ def _migrate_db():
         ('commercial_quote', 'status',           "VARCHAR(20) DEFAULT 'draft'"),
         ('commercial_quote', 'sent_at',          'TIMESTAMP'),
         ('commercial_quote', 'responded_at',     'TIMESTAMP'),
+        # Booking cleaner tracking
+        ('booking', 'cleaner_notified_at', 'TIMESTAMP'),
+        ('booking', 'cleaner_response',    'VARCHAR(20)'),
         # Staff worker model
         ('staff', 'worker_model', "VARCHAR(20) DEFAULT 'contractor'"),
         # Contractor application hiring pipeline

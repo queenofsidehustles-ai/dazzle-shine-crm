@@ -72,6 +72,22 @@
             <option value="{{ booking.assigned_cleaner }}" selected>{{ booking.assigned_cleaner }}</option>
             {% endif %}
           </select>
+          {% if booking.assigned_cleaner %}
+          <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            {% if booking.cleaner_notified_at %}
+              <span style="font-size:0.78rem;color:#9a95ad">📨 Notified {{ booking.cleaner_notified_at.strftime('%b %d, %Y') }}</span>
+            {% else %}
+              <span style="font-size:0.78rem;color:#d97706">⚠️ Not yet notified — save to send</span>
+            {% endif %}
+            {% if booking.cleaner_response == 'accepted' %}
+              <span style="background:#d4edda;color:#155724;padding:2px 10px;border-radius:999px;font-size:0.75rem;font-weight:700">✅ Accepted</span>
+            {% elif booking.cleaner_response == 'declined' %}
+              <span style="background:#f8d7da;color:#842029;padding:2px 10px;border-radius:999px;font-size:0.75rem;font-weight:700">❌ Declined — reassign</span>
+            {% else %}
+              <span style="background:#fff3cd;color:#856404;padding:2px 10px;border-radius:999px;font-size:0.75rem;font-weight:700">⏳ Awaiting response</span>
+            {% endif %}
+          </div>
+          {% endif %}
         </div>
         <div class="form-group">
           <label>Hours Worked <span style="font-weight:400;color:#9a95ad">(for payroll)</span></label>

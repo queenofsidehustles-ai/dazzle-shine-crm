@@ -1,5 +1,5 @@
 import calendar as cal_module
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from auth import login_required
 from models import Booking, Client, Staff
@@ -157,12 +157,14 @@ def cleaner_response(booking_id):
     if token != expected:
         return 'Invalid link.', 400
     if action == 'accept':
-        booking.internal_notes = (booking.internal_notes or '') + '\n[Cleaner accepted job]'
+        booking.cleaner_response = 'accepted'
+        booking.internal_notes = (booking.internal_notes or '') + f'\n[Cleaner accepted job on {datetime.utcnow().strftime("%b %d %Y")}]'
         db.session.commit()
         return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#065f46">✅ Job accepted! We\'ll see you on ' + (booking.preferred_date or 'the scheduled date') + '.</h2>'
     elif action == 'decline':
-        booking.internal_notes = (booking.internal_notes or '') + '\n[Cleaner declined job — needs reassignment]'
+        booking.cleaner_response = 'declined'
         booking.assigned_cleaner = ''
+        booking.internal_notes = (booking.internal_notes or '') + f'\n[Cleaner declined job on {datetime.utcnow().strftime("%b %d %Y")} — needs reassignment]'
         db.session.commit()
         return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#991b1b">Job declined. We\'ve been notified and will reassign. Thank you for letting us know.</h2>'
     return 'Unknown action.', 400
@@ -305,6 +307,9 @@ def _notify_cleaner(booking):
             'baths': booking.bathrooms,
         }
     )
+    booking.cleaner_notified_at = datetime.utcnow()
+    db.session.flush()
+
     if sent:
         return True
 
