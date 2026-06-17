@@ -2,10 +2,99 @@
 {% block title %}Applications — Dazzle & Shine CRM{% endblock %}
 {% block page_title %}Contractor Applications{% endblock %}
 {% block topbar_right %}
-  <a href="{{ url_for('contractors.apply') }}" target="_blank" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">View Application Form →</a>
+  <div style="display:flex;gap:8px">
+    <button onclick="document.getElementById('quick-add').style.display=document.getElementById('quick-add').style.display==='none'?'block':'none'"
+            class="btn btn-gold" style="padding:6px 14px;font-size:0.85rem">+ Add Applicant</button>
+    <a href="{{ apply_url }}" target="_blank" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">View Form →</a>
+  </div>
 {% endblock %}
 
 {% block content %}
+
+<!-- Quick Add Applicant Panel -->
+<div id="quick-add" style="display:none;margin-bottom:20px">
+  <div class="card" style="border-color:#d3a84f">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Add Applicant Manually</h2>
+    <p style="font-size:0.85rem;color:#5f5878;margin-bottom:16px">Use this for applicants from Indeed, Facebook, or any other source. After adding, send them the application link to complete their full profile.</p>
+    <form method="POST" action="{{ url_for('contractors.add_applicant') }}">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px">
+        <div class="form-group" style="margin:0">
+          <label>Full Name *</label>
+          <input type="text" name="name" required placeholder="Jane Smith" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Email *</label>
+          <input type="email" name="email" required placeholder="jane@email.com" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Phone</label>
+          <input type="tel" name="phone" placeholder="(407) 555-0000" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Source</label>
+          <select name="source">
+            {% for s in sources %}
+            <option value="{{ s }}">{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px">
+        <div class="form-group" style="margin:0">
+          <label>Experience</label>
+          <select name="years_experience">
+            <option value="">Unknown</option>
+            <option value="Less than 1 year">Less than 1 year</option>
+            <option value="1-2 years">1–2 years</option>
+            <option value="3-5 years">3–5 years</option>
+            <option value="5+ years">5+ years</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Availability</label>
+          <select name="availability">
+            <option value="">Unknown</option>
+            <option value="Weekdays">Weekdays</option>
+            <option value="Weekends">Weekends</option>
+            <option value="Weekdays and Weekends">Both — flexible</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;display:flex;align-items:center;gap:8px;padding-top:24px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+            <input type="checkbox" name="has_transportation" style="width:auto;accent-color:#d3a84f" checked />
+            Has reliable car
+          </label>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Notes (paste their message, resume summary, etc.)</label>
+        <textarea name="notes" rows="3" placeholder="e.g. 'Responded to Indeed post — 3 years exp, bilingual, available Mon-Fri'"></textarea>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn btn-gold">Add to Pipeline</button>
+        <button type="button" onclick="document.getElementById('quick-add').style.display='none'"
+                class="btn btn-outline">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Application Link Banner -->
+<div style="background:#f0edf8;border:1px solid #d3a84f;border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+  <div>
+    <p style="font-weight:700;font-size:0.88rem;color:#3b2460;margin-bottom:2px">Your public application link — post this everywhere</p>
+    <p style="font-size:0.82rem;color:#5f5878">Indeed (set as external apply URL), Facebook Jobs, Nextdoor, Craigslist, text it directly</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input type="text" readonly value="{{ apply_url }}"
+           style="font-size:0.78rem;padding:7px 10px;border:1px solid #e4dfef;border-radius:6px;color:#5f5878;background:#fff;width:340px;max-width:100%"
+           onclick="this.select()" />
+    <button onclick="navigator.clipboard.writeText('{{ apply_url }}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)"
+            class="btn btn-gold" style="padding:7px 14px;font-size:0.82rem;flex-shrink:0">Copy</button>
+  </div>
+</div>
+
+<!-- Filter tabs -->
 <div class="filter-tabs">
   {% for s, label in [('','All'),('new','New'),('reviewing','Reviewing'),('hired','Hired'),('rejected','Rejected')] %}
   <a href="{{ url_for('contractors.applications', status=s) }}"
@@ -19,12 +108,23 @@
   {% if apps %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>Experience</th><th>Availability</th><th>Has Car</th><th>Status</th><th>Applied</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Source</th><th>Experience</th><th>Availability</th><th>Car</th><th>Status</th><th>Applied</th><th></th></tr></thead>
       <tbody>
         {% for a in apps %}
         <tr>
-          <td><strong>{{ a.name }}</strong><br><span style="font-size:0.8rem;color:#9a95ad">{{ a.email }}</span></td>
-          <td style="font-size:0.88rem">{{ a.years_experience }}</td>
+          <td>
+            <strong>{{ a.name }}</strong><br>
+            <span style="font-size:0.8rem;color:#9a95ad">{{ a.email }}</span>
+            {% if a.phone %}<br><span style="font-size:0.78rem;color:#9a95ad">{{ a.phone }}</span>{% endif %}
+          </td>
+          <td>
+            {% if a.source and a.source != 'Website' %}
+            <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:600">{{ a.source }}</span>
+            {% else %}
+            <span style="font-size:0.82rem;color:#9a95ad">{{ a.source or 'Website' }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size:0.88rem">{{ a.years_experience or '—' }}</td>
           <td style="font-size:0.82rem;color:#9a95ad">{{ a.availability or '—' }}</td>
           <td>{{ '✓' if a.has_transportation else '—' }}</td>
           <td>
@@ -39,10 +139,10 @@
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:40px 0">
-    No applications yet. Share your application link to start receiving them:<br>
-    <strong style="color:#5d4f7d">{{ request.host_url }}contractors/apply</strong>
-  </p>
+  <div style="text-align:center;padding:48px 0">
+    <p style="color:#9a95ad;font-size:0.95rem;margin-bottom:16px">No applications yet.</p>
+    <p style="font-size:0.85rem;color:#9a95ad">Post your application link on Indeed, Facebook, and Nextdoor to start receiving them.</p>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

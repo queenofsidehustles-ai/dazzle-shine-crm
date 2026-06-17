@@ -272,6 +272,7 @@ class ContractorApplication(db.Model):
     background_check_consent = db.Column(db.Boolean, default=False)
     agrees_to_ic_terms = db.Column(db.Boolean, default=False)
     why_interested = db.Column(db.Text)
+    source = db.Column(db.String(50), default='Website')  # Indeed, Facebook, Website, etc.
     status = db.Column(db.String(20), default='new')  # new, reviewing, phone_screen, bg_check, hired, rejected
     admin_notes = db.Column(db.Text)
     # Hiring pipeline tracking

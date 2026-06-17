@@ -18,6 +18,9 @@ EXP_LEVELS = [
 
 # ── Applications ───────────────────────────────────────────────────────────────
 
+SOURCES = ['Indeed', 'Facebook', 'Nextdoor', 'Craigslist', 'Referral', 'Walk-in', 'Website', 'Other']
+
+
 @contractors_bp.route('/applications')
 @login_required
 def applications():
@@ -33,8 +36,68 @@ def applications():
         'hired': ContractorApplication.query.filter_by(status='hired').count(),
         'rejected': ContractorApplication.query.filter_by(status='rejected').count(),
     }
+    apply_url = url_for('contractors.apply', _external=True)
     return render_template('admin/applications.html', apps=apps,
-                           counts=counts, status_filter=status_filter)
+                           counts=counts, status_filter=status_filter,
+                           apply_url=apply_url, sources=SOURCES)
+
+
+@contractors_bp.route('/applications/add', methods=['POST'])
+@login_required
+def add_applicant():
+    name  = request.form.get('name', '').strip()
+    email = request.form.get('email', '').strip()
+    phone = request.form.get('phone', '').strip()
+    if not name or not email:
+        flash('Name and email are required.', 'error')
+        return redirect(url_for('contractors.applications'))
+    a = ContractorApplication(
+        name=name, email=email, phone=phone,
+        years_experience=request.form.get('years_experience', ''),
+        availability=request.form.get('availability', ''),
+        has_transportation=request.form.get('has_transportation') == 'on',
+        admin_notes=f"Source: {request.form.get('source','Other')}\n{request.form.get('notes','').strip()}",
+        status='new',
+    )
+    db.session.add(a)
+    db.session.commit()
+    flash(f'{name} added. Send them the application link to complete their profile.', 'success')
+    return redirect(url_for('contractors.application_detail', app_id=a.id))
+
+
+@contractors_bp.route('/applications/<int:app_id>/send-link', methods=['POST'])
+@login_required
+def send_application_link(app_id):
+    a = ContractorApplication.query.get_or_404(app_id)
+    import os
+    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    apply_url = url_for('contractors.apply', _external=True)
+    send_email(
+        to_email=a.email, to_name=a.name,
+        from_name=f'{biz} Hiring',
+        subject=f'Complete your application — {biz}',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:28px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#d3a84f;margin:0;font-size:1.5rem">We'd Love to Meet You!</h1>
+    <p style="color:#c9b8e8;margin:8px 0 0;font-size:0.9rem">{biz} — Hiring</p>
+  </div>
+  <div style="background:#fff;padding:28px;border-radius:0 0 12px 12px;border:1px solid #e4dfef;border-top:none">
+    <p>Hi {a.name.split()[0]},</p>
+    <p style="margin:12px 0">We saw your interest in joining our team and we'd love to learn more about you! Please take 2 minutes to complete our application form:</p>
+    <div style="text-align:center;margin:24px 0">
+      <a href="{apply_url}" style="background:#d3a84f;color:#1f1333;padding:13px 28px;border-radius:8px;font-weight:700;text-decoration:none;font-size:1rem;display:inline-block">
+        Complete My Application →
+      </a>
+    </div>
+    <p style="font-size:0.85rem;color:#9a95ad">Link not working? Copy and paste: {apply_url}</p>
+    <p style="margin-top:16px">Questions? Just reply to this email.<br>
+    <strong style="color:#b98a33">{biz}</strong></p>
+  </div>
+</div>""",
+    )
+    flash(f'Application link sent to {a.email}!', 'success')
+    return redirect(url_for('contractors.application_detail', app_id=app_id))
 
 
 @contractors_bp.route('/applications/<int:app_id>', methods=['GET', 'POST'])

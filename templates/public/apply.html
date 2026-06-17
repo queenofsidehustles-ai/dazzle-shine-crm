@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Join Our Team — Dazzle & Shine Maids</title>
+  <title>Join Our Team / Únete al Equipo — Dazzle &amp; Shine Maids</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -11,7 +11,10 @@
     .header { background: #1f1333; padding: 22px 20px; text-align: center; }
     .header .script { font-family: "Allura", cursive; font-size: 2rem; color: #d3a84f; }
     .header .sub { font-size: 0.75rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.2em; margin-top: 3px; }
-    .wrap { max-width: 600px; margin: 0 auto; padding: 30px 16px 60px; }
+    .lang-toggle { display: flex; justify-content: center; gap: 0; margin: 16px auto 0; max-width: 200px; border-radius: 999px; overflow: hidden; border: 2px solid #d3a84f; }
+    .lang-btn { flex: 1; padding: 7px; background: transparent; color: #d3a84f; border: none; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: background 0.2s; }
+    .lang-btn.active { background: #d3a84f; color: #1f1333; }
+    .wrap { max-width: 600px; margin: 0 auto; padding: 24px 16px 60px; }
     .card { background: #fff; border-radius: 14px; border: 1px solid #e4dfef; padding: 28px; margin-bottom: 18px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); }
     h2 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #9a95ad; margin-bottom: 16px; }
     .form-group { margin-bottom: 14px; }
@@ -23,100 +26,206 @@
     input:focus, select:focus, textarea:focus { border-color: #d3a84f; box-shadow: 0 0 0 3px rgba(211,168,79,0.15); }
     textarea { resize: vertical; min-height: 80px; }
     .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .check-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; font-weight: 500; }
-    .check-item input { width: auto; }
+    .check-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
+    .check-item input { width: auto; accent-color: #d3a84f; }
     .terms-box { background: #f6f5fb; border-radius: 9px; padding: 14px; font-size: 0.82rem; color: #5f5878; line-height: 1.7; margin-bottom: 14px; }
     .btn { width: 100%; padding: 14px; background: linear-gradient(135deg,#f4d07a,#d3a84f); color: #1a1225; border: none; border-radius: 999px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+    .btn:hover { opacity: 0.9; }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="script">Dazzle &amp; Shine</div>
-    <div class="sub">Contractor Application</div>
+    <div class="sub" id="header-sub">Contractor Application</div>
+    <div class="lang-toggle">
+      <button class="lang-btn active" onclick="setLang('en')" id="btn-en">🇺🇸 English</button>
+      <button class="lang-btn" onclick="setLang('es')" id="btn-es">🇲🇽 Español</button>
+    </div>
   </div>
 
   <div class="wrap">
     <div class="card" style="text-align:center;padding:20px 28px">
-      <p style="font-weight:700;font-size:1.1rem;margin-bottom:6px">Join Our Cleaning Team in Orlando 🌟</p>
-      <p style="color:#5f5878;font-size:0.9rem">Flexible schedule, competitive pay, and a great team. Fill out the application below and we'll be in touch within 2 business days.</p>
+      <p class="t" data-en="Join Our Cleaning Team in Orlando 🌟" data-es="Únete a Nuestro Equipo de Limpieza en Orlando 🌟"
+         style="font-weight:700;font-size:1.1rem;margin-bottom:6px">Join Our Cleaning Team in Orlando 🌟</p>
+      <p class="t" style="color:#5f5878;font-size:0.9rem"
+         data-en="Flexible schedule, competitive pay, and a great team. Fill out the application below and we'll be in touch within 2 business days."
+         data-es="Horario flexible, buen pago y un excelente equipo. Llena la solicitud y te contactaremos en 2 días hábiles.">
+         Flexible schedule, competitive pay, and a great team. Fill out the application below and we'll be in touch within 2 business days.</p>
     </div>
 
     <form method="POST">
+      <!-- Personal Info -->
       <div class="card">
-        <h2>Personal Info</h2>
-        <div class="form-group"><label>Full Name *</label><input type="text" name="name" required placeholder="Maria Rodriguez" /></div>
+        <h2 class="t" data-en="Personal Info" data-es="Información Personal">Personal Info</h2>
+        <div class="form-group">
+          <label class="t" data-en="Full Name *" data-es="Nombre Completo *">Full Name *</label>
+          <input type="text" name="name" required placeholder="Maria Rodriguez" />
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="form-group"><label>Email *</label><input type="email" name="email" required placeholder="maria@email.com" /></div>
-          <div class="form-group"><label>Phone *</label><input type="tel" name="phone" required placeholder="(407) 555-0000" /></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Experience</h2>
-        <div class="form-group">
-          <label>Years of Cleaning Experience</label>
-          <select name="years_experience">
-            <option value="Less than 1 year">Less than 1 year</option>
-            <option value="1-2 years">1–2 years</option>
-            <option value="3-5 years">3–5 years</option>
-            <option value="5+ years">5+ years</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Services You Can Perform</label>
-          <div class="check-grid" style="margin-top:6px">
-            {% for svc in ['Standard Cleaning','Deep Cleaning','Move-Out Cleaning','Airbnb / Vacation Rental','Office Cleaning','Carpet Cleaning'] %}
-            <label class="check-item"><input type="checkbox" name="services" value="{{ svc }}" /> {{ svc }}</label>
-            {% endfor %}
+          <div class="form-group">
+            <label class="t" data-en="Email *" data-es="Correo Electrónico *">Email *</label>
+            <input type="email" name="email" required placeholder="maria@email.com" />
+          </div>
+          <div class="form-group">
+            <label class="t" data-en="Phone *" data-es="Teléfono *">Phone *</label>
+            <input type="tel" name="phone" required placeholder="(407) 555-0000" />
           </div>
         </div>
       </div>
 
+      <!-- Experience -->
       <div class="card">
-        <h2>Availability</h2>
-        <div class="check-grid">
-          {% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}
-          <label class="check-item"><input type="checkbox" name="availability" value="{{ day }}" /> {{ day }}</label>
-          {% endfor %}
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Logistics</h2>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <label class="check-item"><input type="checkbox" name="has_transportation" /> I have reliable personal transportation</label>
-          <label class="check-item"><input type="checkbox" name="has_supplies" /> I have my own cleaning supplies and equipment</label>
-          <label class="check-item"><input type="checkbox" name="has_references" /> I can provide professional references</label>
-          <label class="check-item"><input type="checkbox" name="background_check_consent" required /> I consent to a background check if hired</label>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Tell Us About Yourself</h2>
+        <h2 class="t" data-en="Experience" data-es="Experiencia">Experience</h2>
         <div class="form-group">
-          <label>Why do you want to join Dazzle & Shine? (optional)</label>
-          <textarea name="why_interested" placeholder="Tell us a bit about yourself and why you're interested..."></textarea>
+          <label class="t" data-en="Years of Cleaning Experience" data-es="Años de Experiencia en Limpieza">Years of Cleaning Experience</label>
+          <select name="years_experience">
+            <option class="t" data-en="Less than 1 year" data-es="Menos de 1 año" value="Less than 1 year">Less than 1 year</option>
+            <option class="t" data-en="1–2 years" data-es="1–2 años" value="1-2 years">1–2 years</option>
+            <option class="t" data-en="3–5 years" data-es="3–5 años" value="3-5 years">3–5 years</option>
+            <option class="t" data-en="5+ years" data-es="Más de 5 años" value="5+ years">5+ years</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="t" data-en="Services You Can Perform" data-es="Servicios que Puedes Realizar">Services You Can Perform</label>
+          <div class="check-grid" style="margin-top:6px">
+            <label class="check-item"><input type="checkbox" name="services" value="Standard Cleaning" />
+              <span class="t" data-en="Standard Cleaning" data-es="Limpieza Estándar">Standard Cleaning</span></label>
+            <label class="check-item"><input type="checkbox" name="services" value="Deep Cleaning" />
+              <span class="t" data-en="Deep Cleaning" data-es="Limpieza Profunda">Deep Cleaning</span></label>
+            <label class="check-item"><input type="checkbox" name="services" value="Move-Out Cleaning" />
+              <span class="t" data-en="Move-Out Cleaning" data-es="Limpieza de Mudanza">Move-Out Cleaning</span></label>
+            <label class="check-item"><input type="checkbox" name="services" value="Airbnb / Vacation Rental" />
+              <span class="t" data-en="Airbnb / Vacation Rental" data-es="Airbnb / Alquiler Vacacional">Airbnb / Vacation Rental</span></label>
+            <label class="check-item"><input type="checkbox" name="services" value="Office Cleaning" />
+              <span class="t" data-en="Office Cleaning" data-es="Limpieza de Oficinas">Office Cleaning</span></label>
+            <label class="check-item"><input type="checkbox" name="services" value="Carpet Cleaning" />
+              <span class="t" data-en="Carpet Cleaning" data-es="Limpieza de Alfombras">Carpet Cleaning</span></label>
+          </div>
         </div>
       </div>
 
+      <!-- Availability -->
       <div class="card">
-        <h2>Independent Contractor Terms</h2>
+        <h2 class="t" data-en="Availability" data-es="Disponibilidad">Availability</h2>
+        <div class="check-grid">
+          <label class="check-item"><input type="checkbox" name="availability" value="Monday" />
+            <span class="t" data-en="Monday" data-es="Lunes">Monday</span></label>
+          <label class="check-item"><input type="checkbox" name="availability" value="Tuesday" />
+            <span class="t" data-en="Tuesday" data-es="Martes">Tuesday</span></label>
+          <label class="check-item"><input type="checkbox" name="availability" value="Wednesday" />
+            <span class="t" data-en="Wednesday" data-es="Miércoles">Wednesday</span></label>
+          <label class="check-item"><input type="checkbox" name="availability" value="Thursday" />
+            <span class="t" data-en="Thursday" data-es="Jueves">Thursday</span></label>
+          <label class="check-item"><input type="checkbox" name="availability" value="Friday" />
+            <span class="t" data-en="Friday" data-es="Viernes">Friday</span></label>
+          <label class="check-item"><input type="checkbox" name="availability" value="Saturday" />
+            <span class="t" data-en="Saturday" data-es="Sábado">Saturday</span></label>
+          <label class="check-item"><input type="checkbox" name="availability" value="Sunday" />
+            <span class="t" data-en="Sunday" data-es="Domingo">Sunday</span></label>
+        </div>
+      </div>
+
+      <!-- Logistics -->
+      <div class="card">
+        <h2 class="t" data-en="Logistics" data-es="Requisitos">Logistics</h2>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label class="check-item"><input type="checkbox" name="has_transportation" />
+            <span class="t" data-en="I have reliable personal transportation" data-es="Tengo transporte propio confiable">I have reliable personal transportation</span></label>
+          <label class="check-item"><input type="checkbox" name="has_supplies" />
+            <span class="t" data-en="I have my own cleaning supplies and equipment" data-es="Tengo mis propios materiales y equipos de limpieza">I have my own cleaning supplies and equipment</span></label>
+          <label class="check-item"><input type="checkbox" name="has_references" />
+            <span class="t" data-en="I can provide professional references" data-es="Puedo proporcionar referencias profesionales">I can provide professional references</span></label>
+          <label class="check-item"><input type="checkbox" name="background_check_consent" required />
+            <span class="t" data-en="I consent to a background check if hired" data-es="Acepto una verificación de antecedentes si soy contratado/a">I consent to a background check if hired</span></label>
+        </div>
+      </div>
+
+      <!-- About You -->
+      <div class="card">
+        <h2 class="t" data-en="Tell Us About Yourself" data-es="Cuéntanos Sobre Ti">Tell Us About Yourself</h2>
+        <div class="form-group">
+          <label class="t" data-en="Why do you want to join our team? (optional)" data-es="¿Por qué quieres unirte a nuestro equipo? (opcional)">Why do you want to join our team? (optional)</label>
+          <textarea name="why_interested" id="why-placeholder"></textarea>
+        </div>
+      </div>
+
+      <!-- IC Terms -->
+      <div class="card">
+        <h2 class="t" data-en="Independent Contractor Terms" data-es="Términos de Contratista Independiente">Independent Contractor Terms</h2>
         <div class="terms-box">
-          By submitting this application I understand that:<br><br>
-          • I will work as an <strong>independent contractor</strong>, not an employee of Dazzle & Shine Maids.<br>
-          • I am responsible for my own taxes and insurance.<br>
-          • My pay rate will be agreed upon before my first job.<br>
-          • I must maintain professional standards of quality and punctuality.<br>
-          • Either party may end the working relationship at any time.
+          <span class="t"
+            data-en="By submitting this application I understand that:&#10;&#10;• I will work as an independent contractor, not an employee of Dazzle &amp; Shine Maids.&#10;• I am responsible for my own taxes and insurance.&#10;• My pay rate will be agreed upon before my first job.&#10;• I must maintain professional standards of quality and punctuality.&#10;• Either party may end the working relationship at any time."
+            data-es="Al enviar esta solicitud entiendo que:&#10;&#10;• Trabajaré como contratista independiente, no como empleado/a de Dazzle &amp; Shine Maids.&#10;• Soy responsable de mis propios impuestos y seguro.&#10;• Mi tarifa de pago se acordará antes del primer trabajo.&#10;• Debo mantener estándares profesionales de calidad y puntualidad.&#10;• Cualquiera de las partes puede terminar la relación laboral en cualquier momento.">
+            By submitting this application I understand that:<br><br>
+            • I will work as an <strong>independent contractor</strong>, not an employee of Dazzle &amp; Shine Maids.<br>
+            • I am responsible for my own taxes and insurance.<br>
+            • My pay rate will be agreed upon before my first job.<br>
+            • I must maintain professional standards of quality and punctuality.<br>
+            • Either party may end the working relationship at any time.
+          </span>
         </div>
         <label class="check-item" style="font-weight:600">
           <input type="checkbox" name="agrees_to_ic_terms" required />
-          I have read and agree to the independent contractor terms above.
+          <span class="t" data-en="I have read and agree to the independent contractor terms above."
+                data-es="He leído y acepto los términos de contratista independiente anteriores.">
+            I have read and agree to the independent contractor terms above.</span>
         </label>
       </div>
 
-      <button type="submit" class="btn">Submit Application</button>
+      <button type="submit" class="btn t"
+              data-en="Submit Application" data-es="Enviar Solicitud">Submit Application</button>
     </form>
   </div>
+
+<script>
+let currentLang = 'en';
+
+function setLang(lang) {
+  currentLang = lang;
+  document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+  document.getElementById('btn-es').classList.toggle('active', lang === 'es');
+  document.getElementById('header-sub').textContent = lang === 'es' ? 'Solicitud de Contratista' : 'Contractor Application';
+
+  document.querySelectorAll('.t[data-' + lang + ']').forEach(el => {
+    const text = el.getAttribute('data-' + lang);
+    if (el.tagName === 'OPTION') {
+      el.textContent = text;
+    } else if (el.tagName === 'BUTTON' || el.tagName === 'LABEL' || el.tagName === 'H2' || el.tagName === 'P' || el.tagName === 'SPAN') {
+      if (!el.querySelector('input')) {
+        // Plain text element — safe to set textContent
+        if (text.includes('&#10;') || text.includes('<')) {
+          el.innerHTML = text.replace(/&#10;/g, '<br>');
+        } else {
+          el.textContent = text;
+        }
+      }
+    }
+  });
+
+  // Update labels that contain inputs (use data attribute on their span children)
+  document.querySelectorAll('label.t[data-' + lang + ']').forEach(el => {
+    el.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        node.textContent = el.getAttribute('data-' + lang);
+      }
+    });
+  });
+
+  // Textarea placeholder
+  const why = document.getElementById('why-placeholder');
+  if (why) {
+    why.placeholder = lang === 'es'
+      ? 'Cuéntanos un poco sobre ti y por qué quieres trabajar con nosotros...'
+      : 'Tell us a bit about yourself and why you\'re interested...';
+  }
+
+  // Terms box special handling (pre-formatted)
+  const termsSpan = document.querySelector('.terms-box .t');
+  if (termsSpan) {
+    const raw = termsSpan.getAttribute('data-' + lang);
+    termsSpan.innerHTML = raw.replace(/&#10;/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  }
+}
+</script>
 </body>
 </html>

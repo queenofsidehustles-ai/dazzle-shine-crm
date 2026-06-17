@@ -122,6 +122,7 @@ def _migrate_db():
         # Staff worker model
         ('staff', 'worker_model', "VARCHAR(20) DEFAULT 'contractor'"),
         # Contractor application hiring pipeline
+        ('contractor_application', 'source',                       "VARCHAR(50) DEFAULT 'Website'"),
         ('contractor_application', 'experience_years',             'VARCHAR(20)'),
         ('contractor_application', 'availability',                 'VARCHAR(50)'),
         ('contractor_application', 'phone_interview_completed',    'BOOLEAN DEFAULT FALSE'),
