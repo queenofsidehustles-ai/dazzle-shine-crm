@@ -279,9 +279,23 @@ class ContractorApplication(db.Model):
     phone_interview_completed = db.Column(db.Boolean, default=False)
     phone_interview_at = db.Column(db.DateTime)
     phone_interview_notes = db.Column(db.Text)
-    background_check_status = db.Column(db.String(20), default='not_started')  # not_started, ordered, cleared, failed
+    background_check_status = db.Column(db.String(20), default='not_started')  # not_started, requested, received, cleared, failed
     background_check_notes = db.Column(db.Text)
     background_check_at = db.Column(db.DateTime)
+    bgcheck_request_sent_at = db.Column(db.DateTime)
+    bgcheck_results_received = db.Column(db.Boolean, default=False)
+    # Reference tracking
+    ref1_name = db.Column(db.String(100))
+    ref1_phone = db.Column(db.String(20))
+    ref1_notes = db.Column(db.Text)
+    ref1_called = db.Column(db.Boolean, default=False)
+    ref2_name = db.Column(db.String(100))
+    ref2_phone = db.Column(db.String(20))
+    ref2_notes = db.Column(db.Text)
+    ref2_called = db.Column(db.Boolean, default=False)
+    # Email action tracking
+    interview_invite_sent_at = db.Column(db.DateTime)
+    rejection_sent_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 

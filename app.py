@@ -131,6 +131,18 @@ def _migrate_db():
         ('contractor_application', 'background_check_status',      "VARCHAR(20) DEFAULT 'not_started'"),
         ('contractor_application', 'background_check_notes',       'TEXT'),
         ('contractor_application', 'background_check_at',          'TIMESTAMP'),
+        ('contractor_application', 'bgcheck_request_sent_at',      'TIMESTAMP'),
+        ('contractor_application', 'bgcheck_results_received',     'BOOLEAN DEFAULT FALSE'),
+        ('contractor_application', 'ref1_name',                    'VARCHAR(100)'),
+        ('contractor_application', 'ref1_phone',                   'VARCHAR(20)'),
+        ('contractor_application', 'ref1_notes',                   'TEXT'),
+        ('contractor_application', 'ref1_called',                  'BOOLEAN DEFAULT FALSE'),
+        ('contractor_application', 'ref2_name',                    'VARCHAR(100)'),
+        ('contractor_application', 'ref2_phone',                   'VARCHAR(20)'),
+        ('contractor_application', 'ref2_notes',                   'TEXT'),
+        ('contractor_application', 'ref2_called',                  'BOOLEAN DEFAULT FALSE'),
+        ('contractor_application', 'interview_invite_sent_at',     'TIMESTAMP'),
+        ('contractor_application', 'rejection_sent_at',            'TIMESTAMP'),
     ]
     for table, col, col_type in new_cols:
         try:

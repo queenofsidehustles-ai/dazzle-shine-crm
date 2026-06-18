@@ -53,7 +53,8 @@ def pricing():
 @login_required
 def business():
     fields = ['business_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'website',
-              'worker_model', 'reception_model', 'agreement_template']
+              'worker_model', 'reception_model', 'agreement_template',
+              'interview_calendar_link', 'bgcheck_provider_url', 'bgcheck_provider_name']
     if request.method == 'POST':
         for f in fields:
             BusinessSetting.set(f, request.form.get(f, ''))

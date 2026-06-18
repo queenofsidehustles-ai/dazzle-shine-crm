@@ -45,12 +45,31 @@
         {% else %}{{ a.source or 'Website' }}{% endif %}
       </span></div>
       <div class="detail-row"><span class="dl">Applied</span><span class="dv" style="color:#9a95ad">{{ a.created_at.strftime('%B %d, %Y') }}</span></div>
-      <form method="POST" action="{{ url_for('contractors.send_application_link', app_id=a.id) }}" style="margin-top:14px">
-        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.85rem">
-          📧 Send Application Link to {{ a.name.split()[0] }}
-        </button>
-      </form>
-      <p style="font-size:0.75rem;color:#9a95ad;margin-top:6px;text-align:center">Emails them the full application form link so they can complete their profile</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+        <form method="POST" action="{{ url_for('contractors.send_application_link', app_id=a.id) }}">
+          <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.83rem">
+            📋 Send Application Link
+          </button>
+        </form>
+        {% if not a.interview_invite_sent_at %}
+        <form method="POST" action="{{ url_for('contractors.send_interview_invite', app_id=a.id) }}">
+          <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;font-size:0.83rem">
+            📅 Send Interview Invite (English)
+          </button>
+        </form>
+        <form method="POST" action="{{ url_for('contractors.send_spanish_interview', app_id=a.id) }}">
+          <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;font-size:0.83rem;background:linear-gradient(135deg,#34d399,#10b981);color:#fff">
+            🇲🇽 Send Interview Questions (Spanish)
+          </button>
+        </form>
+        {% else %}
+        <div style="background:#d4edda;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#155724;text-align:center">
+          ✅ Interview invite sent {{ a.interview_invite_sent_at.strftime('%b %d') }}
+          <br><a href="{{ url_for('contractors.send_interview_invite', app_id=a.id) }}" style="color:#155724;font-size:0.78rem;text-decoration:underline"
+                 onclick="return confirm('Re-send the interview invite?')">Resend</a>
+        </div>
+        {% endif %}
+      </div>
     </div>
 
     <div class="card">
@@ -96,26 +115,94 @@
 
     <!-- Background Check -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Background Check</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+        Background Check
+        {% if a.background_check_status == 'cleared' %}<span style="margin-left:8px;background:#d4edda;color:#155724;padding:2px 10px;border-radius:999px;font-size:0.72rem">Cleared ✅</span>
+        {% elif a.background_check_status == 'failed' %}<span style="margin-left:8px;background:#f8d7da;color:#842029;padding:2px 10px;border-radius:999px;font-size:0.72rem">Failed ❌</span>
+        {% elif a.background_check_status == 'requested' %}<span style="margin-left:8px;background:#fff3cd;color:#856404;padding:2px 10px;border-radius:999px;font-size:0.72rem">Requested ⏳</span>
+        {% endif %}
+      </h2>
+
+      <!-- Send BG check request -->
+      {% if a.background_check_status in ('not_started', 'requested') %}
+      <form method="POST" action="{{ url_for('contractors.send_bgcheck_request', app_id=a.id) }}" style="margin-bottom:14px">
+        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.83rem">
+          🔍 {{ 'Resend BG Check Request' if a.bgcheck_request_sent_at else 'Send Background Check Request' }}
+        </button>
+      </form>
+      {% if a.bgcheck_request_sent_at %}
+      <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:12px;text-align:center">
+        Sent {{ a.bgcheck_request_sent_at.strftime('%b %d, %Y') }} — they pay for it directly
+      </p>
+      {% else %}
+      <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:12px">Applicant receives a link, pays for their own check, and emails you the results. Set the provider in Settings → Business.</p>
+      {% endif %}
+      {% endif %}
+
       <form method="POST">
         <input type="hidden" name="action" value="bgcheck" />
         <div class="form-group">
           <label>Status</label>
           <select name="background_check_status">
             <option value="not_started" {{ 'selected' if a.background_check_status == 'not_started' }}>Not Started</option>
+            <option value="requested"   {{ 'selected' if a.background_check_status == 'requested'   }}>Requested (awaiting their results)</option>
             <option value="ordered"     {{ 'selected' if a.background_check_status == 'ordered'     }}>Ordered / In Progress</option>
             <option value="cleared"     {{ 'selected' if a.background_check_status == 'cleared'     }}>✅ Cleared</option>
             <option value="failed"      {{ 'selected' if a.background_check_status == 'failed'      }}>❌ Failed</option>
           </select>
         </div>
-        {% if a.background_check_at %}
-        <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:8px">Ordered: {{ a.background_check_at.strftime('%b %d, %Y') }}</p>
-        {% endif %}
+        <div style="margin-bottom:12px">
+          <label class="check-item" style="font-size:0.88rem;cursor:pointer">
+            <input type="checkbox" name="bgcheck_results_received" style="width:auto;accent-color:#d3a84f"
+                   {{ 'checked' if a.bgcheck_results_received }} />
+            📎 Results received (emailed back by applicant)
+          </label>
+        </div>
         <div class="form-group">
-          <label>Notes (provider, case number, result details)</label>
-          <textarea name="background_check_notes" rows="3" placeholder="Checkr, Sterling, etc. — any notes here...">{{ a.background_check_notes or '' }}</textarea>
+          <label>Notes (provider, result details, concerns)</label>
+          <textarea name="background_check_notes" rows="3" placeholder="FDLE cleared, no issues — or — Checkr case #123...">{{ a.background_check_notes or '' }}</textarea>
         </div>
         <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.85rem">Save Background Check</button>
+      </form>
+    </div>
+
+    <!-- Reference Tracking -->
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Reference Checks</h2>
+      <form method="POST">
+        <input type="hidden" name="action" value="references" />
+        {% for i in [1, 2] %}
+        {% set ref_name = a['ref' ~ i ~ '_name'] if a['ref' ~ i ~ '_name'] is defined else '' %}
+        <div style="background:#f6f5fb;border-radius:10px;padding:14px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <strong style="font-size:0.85rem;color:#3b2460">Reference {{ i }}</strong>
+            <label class="check-item" style="font-size:0.82rem;cursor:pointer">
+              <input type="checkbox" name="ref{{ i }}_called" style="width:auto;accent-color:#10b981"
+                     {{ 'checked' if (a.ref1_called if i==1 else a.ref2_called) }} />
+              ✅ Called
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div>
+              <label style="font-size:0.78rem;margin-bottom:3px">Name</label>
+              <input type="text" name="ref{{ i }}_name"
+                     value="{{ a.ref1_name if i==1 else a.ref2_name or '' }}"
+                     placeholder="Jane Smith" style="font-size:0.88rem;padding:7px 10px" />
+            </div>
+            <div>
+              <label style="font-size:0.78rem;margin-bottom:3px">Phone</label>
+              <input type="tel" name="ref{{ i }}_phone"
+                     value="{{ a.ref1_phone if i==1 else a.ref2_phone or '' }}"
+                     placeholder="(407) 555-0000" style="font-size:0.88rem;padding:7px 10px" />
+            </div>
+          </div>
+          <label style="font-size:0.78rem;margin-bottom:3px">Call Notes</label>
+          <textarea name="ref{{ i }}_notes" rows="2"
+                    placeholder="What did they say? Positive, concerns, overall impression..."
+                    style="font-size:0.85rem">{{ a.ref1_notes if i==1 else a.ref2_notes or '' }}</textarea>
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.85rem">Save References</button>
       </form>
     </div>
 
@@ -151,8 +238,10 @@
       <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:10px;color:#856404;text-transform:uppercase;letter-spacing:0.1em">Pre-Hire Checklist</h2>
       <div style="font-size:0.84rem;line-height:2;color:#856404">
         {{ '✅' if a.phone_interview_completed else '⬜' }} Phone interview completed<br>
+        {{ '✅' if (a.ref1_called or a.ref2_called) else '⬜' }} At least one reference called<br>
+        {{ '✅' if a.bgcheck_request_sent_at else '⬜' }} Background check requested<br>
+        {{ '✅' if a.bgcheck_results_received else '⬜' }} Background check results received<br>
         {{ '✅' if a.background_check_status == 'cleared' else '⬜' }} Background check cleared<br>
-        {{ '✅' if a.has_references else '⬜' }} References verified<br>
         {{ '✅' if a.background_check_consent else '⬜' }} IC agreement consent given
       </div>
     </div>
@@ -201,6 +290,26 @@
       <p style="font-weight:700;color:#155724;font-size:0.95rem;margin-bottom:6px">✅ Hired!</p>
       <p style="font-size:0.85rem;color:#1e7e34">{{ a.name }} is now in your team. Welcome email + agreement was sent automatically.</p>
       <a href="{{ url_for('contractors.team') }}" style="display:inline-block;margin-top:10px;font-size:0.85rem;color:#155724;text-decoration:underline">View Team →</a>
+    </div>
+    {% endif %}
+
+    {% if a.status != 'hired' and a.status != 'rejected' %}
+    <div class="card" style="border-color:#f8d7da">
+      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:10px;color:#842029;text-transform:uppercase;letter-spacing:0.1em">Not the Right Fit?</h2>
+      <p style="font-size:0.83rem;color:#9a95ad;margin-bottom:12px">Send a polite rejection email and close out this application.</p>
+      <form method="POST" action="{{ url_for('contractors.send_rejection', app_id=a.id) }}"
+            onsubmit="return confirm('Send a rejection email to {{ a.name.split()[0] }}?')">
+        <button type="submit" class="btn" style="width:100%;justify-content:center;font-size:0.85rem;background:#f8d7da;color:#842029;border:1px solid #f5c6cb">
+          Send Rejection Email
+        </button>
+      </form>
+    </div>
+    {% elif a.status == 'rejected' %}
+    <div class="card" style="background:#f8d7da;border-color:#f5c6cb">
+      <p style="font-weight:700;color:#842029;font-size:0.9rem;margin-bottom:4px">❌ Application Closed</p>
+      <p style="font-size:0.82rem;color:#842029">
+        Rejection {{ 'email sent ' + a.rejection_sent_at.strftime('%b %d') if a.rejection_sent_at else 'marked — no email sent' }}.
+      </p>
     </div>
     {% endif %}
 

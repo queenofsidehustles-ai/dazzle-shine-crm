@@ -100,6 +100,173 @@ def send_application_link(app_id):
     return redirect(url_for('contractors.application_detail', app_id=app_id))
 
 
+@contractors_bp.route('/applications/<int:app_id>/send-interview-invite', methods=['POST'])
+@login_required
+def send_interview_invite(app_id):
+    a = ContractorApplication.query.get_or_404(app_id)
+    import os
+    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    cal_link = BusinessSetting.get('interview_calendar_link', '')
+    if not cal_link:
+        flash('Add your calendar link in Settings → Business first.', 'warning')
+        return redirect(url_for('contractors.application_detail', app_id=app_id))
+    send_email(
+        to_email=a.email, to_name=a.name,
+        from_name=f'{biz} Hiring',
+        subject=f'Next Step: Schedule Your Phone Interview — {biz}',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:28px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#d3a84f;margin:0;font-size:1.5rem">You're Moving Forward! 🎉</h1>
+    <p style="color:#c9b8e8;margin:8px 0 0;font-size:0.9rem">{biz} — Hiring</p>
+  </div>
+  <div style="background:#fff;padding:28px;border-radius:0 0 12px 12px;border:1px solid #e4dfef;border-top:none">
+    <p>Hi {a.name.split()[0]},</p>
+    <p style="margin:12px 0">We reviewed your application and we'd love to chat! Please use the link below to pick a time for a quick phone interview (about 10–15 minutes).</p>
+    <div style="text-align:center;margin:24px 0">
+      <a href="{cal_link}" style="background:#d3a84f;color:#1f1333;padding:13px 28px;border-radius:8px;font-weight:700;text-decoration:none;font-size:1rem;display:inline-block">
+        Pick My Interview Time →
+      </a>
+    </div>
+    <p style="font-size:0.85rem;color:#5f5878">The call will cover your experience, availability, and any questions you have about the position. It's quick and easy!</p>
+    <p style="font-size:0.85rem;color:#9a95ad">Link not working? Copy and paste: {cal_link}</p>
+    <p style="margin-top:16px">Looking forward to speaking with you!<br>
+    <strong style="color:#b98a33">{biz}</strong></p>
+  </div>
+</div>""",
+    )
+    a.interview_invite_sent_at = datetime.utcnow()
+    db.session.commit()
+    flash(f'Interview invite sent to {a.email}!', 'success')
+    return redirect(url_for('contractors.application_detail', app_id=app_id))
+
+
+@contractors_bp.route('/applications/<int:app_id>/send-spanish-interview', methods=['POST'])
+@login_required
+def send_spanish_interview(app_id):
+    a = ContractorApplication.query.get_or_404(app_id)
+    import os
+    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    send_email(
+        to_email=a.email, to_name=a.name,
+        from_name=f'{biz} Contrataciones',
+        subject=f'Preguntas de Entrevista — {biz}',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:28px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#d3a84f;margin:0;font-size:1.5rem">¡Gracias por su interés! 🌟</h1>
+    <p style="color:#c9b8e8;margin:8px 0 0;font-size:0.9rem">{biz} — Contrataciones</p>
+  </div>
+  <div style="background:#fff;padding:28px;border-radius:0 0 12px 12px;border:1px solid #e4dfef;border-top:none">
+    <p>Hola {a.name.split()[0]},</p>
+    <p style="margin:12px 0">Hemos revisado su solicitud y nos gustaría conocerle mejor. Por favor responda las siguientes preguntas por correo electrónico y le contactaremos pronto.</p>
+    <div style="background:#f6f5fb;border-radius:10px;padding:20px;margin:20px 0;line-height:2.2">
+      <strong style="color:#3b2460">Preguntas de Entrevista:</strong><br><br>
+      <strong>1.</strong> ¿Cuánta experiencia tiene limpiando casas o negocios?<br>
+      <strong>2.</strong> ¿Tiene transporte propio confiable para llegar a los trabajos?<br>
+      <strong>3.</strong> ¿Tiene sus propios materiales y equipos de limpieza?<br>
+      <strong>4.</strong> ¿Qué días y horarios está disponible para trabajar?<br>
+      <strong>5.</strong> ¿Puede proporcionar 1–2 referencias de empleos anteriores (nombre y teléfono)?<br>
+      <strong>6.</strong> ¿Tiene alguna pregunta sobre el puesto o el pago?
+    </div>
+    <p style="font-size:0.9rem;color:#5f5878">Responda a este correo electrónico con sus respuestas. <strong>Nos comunicaremos con usted dentro de 2 días hábiles.</strong></p>
+    <p style="margin-top:16px">¡Gracias y esperamos escuchar de usted pronto!<br>
+    <strong style="color:#b98a33">{biz}</strong><br>
+    <a href="mailto:{owner_email}" style="color:#7c3aed">{owner_email}</a></p>
+  </div>
+</div>""",
+    )
+    a.interview_invite_sent_at = datetime.utcnow()
+    db.session.commit()
+    flash(f'Spanish interview questions sent to {a.email}!', 'success')
+    return redirect(url_for('contractors.application_detail', app_id=app_id))
+
+
+@contractors_bp.route('/applications/<int:app_id>/send-bgcheck-request', methods=['POST'])
+@login_required
+def send_bgcheck_request(app_id):
+    a = ContractorApplication.query.get_or_404(app_id)
+    import os
+    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    provider_url = BusinessSetting.get('bgcheck_provider_url', '')
+    provider_name = BusinessSetting.get('bgcheck_provider_name', 'the provider below')
+    if not provider_url:
+        flash('Add a background check provider URL in Settings → Business first.', 'warning')
+        return redirect(url_for('contractors.application_detail', app_id=app_id))
+    send_email(
+        to_email=a.email, to_name=a.name,
+        from_name=f'{biz} Hiring',
+        subject=f'Action Required: Background Check — {biz}',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:28px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#d3a84f;margin:0;font-size:1.4rem">Background Check Required</h1>
+    <p style="color:#c9b8e8;margin:8px 0 0;font-size:0.9rem">{biz} — Final Step Before Hire</p>
+  </div>
+  <div style="background:#fff;padding:28px;border-radius:0 0 12px 12px;border:1px solid #e4dfef;border-top:none">
+    <p>Hi {a.name.split()[0]},</p>
+    <p style="margin:12px 0">Great news — you've passed your phone interview! The final step before we can bring you on board is a <strong>background check</strong>.</p>
+    <div style="background:#fff3cd;border-radius:10px;padding:16px;margin:20px 0;border-left:4px solid #d3a84f">
+      <p style="margin:0;font-weight:700;color:#856404">What you need to do:</p>
+      <ol style="margin:10px 0 0;line-height:2;color:#856404">
+        <li>Click the button below to visit {provider_name}</li>
+        <li>Complete the background check and pay the fee directly on their site</li>
+        <li>Email your results/certificate to <strong>{owner_email}</strong></li>
+      </ol>
+    </div>
+    <div style="text-align:center;margin:24px 0">
+      <a href="{provider_url}" style="background:#d3a84f;color:#1f1333;padding:13px 28px;border-radius:8px;font-weight:700;text-decoration:none;font-size:1rem;display:inline-block">
+        Complete My Background Check →
+      </a>
+    </div>
+    <p style="font-size:0.82rem;color:#9a95ad">This fee is paid directly by you as part of the contractor application process. It ensures the safety of our clients and their homes.</p>
+    <p style="margin-top:16px">Once we receive your results, we'll be in touch within 1–2 business days!<br>
+    <strong style="color:#b98a33">{biz}</strong></p>
+  </div>
+</div>""",
+    )
+    a.bgcheck_request_sent_at = datetime.utcnow()
+    a.background_check_status = 'requested'
+    db.session.commit()
+    flash(f'Background check request sent to {a.email}!', 'success')
+    return redirect(url_for('contractors.application_detail', app_id=app_id))
+
+
+@contractors_bp.route('/applications/<int:app_id>/send-rejection', methods=['POST'])
+@login_required
+def send_rejection(app_id):
+    a = ContractorApplication.query.get_or_404(app_id)
+    import os
+    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    send_email(
+        to_email=a.email, to_name=a.name,
+        from_name=f'{biz} Hiring',
+        subject=f'Your Application — {biz}',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:28px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#d3a84f;margin:0;font-size:1.4rem">Thank You for Applying</h1>
+    <p style="color:#c9b8e8;margin:8px 0 0;font-size:0.9rem">{biz}</p>
+  </div>
+  <div style="background:#fff;padding:28px;border-radius:0 0 12px 12px;border:1px solid #e4dfef;border-top:none">
+    <p>Hi {a.name.split()[0]},</p>
+    <p style="margin:12px 0">Thank you so much for your interest in joining the {biz} team and for taking the time to apply.</p>
+    <p style="margin:12px 0">After careful consideration, we've decided to move forward with other candidates at this time. This was a difficult decision — we appreciated getting to know you through the process.</p>
+    <p style="margin:12px 0">We encourage you to apply again in the future as our team grows. We wish you all the best in your search!</p>
+    <p style="margin-top:20px">Warmly,<br>
+    <strong style="color:#b98a33">{biz}</strong></p>
+  </div>
+</div>""",
+    )
+    a.status = 'rejected'
+    a.rejection_sent_at = datetime.utcnow()
+    db.session.commit()
+    flash(f'Rejection email sent to {a.name}.', 'success')
+    return redirect(url_for('contractors.application_detail', app_id=app_id))
+
+
 @contractors_bp.route('/applications/<int:app_id>', methods=['GET', 'POST'])
 @login_required
 def application_detail(app_id):
@@ -117,9 +284,20 @@ def application_detail(app_id):
         elif action == 'bgcheck':
             a.background_check_status = request.form.get('background_check_status', a.background_check_status)
             a.background_check_notes = request.form.get('background_check_notes', a.background_check_notes)
+            a.bgcheck_results_received = bool(request.form.get('bgcheck_results_received'))
             if a.background_check_status == 'ordered' and not a.background_check_at:
                 a.background_check_at = datetime.utcnow()
             flash('Background check updated.', 'success')
+        elif action == 'references':
+            a.ref1_name = request.form.get('ref1_name', '').strip()
+            a.ref1_phone = request.form.get('ref1_phone', '').strip()
+            a.ref1_notes = request.form.get('ref1_notes', '').strip()
+            a.ref1_called = bool(request.form.get('ref1_called'))
+            a.ref2_name = request.form.get('ref2_name', '').strip()
+            a.ref2_phone = request.form.get('ref2_phone', '').strip()
+            a.ref2_notes = request.form.get('ref2_notes', '').strip()
+            a.ref2_called = bool(request.form.get('ref2_called'))
+            flash('References saved.', 'success')
         else:
             a.status = request.form.get('status', a.status)
             a.admin_notes = request.form.get('admin_notes', a.admin_notes)
