@@ -61,6 +61,8 @@ def save_response(token):
     public_id = data.get('cloudinary_public_id', '').strip()
     url = data.get('cloudinary_url', '').strip()
     question_en = data.get('question_en', '')
+    transcript = data.get('transcript', '').strip()
+    transcript_lang = data.get('transcript_lang', 'en')
 
     if q_index is None or not public_id or not url:
         return jsonify({'error': 'Missing fields'}), 400
@@ -73,6 +75,8 @@ def save_response(token):
         existing.cloudinary_public_id = public_id
         existing.cloudinary_url = url
         existing.question_en = question_en
+        existing.transcript = transcript or existing.transcript
+        existing.transcript_lang = transcript_lang
     else:
         db.session.add(InterviewResponse(
             application_id=app_rec.id,
@@ -80,6 +84,8 @@ def save_response(token):
             question_en=question_en,
             cloudinary_public_id=public_id,
             cloudinary_url=url,
+            transcript=transcript,
+            transcript_lang=transcript_lang,
         ))
 
     db.session.commit()

@@ -151,6 +151,9 @@ def _migrate_db():
         ('contractor_application', 'interview_status',             "VARCHAR(20) DEFAULT 'not_sent'"),
         ('contractor_application', 'interview_sent_at',            'TIMESTAMP'),
         ('contractor_application', 'interview_completed_at',       'TIMESTAMP'),
+        # Interview response transcripts
+        ('interview_response', 'transcript',       'TEXT'),
+        ('interview_response', 'transcript_lang',  'VARCHAR(10)'),
     ]
     for table, col, col_type in new_cols:
         try:

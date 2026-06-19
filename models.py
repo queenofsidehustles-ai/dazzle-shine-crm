@@ -315,6 +315,8 @@ class InterviewResponse(db.Model):
     question_en = db.Column(db.Text)
     cloudinary_public_id = db.Column(db.String(200))
     cloudinary_url = db.Column(db.String(500))
+    transcript = db.Column(db.Text)       # auto-captured via Web Speech API
+    transcript_lang = db.Column(db.String(10))  # 'en' or 'es'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 

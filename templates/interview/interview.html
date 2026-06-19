@@ -459,6 +459,21 @@
           <p x-text="lang==='en' ? 'Answer saved!' : '¡Respuesta guardada!'"></p>
         </div>
 
+        <!-- Live transcript (shown while recording) -->
+        <div x-show="recState === 'recording' || (recState === 'recorded' && liveTranscript)"
+             style="padding:12px 20px;background:#faf9ff;border-top:1px solid var(--border)">
+          <div style="font-size:0.72rem;font-weight:700;color:var(--gold-deep);
+                      text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px">
+            🎙 <span x-text="lang==='en' ? 'Live transcript' : 'Transcripción en vivo'"></span>
+            <span x-show="recState==='recording'"
+                  style="font-size:0.7rem;color:#9a95ad;font-weight:400;text-transform:none;letter-spacing:0">
+              — Chrome only
+            </span>
+          </div>
+          <p style="font-size:0.88rem;color:var(--purple-mid);line-height:1.6;min-height:24px"
+             x-text="liveTranscript || '...'"></p>
+        </div>
+
         <!-- Controls -->
         <div class="controls">
 
@@ -545,6 +560,9 @@
       chunks: [],
       videoBlob: null,
       errorMsg: '',
+      recognition: null,
+      transcript: '',
+      liveTranscript: '',
 
       currentQuestion() {
         const qs = this.lang === 'en' ? QUESTIONS_EN : QUESTIONS_ES;
@@ -607,6 +625,7 @@
           this.recState = 'recorded';
         };
         this.recorder.start(1000);
+        this.startTranscription();
         this.recState = 'recording';
       },
 
@@ -614,11 +633,45 @@
         if (this.recorder && this.recorder.state === 'recording') {
           this.recorder.stop();
         }
+        this.stopTranscription();
+      },
+
+      startTranscription() {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) return;
+        this.transcript = '';
+        this.liveTranscript = '';
+        this.recognition = new SR();
+        this.recognition.continuous = true;
+        this.recognition.interimResults = true;
+        this.recognition.lang = this.lang === 'es' ? 'es-US' : 'en-US';
+        this.recognition.onresult = (e) => {
+          let interim = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              this.transcript += e.results[i][0].transcript + ' ';
+            } else {
+              interim = e.results[i][0].transcript;
+            }
+          }
+          this.liveTranscript = (this.transcript + interim).trim();
+        };
+        this.recognition.onerror = () => {};
+        try { this.recognition.start(); } catch(e) {}
+      },
+
+      stopTranscription() {
+        if (this.recognition) {
+          try { this.recognition.stop(); } catch(e) {}
+          this.recognition = null;
+        }
       },
 
       reRecord() {
         this.videoBlob = null;
         this.errorMsg = '';
+        this.transcript = '';
+        this.liveTranscript = '';
         const preview = document.getElementById('answer-preview');
         if (preview) preview.src = '';
         const cam = document.getElementById('camera-preview');
@@ -656,6 +709,8 @@
               question_en: QUESTIONS_EN[this.currentQ],
               cloudinary_public_id: cloud.public_id,
               cloudinary_url: cloud.secure_url,
+              transcript: this.transcript.trim(),
+              transcript_lang: this.lang,
             }),
           });
 
