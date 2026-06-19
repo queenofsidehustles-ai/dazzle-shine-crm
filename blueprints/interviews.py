@@ -231,7 +231,7 @@ def _build_invite_html(name, interview_url, biz):
     <p style="font-size:0.72rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;
               color:#d3a84f;margin:0 0 14px">🇺🇸 English</p>
 
-    <h2 style="color:#1f1333;margin:0 0 12px">Hi {app_rec.name}!</h2>
+    <h2 style="color:#1f1333;margin:0 0 12px">Hi {name}!</h2>
     <p style="color:#3b2b6b;line-height:1.8;margin:0 0 12px">
       Congratulations — you've been selected to move forward with <strong>Dazzle &amp; Shine Maids</strong>!
       Please complete <strong>both steps below</strong> to continue your application.
@@ -311,7 +311,7 @@ def _build_invite_html(name, interview_url, biz):
     <p style="font-size:0.72rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;
               color:#5d4f7d;margin:0 0 14px">🇪🇸 Español</p>
 
-    <h2 style="color:#1f1333;margin:0 0 12px">¡Hola {app_rec.name}!</h2>
+    <h2 style="color:#1f1333;margin:0 0 12px">¡Hola {name}!</h2>
     <p style="color:#3b2b6b;line-height:1.8;margin:0 0 12px">
       ¡Felicitaciones! Has sido seleccionado/a para avanzar con <strong>Dazzle &amp; Shine Maids</strong>.
       Por favor completa <strong>los dos pasos a continuación</strong> para continuar tu solicitud.
