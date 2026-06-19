@@ -157,15 +157,15 @@
         <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:8px">Current Application Status</div>
         <div style="font-weight:700;font-size:1rem;color:var(--purple);margin-bottom:16px">{{ app.status | capitalize }}</div>
 
-        {% if app.status not in ('hired', 'onboarding', 'rejected') %}
+        {% if app.status not in ('hired', 'onboarding', 'reviewing', 'rejected') %}
 
           <form method="POST" action="{{ url_for('interviews.approve_interview', app_id=app.id) }}"
-                onsubmit="return confirm('Approve {{ app.name }} and move to onboarding?')"
+                onsubmit="return confirm('Approve {{ app.name }}\'s video and send background check request?')"
                 style="margin-bottom:10px">
             <button type="submit"
                     style="width:100%;background:#38a169;color:#fff;border:none;padding:12px;
                            border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer">
-              ✓ Approve — Move to Onboarding
+              ✓ Approve Video — Request Background Check
             </button>
           </form>
 
@@ -178,7 +178,18 @@
             </button>
           </form>
 
-        {% elif app.status == 'onboarding' %}
+        {% elif app.status in ('reviewing',) %}
+          <div style="background:#fef9ec;border:2px solid #d3a84f;color:#92400e;
+                      padding:12px;border-radius:8px;font-weight:600;text-align:center;font-size:0.9rem">
+            🔍 Video Approved — Awaiting Background Check
+          </div>
+          <a href="{{ url_for('contractors.application_detail', app_id=app.id) }}"
+             style="display:block;margin-top:10px;text-align:center;background:#1f1333;color:#d3a84f;
+                    padding:10px;border-radius:8px;font-weight:700;font-size:0.88rem;text-decoration:none">
+            View Background Check Status →
+          </a>
+
+        {% elif app.status in ('onboarding', 'hired') %}
           <div style="background:#f0fff4;border:1px solid #c6f6d5;color:#276749;
                       padding:12px;border-radius:8px;font-weight:600;text-align:center">
             ✅ Approved — In Onboarding

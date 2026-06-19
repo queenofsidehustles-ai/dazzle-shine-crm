@@ -153,10 +153,22 @@ def review_interview(app_id):
 @login_required
 def approve_interview(app_id):
     app_rec = ContractorApplication.query.get_or_404(app_id)
-    app_rec.status = 'onboarding'
+    app_rec.status = 'reviewing'
+    app_rec.background_check_status = 'requested'
+    app_rec.bgcheck_request_sent_at = datetime.utcnow()
     db.session.commit()
-    flash(f'{app_rec.name} approved and moved to onboarding.', 'success')
-    return redirect(url_for('interviews.admin_interviews'))
+
+    # Send candidate a focused background check reminder
+    biz = 'Dazzle & Shine Maids'
+    send_email(
+        to_email=app_rec.email,
+        to_name=app_rec.name,
+        subject=f"Great News — Next Step: Background Check — {biz}",
+        html=_build_bgcheck_email(app_rec.name, biz),
+    )
+
+    flash(f'Video approved! Background check request sent to {app_rec.name}.', 'success')
+    return redirect(url_for('contractors.application_detail', app_id=app_rec.id))
 
 
 @interviews_bp.route('/admin/interviews/<int:app_id>/reject', methods=['POST'])
@@ -189,8 +201,8 @@ def reject_interview(app_id):
         html=html,
     )
 
-    flash(f'{app_rec.name} rejected. Polite email sent to {app_rec.email}.', 'info')
-    return redirect(url_for('interviews.admin_interviews'))
+    flash(f'{app_rec.name} rejected. Polite email sent.', 'info')
+    return redirect(url_for('contractors.application_detail', app_id=app_rec.id))
 
 
 @interviews_bp.route('/admin/interviews/send/<int:app_id>', methods=['POST'])
@@ -209,6 +221,88 @@ def send_invite(app_id):
 
     flash(f'Interview link sent to {app_rec.name} at {app_rec.email}', 'success')
     return redirect(request.referrer or url_for('interviews.admin_interviews'))
+
+
+def _build_bgcheck_email(name, biz):
+    return f"""
+<div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
+  <div style="background:#1f1333;padding:28px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0 0 6px;font-size:1.8rem">Dazzle &amp; Shine Maids</h1>
+    <p style="color:rgba(255,255,255,0.6);margin:0;font-size:0.85rem;letter-spacing:0.1em;text-transform:uppercase">
+      Your Video Interview — Next Step
+    </p>
+  </div>
+  <div style="padding:32px;background:#fff;border-left:4px solid #d3a84f">
+    <h2 style="color:#1f1333;margin:0 0 12px">Hi {name}! 🎉</h2>
+    <p style="color:#3b2b6b;line-height:1.8;margin:0 0 20px">
+      We reviewed your video interview and we love what we saw!
+      You are moving forward in our hiring process. There is <strong>one more step</strong> before we can bring you on board.
+    </p>
+    <div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:10px;padding:22px 24px;margin-bottom:24px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Complete Your Background Check</div>
+      <p style="color:#7c4a04;line-height:1.7;margin:0 0 14px">
+        A background check is required for all contractors. <strong>This is paid by you</strong> and typically costs $20–$40.
+        You have two accepted options:
+      </p>
+      <div style="background:#fff;border-radius:8px;padding:14px 16px;margin-bottom:10px;border:1px solid #e4dfef">
+        <strong style="color:#1f1333">Option A — Checkr.com (Recommended)</strong><br>
+        <span style="color:#3b2b6b;font-size:0.9rem">
+          Visit <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">checkr.com</a>,
+          order your background check, and email us the results once complete.
+        </span>
+      </div>
+      <div style="background:#fff;border-radius:8px;padding:14px 16px;border:1px solid #e4dfef">
+        <strong style="color:#1f1333">Option B — Care.com Background Check</strong><br>
+        <span style="color:#3b2b6b;font-size:0.9rem">
+          If you already have a recent background check from Care.com, you can forward it directly to us.
+        </span>
+      </div>
+      <p style="color:#7c4a04;font-size:0.88rem;margin:16px 0 0;line-height:1.6">
+        ⏰ Please complete and email your results within <strong>7 days</strong> to
+        <a href="mailto:dazzleandshinemaids@gmail.com" style="color:#d3a84f;font-weight:600">dazzleandshinemaids@gmail.com</a>
+      </p>
+    </div>
+    <hr style="border:none;border-top:1px solid #e4dfef;margin:0 0 20px">
+    <p style="color:#5f5878;font-size:0.82rem;line-height:1.6;margin:0">
+      Questions? Just reply to this email. We look forward to welcoming you to the Dazzle &amp; Shine family!
+    </p>
+  </div>
+  <!-- ESPAÑOL -->
+  <div style="padding:32px;background:#fff;border-left:4px solid #5d4f7d;border-top:2px dashed #e4dfef">
+    <h2 style="color:#1f1333;margin:0 0 12px">¡Hola {name}! 🎉</h2>
+    <p style="color:#3b2b6b;line-height:1.8;margin:0 0 20px">
+      Revisamos tu entrevista en video y nos encantó lo que vimos.
+      ¡Estás avanzando en nuestro proceso de contratación! Solo queda <strong>un paso más</strong>.
+    </p>
+    <div style="background:#fef9ec;border:2px solid #5d4f7d;border-radius:10px;padding:22px 24px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Completa tu Verificación de Antecedentes</div>
+      <p style="color:#7c4a04;line-height:1.7;margin:0 0 14px">
+        Es obligatoria para todos los contratistas. <strong>El costo es tuyo</strong>, generalmente entre $20 y $40.
+        Tienes dos opciones aceptadas:
+      </p>
+      <div style="background:#fff;border-radius:8px;padding:14px 16px;margin-bottom:10px;border:1px solid #e4dfef">
+        <strong style="color:#1f1333">Opción A — Checkr.com (Recomendada)</strong><br>
+        <span style="color:#3b2b6b;font-size:0.9rem">
+          Visita <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">checkr.com</a>,
+          solicita tu verificación y envíanos los resultados por correo.
+        </span>
+      </div>
+      <div style="background:#fff;border-radius:8px;padding:14px 16px;border:1px solid #e4dfef">
+        <strong style="color:#1f1333">Opción B — Verificación de Care.com</strong><br>
+        <span style="color:#3b2b6b;font-size:0.9rem">
+          Si ya tienes una verificación reciente de Care.com, puedes reenviarla directamente.
+        </span>
+      </div>
+      <p style="color:#7c4a04;font-size:0.88rem;margin:16px 0 0;line-height:1.6">
+        ⏰ Por favor envía tus resultados dentro de <strong>7 días</strong> a
+        <a href="mailto:dazzleandshinemaids@gmail.com" style="color:#d3a84f;font-weight:600">dazzleandshinemaids@gmail.com</a>
+      </p>
+    </div>
+  </div>
+  <div style="padding:16px 32px;background:#1f1333;border-radius:0 0 12px 12px;text-align:center">
+    <p style="color:rgba(255,255,255,0.4);font-size:0.78rem;margin:0">{biz} · Questions? Reply to this email.</p>
+  </div>
+</div>"""
 
 
 def _build_invite_html(name, interview_url, biz):
