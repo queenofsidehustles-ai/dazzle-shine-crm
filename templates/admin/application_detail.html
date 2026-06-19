@@ -7,28 +7,125 @@
 
 {% block content %}
 
-<!-- Hiring Pipeline Banner -->
-<div style="display:flex;gap:0;margin-bottom:24px;border-radius:12px;overflow:hidden;border:1px solid #e4dfef">
-  {% set stages = [
-    ('new',          '1. Application',    a.status not in ('reviewing','phone_screen','bg_check','hired','rejected')),
-    ('reviewing',    '2. Phone Screen',   a.phone_interview_completed),
-    ('bg_check',     '3. Background Chk', a.background_check_status == 'cleared'),
-    ('hired',        '4. Hired',          a.status == 'hired'),
-  ] %}
-  {% for key, label, done in stages %}
-  <div style="flex:1;padding:10px 8px;text-align:center;font-size:0.78rem;font-weight:700;
-              background:{{ '#d4edda' if done else ('#fff3cd' if loop.index == 2 and a.status == 'reviewing' else '#f8f9fa') }};
-              color:{{ '#155724' if done else ('#856404' if loop.index == 2 and a.status == 'reviewing' else '#9a95ad') }};
-              border-right:{{ '1px solid #e4dfef' if not loop.last else 'none' }}">
-    {{ '✅' if done else ('⏳' if (loop.index == 2 and a.status == 'reviewing') else '○') }} {{ label }}
-  </div>
-  {% endfor %}
-  <div style="flex:1;padding:10px 8px;text-align:center;font-size:0.78rem;font-weight:700;
-              background:{{ '#f8d7da' if a.status == 'rejected' else '#f8f9fa' }};
-              color:{{ '#842029' if a.status == 'rejected' else '#9a95ad' }}">
-    {{ '❌ Rejected' if a.status == 'rejected' else '○ Rejected' }}
+{# ── Determine current pipeline stage ─────────────────────────────────────── #}
+{% if a.status == 'rejected' %}
+  {% set pipe_stage = 'rejected' %}
+{% elif a.status in ('hired', 'onboarding') %}
+  {% set pipe_stage = 'hired' %}
+{% elif a.background_check_status == 'cleared' %}
+  {% set pipe_stage = 'bg_cleared' %}
+{% elif a.bgcheck_request_sent_at or a.background_check_status in ('requested','ordered') %}
+  {% set pipe_stage = 'bg_waiting' %}
+{% elif a.interview_status == 'completed' %}
+  {% set pipe_stage = 'interview_done' %}
+{% elif a.interview_status == 'in_progress' %}
+  {% set pipe_stage = 'interview_progress' %}
+{% elif a.interview_status in ('sent','pending') %}
+  {% set pipe_stage = 'interview_sent' %}
+{% else %}
+  {% set pipe_stage = 'new' %}
+{% endif %}
+
+{# ── Stage definitions: (key, short label, icon) ──────────────────────────── #}
+{% set stages = [
+  ('new',               'Application',      '📋'),
+  ('interview_sent',    'Interview Sent',   '📬'),
+  ('interview_progress','Recording',        '🎥'),
+  ('interview_done',    'Review Videos',    '👁'),
+  ('bg_waiting',        'Background Chk',   '🔍'),
+  ('bg_cleared',        'BG Cleared',       '✅'),
+  ('hired',             'Hired',            '🎉'),
+] %}
+
+{# Stage order for "done" detection #}
+{% set stage_order = ['new','interview_sent','interview_progress','interview_done','bg_waiting','bg_cleared','hired'] %}
+{% set current_idx = stage_order.index(pipe_stage) if pipe_stage in stage_order else 0 %}
+
+<!-- Pipeline Progress Bar -->
+<div style="margin-bottom:20px">
+  <div style="display:flex;gap:0;border-radius:12px;overflow:hidden;border:1px solid #e4dfef;background:#f8f9fa">
+    {% for key, label, icon in stages %}
+      {% set idx = loop.index0 %}
+      {% set is_done    = (idx < current_idx and pipe_stage != 'rejected') %}
+      {% set is_current = (key == pipe_stage) %}
+      {% set is_reject  = (pipe_stage == 'rejected') %}
+      <div style="flex:1;padding:10px 4px;text-align:center;font-size:0.72rem;font-weight:700;
+                  background:{{ '#d4edda' if is_done else ('#fef9ec' if is_current else '#f8f9fa') }};
+                  color:{{ '#155724' if is_done else ('#92400e' if is_current else '#c8c3d4') }};
+                  border-right:{{ '1px solid #e4dfef' if not loop.last else 'none' }};
+                  position:relative">
+        <div style="font-size:1rem;margin-bottom:2px">{{ '✅' if is_done else icon }}</div>
+        {{ label }}
+        {% if is_current %}<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:#d3a84f;border-radius:0 0 2px 2px"></div>{% endif %}
+      </div>
+    {% endfor %}
+    <!-- Rejected endpoint -->
+    <div style="flex:1;padding:10px 4px;text-align:center;font-size:0.72rem;font-weight:700;
+                background:{{ '#f8d7da' if pipe_stage=='rejected' else '#f8f9fa' }};
+                color:{{ '#842029' if pipe_stage=='rejected' else '#c8c3d4' }};
+                position:relative">
+      <div style="font-size:1rem;margin-bottom:2px">❌</div>
+      Rejected
+      {% if pipe_stage == 'rejected' %}<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:#e53e3e;border-radius:0 0 2px 2px"></div>{% endif %}
+    </div>
   </div>
 </div>
+
+<!-- NEXT STEP CALLOUT -->
+{% if pipe_stage == 'rejected' %}
+<div style="background:#f8d7da;border:1px solid #f5c6cb;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:#842029;margin-bottom:2px">❌ Application Closed</p>
+  <p style="font-size:0.85rem;color:#842029">Rejection {{ 'email sent ' + a.rejection_sent_at.strftime('%b %d') if a.rejection_sent_at else 'marked — no email sent' }}. No further action needed.</p>
+</div>
+
+{% elif pipe_stage == 'hired' %}
+<div style="background:#d4edda;border:1px solid #a3cfbb;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:#155724;font-size:1rem;margin-bottom:4px">🎉 Hired — Welcome email & agreement sent</p>
+  <p style="font-size:0.85rem;color:#1e7e34"><strong>Next:</strong> Wait for {{ a.name.split()[0] }} to sign the work agreement → then confirm orientation is complete → schedule their shadow job.</p>
+</div>
+
+{% elif pipe_stage == 'bg_cleared' %}
+<div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:#92400e;font-size:1rem;margin-bottom:4px">✅ Background Check Cleared — Ready to Hire</p>
+  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> Scroll down to the <strong>Hire {{ a.name.split()[0] }}</strong> card → set pay rate → click <em>Hire & Send Welcome Email</em>. That fires the agreement link automatically.</p>
+</div>
+
+{% elif pipe_stage == 'bg_waiting' %}
+<div style="background:#fff8e1;border:1px solid #fde68a;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:#856404;font-size:1rem;margin-bottom:4px">🔍 Waiting on Background Check Results</p>
+  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> {{ a.name.split()[0] }} has 7 days to complete their background check through Checkr or Care.com and email you the results. When they do, scroll down → update Background Check status to <em>Cleared</em> → save.</p>
+</div>
+
+{% elif pipe_stage == 'interview_done' %}
+<div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:#92400e;font-size:1rem;margin-bottom:6px">👁 Video Interview Complete — Review Now</p>
+  <p style="font-size:0.85rem;color:#7c4a04;margin-bottom:12px"><strong>Your next step:</strong> Watch {{ a.name.split()[0] }}'s 5 video responses. Look for professionalism, communication, and reliability. Then approve or reject.</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <a href="{{ url_for('interviews.review_interview', app_id=a.id) }}"
+       style="background:#d3a84f;color:#1f1333;font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem">
+      ▶ Watch Video Responses →
+    </a>
+  </div>
+</div>
+
+{% elif pipe_stage == 'interview_progress' %}
+<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:#856404;font-size:1rem;margin-bottom:4px">⏳ {{ a.name.split()[0] }} Is Currently Recording</p>
+  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> Nothing yet — they're in the middle of recording their video answers. Check back shortly. You'll see the stage flip to "Review Videos" when all 5 are done.</p>
+</div>
+
+{% elif pipe_stage == 'interview_sent' %}
+<div style="background:#f6f5fb;border:1px solid #c4b5fd;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:#3b2b6b;font-size:1rem;margin-bottom:4px">📬 Interview Link Sent — Waiting for {{ a.name.split()[0] }}</p>
+  <p style="font-size:0.85rem;color:#5f5878"><strong>Your next step:</strong> Nothing for now. They received an email with their video interview link. When they finish recording, this page will update to "Review Videos." If they haven't responded in 3 days, use the re-send button on the left.</p>
+</div>
+
+{% else %}
+<div style="background:#f6f5fb;border:1px solid #e4dfef;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:#3b2460;font-size:1rem;margin-bottom:4px">📋 New Application — Interview Link Sends Automatically</p>
+  <p style="font-size:0.85rem;color:#5f5878"><strong>Your next step:</strong> The video interview link was sent automatically 10 minutes after this application passed the filter. If you added this person manually or need to send it now, use the <em>Send Video Interview Link</em> button on the left.</p>
+</div>
+{% endif %}
 
 <div class="detail-grid">
   <!-- Left column -->
