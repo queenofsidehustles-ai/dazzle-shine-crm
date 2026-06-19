@@ -1,0 +1,179 @@
+{% extends "base_admin.html" %}
+{% block title %}Review: {{ app.name }} — Dazzle & Shine{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>Interview Review</h1>
+    <div style="font-size:0.85rem;color:var(--softer);margin-top:2px">{{ app.name }}</div>
+  </div>
+  <a href="{{ url_for('interviews.admin_interviews') }}"
+     style="color:var(--muted);font-size:0.88rem;text-decoration:none">← Back to Interviews</a>
+</div>
+
+<div class="content">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div style="background:{{ '#f0fff4' if cat=='success' else '#fff5f5' }};
+                  border:1px solid {{ '#c6f6d5' if cat=='success' else '#fed7d7' }};
+                  color:{{ '#276749' if cat=='success' else '#c53030' }};
+                  padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9rem;font-weight:500">
+        {{ msg }}
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <div style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start">
+
+    <!-- LEFT: Video responses -->
+    <div>
+      {% if responses %}
+        {% for r in responses %}
+        <div class="card" style="margin-bottom:20px;padding:0;overflow:hidden">
+          <div style="background:var(--purple);padding:14px 20px;display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-size:0.72rem;color:var(--gold);font-weight:700;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:4px">
+                Question {{ r.question_index + 1 }} of 5
+              </div>
+              <div style="color:#fff;font-weight:600;font-size:1rem;line-height:1.4">
+                {{ r.question_en or questions_en[r.question_index] }}
+              </div>
+            </div>
+          </div>
+          <div style="background:#000;aspect-ratio:16/9;max-height:340px">
+            <video controls
+                   style="width:100%;height:100%;display:block;object-fit:contain;background:#000"
+                   preload="metadata">
+              <source src="{{ r.cloudinary_url }}" type="video/mp4">
+              <source src="{{ r.cloudinary_url }}" type="video/webm">
+              Your browser does not support video playback.
+            </video>
+          </div>
+          <div style="padding:10px 16px;font-size:0.78rem;color:var(--softer)">
+            Recorded {{ r.created_at.strftime('%b %d, %Y at %I:%M %p') if r.created_at else '' }}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="card" style="text-align:center;padding:48px">
+          <div style="font-size:2rem;margin-bottom:10px">📭</div>
+          <p style="color:var(--muted);font-weight:600">No video responses yet</p>
+          <p style="color:var(--softer);font-size:0.88rem;margin-top:6px">
+            The candidate hasn't recorded any answers yet.
+          </p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- RIGHT: Applicant info + decision -->
+    <div style="position:sticky;top:20px;display:flex;flex-direction:column;gap:16px">
+
+      <!-- Applicant card -->
+      <div class="card">
+        <div style="font-weight:700;font-size:1.1rem;margin-bottom:14px;padding-bottom:12px;
+                    border-bottom:1px solid var(--border)">
+          Applicant Info
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:0.9rem">
+          <div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:2px">Name</div>
+            <div style="font-weight:600">{{ app.name }}</div>
+          </div>
+          <div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:2px">Email</div>
+            <div>{{ app.email }}</div>
+          </div>
+          {% if app.phone %}
+          <div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:2px">Phone</div>
+            <div>{{ app.phone }}</div>
+          </div>
+          {% endif %}
+          <div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:2px">Applied</div>
+            <div>{{ app.created_at.strftime('%b %d, %Y') if app.created_at else '—' }}</div>
+          </div>
+          <div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:2px">Interview Status</div>
+            <div>
+              {% if app.interview_status == 'completed' %}
+                <span style="color:#276749;font-weight:600">✅ Completed</span>
+              {% elif app.interview_status == 'in_progress' %}
+                <span style="color:#92400e;font-weight:600">⏳ In Progress</span>
+              {% else %}
+                <span style="color:var(--muted)">📬 Sent</span>
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:2px">Responses</div>
+            <div style="font-weight:600">{{ responses | length }} / 5 recorded</div>
+          </div>
+          {% if app.years_experience %}
+          <div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:2px">Experience</div>
+            <div>{{ app.years_experience }}</div>
+          </div>
+          {% endif %}
+          {% if app.source %}
+          <div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:2px">Source</div>
+            <div>{{ app.source }}</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Application status -->
+      <div class="card">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:8px">Current Application Status</div>
+        <div style="font-weight:700;font-size:1rem;color:var(--purple);margin-bottom:16px">{{ app.status | capitalize }}</div>
+
+        {% if app.status not in ('hired', 'onboarding', 'rejected') %}
+
+          <form method="POST" action="{{ url_for('interviews.approve_interview', app_id=app.id) }}"
+                onsubmit="return confirm('Approve {{ app.name }} and move to onboarding?')"
+                style="margin-bottom:10px">
+            <button type="submit"
+                    style="width:100%;background:#38a169;color:#fff;border:none;padding:12px;
+                           border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer">
+              ✓ Approve — Move to Onboarding
+            </button>
+          </form>
+
+          <form method="POST" action="{{ url_for('interviews.reject_interview', app_id=app.id) }}"
+                onsubmit="return confirm('Reject {{ app.name }}? A polite email will be sent to them.')">
+            <button type="submit"
+                    style="width:100%;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;
+                           padding:12px;border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer">
+              ✗ Reject — Send Polite Email
+            </button>
+          </form>
+
+        {% elif app.status == 'onboarding' %}
+          <div style="background:#f0fff4;border:1px solid #c6f6d5;color:#276749;
+                      padding:12px;border-radius:8px;font-weight:600;text-align:center">
+            ✅ Approved — In Onboarding
+          </div>
+        {% elif app.status == 'rejected' %}
+          <div style="background:#fff5f5;border:1px solid #fed7d7;color:#c53030;
+                      padding:12px;border-radius:8px;font-weight:600;text-align:center">
+            ✗ Rejected
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Link to full application -->
+      <a href="{{ url_for('contractors.application_detail', app_id=app.id) }}"
+         style="display:block;text-align:center;color:var(--muted);font-size:0.85rem;
+                text-decoration:none;padding:10px;border:1px solid var(--border);
+                border-radius:8px;background:var(--white)">
+        View Full Application →
+      </a>
+
+    </div><!-- /right col -->
+  </div><!-- /grid -->
+
+</div>
+{% endblock %}

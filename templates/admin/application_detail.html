@@ -69,6 +69,35 @@
                  onclick="return confirm('Re-send the interview invite?')">Resend</a>
         </div>
         {% endif %}
+
+        <!-- VIDEO INTERVIEW -->
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
+          {% if a.interview_status and a.interview_status != 'not_sent' %}
+            <div style="background:#1f133318;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:var(--purple-mid);text-align:center;margin-bottom:8px">
+              🎥 Video interview:
+              {% if a.interview_status == 'completed' %}
+                <strong style="color:#276749">Completed ✅</strong>
+                &nbsp;—&nbsp;
+                <a href="{{ url_for('interviews.review_interview', app_id=a.id) }}"
+                   style="color:var(--gold);font-weight:700">Watch Responses →</a>
+              {% elif a.interview_status == 'in_progress' %}
+                <strong style="color:#92400e">In Progress ⏳</strong>
+              {% else %}
+                <strong>Link Sent 📬</strong>
+              {% endif %}
+            </div>
+          {% endif %}
+          <form method="POST" action="{{ url_for('interviews.send_invite', app_id=a.id) }}"
+                onsubmit="return confirm('Send video interview link to {{ a.name }}?')">
+            <button type="submit"
+                    style="width:100%;background:#1f1333;color:#d3a84f;border:none;padding:10px 16px;
+                           border-radius:8px;font-weight:700;font-size:0.83rem;cursor:pointer;
+                           display:flex;align-items:center;justify-content:center;gap:6px">
+              🎥 {{ 'Re-send' if (a.interview_status and a.interview_status != 'not_sent') else 'Send' }} Video Interview Link
+            </button>
+          </form>
+        </div>
+
       </div>
     </div>
 

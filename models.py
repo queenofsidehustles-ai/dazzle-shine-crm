@@ -297,6 +297,24 @@ class ContractorApplication(db.Model):
     # Email action tracking
     interview_invite_sent_at = db.Column(db.DateTime)
     rejection_sent_at = db.Column(db.DateTime)
+    # Video interview
+    interview_token = db.Column(db.String(64), unique=True)
+    interview_status = db.Column(db.String(20), default='not_sent')  # not_sent, sent, in_progress, completed
+    interview_sent_at = db.Column(db.DateTime)
+    interview_completed_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    responses = db.relationship('InterviewResponse', backref='application', lazy=True,
+                                order_by='InterviewResponse.question_index')
+
+
+class InterviewResponse(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    application_id = db.Column(db.Integer, db.ForeignKey('contractor_application.id'), nullable=False)
+    question_index = db.Column(db.Integer, nullable=False)  # 0–4
+    question_en = db.Column(db.Text)
+    cloudinary_public_id = db.Column(db.String(200))
+    cloudinary_url = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 

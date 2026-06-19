@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interview Complete — Dazzle & Shine Maids</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --gold: #d3a84f;
+      --purple: #1f1333;
+      --purple-mid: #3b2b6b;
+      --bg: #f6f5fb;
+      --border: #e4dfef;
+      --radius: 14px;
+      --shadow: 0 4px 24px rgba(15,7,40,0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Inter", sans-serif;
+      background: var(--bg);
+      color: var(--purple);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      background: var(--purple);
+      padding: 18px 24px;
+      text-align: center;
+    }
+    .header .script {
+      font-family: "Allura", cursive;
+      font-size: 2rem;
+      color: var(--gold);
+    }
+    .header .sub {
+      display: block;
+      color: rgba(255,255,255,0.5);
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .card {
+      background: #fff;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 48px 36px;
+      max-width: 520px;
+      width: 100%;
+      text-align: center;
+    }
+    .icon-wrap {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #d3a84f 0%, #b98a33 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 2.2rem;
+    }
+    h1 {
+      font-size: 1.7rem;
+      font-weight: 700;
+      color: var(--purple);
+      margin-bottom: 12px;
+    }
+    p {
+      color: var(--purple-mid);
+      line-height: 1.7;
+      margin-bottom: 12px;
+    }
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 28px 0;
+    }
+    .next-steps {
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 18px 20px;
+      text-align: left;
+    }
+    .next-steps h3 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: #9a95ad;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .next-steps li {
+      list-style: none;
+      color: var(--purple-mid);
+      font-size: 0.92rem;
+      line-height: 1.6;
+      margin-bottom: 8px;
+      display: flex;
+      gap: 10px;
+    }
+    .next-steps li .bullet {
+      color: var(--gold);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    footer {
+      text-align: center;
+      padding: 18px;
+      color: #9a95ad;
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="script">Dazzle &amp; Shine</span>
+    <span class="sub">Interview Complete</span>
+  </div>
+
+  <main class="main">
+    <div class="card">
+      <div class="icon-wrap">✨</div>
+
+      {% if already_done %}
+        <h1>Already submitted!</h1>
+        <p>We've already received your video interview, {{ app.name }}. There's nothing else you need to do at this time.</p>
+      {% else %}
+        <h1>You're all done, {{ app.name }}!</h1>
+        <p>
+          Thank you for completing your video interview with <strong>Dazzle & Shine Maids</strong>.
+          We received all 5 of your answers and our team will review them shortly.
+        </p>
+      {% endif %}
+
+      <p style="color:#9a95ad;font-size:0.88rem">
+        You can now close this page. We'll be in touch via email.
+      </p>
+
+      <div class="divider"></div>
+
+      <div class="next-steps">
+        <h3>What happens next?</h3>
+        <ul>
+          <li><span class="bullet">1.</span> Our team reviews your video responses (usually within 2–3 business days).</li>
+          <li><span class="bullet">2.</span> If selected, you'll receive an email with onboarding details.</li>
+          <li><span class="bullet">3.</span> If we decide to go another direction, you'll also hear from us via email.</li>
+        </ul>
+      </div>
+
+      <p style="margin-top:24px;font-size:0.88rem;color:#9a95ad">
+        Questions? Email us at
+        <a href="mailto:dazzleandshinemaids@gmail.com" style="color:var(--gold)">dazzleandshinemaids@gmail.com</a>
+      </p>
+    </div>
+  </main>
+
+  <footer>
+    Dazzle &amp; Shine Maids &copy; 2024 &mdash; Thank you for your interest!
+  </footer>
+</body>
+</html>

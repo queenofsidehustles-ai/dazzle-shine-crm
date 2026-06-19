@@ -276,6 +276,9 @@
       <a href="{{ url_for('contractors.applications') }}" class="{{ 'active' if request.endpoint in ('contractors.applications','contractors.application_detail') }}">
         <span class="icon">📥</span> Applications
       </a>
+      <a href="{{ url_for('interviews.admin_interviews') }}" class="{{ 'active' if request.blueprint == 'interviews' }}">
+        <span class="icon">🎥</span> Interviews
+      </a>
       <a href="{{ url_for('contractors.payroll') }}" class="{{ 'active' if request.endpoint == 'contractors.payroll' }}">
         <span class="icon">💰</span> Payroll
       </a>

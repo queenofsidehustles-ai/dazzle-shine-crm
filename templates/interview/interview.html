@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Interview — Dazzle & Shine Maids</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    :root {
+      --gold: #d3a84f;
+      --gold-deep: #b98a33;
+      --purple: #1f1333;
+      --purple-mid: #3b2b6b;
+      --bg: #f6f5fb;
+      --white: #ffffff;
+      --border: #e4dfef;
+      --radius: 14px;
+      --shadow: 0 4px 24px rgba(15,7,40,0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Inter", sans-serif;
+      background: var(--bg);
+      color: var(--purple);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* HEADER */
+    .header {
+      background: var(--purple);
+      padding: 18px 24px;
+      text-align: center;
+    }
+    .header .script {
+      font-family: "Allura", cursive;
+      font-size: 2rem;
+      color: var(--gold);
+      display: block;
+      line-height: 1;
+    }
+    .header .sub {
+      color: rgba(255,255,255,0.55);
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    /* LANG TOGGLE */
+    .lang-bar {
+      background: rgba(255,255,255,0.07);
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding: 8px 24px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .lang-btn {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.6);
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      font-family: "Inter", sans-serif;
+      transition: all 0.15s;
+    }
+    .lang-btn.active {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: var(--purple);
+      font-weight: 700;
+    }
+
+    /* PROGRESS */
+    .progress-wrap {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+    }
+    .progress-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #5f5878;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .progress-bar {
+      height: 6px;
+      background: var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--gold);
+      border-radius: 999px;
+      transition: width 0.4s ease;
+    }
+
+    /* MAIN */
+    .main {
+      flex: 1;
+      padding: 28px 20px;
+      max-width: 680px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* START SCREEN */
+    .start-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 36px 32px;
+      text-align: center;
+    }
+    .start-card .greeting {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--purple);
+      margin-bottom: 10px;
+    }
+    .start-card p {
+      color: #5f5878;
+      line-height: 1.7;
+      margin-bottom: 14px;
+    }
+    .steps-list {
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 18px 24px;
+      text-align: left;
+      margin: 20px 0 28px;
+    }
+    .steps-list li {
+      color: var(--purple-mid);
+      margin-bottom: 10px;
+      padding-left: 4px;
+      list-style: none;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    .steps-list li .num {
+      background: var(--gold);
+      color: var(--purple);
+      font-weight: 700;
+      font-size: 0.75rem;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* RECORDING SCREEN */
+    .question-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .question-header {
+      background: var(--purple);
+      padding: 18px 24px;
+    }
+    .question-num {
+      font-size: 0.75rem;
+      color: var(--gold);
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .question-text {
+      color: #fff;
+      font-size: 1.15rem;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+    .video-area {
+      background: #0a0612;
+      position: relative;
+      aspect-ratio: 16/9;
+    }
+    .video-area video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .rec-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: #e53e3e;
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .rec-dot {
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      border-radius: 50%;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    .video-placeholder {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #0a0612;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255,255,255,0.4);
+      gap: 12px;
+    }
+    .video-placeholder svg { width: 52px; height: 52px; opacity: 0.3; }
+    .video-placeholder p { font-size: 0.9rem; }
+
+    .controls {
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    /* BUTTONS */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 12px 22px;
+      border-radius: 8px;
+      font-family: "Inter", sans-serif;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+      text-decoration: none;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--gold);
+      color: var(--purple);
+      flex: 1;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--gold-deep); }
+    .btn-danger {
+      background: #e53e3e;
+      color: #fff;
+      flex: 1;
+    }
+    .btn-danger:hover:not(:disabled) { background: #c53030; }
+    .btn-ghost {
+      background: transparent;
+      color: #5f5878;
+      border: 1px solid var(--border);
+      flex: 1;
+    }
+    .btn-ghost:hover:not(:disabled) { background: var(--bg); }
+    .btn-success {
+      background: #38a169;
+      color: #fff;
+      flex: 1;
+    }
+    .btn-success:hover:not(:disabled) { background: #276749; }
+    .btn-lg { padding: 15px 28px; font-size: 1rem; width: 100%; }
+
+    .hint {
+      font-size: 0.82rem;
+      color: #9a95ad;
+      text-align: center;
+      padding: 0 4px;
+    }
+
+    /* UPLOADING SPINNER */
+    .uploading-overlay {
+      padding: 32px;
+      text-align: center;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 4px solid var(--border);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* SUCCESS */
+    .submitted-msg {
+      padding: 20px 24px;
+      background: #f0fff4;
+      border-top: 1px solid #c6f6d5;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .submitted-msg .check { font-size: 1.5rem; }
+    .submitted-msg p { color: #276749; font-weight: 600; }
+
+    /* ERROR */
+    .error-msg {
+      background: #fff5f5;
+      border: 1px solid #fed7d7;
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: #c53030;
+      font-size: 0.88rem;
+    }
+
+    @media (max-width: 480px) {
+      .start-card { padding: 24px 18px; }
+      .controls { padding: 16px; }
+    }
+  </style>
+</head>
+<body x-data="interviewApp()" x-init="init()">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header">
+      <span class="script">Dazzle &amp; Shine</span>
+      <span class="sub">Contractor Video Interview</span>
+    </div>
+    <div class="lang-bar" style="background:var(--purple)">
+      <button class="lang-btn" :class="lang==='en' ? 'active' : ''" @click="lang='en'">EN</button>
+      <button class="lang-btn" :class="lang==='es' ? 'active' : ''" @click="lang='es'">ES</button>
+    </div>
+  </header>
+
+  <!-- PROGRESS BAR (shown after camera started) -->
+  <div class="progress-wrap" x-show="phase !== 'start'" x-cloak>
+    <div class="progress-label">
+      <span x-text="lang==='en' ? 'Question ' + (currentQ+1) + ' of 5' : 'Pregunta ' + (currentQ+1) + ' de 5'"></span>
+      <span x-text="Math.round((currentQ/5)*100) + '%'"></span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" :style="'width:' + (currentQ/5*100) + '%'"></div>
+    </div>
+  </div>
+
+  <main class="main">
+
+    <!-- ── START SCREEN ── -->
+    <div x-show="phase === 'start'">
+      <div class="start-card">
+        <div class="greeting" x-text="lang==='en' ? 'Hi, ' + applicantName + '!' : '¡Hola, ' + applicantName + '!'"></div>
+        <p x-text="lang==='en'
+          ? 'Welcome to your video interview with Dazzle & Shine Maids. This is your chance to let us get to know you!'
+          : 'Bienvenido/a a tu entrevista en video con Dazzle & Shine Maids. ¡Esta es tu oportunidad de que te conozcamos!'">
+        </p>
+        <ul class="steps-list">
+          <li>
+            <span class="num">1</span>
+            <span x-text="lang==='en' ? 'Allow camera & microphone access when prompted.' : 'Permite el acceso a la cámara y micrófono cuando se te solicite.'"></span>
+          </li>
+          <li>
+            <span class="num">2</span>
+            <span x-text="lang==='en' ? 'Read the question, then click Record when you\'re ready.' : 'Lee la pregunta y haz clic en Grabar cuando estés listo/a.'"></span>
+          </li>
+          <li>
+            <span class="num">3</span>
+            <span x-text="lang==='en' ? 'Answer in 1–3 minutes, then click Stop.' : 'Responde en 1–3 minutos y luego haz clic en Detener.'"></span>
+          </li>
+          <li>
+            <span class="num">4</span>
+            <span x-text="lang==='en' ? 'Preview your answer, then submit. Repeat for all 5 questions.' : 'Previsualiza tu respuesta y envíala. Repite para las 5 preguntas.'"></span>
+          </li>
+        </ul>
+        <p x-text="lang==='en'
+          ? 'No account needed. Your link is unique to you.'
+          : 'No necesitas una cuenta. Tu enlace es único para ti.'">
+        </p>
+        <div style="margin-top:24px">
+          <button class="btn btn-primary btn-lg" @click="startCamera()">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px"><path d="M4 4h10a2 2 0 0 1 2 2v3.586l3.707-3.707A1 1 0 0 1 21 6.586V17.414a1 1 0 0 1-1.707.707L16 14.414V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+            <span x-text="lang==='en' ? 'Allow Camera & Begin' : 'Permitir Cámara y Comenzar'"></span>
+          </button>
+        </div>
+        <div class="error-msg" style="margin-top:16px" x-show="errorMsg" x-text="errorMsg"></div>
+      </div>
+    </div>
+
+    <!-- ── RECORDING SCREEN ── -->
+    <div x-show="phase === 'recording_screen'" x-cloak>
+      <div class="question-card">
+
+        <!-- Question header -->
+        <div class="question-header">
+          <div class="question-num"
+               x-text="lang==='en' ? 'Question ' + (currentQ+1) + ' of 5' : 'Pregunta ' + (currentQ+1) + ' de 5'">
+          </div>
+          <div class="question-text" x-text="currentQuestion()"></div>
+        </div>
+
+        <!-- Camera live view -->
+        <div class="video-area" x-show="recState === 'ready' || recState === 'recording'">
+          <video id="camera-preview" autoplay playsinline muted></video>
+          <div class="rec-badge" x-show="recState === 'recording'">
+            <div class="rec-dot"></div> REC
+          </div>
+        </div>
+
+        <!-- Placeholder before camera loads -->
+        <div class="video-placeholder" x-show="recState === 'idle'">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M4 4h10a2 2 0 0 1 2 2v3.586l3.707-3.707A1 1 0 0 1 21 6.586V17.414a1 1 0 0 1-1.707.707L16 14.414V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+          <p x-text="lang==='en' ? 'Loading camera...' : 'Cargando cámara...'"></p>
+        </div>
+
+        <!-- Recorded answer preview -->
+        <div class="video-area" x-show="recState === 'recorded' || recState === 'submitted'">
+          <video id="answer-preview" controls playsinline style="background:#000"></video>
+        </div>
+
+        <!-- Uploading overlay -->
+        <div class="uploading-overlay" x-show="recState === 'uploading'">
+          <div class="spinner"></div>
+          <p style="color:#5f5878;font-weight:600"
+             x-text="lang==='en' ? 'Uploading your answer...' : 'Subiendo tu respuesta...'"></p>
+          <p style="color:#9a95ad;font-size:0.85rem;margin-top:6px"
+             x-text="lang==='en' ? 'Please don\'t close this page.' : 'Por favor no cierres esta página.'"></p>
+        </div>
+
+        <!-- Submitted confirmation -->
+        <div class="submitted-msg" x-show="recState === 'submitted'">
+          <span class="check">✅</span>
+          <p x-text="lang==='en' ? 'Answer saved!' : '¡Respuesta guardada!'"></p>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+
+          <!-- Error -->
+          <div class="error-msg" x-show="errorMsg" x-text="errorMsg"></div>
+
+          <!-- idle: waiting for camera -->
+          <div x-show="recState === 'idle'">
+            <p class="hint" x-text="lang==='en' ? 'Starting camera...' : 'Iniciando cámara...'"></p>
+          </div>
+
+          <!-- ready: start recording -->
+          <div class="btn-row" x-show="recState === 'ready'">
+            <button class="btn btn-danger" @click="startRecording()">
+              ⏺ <span x-text="lang==='en' ? 'Start Recording' : 'Comenzar a Grabar'"></span>
+            </button>
+          </div>
+
+          <!-- recording: stop button -->
+          <div class="btn-row" x-show="recState === 'recording'">
+            <button class="btn btn-ghost" @click="stopRecording()">
+              ⏹ <span x-text="lang==='en' ? 'Stop Recording' : 'Detener Grabación'"></span>
+            </button>
+          </div>
+
+          <!-- recorded: re-record or submit -->
+          <div x-show="recState === 'recorded'">
+            <p class="hint" style="margin-bottom:10px"
+               x-text="lang==='en' ? 'Happy with your answer? Submit it, or re-record.' : '¿Satisfecho/a con tu respuesta? Envíala o vuelve a grabar.'">
+            </p>
+            <div class="btn-row">
+              <button class="btn btn-ghost" @click="reRecord()">
+                🔄 <span x-text="lang==='en' ? 'Re-record' : 'Volver a Grabar'"></span>
+              </button>
+              <button class="btn btn-success" @click="submitAnswer()">
+                ✓ <span x-text="lang==='en' ? 'Submit Answer' : 'Enviar Respuesta'"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- submitted: next question or finish -->
+          <div x-show="recState === 'submitted'">
+            <button class="btn btn-primary btn-lg" @click="nextQuestion()">
+              <span x-show="currentQ < 4" x-text="lang==='en' ? 'Next Question →' : 'Siguiente Pregunta →'"></span>
+              <span x-show="currentQ >= 4" x-text="lang==='en' ? 'Finish Interview ✓' : 'Finalizar Entrevista ✓'"></span>
+            </button>
+          </div>
+
+        </div><!-- /controls -->
+      </div><!-- /question-card -->
+    </div><!-- /recording_screen -->
+
+    <!-- ── COMPLETING ── -->
+    <div x-show="phase === 'completing'" x-cloak style="text-align:center;padding:60px 20px">
+      <div class="spinner" style="margin:0 auto 20px"></div>
+      <p style="color:#5f5878;font-weight:600;font-size:1.1rem"
+         x-text="lang==='en' ? 'Submitting your interview...' : 'Enviando tu entrevista...'"></p>
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer style="text-align:center;padding:20px;color:#9a95ad;font-size:0.8rem;border-top:1px solid var(--border)">
+    Dazzle &amp; Shine Maids &copy; 2024 &middot; This link is private and unique to you.
+  </footer>
+
+<script>
+  const TOKEN        = {{ app.interview_token | tojson }};
+  const CLOUD_NAME   = {{ cloud_name | tojson }};
+  const UPLOAD_PRESET= {{ upload_preset | tojson }};
+  const QUESTIONS_EN = {{ questions_en | tojson }};
+  const QUESTIONS_ES = {{ questions_es | tojson }};
+  const PRE_ANSWERED = new Set({{ answered | tojson }});
+
+  function interviewApp() {
+    return {
+      lang: 'en',
+      phase: 'start',       // start | recording_screen | completing
+      recState: 'idle',     // idle | ready | recording | recorded | uploading | submitted
+      currentQ: 0,
+      applicantName: {{ app.name | tojson }},
+      stream: null,
+      recorder: null,
+      chunks: [],
+      videoBlob: null,
+      errorMsg: '',
+
+      currentQuestion() {
+        const qs = this.lang === 'en' ? QUESTIONS_EN : QUESTIONS_ES;
+        return qs[this.currentQ] || '';
+      },
+
+      init() {
+        // Resume from first unanswered question
+        while (PRE_ANSWERED.has(this.currentQ) && this.currentQ < 5) {
+          this.currentQ++;
+        }
+        if (this.currentQ >= 5) {
+          this.completeInterview();
+        }
+      },
+
+      async startCamera() {
+        this.errorMsg = '';
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          this.errorMsg = 'Your browser does not support camera recording. Please use Chrome or Safari.';
+          return;
+        }
+        try {
+          this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          this.phase = 'recording_screen';
+          await this.$nextTick();
+          const vid = document.getElementById('camera-preview');
+          vid.srcObject = this.stream;
+          vid.muted = true;
+          await vid.play().catch(() => {});
+          this.recState = 'ready';
+        } catch (e) {
+          if (e.name === 'NotAllowedError') {
+            this.errorMsg = 'Camera access was denied. Please allow camera access in your browser settings and try again.';
+          } else {
+            this.errorMsg = 'Could not access camera: ' + e.message;
+          }
+        }
+      },
+
+      startRecording() {
+        this.chunks = [];
+        this.errorMsg = '';
+        const mimeType = this.getBestMimeType();
+        try {
+          this.recorder = new MediaRecorder(this.stream, mimeType ? { mimeType } : {});
+        } catch (e) {
+          this.recorder = new MediaRecorder(this.stream);
+        }
+        this.recorder.ondataavailable = e => {
+          if (e.data && e.data.size > 0) this.chunks.push(e.data);
+        };
+        this.recorder.onstop = () => {
+          const type = this.recorder.mimeType || 'video/webm';
+          this.videoBlob = new Blob(this.chunks, { type });
+          const preview = document.getElementById('answer-preview');
+          if (preview) {
+            preview.src = URL.createObjectURL(this.videoBlob);
+          }
+          this.recState = 'recorded';
+        };
+        this.recorder.start(1000);
+        this.recState = 'recording';
+      },
+
+      stopRecording() {
+        if (this.recorder && this.recorder.state === 'recording') {
+          this.recorder.stop();
+        }
+      },
+
+      reRecord() {
+        this.videoBlob = null;
+        this.errorMsg = '';
+        const preview = document.getElementById('answer-preview');
+        if (preview) preview.src = '';
+        const cam = document.getElementById('camera-preview');
+        if (cam) {
+          cam.srcObject = this.stream;
+          cam.play().catch(() => {});
+        }
+        this.recState = 'ready';
+      },
+
+      async submitAnswer() {
+        if (!this.videoBlob) return;
+        this.recState = 'uploading';
+        this.errorMsg = '';
+        try {
+          const formData = new FormData();
+          const ext = this.videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
+          formData.append('file', this.videoBlob, `answer_q${this.currentQ}.${ext}`);
+          formData.append('upload_preset', UPLOAD_PRESET);
+          formData.append('folder', 'dazzle-interviews');
+
+          const res = await fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,
+            { method: 'POST', body: formData }
+          );
+          const cloud = await res.json();
+
+          if (cloud.error) throw new Error(cloud.error.message);
+
+          const saveRes = await fetch(`/interview/${TOKEN}/save`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question_index: this.currentQ,
+              question_en: QUESTIONS_EN[this.currentQ],
+              cloudinary_public_id: cloud.public_id,
+              cloudinary_url: cloud.secure_url,
+            }),
+          });
+
+          if (!saveRes.ok) throw new Error('Server error saving response');
+
+          PRE_ANSWERED.add(this.currentQ);
+          this.recState = 'submitted';
+
+        } catch (e) {
+          this.errorMsg = 'Upload failed: ' + e.message + '. Please check your connection and try again.';
+          this.recState = 'recorded';
+        }
+      },
+
+      nextQuestion() {
+        this.currentQ++;
+        this.recState = 'ready';
+        this.videoBlob = null;
+        this.errorMsg = '';
+        const preview = document.getElementById('answer-preview');
+        if (preview) preview.src = '';
+
+        if (this.currentQ >= 5) {
+          this.completeInterview();
+          return;
+        }
+
+        // Reconnect camera preview for next question
+        this.$nextTick(() => {
+          const cam = document.getElementById('camera-preview');
+          if (cam && this.stream) {
+            cam.srcObject = this.stream;
+            cam.play().catch(() => {});
+          }
+        });
+      },
+
+      async completeInterview() {
+        this.phase = 'completing';
+        try {
+          await fetch(`/interview/${TOKEN}/complete`, { method: 'POST' });
+        } catch (e) { /* proceed regardless */ }
+        window.location.href = `/interview/${TOKEN}`;
+      },
+
+      getBestMimeType() {
+        const candidates = [
+          'video/webm;codecs=vp9,opus',
+          'video/webm;codecs=vp8,opus',
+          'video/webm',
+          'video/mp4',
+        ];
+        for (const t of candidates) {
+          if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) {
+            return t;
+          }
+        }
+        return '';
+      },
+    };
+  }
+</script>
+</body>
+</html>

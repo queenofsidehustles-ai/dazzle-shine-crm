@@ -1,0 +1,62 @@
+Dazzle & Shine CRM — Process Gap Audit
+============================================================
+
+PASSING
+------------------------------
+✅ [Login] Admin login successful
+✅ [Dashboard] Loads without error
+✅ [Dashboard Nav] "Bookings" link present
+✅ [Dashboard Nav] "Team" link present
+✅ [Dashboard Nav] "Applications" link present
+✅ [Dashboard Nav] "Payroll" link present
+✅ [Dashboard Nav] "Settings" link present
+✅ [Applications] Applications page loads
+✅ [Applications] Stage filter "New" present
+✅ [Applications] Stage filter "Reviewing" present
+✅ [Applications] Stage filter "Hired" present
+✅ [Applications] Stage filter "Rejected" present
+✅ [Application Detail] "Phone interview" section present
+✅ [Application Detail] "Background check" section present
+✅ [Application Detail] "Worker Type" section present
+✅ [Application Detail] "Hire" section present
+✅ [Team] Team page loads
+✅ [Team] Onboarding progress visible on team list
+✅ [Staff Detail] onboarding checklist showing
+✅ [Staff Detail] agreement section present
+✅ [Staff Detail] pay settings present
+✅ [Staff Detail] pending steps / action items visible
+✅ [Staff Detail] Reset orientation option present
+✅ [Staff Detail] Worker model visible
+✅ [Bookings] Bookings list loads
+✅ [Bookings] "Pending" filter present
+✅ [Bookings] "Confirmed" filter present
+✅ [Bookings] "Completed" filter present
+✅ [Bookings] "Cancelled" filter present
+✅ [Orientation] Orientation status visible on staff detail
+✅ [Orientation] Orientation completion link available
+✅ [Orientation] Training materials reference visible
+✅ [Payroll] Payroll page loads
+✅ [Payroll] "Pay" visible on payroll page
+✅ [Settings] "Worker Model" setting present
+✅ [Settings] "Reception Model" setting present
+✅ [Settings] "Agreement Template" setting present
+✅ [Settings] "Business Name" setting present
+✅ [Email Templates] Email templates page loads
+✅ [Email Templates] 3 rows/cards found on template page
+✅ [VA Scripts] VA Scripts page accessible
+✅ [SOP Library] SOP Library page accessible
+✅ [Public] Contractor apply page accessible at /contractors/apply
+
+GAPS
+------------------------------
+⚠️  [Booking Detail] cannot assign jobs to cleaners
+⚠️  [Booking Detail] no indication whether cleaner was notified
+⚠️  [Booking Detail] cannot see if cleaner accepted the job
+⚠️  [Booking Detail] No confirmation that cleaner notification was sent — admin doesn't know if email went out
+⚠️  [Booking Detail] Cleaner accept/decline status not shown on booking — admin doesn't know if cleaner confirmed
+⚠️  [Payroll] "Earnings" missing — payroll summary may be incomplete
+⚠️  [Payroll] "Cleaner" missing — payroll summary may be incomplete
+⚠️  [Public] Public store page not rendering correctly
+
+ERRORS
+------------------------------

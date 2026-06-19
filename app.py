@@ -16,6 +16,7 @@ from blueprints.contractors import contractors_bp
 from blueprints.scripts import scripts_bp
 from blueprints.sops import sops_bp
 from blueprints.email_templates import email_templates_bp
+from blueprints.interviews import interviews_bp
 
 
 def create_app():
@@ -51,6 +52,7 @@ def create_app():
     app.register_blueprint(scripts_bp)
     app.register_blueprint(sops_bp)
     app.register_blueprint(email_templates_bp)
+    app.register_blueprint(interviews_bp)
 
     with app.app_context():
         db.create_all()
@@ -144,6 +146,11 @@ def _migrate_db():
         ('contractor_application', 'ref2_called',                  'BOOLEAN DEFAULT FALSE'),
         ('contractor_application', 'interview_invite_sent_at',     'TIMESTAMP'),
         ('contractor_application', 'rejection_sent_at',            'TIMESTAMP'),
+        # Video interview
+        ('contractor_application', 'interview_token',              'VARCHAR(64)'),
+        ('contractor_application', 'interview_status',             "VARCHAR(20) DEFAULT 'not_sent'"),
+        ('contractor_application', 'interview_sent_at',            'TIMESTAMP'),
+        ('contractor_application', 'interview_completed_at',       'TIMESTAMP'),
     ]
     for table, col, col_type in new_cols:
         try:
