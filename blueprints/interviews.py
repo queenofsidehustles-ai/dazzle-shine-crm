@@ -9,6 +9,21 @@ from notifications import send_email
 
 interviews_bp = Blueprint('interviews', __name__)
 
+
+def send_interview_invite_email(app_rec):
+    """Send the bilingual interview + background check invitation email.
+    Can be called from the admin manual route OR the auto-filter delayed timer."""
+    biz = 'Dazzle & Shine Maids'
+    interview_url = url_for('interviews.interview_page',
+                            token=app_rec.interview_token, _external=True)
+    html = _build_invite_html(app_rec.name, interview_url, biz)
+    send_email(
+        to_email=app_rec.email,
+        to_name=app_rec.name,
+        subject=f"Next Steps: Video Interview + Background Check — {biz}",
+        html=html,
+    )
+
 QUESTIONS_EN = [
     "Tell me about your cleaning experience.",
     "Are you comfortable working independently without supervision?",
@@ -190,11 +205,14 @@ def send_invite(app_id):
     app_rec.interview_sent_at = datetime.utcnow()
     db.session.commit()
 
-    interview_url = url_for('interviews.interview_page',
-                            token=app_rec.interview_token, _external=True)
-    biz = 'Dazzle & Shine Maids'
+    send_interview_invite_email(app_rec)
 
-    html = f"""
+    flash(f'Interview link sent to {app_rec.name} at {app_rec.email}', 'success')
+    return redirect(request.referrer or url_for('interviews.admin_interviews'))
+
+
+def _build_invite_html(name, interview_url, biz):
+    return f"""
 <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
 
   <!-- HEADER -->
@@ -365,12 +383,15 @@ def send_invite(app_id):
 
 </div>"""
 
+
+def send_interview_invite_email(app_rec):
+    """Send the bilingual invite email. Called by admin route and auto-filter timer."""
+    biz = 'Dazzle & Shine Maids'
+    interview_url = url_for('interviews.interview_page',
+                            token=app_rec.interview_token, _external=True)
     send_email(
         to_email=app_rec.email,
         to_name=app_rec.name,
         subject=f"Next Steps: Video Interview + Background Check — {biz}",
-        html=html,
+        html=_build_invite_html(app_rec.name, interview_url, biz),
     )
-
-    flash(f'Interview link sent to {app_rec.name} at {app_rec.email}', 'success')
-    return redirect(request.referrer or url_for('interviews.admin_interviews'))

@@ -1,7 +1,8 @@
 import json
 import secrets
+import threading
 from datetime import datetime, date, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from auth import login_required
 from models import Staff, ContractorApplication, Booking, BusinessSetting
 from extensions import db
@@ -486,7 +487,10 @@ def apply():
         )
         db.session.add(a)
         db.session.commit()
-        notify = __import__('os').environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+
+        # ── Notify Monica of new application ──────────────────────────────────
+        import os
+        notify = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
         send_email(
             to_email=notify, to_name='Dazzle & Shine Maids',
             from_name='Dazzle & Shine Hiring',
@@ -496,7 +500,7 @@ def apply():
   <h2 style="color:#b98a33">New Contractor Application</h2>
   <p><strong>Name:</strong> {a.name}</p>
   <p><strong>Email:</strong> {a.email} &nbsp; <strong>Phone:</strong> {a.phone}</p>
-  <p><strong>Experience:</strong> {a.years_experience} years</p>
+  <p><strong>Experience:</strong> {a.years_experience}</p>
   <p><strong>Services:</strong> {a.services}</p>
   <p><strong>Availability:</strong> {a.availability}</p>
   <p><strong>Has car:</strong> {'Yes' if a.has_transportation else 'No'} &nbsp;
@@ -504,6 +508,33 @@ def apply():
   <p><strong>Why interested:</strong> {a.why_interested or '—'}</p>
 </div>""",
         )
+
+        # ── Auto-filter ────────────────────────────────────────────────────────
+        reject_reasons_en = []
+        reject_reasons_es = []
+
+        exp = (a.years_experience or '').strip().lower()
+        if not exp or exp in ('no experience', 'none', ''):
+            reject_reasons_en.append("Prior cleaning experience is required for all contractors.")
+            reject_reasons_es.append("Se requiere experiencia previa en limpieza para todos los contratistas.")
+
+        if not a.has_transportation:
+            reject_reasons_en.append("Reliable personal transportation is required.")
+            reject_reasons_es.append("Se requiere transporte personal confiable.")
+
+        if reject_reasons_en:
+            a.status = 'rejected'
+            db.session.commit()
+            _send_auto_rejection(a, reject_reasons_en, reject_reasons_es)
+        else:
+            # Passed — schedule interview invite after 10-minute delay
+            a.interview_status = 'pending'
+            db.session.commit()
+            flask_app = current_app._get_current_object()
+            t = threading.Timer(600, _delayed_send_invite, args=[flask_app, a.id])
+            t.daemon = True
+            t.start()
+
         return render_template('public/apply_done.html', name=a.name)
     return render_template('public/apply.html')
 
@@ -710,6 +741,80 @@ def reset_orientation(staff_id):
     db.session.commit()
     flash(f'Orientation reset for {s.name} — they can re-complete training via their link.', 'success')
     return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+
+def _send_auto_rejection(app_rec, reasons_en, reasons_es):
+    biz = 'Dazzle & Shine Maids'
+    reasons_html_en = ''.join(f'<li style="margin-bottom:6px">{r}</li>' for r in reasons_en)
+    reasons_html_es = ''.join(f'<li style="margin-bottom:6px">{r}</li>' for r in reasons_es)
+    html = f"""
+<div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
+  <div style="background:#1f1333;padding:24px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0;font-size:1.6rem">Dazzle &amp; Shine Maids</h1>
+  </div>
+  <div style="padding:28px 32px;background:#fff;border-left:4px solid #d3a84f">
+    <p style="font-size:0.72rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#d3a84f;margin:0 0 14px">🇺🇸 English</p>
+    <h2 style="color:#1f1333;margin:0 0 12px">Hi {app_rec.name},</h2>
+    <p style="color:#3b2b6b;line-height:1.7">
+      Thank you for your interest in joining <strong>{biz}</strong>. We reviewed your application
+      and unfortunately we are unable to move forward at this time for the following reason(s):
+    </p>
+    <ul style="color:#3b2b6b;line-height:1.8;margin:14px 0;padding-left:20px">
+      {reasons_html_en}
+    </ul>
+    <p style="color:#3b2b6b;line-height:1.7">
+      We appreciate you taking the time to apply and wish you all the best in your job search.
+    </p>
+    <p style="color:#3b2b6b">Warm regards,<br><strong>The {biz} Team</strong></p>
+  </div>
+  <div style="padding:12px 32px;background:#f6f5fb;text-align:center">
+    <div style="border-top:2px dashed #e4dfef"></div>
+  </div>
+  <div style="padding:28px 32px;background:#fff;border-left:4px solid #5d4f7d">
+    <p style="font-size:0.72rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#5d4f7d;margin:0 0 14px">🇪🇸 Español</p>
+    <h2 style="color:#1f1333;margin:0 0 12px">Hola {app_rec.name},</h2>
+    <p style="color:#3b2b6b;line-height:1.7">
+      Gracias por tu interés en unirte a <strong>{biz}</strong>. Revisamos tu solicitud
+      y lamentablemente no podemos continuar en este momento por la(s) siguiente(s) razón(es):
+    </p>
+    <ul style="color:#3b2b6b;line-height:1.8;margin:14px 0;padding-left:20px">
+      {reasons_html_es}
+    </ul>
+    <p style="color:#3b2b6b;line-height:1.7">
+      Apreciamos el tiempo que tomaste para aplicar y te deseamos lo mejor en tu búsqueda de empleo.
+    </p>
+    <p style="color:#3b2b6b">Saludos,<br><strong>El equipo de {biz}</strong></p>
+  </div>
+  <div style="padding:14px 32px;background:#1f1333;border-radius:0 0 12px 12px;text-align:center">
+    <p style="color:rgba(255,255,255,0.4);font-size:0.78rem;margin:0">{biz} · Questions? Reply to this email.</p>
+  </div>
+</div>"""
+    send_email(
+        to_email=app_rec.email,
+        to_name=app_rec.name,
+        subject=f"Your Application to {biz}",
+        html=html,
+    )
+
+
+def _delayed_send_invite(flask_app, application_id):
+    """Runs in a background thread after a 10-minute delay."""
+    with flask_app.app_context():
+        from models import ContractorApplication
+        from extensions import db
+        from blueprints.interviews import send_interview_invite_email
+        app_rec = ContractorApplication.query.get(application_id)
+        if not app_rec or app_rec.interview_status != 'pending':
+            return
+        if not app_rec.interview_token:
+            app_rec.interview_token = secrets.token_urlsafe(32)
+        app_rec.interview_status = 'sent'
+        app_rec.interview_sent_at = datetime.utcnow()
+        db.session.commit()
+        try:
+            send_interview_invite_email(app_rec)
+        except Exception:
+            pass
 
 
 def _default_agreement(biz_name, worker_model):
