@@ -1034,7 +1034,14 @@ STEP 6 — AFTER THE CLEANING
 
 
 def _seed_pricing_defaults():
-    """Write default pricing matrix into PricingSetting DB rows (only if not already set)."""
+    """
+    Write pricing matrix into PricingSetting DB.
+    Uses a version key so price updates in code push through to the live DB
+    exactly once — after that, admin edits persist across restarts.
+    Bump PRICING_VERSION whenever the default matrix changes.
+    """
+    PRICING_VERSION = 2  # increment this when defaults change
+
     try:
         from models import PricingSetting
         from pricing import (
@@ -1042,6 +1049,11 @@ def _seed_pricing_defaults():
             SERVICE_MULTIPLIERS_DEFAULTS, EXTRAS,
             DEPOSIT_AMOUNT, CONTRACTOR_SPLIT_PCT, SQFT_SURCHARGE_RATE,
         )
+
+        current_version = int(PricingSetting.get('pricing_version') or 0)
+        if current_version >= PRICING_VERSION:
+            return  # already at this version — respect any admin overrides
+
         seeds = {}
         for (beds, baths), price in PRICE_MATRIX_DEFAULTS.items():
             seeds[f'std_price_{beds}_{baths}'] = price
@@ -1052,13 +1064,13 @@ def _seed_pricing_defaults():
         for name, price in EXTRAS.items():
             key = f"extra_{name.lower().replace(' ', '_')}"
             seeds[key] = price
-        seeds['deposit_amount']    = DEPOSIT_AMOUNT
-        seeds['contractor_split']  = CONTRACTOR_SPLIT_PCT
-        seeds['sqft_surcharge']    = SQFT_SURCHARGE_RATE
+        seeds['deposit_amount']   = DEPOSIT_AMOUNT
+        seeds['contractor_split'] = CONTRACTOR_SPLIT_PCT
+        seeds['sqft_surcharge']   = SQFT_SURCHARGE_RATE
 
         for key, value in seeds.items():
-            if PricingSetting.get(key) is None:
-                db.session.add(PricingSetting(key=key, value=str(value)))
+            PricingSetting.set(key, str(value))
+        PricingSetting.set('pricing_version', str(PRICING_VERSION))
         db.session.commit()
     except Exception:
         pass
