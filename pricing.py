@@ -1,138 +1,224 @@
 # ============================================================
-# DAZZLE & SHINE — PRICING CONFIGURATION
-# Edit numbers here to update prices everywhere.
-# No other files need to be touched.
+# DAZZLE & SHINE — PRICING ENGINE
+# Fixed price matrix by (beds, baths). Deep = 1.6x, Move-Out = 1.9x.
+# Update prices in the admin dashboard — no code changes needed.
 # ============================================================
 
-DEPOSIT_AMOUNT = 50  # $50 non-refundable deposit (goes toward final balance)
+# Valid bed/bath combinations and their standard prices
+PRICE_MATRIX_DEFAULTS = {
+    (1, 1): 110,
+    (1, 2): 125,
+    (2, 1): 135,
+    (2, 2): 150,
+    (3, 2): 175,
+    (3, 3): 195,
+    (4, 2): 210,
+    (4, 3): 230,
+    (5, 3): 260,
+    (5, 4): 285,
+}
 
-# Base price for 1 bedroom / 1 bathroom
-# Then add per_extra_bed for each bedroom above 1
-# And per_extra_bath for each bathroom above 1
-SERVICES = {
-    "standard": {
-        "label": "Standard House Cleaning",
-        "base": 140,
-        "per_extra_bed": 35,
-        "per_extra_bath": 25,
-    },
-    "deep": {
-        "label": "Deep Cleaning",
-        "base": 265,
-        "per_extra_bed": 60,
-        "per_extra_bath": 35,
-    },
-    "moveout": {
-        "label": "Move-Out / Move-In Cleaning",
-        "base": 230,
-        "per_extra_bed": 50,
-        "per_extra_bath": 35,
-    },
-    "airbnb": {
-        "label": "Airbnb / Vacation Rental Cleaning",
-        "base": 150,
-        "per_extra_bed": 35,
-        "per_extra_bath": 25,
-    },
-    "apartment": {
-        "label": "Apartment & Condo Cleaning",
-        "base": 140,
-        "per_extra_bed": 30,
-        "per_extra_bath": 20,
-    },
-    "luxury": {
-        "label": "Luxury Home Cleaning",
-        "base": 235,
-        "per_extra_bed": 70,
-        "per_extra_bath": 45,
-    },
+# Estimated hours for standard cleaning
+HOURS_MATRIX_DEFAULTS = {
+    (1, 1): 1.5,
+    (1, 2): 2.0,
+    (2, 1): 2.0,
+    (2, 2): 2.5,
+    (3, 2): 3.0,
+    (3, 3): 3.5,
+    (4, 2): 4.0,
+    (4, 3): 4.5,
+    (5, 3): 5.5,
+    (5, 4): 6.5,
+}
+
+# Valid bathroom options per bedroom count
+VALID_BATHS = {1: [1, 2], 2: [1, 2], 3: [2, 3], 4: [2, 3], 5: [3, 4]}
+
+# Standard square footage by bedroom count (for sqft surcharge)
+STANDARD_SQFT = {1: 800, 2: 1200, 3: 1800, 4: 2400, 5: 3200}
+
+# Service multipliers vs standard (also stored in DB)
+SERVICE_MULTIPLIERS_DEFAULTS = {
+    'standard': 1.0,
+    'deep':     1.6,
+    'moveout':  1.9,
+}
+
+SERVICE_LABELS = {
+    'standard': 'Standard Cleaning',
+    'deep':     'Deep Cleaning',
+    'moveout':  'Move-In / Move-Out',
 }
 
 # Add-on prices
 EXTRAS = {
-    "Inside oven":      35,
-    "Inside fridge":    30,
-    "Laundry":          40,
-    "Inside windows":   45,
-    "Inside cabinets":  30,
+    'Inside oven':     35,
+    'Inside fridge':   30,
+    'Laundry':         40,
+    'Inside windows':  45,
+    'Inside cabinets': 30,
 }
 
-# Frequency discounts (percentage off per visit)
 FREQUENCY_DISCOUNTS = {
-    "one_time":  0,    # No discount
-    "monthly":   5,    # 5% off
-    "biweekly":  10,   # 10% off
-    "weekly":    15,   # 15% off
+    'one_time': 0,
+    'monthly':  5,
+    'biweekly': 10,
+    'weekly':   15,
 }
 
 FREQUENCY_LABELS = {
-    "one_time":  "One-Time",
-    "monthly":   "Monthly (5% off)",
-    "biweekly":  "Bi-Weekly (10% off)",
-    "weekly":    "Weekly (15% off)",
+    'one_time': 'One-Time',
+    'monthly':  'Monthly (5% off)',
+    'biweekly': 'Bi-Weekly (10% off)',
+    'weekly':   'Weekly (15% off)',
 }
 
+DEPOSIT_AMOUNT       = 50   # dollars
+CONTRACTOR_SPLIT_PCT = 50   # percent
+SQFT_SURCHARGE_RATE  = 15   # dollars per 200 sqft over standard
 
-def get_service_price(service_type, field):
-    """Get price from DB override if available, otherwise use default."""
+
+# ── DB getters (fall back to defaults above) ──────────────────────────────────
+
+def _db_get(key, default):
     try:
         from models import PricingSetting
-        db_val = PricingSetting.get(f"{service_type}_{field}")
-        if db_val is not None:
-            return float(db_val)
-    except Exception:
-        pass
-    return SERVICES.get(service_type, {}).get(field, 0)
-
-
-def get_extra_price(extra_name):
-    """Get add-on price from DB override if available."""
-    try:
-        from models import PricingSetting
-        key = f"extra_{extra_name.lower().replace(' ', '_')}"
-        db_val = PricingSetting.get(key)
-        if db_val is not None:
-            return float(db_val)
-    except Exception:
-        pass
-    return EXTRAS.get(extra_name, 0)
-
-
-def get_deposit():
-    try:
-        from models import PricingSetting
-        val = PricingSetting.get('deposit_amount')
+        val = PricingSetting.get(key)
         if val is not None:
             return float(val)
     except Exception:
         pass
-    return DEPOSIT_AMOUNT
+    return default
 
 
-def calculate_price(service_type, bedrooms, bathrooms, extras=None, frequency="one_time"):
-    """Calculate total job price based on service, home size, extras, and frequency."""
-    if service_type not in SERVICES:
-        return 0
+def get_std_price(beds, baths):
+    return _db_get(f'std_price_{beds}_{baths}',
+                   PRICE_MATRIX_DEFAULTS.get((int(beds), int(baths)), 0))
 
-    try:
-        beds = int(str(bedrooms).replace("+", "").replace("Studio", "1"))
-        baths = float(str(bathrooms).replace("+", ""))
-    except (ValueError, TypeError):
-        beds, baths = 1, 1
 
-    extra_beds = max(0, beds - 1)
-    extra_baths = max(0, baths - 1)
+def get_std_hours(beds, baths):
+    return _db_get(f'std_hours_{beds}_{baths}',
+                   HOURS_MATRIX_DEFAULTS.get((int(beds), int(baths)), 2.0))
 
-    total = get_service_price(service_type, 'base')
-    total += extra_beds * get_service_price(service_type, 'per_extra_bed')
-    total += extra_baths * get_service_price(service_type, 'per_extra_bath')
 
+def get_multiplier(service_type):
+    return _db_get(f'{service_type}_multiplier',
+                   SERVICE_MULTIPLIERS_DEFAULTS.get(service_type, 1.0))
+
+
+def get_extra_price(extra_name):
+    key = f"extra_{extra_name.lower().replace(' ', '_')}"
+    return _db_get(key, EXTRAS.get(extra_name, 0))
+
+
+def get_contractor_split():
+    return _db_get('contractor_split', CONTRACTOR_SPLIT_PCT)
+
+
+def get_sqft_surcharge_rate():
+    return _db_get('sqft_surcharge', SQFT_SURCHARGE_RATE)
+
+
+def get_deposit():
+    return _db_get('deposit_amount', DEPOSIT_AMOUNT)
+
+
+# ── Core calculation ───────────────────────────────────────────────────────────
+
+def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='one_time'):
+    """
+    Returns a dict with all four key numbers:
+      client_price, contractor_earnings, hours, hourly_rate
+    Plus breakdown fields for display.
+    """
+    beds = min(int(str(beds).replace('+', '') or 1), 5)
+    baths = int(str(baths).replace('+', '') or 1)
+
+    std_price  = get_std_price(beds, baths)
+    multiplier = get_multiplier(service_type)
+    base_price = round(std_price * multiplier, 2)
+
+    # Square footage surcharge
+    sqft_surcharge = 0
+    if sqft:
+        standard_sqft = STANDARD_SQFT.get(beds, 800)
+        over = max(0, int(sqft) - standard_sqft)
+        sqft_surcharge = (over // 200) * get_sqft_surcharge_rate()
+
+    # Add-ons
+    extras_total = 0
+    extra_list = []
     if extras:
-        for extra in [e.strip() for e in extras.split(",") if e.strip()]:
-            total += get_extra_price(extra)
+        if isinstance(extras, str):
+            extra_list = [e.strip() for e in extras.split(',') if e.strip()]
+        else:
+            extra_list = list(extras)
+        for e in extra_list:
+            extras_total += get_extra_price(e)
 
-    discount = FREQUENCY_DISCOUNTS.get(frequency, 0)
-    if discount:
-        total = total * (1 - discount / 100)
+    subtotal = base_price + sqft_surcharge + extras_total
 
-    return round(total, 2)
+    # Frequency discount
+    disc = FREQUENCY_DISCOUNTS.get(frequency, 0)
+    if disc:
+        subtotal = round(subtotal * (1 - disc / 100), 2)
+
+    client_price = round(subtotal, 2)
+
+    # Hours
+    std_hours = get_std_hours(beds, baths)
+    hours = round(std_hours * multiplier, 2)
+
+    # Contractor earnings — 50/50 straight, no minimum
+    split = get_contractor_split() / 100
+    contractor_earnings = round(client_price * split, 2)
+    hourly_rate = round(contractor_earnings / hours, 2) if hours > 0 else 0
+
+    return {
+        'client_price':         client_price,
+        'contractor_earnings':  contractor_earnings,
+        'hours':                hours,
+        'hourly_rate':          hourly_rate,
+        'base_price':           base_price,
+        'sqft_surcharge':       sqft_surcharge,
+        'extras_total':         extras_total,
+        'extras_list':          extra_list,
+        'service_label':        SERVICE_LABELS.get(service_type, service_type),
+        'beds':                 beds,
+        'baths':                baths,
+        'contractor_split_pct': int(get_contractor_split()),
+    }
+
+
+def build_full_matrix():
+    """Return all 30 combinations (3 services × 10 combos) sorted by client price."""
+    rows = []
+    for svc in ('standard', 'deep', 'moveout'):
+        for (beds, baths) in sorted(PRICE_MATRIX_DEFAULTS.keys()):
+            job = calculate_job(svc, beds, baths)
+            job['service_type'] = svc
+            rows.append(job)
+    rows.sort(key=lambda r: r['client_price'])
+    return rows
+
+
+# ── Backward-compatibility wrappers ───────────────────────────────────────────
+
+SERVICES = {
+    'standard': {'label': 'Standard House Cleaning', 'base': 110, 'per_extra_bed': 0, 'per_extra_bath': 0},
+    'deep':     {'label': 'Deep Cleaning',            'base': 176, 'per_extra_bed': 0, 'per_extra_bath': 0},
+    'moveout':  {'label': 'Move-In / Move-Out',       'base': 209, 'per_extra_bed': 0, 'per_extra_bath': 0},
+}
+
+
+def calculate_price(service_type, bedrooms, bathrooms, extras=None, frequency='one_time'):
+    extras_str = extras if isinstance(extras, str) else (','.join(extras) if extras else '')
+    return calculate_job(service_type, bedrooms, bathrooms,
+                         extras=extras_str, frequency=frequency)['client_price']
+
+
+def get_service_price(service_type, field):
+    if field == 'base':
+        return round(get_std_price(1, 1) * get_multiplier(service_type), 2)
+    return 0

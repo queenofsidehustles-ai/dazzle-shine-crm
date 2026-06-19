@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Get a Price — Dazzle & Shine Maids</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,0.12);
+      --purple:#1f1333; --purple-mid:#3b2b6b; --bg:#f6f5fb;
+      --white:#fff; --border:#e4dfef; --radius:14px;
+      --shadow:0 4px 24px rgba(15,7,40,0.1);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple);min-height:100vh}
+    .header{background:var(--purple);padding:20px 24px;text-align:center}
+    .header .script{font-family:"Allura",cursive;font-size:2.2rem;color:var(--gold);display:block;line-height:1}
+    .header .sub{color:rgba(255,255,255,0.5);font-size:0.75rem;letter-spacing:0.2em;text-transform:uppercase;margin-top:4px;display:block}
+    .wrap{max-width:640px;margin:0 auto;padding:28px 16px 60px}
+
+    /* STEPS */
+    .step{background:var(--white);border-radius:var(--radius);border:1px solid var(--border);
+          box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+    .step-head{padding:16px 20px;display:flex;align-items:center;gap:12px;cursor:pointer}
+    .step-num{width:28px;height:28px;border-radius:50%;background:var(--purple);color:var(--gold);
+              font-weight:700;font-size:0.85rem;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .step-head h3{font-size:1rem;font-weight:700;color:var(--purple)}
+    .step-body{padding:0 20px 20px}
+
+    /* SERVICE CARDS */
+    .svc-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:4px}
+    .svc-card{border:2px solid var(--border);border-radius:10px;padding:14px 10px;text-align:center;
+              cursor:pointer;transition:all .15s}
+    .svc-card:hover{border-color:var(--gold)}
+    .svc-card.active{border-color:var(--gold);background:var(--gold-soft)}
+    .svc-card strong{display:block;font-size:0.88rem;color:var(--purple);margin-bottom:4px}
+    .svc-card small{font-size:0.75rem;color:#9a95ad}
+    input[type=radio]{display:none}
+
+    /* SELECTS */
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    label.field-label{display:block;font-size:0.8rem;font-weight:600;color:#5f5878;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.1em}
+    select,input[type=number]{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;
+             font-family:"Inter",sans-serif;font-size:0.95rem;color:var(--purple);background:var(--white);
+             appearance:none;-webkit-appearance:none}
+    select:focus,input[type=number]:focus{outline:none;border-color:var(--gold)}
+
+    /* EXTRAS */
+    .extras-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+    .extra-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);
+                border-radius:8px;cursor:pointer;font-size:0.88rem}
+    .extra-item:hover{border-color:var(--gold)}
+    .extra-item input{accent-color:var(--gold)}
+    .extra-item .price{margin-left:auto;color:var(--gold-deep);font-weight:700;font-size:0.82rem}
+
+    /* PRICE BOX */
+    .price-box{background:var(--purple);border-radius:var(--radius);padding:28px 24px;text-align:center;margin-top:20px}
+    .price-box .label{color:rgba(255,255,255,0.5);font-size:0.75rem;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:6px}
+    .price-box .total{color:var(--gold);font-size:3rem;font-weight:700;line-height:1}
+    .price-box .deposit-note{color:rgba(255,255,255,0.55);font-size:0.82rem;margin-top:10px}
+    .price-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,0.1);
+                     border-radius:8px;overflow:hidden;margin-top:18px}
+    .breakdown-cell{background:rgba(255,255,255,0.05);padding:12px 16px;text-align:center}
+    .breakdown-cell .bl{font-size:0.72rem;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px}
+    .breakdown-cell .bv{font-size:1.1rem;font-weight:700;color:#fff}
+
+    /* BOOK BTN */
+    .btn-book{display:block;background:var(--gold);color:var(--purple);text-align:center;
+              padding:16px;border-radius:10px;font-weight:700;font-size:1.05rem;
+              text-decoration:none;margin-top:16px;transition:background .15s}
+    .btn-book:hover{background:var(--gold-deep)}
+    .hidden{display:none}
+
+    @media(max-width:480px){
+      .svc-grid{grid-template-columns:1fr 1fr}
+      .row2{grid-template-columns:1fr}
+      .extras-grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="script">Dazzle &amp; Shine</span>
+    <span class="sub">Get Your Instant Price</span>
+  </div>
+
+  <div class="wrap">
+
+    <!-- STEP 1: Service -->
+    <div class="step">
+      <div class="step-head">
+        <div class="step-num">1</div>
+        <h3>What type of cleaning do you need?</h3>
+      </div>
+      <div class="step-body">
+        <div class="svc-grid">
+          <label class="svc-card" id="card-standard">
+            <input type="radio" name="service_type" value="standard" checked />
+            <strong>Standard</strong><small>Regular upkeep</small>
+          </label>
+          <label class="svc-card" id="card-deep">
+            <input type="radio" name="service_type" value="deep" />
+            <strong>Deep Clean</strong><small>Top-to-bottom reset</small>
+          </label>
+          <label class="svc-card" id="card-moveout">
+            <input type="radio" name="service_type" value="moveout" />
+            <strong>Move In/Out</strong><small>Keys-ready clean</small>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: Home Size -->
+    <div class="step">
+      <div class="step-head">
+        <div class="step-num">2</div>
+        <h3>Tell us about your home</h3>
+      </div>
+      <div class="step-body">
+        <div class="row2">
+          <div>
+            <label class="field-label">Bedrooms</label>
+            <select id="bedrooms">
+              <option value="1">1 bedroom</option>
+              <option value="2">2 bedrooms</option>
+              <option value="3" selected>3 bedrooms</option>
+              <option value="4">4 bedrooms</option>
+              <option value="5">5 bedrooms</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Bathrooms</label>
+            <select id="bathrooms"></select>
+          </div>
+        </div>
+        <div class="row2" style="margin-top:12px">
+          <div>
+            <label class="field-label">Square Footage <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+            <input type="number" id="sqft" placeholder="e.g. 1800" min="0" max="10000" />
+          </div>
+          <div>
+            <label class="field-label">Frequency</label>
+            <select id="frequency">
+              {% for val, label in frequency_labels.items() %}
+              <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: Add-ons -->
+    <div class="step">
+      <div class="step-head">
+        <div class="step-num">3</div>
+        <h3>Add-on services <span style="font-weight:400;font-size:0.88rem;color:#9a95ad">(optional)</span></h3>
+      </div>
+      <div class="step-body">
+        <div class="extras-grid">
+          {% for name, price in extras.items() %}
+          <label class="extra-item">
+            <input type="checkbox" class="extra-cb" value="{{ name }}" />
+            {{ name }}
+            <span class="price">+${{ price|int }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- PRICE RESULT -->
+    <div class="price-box" id="price-box">
+      <div class="label">Your Estimate</div>
+      <div class="total" id="total-display">$—</div>
+      <div class="deposit-note">${{ deposit|int }} deposit secures your date · Balance due after cleaning</div>
+      <div class="price-breakdown" id="breakdown" style="display:none">
+        <div class="breakdown-cell">
+          <div class="bl">Base Price</div>
+          <div class="bv" id="base-display">—</div>
+        </div>
+        <div class="breakdown-cell" id="sqft-cell" style="display:none">
+          <div class="bl">Sqft Surcharge</div>
+          <div class="bv" id="sqft-display">—</div>
+        </div>
+        <div class="breakdown-cell" id="extras-cell" style="display:none">
+          <div class="bl">Add-ons</div>
+          <div class="bv" id="extras-display">—</div>
+        </div>
+        <div class="breakdown-cell" id="freq-cell" style="display:none">
+          <div class="bl">Frequency Discount</div>
+          <div class="bv" id="freq-display">—</div>
+        </div>
+      </div>
+      <a href="/#book" class="btn-book" id="book-btn" style="display:none">
+        Book This Clean →
+      </a>
+    </div>
+
+  </div><!-- /wrap -->
+
+<script>
+  const VALID_BATHS = {{ valid_baths | tojson }};
+  const CRM_URL = 'https://dazzle-shine-crm-production.up.railway.app';
+
+  let pricingData = null;
+
+  async function loadPricing() {
+    try {
+      const res = await fetch(`${CRM_URL}/api/pricing-data`);
+      pricingData = await res.json();
+    } catch(e) {
+      // Fallback to hardcoded defaults if API unavailable
+      pricingData = {
+        price_matrix: {
+          '1_1':110,'1_2':125,'2_1':135,'2_2':150,
+          '3_2':175,'3_3':195,'4_2':210,'4_3':230,
+          '5_3':260,'5_4':285
+        },
+        multipliers: {standard:1.0, deep:1.6, moveout:1.9},
+        extras: {{ extras | tojson }},
+        frequency_discounts: {one_time:0,monthly:5,biweekly:10,weekly:15},
+        sqft_surcharge_rate: 15,
+        standard_sqft: {'1':800,'2':1200,'3':1800,'4':2400,'5':3200},
+      };
+    }
+    updateBaths();
+    calculate();
+  }
+
+  function updateBaths() {
+    const beds = document.getElementById('bedrooms').value;
+    const bathSel = document.getElementById('bathrooms');
+    const validBaths = VALID_BATHS[beds] || [1, 2];
+    const current = bathSel.value;
+    bathSel.innerHTML = '';
+    validBaths.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b;
+      opt.textContent = b + (b === 1 ? ' bathroom' : ' bathrooms');
+      if (String(b) === String(current)) opt.selected = true;
+      bathSel.appendChild(opt);
+    });
+    if (!validBaths.includes(parseInt(current))) {
+      bathSel.value = validBaths[validBaths.length - 1];
+    }
+  }
+
+  function calculate() {
+    if (!pricingData) return;
+    const svc   = document.querySelector('input[name="service_type"]:checked')?.value || 'standard';
+    const beds  = document.getElementById('bedrooms').value;
+    const baths = document.getElementById('bathrooms').value;
+    const sqft  = parseInt(document.getElementById('sqft').value) || 0;
+    const freq  = document.getElementById('frequency').value;
+    const extras = [...document.querySelectorAll('.extra-cb:checked')].map(c => c.value);
+
+    // Standard base price from matrix
+    const matrixKey = `${beds}_${baths}`;
+    const stdPrice  = pricingData.price_matrix[matrixKey] || 0;
+    const mult      = pricingData.multipliers[svc] || 1.0;
+    let base        = Math.round(stdPrice * mult * 100) / 100;
+
+    // Sqft surcharge
+    let sqftSurcharge = 0;
+    if (sqft > 0) {
+      const stdSqft = pricingData.standard_sqft[beds] || 800;
+      const over = Math.max(0, sqft - stdSqft);
+      sqftSurcharge = Math.floor(over / 200) * (pricingData.sqft_surcharge_rate || 15);
+    }
+
+    // Extras
+    let extrasTotal = 0;
+    extras.forEach(e => { extrasTotal += pricingData.extras[e] || 0; });
+
+    let subtotal = base + sqftSurcharge + extrasTotal;
+
+    // Frequency discount
+    const disc = (pricingData.frequency_discounts || {})[freq] || 0;
+    if (disc) subtotal = Math.round(subtotal * (1 - disc/100) * 100) / 100;
+
+    const total = Math.round(subtotal * 100) / 100;
+
+    // Display
+    document.getElementById('total-display').textContent = '$' + total.toFixed(2);
+    document.getElementById('base-display').textContent  = '$' + base.toFixed(2);
+    document.getElementById('breakdown').style.display   = 'grid';
+    document.getElementById('book-btn').style.display    = 'block';
+
+    // Conditionals
+    const sqftCell = document.getElementById('sqft-cell');
+    const extrasCell = document.getElementById('extras-cell');
+    const freqCell = document.getElementById('freq-cell');
+    sqftCell.style.display   = sqftSurcharge > 0 ? '' : 'none';
+    extrasCell.style.display = extrasTotal > 0 ? '' : 'none';
+    freqCell.style.display   = disc > 0 ? '' : 'none';
+    document.getElementById('sqft-display').textContent   = '+$' + sqftSurcharge;
+    document.getElementById('extras-display').textContent = '+$' + extrasTotal;
+    document.getElementById('freq-display').textContent   = '-' + disc + '%';
+
+    // Pre-fill book URL
+    const params = new URLSearchParams({
+      service_type: svc, bedrooms: beds, bathrooms: baths,
+      sqft: sqft || '', frequency: freq,
+      extras: extras.join(','),
+    });
+    document.getElementById('book-btn').href =
+      'https://www.dazzleandshinemaids.com/#book?' + params.toString();
+  }
+
+  // Service card selection
+  document.querySelectorAll('.svc-grid label').forEach(label => {
+    label.addEventListener('click', () => {
+      document.querySelectorAll('.svc-grid label').forEach(l => l.classList.remove('active'));
+      label.classList.add('active');
+      setTimeout(calculate, 50);
+    });
+  });
+  document.getElementById('card-standard').classList.add('active');
+
+  document.getElementById('bedrooms').addEventListener('change', () => { updateBaths(); calculate(); });
+  document.getElementById('bathrooms').addEventListener('change', calculate);
+  document.getElementById('sqft').addEventListener('input', calculate);
+  document.getElementById('frequency').addEventListener('change', calculate);
+  document.querySelectorAll('.extra-cb').forEach(cb => cb.addEventListener('change', calculate));
+
+  loadPricing();
+</script>
+</body>
+</html>

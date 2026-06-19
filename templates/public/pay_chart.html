@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contractor Pay Chart — Dazzle & Shine Maids</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root{
+      --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,0.10);
+      --purple:#1f1333; --purple-mid:#3b2b6b; --bg:#f6f5fb;
+      --white:#fff; --border:#e4dfef; --radius:14px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple)}
+
+    /* HEADER */
+    .header{background:var(--purple);padding:24px;text-align:center}
+    .header .script{font-family:"Allura",cursive;font-size:2.4rem;color:var(--gold);display:block;line-height:1}
+    .header .sub{color:rgba(255,255,255,0.45);font-size:0.7rem;letter-spacing:0.25em;text-transform:uppercase;margin-top:6px;display:block}
+    .header p{color:rgba(255,255,255,0.65);font-size:0.82rem;margin-top:8px}
+
+    /* PRINT ACTIONS */
+    .actions{max-width:860px;margin:20px auto 0;padding:0 16px;display:flex;gap:10px;justify-content:flex-end}
+    .btn{padding:8px 18px;border-radius:8px;font-weight:700;font-size:0.85rem;cursor:pointer;border:none;font-family:"Inter",sans-serif}
+    .btn-gold{background:var(--gold);color:var(--purple)}
+    .btn-outline{background:transparent;color:var(--purple-mid);border:1.5px solid var(--border)}
+
+    /* INCOME CALCULATOR (print hidden) */
+    .calc-bar{max-width:860px;margin:16px auto;padding:0 16px}
+    .calc-inner{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
+                padding:18px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+    .calc-inner label{font-size:0.8rem;font-weight:600;color:#5f5878;text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:4px}
+    .calc-inner input,
+    .calc-inner select{padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-family:"Inter",sans-serif;font-size:0.92rem;color:var(--purple);background:var(--white);width:130px}
+    .calc-result{margin-left:auto;text-align:right}
+    .calc-result .cl{font-size:0.72rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px}
+    .calc-result .cv{font-size:1.5rem;font-weight:700;color:var(--gold)}
+
+    /* SECTION HEAD */
+    .section{max-width:860px;margin:16px auto 0;padding:0 16px}
+    .section-head{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+    .section-head h2{font-size:0.88rem;font-weight:700;color:#9a95ad;text-transform:uppercase;letter-spacing:0.15em}
+    .section-line{flex:1;height:1px;background:var(--border)}
+
+    /* TABLE */
+    .tbl-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border);
+              background:var(--white);box-shadow:0 2px 12px rgba(15,7,40,0.06)}
+    table{width:100%;border-collapse:collapse;font-size:0.88rem}
+    thead tr{background:var(--purple)}
+    th{padding:12px 16px;text-align:left;color:rgba(255,255,255,0.55);font-size:0.72rem;
+       font-weight:700;letter-spacing:0.12em;text-transform:uppercase;white-space:nowrap}
+    td{padding:12px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tr:nth-child(even){background:#faf9fd}
+    tr:hover td{background:var(--gold-soft)}
+
+    .badge{padding:3px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap}
+    .badge-std{background:#f0edf8;color:var(--purple-mid)}
+    .badge-deep{background:#fef9ec;color:#92400e;border:1px solid #d3a84f}
+    .badge-move{background:#fdf4e8;color:#7c4a04;border:1px solid #e4a82a}
+
+    .earn{font-weight:700;color:#1a9e5f;font-size:0.95rem}
+    .hr{font-size:0.85rem;color:#5f5878}
+    .client-p{color:#5f5878}
+
+    /* NOTE BOX */
+    .note{max-width:860px;margin:16px auto;padding:0 16px}
+    .note-inner{background:#fef9ec;border:1px solid #d3a84f;border-radius:10px;padding:14px 18px}
+    .note-inner p{font-size:0.82rem;color:#7c4a04;line-height:1.55}
+
+    /* EXTRAS CARD */
+    .extras-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:4px}
+    .extra-card{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:12px 14px;
+                display:flex;justify-content:space-between;align-items:center}
+    .extra-card .en{font-size:0.85rem;color:var(--purple)}
+    .extra-card .ep{font-weight:700;color:var(--gold-deep)}
+
+    /* PRINT */
+    @media print{
+      .actions,.calc-bar{display:none!important}
+      body{background:#fff}
+      .tbl-wrap{box-shadow:none;border:1px solid #ddd}
+      .header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .section{margin-top:12px}
+    }
+    @media(max-width:540px){
+      .calc-inner{flex-direction:column;align-items:stretch}
+      .calc-result{margin-left:0;text-align:left}
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <span class="script">Dazzle &amp; Shine</span>
+  <span class="sub">Contractor Pay Chart</span>
+  <p>{{ split }}% of every job — see exactly what you earn before accepting</p>
+</div>
+
+<div class="actions no-print">
+  <button class="btn btn-outline" onclick="window.print()">🖨 Print / Save PDF</button>
+</div>
+
+<!-- INCOME ESTIMATOR -->
+<div class="calc-bar no-print">
+  <div class="calc-inner">
+    <div>
+      <label>Jobs per week</label>
+      <input type="number" id="jobs-week" value="5" min="1" max="30" oninput="calcIncome()" />
+    </div>
+    <div>
+      <label>Avg job type</label>
+      <select id="avg-type" onchange="calcIncome()">
+        <option value="standard">Standard</option>
+        <option value="deep">Deep Clean</option>
+        <option value="moveout">Move In/Out</option>
+      </select>
+    </div>
+    <div>
+      <label>Avg home size</label>
+      <select id="avg-size" onchange="calcIncome()">
+        <option value="1_1">1 bed / 1 bath</option>
+        <option value="1_2">1 bed / 2 bath</option>
+        <option value="2_1">2 bed / 1 bath</option>
+        <option value="2_2" selected>2 bed / 2 bath</option>
+        <option value="3_2">3 bed / 2 bath</option>
+        <option value="3_3">3 bed / 3 bath</option>
+        <option value="4_2">4 bed / 2 bath</option>
+        <option value="4_3">4 bed / 3 bath</option>
+        <option value="5_3">5 bed / 3 bath</option>
+        <option value="5_4">5 bed / 4 bath</option>
+      </select>
+    </div>
+    <div class="calc-result">
+      <div class="cl">Est. Weekly Earnings</div>
+      <div class="cv" id="weekly-earn">—</div>
+    </div>
+    <div class="calc-result">
+      <div class="cl">Est. Monthly Earnings</div>
+      <div class="cv" id="monthly-earn">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- EARNINGS TABLE: STANDARD -->
+<div class="section">
+  <div class="section-head"><h2>Standard Cleaning</h2><div class="section-line"></div></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Home Size</th>
+          <th>Client Pays</th>
+          <th>You Earn ({{ split }}%)</th>
+          <th>Est. Hours</th>
+          <th>Your Hourly Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows if r.service_type == 'standard' %}
+        <tr>
+          <td>{{ r.beds }} bed / {{ r.baths }} bath</td>
+          <td class="client-p">${{ "%.0f"|format(r.client_price) }}</td>
+          <td class="earn">${{ "%.0f"|format(r.contractor_earnings) }}</td>
+          <td>{{ r.hours }}h</td>
+          <td class="hr">${{ "%.2f"|format(r.hourly_rate) }}/hr</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- EARNINGS TABLE: DEEP CLEAN -->
+<div class="section" style="margin-top:20px">
+  <div class="section-head"><h2>Deep Cleaning</h2><div class="section-line"></div></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Home Size</th>
+          <th>Client Pays</th>
+          <th>You Earn ({{ split }}%)</th>
+          <th>Est. Hours</th>
+          <th>Your Hourly Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows if r.service_type == 'deep' %}
+        <tr>
+          <td>{{ r.beds }} bed / {{ r.baths }} bath</td>
+          <td class="client-p">${{ "%.0f"|format(r.client_price) }}</td>
+          <td class="earn">${{ "%.0f"|format(r.contractor_earnings) }}</td>
+          <td>{{ r.hours }}h</td>
+          <td class="hr">${{ "%.2f"|format(r.hourly_rate) }}/hr</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- EARNINGS TABLE: MOVE IN/OUT -->
+<div class="section" style="margin-top:20px">
+  <div class="section-head"><h2>Move-In / Move-Out</h2><div class="section-line"></div></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Home Size</th>
+          <th>Client Pays</th>
+          <th>You Earn ({{ split }}%)</th>
+          <th>Est. Hours</th>
+          <th>Your Hourly Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows if r.service_type == 'moveout' %}
+        <tr>
+          <td>{{ r.beds }} bed / {{ r.baths }} bath</td>
+          <td class="client-p">${{ "%.0f"|format(r.client_price) }}</td>
+          <td class="earn">${{ "%.0f"|format(r.contractor_earnings) }}</td>
+          <td>{{ r.hours }}h</td>
+          <td class="hr">${{ "%.2f"|format(r.hourly_rate) }}/hr</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ADD-ONS -->
+<div class="section" style="margin-top:20px">
+  <div class="section-head"><h2>Add-On Services</h2><div class="section-line"></div></div>
+  <div class="extras-grid">
+    {% for name, price in extras.items() %}
+    <div class="extra-card">
+      <span class="en">{{ name }}</span>
+      <span class="ep">+${{ price|int }} → you earn ${{ (price * split / 100)|int }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- NOTE -->
+<div class="note" style="margin-top:20px;margin-bottom:40px">
+  <div class="note-inner">
+    <p><strong>How you get paid:</strong> {{ split }}% of the client price goes directly to you after each completed job.
+    Hours shown are estimates — move efficiently and your effective hourly rate goes up.
+    Add-ons are split the same way. You will be notified of each job assignment via text and email.</p>
+  </div>
+</div>
+
+<script>
+  const EARNINGS = {{ rows | tojson }};
+
+  function calcIncome() {
+    const jobs   = parseFloat(document.getElementById('jobs-week').value) || 0;
+    const type   = document.getElementById('avg-type').value;
+    const size   = document.getElementById('avg-size').value;
+    const [beds, baths] = size.split('_').map(Number);
+
+    const row = EARNINGS.find(r => r.service_type === type && r.beds === beds && r.baths === baths);
+    if (!row) return;
+
+    const weekly  = jobs * row.contractor_earnings;
+    const monthly = weekly * 4.33;
+
+    document.getElementById('weekly-earn').textContent  = '$' + weekly.toFixed(0);
+    document.getElementById('monthly-earn').textContent = '$' + monthly.toFixed(0);
+  }
+
+  calcIncome();
+</script>
+</body>
+</html>

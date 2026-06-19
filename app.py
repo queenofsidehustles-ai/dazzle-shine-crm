@@ -17,6 +17,7 @@ from blueprints.scripts import scripts_bp
 from blueprints.sops import sops_bp
 from blueprints.email_templates import email_templates_bp
 from blueprints.interviews import interviews_bp
+from blueprints.pricing_public import pricing_public_bp
 
 
 def create_app():
@@ -53,6 +54,7 @@ def create_app():
     app.register_blueprint(sops_bp)
     app.register_blueprint(email_templates_bp)
     app.register_blueprint(interviews_bp)
+    app.register_blueprint(pricing_public_bp)
 
     with app.app_context():
         db.create_all()
@@ -61,6 +63,7 @@ def create_app():
         _seed_scripts()
         _seed_sops()
         _seed_email_templates()
+        _seed_pricing_defaults()
 
     return app
 
@@ -1028,6 +1031,37 @@ STEP 6 — AFTER THE CLEANING
         s = SOP(category=cat, title=title, sort_order=order, content=content.strip())
         db.session.add(s)
     db.session.commit()
+
+
+def _seed_pricing_defaults():
+    """Write default pricing matrix into PricingSetting DB rows (only if not already set)."""
+    try:
+        from models import PricingSetting
+        from pricing import (
+            PRICE_MATRIX_DEFAULTS, HOURS_MATRIX_DEFAULTS,
+            SERVICE_MULTIPLIERS_DEFAULTS, EXTRAS,
+            DEPOSIT_AMOUNT, CONTRACTOR_SPLIT_PCT, SQFT_SURCHARGE_RATE,
+        )
+        seeds = {}
+        for (beds, baths), price in PRICE_MATRIX_DEFAULTS.items():
+            seeds[f'std_price_{beds}_{baths}'] = price
+        for (beds, baths), hours in HOURS_MATRIX_DEFAULTS.items():
+            seeds[f'std_hours_{beds}_{baths}'] = hours
+        for svc, mult in SERVICE_MULTIPLIERS_DEFAULTS.items():
+            seeds[f'{svc}_multiplier'] = mult
+        for name, price in EXTRAS.items():
+            key = f"extra_{name.lower().replace(' ', '_')}"
+            seeds[key] = price
+        seeds['deposit_amount']    = DEPOSIT_AMOUNT
+        seeds['contractor_split']  = CONTRACTOR_SPLIT_PCT
+        seeds['sqft_surcharge']    = SQFT_SURCHARGE_RATE
+
+        for key, value in seeds.items():
+            if PricingSetting.get(key) is None:
+                db.session.add(PricingSetting(key=key, value=str(value)))
+        db.session.commit()
+    except Exception:
+        pass
 
 
 if __name__ == '__main__':
