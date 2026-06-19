@@ -123,6 +123,16 @@
         {% endif %}
       </h2>
 
+      {% if a.bgcheck_existing_link %}
+      <div style="background:#d4edda;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem">
+        <strong style="color:#155724">✅ Applicant submitted an existing background check:</strong><br>
+        <a href="{{ a.bgcheck_existing_link }}" target="_blank" style="color:#155724;word-break:break-all">
+          {{ a.bgcheck_existing_link }}
+        </a>
+        <p style="color:#1e7e34;font-size:0.78rem;margin-top:4px">Review it — if it's recent and clear, you may not need to request a new one.</p>
+      </div>
+      {% endif %}
+
       <!-- Send BG check request -->
       {% if a.background_check_status in ('not_started', 'requested') %}
       <form method="POST" action="{{ url_for('contractors.send_bgcheck_request', app_id=a.id) }}" style="margin-bottom:14px">

@@ -282,6 +282,7 @@ class ContractorApplication(db.Model):
     background_check_status = db.Column(db.String(20), default='not_started')  # not_started, requested, received, cleared, failed
     background_check_notes = db.Column(db.Text)
     background_check_at = db.Column(db.DateTime)
+    bgcheck_existing_link = db.Column(db.String(500))   # link applicant provides on application
     bgcheck_request_sent_at = db.Column(db.DateTime)
     bgcheck_results_received = db.Column(db.Boolean, default=False)
     # Reference tracking

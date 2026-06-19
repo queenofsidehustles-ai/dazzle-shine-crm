@@ -481,6 +481,7 @@ def apply():
             background_check_consent='background_check_consent' in request.form,
             agrees_to_ic_terms='agrees_to_ic_terms' in request.form,
             why_interested=request.form.get('why_interested', '').strip(),
+            bgcheck_existing_link=request.form.get('bgcheck_existing_link', '').strip(),
             status='new',
         )
         db.session.add(a)

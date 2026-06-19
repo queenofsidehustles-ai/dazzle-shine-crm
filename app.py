@@ -131,6 +131,7 @@ def _migrate_db():
         ('contractor_application', 'background_check_status',      "VARCHAR(20) DEFAULT 'not_started'"),
         ('contractor_application', 'background_check_notes',       'TEXT'),
         ('contractor_application', 'background_check_at',          'TIMESTAMP'),
+        ('contractor_application', 'bgcheck_existing_link',         'VARCHAR(500)'),
         ('contractor_application', 'bgcheck_request_sent_at',      'TIMESTAMP'),
         ('contractor_application', 'bgcheck_results_received',     'BOOLEAN DEFAULT FALSE'),
         ('contractor_application', 'ref1_name',                    'VARCHAR(100)'),

@@ -149,6 +149,40 @@
         </div>
       </div>
 
+      <!-- Background Check Notice -->
+      <div class="card" style="border-color:#d3a84f">
+        <h2 class="t" data-en="Background Check Requirement" data-es="Requisito de Verificación de Antecedentes">Background Check Requirement</h2>
+
+        <div class="terms-box" style="border-left:4px solid #d3a84f">
+          <span class="t"
+            data-en="All applicants who advance past the phone interview will be required to complete a background check as a condition of working with us.&#10;&#10;You are responsible for obtaining and paying for this check directly (typically $20–$30). We will send you the link and instructions after your interview.&#10;&#10;We take the safety of our clients and their homes seriously. This step protects everyone — including you."
+            data-es="Todos los solicitantes que avancen después de la entrevista telefónica deberán completar una verificación de antecedentes como requisito para trabajar con nosotros.&#10;&#10;Usted es responsable de obtener y pagar esta verificación directamente (generalmente $20–$30). Le enviaremos el enlace e instrucciones después de su entrevista.&#10;&#10;Nos tomamos muy en serio la seguridad de nuestros clientes y sus hogares. Este paso protege a todos, incluyéndole a usted.">
+            All applicants who advance past the phone interview will be required to complete a <strong>background check</strong> as a condition of working with us.<br><br>
+            You are responsible for obtaining and paying for this check directly (typically $20–$30). We will send you the link and instructions after your interview.<br><br>
+            We take the safety of our clients and their homes seriously. This step protects everyone — including you.
+          </span>
+        </div>
+
+        <div class="form-group" style="margin-top:14px">
+          <label class="t" data-en="Already have a background check? (optional)" data-es="¿Ya tiene una verificación de antecedentes? (opcional)">Already have a background check? (optional)</label>
+          <input type="url" name="bgcheck_existing_link" id="bgcheck-placeholder"
+                 placeholder="Paste a link — Care.com profile, Google Drive PDF, Checkr certificate, etc." />
+          <p class="t" id="bgcheck-hint" style="font-size:0.78rem;color:#9a95ad;margin-top:5px"
+             data-en="If you have a background check from Care.com, Checkr, FDLE, or any other provider completed within the last 12 months, paste a shareable link here. We'll review it and may not need to request a new one."
+             data-es="Si tiene una verificación de antecedentes de Care.com, Checkr, FDLE u otro proveedor completada en los últimos 12 meses, pegue un enlace aquí. Lo revisaremos y es posible que no necesitemos solicitar uno nuevo.">
+            If you have a background check from Care.com, Checkr, FDLE, or any other provider completed within the last 12 months, paste a shareable link here. We'll review it and may not need to request a new one.
+          </p>
+        </div>
+
+        <label class="check-item" style="font-weight:600;margin-top:4px">
+          <input type="checkbox" name="understands_bgcheck" required />
+          <span class="t"
+                data-en="I understand that a background check is required and that I am responsible for the cost."
+                data-es="Entiendo que se requiere una verificación de antecedentes y que soy responsable del costo.">
+            I understand that a background check is required and that I am responsible for the cost.</span>
+        </label>
+      </div>
+
       <!-- IC Terms -->
       <div class="card">
         <h2 class="t" data-en="Independent Contractor Terms" data-es="Términos de Contratista Independiente">Independent Contractor Terms</h2>
@@ -217,6 +251,14 @@ function setLang(lang) {
     why.placeholder = lang === 'es'
       ? 'Cuéntanos un poco sobre ti y por qué quieres trabajar con nosotros...'
       : 'Tell us a bit about yourself and why you\'re interested...';
+  }
+
+  // BG check input placeholder
+  const bgcheck = document.getElementById('bgcheck-placeholder');
+  if (bgcheck) {
+    bgcheck.placeholder = lang === 'es'
+      ? 'Pegue un enlace — perfil de Care.com, PDF de Google Drive, certificado de Checkr, etc.'
+      : 'Paste a link — Care.com profile, Google Drive PDF, Checkr certificate, etc.';
   }
 
   // Terms box special handling (pre-formatted)
