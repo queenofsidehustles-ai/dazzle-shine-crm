@@ -86,25 +86,22 @@
     <div class="card" id="form-card">
       <h1>Submit Your Background Check</h1>
       <p class="lead">
-        Hi {{ app.name.split()[0] }}! Please submit your background check results below.
-        You can either <strong>upload a file</strong> (PDF or screenshot) or
-        <strong>paste a verification link</strong> from Care.com — whichever you have.
+        Hi {{ app.name.split()[0] }}! Please upload your background check results below
+        as a <strong>PDF</strong> or a <strong>clear screenshot/photo</strong>.
+      </p>
+      <p class="lead" style="font-size:0.88rem;color:#5f5878;margin-top:8px">
+        Using Care.com? Open your completed background check, then either download it as a PDF
+        or take a screenshot, and upload that file here.
       </p>
 
-      <!-- OPTION 1: UPLOAD FILE -->
-      <div class="opt-label"><span class="num">1</span> Upload a file (PDF or photo)</div>
+      <!-- UPLOAD FILE -->
+      <div class="opt-label"><span class="num">📎</span> Upload your results (PDF or photo)</div>
       <label class="drop" id="drop-zone">
         <div class="ico" id="drop-ico">📎</div>
         <div class="big" id="drop-big">Tap to choose a file</div>
         <div class="small" id="drop-small">PDF, JPG, or PNG — up to 20MB</div>
         <input type="file" id="file-input" accept=".pdf,image/*" />
       </label>
-
-      <div class="divider">OR</div>
-
-      <!-- OPTION 2: PASTE LINK -->
-      <div class="opt-label"><span class="num">2</span> Paste a Care.com verification link</div>
-      <input type="url" id="link-input" placeholder="https://www.care.com/..." />
 
       <div class="err" id="err-box"></div>
 
@@ -141,7 +138,6 @@
 
   const fileInput = document.getElementById('file-input');
   const dropZone  = document.getElementById('drop-zone');
-  const linkInput = document.getElementById('link-input');
   const submitBtn = document.getElementById('submit-btn');
   const errBox    = document.getElementById('err-box');
 
@@ -162,39 +158,35 @@
 
   submitBtn.addEventListener('click', async () => {
     errBox.style.display = 'none';
-    const link = linkInput.value.trim();
 
-    if (!selectedFile && !link) {
-      showErr('Please upload a file or paste a verification link first.');
+    if (!selectedFile) {
+      showErr('Please choose a PDF or photo of your background check first.');
       return;
     }
 
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Submitting…';
+    submitBtn.textContent = 'Uploading file…';
 
     let uploadedUrl = '';
 
     try {
-      if (selectedFile) {
-        submitBtn.textContent = 'Uploading file…';
-        const fd = new FormData();
-        fd.append('file', selectedFile);
-        fd.append('upload_preset', UPLOAD_PRESET);
-        // 'auto' handles PDFs, images, etc.
-        const res = await fetch(
-          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`,
-          { method: 'POST', body: fd }
-        );
-        const cloud = await res.json();
-        if (!cloud.secure_url) throw new Error(cloud.error?.message || 'Upload failed');
-        uploadedUrl = cloud.secure_url;
-      }
+      const fd = new FormData();
+      fd.append('file', selectedFile);
+      fd.append('upload_preset', UPLOAD_PRESET);
+      // 'auto' handles PDFs, images, etc.
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`,
+        { method: 'POST', body: fd }
+      );
+      const cloud = await res.json();
+      if (!cloud.secure_url) throw new Error(cloud.error?.message || 'Upload failed');
+      uploadedUrl = cloud.secure_url;
 
       submitBtn.textContent = 'Saving…';
       const save = await fetch(`/background-check/${TOKEN}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uploaded_url: uploadedUrl, verification_link: link }),
+        body: JSON.stringify({ uploaded_url: uploadedUrl }),
       });
       const result = await save.json();
       if (!save.ok) throw new Error(result.error || 'Could not save');

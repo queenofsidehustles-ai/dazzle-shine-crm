@@ -331,7 +331,7 @@ def _build_bgcheck_email(name, biz, upload_url='#'):
         </a>
       </div>
       <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0;line-height:1.5;text-align:center">
-        Upload a PDF/screenshot, or paste your Care.com verification link — whichever you have.
+        Just upload a PDF or a clear screenshot of your results.
       </p>
     </div>
     <hr style="border:none;border-top:1px solid #e4dfef;margin:0 0 20px">
@@ -376,7 +376,7 @@ def _build_bgcheck_email(name, biz, upload_url='#'):
         </a>
       </div>
       <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0;line-height:1.5;text-align:center">
-        Sube un PDF/captura de pantalla, o pega tu enlace de verificación de Care.com.
+        Solo sube un PDF o una captura de pantalla clara de tus resultados.
       </p>
     </div>
   </div>
