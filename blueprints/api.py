@@ -95,7 +95,10 @@ def capture_quote():
     if request.method == 'OPTIONS':
         return add_cors(jsonify({}), origin), 200
 
+    # Accept JSON, form-encoded, or query params — never silently reject a real lead
     data = request.get_json(silent=True) or {}
+    if not data:
+        data = request.form.to_dict() or request.values.to_dict() or {}
     if not data.get('name') or not data.get('email'):
         resp = jsonify({'ok': False, 'error': 'Name and email required'})
         return add_cors(resp, origin), 400
