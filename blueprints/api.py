@@ -122,6 +122,7 @@ def capture_quote():
     db.session.commit()
 
     _send_quote_email(lead, total)
+    _send_speed_to_lead(lead, total)   # instant text to lead + alert to owner
     add_to_mailerlite(lead.email, lead.name)
     resp = jsonify({'ok': True, 'total': total, 'deposit': DEPOSIT_AMOUNT,
                     'balance_due': round(total - DEPOSIT_AMOUNT, 2)})
@@ -509,6 +510,71 @@ def _send_reminder(booking: Booking):
         f"Hi {booking.name.split()[0]}! Reminder: your cleaning is tomorrow at {time_text}. "
         f"Balance due: ${booking.balance_due:.2f}. Need to reschedule? Call {{phone}}. Reply STOP to opt out.",
     )
+
+
+def _send_speed_to_lead(lead, total):
+    """Instant response the moment a website lead comes in:
+       1) text the LEAD so they feel taken care of,
+       2) alert the OWNER (text + email) so they can call while the lead is hot."""
+    from models import BusinessSetting
+    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    owner_phone = (BusinessSetting.get('owner_phone') or BusinessSetting.get('phone')
+                   or os.environ.get('OWNER_PHONE', ''))
+    owner_email = (BusinessSetting.get('email')
+                   or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com'))
+
+    first = (lead.name or 'there').split()[0]
+    service = lead.service_label or 'cleaning'
+
+    # 1) Instant text to the LEAD
+    if lead.phone:
+        send_sms(
+            lead.phone,
+            f"Hi {first}! It's {biz} \U0001F9F9 We just received your request for a "
+            f"{service} and your estimate is ${total:.0f}. We're getting your booking "
+            f"details ready now — reply here with any questions or to lock in your spot! "
+            f"Reply STOP to opt out."
+        )
+
+    # 2) Instant alert to the OWNER so they can call within minutes
+    alert = (f"\U0001F514 NEW LEAD — call them NOW! {lead.name}, {lead.phone or 'no phone'}. "
+             f"{service}, {lead.bedrooms}bd/{lead.bathrooms}ba. Quote ${total:.0f}. "
+             f"{lead.city or ''} {lead.zip_code or ''}".strip())
+    if owner_phone:
+        send_sms(owner_phone, alert)
+
+    try:
+        send_email(
+            to_email=owner_email,
+            to_name=biz,
+            subject=f"\U0001F514 New lead: {lead.name} — call them now!",
+            html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#f6f5fb">
+  <div style="background:#1f1333;padding:20px;border-radius:12px;text-align:center;margin-bottom:20px">
+    <h2 style="color:#d3a84f;margin:0">New Lead — Respond Fast!</h2>
+  </div>
+  <div style="background:#fff;border-radius:12px;padding:22px 24px">
+    <p style="color:#3b2b6b;line-height:1.8;margin:0 0 14px">
+      The faster you call, the more likely you win the job. Aim for under 5 minutes.
+    </p>
+    <table style="width:100%;font-size:0.95rem;color:#1f1333;border-collapse:collapse">
+      <tr><td style="padding:6px 0;color:#9a95ad">Name</td><td style="padding:6px 0;font-weight:600">{lead.name}</td></tr>
+      <tr><td style="padding:6px 0;color:#9a95ad">Phone</td><td style="padding:6px 0;font-weight:600"><a href="tel:{lead.phone}" style="color:#d3a84f">{lead.phone or '—'}</a></td></tr>
+      <tr><td style="padding:6px 0;color:#9a95ad">Email</td><td style="padding:6px 0;font-weight:600">{lead.email}</td></tr>
+      <tr><td style="padding:6px 0;color:#9a95ad">Service</td><td style="padding:6px 0;font-weight:600">{service}</td></tr>
+      <tr><td style="padding:6px 0;color:#9a95ad">Home</td><td style="padding:6px 0;font-weight:600">{lead.bedrooms} bed / {lead.bathrooms} bath</td></tr>
+      <tr><td style="padding:6px 0;color:#9a95ad">Quote</td><td style="padding:6px 0;font-weight:600">${total:.2f}</td></tr>
+      <tr><td style="padding:6px 0;color:#9a95ad">Area</td><td style="padding:6px 0;font-weight:600">{lead.city or '—'} {lead.zip_code or ''}</td></tr>
+    </table>
+    <a href="tel:{lead.phone}" style="display:block;text-align:center;background:#d3a84f;color:#1f1333;
+       padding:14px;border-radius:8px;font-weight:700;text-decoration:none;margin-top:18px">
+      \U0001F4DE Call {first} Now
+    </a>
+  </div>
+</div>""",
+        )
+    except Exception:
+        pass
 
 
 def _send_quote_email(lead, total):
