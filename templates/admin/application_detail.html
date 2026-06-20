@@ -14,6 +14,8 @@
   {% set pipe_stage = 'hired' %}
 {% elif a.background_check_status == 'cleared' %}
   {% set pipe_stage = 'bg_cleared' %}
+{% elif a.background_check_status == 'received' or a.bgcheck_uploaded_at %}
+  {% set pipe_stage = 'bg_received' %}
 {% elif a.bgcheck_request_sent_at or a.background_check_status in ('requested','ordered') %}
   {% set pipe_stage = 'bg_waiting' %}
 {% elif a.interview_status == 'completed' %}
@@ -37,9 +39,10 @@
   ('hired',             'Hired',            '🎉'),
 ] %}
 
-{# Stage order for "done" detection #}
+{# Stage order for "done" detection — bg_received shares the 'Background Chk' cell with bg_waiting #}
 {% set stage_order = ['new','interview_sent','interview_progress','interview_done','bg_waiting','bg_cleared','hired'] %}
-{% set current_idx = stage_order.index(pipe_stage) if pipe_stage in stage_order else 0 %}
+{% set effective_stage = 'bg_waiting' if pipe_stage == 'bg_received' else pipe_stage %}
+{% set current_idx = stage_order.index(effective_stage) if effective_stage in stage_order else 0 %}
 
 <!-- Pipeline Progress Bar -->
 <div style="margin-bottom:20px">
@@ -47,7 +50,7 @@
     {% for key, label, icon in stages %}
       {% set idx = loop.index0 %}
       {% set is_done    = (idx < current_idx and pipe_stage != 'rejected') %}
-      {% set is_current = (key == pipe_stage) %}
+      {% set is_current = (key == effective_stage) %}
       {% set is_reject  = (pipe_stage == 'rejected') %}
       <div style="flex:1;padding:10px 4px;text-align:center;font-size:0.72rem;font-weight:700;
                   background:{{ '#d4edda' if is_done else ('#fef9ec' if is_current else '#f8f9fa') }};
@@ -90,10 +93,27 @@
   <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> Scroll down to the <strong>Hire {{ a.name.split()[0] }}</strong> card → set pay rate → click <em>Hire & Send Welcome Email</em>. That fires the agreement link automatically.</p>
 </div>
 
+{% elif pipe_stage == 'bg_received' %}
+<div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:#92400e;font-size:1rem;margin-bottom:6px">📎 Background Check Submitted — Review It</p>
+  <p style="font-size:0.85rem;color:#7c4a04;margin-bottom:12px"><strong>Your next step:</strong> {{ a.name.split()[0] }} submitted their background check. Open it from the <strong>Background Check</strong> card below. If it's recent and clear, set the status to <em>Cleared</em> → save. Then you'll be ready to hire.</p>
+  {% if a.bgcheck_uploaded_url %}
+  <a href="{{ a.bgcheck_uploaded_url }}" target="_blank"
+     style="background:#d3a84f;color:#1f1333;font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem;display:inline-block">
+    📄 View Their Background Check →
+  </a>
+  {% elif a.bgcheck_uploaded_link %}
+  <a href="{{ a.bgcheck_uploaded_link }}" target="_blank"
+     style="background:#d3a84f;color:#1f1333;font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem;display:inline-block">
+    🔗 Open Their Verification Link →
+  </a>
+  {% endif %}
+</div>
+
 {% elif pipe_stage == 'bg_waiting' %}
 <div style="background:#fff8e1;border:1px solid #fde68a;border-radius:12px;padding:16px 20px;margin-bottom:24px">
   <p style="font-weight:700;color:#856404;font-size:1rem;margin-bottom:4px">🔍 Waiting on Background Check Results</p>
-  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> {{ a.name.split()[0] }} has 7 days to complete their background check through Checkr or Care.com and email you the results. When they do, scroll down → update Background Check status to <em>Cleared</em> → save.</p>
+  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> {{ a.name.split()[0] }} has 7 days to complete their background check through Checkr or Care.com. They submit it through a secure upload link in their email. When it arrives, this box will turn gold and let you review it.</p>
 </div>
 
 {% elif pipe_stage == 'interview_done' %}
@@ -249,9 +269,30 @@
         {% endif %}
       </h2>
 
+      {% if a.bgcheck_uploaded_at %}
+      <div style="background:#d4edda;border:1px solid #a3cfbb;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:0.85rem">
+        <strong style="color:#155724">📎 Candidate submitted their results {{ a.bgcheck_uploaded_at.strftime('%b %d, %Y') }}</strong>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+          {% if a.bgcheck_uploaded_url %}
+          <a href="{{ a.bgcheck_uploaded_url }}" target="_blank"
+             style="display:inline-block;background:#155724;color:#fff;padding:7px 14px;border-radius:6px;
+                    text-decoration:none;font-weight:600;font-size:0.82rem;text-align:center">
+            📄 View Uploaded File →
+          </a>
+          {% endif %}
+          {% if a.bgcheck_uploaded_link %}
+          <a href="{{ a.bgcheck_uploaded_link }}" target="_blank" style="color:#155724;word-break:break-all;font-size:0.82rem">
+            🔗 {{ a.bgcheck_uploaded_link }}
+          </a>
+          {% endif %}
+        </div>
+        <p style="color:#1e7e34;font-size:0.78rem;margin-top:8px">Review it — if it's recent and clear, set the status below to <strong>Cleared</strong>.</p>
+      </div>
+      {% endif %}
+
       {% if a.bgcheck_existing_link %}
       <div style="background:#d4edda;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem">
-        <strong style="color:#155724">✅ Applicant submitted an existing background check:</strong><br>
+        <strong style="color:#155724">✅ Applicant listed an existing background check on their application:</strong><br>
         <a href="{{ a.bgcheck_existing_link }}" target="_blank" style="color:#155724;word-break:break-all">
           {{ a.bgcheck_existing_link }}
         </a>
@@ -282,6 +323,7 @@
           <select name="background_check_status">
             <option value="not_started" {{ 'selected' if a.background_check_status == 'not_started' }}>Not Started</option>
             <option value="requested"   {{ 'selected' if a.background_check_status == 'requested'   }}>Requested (awaiting their results)</option>
+            <option value="received"    {{ 'selected' if a.background_check_status == 'received'    }}>📎 Results Received (needs review)</option>
             <option value="ordered"     {{ 'selected' if a.background_check_status == 'ordered'     }}>Ordered / In Progress</option>
             <option value="cleared"     {{ 'selected' if a.background_check_status == 'cleared'     }}>✅ Cleared</option>
             <option value="failed"      {{ 'selected' if a.background_check_status == 'failed'      }}>❌ Failed</option>

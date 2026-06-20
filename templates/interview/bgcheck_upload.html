@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Submit Background Check — Dazzle & Shine Maids</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root{
+      --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,0.12);
+      --purple:#1f1333; --purple-mid:#3b2b6b; --bg:#f6f5fb;
+      --white:#fff; --border:#e4dfef; --radius:14px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple);min-height:100vh}
+    .header{background:var(--purple);padding:24px;text-align:center}
+    .header .script{font-family:"Allura",cursive;font-size:2.4rem;color:var(--gold);display:block;line-height:1}
+    .header .sub{color:rgba(255,255,255,0.5);font-size:0.72rem;letter-spacing:0.2em;text-transform:uppercase;margin-top:6px;display:block}
+    .wrap{max-width:560px;margin:0 auto;padding:28px 16px 60px}
+    .card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
+          box-shadow:0 4px 24px rgba(15,7,40,0.1);padding:28px 26px;margin-bottom:18px}
+    h1{font-size:1.3rem;color:var(--purple);margin-bottom:8px}
+    .lead{color:var(--purple-mid);line-height:1.7;font-size:0.95rem;margin-bottom:4px}
+
+    .opt-label{font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;
+               color:var(--gold-deep);margin:24px 0 10px;display:flex;align-items:center;gap:8px}
+    .opt-label .num{background:var(--purple);color:var(--gold);width:22px;height:22px;border-radius:50%;
+                    display:inline-flex;align-items:center;justify-content:center;font-size:0.78rem}
+
+    /* DROP ZONE */
+    .drop{border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;
+          cursor:pointer;transition:all .15s;background:#fafafe}
+    .drop:hover{border-color:var(--gold);background:var(--gold-soft)}
+    .drop.has-file{border-color:#1a9e5f;background:#f0fff7}
+    .drop .ico{font-size:2rem;margin-bottom:8px}
+    .drop .big{font-weight:600;color:var(--purple);margin-bottom:4px}
+    .drop .small{font-size:0.82rem;color:#9a95ad}
+    input[type=file]{display:none}
+
+    .divider{text-align:center;margin:22px 0;position:relative;color:#9a95ad;font-size:0.82rem;font-weight:600}
+    .divider:before,.divider:after{content:"";position:absolute;top:50%;width:40%;height:1px;background:var(--border)}
+    .divider:before{left:0} .divider:after{right:0}
+
+    input[type=url]{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:9px;
+                    font-family:"Inter",sans-serif;font-size:0.95rem;color:var(--purple)}
+    input[type=url]:focus{outline:none;border-color:var(--gold)}
+
+    .btn{display:block;width:100%;background:var(--gold);color:var(--purple);text-align:center;
+         padding:15px;border:none;border-radius:10px;font-weight:700;font-size:1.05rem;cursor:pointer;
+         margin-top:24px;font-family:"Inter",sans-serif;transition:background .15s}
+    .btn:hover{background:var(--gold-deep)}
+    .btn:disabled{opacity:0.5;cursor:not-allowed}
+
+    .note{background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;
+          padding:14px 16px;font-size:0.85rem;color:#7c4a04;line-height:1.6;margin-top:18px}
+    .err{background:#fff5f5;border:1px solid #fed7d7;color:#c53030;border-radius:9px;
+         padding:12px 14px;font-size:0.88rem;margin-top:14px;display:none}
+    .success-box{text-align:center;padding:20px 0}
+    .success-box .check{font-size:3rem;margin-bottom:12px}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="script">Dazzle &amp; Shine</span>
+    <span class="sub">Background Check Submission</span>
+  </div>
+
+  <div class="wrap">
+
+    {% if already_done %}
+    <div class="card">
+      <div class="success-box">
+        <div class="check">✅</div>
+        <h1>Already Received — Thank You!</h1>
+        <p class="lead" style="margin-top:8px">
+          We already have your background check on file, {{ app.name.split()[0] }}.
+          There's nothing more you need to do. We'll be in touch with next steps soon!
+        </p>
+      </div>
+    </div>
+    {% else %}
+
+    <!-- FORM -->
+    <div class="card" id="form-card">
+      <h1>Submit Your Background Check</h1>
+      <p class="lead">
+        Hi {{ app.name.split()[0] }}! Please submit your background check results below.
+        You can either <strong>upload a file</strong> (PDF or screenshot) or
+        <strong>paste a verification link</strong> from Care.com — whichever you have.
+      </p>
+
+      <!-- OPTION 1: UPLOAD FILE -->
+      <div class="opt-label"><span class="num">1</span> Upload a file (PDF or photo)</div>
+      <label class="drop" id="drop-zone">
+        <div class="ico" id="drop-ico">📎</div>
+        <div class="big" id="drop-big">Tap to choose a file</div>
+        <div class="small" id="drop-small">PDF, JPG, or PNG — up to 20MB</div>
+        <input type="file" id="file-input" accept=".pdf,image/*" />
+      </label>
+
+      <div class="divider">OR</div>
+
+      <!-- OPTION 2: PASTE LINK -->
+      <div class="opt-label"><span class="num">2</span> Paste a Care.com verification link</div>
+      <input type="url" id="link-input" placeholder="https://www.care.com/..." />
+
+      <div class="err" id="err-box"></div>
+
+      <button class="btn" id="submit-btn">Submit Background Check →</button>
+
+      <div class="note">
+        🔒 Your information is private and secure. This link is unique to you — please don't share it.
+        Questions? Just reply to the email we sent you.
+      </div>
+    </div>
+
+    <!-- SUCCESS -->
+    <div class="card hidden" id="success-card">
+      <div class="success-box">
+        <div class="check">🎉</div>
+        <h1>Got it — Thank You!</h1>
+        <p class="lead" style="margin-top:8px">
+          Your background check has been submitted successfully, {{ app.name.split()[0] }}.
+          Our team will review it and reach out with the next steps. We're excited to have you!
+        </p>
+      </div>
+    </div>
+
+    {% endif %}
+  </div>
+
+{% if not already_done %}
+<script>
+  const CLOUD_NAME    = {{ cloud_name | tojson }};
+  const UPLOAD_PRESET = {{ upload_preset | tojson }};
+  const TOKEN         = {{ token | tojson }};
+
+  let selectedFile = null;
+
+  const fileInput = document.getElementById('file-input');
+  const dropZone  = document.getElementById('drop-zone');
+  const linkInput = document.getElementById('link-input');
+  const submitBtn = document.getElementById('submit-btn');
+  const errBox    = document.getElementById('err-box');
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) {
+      selectedFile = fileInput.files[0];
+      dropZone.classList.add('has-file');
+      document.getElementById('drop-ico').textContent = '✅';
+      document.getElementById('drop-big').textContent = selectedFile.name;
+      document.getElementById('drop-small').textContent = 'File ready — tap Submit below';
+    }
+  });
+
+  function showErr(msg) {
+    errBox.textContent = msg;
+    errBox.style.display = 'block';
+  }
+
+  submitBtn.addEventListener('click', async () => {
+    errBox.style.display = 'none';
+    const link = linkInput.value.trim();
+
+    if (!selectedFile && !link) {
+      showErr('Please upload a file or paste a verification link first.');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting…';
+
+    let uploadedUrl = '';
+
+    try {
+      if (selectedFile) {
+        submitBtn.textContent = 'Uploading file…';
+        const fd = new FormData();
+        fd.append('file', selectedFile);
+        fd.append('upload_preset', UPLOAD_PRESET);
+        // 'auto' handles PDFs, images, etc.
+        const res = await fetch(
+          `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`,
+          { method: 'POST', body: fd }
+        );
+        const cloud = await res.json();
+        if (!cloud.secure_url) throw new Error(cloud.error?.message || 'Upload failed');
+        uploadedUrl = cloud.secure_url;
+      }
+
+      submitBtn.textContent = 'Saving…';
+      const save = await fetch(`/background-check/${TOKEN}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploaded_url: uploadedUrl, verification_link: link }),
+      });
+      const result = await save.json();
+      if (!save.ok) throw new Error(result.error || 'Could not save');
+
+      document.getElementById('form-card').classList.add('hidden');
+      document.getElementById('success-card').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    } catch (e) {
+      showErr('Something went wrong: ' + e.message + '. Please try again or reply to our email.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit Background Check →';
+    }
+  });
+</script>
+{% endif %}
+</body>
+</html>

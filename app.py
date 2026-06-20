@@ -157,6 +157,11 @@ def _migrate_db():
         # Interview response transcripts
         ('interview_response', 'transcript',       'TEXT'),
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),
+        # Background check candidate upload
+        ('contractor_application', 'bgcheck_upload_token',  'VARCHAR(64)'),
+        ('contractor_application', 'bgcheck_uploaded_url',  'VARCHAR(500)'),
+        ('contractor_application', 'bgcheck_uploaded_link', 'VARCHAR(500)'),
+        ('contractor_application', 'bgcheck_uploaded_at',   'TIMESTAMP'),
     ]
     for table, col, col_type in new_cols:
         try:

@@ -116,6 +116,65 @@ def complete_interview(token):
     return jsonify({'ok': True})
 
 
+# ── Background check upload (public, token-gated) ────────────────────────────────
+
+@interviews_bp.route('/background-check/<token>')
+def bgcheck_upload_page(token):
+    app_rec = ContractorApplication.query.filter_by(bgcheck_upload_token=token).first_or_404()
+    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk')
+    upload_preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'dazzle_interviews')
+    already_done = bool(app_rec.bgcheck_uploaded_at)
+    return render_template('interview/bgcheck_upload.html',
+        app=app_rec,
+        token=token,
+        cloud_name=cloud_name,
+        upload_preset=upload_preset,
+        already_done=already_done,
+    )
+
+
+@interviews_bp.route('/background-check/<token>/submit', methods=['POST'])
+def bgcheck_submit(token):
+    app_rec = ContractorApplication.query.filter_by(bgcheck_upload_token=token).first_or_404()
+    data = request.get_json() or {}
+
+    uploaded_url = (data.get('uploaded_url') or '').strip()
+    verification_link = (data.get('verification_link') or '').strip()
+
+    if not uploaded_url and not verification_link:
+        return jsonify({'error': 'Please upload a file or paste a link.'}), 400
+
+    if uploaded_url:
+        app_rec.bgcheck_uploaded_url = uploaded_url
+    if verification_link:
+        app_rec.bgcheck_uploaded_link = verification_link
+    app_rec.bgcheck_uploaded_at = datetime.utcnow()
+    app_rec.bgcheck_results_received = True
+    app_rec.background_check_status = 'received'
+    db.session.commit()
+
+    # Notify the owner
+    biz = 'Dazzle & Shine Maids'
+    owner_email = os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    try:
+        send_email(
+            to_email=owner_email,
+            to_name=biz,
+            subject=f"Background check submitted — {app_rec.name}",
+            html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;padding:24px">
+  <h2 style="color:#1f1333">{app_rec.name} submitted their background check</h2>
+  <p style="color:#3b2b6b">Review it in the CRM and mark them Cleared or Failed.</p>
+  <p style="color:#3b2b6b"><a href="{url_for('contractors.application_detail', app_id=app_rec.id, _external=True)}"
+     style="color:#d3a84f;font-weight:700">Open {app_rec.name}'s application →</a></p>
+</div>""",
+        )
+    except Exception:
+        pass
+
+    return jsonify({'ok': True})
+
+
 # ── Admin (login required) ──────────────────────────────────────────────────────
 
 @interviews_bp.route('/admin/interviews')
@@ -156,15 +215,19 @@ def approve_interview(app_id):
     app_rec.status = 'reviewing'
     app_rec.background_check_status = 'requested'
     app_rec.bgcheck_request_sent_at = datetime.utcnow()
+    if not app_rec.bgcheck_upload_token:
+        app_rec.bgcheck_upload_token = secrets.token_urlsafe(32)
     db.session.commit()
 
     # Send candidate a focused background check reminder
     biz = 'Dazzle & Shine Maids'
+    upload_url = url_for('interviews.bgcheck_upload_page',
+                         token=app_rec.bgcheck_upload_token, _external=True)
     send_email(
         to_email=app_rec.email,
         to_name=app_rec.name,
         subject=f"Great News — Next Step: Background Check — {biz}",
-        html=_build_bgcheck_email(app_rec.name, biz),
+        html=_build_bgcheck_email(app_rec.name, biz, upload_url),
     )
 
     flash(f'Video approved! Background check request sent to {app_rec.name}.', 'success')
@@ -223,7 +286,7 @@ def send_invite(app_id):
     return redirect(request.referrer or url_for('interviews.admin_interviews'))
 
 
-def _build_bgcheck_email(name, biz):
+def _build_bgcheck_email(name, biz, upload_url='#'):
     return f"""
 <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
   <div style="background:#1f1333;padding:28px;border-radius:12px 12px 0 0;text-align:center">
@@ -254,12 +317,21 @@ def _build_bgcheck_email(name, biz):
       <div style="background:#fff;border-radius:8px;padding:14px 16px;border:1px solid #e4dfef">
         <strong style="color:#1f1333">Option B — Care.com Background Check</strong><br>
         <span style="color:#3b2b6b;font-size:0.9rem">
-          If you already have a recent background check from Care.com, you can forward it directly to us.
+          If you already have a recent background check from Care.com, you can submit it to us — no need to buy a new one.
         </span>
       </div>
-      <p style="color:#7c4a04;font-size:0.88rem;margin:16px 0 0;line-height:1.6">
-        ⏰ Please complete and email your results within <strong>7 days</strong> to
-        <a href="mailto:dazzleandshinemaids@gmail.com" style="color:#d3a84f;font-weight:600">dazzleandshinemaids@gmail.com</a>
+      <p style="color:#7c4a04;font-size:0.88rem;margin:16px 0 14px;line-height:1.6">
+        ⏰ Please submit your results within <strong>7 days</strong> using your secure upload link below.
+      </p>
+      <div style="text-align:center">
+        <a href="{upload_url}"
+           style="background:#1f1333;color:#d3a84f;padding:14px 32px;border-radius:8px;
+                  text-decoration:none;font-weight:700;font-size:1rem;display:inline-block">
+          📎 Submit My Background Check →
+        </a>
+      </div>
+      <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0;line-height:1.5;text-align:center">
+        Upload a PDF/screenshot, or paste your Care.com verification link — whichever you have.
       </p>
     </div>
     <hr style="border:none;border-top:1px solid #e4dfef;margin:0 0 20px">
@@ -290,12 +362,21 @@ def _build_bgcheck_email(name, biz):
       <div style="background:#fff;border-radius:8px;padding:14px 16px;border:1px solid #e4dfef">
         <strong style="color:#1f1333">Opción B — Verificación de Care.com</strong><br>
         <span style="color:#3b2b6b;font-size:0.9rem">
-          Si ya tienes una verificación reciente de Care.com, puedes reenviarla directamente.
+          Si ya tienes una verificación reciente de Care.com, puedes enviárnosla — no necesitas comprar una nueva.
         </span>
       </div>
-      <p style="color:#7c4a04;font-size:0.88rem;margin:16px 0 0;line-height:1.6">
-        ⏰ Por favor envía tus resultados dentro de <strong>7 días</strong> a
-        <a href="mailto:dazzleandshinemaids@gmail.com" style="color:#d3a84f;font-weight:600">dazzleandshinemaids@gmail.com</a>
+      <p style="color:#7c4a04;font-size:0.88rem;margin:16px 0 14px;line-height:1.6">
+        ⏰ Por favor envía tus resultados dentro de <strong>7 días</strong> usando tu enlace seguro a continuación.
+      </p>
+      <div style="text-align:center">
+        <a href="{upload_url}"
+           style="background:#1f1333;color:#d3a84f;padding:14px 32px;border-radius:8px;
+                  text-decoration:none;font-weight:700;font-size:1rem;display:inline-block">
+          📎 Enviar mi Verificación de Antecedentes →
+        </a>
+      </div>
+      <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0;line-height:1.5;text-align:center">
+        Sube un PDF/captura de pantalla, o pega tu enlace de verificación de Care.com.
       </p>
     </div>
   </div>

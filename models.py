@@ -285,6 +285,10 @@ class ContractorApplication(db.Model):
     bgcheck_existing_link = db.Column(db.String(500))   # link applicant provides on application
     bgcheck_request_sent_at = db.Column(db.DateTime)
     bgcheck_results_received = db.Column(db.Boolean, default=False)
+    bgcheck_upload_token = db.Column(db.String(64))      # unique link candidate uses to submit results
+    bgcheck_uploaded_url = db.Column(db.String(500))     # Cloudinary URL of uploaded PDF/image
+    bgcheck_uploaded_link = db.Column(db.String(500))    # OR a verification link they pasted
+    bgcheck_uploaded_at = db.Column(db.DateTime)
     # Reference tracking
     ref1_name = db.Column(db.String(100))
     ref1_phone = db.Column(db.String(20))
