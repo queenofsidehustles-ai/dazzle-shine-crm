@@ -57,6 +57,7 @@ class Booking(db.Model):
     stripe_customer_id = db.Column(db.String(100))
     stripe_payment_method_id = db.Column(db.String(100))
     deposit_paid = db.Column(db.Boolean, default=False)
+    deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
     balance_due = db.Column(db.Float)
     balance_collected = db.Column(db.Boolean, default=False)
 

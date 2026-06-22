@@ -1,4 +1,5 @@
 import os
+import secrets
 import stripe
 from datetime import date, timedelta, datetime
 from flask import Blueprint, request, jsonify
@@ -391,16 +392,24 @@ def create_booking():
         discount_code=data.get('discount_code', ''),
         discount_amount=float(data.get('discount_amount', 0) or 0),
         deposit_paid=True if data.get('payment_intent_id') else False,
+        deposit_token=secrets.token_urlsafe(32),
         price=total,
         balance_due=round(total - DEPOSIT_AMOUNT, 2),
-        status='pending',
+        status='confirmed' if data.get('payment_intent_id') else 'pending',
     )
     db.session.add(booking)
     db.session.commit()
 
-    _send_confirmation(booking)
+    if booking.deposit_paid:
+        # Deposit was paid up front → fully confirmed
+        _send_confirmation(booking)
+    else:
+        # Tentative booking → ask for the deposit to confirm
+        _send_deposit_request(booking)
 
-    resp = jsonify({'ok': True, 'booking_id': booking.id})
+    resp = jsonify({'ok': True, 'booking_id': booking.id,
+                    'deposit_paid': booking.deposit_paid,
+                    'deposit_token': None if booking.deposit_paid else booking.deposit_token})
     return add_cors(resp, origin), 201
 
 
@@ -436,6 +445,7 @@ def _send_confirmation(booking: Booking):
     freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')
     date_text = booking.preferred_date or 'Flexible'
     time_text = booking.preferred_time or 'Flexible'
+    extras_text = f'<p><strong>Add-ons:</strong> {booking.extras}</p>' if booking.extras else ''
 
     from notifications import send_triggered_email
     send_triggered_email(
@@ -485,6 +495,99 @@ def _send_confirmation(booking: Booking):
   <p><strong>Date:</strong> {date_text} &nbsp; <strong>Time:</strong> {time_text}</p>
   <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
   <p><strong>Total:</strong> ${booking.price:.2f} &nbsp; <strong>Balance due:</strong> ${booking.balance_due:.2f}</p>
+  <p><strong>Notes:</strong> {booking.notes or '—'}</p>
+</div>""",
+    )
+
+
+def _send_deposit_request(booking: Booking):
+    """Tentative booking: confirm we received it, but make clear it's NOT locked in
+    until the $50 deposit is paid. Includes a secure Pay Deposit link."""
+    from flask import url_for
+    from models import BusinessSetting
+    notify_email = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')
+    date_text = booking.preferred_date or 'Flexible'
+    time_text = booking.preferred_time or 'Flexible'
+    first = (booking.name or 'there').split()[0]
+
+    try:
+        pay_url = url_for('deposit.pay_deposit_page', token=booking.deposit_token, _external=True)
+    except Exception:
+        pay_url = '#'
+
+    # Customer email — friendly but crystal clear it's not confirmed yet
+    html = f"""
+<div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
+  <div style="background:#1f1333;padding:26px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0;font-size:1.7rem">{biz}</h1>
+  </div>
+  <div style="padding:30px;background:#fff">
+    <h2 style="color:#1f1333;margin:0 0 12px">Hi {first}, we got your booking request! 🧹</h2>
+
+    <div style="background:#fff8e1;border:2px solid #f59e0b;border-radius:10px;padding:16px 18px;margin:0 0 22px">
+      <p style="margin:0;color:#92400e;font-weight:700;font-size:1rem">⚠️ Your booking is NOT confirmed yet</p>
+      <p style="margin:8px 0 0;color:#7c4a04;line-height:1.6;font-size:0.92rem">
+        To lock in your date and time, please pay your <strong>$50 deposit</strong> below.
+        Your spot is held only once the deposit is received. The deposit goes toward your total —
+        it is not an extra charge.
+      </p>
+    </div>
+
+    <table style="width:100%;font-size:0.95rem;color:#1f1333;border-collapse:collapse;margin-bottom:22px">
+      <tr><td style="padding:5px 0;color:#9a95ad">Service</td><td style="padding:5px 0;font-weight:600;text-align:right">{booking.service_label}</td></tr>
+      <tr><td style="padding:5px 0;color:#9a95ad">Home</td><td style="padding:5px 0;font-weight:600;text-align:right">{booking.bedrooms} bed / {booking.bathrooms} bath</td></tr>
+      <tr><td style="padding:5px 0;color:#9a95ad">Date</td><td style="padding:5px 0;font-weight:600;text-align:right">{date_text} {('· ' + time_text) if time_text != 'Flexible' else ''}</td></tr>
+      <tr><td style="padding:5px 0;color:#9a95ad">Estimated total</td><td style="padding:5px 0;font-weight:600;text-align:right">${booking.price:.2f}</td></tr>
+      <tr><td style="padding:5px 0;color:#9a95ad">Deposit to confirm</td><td style="padding:5px 0;font-weight:700;text-align:right;color:#065f46">$50.00</td></tr>
+      <tr><td style="padding:5px 0;color:#9a95ad">Balance after cleaning</td><td style="padding:5px 0;font-weight:600;text-align:right">${booking.balance_due:.2f}</td></tr>
+    </table>
+
+    <div style="text-align:center;margin-bottom:18px">
+      <a href="{pay_url}" style="background:#d3a84f;color:#1f1333;padding:16px 40px;border-radius:8px;
+         text-decoration:none;font-weight:700;font-size:1.1rem;display:inline-block">
+        Pay My $50 Deposit & Confirm →
+      </a>
+    </div>
+
+    <p style="color:#5f5878;font-size:0.85rem;line-height:1.6;text-align:center;margin:0">
+      Questions or want to change something? Call or text us at (689) 999-0194.
+    </p>
+  </div>
+  <div style="padding:14px;background:#1f1333;border-radius:0 0 12px 12px;text-align:center">
+    <p style="color:rgba(255,255,255,0.4);font-size:0.78rem;margin:0">{biz}</p>
+  </div>
+</div>"""
+    send_email(to_email=booking.email, to_name=booking.name,
+               subject=f"Action needed: confirm your cleaning with a $50 deposit — {biz}",
+               html=html)
+
+    # SMS to customer
+    send_sms(
+        booking.phone,
+        f"Hi {first}! {biz} got your booking request for {date_text}. "
+        f"It's NOT confirmed until your $50 deposit is paid. "
+        f"Pay here to lock your spot: {pay_url}  Reply STOP to opt out.",
+    )
+
+    # Owner alert — a tentative booking needs follow-up
+    send_email(
+        to_email=notify_email, to_name=biz, from_name=f'{biz} Bookings',
+        subject=f"⚠️ Tentative booking (no deposit yet): {booking.name} — {booking.service_label}",
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2>Tentative Booking — Deposit Not Paid Yet</h2>
+  <p>This booking is held but <strong>not confirmed</strong> until the $50 deposit is paid.
+     Consider following up if the deposit isn't paid soon.</p>
+  <p><strong>Name:</strong> {booking.name}</p>
+  <p><strong>Email:</strong> {booking.email}</p>
+  <p><strong>Phone:</strong> <a href="tel:{booking.phone}">{booking.phone}</a></p>
+  <p><strong>Service:</strong> {booking.service_label} ({freq_label})</p>
+  <p><strong>Home:</strong> {booking.bedrooms} bed / {booking.bathrooms} bath</p>
+  <p><strong>Date:</strong> {date_text} · {time_text}</p>
+  <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
+  <p><strong>Total:</strong> ${booking.price:.2f} · <strong>Balance after:</strong> ${booking.balance_due:.2f}</p>
   <p><strong>Notes:</strong> {booking.notes or '—'}</p>
 </div>""",
     )

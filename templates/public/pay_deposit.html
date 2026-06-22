@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pay Your Deposit — Dazzle & Shine Maids</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    :root{
+      --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,0.12);
+      --purple:#1f1333; --purple-mid:#3b2b6b; --bg:#f6f5fb;
+      --white:#fff; --border:#e4dfef; --radius:14px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple);min-height:100vh}
+    .header{background:var(--purple);padding:24px;text-align:center}
+    .header .script{font-family:"Allura",cursive;font-size:2.4rem;color:var(--gold);display:block;line-height:1}
+    .header .sub{color:rgba(255,255,255,0.5);font-size:0.72rem;letter-spacing:0.2em;text-transform:uppercase;margin-top:6px;display:block}
+    .wrap{max-width:520px;margin:0 auto;padding:28px 16px 60px}
+    .card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
+          box-shadow:0 4px 24px rgba(15,7,40,0.1);padding:28px 26px;margin-bottom:18px}
+    h1{font-size:1.3rem;color:var(--purple);margin-bottom:14px}
+
+    .summary{background:#faf9fd;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px}
+    .summary .row{display:flex;justify-content:space-between;padding:5px 0;font-size:0.92rem}
+    .summary .row .k{color:#9a95ad}
+    .summary .row .v{font-weight:600;text-align:right}
+    .summary .row.dep .v{color:#065f46;font-weight:700}
+
+    .deposit-banner{background:var(--purple);border-radius:10px;padding:18px 20px;text-align:center;margin-bottom:20px}
+    .deposit-banner .lbl{color:rgba(255,255,255,0.55);font-size:0.72rem;letter-spacing:0.14em;text-transform:uppercase}
+    .deposit-banner .amt{color:var(--gold);font-size:2.4rem;font-weight:700;line-height:1.1}
+    .deposit-banner .note{color:rgba(255,255,255,0.55);font-size:0.78rem;margin-top:4px}
+
+    label.fld{display:block;font-size:0.8rem;font-weight:600;color:#5f5878;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em}
+    #card-element{padding:13px 14px;border:1px solid var(--border);border-radius:10px;background:#fff}
+    .btn{display:block;width:100%;background:var(--gold);color:var(--purple);text-align:center;
+         padding:15px;border:none;border-radius:10px;font-weight:700;font-size:1.05rem;cursor:pointer;
+         margin-top:18px;font-family:"Inter",sans-serif}
+    .btn:hover{background:var(--gold-deep)}
+    .btn:disabled{opacity:0.5;cursor:not-allowed}
+    .err{background:#fff5f5;border:1px solid #fed7d7;color:#c53030;border-radius:9px;padding:12px 14px;font-size:0.88rem;margin-top:14px;display:none}
+    .secure{text-align:center;color:#9a95ad;font-size:0.8rem;margin-top:14px}
+    .success-box{text-align:center;padding:14px 0}
+    .success-box .check{font-size:3rem;margin-bottom:12px}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="script">Dazzle &amp; Shine</span>
+    <span class="sub">Confirm Your Booking</span>
+  </div>
+
+  <div class="wrap">
+
+    {% if already_paid %}
+    <div class="card">
+      <div class="success-box">
+        <div class="check">✅</div>
+        <h1>You're All Set!</h1>
+        <p style="color:#5f5878;line-height:1.7">
+          Your deposit is already paid and your cleaning is <strong>confirmed</strong>, {{ booking.name.split()[0] }}.
+          There's nothing more to do — check your email for the details. See you soon!
+        </p>
+      </div>
+    </div>
+    {% else %}
+
+    <div class="card" id="pay-card">
+      <h1>Pay your $50 deposit to confirm</h1>
+
+      <div class="summary">
+        <div class="row"><span class="k">Service</span><span class="v">{{ booking.service_label }}</span></div>
+        <div class="row"><span class="k">Home</span><span class="v">{{ booking.bedrooms }} bed / {{ booking.bathrooms }} bath</span></div>
+        <div class="row"><span class="k">Date</span><span class="v">{{ booking.preferred_date or 'Flexible' }}{% if booking.preferred_time and booking.preferred_time != 'Flexible' %} · {{ booking.preferred_time }}{% endif %}</span></div>
+        <div class="row"><span class="k">Estimated total</span><span class="v">${{ '%.2f'|format(booking.price or 0) }}</span></div>
+        <div class="row dep"><span class="k">Deposit today</span><span class="v">${{ '%.2f'|format(deposit) }}</span></div>
+        <div class="row"><span class="k">Balance after cleaning</span><span class="v">${{ '%.2f'|format(booking.balance_due or 0) }}</span></div>
+      </div>
+
+      <div class="deposit-banner">
+        <div class="lbl">Deposit Due Now</div>
+        <div class="amt">${{ '%.0f'|format(deposit) }}</div>
+        <div class="note">Goes toward your total — not an extra charge</div>
+      </div>
+
+      {% if stripe_pk %}
+      <label class="fld">Card details</label>
+      <div id="card-element"></div>
+      <div class="err" id="err-box"></div>
+      <button class="btn" id="pay-btn">Pay ${{ '%.0f'|format(deposit) }} &amp; Confirm →</button>
+      <div class="secure">🔒 Secure payment powered by Stripe</div>
+      {% else %}
+      <div class="err" style="display:block">
+        Online payment isn't set up yet. Please call or text us at (689) 999-0194 to pay your deposit.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card hidden" id="success-card">
+      <div class="success-box">
+        <div class="check">🎉</div>
+        <h1>Deposit Received — You're Confirmed!</h1>
+        <p style="color:#5f5878;line-height:1.7">
+          Thank you, {{ booking.name.split()[0] }}! Your cleaning is now locked in.
+          We just emailed your confirmation and details. We can't wait to make your home sparkle ✨
+        </p>
+      </div>
+    </div>
+
+    {% endif %}
+  </div>
+
+{% if stripe_pk and not already_paid %}
+<script>
+  const STRIPE_PK = {{ stripe_pk | tojson }};
+  const TOKEN     = {{ token | tojson }};
+  const stripe = Stripe(STRIPE_PK);
+  const elements = stripe.elements();
+  const card = elements.create('card', {
+    style: { base: { fontFamily: 'Inter, sans-serif', fontSize: '16px', color: '#1f1333' } }
+  });
+  card.mount('#card-element');
+
+  const payBtn = document.getElementById('pay-btn');
+  const errBox = document.getElementById('err-box');
+  const custName = {{ booking.name | tojson }};
+  const custEmail = {{ booking.email | tojson }};
+  const custPhone = {{ booking.phone | tojson }};
+
+  function showErr(msg){ errBox.textContent = msg; errBox.style.display = 'block'; }
+
+  card.on('change', e => {
+    if (e.error) showErr(e.error.message); else errBox.style.display = 'none';
+  });
+
+  payBtn.addEventListener('click', async () => {
+    errBox.style.display = 'none';
+    payBtn.disabled = true;
+    payBtn.textContent = 'Processing…';
+    try {
+      // 1) Create the payment intent on the server
+      const intentRes = await fetch(`/pay-deposit/${TOKEN}/intent`, { method: 'POST' });
+      const intentData = await intentRes.json();
+      if (!intentData.ok) throw new Error(intentData.error || 'Could not start payment');
+
+      // 2) Confirm the card payment
+      const { error, paymentIntent } = await stripe.confirmCardPayment(intentData.client_secret, {
+        payment_method: {
+          card: card,
+          billing_details: { name: custName, email: custEmail, phone: custPhone },
+        },
+      });
+      if (error) throw new Error(error.message);
+
+      // 3) Tell the server it succeeded
+      const confirmRes = await fetch(`/pay-deposit/${TOKEN}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_intent_id: paymentIntent.id }),
+      });
+      const confirmData = await confirmRes.json();
+      if (!confirmData.ok) throw new Error(confirmData.error || 'Could not confirm');
+
+      document.getElementById('pay-card').classList.add('hidden');
+      document.getElementById('success-card').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+      showErr(e.message + ' — or call/text us at (689) 999-0194.');
+      payBtn.disabled = false;
+      payBtn.textContent = 'Pay Deposit & Confirm →';
+    }
+  });
+</script>
+{% endif %}
+</body>
+</html>

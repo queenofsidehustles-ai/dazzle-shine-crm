@@ -18,6 +18,7 @@ from blueprints.sops import sops_bp
 from blueprints.email_templates import email_templates_bp
 from blueprints.interviews import interviews_bp
 from blueprints.pricing_public import pricing_public_bp
+from blueprints.deposit import deposit_bp
 
 
 def create_app():
@@ -55,6 +56,7 @@ def create_app():
     app.register_blueprint(email_templates_bp)
     app.register_blueprint(interviews_bp)
     app.register_blueprint(pricing_public_bp)
+    app.register_blueprint(deposit_bp)
 
     with app.app_context():
         db.create_all()
@@ -157,6 +159,8 @@ def _migrate_db():
         # Interview response transcripts
         ('interview_response', 'transcript',       'TEXT'),
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),
+        # Tentative booking deposit link
+        ('booking', 'deposit_token', 'VARCHAR(64)'),
         # Background check candidate upload
         ('contractor_application', 'bgcheck_upload_token',  'VARCHAR(64)'),
         ('contractor_application', 'bgcheck_uploaded_url',  'VARCHAR(500)'),
