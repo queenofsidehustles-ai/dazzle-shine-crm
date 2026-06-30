@@ -59,14 +59,17 @@ def _wrap_html(body_text, biz_name):
 
 
 def send_email(to_email, to_name, subject, html, from_name=None):
+    """Send via Resend. Returns (ok: bool, detail: str) so callers/diagnostics
+    can see what happened. Existing callers that ignore the return value are
+    unaffected."""
     api_key = os.environ.get('RESEND_API_KEY')
     from_email = os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
     if not from_name:
         from_name = os.environ.get('FROM_NAME', 'Dazzle & Shine Maids')
     if not api_key:
-        return
+        return False, 'RESEND_API_KEY is not set in Railway — no email service connected.'
     try:
-        http_requests.post(
+        resp = http_requests.post(
             'https://api.resend.com/emails',
             headers={
                 'Authorization': f'Bearer {api_key}',
@@ -80,8 +83,11 @@ def send_email(to_email, to_name, subject, html, from_name=None):
             },
             timeout=10,
         )
-    except Exception:
-        pass
+        if 200 <= resp.status_code < 300:
+            return True, f'Sent OK (from {from_email}).'
+        return False, f'Resend error {resp.status_code}: {resp.text[:400]}'
+    except Exception as e:
+        return False, f'Could not reach Resend: {e}'
 
 
 def add_to_mailerlite(email, name, group_id=None):

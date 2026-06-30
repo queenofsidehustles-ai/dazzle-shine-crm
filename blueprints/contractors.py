@@ -16,6 +16,49 @@ EXP_LEVELS = [
 ]
 
 
+@contractors_bp.route('/email-test')
+@login_required
+def email_test():
+    """Diagnostic: send a real test email and show exactly what Resend says."""
+    import os as _os
+    to = request.args.get('to') or BusinessSetting.get('email') or \
+        _os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    from_email = _os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
+    has_key = bool(_os.environ.get('RESEND_API_KEY'))
+
+    ok, detail = send_email(
+        to_email=to, to_name='Dazzle & Shine',
+        subject='✅ Dazzle & Shine — Email Test',
+        html='<div style="font-family:sans-serif;padding:24px">'
+             '<h2 style="color:#1f1333">Your email is working! 🎉</h2>'
+             '<p>If you can read this, Dazzle &amp; Shine emails are sending correctly.</p></div>',
+    )
+
+    color = '#155724' if ok else '#842029'
+    bg = '#d4edda' if ok else '#f8d7da'
+    fix_hint = '' if ok else (
+        '<div style="margin-top:18px;padding:16px;background:#fff8e1;border:1px solid #f0d488;border-radius:8px;color:#7c4a04;font-size:0.9rem;line-height:1.6">'
+        '<strong>How to fix:</strong><br>'
+        '1. In Railway, make sure <code>RESEND_API_KEY</code> is set'
+        f' (currently {"SET" if has_key else "<strong>MISSING</strong>"}).<br>'
+        f'2. In your Resend account, verify the sending domain for <code>{from_email}</code>'
+        ' (Resend → Domains → Add/Verify). Until the domain is verified, Resend rejects sends.<br>'
+        '3. Re-run this test.</div>'
+    )
+    return (
+        f'<div style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 16px">'
+        f'<div style="background:{bg};color:{color};padding:18px 22px;border-radius:10px;font-weight:700;font-size:1.05rem">'
+        f'{"✅ Test email sent!" if ok else "❌ Email did NOT send"}</div>'
+        f'<p style="margin-top:16px;color:#1f1333"><strong>To:</strong> {to}<br>'
+        f'<strong>From:</strong> {from_email}<br>'
+        f'<strong>API key set:</strong> {"yes" if has_key else "no"}<br>'
+        f'<strong>Result:</strong> {detail}</p>'
+        f'{fix_hint}'
+        f'<p style="margin-top:20px"><a href="{url_for("contractors.team")}" style="color:#7c3aed">← Back to Team</a></p>'
+        f'</div>'
+    )
+
+
 # ── Applications ───────────────────────────────────────────────────────────────
 
 SOURCES = ['Indeed', 'Facebook', 'Nextdoor', 'Craigslist', 'Referral', 'Walk-in', 'Website', 'Other']
