@@ -68,6 +68,10 @@ def send_email(to_email, to_name, subject, html, from_name=None):
         from_name = os.environ.get('FROM_NAME', 'Dazzle & Shine Maids')
     if not api_key:
         return False, 'RESEND_API_KEY is not set in Railway — no email service connected.'
+    # Replies go to the inbox Monica actually checks (her Gmail), even though
+    # the email is sent "from" the branded domain address.
+    reply_to = os.environ.get('REPLY_TO_EMAIL') or \
+        os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
     try:
         resp = http_requests.post(
             'https://api.resend.com/emails',
@@ -78,6 +82,7 @@ def send_email(to_email, to_name, subject, html, from_name=None):
             json={
                 'from': f'{from_name} <{from_email}>',
                 'to': [to_email],
+                'reply_to': reply_to,
                 'subject': subject,
                 'html': html,
             },
