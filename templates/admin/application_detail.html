@@ -437,12 +437,12 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Experience Level</label>
+          <label>Pay Tier</label>
           <select name="experience_level" onchange="autoFillRate(this)">
-            <option value="new"         data-pct="40">New Cleaner — 40% (default)</option>
-            <option value="experienced" data-pct="45">Experienced — 45% (default)</option>
-            <option value="senior"      data-pct="50">Senior — 50% (default)</option>
+            <option value="standard" data-pct="50">Starting Rate — 50% (all new hires)</option>
+            <option value="top"      data-pct="55">Top Performer — 55% (earned)</option>
           </select>
+          <span style="font-size:0.78rem;color:#9a95ad">New hires start at 50%. Bump to 55% later once they've earned it (15+ jobs, 4.5★+).</span>
         </div>
         <div class="form-group">
           <label>Pay Type</label>
@@ -453,8 +453,8 @@
         </div>
         <div class="form-group">
           <label id="rate-label">Rate (%)</label>
-          <input type="number" name="pay_rate" id="pay-rate" step="0.5" value="40" min="0" />
-          <span id="rate-hint" style="font-size:0.78rem;color:#9a95ad">e.g. 40 means cleaner earns 40% of each job</span>
+          <input type="number" name="pay_rate" id="pay-rate" step="0.5" value="50" min="0" />
+          <span id="rate-hint" style="font-size:0.78rem;color:#9a95ad">e.g. 50 means cleaner earns 50% of each job</span>
         </div>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:4px">
           Hire &amp; Send Welcome Email →

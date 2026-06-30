@@ -11,9 +11,8 @@ from notifications import send_email
 contractors_bp = Blueprint('contractors', __name__, url_prefix='/contractors')
 
 EXP_LEVELS = [
-    ('new',         'New Cleaner',   40),
-    ('experienced', 'Experienced',   45),
-    ('senior',      'Senior',        50),
+    ('standard', 'Starting Rate', 50),
+    ('top',      'Top Performer', 55),
 ]
 
 
@@ -312,9 +311,9 @@ def application_detail(app_id):
 @login_required
 def hire(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    exp = request.form.get('experience_level', 'new')
+    exp = request.form.get('experience_level', 'standard')
     pay_type = request.form.get('pay_type', 'percent')
-    pay_rate = float(request.form.get('pay_rate', 40))
+    pay_rate = float(request.form.get('pay_rate', 50))
     import os as _os
     worker_model = request.form.get('worker_model',
         BusinessSetting.get('worker_model') or _os.environ.get('WORKER_MODEL', 'contractor'))
@@ -409,7 +408,7 @@ def staff_detail(staff_id):
         s.email = request.form.get('email', s.email or '').strip()
         s.experience_level = request.form.get('experience_level', s.experience_level)
         s.pay_type = request.form.get('pay_type', s.pay_type)
-        s.pay_rate = float(request.form.get('pay_rate', s.pay_rate or 40))
+        s.pay_rate = float(request.form.get('pay_rate', s.pay_rate or 50))
         s.emergency_contact_name = request.form.get('emergency_contact_name', '').strip()
         s.emergency_contact_phone = request.form.get('emergency_contact_phone', '').strip()
         s.has_transportation = 'has_transportation' in request.form

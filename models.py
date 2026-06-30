@@ -357,7 +357,7 @@ class Staff(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     # Pay settings
     pay_type = db.Column(db.String(20), default='percent')  # percent, hourly
-    pay_rate = db.Column(db.Float, default=40.0)            # % of job or $/hr
+    pay_rate = db.Column(db.Float, default=50.0)            # % of job or $/hr
     experience_level = db.Column(db.String(20), default='new')  # new, experienced, senior
     # Profile
     emergency_contact_name = db.Column(db.String(100))
