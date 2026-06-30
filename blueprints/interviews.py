@@ -234,6 +234,34 @@ def approve_interview(app_id):
     return redirect(url_for('contractors.application_detail', app_id=app_rec.id))
 
 
+@interviews_bp.route('/admin/interviews/<int:app_id>/resend-offer', methods=['POST'])
+@login_required
+def resend_offer(app_id):
+    """Re-send the conditional offer / background-check email at any stage —
+    e.g. for candidates approved before the conditional-offer email existed."""
+    app_rec = ContractorApplication.query.get_or_404(app_id)
+    if not app_rec.bgcheck_upload_token:
+        app_rec.bgcheck_upload_token = secrets.token_urlsafe(32)
+    # Make sure they're flagged as awaiting a background check
+    if app_rec.status not in ('hired', 'onboarding', 'rejected'):
+        app_rec.status = 'reviewing'
+    if app_rec.background_check_status in (None, '', 'not_started'):
+        app_rec.background_check_status = 'requested'
+        app_rec.bgcheck_request_sent_at = datetime.utcnow()
+    db.session.commit()
+
+    biz = 'Dazzle & Shine Maids'
+    upload_url = url_for('interviews.bgcheck_upload_page',
+                         token=app_rec.bgcheck_upload_token, _external=True)
+    send_email(
+        to_email=app_rec.email, to_name=app_rec.name,
+        subject=f"Welcome to the Team (Pending Your Background Check) — {biz}",
+        html=_build_bgcheck_email(app_rec.name, biz, upload_url),
+    )
+    flash(f'Conditional offer email sent to {app_rec.name}.', 'success')
+    return redirect(request.referrer or url_for('contractors.application_detail', app_id=app_rec.id))
+
+
 @interviews_bp.route('/admin/interviews/<int:app_id>/reject', methods=['POST'])
 @login_required
 def reject_interview(app_id):

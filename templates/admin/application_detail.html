@@ -213,6 +213,22 @@
               🎥 {{ 'Re-send' if (a.interview_status and a.interview_status != 'not_sent') else 'Send' }} Video Interview Link
             </button>
           </form>
+
+          {% if a.interview_status == 'completed' and a.status not in ('hired', 'onboarding', 'rejected') %}
+          <form method="POST" action="{{ url_for('interviews.resend_offer', app_id=a.id) }}"
+                onsubmit="return confirm('Send the conditional offer email (pay details + background check link) to {{ a.name }}?')"
+                style="margin-top:8px">
+            <button type="submit"
+                    style="width:100%;background:#d3a84f;color:#1f1333;border:none;padding:10px 16px;
+                           border-radius:8px;font-weight:700;font-size:0.83rem;cursor:pointer;
+                           display:flex;align-items:center;justify-content:center;gap:6px">
+              💌 Send Conditional Offer Email
+            </button>
+          </form>
+          <p style="font-size:0.74rem;color:#9a95ad;margin-top:6px;text-align:center">
+            Sends the welcome offer with pay details + background check link. Use this for anyone approved before this email existed.
+          </p>
+          {% endif %}
         </div>
 
       </div>
