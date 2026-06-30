@@ -226,11 +226,11 @@ def approve_interview(app_id):
     send_email(
         to_email=app_rec.email,
         to_name=app_rec.name,
-        subject=f"Great News — Next Step: Background Check — {biz}",
+        subject=f"Welcome to the Team (Pending Your Background Check) — {biz}",
         html=_build_bgcheck_email(app_rec.name, biz, upload_url),
     )
 
-    flash(f'Video approved! Background check request sent to {app_rec.name}.', 'success')
+    flash(f'Video approved! Conditional offer + background check link sent to {app_rec.name}.', 'success')
     return redirect(url_for('contractors.application_detail', app_id=app_rec.id))
 
 
@@ -287,43 +287,68 @@ def send_invite(app_id):
 
 
 def _build_bgcheck_email(name, biz, upload_url='#'):
+    first = (name or 'there').split()[0]
     return f"""
 <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
   <div style="background:#1f1333;padding:28px;border-radius:12px 12px 0 0;text-align:center">
     <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0 0 6px;font-size:1.8rem">Dazzle &amp; Shine Maids</h1>
     <p style="color:rgba(255,255,255,0.6);margin:0;font-size:0.85rem;letter-spacing:0.1em;text-transform:uppercase">
-      Your Video Interview — Next Step
+      Welcome to the Team — Pending Your Background Check
     </p>
   </div>
+
+  <!-- ENGLISH -->
   <div style="padding:32px;background:#fff;border-left:4px solid #d3a84f">
-    <h2 style="color:#1f1333;margin:0 0 12px">Hi {name}! 🎉</h2>
-    <p style="color:#3b2b6b;line-height:1.8;margin:0 0 20px">
-      We reviewed your video interview and we love what we saw!
-      You are moving forward in our hiring process. There is <strong>one more step</strong> before we can bring you on board.
+    <h2 style="color:#1f1333;margin:0 0 12px">Congratulations, {first}! 🎉</h2>
+    <p style="color:#3b2b6b;line-height:1.8;margin:0 0 16px">
+      We loved your video interview, and <strong>we'd love to bring you onto the Dazzle &amp; Shine Maids team
+      as an independent contractor</strong> — contingent on a clear background check.
+      Consider this your official welcome (almost)!
     </p>
-    <div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:10px;padding:22px 24px;margin-bottom:24px">
-      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Complete Your Background Check</div>
-      <p style="color:#7c4a04;line-height:1.7;margin:0 0 14px">
-        A background check is required for all contractors. <strong>This is paid by you</strong> and typically costs $20–$40.
-        You have two accepted options:
+
+    <div style="background:#f6f5fb;border-left:3px solid #d3a84f;border-radius:6px;padding:14px 18px;margin:0 0 22px">
+      <p style="color:#5f5878;line-height:1.7;margin:0;font-style:italic">
+        A personal note from me: I started Dazzle &amp; Shine to build a team of people who take pride in their
+        work and treat every client's home like their own. I'm genuinely excited about the care you'll bring
+        to our clients. — Monica, Owner
       </p>
-      <div style="background:#fff;border-radius:8px;padding:14px 16px;margin-bottom:10px;border:1px solid #e4dfef">
-        <strong style="color:#1f1333">Option A — Checkr.com (Recommended)</strong><br>
-        <span style="color:#3b2b6b;font-size:0.9rem">
-          Visit <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">checkr.com</a>,
-          order your background check, and email us the results once complete.
-        </span>
-      </div>
-      <div style="background:#fff;border-radius:8px;padding:14px 16px;border:1px solid #e4dfef">
-        <strong style="color:#1f1333">Option B — Care.com Background Check</strong><br>
-        <span style="color:#3b2b6b;font-size:0.9rem">
-          If you already have a recent background check from Care.com, you can submit it to us — no need to buy a new one.
-        </span>
-      </div>
-      <p style="color:#7c4a04;font-size:0.88rem;margin:16px 0 14px;line-height:1.6">
-        ⏰ Please submit your results within <strong>7 days</strong> using your secure upload link below.
+    </div>
+
+    <!-- PAY -->
+    <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 What You'll Earn</div>
+      <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
+        You earn <strong>50% of every job</strong> you complete, paid after each clean. In real terms,
+        that's about <strong>$35–$48 an hour</strong> depending on the home. For example:
       </p>
-      <div style="text-align:center">
+      <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
+        <li>A 1-bed/1-bath standard clean is a $145 job — <strong>you earn $72.50</strong> for about 1.5 hours (~$48/hr).</li>
+        <li>A 3-bed/2-bath standard clean is a $225 job — <strong>you earn $112.50</strong> for about 3 hours (~$37/hr).</li>
+      </ul>
+      <p style="color:#1e7e34;font-size:0.85rem;margin:8px 0 0">The more efficiently you work, the higher your effective hourly rate.</p>
+    </div>
+
+    <!-- IC EXPECTATIONS -->
+    <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:10px;padding:20px 22px;margin:0 0 20px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">📋 What to Know as an Independent Contractor</div>
+      <ul style="color:#7c4a04;line-height:1.9;margin:0;padding-left:20px">
+        <li>You provide your <strong>own cleaning supplies and equipment</strong>.</li>
+        <li><strong>No uniform is provided</strong> — please wear neat, professional attire.</li>
+        <li>You use your <strong>own reliable transportation</strong>.</li>
+        <li>You're responsible for your <strong>own taxes and insurance</strong> (you'll receive a 1099).</li>
+        <li>You choose your schedule by accepting the jobs that work for you.</li>
+      </ul>
+    </div>
+
+    <!-- BACKGROUND CHECK -->
+    <div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:10px;padding:22px 24px;margin-bottom:22px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Your One Remaining Step — Background Check</div>
+      <p style="color:#7c4a04;line-height:1.7;margin:0 0 12px">
+        Your offer is contingent on a clear background check, at your own cost (typically $20–$40).
+        Use <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">Checkr.com</a>, or submit a recent
+        Care.com check if you already have one. Please complete it within <strong>7 days</strong> and upload your results below.
+      </p>
+      <div style="text-align:center;margin-top:14px">
         <a href="{upload_url}"
            style="background:#1f1333;color:#d3a84f;padding:14px 32px;border-radius:8px;
                   text-decoration:none;font-weight:700;font-size:1rem;display:inline-block">
@@ -334,41 +359,73 @@ def _build_bgcheck_email(name, biz, upload_url='#'):
         Just upload a PDF or a clear screenshot of your results.
       </p>
     </div>
-    <hr style="border:none;border-top:1px solid #e4dfef;margin:0 0 20px">
+
+    <!-- NEXT STEPS -->
+    <div style="margin-bottom:8px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:6px">✅ What Happens Next</div>
+      <p style="color:#3b2b6b;line-height:1.7;margin:0">
+        Once your check clears, we'll send your contractor agreement to sign and schedule your first job. Welcome aboard!
+      </p>
+    </div>
+
+    <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0">
     <p style="color:#5f5878;font-size:0.82rem;line-height:1.6;margin:0">
-      Questions? Just reply to this email. We look forward to welcoming you to the Dazzle &amp; Shine family!
+      Questions? Just reply to this email. We can't wait to welcome you to the Dazzle &amp; Shine family!
     </p>
   </div>
+
   <!-- ESPAÑOL -->
   <div style="padding:32px;background:#fff;border-left:4px solid #5d4f7d;border-top:2px dashed #e4dfef">
-    <h2 style="color:#1f1333;margin:0 0 12px">¡Hola {name}! 🎉</h2>
-    <p style="color:#3b2b6b;line-height:1.8;margin:0 0 20px">
-      Revisamos tu entrevista en video y nos encantó lo que vimos.
-      ¡Estás avanzando en nuestro proceso de contratación! Solo queda <strong>un paso más</strong>.
+    <h2 style="color:#1f1333;margin:0 0 12px">¡Felicidades, {first}! 🎉</h2>
+    <p style="color:#3b2b6b;line-height:1.8;margin:0 0 16px">
+      ¡Nos encantó tu entrevista en video y <strong>nos encantaría sumarte al equipo de Dazzle &amp; Shine Maids
+      como contratista independiente</strong> — sujeto a una verificación de antecedentes sin problemas!
+      Considera esta tu bienvenida oficial (casi).
     </p>
-    <div style="background:#fef9ec;border:2px solid #5d4f7d;border-radius:10px;padding:22px 24px">
-      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Completa tu Verificación de Antecedentes</div>
-      <p style="color:#7c4a04;line-height:1.7;margin:0 0 14px">
-        Es obligatoria para todos los contratistas. <strong>El costo es tuyo</strong>, generalmente entre $20 y $40.
-        Tienes dos opciones aceptadas:
+
+    <div style="background:#f6f5fb;border-left:3px solid #5d4f7d;border-radius:6px;padding:14px 18px;margin:0 0 22px">
+      <p style="color:#5f5878;line-height:1.7;margin:0;font-style:italic">
+        Una nota personal de mi parte: Fundé Dazzle &amp; Shine para formar un equipo de personas que se enorgullecen
+        de su trabajo y tratan cada hogar como si fuera el suyo. Estoy muy emocionada por el cuidado que les brindarás
+        a nuestros clientes. — Monica, Propietaria
       </p>
-      <div style="background:#fff;border-radius:8px;padding:14px 16px;margin-bottom:10px;border:1px solid #e4dfef">
-        <strong style="color:#1f1333">Opción A — Checkr.com (Recomendada)</strong><br>
-        <span style="color:#3b2b6b;font-size:0.9rem">
-          Visita <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">checkr.com</a>,
-          solicita tu verificación y envíanos los resultados por correo.
-        </span>
-      </div>
-      <div style="background:#fff;border-radius:8px;padding:14px 16px;border:1px solid #e4dfef">
-        <strong style="color:#1f1333">Opción B — Verificación de Care.com</strong><br>
-        <span style="color:#3b2b6b;font-size:0.9rem">
-          Si ya tienes una verificación reciente de Care.com, puedes enviárnosla — no necesitas comprar una nueva.
-        </span>
-      </div>
-      <p style="color:#7c4a04;font-size:0.88rem;margin:16px 0 14px;line-height:1.6">
-        ⏰ Por favor envía tus resultados dentro de <strong>7 días</strong> usando tu enlace seguro a continuación.
+    </div>
+
+    <!-- PAGO -->
+    <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 Lo que Ganarás</div>
+      <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
+        Ganas el <strong>50% de cada trabajo</strong> que completes, pagado después de cada limpieza. En términos reales,
+        eso es aproximadamente <strong>$35–$48 por hora</strong> según el hogar. Por ejemplo:
       </p>
-      <div style="text-align:center">
+      <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
+        <li>Una limpieza estándar de 1 hab/1 baño es un trabajo de $145 — <strong>ganas $72.50</strong> por aprox. 1.5 horas (~$48/hr).</li>
+        <li>Una limpieza estándar de 3 hab/2 baños es un trabajo de $225 — <strong>ganas $112.50</strong> por aprox. 3 horas (~$37/hr).</li>
+      </ul>
+      <p style="color:#1e7e34;font-size:0.85rem;margin:8px 0 0">Cuanto más eficiente trabajes, mayor será tu tarifa por hora.</p>
+    </div>
+
+    <!-- EXPECTATIVAS IC -->
+    <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:10px;padding:20px 22px;margin:0 0 20px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">📋 Lo que Debes Saber como Contratista Independiente</div>
+      <ul style="color:#7c4a04;line-height:1.9;margin:0;padding-left:20px">
+        <li>Tú aportas tus <strong>propios materiales y equipos de limpieza</strong>.</li>
+        <li><strong>No se proporciona uniforme</strong> — por favor usa vestimenta limpia y profesional.</li>
+        <li>Usas tu <strong>propio transporte confiable</strong>.</li>
+        <li>Eres responsable de tus <strong>propios impuestos y seguro</strong> (recibirás un 1099).</li>
+        <li>Eliges tu horario aceptando los trabajos que te convengan.</li>
+      </ul>
+    </div>
+
+    <!-- VERIFICACIÓN -->
+    <div style="background:#fef9ec;border:2px solid #5d4f7d;border-radius:10px;padding:22px 24px;margin-bottom:22px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Tu Único Paso Restante — Verificación de Antecedentes</div>
+      <p style="color:#7c4a04;line-height:1.7;margin:0 0 12px">
+        Tu oferta está sujeta a una verificación de antecedentes sin problemas, por tu cuenta (generalmente $20–$40).
+        Usa <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">Checkr.com</a>, o envía una verificación
+        reciente de Care.com si ya la tienes. Complétala dentro de <strong>7 días</strong> y sube tus resultados abajo.
+      </p>
+      <div style="text-align:center;margin-top:14px">
         <a href="{upload_url}"
            style="background:#1f1333;color:#d3a84f;padding:14px 32px;border-radius:8px;
                   text-decoration:none;font-weight:700;font-size:1rem;display:inline-block">
@@ -379,7 +436,17 @@ def _build_bgcheck_email(name, biz, upload_url='#'):
         Solo sube un PDF o una captura de pantalla clara de tus resultados.
       </p>
     </div>
+
+    <!-- SIGUIENTE -->
+    <div>
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:6px">✅ Qué Sigue</div>
+      <p style="color:#3b2b6b;line-height:1.7;margin:0">
+        Una vez que tu verificación esté lista, te enviaremos tu acuerdo de contratista para firmar y programaremos
+        tu primer trabajo. ¡Bienvenido/a al equipo!
+      </p>
+    </div>
   </div>
+
   <div style="padding:16px 32px;background:#1f1333;border-radius:0 0 12px 12px;text-align:center">
     <p style="color:rgba(255,255,255,0.4);font-size:0.78rem;margin:0">{biz} · Questions? Reply to this email.</p>
   </div>
