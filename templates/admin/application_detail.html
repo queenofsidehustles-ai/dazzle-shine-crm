@@ -214,7 +214,7 @@
             </button>
           </form>
 
-          {% if a.interview_status == 'completed' and a.status not in ('hired', 'onboarding', 'rejected') %}
+          {% if a.interview_status == 'completed' and a.status != 'rejected' %}
           <form method="POST" action="{{ url_for('interviews.resend_offer', app_id=a.id) }}"
                 onsubmit="return confirm('Send the conditional offer email (pay details + background check link) to {{ a.name }}?')"
                 style="margin-top:8px">

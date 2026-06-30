@@ -202,6 +202,25 @@
         {% endif %}
       </div>
 
+      <!-- Send / re-send the conditional offer email (works at any stage) -->
+      {% if app.interview_status == 'completed' and app.status != 'rejected' %}
+      <div class="card">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:8px">Conditional Offer Email</div>
+        <p style="font-size:0.82rem;color:var(--softer);line-height:1.5;margin-bottom:12px">
+          Sends the welcome offer with pay details + the background-check upload link.
+          Use this for anyone approved before this email existed, or to re-send it.
+        </p>
+        <form method="POST" action="{{ url_for('interviews.resend_offer', app_id=app.id) }}"
+              onsubmit="return confirm('Send the conditional offer email (pay details + background check link) to {{ app.name }}?')">
+          <button type="submit"
+                  style="width:100%;background:#d3a84f;color:#1f1333;border:none;padding:12px;
+                         border-radius:8px;font-weight:700;font-size:0.92rem;cursor:pointer">
+            💌 Send Conditional Offer Email
+          </button>
+        </form>
+      </div>
+      {% endif %}
+
       <!-- Link to full application -->
       <a href="{{ url_for('contractors.application_detail', app_id=app.id) }}"
          style="display:block;text-align:center;color:var(--muted);font-size:0.85rem;
