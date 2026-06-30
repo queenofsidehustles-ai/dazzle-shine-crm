@@ -399,8 +399,8 @@ def hire(app_id):
       <li><strong>Sign your {agreement_label}</strong> — use the button below</li>
       <li><strong>Complete your onboarding forms</strong> — payment info, emergency contact</li>
       <li><strong>Complete orientation training</strong> — review all policies, then confirm</li>
-      <li><strong>Shadow job / trial shift</strong> — you'll go out on a job with an experienced team member first</li>
-      {'<li><strong>Receive your supply kit</strong> — we will confirm pickup details with you</li>' if worker_model == 'employee' else '<li><strong>First solo job</strong> — bring your own supplies and equipment</li>'}
+      {'<li><strong>Receive your supply kit</strong> — we will confirm pickup details with you</li>' if worker_model == 'employee' else '<li><strong>Get ready for your first job</strong> — bring your own supplies and equipment</li>'}
+      <li><strong>Your first cleaning</strong> — we'll stay in close contact and review your photos to make sure everything's perfect. When an experienced team member is available, you may be paired to shadow them first.</li>
     </ol>
     <div style="text-align:center;margin:28px 0">
       <a href="{sign_url}" style="background:#d3a84f;color:#1f1333;padding:14px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:1rem;display:inline-block">

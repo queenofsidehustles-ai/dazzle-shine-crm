@@ -558,7 +558,7 @@ What to review during orientation:
 - Our scheduling and punctuality policy
 - Supply usage and safety guidelines
 
-Once you've completed both steps above, we'll schedule your shadow job and you'll be ready for your first assignment!
+Once you've completed both steps above, you'll be ready for your first assignment!
 
 Questions? Call us at {{phone}} — we're here to help.
 
@@ -576,8 +576,7 @@ Here's what happens next:
 1. Sign your work agreement — use the link we emailed you
 2. Complete your onboarding forms — payment info, shirt size, emergency contact
 3. Complete orientation — review our training materials and quality checklists
-4. Complete your shadow shift — you'll go out with an experienced team member first
-5. Get your supply kit — we'll confirm pickup details with you
+4. Your first job — bring your own supplies; we'll stay in close contact and review your photos to make sure everything's perfect. When an experienced team member is available, you may be paired to shadow them first.
 
 Once all steps are complete, you'll be ready for your first solo job!
 
