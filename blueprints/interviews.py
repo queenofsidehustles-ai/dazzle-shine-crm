@@ -318,14 +318,15 @@ def _build_bgcheck_email(name, biz, upload_url='#'):
     <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
       <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 What You'll Earn</div>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        You earn <strong>50% of every job</strong> you complete, paid after each clean. In real terms,
+        You start at <strong>50% of every job</strong> you complete, paid after each clean. In real terms,
         that's about <strong>$35–$48 an hour</strong> depending on the home. For example:
       </p>
       <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
         <li>A 1-bed/1-bath standard clean is a $145 job — <strong>you earn $72.50</strong> for about 1.5 hours (~$48/hr).</li>
         <li>A 3-bed/2-bath standard clean is a $225 job — <strong>you earn $112.50</strong> for about 3 hours (~$37/hr).</li>
       </ul>
-      <p style="color:#1e7e34;font-size:0.85rem;margin:8px 0 0">The more efficiently you work, the higher your effective hourly rate.</p>
+      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">⭐ Our top performers grow to 55% of every job — earn it with great reviews and reliability.</p>
+      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">The more efficiently you work, the higher your effective hourly rate.</p>
     </div>
 
     <!-- IC EXPECTATIONS -->
@@ -395,14 +396,15 @@ def _build_bgcheck_email(name, biz, upload_url='#'):
     <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
       <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 Lo que Ganarás</div>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        Ganas el <strong>50% de cada trabajo</strong> que completes, pagado después de cada limpieza. En términos reales,
+        Comienzas con el <strong>50% de cada trabajo</strong> que completes, pagado después de cada limpieza. En términos reales,
         eso es aproximadamente <strong>$35–$48 por hora</strong> según el hogar. Por ejemplo:
       </p>
       <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
         <li>Una limpieza estándar de 1 hab/1 baño es un trabajo de $145 — <strong>ganas $72.50</strong> por aprox. 1.5 horas (~$48/hr).</li>
         <li>Una limpieza estándar de 3 hab/2 baños es un trabajo de $225 — <strong>ganas $112.50</strong> por aprox. 3 horas (~$37/hr).</li>
       </ul>
-      <p style="color:#1e7e34;font-size:0.85rem;margin:8px 0 0">Cuanto más eficiente trabajes, mayor será tu tarifa por hora.</p>
+      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">⭐ Nuestros mejores contratistas crecen al 55% de cada trabajo — gánalo con excelentes reseñas y confiabilidad.</p>
+      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">Cuanto más eficiente trabajes, mayor será tu tarifa por hora.</p>
     </div>
 
     <!-- EXPECTATIVAS IC -->
