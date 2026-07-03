@@ -719,6 +719,8 @@ def staff_detail(staff_id):
         db.session.commit()
         flash('Profile updated!', 'success')
         return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+    if s.stripe_account_id:
+        _sync_stripe_status(s)   # auto-refresh payment status on page load
     recent_jobs = Booking.query.filter_by(assigned_cleaner=s.name, status='completed').order_by(Booking.created_at.desc()).limit(10).all()
     return render_template('admin/contractor_detail.html', s=s, recent_jobs=recent_jobs, exp_levels=EXP_LEVELS)
 
