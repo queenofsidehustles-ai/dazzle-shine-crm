@@ -163,6 +163,74 @@ def send_drips():
     return jsonify({'ok': True, 'drips_sent': count})
 
 
+# ── Applicant interview follow-ups (cron — run once daily) ────────────────────
+# Re-sends the bilingual video interview link every 2 days to applicants who
+# haven't responded (up to 2 extra nudges), then marks them "No Response".
+
+@api_bp.route('/applicant-followups', methods=['POST'])
+def applicant_followups():
+    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
+    expected = os.environ.get('REMINDER_API_KEY', '')
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    from models import ContractorApplication
+    from blueprints.interviews import send_interview_invite_email
+
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=2)   # spacing between nudges
+
+    candidates = ContractorApplication.query.filter(
+        ContractorApplication.interview_status.in_(['pending', 'sent', 'in_progress']),
+        ContractorApplication.status.notin_(['rejected', 'hired', 'onboarding', 'no_response']),
+    ).all()
+
+    nudged = 0
+    first_sent = 0
+    no_response = 0
+    for a in candidates:
+        # Backstop: first invite never went out (e.g. server restarted before the
+        # 10-minute timer fired). Send it if they applied at least 15 min ago.
+        if a.interview_status == 'pending':
+            if a.created_at and a.created_at <= now - timedelta(minutes=15):
+                if not a.interview_token:
+                    a.interview_token = secrets.token_urlsafe(32)
+                a.interview_status = 'sent'
+                a.interview_sent_at = now
+                a.interview_last_sent_at = now
+                db.session.commit()
+                try:
+                    send_interview_invite_email(a)
+                    first_sent += 1
+                except Exception:
+                    pass
+            continue
+
+        last = a.interview_last_sent_at or a.interview_sent_at
+        if not last or last > cutoff:
+            continue  # not enough time has passed since the last send
+
+        count = a.interview_nudge_count or 0
+        if count < 2:
+            try:
+                send_interview_invite_email(a)
+                a.interview_nudge_count = count + 1
+                a.interview_last_sent_at = now
+                nudged += 1
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        else:
+            # Original + 2 nudges sent, still silent → move out of the active list
+            a.status = 'no_response'
+            no_response += 1
+            db.session.commit()
+
+    return jsonify({'ok': True, 'nudged': nudged,
+                    'first_invites_sent': first_sent,
+                    'moved_to_no_response': no_response})
+
+
 # ── Contractor application (from website) ─────────────────────────────────────
 
 @api_bp.route('/apply', methods=['POST', 'OPTIONS'])

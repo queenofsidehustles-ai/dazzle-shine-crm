@@ -168,30 +168,11 @@
             📋 Send Application Link
           </button>
         </form>
-        {% if not a.interview_invite_sent_at %}
-        <form method="POST" action="{{ url_for('contractors.send_interview_invite', app_id=a.id) }}">
-          <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;font-size:0.83rem">
-            📅 Send Interview Invite (English)
-          </button>
-        </form>
-        <form method="POST" action="{{ url_for('contractors.send_spanish_interview', app_id=a.id) }}">
-          <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;font-size:0.83rem;background:linear-gradient(135deg,#34d399,#10b981);color:#fff">
-            🇲🇽 Send Interview Questions (Spanish)
-          </button>
-        </form>
-        {% else %}
-        <div style="background:#d4edda;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#155724;text-align:center">
-          ✅ Interview invite sent {{ a.interview_invite_sent_at.strftime('%b %d') }}
-          <br><a href="{{ url_for('contractors.send_interview_invite', app_id=a.id) }}" style="color:#155724;font-size:0.78rem;text-decoration:underline"
-                 onclick="return confirm('Re-send the interview invite?')">Resend</a>
-        </div>
-        {% endif %}
-
         <!-- VIDEO INTERVIEW -->
         <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
           {% if a.interview_status and a.interview_status != 'not_sent' %}
             <div style="background:#1f133318;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:var(--purple-mid);text-align:center;margin-bottom:8px">
-              🎥 Video interview:
+              🎥 Interview (English &amp; Spanish):
               {% if a.interview_status == 'completed' %}
                 <strong style="color:#276749">Completed ✅</strong>
                 &nbsp;—&nbsp;
@@ -200,17 +181,28 @@
               {% elif a.interview_status == 'in_progress' %}
                 <strong style="color:#92400e">In Progress ⏳</strong>
               {% else %}
-                <strong>Link Sent 📬</strong>
+                <strong>Link Sent 📬 · {{ (a.interview_nudge_count or 0) + 1 }}×</strong>
+                {% if a.interview_last_sent_at %}<br><span style="color:#9a95ad">last sent {{ a.interview_last_sent_at.strftime('%b %d') }}</span>{% endif %}
+                {% if (a.interview_nudge_count or 0) >= 2 %}
+                  <br><span style="color:#b7791f">Last nudge sent — will move to “No Response” if still silent.</span>
+                {% else %}
+                  <br><span style="color:#9a95ad">Auto-nudges every 2 days ({{ 2 - (a.interview_nudge_count or 0) }} left).</span>
+                {% endif %}
               {% endif %}
             </div>
           {% endif %}
+          {% if a.status == 'no_response' %}
+            <div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#718096;text-align:center;margin-bottom:8px">
+              🔕 <strong>No Response</strong> — link sent 3× with no reply. Re-send below to give them another chance.
+            </div>
+          {% endif %}
           <form method="POST" action="{{ url_for('interviews.send_invite', app_id=a.id) }}"
-                onsubmit="return confirm('Send video interview link to {{ a.name }}?')">
+                onsubmit="return confirm('Send the bilingual interview link to {{ a.name }}? This restarts the follow-up nudges.')">
             <button type="submit"
                     style="width:100%;background:#1f1333;color:#d3a84f;border:none;padding:10px 16px;
                            border-radius:8px;font-weight:700;font-size:0.83rem;cursor:pointer;
                            display:flex;align-items:center;justify-content:center;gap:6px">
-              🎥 {{ 'Re-send' if (a.interview_status and a.interview_status != 'not_sent') else 'Send' }} Video Interview Link
+              🎥 {{ 'Re-send' if (a.interview_status and a.interview_status != 'not_sent') else 'Send' }} Interview Link (English &amp; Spanish)
             </button>
           </form>
 

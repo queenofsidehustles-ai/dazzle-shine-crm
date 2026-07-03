@@ -304,8 +304,11 @@ def send_invite(app_id):
     if not app_rec.interview_token:
         app_rec.interview_token = secrets.token_urlsafe(32)
 
+    _now = datetime.utcnow()
     app_rec.interview_status = 'sent'
-    app_rec.interview_sent_at = datetime.utcnow()
+    app_rec.interview_sent_at = _now
+    app_rec.interview_last_sent_at = _now
+    app_rec.interview_nudge_count = 0   # manual re-send restarts the follow-up clock
     db.session.commit()
 
     send_interview_invite_email(app_rec)

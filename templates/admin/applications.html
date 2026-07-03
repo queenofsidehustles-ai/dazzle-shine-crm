@@ -95,13 +95,21 @@
 </div>
 
 <!-- Filter tabs -->
-<div class="filter-tabs">
-  {% for s, label in [('','All'),('new','New'),('reviewing','Reviewing'),('hired','Hired'),('rejected','Rejected')] %}
-  <a href="{{ url_for('contractors.applications', status=s) }}"
-     class="filter-tab {{ 'active' if status_filter == s }}">
-    {{ label }} ({{ counts['all' if not s else s] }})
-  </a>
-  {% endfor %}
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+  <div class="filter-tabs">
+    {% for s, label in [('','All'),('new','New'),('reviewing','Reviewing'),('hired','Hired'),('no_response','No Response'),('rejected','Rejected')] %}
+    <a href="{{ url_for('contractors.applications', status=s) }}"
+       class="filter-tab {{ 'active' if status_filter == s }}">
+      {{ label }} ({{ counts['all' if not s else s] }})
+    </a>
+    {% endfor %}
+  </div>
+  <form method="POST" action="{{ url_for('contractors.merge_duplicates') }}"
+        onsubmit="return confirm('Combine any repeat applications (same email) into one card per person? This keeps the card furthest along and safely removes the extras.')">
+    <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.82rem;white-space:nowrap">
+      ✨ Merge Duplicates
+    </button>
+  </form>
 </div>
 
 <div class="card">
@@ -148,10 +156,15 @@
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
                 ⏳ Interview In Progress
               </span>
+            {% elif a.status == 'no_response' %}
+              <span style="background:#f7fafc;color:#718096;border:1px solid #e2e8f0;
+                           padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
+                🔕 No Response
+              </span>
             {% elif a.interview_status in ('sent', 'pending') %}
               <span style="background:#f6f5fb;color:#3b2b6b;border:1px solid #c4b5fd;
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
-                📬 Interview Link Sent
+                📬 Interview Link Sent{% if a.interview_status == 'sent' %} · {{ (a.interview_nudge_count or 0) + 1 }}×{% endif %}
               </span>
             {% elif a.status == 'reviewing' %}
               <span style="background:#ebf8ff;color:#2b6cb0;border:1px solid #bee3f8;

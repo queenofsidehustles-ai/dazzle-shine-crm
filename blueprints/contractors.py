@@ -78,11 +78,67 @@ def applications():
         'reviewing': ContractorApplication.query.filter_by(status='reviewing').count(),
         'hired': ContractorApplication.query.filter_by(status='hired').count(),
         'rejected': ContractorApplication.query.filter_by(status='rejected').count(),
+        'no_response': ContractorApplication.query.filter_by(status='no_response').count(),
     }
     apply_url = url_for('contractors.apply', _external=True)
     return render_template('admin/applications.html', apps=apps,
                            counts=counts, status_filter=status_filter,
                            apply_url=apply_url, sources=SOURCES)
+
+
+@contractors_bp.route('/applications/merge-duplicates', methods=['POST'])
+@login_required
+def merge_duplicates():
+    """Combine repeat applications (same email) into one card per person.
+    Keeps the card furthest along in the pipeline; moves over any video
+    answers the keeper is missing, then deletes the extras."""
+    from models import InterviewResponse  # noqa: F401 (relationship use)
+    STATUS_RANK = {'hired': 5, 'onboarding': 5, 'reviewing': 3, 'new': 2, 'no_response': 1, 'rejected': 0}
+    IV_RANK = {'completed': 4, 'in_progress': 3, 'sent': 2, 'pending': 1, 'not_sent': 0}
+
+    def score(a):
+        return STATUS_RANK.get(a.status, 2) * 10 + IV_RANK.get(a.interview_status or 'not_sent', 0)
+
+    groups = {}
+    for a in ContractorApplication.query.all():
+        key = (a.email or '').strip().lower()
+        if key:
+            groups.setdefault(key, []).append(a)
+
+    merged = 0
+    people = 0
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        people += 1
+        keeper = max(group, key=lambda a: (score(a), a.created_at or datetime.min))
+        for dup in group:
+            if dup.id == keeper.id:
+                continue
+            # Fill blanks on the keeper from the duplicate
+            for f in ('name', 'phone', 'years_experience', 'services', 'availability',
+                      'why_interested', 'bgcheck_existing_link', 'source'):
+                if not getattr(keeper, f, None) and getattr(dup, f, None):
+                    setattr(keeper, f, getattr(dup, f))
+            # Move over any interview answers the keeper doesn't already have
+            answered = {r.question_index for r in keeper.responses}
+            for r in list(dup.responses):
+                if r.question_index in answered:
+                    db.session.delete(r)
+                else:
+                    r.application_id = keeper.id
+                    answered.add(r.question_index)
+            _d = dup.created_at.strftime('%b %d') if dup.created_at else '?'
+            keeper.admin_notes = ((keeper.admin_notes or '') + f"\nMerged duplicate applied {_d}.").strip()
+            db.session.delete(dup)
+            merged += 1
+
+    db.session.commit()
+    if merged:
+        flash(f'Merged {merged} duplicate card(s) across {people} applicant(s). ✨', 'success')
+    else:
+        flash('No duplicates found — your list is already clean! 🎉', 'success')
+    return redirect(url_for('contractors.applications'))
 
 
 @contractors_bp.route('/applications/add', methods=['POST'])
@@ -511,9 +567,38 @@ def payroll():
 @contractors_bp.route('/apply', methods=['GET', 'POST'])
 def apply():
     if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        email = request.form.get('email', '').strip()
+
+        # ── Duplicate guard ────────────────────────────────────────────────────
+        # If this email already applied, UPDATE that card instead of creating a
+        # new one. Prevents the same person showing up multiple times, and skips
+        # re-sending the notify/interview emails.
+        existing = None
+        if email:
+            existing = ContractorApplication.query.filter(
+                db.func.lower(ContractorApplication.email) == email.lower()
+            ).order_by(ContractorApplication.created_at.desc()).first()
+        if existing:
+            existing.name = name or existing.name
+            existing.phone = request.form.get('phone', '').strip() or existing.phone
+            existing.years_experience = request.form.get('years_experience', '') or existing.years_experience
+            existing.services = ', '.join(request.form.getlist('services')) or existing.services
+            existing.availability = ', '.join(request.form.getlist('availability')) or existing.availability
+            existing.has_transportation = 'has_transportation' in request.form
+            existing.has_supplies = 'has_supplies' in request.form
+            existing.has_references = 'has_references' in request.form
+            existing.background_check_consent = 'background_check_consent' in request.form
+            existing.agrees_to_ic_terms = 'agrees_to_ic_terms' in request.form
+            existing.why_interested = request.form.get('why_interested', '').strip() or existing.why_interested
+            _note = f"Re-applied {datetime.utcnow().strftime('%b %d, %Y')} — info updated, no duplicate created."
+            existing.admin_notes = (existing.admin_notes + "\n" + _note) if existing.admin_notes else _note
+            db.session.commit()
+            return render_template('public/apply_done.html', name=existing.name)
+
         a = ContractorApplication(
-            name=request.form.get('name', '').strip(),
-            email=request.form.get('email', '').strip(),
+            name=name,
+            email=email,
             phone=request.form.get('phone', '').strip(),
             years_experience=request.form.get('years_experience', ''),
             services=', '.join(request.form.getlist('services')),
@@ -850,8 +935,10 @@ def _delayed_send_invite(flask_app, application_id):
             return
         if not app_rec.interview_token:
             app_rec.interview_token = secrets.token_urlsafe(32)
+        _now = datetime.utcnow()
         app_rec.interview_status = 'sent'
-        app_rec.interview_sent_at = datetime.utcnow()
+        app_rec.interview_sent_at = _now
+        app_rec.interview_last_sent_at = _now
         db.session.commit()
         try:
             send_interview_invite_email(app_rec)
