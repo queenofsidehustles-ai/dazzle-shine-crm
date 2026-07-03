@@ -453,9 +453,9 @@ Address: {{address}}
 
 Total price: ${{price}}
 Deposit paid: ${{deposit}}
-Balance due after cleaning: ${{balance}}
+Balance charged the morning of your cleaning: ${{balance}}
 
-The balance will be automatically collected on the day of your cleaning. No need to do anything!
+The balance is automatically charged to your card the morning of your cleaning. No need to do anything!
 
 Need to reschedule? Call or text us at {{phone}} as soon as possible. Deposits are non-refundable but you may reschedule at any time.
 
@@ -471,7 +471,7 @@ Just a friendly reminder that your cleaning is scheduled for tomorrow!
 Service: {{service_type}}
 Date: {{booking_date}} at {{booking_time}}
 Address: {{address}}
-Balance due after cleaning: ${{balance}}
+Balance charged the morning of your cleaning: ${{balance}}
 
 Please make sure your home is accessible at your scheduled time. If you need to reschedule, please call us at {{phone}} as soon as possible.
 
@@ -500,7 +500,7 @@ Service: {{service_type}}
 Bedrooms: {{beds}} | Bathrooms: {{baths}}
 Estimated Total: ${{quote_amount}}
 
-Ready to book? All we need is a $50 deposit to hold your spot — the rest is due after your cleaning.
+Ready to book? All we need is a $50 deposit to hold your spot — the remaining balance is charged to your card the morning of your appointment.
 
 You can book online at {{booking_link}} or call us at {{phone}} and we'll get you scheduled in minutes.
 
@@ -518,7 +518,7 @@ We'd love to help you reclaim your time. Here's what you get when you book with 
 - Background-checked, insured cleaners
 - Satisfaction guaranteed — if something's missed we'll come back
 - Only a $50 deposit to hold your spot
-- The balance is due after your cleaning, not before
+- The balance is charged the morning of your cleaning — nothing more due today
 
 Booking takes less than 2 minutes: {{booking_link}}
 
