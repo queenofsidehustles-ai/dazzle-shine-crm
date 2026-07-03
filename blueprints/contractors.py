@@ -560,7 +560,7 @@ def onboarding_payments(token):
             return redirect(url_for('contractors.onboarding_hub', token=token))
         s.stripe_account_id = result
         db.session.commit()
-    hub_url = url_for('contractors.onboarding_hub', token=token, _external=True)
+    hub_url = url_for('contractors.onboarding_hub', token=token, _external=True, _scheme='https')
     ok, link = stripe_connect.create_onboarding_link(s.stripe_account_id, hub_url, hub_url)
     if not ok:
         flash(f'Payment setup could not open: {link}', 'error')

@@ -24,6 +24,14 @@ from blueprints.deposit import deposit_bp
 def create_app():
     app = Flask(__name__)
 
+    # Trust Railway's proxy so url_for(_external=True) builds https:// links
+    # (Stripe live mode rejects http return URLs, and email links should be secure).
+    try:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    except Exception:
+        pass
+
     # Database
     db_url = os.environ.get('DATABASE_URL', '')
     # Fall back to SQLite if URL is missing or unresolved template
