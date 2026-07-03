@@ -522,6 +522,8 @@ def accept_offer(token):
         a.offer_accepted_at = datetime.utcnow()
     if a.status not in ('hired', 'onboarding'):
         a.status = 'reviewing'
+    if not s.agreement_token:            # existing staff may not have one yet
+        s.agreement_token = secrets.token_urlsafe(32)
     db.session.commit()
 
     # Create their Stripe connected account if they don't have one yet
