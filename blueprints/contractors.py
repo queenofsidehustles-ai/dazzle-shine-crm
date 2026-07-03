@@ -568,6 +568,14 @@ def onboarding_payments(token):
     return redirect(link)
 
 
+@contractors_bp.route('/onboarding/<token>/pay-schedule', methods=['POST'])
+def onboarding_pay_schedule(token):
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    s.pay_schedule = 'weekly' if request.form.get('pay_schedule') == 'weekly' else 'daily'
+    db.session.commit()
+    return redirect(url_for('contractors.onboarding_hub', token=token))
+
+
 # ── Paying contractors ─────────────────────────────────────────────────────────
 
 @contractors_bp.route('/team/<int:staff_id>/refresh-stripe', methods=['POST'])
@@ -697,6 +705,7 @@ def staff_detail(staff_id):
         s.has_supplies = 'has_supplies' in request.form
         s.color = request.form.get('color', s.color)
         s.is_active = 'is_active' in request.form
+        s.pay_schedule = request.form.get('pay_schedule', s.pay_schedule or 'daily')
         s.notes = request.form.get('notes', '').strip()
         db.session.commit()
         flash('Profile updated!', 'success')
@@ -1167,18 +1176,21 @@ You are engaged as an independent contractor, not an employee. You are responsib
 You agree to provide residential and/or commercial cleaning services as assigned by {biz_name}, following all company quality standards, checklists, and client expectations.
 
 3. COMPENSATION
-Your pay rate (percentage of job or hourly) was communicated during onboarding. Payment is issued [weekly/bi-weekly] after jobs are marked complete.
+Your pay rate (a percentage of each job or an hourly rate) was communicated during onboarding. Payment is issued after each job is marked complete — by default, the same day. If you prefer, you may choose weekly payment during onboarding to be paid once per week instead.
 
-4. SCHEDULING
+4. INSURANCE
+As an independent contractor, you operate your own cleaning business and are responsible for carrying your own general liability insurance. The Company's insurance covers the Company and does not extend to independent contractors. Affordable coverage is widely available (often around $30–$50 per month), and the Company is glad to share provider options. While it is not required to begin working, we strongly recommend obtaining coverage to protect both you and the clients you serve.
+
+5. SCHEDULING
 Jobs will be offered to you based on availability. You may accept or decline jobs, but consistent availability is expected. Last-minute cancellations must be communicated immediately.
 
-5. CONDUCT & QUALITY
+6. CONDUCT & QUALITY
 You agree to: arrive on time, maintain professional appearance and communication, follow all cleaning checklists, treat client homes and belongings with the utmost care, and never solicit clients directly.
 
-6. CONFIDENTIALITY & NON-SOLICITATION
+7. CONFIDENTIALITY & NON-SOLICITATION
 You agree to keep all client information, pricing, and business processes strictly confidential. For 12 months after this agreement ends, you agree not to solicit or accept direct business from any {biz_name} client.
 
-7. TERMINATION
+8. TERMINATION
 Either party may terminate this agreement at any time with or without cause.
 
 ACKNOWLEDGMENT

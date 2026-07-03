@@ -70,10 +70,10 @@ def _send_transactional(trigger, email, name, variables):
 
 def run_lifecycle_emails():
     """Process every lifecycle stage. Returns a dict of how many of each were sent."""
-    from models import Booking, Lead, BookingRating
+    from models import Booking, Lead, BookingRating, Staff
     now = datetime.utcnow()
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
-         'upsell': 0, 'upsell_nudge': 0, 'winback': 0}
+         'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0}
 
     # ── A4 — final lead follow-up (~5 days after the last-chance drip) ──
     for lead in Lead.query.filter(Lead.drip_step == 3, Lead.status == 'new').all():
@@ -147,6 +147,22 @@ def run_lifecycle_emails():
                            {'booking_link': _booking_link(), 'discount_code': _winback_code()}):
             c['winback'] += 1
         b.winback_sent_at = now
+        db.session.commit()
+
+    # ── Insurance reminder — after a contractor completes a few cleanings ──
+    INSURANCE_AFTER_JOBS = 3
+    for s in Staff.query.filter(Staff.is_active.is_(True),
+                                Staff.insurance_reminder_sent_at.is_(None)).all():
+        if not s.email or (s.worker_model or 'contractor') == 'employee':
+            continue
+        done = Booking.query.filter(
+            db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+            Booking.status == 'completed').count()
+        if done < INSURANCE_AFTER_JOBS:
+            continue
+        _send_transactional('contractor_insurance_reminder', s.email, s.name, {})
+        c['insurance_reminder'] += 1
+        s.insurance_reminder_sent_at = now
         db.session.commit()
 
     return c

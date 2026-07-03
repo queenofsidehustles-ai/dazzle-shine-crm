@@ -73,6 +73,26 @@
       {% endif %}
     </div>
 
+    <!-- Pay schedule choice -->
+    <div class="step">
+      <div class="badge {{ 'done' if s.pay_schedule else 'todo' }}">💵</div>
+      <div style="flex:1">
+        <h3>How would you like to be paid?</h3>
+        <p>Most cleaners choose daily — you get paid the same day after each job. Prefer to collect it all at once? Choose weekly.</p>
+        <form method="POST" action="{{ url_for('contractors.onboarding_pay_schedule', token=s.agreement_token) }}">
+          <label style="display:block;margin-bottom:8px;cursor:pointer">
+            <input type="radio" name="pay_schedule" value="daily" {{ 'checked' if (s.pay_schedule or 'daily') == 'daily' }}>
+            <strong>Daily</strong> — paid the same day after each job (recommended)
+          </label>
+          <label style="display:block;margin-bottom:12px;cursor:pointer">
+            <input type="radio" name="pay_schedule" value="weekly" {{ 'checked' if s.pay_schedule == 'weekly' }}>
+            <strong>Weekly</strong> — one payment per week
+          </label>
+          <button class="btn" type="submit" style="font-size:0.9rem">Save my choice</button>
+        </form>
+      </div>
+    </div>
+
     {% if s.agreement_signed_at and s.stripe_payouts_enabled %}
     <div class="step" style="background:#f0fff4;border-color:#c6f6d5;justify-content:center;text-align:center;display:block">
       <h3 style="color:#276749">🎉 You're all set!</h3>

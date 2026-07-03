@@ -27,6 +27,13 @@
           <label>Emergency Contact Phone</label>
           <input type="tel" name="emergency_contact_phone" value="{{ s.emergency_contact_phone or '' }}" />
         </div>
+        <div class="form-group">
+          <label>Pay Schedule</label>
+          <select name="pay_schedule">
+            <option value="daily" {{ 'selected' if (s.pay_schedule or 'daily') == 'daily' }}>Daily — paid per job (default)</option>
+            <option value="weekly" {{ 'selected' if s.pay_schedule == 'weekly' }}>Weekly — one payment per week</option>
+          </select>
+        </div>
         <div style="display:flex;gap:16px;margin-bottom:14px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" name="has_transportation" style="width:auto" {{ 'checked' if s.has_transportation }} /> Has car</label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" name="has_supplies" style="width:auto" {{ 'checked' if s.has_supplies }} /> Has supplies</label>
@@ -151,6 +158,11 @@
         {% endif %}
       </div>
 
+      <div style="margin-bottom:12px">
+        <span style="background:#f6f5fb;border:1px solid #e4dfef;color:#5f5878;padding:3px 10px;border-radius:999px;font-size:0.75rem;font-weight:600">
+          {% if s.pay_schedule == 'weekly' %}🗓 Prefers WEEKLY pay{% else %}⚡ Prefers DAILY pay (per job){% endif %}
+        </span>
+      </div>
       {% if s.stripe_payouts_enabled %}
         <!-- Verified: show the Stripe Pay form -->
         <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#d4edda;border-radius:8px;margin-bottom:14px">

@@ -174,6 +174,8 @@ def _migrate_db():
         ('staff', 'stripe_payouts_enabled',   'BOOLEAN DEFAULT FALSE'),
         ('staff', 'stripe_details_submitted', 'BOOLEAN DEFAULT FALSE'),
         ('staff', 'stripe_disabled_reason',   'VARCHAR(120)'),
+        ('staff', 'pay_schedule',             "VARCHAR(10) DEFAULT 'daily'"),
+        ('staff', 'insurance_reminder_sent_at', 'TIMESTAMP'),
         # Interview response transcripts
         ('interview_response', 'transcript',       'TEXT'),
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),
@@ -743,6 +745,23 @@ We'd love to make your home shine again. See you soon!"""),
 Comment: {{comment}}
 
 Please reach out to make it right as soon as possible. Log in to the CRM for details."""),
+
+        ('contractor_insurance_reminder', 'cleaner', 'Insurance Reminder',
+         'Friendly nudge to a contractor to get their own insurance, after a few completed cleanings',
+         "A quick tip to protect yourself, {{first_name}}",
+         """Hi {{first_name}},
+
+You've completed a few cleanings with {{business_name}} now — congratulations, and thank you for your great work!
+
+Now that you're earning, this is a great time to protect yourself with your own general liability insurance. As an independent contractor, it covers you if anything ever comes up on a job — and it's usually very affordable (often around $30–$50 per month).
+
+A couple of popular options for cleaners:
+- Next Insurance (nextinsurance.com)
+- Thimble (thimble.com)
+
+It only takes a few minutes to get a quote. Any questions, just reply to this email — we're happy to point you in the right direction!
+
+Thanks again for being part of the team."""),
     ]
 
     added = 0
