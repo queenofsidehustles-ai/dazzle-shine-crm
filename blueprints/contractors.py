@@ -16,6 +16,86 @@ EXP_LEVELS = [
     ('top',      'Top Performer', 55),
 ]
 
+DEFAULT_TRAINING_GUIDE = """DAZZLE & SHINE — CONTRACTOR TRAINING & SUPPLY GUIDE
+
+Welcome to the team! Please review this before your first cleaning. It covers the supplies you'll need and the cleaning routine we expect on every job.
+
+━━━━━━━━━━━━━━━━━━━━━━
+🧴 YOUR SUPPLY CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━
+As an independent contractor, you bring your own supplies. Here's what you'll need:
+
+Cleaning products:
+- All-purpose cleaner
+- Glass / window cleaner
+- Disinfectant / bathroom cleaner
+- Floor cleaner
+- Degreaser (for kitchens)
+- Toilet bowl cleaner
+
+Tools:
+- Microfiber cloths (several — use separate colors for kitchen, bathroom, and glass)
+- Non-scratch sponges & scrub pads
+- Vacuum cleaner
+- Mop & bucket (or a spray mop)
+- Broom & dustpan
+- Extendable duster
+- Toilet brush
+- Rubber gloves
+- Trash bags
+
+Nice to have:
+- Grout brush or old toothbrush for detail work
+- Squeegee for glass and showers
+- Step stool
+- A caddy or tote to carry supplies room to room
+
+Tip: Affordable supplies are available at Walmart, Dollar Tree, Costco, or Amazon. Buying in bulk saves money.
+
+━━━━━━━━━━━━━━━━━━━━━━
+🧹 OUR CLEANING ROUTINE
+━━━━━━━━━━━━━━━━━━━━━━
+Always work TOP TO BOTTOM and LEFT TO RIGHT so dust falls onto floors you clean last.
+
+KITCHEN
+- Wipe counters, backsplash, and the outside of appliances
+- Clean stovetop and microwave (inside & out)
+- Wipe cabinet fronts; clean and shine the sink & faucet
+- Sweep and mop the floor
+- Empty the trash
+
+BATHROOMS
+- Clean and disinfect the toilet (inside, seat, base)
+- Scrub tub/shower and glass
+- Wipe counter, sink, faucet, and mirror
+- Wipe cabinet fronts
+- Sweep and mop the floor
+- Empty trash; replace towels if provided
+
+BEDROOMS & LIVING AREAS
+- Dust all surfaces, shelves, and décor
+- Make beds / tidy as requested
+- Wipe mirrors and glass
+- Vacuum carpets; sweep/mop hard floors
+- Empty the trash
+
+WHOLE HOME
+- Dust ceiling fans, light fixtures, and baseboards
+- Wipe light switches, door handles, and other high-touch spots
+- Spot-clean walls and doors
+
+━━━━━━━━━━━━━━━━━━━━━━
+⭐ PROFESSIONAL STANDARDS
+━━━━━━━━━━━━━━━━━━━━━━
+- Arrive on time, neat and professional
+- Treat every home and belonging with care
+- Take BEFORE and AFTER photos of each room (helps quality and reviews)
+- If anything is damaged or missed, tell us right away — honesty always
+- Never use a client's supplies without permission
+- Lock up and leave the home secure
+
+Questions? Reply to your welcome email anytime. Thank you for representing us with pride!"""
+
 
 @contractors_bp.route('/email-test')
 @login_required
@@ -582,6 +662,28 @@ def onboarding_start_date(token):
     s.roster_start_date = request.form.get('roster_start_date', '').strip()
     db.session.commit()
     return redirect(url_for('contractors.onboarding_hub', token=token))
+
+
+@contractors_bp.route('/onboarding/<token>/guide')
+def onboarding_guide(token):
+    """Public training & supply guide the contractor reviews during onboarding."""
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    guide = BusinessSetting.get('training_guide') or DEFAULT_TRAINING_GUIDE
+    return render_template('public/training_guide.html', s=s, biz=biz, guide=guide)
+
+
+@contractors_bp.route('/training-guide', methods=['GET', 'POST'])
+@login_required
+def training_guide():
+    """Owner edits the training & supply guide contractors see during onboarding."""
+    if request.method == 'POST':
+        BusinessSetting.set('training_guide', request.form.get('guide', '').strip())
+        db.session.commit()
+        flash('Training & Supply Guide saved!', 'success')
+        return redirect(url_for('contractors.training_guide'))
+    guide = BusinessSetting.get('training_guide') or DEFAULT_TRAINING_GUIDE
+    return render_template('admin/training_guide_edit.html', guide=guide)
 
 
 # ── Paying contractors ─────────────────────────────────────────────────────────

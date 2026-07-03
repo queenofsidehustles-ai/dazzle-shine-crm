@@ -125,6 +125,16 @@
       </div>
     </div>
 
+    <!-- Training & Supply Guide -->
+    <div class="step">
+      <div class="badge todo">📚</div>
+      <div style="flex:1">
+        <h3>Review your Training &amp; Supply Guide</h3>
+        <p>What supplies to bring, our room-by-room cleaning routine, and what we expect on every job. Please read it before your first cleaning.</p>
+        <a class="btn dark" href="{{ url_for('contractors.onboarding_guide', token=s.agreement_token) }}">📖 Open the Guide →</a>
+      </div>
+    </div>
+
     {% if s.agreement_signed_at and s.stripe_payouts_enabled %}
     <div class="step" style="background:#f0fff4;border-color:#c6f6d5;justify-content:center;text-align:center;display:block">
       <h3 style="color:#276749">🎉 You're all set!</h3>
