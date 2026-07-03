@@ -158,6 +158,8 @@ def _migrate_db():
         ('contractor_application', 'interview_completed_at',       'TIMESTAMP'),
         ('contractor_application', 'interview_nudge_count',        'INTEGER DEFAULT 0'),
         ('contractor_application', 'interview_last_sent_at',       'TIMESTAMP'),
+        ('contractor_application', 'offer_sent_at',                'TIMESTAMP'),
+        ('contractor_application', 'offer_sent_count',             'INTEGER DEFAULT 0'),
         # Interview response transcripts
         ('interview_response', 'transcript',       'TEXT'),
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),

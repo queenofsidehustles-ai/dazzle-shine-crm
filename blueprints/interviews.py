@@ -215,6 +215,8 @@ def approve_interview(app_id):
     app_rec.status = 'reviewing'
     app_rec.background_check_status = 'requested'
     app_rec.bgcheck_request_sent_at = datetime.utcnow()
+    app_rec.offer_sent_at = datetime.utcnow()
+    app_rec.offer_sent_count = (app_rec.offer_sent_count or 0) + 1
     if not app_rec.bgcheck_upload_token:
         app_rec.bgcheck_upload_token = secrets.token_urlsafe(32)
     db.session.commit()
@@ -248,6 +250,8 @@ def resend_offer(app_id):
     if app_rec.background_check_status in (None, '', 'not_started'):
         app_rec.background_check_status = 'requested'
         app_rec.bgcheck_request_sent_at = datetime.utcnow()
+    app_rec.offer_sent_at = datetime.utcnow()
+    app_rec.offer_sent_count = (app_rec.offer_sent_count or 0) + 1
     db.session.commit()
 
     biz = 'Dazzle & Shine Maids'

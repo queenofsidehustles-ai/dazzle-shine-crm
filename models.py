@@ -309,6 +309,9 @@ class ContractorApplication(db.Model):
     interview_completed_at = db.Column(db.DateTime)
     interview_nudge_count = db.Column(db.Integer, default=0)   # auto follow-up nudges sent (0, 1, 2)
     interview_last_sent_at = db.Column(db.DateTime)            # last time the link went out (original or nudge)
+    # Conditional offer email tracking
+    offer_sent_at = db.Column(db.DateTime)                     # last time the conditional offer email went out
+    offer_sent_count = db.Column(db.Integer, default=0)        # how many times it's been sent
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     responses = db.relationship('InterviewResponse', backref='application', lazy=True,

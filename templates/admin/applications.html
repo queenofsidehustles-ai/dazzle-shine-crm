@@ -167,10 +167,17 @@
                 📬 Interview Link Sent{% if a.interview_status == 'sent' %} · {{ (a.interview_nudge_count or 0) + 1 }}×{% endif %}
               </span>
             {% elif a.status == 'reviewing' %}
+              {% if a.offer_sent_at %}
+              <span style="background:#f0fff4;color:#276749;border:1px solid #c6f6d5;
+                           padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
+                💌 Offer Sent{% if (a.offer_sent_count or 0) > 1 %} · {{ a.offer_sent_count }}×{% endif %}
+              </span>
+              {% else %}
               <span style="background:#ebf8ff;color:#2b6cb0;border:1px solid #bee3f8;
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
                 👁 Reviewing
               </span>
+              {% endif %}
             {% else %}
               <span style="background:#f6f5fb;color:#5f5878;border:1px solid #e4dfef;
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
