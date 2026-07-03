@@ -1,10 +1,47 @@
 import os
+import hmac
+import hashlib
+import base64
 import requests as http_requests
 
 
-def send_triggered_email(trigger, to_email, to_name, variables=None):
+# ── Marketing opt-out (unsubscribe) ─────────────────────────────────────────────
+
+def _unsub_secret():
+    return (os.environ.get('SECRET_KEY') or os.environ.get('FLASK_SECRET_KEY')
+            or 'dazzle-unsub-fallback').encode()
+
+
+def unsubscribe_token(email):
+    """Signed, tamper-proof token that encodes an email for a one-click unsubscribe."""
+    email = (email or '').strip().lower()
+    sig = hmac.new(_unsub_secret(), email.encode(), hashlib.sha256).hexdigest()[:16]
+    return base64.urlsafe_b64encode(f'{email}|{sig}'.encode()).decode().rstrip('=')
+
+
+def verify_unsubscribe_token(token):
+    """Return the email if the token is valid, else None."""
+    try:
+        pad = '=' * (-len(token) % 4)
+        raw = base64.urlsafe_b64decode((token + pad).encode()).decode()
+        email, sig = raw.rsplit('|', 1)
+        good = hmac.new(_unsub_secret(), email.encode(), hashlib.sha256).hexdigest()[:16]
+        return email if hmac.compare_digest(sig, good) else None
+    except Exception:
+        return None
+
+
+def is_opted_out(email):
+    from models import EmailOptOut
+    if not email:
+        return False
+    return EmailOptOut.query.filter_by(email=email.strip().lower()).first() is not None
+
+
+def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe_url=None):
     """Look up an EmailTemplate by trigger key, fill in variables, and send.
-    Returns True if sent, False if template not found or inactive."""
+    If unsubscribe_url is given, an unsubscribe line is added to the footer
+    (use for marketing emails). Returns True if sent, False otherwise."""
     from models import EmailTemplate, BusinessSetting
     tmpl = EmailTemplate.query.filter_by(trigger=trigger, is_active=True).first()
     if not tmpl:
@@ -21,7 +58,7 @@ def send_triggered_email(trigger, to_email, to_name, variables=None):
         v.update(variables)
     subject = _sub(tmpl.subject, v)
     body_text = _sub(tmpl.body, v)
-    html = _wrap_html(body_text, biz)
+    html = _wrap_html(body_text, biz, unsubscribe_url=unsubscribe_url)
     send_email(to_email=to_email, to_name=to_name, subject=subject,
                html=html, from_name=biz)
     return True
@@ -33,7 +70,7 @@ def _sub(text, variables):
     return text
 
 
-def _wrap_html(body_text, biz_name):
+def _wrap_html(body_text, biz_name, unsubscribe_url=None):
     """Wrap plain-text email body in a branded HTML shell."""
     lines = body_text.replace('\r\n', '\n').split('\n')
     paragraphs = ''
@@ -45,6 +82,10 @@ def _wrap_html(body_text, biz_name):
             paragraphs += f'<li style="margin-bottom:6px">{line.lstrip("- 0123456789.")}</li>'
         else:
             paragraphs += f'<p style="margin:0 0 10px">{line}</p>'
+    unsub = ''
+    if unsubscribe_url:
+        unsub = (f'<br><a href="{unsubscribe_url}" style="color:#9a95ad;text-decoration:underline">'
+                 f'Unsubscribe from these emails</a>')
     return f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:28px 32px;border-radius:12px 12px 0 0">
@@ -53,7 +94,7 @@ def _wrap_html(body_text, biz_name):
   <div style="background:#ffffff;padding:28px 32px;border-radius:0 0 12px 12px;border:1px solid #e4dfef;border-top:none">
     {paragraphs}
     <hr style="border:none;border-top:1px solid #e4dfef;margin:24px 0">
-    <p style="font-size:0.78rem;color:#9a95ad;margin:0">{biz_name} · Questions? Reply to this email.</p>
+    <p style="font-size:0.78rem;color:#9a95ad;margin:0">{biz_name} · Questions? Reply to this email.{unsub}</p>
   </div>
 </div>"""
 

@@ -162,6 +162,13 @@ def _migrate_db():
         ('contractor_application', 'offer_sent_count',             'INTEGER DEFAULT 0'),
         ('contractor_application', 'offer_token',                  'VARCHAR(64)'),
         ('contractor_application', 'offer_accepted_at',            'TIMESTAMP'),
+        # Booking lifecycle email tracking
+        ('booking', 'completed_at',    'TIMESTAMP'),
+        ('booking', 'morning_note_at', 'TIMESTAMP'),
+        ('booking', 'review_nudge_at', 'TIMESTAMP'),
+        ('booking', 'upsell_sent_at',  'TIMESTAMP'),
+        ('booking', 'upsell_nudge_at', 'TIMESTAMP'),
+        ('booking', 'winback_sent_at', 'TIMESTAMP'),
         # Staff Stripe Connect (payouts)
         ('staff', 'stripe_account_id',        'VARCHAR(64)'),
         ('staff', 'stripe_payouts_enabled',   'BOOLEAN DEFAULT FALSE'),
@@ -432,10 +439,9 @@ Would that work for you?"""),
 
 
 def _seed_email_templates():
-    """Seed all automated email templates if none exist."""
+    """Add any automated email templates that don't exist yet (idempotent —
+    never overwrites templates the owner has customized)."""
     from models import EmailTemplate
-    if EmailTemplate.query.count() > 0:
-        return
 
     templates = [
         # ── Client Emails ─────────────────────────────────────────
@@ -643,13 +649,111 @@ Amount: ${{amount}}
 Error: {{error}}
 
 Log in to the CRM to resolve this manually."""),
+
+        # ── Lifecycle Automation (new) ────────────────────────────
+        ('lead_drip_final', 'lead', 'Final Lead Follow-Up',
+         'Last touch ~10 days after the quote if the lead never booked',
+         "One last note about your quote — {{business_name}}",
+         """Hi {{first_name}},
+
+We don't want to crowd your inbox, so this is our last note about your ${{quote_amount}} cleaning quote.
+
+If now isn't the right time, no worries at all — your quote stays good and we're here whenever you're ready. Booking only takes 2 minutes:
+
+{{booking_link}}
+
+Or just reply with any questions. Thank you for considering {{business_name}}!"""),
+
+        ('booking_morning_of', 'client', 'Morning-Of Reminder',
+         'Sent the morning of a scheduled cleaning',
+         "See you today, {{first_name}}! — {{business_name}}",
+         """Hi {{first_name}},
+
+Just a friendly heads-up that your cleaning is scheduled for today!
+
+Your remaining balance will be charged automatically this morning — nothing you need to do.
+
+Please make sure we can access your home at your scheduled time. Questions? Call or text us at {{phone}}.
+
+See you soon!"""),
+
+        ('review_nudge', 'client', 'Review Reminder',
+         'Sent ~3 days after a cleaning if the customer has not rated yet',
+         "How was your cleaning, {{first_name}}?",
+         """Hi {{first_name}},
+
+We'd still love to hear how your recent cleaning went — it only takes 5 seconds:
+
+{{rate_link}}
+
+Your feedback helps us improve and helps other families find us. Thank you!"""),
+
+        ('recurring_upsell', 'client', 'Recurring Upsell',
+         'Sent ~2 days after a one-time cleaning — invites them to go recurring',
+         "Loved your clean? Keep it that way & save — {{business_name}}",
+         """Hi {{first_name}},
+
+We hope your home is still sparkling!
+
+Most of our happy customers switch to regular cleanings so they never have to think about it again — and they save on every single visit:
+
+- Monthly — ${{monthly_price}} (save 5%)
+- Bi-Weekly — ${{biweekly_price}} (save 10%)
+- Weekly — ${{weekly_price}} (save 15%)
+
+Lock in your spot and your discount here:
+
+{{booking_link}}
+
+Questions? Just reply or call {{phone}}. We'd love to keep your home fresh year-round!"""),
+
+        ('recurring_upsell_nudge', 'client', 'Recurring Upsell Reminder',
+         'Second nudge ~9 days later if they have not rebooked',
+         "Still time to save on regular cleanings, {{first_name}}",
+         """Hi {{first_name}},
+
+Just circling back — your recurring cleaning discount is still available:
+
+- Monthly ${{monthly_price}} · Bi-Weekly ${{biweekly_price}} · Weekly ${{weekly_price}}
+
+Set it and forget it: a consistently clean home with no big deep-clean surprises.
+
+{{booking_link}}
+
+Reply anytime with questions!"""),
+
+        ('winback', 'client', 'Win-Back — We Miss You',
+         'Sent to a past customer who has not booked in ~50 days',
+         "We miss you, {{first_name}}! Here's 10% off — {{business_name}}",
+         """Hi {{first_name}},
+
+It's been a little while since your last cleaning with {{business_name}}, and we'd love to welcome you back!
+
+As a thank-you for being a valued customer, here's 10% off your next cleaning — just use code {{discount_code}} at checkout:
+
+{{booking_link}}
+
+We'd love to make your home shine again. See you soon!"""),
+
+        ('owner_low_rating', 'owner', 'Low Rating Alert',
+         'Alerts the owner when a customer rates below 4 stars',
+         "Low rating: {{client_name}} — {{stars}} stars",
+         """{{client_name}} just left a {{stars}}-star rating for their cleaning.
+
+Comment: {{comment}}
+
+Please reach out to make it right as soon as possible. Log in to the CRM for details."""),
     ]
 
+    added = 0
     for trigger, cat, name, desc, subject, body in templates:
-        t = EmailTemplate(trigger=trigger, category=cat, name=name,
-                          description=desc, subject=subject, body=body.strip())
-        db.session.add(t)
-    db.session.commit()
+        if EmailTemplate.query.filter_by(trigger=trigger).first():
+            continue  # already exists — keep the owner's version
+        db.session.add(EmailTemplate(trigger=trigger, category=cat, name=name,
+                       description=desc, subject=subject, body=body.strip()))
+        added += 1
+    if added:
+        db.session.commit()
 
 
 def _seed_sops():

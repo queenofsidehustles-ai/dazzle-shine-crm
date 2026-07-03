@@ -87,6 +87,8 @@ def detail(booking_id):
         booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
 
         if booking.status == 'completed' and old_status != 'completed':
+            from datetime import datetime as _dt
+            booking.completed_at = _dt.utcnow()
             _send_followup_email(booking)
             _send_rating_request(booking)
             _create_next_recurring(booking)

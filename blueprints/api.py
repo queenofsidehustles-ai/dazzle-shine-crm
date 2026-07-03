@@ -247,6 +247,39 @@ def applicant_followups():
                     'moved_to_no_response': no_response})
 
 
+# ── Lifecycle marketing emails (cron — run daily or every 15 min) ─────────────
+# Final lead drip, morning-of note, review nudge, recurring upsell + nudge, win-back.
+
+@api_bp.route('/lifecycle-emails', methods=['POST'])
+def lifecycle_emails():
+    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
+    expected = os.environ.get('REMINDER_API_KEY', '')
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    import lifecycle
+    counts = lifecycle.run_lifecycle_emails()
+    return jsonify({'ok': True, **counts})
+
+
+# ── One-click unsubscribe (public) ────────────────────────────────────────────
+
+@api_bp.route('/unsubscribe/<token>')
+def unsubscribe(token):
+    from notifications import verify_unsubscribe_token
+    from models import EmailOptOut
+    email = verify_unsubscribe_token(token)
+    page = ("<div style='font-family:Inter,sans-serif;max-width:480px;margin:60px auto;"
+            "text-align:center;color:#1f1333;padding:0 20px'>")
+    if not email:
+        return page + "<h2>Invalid link</h2><p>This unsubscribe link is not valid.</p></div>", 400
+    if not EmailOptOut.query.filter_by(email=email).first():
+        db.session.add(EmailOptOut(email=email))
+        db.session.commit()
+    return page + ("<h2 style='color:#b98a33'>You're unsubscribed ✓</h2>"
+                   "<p>You won't receive any more marketing emails from us. "
+                   "You'll still get important messages about your bookings and payments.</p></div>")
+
+
 # ── Contractor application (from website) ─────────────────────────────────────
 
 @api_bp.route('/apply', methods=['POST', 'OPTIONS'])

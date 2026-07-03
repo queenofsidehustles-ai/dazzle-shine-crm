@@ -76,6 +76,13 @@ class Booking(db.Model):
     status = db.Column(db.String(20), default='pending')  # pending, confirmed, in_progress, completed, cancelled
     price = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)               # when marked completed (drives lifecycle emails)
+    # Lifecycle email tracking (one send each, never repeats)
+    morning_note_at = db.Column(db.DateTime)            # morning-of note
+    review_nudge_at = db.Column(db.DateTime)            # review reminder
+    upsell_sent_at = db.Column(db.DateTime)             # one-time → recurring upsell
+    upsell_nudge_at = db.Column(db.DateTime)            # upsell 2nd nudge
+    winback_sent_at = db.Column(db.DateTime)            # "we miss you" win-back
 
     SERVICE_LABELS = {
         'standard': 'Standard House Cleaning',
@@ -541,3 +548,10 @@ class BusinessSetting(db.Model):
         else:
             row = BusinessSetting(key=key, value=str(value))
             db.session.add(row)
+
+
+class EmailOptOut(db.Model):
+    """Emails that have unsubscribed from marketing messages (global, by email)."""
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
