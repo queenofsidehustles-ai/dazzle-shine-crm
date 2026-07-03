@@ -397,6 +397,7 @@ class Staff(db.Model):
     stripe_disabled_reason = db.Column(db.String(120))        # set if Stripe blocks the account (e.g. can't verify)
     pay_schedule = db.Column(db.String(10), default='daily')  # daily (per job) or weekly
     insurance_reminder_sent_at = db.Column(db.DateTime)       # friendly "get insurance" nudge after a few jobs
+    roster_start_date = db.Column(db.String(20))              # date they're ready to start receiving jobs (YYYY-MM-DD)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property

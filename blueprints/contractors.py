@@ -576,6 +576,14 @@ def onboarding_pay_schedule(token):
     return redirect(url_for('contractors.onboarding_hub', token=token))
 
 
+@contractors_bp.route('/onboarding/<token>/start-date', methods=['POST'])
+def onboarding_start_date(token):
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    s.roster_start_date = request.form.get('roster_start_date', '').strip()
+    db.session.commit()
+    return redirect(url_for('contractors.onboarding_hub', token=token))
+
+
 # ── Paying contractors ─────────────────────────────────────────────────────────
 
 @contractors_bp.route('/team/<int:staff_id>/refresh-stripe', methods=['POST'])
@@ -706,6 +714,7 @@ def staff_detail(staff_id):
         s.color = request.form.get('color', s.color)
         s.is_active = 'is_active' in request.form
         s.pay_schedule = request.form.get('pay_schedule', s.pay_schedule or 'daily')
+        s.roster_start_date = request.form.get('roster_start_date', s.roster_start_date or '').strip()
         s.notes = request.form.get('notes', '').strip()
         db.session.commit()
         flash('Profile updated!', 'success')

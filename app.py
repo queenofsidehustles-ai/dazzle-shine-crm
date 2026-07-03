@@ -176,6 +176,7 @@ def _migrate_db():
         ('staff', 'stripe_disabled_reason',   'VARCHAR(120)'),
         ('staff', 'pay_schedule',             "VARCHAR(10) DEFAULT 'daily'"),
         ('staff', 'insurance_reminder_sent_at', 'TIMESTAMP'),
+        ('staff', 'roster_start_date',        'VARCHAR(20)'),
         # Interview response transcripts
         ('interview_response', 'transcript',       'TEXT'),
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),

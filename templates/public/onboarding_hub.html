@@ -93,6 +93,25 @@
       </div>
     </div>
 
+    <!-- Start date -->
+    <div class="step">
+      <div class="badge {{ 'done' if s.roster_start_date else 'todo' }}">📅</div>
+      <div style="flex:1">
+        <h3>When can you start taking jobs?</h3>
+        {% if s.roster_start_date %}
+          <span class="done-txt">✓ You're set to start {{ s.roster_start_date }}</span>
+          <p style="margin-top:8px">Need to change it? Pick a new date below.</p>
+        {% else %}
+          <p>Let us know the date you're ready to be on the roster and start receiving job offers.</p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('contractors.onboarding_start_date', token=s.agreement_token) }}">
+          <input type="date" name="roster_start_date" value="{{ s.roster_start_date or '' }}" required
+                 style="padding:10px 12px;border:1px solid #e4dfef;border-radius:8px;font-size:0.95rem;margin-bottom:10px">
+          <br><button class="btn" type="submit" style="font-size:0.9rem">Save start date</button>
+        </form>
+      </div>
+    </div>
+
     {% if s.agreement_signed_at and s.stripe_payouts_enabled %}
     <div class="step" style="background:#f0fff4;border-color:#c6f6d5;justify-content:center;text-align:center;display:block">
       <h3 style="color:#276749">🎉 You're all set!</h3>
