@@ -10,6 +10,13 @@
 {% if staff %}
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
   {% for s in staff %}
+  <div style="position:relative">
+  <form method="POST" action="{{ url_for('contractors.delete_staff', staff_id=s.id) }}"
+        style="position:absolute;top:12px;right:12px;z-index:3"
+        onsubmit="return confirm('Remove {{ s.name }} from your team? This permanently deletes their card. Use this for test entries.')">
+    <button type="submit" title="Delete team member"
+            style="background:#fff;border:1px solid #fed7d7;color:#c53030;border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:0.9rem;line-height:1">🗑</button>
+  </form>
   <a href="{{ url_for('contractors.staff_detail', staff_id=s.id) }}" style="text-decoration:none">
   <div class="card" style="cursor:pointer;transition:box-shadow 0.15s" onmouseover="this.style.boxShadow='0 8px 32px rgba(15,7,40,0.13)'" onmouseout="this.style.boxShadow=''">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
@@ -40,6 +47,7 @@
     </div>
   </div>
   </a>
+  </div>
   {% endfor %}
 </div>
 {% else %}

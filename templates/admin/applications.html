@@ -184,7 +184,16 @@
             {% endif %}
           </td>
           <td style="font-size:0.82rem;color:#9a95ad">{{ a.created_at.strftime('%b %d') }}</td>
-          <td><a href="{{ url_for('contractors.application_detail', app_id=a.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Review</a></td>
+          <td>
+            <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
+              <a href="{{ url_for('contractors.application_detail', app_id=a.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Review</a>
+              <form method="POST" action="{{ url_for('contractors.delete_application', app_id=a.id) }}"
+                    onsubmit="return confirm('Delete {{ a.name }}\'s application permanently? Use this for test entries.')">
+                <button type="submit" title="Delete application"
+                        style="background:#fff;border:1px solid #fed7d7;color:#c53030;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">🗑</button>
+              </form>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>

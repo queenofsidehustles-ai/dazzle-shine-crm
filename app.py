@@ -160,6 +160,13 @@ def _migrate_db():
         ('contractor_application', 'interview_last_sent_at',       'TIMESTAMP'),
         ('contractor_application', 'offer_sent_at',                'TIMESTAMP'),
         ('contractor_application', 'offer_sent_count',             'INTEGER DEFAULT 0'),
+        ('contractor_application', 'offer_token',                  'VARCHAR(64)'),
+        ('contractor_application', 'offer_accepted_at',            'TIMESTAMP'),
+        # Staff Stripe Connect (payouts)
+        ('staff', 'stripe_account_id',        'VARCHAR(64)'),
+        ('staff', 'stripe_payouts_enabled',   'BOOLEAN DEFAULT FALSE'),
+        ('staff', 'stripe_details_submitted', 'BOOLEAN DEFAULT FALSE'),
+        ('staff', 'stripe_disabled_reason',   'VARCHAR(120)'),
         # Interview response transcripts
         ('interview_response', 'transcript',       'TEXT'),
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),

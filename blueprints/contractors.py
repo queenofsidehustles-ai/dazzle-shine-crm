@@ -4,9 +4,10 @@ import threading
 from datetime import datetime, date, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from auth import login_required
-from models import Staff, ContractorApplication, Booking, BusinessSetting
+from models import Staff, ContractorApplication, Booking, BusinessSetting, ContractorPayment
 from extensions import db
 from notifications import send_email
+import stripe_connect
 
 contractors_bp = Blueprint('contractors', __name__, url_prefix='/contractors')
 
@@ -474,6 +475,186 @@ def hire(app_id):
 
     flash(f'{a.name} has been added to your team!', 'success')
     return redirect(url_for('contractors.staff_detail', staff_id=s.id))
+
+
+# ── Offer acceptance + Stripe onboarding ───────────────────────────────────────
+
+def _sync_stripe_status(s):
+    """Pull the contractor's latest Stripe status onto the Staff record."""
+    if not s or not s.stripe_account_id:
+        return
+    ok, data = stripe_connect.get_account_status(s.stripe_account_id)
+    if not ok:
+        return
+    s.stripe_payouts_enabled = data['payouts_enabled']
+    s.stripe_details_submitted = data['details_submitted']
+    s.stripe_disabled_reason = data.get('disabled_reason')
+    if s.stripe_payouts_enabled:
+        steps = s.get_onboarding()
+        if 'payment_info' not in steps:
+            steps.append('payment_info')
+            s.onboarding_steps = json.dumps(steps)
+    db.session.commit()
+
+
+@contractors_bp.route('/offer/accept/<token>')
+def accept_offer(token):
+    """Public link from the conditional-offer email. Records acceptance, creates
+    the Team member + their Stripe account, then sends them to the onboarding hub."""
+    a = ContractorApplication.query.filter_by(offer_token=token).first_or_404()
+
+    # Find or create the Staff record for this person (avoid duplicates)
+    s = None
+    if a.email:
+        s = Staff.query.filter(db.func.lower(Staff.email) == a.email.lower()).first()
+    if not s:
+        s = Staff(
+            name=a.name, email=a.email, phone=a.phone,
+            pay_type='percent', pay_rate=50.0, experience_level='standard',
+            has_transportation=a.has_transportation, has_supplies=a.has_supplies,
+            worker_model=BusinessSetting.get('worker_model', 'contractor'),
+            color='#7c3aed', is_active=True,
+        )
+        s.agreement_token = secrets.token_urlsafe(32)
+        db.session.add(s)
+
+    if not a.offer_accepted_at:
+        a.offer_accepted_at = datetime.utcnow()
+    if a.status not in ('hired', 'onboarding'):
+        a.status = 'reviewing'
+    db.session.commit()
+
+    # Create their Stripe connected account if they don't have one yet
+    if not s.stripe_account_id and stripe_connect.is_configured():
+        ok, result = stripe_connect.create_express_account(s.email, s.name)
+        if ok:
+            s.stripe_account_id = result
+            db.session.commit()
+
+    return redirect(url_for('contractors.onboarding_hub', token=s.agreement_token))
+
+
+@contractors_bp.route('/onboarding/<token>')
+def onboarding_hub(token):
+    """One page for the new contractor: sign agreement + set up Stripe payments."""
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    _sync_stripe_status(s)   # refresh in case they just came back from Stripe
+    return render_template('public/onboarding_hub.html', s=s, biz=biz,
+                           stripe_configured=stripe_connect.is_configured())
+
+
+@contractors_bp.route('/onboarding/<token>/payments')
+def onboarding_payments(token):
+    """Create a Stripe hosted-onboarding link and send the contractor to it."""
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    if not stripe_connect.is_configured():
+        flash('Payments are not set up yet — please contact us.', 'warning')
+        return redirect(url_for('contractors.onboarding_hub', token=token))
+    if not s.stripe_account_id:
+        ok, result = stripe_connect.create_express_account(s.email, s.name)
+        if not ok:
+            flash('Could not start payment setup. Please try again later.', 'error')
+            return redirect(url_for('contractors.onboarding_hub', token=token))
+        s.stripe_account_id = result
+        db.session.commit()
+    hub_url = url_for('contractors.onboarding_hub', token=token, _external=True)
+    ok, link = stripe_connect.create_onboarding_link(s.stripe_account_id, hub_url, hub_url)
+    if not ok:
+        flash('Could not open payment setup. Please try again later.', 'error')
+        return redirect(url_for('contractors.onboarding_hub', token=token))
+    return redirect(link)
+
+
+# ── Paying contractors ─────────────────────────────────────────────────────────
+
+@contractors_bp.route('/team/<int:staff_id>/refresh-stripe', methods=['POST'])
+@login_required
+def refresh_stripe(staff_id):
+    s = Staff.query.get_or_404(staff_id)
+    _sync_stripe_status(s)
+    flash('Payment status refreshed.', 'success')
+    return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+
+@contractors_bp.route('/team/<int:staff_id>/pay', methods=['POST'])
+@login_required
+def pay_contractor(staff_id):
+    s = Staff.query.get_or_404(staff_id)
+    try:
+        amount = round(float(request.form.get('amount', 0)), 2)
+    except (TypeError, ValueError):
+        amount = 0
+    note = request.form.get('note', '').strip()
+    if amount <= 0:
+        flash('Enter an amount greater than $0.', 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+    _sync_stripe_status(s)
+    if not (s.stripe_account_id and s.stripe_payouts_enabled):
+        flash(f"{s.name} isn't verified on Stripe yet, so we can't send a Stripe payment.", 'warning')
+        return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+    ok, result = stripe_connect.create_transfer(
+        s.stripe_account_id, amount, description=f'Payout to {s.name}')
+    if not ok:
+        flash(f'Stripe payment failed: {result}', 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+    db.session.add(ContractorPayment(
+        staff_id=s.id, amount=amount, method='stripe',
+        status='paid', stripe_transfer_id=result, note=note))
+    db.session.commit()
+    flash(f'✅ Sent ${amount:.2f} to {s.name} via Stripe.', 'success')
+    return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+
+@contractors_bp.route('/team/<int:staff_id>/pay-manual', methods=['POST'])
+@login_required
+def pay_manual(staff_id):
+    """Record a payment made outside Stripe (Venmo/Zelle/cash/check)."""
+    s = Staff.query.get_or_404(staff_id)
+    try:
+        amount = round(float(request.form.get('amount', 0)), 2)
+    except (TypeError, ValueError):
+        amount = 0
+    method = request.form.get('method', 'venmo')
+    note = request.form.get('note', '').strip()
+    if amount <= 0:
+        flash('Enter an amount greater than $0.', 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+    db.session.add(ContractorPayment(
+        staff_id=s.id, amount=amount, method=method, status='paid', note=note))
+    db.session.commit()
+    flash(f'Recorded ${amount:.2f} paid to {s.name} via {method.title()}.', 'success')
+    return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+
+# ── Delete (clean up test entries) ─────────────────────────────────────────────
+
+@contractors_bp.route('/applications/<int:app_id>/delete', methods=['POST'])
+@login_required
+def delete_application(app_id):
+    from models import InterviewResponse
+    a = ContractorApplication.query.get_or_404(app_id)
+    name = a.name
+    InterviewResponse.query.filter_by(application_id=a.id).delete()
+    db.session.delete(a)
+    db.session.commit()
+    flash(f'Deleted application: {name}.', 'success')
+    return redirect(url_for('contractors.applications'))
+
+
+@contractors_bp.route('/team/<int:staff_id>/delete', methods=['POST'])
+@login_required
+def delete_staff(staff_id):
+    s = Staff.query.get_or_404(staff_id)
+    name = s.name
+    ContractorPayment.query.filter_by(staff_id=s.id).delete()
+    db.session.delete(s)
+    db.session.commit()
+    flash(f'Removed team member: {name}.', 'success')
+    return redirect(url_for('contractors.team'))
 
 
 # ── Team / Contractor Profiles ─────────────────────────────────────────────────

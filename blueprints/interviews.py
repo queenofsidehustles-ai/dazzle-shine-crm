@@ -219,17 +219,21 @@ def approve_interview(app_id):
     app_rec.offer_sent_count = (app_rec.offer_sent_count or 0) + 1
     if not app_rec.bgcheck_upload_token:
         app_rec.bgcheck_upload_token = secrets.token_urlsafe(32)
+    if not app_rec.offer_token:
+        app_rec.offer_token = secrets.token_urlsafe(32)
     db.session.commit()
 
     # Send candidate a focused background check reminder
     biz = 'Dazzle & Shine Maids'
     upload_url = url_for('interviews.bgcheck_upload_page',
                          token=app_rec.bgcheck_upload_token, _external=True)
+    accept_url = url_for('contractors.accept_offer',
+                         token=app_rec.offer_token, _external=True)
     send_email(
         to_email=app_rec.email,
         to_name=app_rec.name,
         subject=f"Welcome to the Team (Pending Your Background Check) — {biz}",
-        html=_build_bgcheck_email(app_rec.name, biz, upload_url),
+        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url),
     )
 
     flash(f'Video approved! Conditional offer + background check link sent to {app_rec.name}.', 'success')
@@ -252,15 +256,19 @@ def resend_offer(app_id):
         app_rec.bgcheck_request_sent_at = datetime.utcnow()
     app_rec.offer_sent_at = datetime.utcnow()
     app_rec.offer_sent_count = (app_rec.offer_sent_count or 0) + 1
+    if not app_rec.offer_token:
+        app_rec.offer_token = secrets.token_urlsafe(32)
     db.session.commit()
 
     biz = 'Dazzle & Shine Maids'
     upload_url = url_for('interviews.bgcheck_upload_page',
                          token=app_rec.bgcheck_upload_token, _external=True)
+    accept_url = url_for('contractors.accept_offer',
+                         token=app_rec.offer_token, _external=True)
     send_email(
         to_email=app_rec.email, to_name=app_rec.name,
         subject=f"Welcome to the Team (Pending Your Background Check) — {biz}",
-        html=_build_bgcheck_email(app_rec.name, biz, upload_url),
+        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url),
     )
     flash(f'Conditional offer email sent to {app_rec.name}.', 'success')
     return redirect(request.referrer or url_for('contractors.application_detail', app_id=app_rec.id))
@@ -321,8 +329,20 @@ def send_invite(app_id):
     return redirect(request.referrer or url_for('interviews.admin_interviews'))
 
 
-def _build_bgcheck_email(name, biz, upload_url='#'):
+def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None):
     first = (name or 'there').split()[0]
+    accept_block = ''
+    if accept_url:
+        accept_block = f"""
+    <div style="background:#1f1333;border-radius:12px;padding:24px;margin:0 0 22px;text-align:center">
+      <div style="color:#fff;font-size:1.05rem;font-weight:700;margin-bottom:6px">Ready to join us?</div>
+      <p style="color:#c9b8e8;font-size:0.9rem;margin:0 0 16px">Tap below to accept your offer and set up how you'll get paid.</p>
+      <a href="{accept_url}"
+         style="background:#d3a84f;color:#1f1333;padding:15px 36px;border-radius:8px;
+                text-decoration:none;font-weight:800;font-size:1.05rem;display:inline-block">
+        ✅ Accept This Offer →
+      </a>
+    </div>"""
     return f"""
 <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
   <div style="background:#1f1333;padding:28px;border-radius:12px 12px 0 0;text-align:center">
@@ -363,7 +383,7 @@ def _build_bgcheck_email(name, biz, upload_url='#'):
       <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">⭐ Our top performers grow to 55% of every job — earn it with great reviews and reliability.</p>
       <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">The more efficiently you work, the higher your effective hourly rate.</p>
     </div>
-
+    {accept_block}
     <!-- IC EXPECTATIONS -->
     <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:10px;padding:20px 22px;margin:0 0 20px">
       <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">📋 What to Know as an Independent Contractor</div>

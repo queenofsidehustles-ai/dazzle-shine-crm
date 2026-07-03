@@ -312,6 +312,8 @@ class ContractorApplication(db.Model):
     # Conditional offer email tracking
     offer_sent_at = db.Column(db.DateTime)                     # last time the conditional offer email went out
     offer_sent_count = db.Column(db.Integer, default=0)        # how many times it's been sent
+    offer_token = db.Column(db.String(64), unique=True)        # link the candidate clicks to accept
+    offer_accepted_at = db.Column(db.DateTime)                 # when they accepted the offer
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     responses = db.relationship('InterviewResponse', backref='application', lazy=True,
@@ -381,7 +383,20 @@ class Staff(db.Model):
     orientation_token = db.Column(db.String(64), unique=True)
     orientation_completed_at = db.Column(db.DateTime)
     notes = db.Column(db.Text)
+    # Stripe Connect (payouts)
+    stripe_account_id = db.Column(db.String(64))               # acct_... connected account
+    stripe_payouts_enabled = db.Column(db.Boolean, default=False)  # Stripe verified & ready to receive money
+    stripe_details_submitted = db.Column(db.Boolean, default=False)  # finished the onboarding form
+    stripe_disabled_reason = db.Column(db.String(120))        # set if Stripe blocks the account (e.g. can't verify)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def can_verify_on_stripe(self):
+        """False only when Stripe has clearly rejected/blocked the account —
+        that's when the manual Venmo/Zelle fallback should appear."""
+        bad = ('rejected', 'disabled', 'failed', 'unverified')
+        r = (self.stripe_disabled_reason or '').lower()
+        return not any(b in r for b in bad)
 
     ONBOARDING_STEPS = [
         ('phone_interview',   'Phone interview completed'),
@@ -421,6 +436,21 @@ class Staff(db.Model):
         if self.pay_type == 'hourly':
             return round((hours_worked or 0) * (self.pay_rate or 0), 2)
         return round((job_price or 0) * ((self.pay_rate or 0) / 100), 2)
+
+
+class ContractorPayment(db.Model):
+    """A record of paying a contractor — via Stripe (automatic) or manually (Venmo/Zelle/etc.)."""
+    id = db.Column(db.Integer, primary_key=True)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    method = db.Column(db.String(20), default='stripe')   # stripe, venmo, zelle, cash, check
+    status = db.Column(db.String(20), default='paid')     # paid, pending, failed
+    stripe_transfer_id = db.Column(db.String(64))         # tr_... when paid via Stripe
+    note = db.Column(db.String(200))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    staff = db.relationship('Staff', backref=db.backref('payments', lazy=True,
+                            order_by='ContractorPayment.created_at.desc()'))
 
 
 class EmailTemplate(db.Model):
