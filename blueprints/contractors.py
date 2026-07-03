@@ -556,14 +556,14 @@ def onboarding_payments(token):
     if not s.stripe_account_id:
         ok, result = stripe_connect.create_express_account(s.email, s.name)
         if not ok:
-            flash('Could not start payment setup. Please try again later.', 'error')
+            flash(f'Payment setup could not start: {result}', 'error')
             return redirect(url_for('contractors.onboarding_hub', token=token))
         s.stripe_account_id = result
         db.session.commit()
     hub_url = url_for('contractors.onboarding_hub', token=token, _external=True)
     ok, link = stripe_connect.create_onboarding_link(s.stripe_account_id, hub_url, hub_url)
     if not ok:
-        flash('Could not open payment setup. Please try again later.', 'error')
+        flash(f'Payment setup could not open: {link}', 'error')
         return redirect(url_for('contractors.onboarding_hub', token=token))
     return redirect(link)
 
