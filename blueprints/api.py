@@ -180,19 +180,32 @@ def applicant_followups():
     now = datetime.utcnow()
     cutoff = now - timedelta(days=2)   # spacing between nudges
 
+    def _qualifies(a):
+        """Same rule the apply form uses: needs experience + transportation."""
+        exp = (a.years_experience or '').strip().lower()
+        return bool(exp) and exp not in ('no experience', 'none') and bool(a.has_transportation)
+
+    # Include applicants who never got a link at all ('not_sent'/None), so a missed
+    # timer can never leave a qualified person stuck without their interview.
     candidates = ContractorApplication.query.filter(
-        ContractorApplication.interview_status.in_(['pending', 'sent', 'in_progress']),
         ContractorApplication.status.notin_(['rejected', 'hired', 'onboarding', 'no_response']),
+        db.or_(
+            ContractorApplication.interview_status.in_(['pending', 'sent', 'in_progress', 'not_sent']),
+            ContractorApplication.interview_status.is_(None),
+        ),
     ).all()
 
     nudged = 0
     first_sent = 0
     no_response = 0
     for a in candidates:
-        # Backstop: first invite never went out (e.g. server restarted before the
-        # 10-minute timer fired). Send it if they applied at least 15 min ago.
-        if a.interview_status == 'pending':
-            if a.created_at and a.created_at <= now - timedelta(minutes=15):
+        iv = a.interview_status or 'not_sent'
+
+        # ── Backstop: qualified applicant who never actually received a link ──
+        # Covers a missed 10-min timer AND anyone stuck at 'not_sent'/'reviewing'.
+        if not a.interview_sent_at and iv in ('pending', 'not_sent'):
+            applied_ago_ok = a.created_at and a.created_at <= now - timedelta(minutes=10)
+            if _qualifies(a) and applied_ago_ok:
                 if not a.interview_token:
                     a.interview_token = secrets.token_urlsafe(32)
                 a.interview_status = 'sent'
@@ -205,6 +218,9 @@ def applicant_followups():
                 except Exception:
                     pass
             continue
+
+        if iv not in ('sent', 'in_progress'):
+            continue  # e.g. completed — nothing to nudge
 
         last = a.interview_last_sent_at or a.interview_sent_at
         if not last or last > cutoff:
