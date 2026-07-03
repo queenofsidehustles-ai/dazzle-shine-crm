@@ -268,14 +268,17 @@
           <p style="font-weight:600">{{ s.shirt_size }}</p>
         </div>
         {% endif %}
-        {% if s.payment_pref %}
         <div>
           <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Paid Via</p>
-          <p style="font-weight:600">{{ s.payment_pref }}</p>
+          <p style="font-weight:600">
+            {% if s.stripe_payouts_enabled %}<span style="color:#276749">Stripe ✓ ready</span>
+            {% elif s.stripe_account_id %}<span style="color:#92400e">Stripe (setting up)</span>
+            {% elif s.payment_pref %}{{ s.payment_pref }}
+            {% else %}—{% endif %}
+          </p>
         </div>
-        {% endif %}
       </div>
-      {% if s.payment_notes %}
+      {% if s.payment_notes and not s.stripe_account_id %}
       <p style="font-size:0.8rem;color:#5f5878"><strong>Payment notes:</strong> {{ s.payment_notes }}</p>
       {% endif %}
     </div>
