@@ -90,7 +90,7 @@
 {% elif pipe_stage == 'bg_cleared' %}
 <div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:12px;padding:16px 20px;margin-bottom:24px">
   <p style="font-weight:700;color:#92400e;font-size:1rem;margin-bottom:4px">✅ Background Check Cleared — Ready to Hire</p>
-  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> Scroll down to the <strong>Hire {{ a.name.split()[0] }}</strong> card → set pay rate → click <em>Hire & Send Welcome Email</em>. That fires the agreement link automatically.</p>
+  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> Click <strong>Send Conditional Offer Email</strong> (left) — it sends the pay details, pay chart, and lets {{ a.name.split()[0] }} accept and onboard.</p>
 </div>
 
 {% elif pipe_stage == 'bg_received' %}
@@ -211,7 +211,12 @@
               ✅ <strong>Hired — onboarding in progress</strong><br>
               <span style="color:#2f8f57">Track their signature, payment setup &amp; start date on their <strong>Team</strong> profile.</span>
             </div>
-          {% elif a.interview_status == 'completed' and a.status != 'rejected' %}
+          {% elif a.status != 'rejected' %}
+          {% if a.interview_status != 'completed' and not a.offer_sent_at and not a.offer_accepted_at %}
+            <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px 14px;font-size:0.8rem;color:#3730a3;margin-top:8px;line-height:1.5">
+              ⚡ <strong>No video interview yet.</strong> Normally you'd wait for it — but if this is a <strong>referral</strong> or someone you already trust, you can send the offer now to hire them directly.
+            </div>
+          {% endif %}
           {% if a.offer_accepted_at %}
             <div style="background:#eefcf3;border:1px solid #9ae0b8;border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#1a7a44;text-align:center;margin-top:8px">
               🎉 <strong>Offer Accepted on {{ a.offer_accepted_at.strftime('%b %d, %Y') }}!</strong><br>
@@ -452,10 +457,14 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
-        Hire {{ a.name.split()[0] }}
-      </h2>
+    <details class="card">
+      <summary style="cursor:pointer;font-size:0.9rem;font-weight:700;color:#9a95ad;list-style:none">
+        ⚙️ Advanced: hire directly (skip the offer email)
+      </summary>
+      <p style="font-size:0.8rem;color:#9a95ad;margin:10px 0 14px;line-height:1.6">
+        Most of the time, use <strong>Send Conditional Offer Email</strong> on the left — it includes the pay details, pay chart, and background-check step, and lets them accept.
+        Only use this shortcut to add someone to the team <strong>immediately</strong> (e.g., a rehire) without the offer step.
+      </p>
       <form method="POST" action="{{ url_for('contractors.hire', app_id=a.id) }}">
         <div class="form-group">
           <label>Worker Type</label>
@@ -484,11 +493,11 @@
           <input type="number" name="pay_rate" id="pay-rate" step="0.5" value="50" min="0" />
           <span id="rate-hint" style="font-size:0.78rem;color:#9a95ad">e.g. 50 means cleaner earns 50% of each job</span>
         </div>
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:4px">
-          Hire &amp; Send Welcome Email →
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;margin-top:4px">
+          Hire directly &amp; send welcome →
         </button>
       </form>
-    </div>
+    </details>
     {% endif %}
 
     {% if a.status == 'hired' %}
