@@ -1358,11 +1358,21 @@ Jobs will be offered to you based on availability. You may accept or decline job
 6. CONDUCT & QUALITY
 You agree to: arrive on time, maintain professional appearance and communication, follow all cleaning checklists, treat client homes and belongings with the utmost care, and never solicit clients directly.
 
-7. CONFIDENTIALITY & NON-SOLICITATION
-You agree to keep all client information, pricing, and business processes strictly confidential. For 12 months after this agreement ends, you agree not to solicit or accept direct business from any {biz_name} client.
+7. CONFIDENTIALITY
+You agree to keep all client information, pricing, and business processes strictly confidential, both during and after this agreement.
 
-8. TERMINATION
-Either party may terminate this agreement at any time with or without cause.
+8. OUR CLIENTS & NON-SOLICITATION
+The clients you serve belong to {biz_name}. You are introduced to them through the Company's advertising, reputation, and booking systems — not on your own. During this agreement and for 24 months after it ends, you agree that you will NOT, directly or indirectly:
+- Solicit, divert, or accept cleaning work from any {biz_name} client you met or served through the Company;
+- Offer a {biz_name} client your own services, side jobs, or lower "off-the-books" pricing;
+- Encourage or help any client leave {biz_name}.
+Going into a client's home and trying to take their business is a serious breach of trust and of this agreement.
+
+9. NON-CIRCUMVENTION & BUYOUT FEE
+If a client and contractor genuinely wish to work together directly, it may happen ONLY with the Company's written approval and payment of a buyout fee of $2,000 per client to {biz_name}. Because the true value of a lost client relationship is difficult to calculate exactly, this amount is agreed in advance as a fair and reasonable estimate of the Company's loss (liquidated damages, not a penalty). Working around the Company without this approval and fee is a breach of this agreement, and the Company may recover the buyout fee plus its collection costs and reasonable attorney's fees.
+
+10. TERMINATION
+Either party may terminate this agreement at any time, with or without cause. The confidentiality, non-solicitation, non-circumvention, and buyout terms above survive and remain in effect after this agreement ends.
 
 ACKNOWLEDGMENT
 By signing below, you confirm that you have read and understood this Agreement and agree to its terms as an independent contractor."""
