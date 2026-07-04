@@ -584,6 +584,17 @@ def hire(app_id):
 
 # ── Offer acceptance + Stripe onboarding ───────────────────────────────────────
 
+def _notify_owner(subject, html):
+    """Send the business owner an internal alert email (best-effort)."""
+    import os
+    owner = (BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL')
+             or os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com'))
+    try:
+        send_email(to_email=owner, to_name='Dazzle & Shine', subject=subject, html=html)
+    except Exception:
+        pass
+
+
 def _sync_stripe_status(s):
     """Pull the contractor's latest Stripe status onto the Staff record."""
     if not s or not s.stripe_account_id:
@@ -591,6 +602,7 @@ def _sync_stripe_status(s):
     ok, data = stripe_connect.get_account_status(s.stripe_account_id)
     if not ok:
         return
+    was_enabled = bool(s.stripe_payouts_enabled)
     s.stripe_payouts_enabled = data['payouts_enabled']
     s.stripe_details_submitted = data['details_submitted']
     s.stripe_disabled_reason = data.get('disabled_reason')
@@ -600,6 +612,14 @@ def _sync_stripe_status(s):
             steps.append('payment_info')
             s.onboarding_steps = json.dumps(steps)
     db.session.commit()
+    # Alert the owner the first time this contractor becomes payable
+    if s.stripe_payouts_enabled and not was_enabled:
+        _notify_owner(
+            f'✅ {s.name} finished payment setup — ready to be paid',
+            f'<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f1333">'
+            f'<h2 style="color:#276749">{s.name} is ready to get paid 💰</h2>'
+            f'<p>They completed their Stripe payment setup and are now verified. '
+            f'You can send them payouts from their Team profile.</p></div>')
 
 
 @contractors_bp.route('/offer/accept/<token>')
@@ -1034,6 +1054,14 @@ def sign_agreement(token):
             steps.append('ic_agreement')
             s.onboarding_steps = json.dumps(steps)
         db.session.commit()
+
+        # Alert the owner that this contractor signed
+        _notify_owner(
+            f'✍️ {s.name} signed their agreement',
+            f'<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f1333">'
+            f'<h2 style="color:#b98a33">{s.name} signed their agreement ✍️</h2>'
+            f'<p>Signed as "<strong>{typed_name}</strong>" on {s.agreement_signed_at.strftime("%b %d, %Y")}. '
+            f'Check their onboarding progress on their Team profile.</p></div>')
 
         # Auto-fire orientation email with training resources link
         if s.email:
