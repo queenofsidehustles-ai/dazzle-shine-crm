@@ -206,7 +206,12 @@
             </button>
           </form>
 
-          {% if a.interview_status == 'completed' and a.status != 'rejected' %}
+          {% if a.status in ('hired', 'onboarding') %}
+            <div style="background:#eefcf3;border:1px solid #9ae0b8;border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#1a7a44;text-align:center;margin-top:8px">
+              ✅ <strong>Hired — onboarding in progress</strong><br>
+              <span style="color:#2f8f57">Track their signature, payment setup &amp; start date on their <strong>Team</strong> profile.</span>
+            </div>
+          {% elif a.interview_status == 'completed' and a.status != 'rejected' %}
           {% if a.offer_accepted_at %}
             <div style="background:#eefcf3;border:1px solid #9ae0b8;border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#1a7a44;text-align:center;margin-top:8px">
               🎉 <strong>Offer Accepted on {{ a.offer_accepted_at.strftime('%b %d, %Y') }}!</strong><br>

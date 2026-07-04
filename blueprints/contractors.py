@@ -544,9 +544,7 @@ def hire(app_id):
         import os
         biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
         owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
-        sign_url = url_for('contractors.sign_agreement', token=token, _external=True)
-        worker_model = BusinessSetting.get('worker_model', 'contractor')
-        agreement_label = 'Independent Contractor Agreement' if worker_model == 'contractor' else 'Employment Agreement'
+        hub_url = url_for('contractors.onboarding_hub', token=token, _external=True, _scheme='https')
         send_email(
             to_email=s.email, to_name=s.name,
             from_name=f'{biz} Hiring',
@@ -559,20 +557,19 @@ def hire(app_id):
   </div>
   <div style="background:#fff;padding:32px;border-radius:0 0 12px 12px;border:1px solid #e4dfef">
     <p style="margin-top:0">Hi {s.name.split()[0]},</p>
-    <p>We're excited to have you on board! Here's what happens next:</p>
+    <p>We're excited to have you on board! Everything you need to get started is on one page — just tap below to:</p>
     <ol style="line-height:2;color:#3b2460">
-      <li><strong>Sign your {agreement_label}</strong> — use the button below</li>
-      <li><strong>Complete your onboarding forms</strong> — payment info, emergency contact</li>
-      <li><strong>Complete orientation training</strong> — review all policies, then confirm</li>
-      {'<li><strong>Receive your supply kit</strong> — we will confirm pickup details with you</li>' if worker_model == 'employee' else '<li><strong>Get ready for your first job</strong> — bring your own supplies and equipment</li>'}
-      <li><strong>Your first cleaning</strong> — we'll stay in close contact and review your photos to make sure everything's perfect. When an experienced team member is available, you may be paired to shadow them first.</li>
+      <li><strong>Sign your work agreement</strong></li>
+      <li><strong>Set up how you get paid</strong> (secure bank + tax setup through Stripe)</li>
+      <li><strong>Choose your pay schedule and start date</strong></li>
+      <li><strong>Review your Training &amp; Supply Guide</strong></li>
     </ol>
     <div style="text-align:center;margin:28px 0">
-      <a href="{sign_url}" style="background:#d3a84f;color:#1f1333;padding:14px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:1rem;display:inline-block">
-        Sign My {agreement_label} →
+      <a href="{hub_url}" style="background:#d3a84f;color:#1f1333;padding:14px 32px;border-radius:8px;font-weight:700;text-decoration:none;font-size:1rem;display:inline-block">
+        Complete My Onboarding →
       </a>
     </div>
-    <p style="font-size:0.82rem;color:#9a95ad">Link not working? Copy and paste: {sign_url}</p>
+    <p style="font-size:0.82rem;color:#9a95ad">Link not working? Copy and paste: {hub_url}</p>
     <p>Questions? Reply to this email or call us directly. We're here to set you up for success.</p>
     <p style="margin-bottom:0">Welcome aboard,<br>
     <strong style="color:#b98a33">{biz}</strong><br>
