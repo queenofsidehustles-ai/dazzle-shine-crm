@@ -207,10 +207,15 @@
           </form>
 
           {% if a.interview_status == 'completed' and a.status != 'rejected' %}
-          {% if a.offer_sent_at %}
-            <div style="background:#f0fff4;border:1px solid #c6f6d5;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#276749;text-align:center;margin-top:8px">
-              💌 <strong>Conditional Offer Sent · {{ a.offer_sent_count or 1 }}×</strong><br>
-              <span style="color:#38856a">last sent {{ a.offer_sent_at.strftime('%b %d, %Y') }}</span>
+          {% if a.offer_accepted_at %}
+            <div style="background:#eefcf3;border:1px solid #9ae0b8;border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#1a7a44;text-align:center;margin-top:8px">
+              🎉 <strong>Offer Accepted on {{ a.offer_accepted_at.strftime('%b %d, %Y') }}!</strong><br>
+              <span style="color:#2f8f57">They're now onboarding — find them in your <strong>Team</strong> page.</span>
+            </div>
+          {% elif a.offer_sent_at %}
+            <div style="background:#fffaf0;border:1px solid #f5d9a0;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#92600e;text-align:center;margin-top:8px">
+              💌 <strong>Offer Sent · {{ a.offer_sent_count or 1 }}× — waiting for them to accept</strong><br>
+              <span style="color:#a9750f">last sent {{ a.offer_sent_at.strftime('%b %d, %Y') }}</span>
             </div>
           {% else %}
             <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#92400e;text-align:center;margin-top:8px">

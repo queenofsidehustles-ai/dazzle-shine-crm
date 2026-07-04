@@ -16,14 +16,39 @@ EXP_LEVELS = [
     ('top',      'Top Performer', 55),
 ]
 
-DEFAULT_TRAINING_GUIDE = """DAZZLE & SHINE — CONTRACTOR TRAINING & SUPPLY GUIDE
+DEFAULT_TRAINING_GUIDE = """✨ WELCOME TO THE DAZZLE & SHINE FAMILY ✨
 
-Welcome to the team! Please review this before your first cleaning. It covers the supplies you'll need and the cleaning routine we expect on every job.
+You didn't just get a gig — you joined a team that takes real pride in what we do. When you clean a home the Dazzle way, you're giving someone back their time, their peace of mind, and a space they're proud to come home to. That's the Dazzle Difference, and now it's yours to deliver.
+
+Read this before your first job, keep it handy, and never be afraid to ask questions. We shine brightest as a team. 💛
+
+━━━━━━━━━━━━━━━━━━━━━━
+💛 THE DAZZLE DIFFERENCE — WHO WE ARE
+━━━━━━━━━━━━━━━━━━━━━━
+Our promise to every client: they come home to a space that sparkles and feels brand new. We treat every home like it's our own.
+
+Three things make you a Dazzle & Shine pro:
+1. CARE — Treat every home, and everything in it, like it's precious.
+2. DETAIL — The little touches (a fan-folded towel, a shined faucet, straight throw pillows) are what make clients say "WOW."
+3. TRUST — Show up on time, be honest, and protect our clients' privacy and property like family.
+
+Do those three things every time and you'll never run out of work with us.
+
+━━━━━━━━━━━━━━━━━━━━━━
+🎥 TRAINING VIDEOS — WATCH BEFORE YOUR FIRST JOB
+━━━━━━━━━━━━━━━━━━━━━━
+(Owner: paste your YouTube links in the brackets — you can add more anytime.)
+
+- Welcome & The Dazzle Difference:  [ paste YouTube link ]
+- The Dazzle Method — How We Clean a Kitchen:  [ paste YouTube link ]
+- The Dazzle Method — Bathroom Deep Clean:  [ paste YouTube link ]
+- Before & After Photos — How & Why:  [ paste YouTube link ]
+- Using the App & Getting Paid:  [ paste YouTube link ]
 
 ━━━━━━━━━━━━━━━━━━━━━━
 🧴 YOUR SUPPLY CHECKLIST
 ━━━━━━━━━━━━━━━━━━━━━━
-As an independent contractor, you bring your own supplies. Here's what you'll need:
+As an independent contractor, you bring your own supplies — think of it as your professional toolkit. Here's what a Dazzle pro carries:
 
 Cleaning products:
 - All-purpose cleaner
@@ -34,7 +59,7 @@ Cleaning products:
 - Toilet bowl cleaner
 
 Tools:
-- Microfiber cloths (several — use separate colors for kitchen, bathroom, and glass)
+- Microfiber cloths (several — use separate colors for kitchen, bathroom, and glass so you never cross-contaminate)
 - Non-scratch sponges & scrub pads
 - Vacuum cleaner
 - Mop & bucket (or a spray mop)
@@ -44,57 +69,60 @@ Tools:
 - Rubber gloves
 - Trash bags
 
-Nice to have:
+Nice to have (the pros carry these):
 - Grout brush or old toothbrush for detail work
 - Squeegee for glass and showers
 - Step stool
 - A caddy or tote to carry supplies room to room
 
-Tip: Affordable supplies are available at Walmart, Dollar Tree, Costco, or Amazon. Buying in bulk saves money.
+Tip: Affordable supplies are at Walmart, Dollar Tree, Costco, and Amazon. Buy in bulk to save — you'll go through microfiber cloths and gloves fastest.
 
 ━━━━━━━━━━━━━━━━━━━━━━
-🧹 OUR CLEANING ROUTINE
+🧹 THE DAZZLE METHOD — OUR CLEANING ROUTINE
 ━━━━━━━━━━━━━━━━━━━━━━
-Always work TOP TO BOTTOM and LEFT TO RIGHT so dust falls onto floors you clean last.
+Golden rule: always work TOP TO BOTTOM and LEFT TO RIGHT, so dust falls onto floors you clean last. Never clean the same room twice — do it right the first time.
 
 KITCHEN
 - Wipe counters, backsplash, and the outside of appliances
-- Clean stovetop and microwave (inside & out)
-- Wipe cabinet fronts; clean and shine the sink & faucet
+- Clean the stovetop and microwave (inside & out)
+- Wipe cabinet fronts; clean and SHINE the sink & faucet (a shiny sink = a happy client)
 - Sweep and mop the floor
 - Empty the trash
 
 BATHROOMS
 - Clean and disinfect the toilet (inside, seat, base)
-- Scrub tub/shower and glass
-- Wipe counter, sink, faucet, and mirror
+- Scrub tub/shower and glass until it gleams
+- Wipe counter, sink, faucet, and mirror (no streaks!)
 - Wipe cabinet fronts
 - Sweep and mop the floor
-- Empty trash; replace towels if provided
+- Empty trash; fan-fold or replace towels if provided
 
 BEDROOMS & LIVING AREAS
 - Dust all surfaces, shelves, and décor
 - Make beds / tidy as requested
 - Wipe mirrors and glass
 - Vacuum carpets; sweep/mop hard floors
-- Empty the trash
+- Straighten pillows and leave it picture-perfect
 
-WHOLE HOME
+WHOLE HOME — THE DAZZLE TOUCHES
 - Dust ceiling fans, light fixtures, and baseboards
-- Wipe light switches, door handles, and other high-touch spots
+- Wipe light switches, door handles, and high-touch spots
 - Spot-clean walls and doors
+- Final walkthrough: stand in each doorway and ask, "Would I say WOW?"
 
 ━━━━━━━━━━━━━━━━━━━━━━
-⭐ PROFESSIONAL STANDARDS
+⭐ THE DAZZLE STANDARD
 ━━━━━━━━━━━━━━━━━━━━━━
-- Arrive on time, neat and professional
+- Arrive on time, neat, and professional — you represent Dazzle & Shine
 - Treat every home and belonging with care
-- Take BEFORE and AFTER photos of each room (helps quality and reviews)
-- If anything is damaged or missed, tell us right away — honesty always
+- Take BEFORE and AFTER photos of every room — it protects you, proves your great work, and earns us 5-star reviews
+- If anything is damaged or you miss something, tell us right away — honesty always, no exceptions
 - Never use a client's supplies without permission
 - Lock up and leave the home secure
 
-Questions? Reply to your welcome email anytime. Thank you for representing us with pride!"""
+━━━━━━━━━━━━━━━━━━━━━━
+Welcome aboard. Let's make Orlando sparkle, one home at a time. 💛
+— The Dazzle & Shine Family"""
 
 
 @contractors_bp.route('/email-test')
