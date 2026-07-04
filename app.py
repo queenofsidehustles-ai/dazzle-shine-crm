@@ -476,6 +476,8 @@ The balance is automatically charged to your card the morning of your cleaning. 
 
 Need to reschedule? Call or text us at {{phone}} as soon as possible. Deposits are non-refundable but you may reschedule at any time.
 
+Our team: The cleaners we send are valued members of the {{business_name}} team. To keep things fair for everyone, you agree not to directly hire or pay any {{business_name}} cleaner outside the company for 24 months, except with our written approval and a $2,000 buyout fee. Thank you for understanding!
+
 We can't wait to make your home sparkle!"""),
 
         ('booking_reminder_24h', 'client', '24-Hour Reminder',
