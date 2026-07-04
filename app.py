@@ -73,9 +73,31 @@ def create_app():
         _seed_scripts()
         _seed_sops()
         _seed_email_templates()
+        _apply_template_patches()
         _seed_pricing_defaults()
 
     return app
+
+
+def _apply_template_patches():
+    """One-time content patches to LIVE email templates (idempotent via flags),
+    so fixes reach existing installs without the owner pasting anything."""
+    from models import EmailTemplate, BusinessSetting
+    # Patch 1: client anti-poaching / buyout clause in the booking confirmation
+    if not BusinessSetting.get('tmpl_patch_buyout_v1'):
+        t = EmailTemplate.query.filter_by(trigger='booking_confirmed').first()
+        if t and 'buyout' not in (t.body or '').lower():
+            clause = ("Our team: The cleaners we send are valued members of the {{business_name}} team. "
+                      "To keep things fair for everyone, you agree not to directly hire or pay any "
+                      "{{business_name}} cleaner outside the company for 24 months, except with our written "
+                      "approval and a $2,000 buyout fee. Thank you for understanding!")
+            marker = "We can't wait to make your home sparkle!"
+            if marker in t.body:
+                t.body = t.body.replace(marker, clause + "\n\n" + marker)
+            else:
+                t.body = (t.body or '').rstrip() + "\n\n" + clause
+        BusinessSetting.set('tmpl_patch_buyout_v1', '1')
+        db.session.commit()
 
 
 def _migrate_db():
