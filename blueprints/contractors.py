@@ -35,15 +35,15 @@ Three things make you a Dazzle & Shine pro:
 Do those three things every time and you'll never run out of work with us.
 
 ━━━━━━━━━━━━━━━━━━━━━━
-🎥 TRAINING VIDEOS — WATCH BEFORE YOUR FIRST JOB
+🎥 RECOMMENDED WATCHING
 ━━━━━━━━━━━━━━━━━━━━━━
-(Owner: paste your YouTube links in the brackets — you can add more anytime.)
+Helpful cleaning-technique videos from trusted creators around the web (these aren't ours) — a great way to see pro technique in action before your first job. Watch the routine, then bring it to life the Dazzle way:
 
-- Welcome & The Dazzle Difference:  [ paste YouTube link ]
-- The Dazzle Method — How We Clean a Kitchen:  [ paste YouTube link ]
-- The Dazzle Method — Bathroom Deep Clean:  [ paste YouTube link ]
-- Before & After Photos — How & Why:  [ paste YouTube link ]
-- Using the App & Getting Paid:  [ paste YouTube link ]
+- How to Clean a Bathroom (Clean My Space): https://www.youtube.com/watch?v=YKpuELbeZQM
+- Daily Kitchen Cleaning Routine (Clean My Space): https://www.youtube.com/watch?v=Vos3br2docY
+- 20 Brilliant Cleaning Hacks (Clean My Space): https://www.youtube.com/watch?v=vPbgffgCPy0
+- 25 Cleaning Tips That Will Blow Your Mind (Clean My Space): https://www.youtube.com/watch?v=RnuvD8I3BQc
+- Angela Brown Cleaning — a whole channel that trains professional house cleaners: https://www.youtube.com/channel/UC8OUzZ0rKHOUZ19em4cEXyQ
 
 ━━━━━━━━━━━━━━━━━━━━━━
 🧴 YOUR SUPPLY CHECKLIST
@@ -698,7 +698,12 @@ def onboarding_guide(token):
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
     biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
     guide = BusinessSetting.get('training_guide') or DEFAULT_TRAINING_GUIDE
-    return render_template('public/training_guide.html', s=s, biz=biz, guide=guide)
+    # Escape first (safe from any HTML in the owner-edited text), then linkify URLs.
+    import html as _html, re as _re
+    guide_html = _re.sub(r'(https?://[^\s]+)',
+                         r'<a href="\1" target="_blank" style="color:#7c3aed;word-break:break-all">\1</a>',
+                         _html.escape(guide))
+    return render_template('public/training_guide.html', s=s, biz=biz, guide_html=guide_html)
 
 
 @contractors_bp.route('/training-guide', methods=['GET', 'POST'])

@@ -23,7 +23,7 @@
       <p>Everything you need for a great first cleaning with {{ biz }}</p>
     </div>
     <div class="card">
-      <pre class="guide">{{ guide }}</pre>
+      <pre class="guide">{{ guide_html|safe }}</pre>
     </div>
     <a class="back" href="{{ url_for('contractors.onboarding_hub', token=s.agreement_token) }}">← Back to onboarding</a>
   </div>
