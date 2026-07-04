@@ -229,11 +229,12 @@ def approve_interview(app_id):
                          token=app_rec.bgcheck_upload_token, _external=True)
     accept_url = url_for('contractors.accept_offer',
                          token=app_rec.offer_token, _external=True)
+    pay_chart_url = url_for('pricing_public.pay_chart', _external=True, _scheme='https')
     send_email(
         to_email=app_rec.email,
         to_name=app_rec.name,
         subject=f"Welcome to the Team (Pending Your Background Check) — {biz}",
-        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url),
+        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url, pay_chart_url),
     )
 
     flash(f'Video approved! Conditional offer + background check link sent to {app_rec.name}.', 'success')
@@ -265,10 +266,11 @@ def resend_offer(app_id):
                          token=app_rec.bgcheck_upload_token, _external=True)
     accept_url = url_for('contractors.accept_offer',
                          token=app_rec.offer_token, _external=True)
+    pay_chart_url = url_for('pricing_public.pay_chart', _external=True, _scheme='https')
     send_email(
         to_email=app_rec.email, to_name=app_rec.name,
         subject=f"Welcome to the Team (Pending Your Background Check) — {biz}",
-        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url),
+        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url, pay_chart_url),
     )
     flash(f'Conditional offer email sent to {app_rec.name}.', 'success')
     return redirect(request.referrer or url_for('contractors.application_detail', app_id=app_rec.id))
@@ -329,8 +331,14 @@ def send_invite(app_id):
     return redirect(request.referrer or url_for('interviews.admin_interviews'))
 
 
-def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None):
+def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_url=None):
     first = (name or 'there').split()[0]
+    chart_line = ''
+    if pay_chart_url:
+        chart_line = (f'<div style="text-align:center;margin-top:14px">'
+                      f'<a href="{pay_chart_url}" style="color:#1e7e34;font-weight:700;'
+                      f'text-decoration:underline;font-size:0.9rem">'
+                      f'📊 See the full pay chart — your earnings for every home size →</a></div>')
     accept_block = ''
     if accept_url:
         accept_block = f"""
@@ -382,6 +390,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None):
       </ul>
       <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">⭐ Our top performers grow to 55% of every job — earn it with great reviews and reliability.</p>
       <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">The more efficiently you work, the higher your effective hourly rate.</p>
+      {chart_line}
     </div>
     {accept_block}
     <!-- IC EXPECTATIONS -->
