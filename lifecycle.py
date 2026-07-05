@@ -73,7 +73,8 @@ def run_lifecycle_emails():
     from models import Booking, Lead, BookingRating, Staff
     now = datetime.utcnow()
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
-         'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0}
+         'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
+         'onboarding_reminder': 0}
 
     # ── A4 — final lead follow-up (~5 days after the last-chance drip) ──
     for lead in Lead.query.filter(Lead.drip_step == 3, Lead.status == 'new').all():
@@ -163,6 +164,28 @@ def run_lifecycle_emails():
         _send_transactional('contractor_insurance_reminder', s.email, s.name, {})
         c['insurance_reminder'] += 1
         s.insurance_reminder_sent_at = now
+        db.session.commit()
+
+    # ── Onboarding reminders — nudge recent new hires who haven't finished setup ──
+    ONBOARD_MAX = 3
+    for s in Staff.query.filter(Staff.is_active.is_(True)).all():
+        if not s.email or not s.agreement_token:
+            continue
+        if not s.created_at or s.created_at < now - timedelta(days=30):
+            continue                                  # only recent onboarders
+        if s.agreement_signed_at and s.stripe_payouts_enabled:
+            continue                                  # fully onboarded — done
+        if (s.onboarding_reminder_count or 0) >= ONBOARD_MAX:
+            continue
+        last = s.onboarding_reminder_at or s.created_at
+        if last and last > now - timedelta(days=2):
+            continue                                  # every ~2 days
+        link = f"{CRM_BASE}/contractors/onboarding/{s.agreement_token}"
+        _send_transactional('contractor_onboarding_reminder', s.email, s.name,
+                            {'onboarding_link': link})
+        c['onboarding_reminder'] += 1
+        s.onboarding_reminder_at = now
+        s.onboarding_reminder_count = (s.onboarding_reminder_count or 0) + 1
         db.session.commit()
 
     return c

@@ -398,6 +398,8 @@ class Staff(db.Model):
     pay_schedule = db.Column(db.String(10), default='daily')  # daily (per job) or weekly
     insurance_reminder_sent_at = db.Column(db.DateTime)       # friendly "get insurance" nudge after a few jobs
     roster_start_date = db.Column(db.String(20))              # date they're ready to start receiving jobs (YYYY-MM-DD)
+    onboarding_reminder_at = db.Column(db.DateTime)           # last "finish your onboarding" nudge
+    onboarding_reminder_count = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property

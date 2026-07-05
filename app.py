@@ -207,6 +207,8 @@ def _migrate_db():
         ('staff', 'pay_schedule',             "VARCHAR(10) DEFAULT 'daily'"),
         ('staff', 'insurance_reminder_sent_at', 'TIMESTAMP'),
         ('staff', 'roster_start_date',        'VARCHAR(20)'),
+        ('staff', 'onboarding_reminder_at',   'TIMESTAMP'),
+        ('staff', 'onboarding_reminder_count', 'INTEGER DEFAULT 0'),
         # Interview response transcripts
         ('interview_response', 'transcript',       'TEXT'),
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),
@@ -778,6 +780,20 @@ We'd love to make your home shine again. See you soon!"""),
 Comment: {{comment}}
 
 Please reach out to make it right as soon as possible. Log in to the CRM for details."""),
+
+        ('contractor_onboarding_reminder', 'cleaner', 'Onboarding Reminder',
+         'Nudges a new hire every ~2 days until they finish onboarding (up to 3 times)',
+         "Finish setting up your {{business_name}} account, {{first_name}}",
+         """Hi {{first_name}},
+
+Welcome again to the team! We noticed you haven't finished setting up your account yet — it only takes a few minutes, and it's the last step before you can start getting jobs.
+
+Tap here to finish:
+{{onboarding_link}}
+
+You'll sign your work agreement, set up how you get paid, pick your start date, and review your training guide. Any questions, just reply to this email — we're happy to help!
+
+We're excited to have you on the team!"""),
 
         ('contractor_insurance_reminder', 'cleaner', 'Insurance Reminder',
          'Friendly nudge to a contractor to get their own insurance, after a few completed cleanings',
