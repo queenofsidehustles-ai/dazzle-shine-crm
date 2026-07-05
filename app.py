@@ -214,6 +214,10 @@ def _migrate_db():
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),
         # Tentative booking deposit link
         ('booking', 'deposit_token', 'VARCHAR(64)'),
+        # Job completion before/after photos
+        ('job_checklist', 'before_photos',       "TEXT DEFAULT '[]'"),
+        ('job_checklist', 'after_photos',        "TEXT DEFAULT '[]'"),
+        ('job_checklist', 'photos_submitted_at', 'TIMESTAMP'),
         # Background check candidate upload
         ('contractor_application', 'bgcheck_upload_token',  'VARCHAR(64)'),
         ('contractor_application', 'bgcheck_uploaded_url',  'VARCHAR(500)'),

@@ -27,6 +27,22 @@
     .checklist-item .text { font-size: 0.95rem; font-weight: 500; transition: all 0.15s; }
     .checklist-item.done .text { color: #9a95ad; text-decoration: line-through; }
     .complete-banner { background: #d1fae5; color: #065f46; border-radius: 12px; padding: 18px; text-align: center; font-weight: 700; font-size: 1rem; display: none; margin-top: 16px; }
+    /* Photos */
+    .photo-head { font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
+    .photo-sub { font-size: 0.82rem; color: #9a95ad; margin-bottom: 12px; }
+    .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .photo-thumb { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #f0edf8; }
+    .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .add-photo { aspect-ratio: 1; border: 2px dashed #d3a84f; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #b98a33; font-size: 0.78rem; font-weight: 600; text-align: center; gap: 4px; background: #fdfaf3; }
+    .add-photo:active { background: #f6ecd6; }
+    .add-photo .plus { font-size: 1.6rem; line-height: 1; }
+    .req-tag { display:inline-block; background:#fef3c7; color:#92400e; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:0.08em; margin-left:6px; }
+    .done-tag { background:#d1fae5; color:#065f46; }
+    .btn-complete { display:block; width:100%; background:#d3a84f; color:#1f1333; border:none; padding:16px; border-radius:12px; font-weight:700; font-size:1.05rem; font-family:"Inter",sans-serif; cursor:pointer; margin-top:6px; }
+    .btn-complete:disabled { opacity:0.45; cursor:not-allowed; }
+    .photo-err { background:#fff5f5; border:1px solid #fed7d7; color:#c53030; border-radius:9px; padding:11px 14px; font-size:0.85rem; margin-top:10px; display:none; }
+    input[type=file] { display:none; }
+    .uploading { font-size:0.8rem; color:#9a95ad; margin-bottom:10px; display:none; }
   </style>
 </head>
 <body>
@@ -69,8 +85,49 @@
     </div>
 
     <div class="complete-banner" id="complete-banner">
-      ✅ All done! Great work — this job is complete.
+      ✅ Checklist complete! Now add your photos below to close out the job.
     </div>
+
+    {% if not checklist.photos_submitted_at %}
+    <!-- BEFORE PHOTOS -->
+    <div class="card">
+      <div class="photo-head">📸 Before Photos <span class="req-tag" id="before-tag">Required</span></div>
+      <div class="photo-sub">Take these <strong>when you arrive</strong>, before you start. Protects you and shows the starting condition.</div>
+      <div class="photo-grid" id="before-grid">
+        <label class="add-photo">
+          <span class="plus">+</span><span>Add before</span>
+          <input type="file" accept="image/*" capture="environment" onchange="uploadPhoto(this,'before')" />
+        </label>
+      </div>
+    </div>
+
+    <!-- AFTER PHOTOS -->
+    <div class="card">
+      <div class="photo-head">✨ After Photos <span class="req-tag" id="after-tag">Required</span></div>
+      <div class="photo-sub">Take these <strong>when you finish</strong>, showing the completed work.</div>
+      <div class="photo-grid" id="after-grid">
+        <label class="add-photo">
+          <span class="plus">+</span><span>Add after</span>
+          <input type="file" accept="image/*" capture="environment" onchange="uploadPhoto(this,'after')" />
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="uploading" id="uploading">Uploading photo…</div>
+      <button class="btn-complete" id="btn-complete" onclick="submitComplete()" disabled>
+        Mark Job Complete →
+      </button>
+      <div class="photo-err" id="photo-err"></div>
+      <p style="font-size:0.76rem;color:#9a95ad;text-align:center;margin-top:10px">
+        You need at least one before and one after photo to close out the job.
+      </p>
+    </div>
+    {% else %}
+    <div class="complete-banner" style="display:block">
+      🎉 Job closed out! Your photos were submitted and the office was notified. Thank you!
+    </div>
+    {% endif %}
   </div>
 
   <script>
@@ -104,6 +161,89 @@
     }
 
     updateUI();
+
+    // ── Photos ──────────────────────────────────────────────────────────────
+    const CLOUD_NAME = {{ cloud_name | tojson }};
+    const UPLOAD_PRESET = {{ upload_preset | tojson }};
+    let beforePhotos = {{ checklist.get_before_photos() | tojson }};
+    let afterPhotos = {{ checklist.get_after_photos() | tojson }};
+
+    function renderPhotos(phase) {
+      const grid = document.getElementById(phase + '-grid');
+      const list = phase === 'before' ? beforePhotos : afterPhotos;
+      // Clear all thumbs (keep the add button which is the last child)
+      grid.querySelectorAll('.photo-thumb').forEach(t => t.remove());
+      const addBtn = grid.querySelector('.add-photo');
+      list.forEach(url => {
+        const div = document.createElement('div');
+        div.className = 'photo-thumb';
+        div.innerHTML = '<img src="' + url + '" />';
+        grid.insertBefore(div, addBtn);
+      });
+      // Update the required tag
+      const tag = document.getElementById(phase + '-tag');
+      if (list.length > 0) { tag.textContent = list.length + ' added'; tag.classList.add('done-tag'); }
+      else { tag.textContent = 'Required'; tag.classList.remove('done-tag'); }
+      updateCompleteBtn();
+    }
+
+    function updateCompleteBtn() {
+      const btn = document.getElementById('btn-complete');
+      if (btn) btn.disabled = !(beforePhotos.length > 0 && afterPhotos.length > 0);
+    }
+
+    async function uploadPhoto(input, phase) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      const up = document.getElementById('uploading');
+      up.style.display = 'block';
+      document.getElementById('photo-err').style.display = 'none';
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('upload_preset', UPLOAD_PRESET);
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+          { method: 'POST', body: fd });
+        const cloud = await res.json();
+        if (!cloud.secure_url) throw new Error(cloud.error?.message || 'Upload failed');
+
+        await fetch('/workorders/checklist/' + TOKEN + '/add-photo', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phase: phase, url: cloud.secure_url }),
+        });
+        if (phase === 'before') beforePhotos.push(cloud.secure_url);
+        else afterPhotos.push(cloud.secure_url);
+        renderPhotos(phase);
+      } catch (e) {
+        const err = document.getElementById('photo-err');
+        err.textContent = 'Could not upload that photo. Please try again. (' + e.message + ')';
+        err.style.display = 'block';
+      } finally {
+        up.style.display = 'none';
+        input.value = '';
+      }
+    }
+
+    async function submitComplete() {
+      const btn = document.getElementById('btn-complete');
+      const err = document.getElementById('photo-err');
+      err.style.display = 'none';
+      btn.disabled = true; btn.textContent = 'Submitting…';
+      try {
+        const res = await fetch('/workorders/checklist/' + TOKEN + '/submit-complete', { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Could not submit');
+        document.querySelector('.wrap').innerHTML =
+          '<div class="complete-banner" style="display:block">🎉 Job closed out! Your before &amp; after photos were submitted and the office was notified. Great work — thank you!</div>';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (e) {
+        err.textContent = e.message; err.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Mark Job Complete →';
+      }
+    }
+
+    // Initial render of any already-uploaded photos
+    if (document.getElementById('before-grid')) { renderPhotos('before'); renderPhotos('after'); }
   </script>
 </body>
 </html>

@@ -173,8 +173,81 @@ def send_workorder(booking_id):
 
 @workorders_bp.route('/checklist/<token>')
 def view_checklist(token):
+    import os
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
-    return render_template('public/checklist.html', checklist=checklist)
+    return render_template('public/checklist.html', checklist=checklist,
+        cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk'),
+        upload_preset=os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'dazzle_interviews'),
+    )
+
+
+@workorders_bp.route('/checklist/<token>/add-photo', methods=['POST'])
+def add_photo(token):
+    checklist = JobChecklist.query.filter_by(token=token).first_or_404()
+    data = request.get_json() or {}
+    phase = data.get('phase')          # 'before' or 'after'
+    url = (data.get('url') or '').strip()
+    if phase not in ('before', 'after') or not url:
+        return jsonify({'ok': False, 'error': 'Missing phase or url'}), 400
+    if phase == 'before':
+        photos = checklist.get_before_photos()
+        photos.append(url)
+        checklist.before_photos = json.dumps(photos)
+    else:
+        photos = checklist.get_after_photos()
+        photos.append(url)
+        checklist.after_photos = json.dumps(photos)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@workorders_bp.route('/checklist/<token>/submit-complete', methods=['POST'])
+def submit_complete(token):
+    import os
+    checklist = JobChecklist.query.filter_by(token=token).first_or_404()
+    before = checklist.get_before_photos()
+    after = checklist.get_after_photos()
+    if not before or not after:
+        return jsonify({'ok': False,
+            'error': 'Please add at least one BEFORE photo and one AFTER photo.'}), 400
+
+    checklist.photos_submitted_at = datetime.utcnow()
+    if not checklist.completed_at:
+        checklist.completed_at = datetime.utcnow()
+    booking = checklist.booking
+    if booking and booking.status not in ('cancelled',):
+        booking.status = 'completed'
+    db.session.commit()
+
+    # Notify the owner that the job is closed out and ready for payment review
+    booking = checklist.booking
+    owner_email = os.environ.get('NOTIFY_EMAIL') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    try:
+        review_url = url_for('bookings.detail', booking_id=booking.id, _external=True, _scheme='https')
+        send_email(
+            to_email=owner_email, to_name='Dazzle & Shine Maids',
+            subject=f'Job completed — {booking.name} ({len(before)} before / {len(after)} after photos)',
+            html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">Job Closed Out — Ready for Payment Review</h2>
+  <p><strong>{booking.assigned_cleaner or 'Cleaner'}</strong> finished the job for
+     <strong>{booking.name}</strong> and submitted photos.</p>
+  <p>📸 {len(before)} before photo(s) · {len(after)} after photo(s)</p>
+  <p><a href="{review_url}" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Review Photos &amp; Release Payment →</a></p>
+</div>""",
+        )
+    except Exception:
+        pass
+
+    # Text the owner too (works once Twilio is connected)
+    owner_phone = os.environ.get('OWNER_PHONE', '')
+    if owner_phone:
+        send_sms(owner_phone,
+                 f"✅ Job done: {booking.assigned_cleaner or 'Cleaner'} finished {booking.name}'s "
+                 f"cleaning and submitted {len(before)} before + {len(after)} after photos. "
+                 f"Review to release payment.")
+
+    return jsonify({'ok': True})
 
 
 @workorders_bp.route('/checklist/<token>/check', methods=['POST'])

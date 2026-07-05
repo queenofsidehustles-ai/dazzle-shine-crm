@@ -132,6 +132,45 @@
       {% endif %}
     </div>
 
+    <!-- Job Photos Card (before / after proof) -->
+    {% set photo_jc = None %}
+    {% for jc in booking.job_checklists %}
+      {% if jc.get_before_photos() or jc.get_after_photos() %}{% set photo_jc = jc %}{% endif %}
+    {% endfor %}
+    {% if photo_jc %}
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+        Job Photos
+        {% if photo_jc.photos_submitted_at %}
+        <span style="background:#d1fae5;color:#065f46;padding:2px 10px;border-radius:999px;font-size:0.7rem;margin-left:6px">Submitted {{ photo_jc.photos_submitted_at.strftime('%b %d') }}</span>
+        {% endif %}
+      </h2>
+      <p style="font-size:0.82rem;color:#9a95ad;margin-bottom:14px">Before &amp; after proof from {{ booking.assigned_cleaner or 'the cleaner' }}. Review before releasing payment.</p>
+
+      {% if photo_jc.get_before_photos() %}
+      <div style="font-size:0.78rem;font-weight:700;color:#5f5878;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">📸 Before ({{ photo_jc.get_before_photos()|length }})</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+        {% for url in photo_jc.get_before_photos() %}
+        <a href="{{ url }}" target="_blank" style="aspect-ratio:1;border-radius:10px;overflow:hidden;background:#f0edf8">
+          <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover" />
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if photo_jc.get_after_photos() %}
+      <div style="font-size:0.78rem;font-weight:700;color:#5f5878;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">✨ After ({{ photo_jc.get_after_photos()|length }})</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        {% for url in photo_jc.get_after_photos() %}
+        <a href="{{ url }}" target="_blank" style="aspect-ratio:1;border-radius:10px;overflow:hidden;background:#f0edf8">
+          <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover" />
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Balance Collection Card -->
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Balance Collection</h2>

@@ -191,6 +191,9 @@ class JobChecklist(db.Model):
     token = db.Column(db.String(64), unique=True, nullable=False)
     sent_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
+    before_photos = db.Column(db.Text, default='[]')   # JSON list of Cloudinary URLs
+    after_photos = db.Column(db.Text, default='[]')    # JSON list of Cloudinary URLs
+    photos_submitted_at = db.Column(db.DateTime)       # when cleaner closed out the job
     booking = db.relationship('Booking', backref='job_checklists')
 
     def get_items(self):
@@ -204,6 +207,18 @@ class JobChecklist(db.Model):
             return set(json.loads(self.completed_items or '[]'))
         except Exception:
             return set()
+
+    def get_before_photos(self):
+        try:
+            return json.loads(self.before_photos or '[]')
+        except Exception:
+            return []
+
+    def get_after_photos(self):
+        try:
+            return json.loads(self.after_photos or '[]')
+        except Exception:
+            return []
 
     @property
     def completion_percent(self):
