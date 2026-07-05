@@ -17,6 +17,24 @@ def index():
                            categories=SOP.CATEGORIES, counts=counts)
 
 
+# Categories cleaners should see (not admin/lead-handling ones)
+CLEANER_CATEGORIES = ['cleaning', 'commercial', 'quality']
+
+
+@sops_bp.route('/library')
+def library():
+    """Public SOP library cleaners can reference anytime (job-relevant categories only)."""
+    from models import BusinessSetting
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    label_map = dict(SOP.CATEGORIES)
+    groups = []
+    for key in CLEANER_CATEGORIES:
+        items = SOP.query.filter_by(category=key).order_by(SOP.sort_order, SOP.id).all()
+        if items:
+            groups.append({'label': label_map.get(key, key), 'items': items})
+    return render_template('public/sop_library.html', biz=biz, groups=groups)
+
+
 @sops_bp.route('/new', methods=['GET', 'POST'])
 @login_required
 def new():

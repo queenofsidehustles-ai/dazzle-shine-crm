@@ -97,8 +97,14 @@ def detail(booking_id):
         new_cleaner = request.form.get('assigned_cleaner', '').strip()
         if new_cleaner and new_cleaner != old_cleaner:
             notified = _notify_cleaner(booking)
+            # Auto-send the job checklist to the newly assigned cleaner
+            try:
+                from blueprints.workorders import create_and_send_workorder
+                create_and_send_workorder(booking)
+            except Exception:
+                pass
             if notified:
-                flash(f'Booking updated — notification sent to {new_cleaner}.', 'success')
+                flash(f'Booking updated — notification + checklist sent to {new_cleaner}.', 'success')
             else:
                 flash(f'Booking updated — ⚠️ no email on file for {new_cleaner}, notify them manually.', 'warning')
         else:

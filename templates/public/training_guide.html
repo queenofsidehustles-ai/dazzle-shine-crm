@@ -25,6 +25,9 @@
     <div class="card">
       <pre class="guide">{{ guide_html|safe }}</pre>
     </div>
+    <div style="margin-top:18px">
+      <a href="{{ url_for('sops.library') }}" target="_blank" style="display:inline-block;background:#1f1333;color:#d3a84f;padding:11px 22px;border-radius:8px;font-weight:700;text-decoration:none;font-size:0.9rem">📋 See our detailed Cleaning SOPs →</a>
+    </div>
     <a class="back" href="{{ url_for('contractors.onboarding_hub', token=s.agreement_token) }}">← Back to onboarding</a>
   </div>
 </body>

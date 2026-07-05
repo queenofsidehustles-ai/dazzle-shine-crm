@@ -103,12 +103,10 @@ def delete_template(template_id):
     return redirect(url_for('workorders.templates'))
 
 
-@workorders_bp.route('/send/<int:booking_id>', methods=['POST'])
-@login_required
-def send_workorder(booking_id):
-    booking = Booking.query.get_or_404(booking_id)
-    template_id = request.form.get('template_id')
-
+def create_and_send_workorder(booking, template_id=None):
+    """Create a job checklist for a booking and email/text it to the assigned
+    cleaner. Reusable from the manual route AND the auto-assign hook.
+    Returns True if a checklist was created."""
     if template_id:
         tmpl = ChecklistTemplate.query.get(template_id)
         items = tmpl.get_items() if tmpl else DEFAULT_ITEMS.get(booking.service_type, DEFAULT_ITEMS['standard'])
@@ -130,8 +128,8 @@ def send_workorder(booking_id):
             cleaner_email = cleaner.email
             cleaner_phone = cleaner.phone
 
-    crm_url = request.host_url.rstrip('/')
-    checklist_url = f"{crm_url}/workorders/checklist/{token}"
+    checklist_url = url_for('workorders.view_checklist', token=token, _external=True, _scheme='https')
+    sop_url = url_for('sops.library', _external=True, _scheme='https')
     date_text = booking.preferred_date or 'TBD'
     time_text = booking.preferred_time or 'TBD'
     extras_html = f"<p><strong>Add-ons:</strong> {booking.extras}</p>" if booking.extras else ''
@@ -151,7 +149,7 @@ def send_workorder(booking_id):
   {extras_html}{notes_html}
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <p><a href="{checklist_url}" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Open Job Checklist →</a></p>
-  <p style="font-size:0.82rem;color:#9a95ad">Check off each item as you complete it.</p>
+  <p style="font-size:0.82rem;color:#9a95ad">Check off each item as you complete it. Need a refresher? <a href="{sop_url}" style="color:#b98a33">See our cleaning SOPs →</a></p>
 </div>""",
         )
 
@@ -159,7 +157,14 @@ def send_workorder(booking_id):
         send_sms(cleaner_phone,
                  f"Work Order: {booking.name} · {booking.address} · {date_text} at {time_text}. "
                  f"Checklist: {checklist_url}")
+    return True
 
+
+@workorders_bp.route('/send/<int:booking_id>', methods=['POST'])
+@login_required
+def send_workorder(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    create_and_send_workorder(booking, request.form.get('template_id'))
     flash('Work order sent to cleaner!', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
