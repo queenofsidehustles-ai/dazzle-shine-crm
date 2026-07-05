@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from auth import login_required
 from models import Staff, ContractorApplication, Booking, BusinessSetting, ContractorPayment
 from extensions import db
-from notifications import send_email
+from notifications import send_email, send_sms
 import stripe_connect
 
 contractors_bp = Blueprint('contractors', __name__, url_prefix='/contractors')
@@ -123,6 +123,45 @@ WHOLE HOME — THE DAZZLE TOUCHES
 ━━━━━━━━━━━━━━━━━━━━━━
 Welcome aboard. Let's make Orlando sparkle, one home at a time. 💛
 — The Dazzle & Shine Family"""
+
+
+@contractors_bp.route('/sms-test')
+@login_required
+def sms_test():
+    """Diagnostic: send a real test text and show exactly what Twilio says."""
+    import os as _os
+    to = request.args.get('to') or _os.environ.get('OWNER_PHONE', '')
+    from_phone = _os.environ.get('TWILIO_PHONE', '')
+
+    if not to:
+        detail = 'No number to text. Add ?to=+14075551234 to the web address, or set OWNER_PHONE in Railway.'
+        ok = False
+    else:
+        ok, detail = send_sms(to, 'Dazzle & Shine test text ✅ — if you got this, your texting is working!')
+
+    color = '#155724' if ok else '#842029'
+    bg = '#d4edda' if ok else '#f8d7da'
+    fix_hint = '' if ok else (
+        '<div style="margin-top:18px;padding:16px;background:#fff8e1;border:1px solid #f0d488;border-radius:8px;color:#7c4a04;font-size:0.9rem;line-height:1.6">'
+        '<strong>Common fixes:</strong><br>'
+        '1. Make sure <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code>, and '
+        '<code>TWILIO_PHONE</code> are all set in Railway.<br>'
+        '2. On a Twilio <strong>trial</strong> account you can only text numbers you\'ve '
+        '<strong>verified</strong> in Twilio. Verify your own cell first, or upgrade the account.<br>'
+        '3. To text real customers/cleaners at scale you\'ll need Twilio\'s A2P 10DLC '
+        'business registration.</div>'
+    )
+    return (
+        f'<div style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 16px">'
+        f'<div style="background:{bg};color:{color};padding:18px 22px;border-radius:10px;font-weight:700;font-size:1.05rem">'
+        f'{"✅ Test text sent!" if ok else "❌ Text did NOT send"}</div>'
+        f'<p style="margin-top:16px;color:#1f1333"><strong>To:</strong> {to or "—"}<br>'
+        f'<strong>From:</strong> {from_phone or "(TWILIO_PHONE not set)"}<br>'
+        f'<strong>Result:</strong> {detail}</p>'
+        f'{fix_hint}'
+        f'<p style="margin-top:20px"><a href="{url_for("contractors.team")}" style="color:#7c3aed">← Back to Team</a></p>'
+        f'</div>'
+    )
 
 
 @contractors_bp.route('/email-test')

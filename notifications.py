@@ -161,16 +161,24 @@ def add_to_mailerlite(email, name, group_id=None):
 
 
 def send_sms(to_phone, message):
+    """Send an SMS via Twilio. Returns (ok: bool, detail: str) so diagnostics
+    can surface the real reason a text failed. Existing callers ignore the return."""
     account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
     auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
     from_phone = os.environ.get('TWILIO_PHONE')
     if not all([account_sid, auth_token, from_phone]):
-        return
+        missing = [n for n, v in (('TWILIO_ACCOUNT_SID', account_sid),
+                                  ('TWILIO_AUTH_TOKEN', auth_token),
+                                  ('TWILIO_PHONE', from_phone)) if not v]
+        return False, 'Texting not connected — missing in Railway: ' + ', '.join(missing)
+    if not to_phone:
+        return False, 'No phone number to send to.'
     try:
         from twilio.rest import Client
         digits = ''.join(filter(str.isdigit, to_phone))
         formatted = ('+1' + digits) if not to_phone.startswith('+') else to_phone
         client = Client(account_sid, auth_token)
-        client.messages.create(body=message, from_=from_phone, to=formatted)
-    except Exception:
-        pass
+        msg = client.messages.create(body=message, from_=from_phone, to=formatted)
+        return True, f'Sent OK to {formatted} (Twilio id {msg.sid}).'
+    except Exception as e:
+        return False, f'Twilio error: {e}'
