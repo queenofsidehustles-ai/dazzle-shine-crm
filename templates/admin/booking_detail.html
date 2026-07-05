@@ -133,10 +133,11 @@
     </div>
 
     <!-- Job Photos Card (before / after proof) -->
-    {% set photo_jc = None %}
+    {% set ns = namespace(photo_jc=None) %}
     {% for jc in booking.job_checklists %}
-      {% if jc.get_before_photos() or jc.get_after_photos() %}{% set photo_jc = jc %}{% endif %}
+      {% if jc.get_before_photos() or jc.get_after_photos() %}{% set ns.photo_jc = jc %}{% endif %}
     {% endfor %}
+    {% set photo_jc = ns.photo_jc %}
     {% if photo_jc %}
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">

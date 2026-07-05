@@ -131,7 +131,11 @@ def charge_balance(booking_id):
 @bookings_bp.route('/<int:booking_id>/delete', methods=['POST'])
 @login_required
 def delete(booking_id):
+    from models import JobChecklist, BookingRating
     booking = Booking.query.get_or_404(booking_id)
+    # Remove child records first so the delete doesn't hit a foreign-key error
+    JobChecklist.query.filter_by(booking_id=booking.id).delete()
+    BookingRating.query.filter_by(booking_id=booking.id).delete()
     db.session.delete(booking)
     db.session.commit()
     flash('Booking deleted.', 'success')
