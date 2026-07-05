@@ -28,7 +28,16 @@
               <span class="status status-cancelled">Inactive</span>
             {% endif %}
           </td>
-          <td><a href="{{ url_for('discounts.edit', code_id=c.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a></td>
+          <td>
+            <div style="display:flex;gap:6px;align-items:center">
+              <a href="{{ url_for('discounts.edit', code_id=c.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a>
+              <form method="POST" action="{{ url_for('discounts.delete', code_id=c.id) }}"
+                    onsubmit="return confirm('Delete code {{ c.code }} permanently?')">
+                <button type="submit" title="Delete code"
+                        style="background:#fff;border:1px solid #fed7d7;color:#c53030;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">🗑</button>
+              </form>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>

@@ -43,7 +43,14 @@
           <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
           <td style="color:#5f5878">{{ ('$%.0f' % b.price) if b.price else '—' }}</td>
           <td>
-            <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a>
+            <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
+              <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a>
+              <form method="POST" action="{{ url_for('bookings.delete', booking_id=b.id) }}"
+                    onsubmit="return confirm('Delete {{ b.name }}\'s booking (#{{ b.id }}) permanently? Use this for test bookings.')">
+                <button type="submit" title="Delete booking"
+                        style="background:#fff;border:1px solid #fed7d7;color:#c53030;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">🗑</button>
+              </form>
+            </div>
           </td>
         </tr>
         {% endfor %}
