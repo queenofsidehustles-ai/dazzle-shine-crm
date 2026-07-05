@@ -825,10 +825,8 @@ Thanks again for being part of the team."""),
 
 
 def _seed_sops():
-    """Seed placeholder SOPs based on class document titles."""
+    """Add any missing SOPs (idempotent — never overwrites the owner's edits)."""
     from models import SOP
-    if SOP.query.count() > 0:
-        return
 
     seeds = [
         # ── Cleaning Procedures ───────────────────────────────────
@@ -1216,12 +1214,237 @@ STEP 6 — AFTER THE CLEANING
 1. Mark complete in CRM.
 2. CRM auto-charges the balance and sends a rating request.
 3. If the client is on recurring service, confirm the next appointment is scheduled."""),
+
+        # ── Cleaning Procedures (added layer) ─────────────────────
+        ('cleaning', 'Products & Surfaces — What to Use Where', 4, """PRODUCTS & SURFACES — WHAT TO USE WHERE
+
+Using the wrong product can damage a client's home and cost us the account. When in doubt, use the gentlest option and test a hidden spot first.
+
+GENERAL RULE
+- Start with the mildest cleaner that works. Escalate only if needed.
+- Never mix products (especially bleach + ammonia — it creates toxic fumes).
+- Always read the client's surface before spraying.
+
+BY SURFACE
+- Granite / marble / natural stone: pH-neutral stone cleaner ONLY. Never vinegar, lemon, or acidic/abrasive cleaners — they etch and dull stone.
+- Quartz / laminate counters: all-purpose cleaner, soft cloth.
+- Stainless steel: stainless cleaner or a little dish soap + water; wipe WITH the grain; dry to avoid streaks.
+- Wood (floors, cabinets, furniture): wood-safe cleaner, barely-damp cloth. Never soak wood.
+- Glass / mirrors: glass cleaner + flat-weave microfiber; buff dry for no streaks.
+- Tubs / tile / grout: non-scratch bathroom cleaner; soft scrub for grout. No steel wool.
+- Toilets: toilet bowl cleaner inside; disinfectant outside.
+- Electronics / TVs: dry or slightly damp microfiber only — never spray directly.
+
+IF YOU'RE UNSURE
+Text the office a photo before using anything you're not sure about. Protecting the client's home always comes first."""),
+
+        ('cleaning', 'Color-Coded Cloths & Cross-Contamination', 5, """COLOR-CODED CLOTHS — PREVENT CROSS-CONTAMINATION
+
+Using the same cloth in the bathroom and then the kitchen spreads germs. We keep colors separated so every home is truly sanitary.
+
+THE SYSTEM (suggested)
+- BLUE — glass, mirrors, windows
+- GREEN — kitchen surfaces & counters
+- YELLOW — general dusting, living areas, bedrooms
+- RED — bathrooms & toilets ONLY
+
+RULES
+1. A red (bathroom) cloth NEVER touches a kitchen or living surface. Ever.
+2. Use a fresh cloth per home — never carry a used cloth from one client to the next.
+3. When a cloth is visibly dirty, swap it for a clean one.
+4. Wash cloths after every day: hot water, no fabric softener (it ruins microfiber).
+5. Keep a "dirty cloth" bag separate from your clean stack in your caddy.
+
+Same idea for sponges and scrubbers — bathroom tools stay in the bathroom."""),
+
+        ('cleaning', 'Arrival & In-Home Etiquette', 6, """ARRIVAL & IN-HOME ETIQUETTE
+
+You represent Dazzle & Shine the moment you pull up. First impressions win reviews and repeat clients.
+
+ARRIVAL
+1. Arrive on time (aim 5 minutes early). If you're running late, message the office immediately.
+2. Park considerately — never block driveways or neighbors.
+3. Knock/ring; announce yourself warmly: "Hi, I'm ___ with Dazzle & Shine!"
+4. If entering with a code/key, follow the exact instructions in the work order.
+
+INSIDE THE HOME
+1. Wear clean, professional attire. Shoe covers or remove shoes if requested.
+2. Do a quick walkthrough with the client (if home) to confirm priorities.
+3. Note and photo any pre-existing damage before you start.
+4. Keep your phone on silent. No personal calls in a client's home.
+5. Respect privacy — never open drawers, closets, or personal items unless the job requires it.
+6. If you find cash, jewelry, or valuables out, do not touch — clean around them and note it.
+
+PETS & PEOPLE
+- Be friendly but keep doors closed so pets don't escape.
+- If a client is working from home, keep noise down and stay out of their space."""),
+
+        ('cleaning', 'Kitchen — Detailed Deep Clean', 7, """KITCHEN — DETAILED DEEP CLEAN
+
+Work top to bottom so crumbs and dust fall to the floor you clean last.
+
+TOP DOWN
+1. Dust the top of cabinets, hood, and any high shelves.
+2. Wipe cabinet fronts and handles (grease loves handles).
+3. Backsplash — degrease and wipe.
+
+APPLIANCES
+4. Microwave: steam a bowl of water 2 min, then wipe inside; clean door and handle.
+5. Stovetop: remove grates/knobs, degrease, scrub, dry, replace.
+6. Oven (if included): apply oven cleaner per instructions; wipe thoroughly.
+7. Fridge exterior + handles; interior only if booked.
+8. Dishwasher front, small appliances (toaster, coffee maker) wiped.
+
+COUNTERS & SINK
+9. Clear counters, clean surface (right product for the material), replace items neatly.
+10. Sink: scrub basin, disinfect, clean drain area, SHINE the faucet — a gleaming faucet says "clean."
+
+FINISH
+11. Empty trash, wipe can, fresh liner.
+12. Sweep, then mop the floor last (get edges and under the toe-kick)."""),
+
+        ('cleaning', 'Bathroom — Detailed Deep Clean', 8, """BATHROOM — DETAILED DEEP CLEAN
+
+Bathrooms make or break a review. Be thorough and disinfect.
+
+START
+1. Apply toilet bowl cleaner and let it sit while you work elsewhere.
+2. Spray tub/shower and let the cleaner dwell (dwell time = less scrubbing).
+
+TOP DOWN
+3. Dust vents, light fixtures, and top of mirror/cabinets.
+4. Mirror and glass — buff streak-free.
+5. Counter, sink, faucet — clean and disinfect; shine the faucet.
+6. Wipe cabinet fronts and handles.
+
+TUB / SHOWER
+7. Scrub walls, door/track or curtain rod, and floor of the tub.
+8. Remove soap scum and hard-water spots; rinse; squeegee glass.
+9. Polish fixtures.
+
+TOILET (use RED tools only)
+10. Scrub bowl (including under the rim), then flush.
+11. Disinfect seat (both sides), lid, tank, handle, base, and behind the base — the spot everyone forgets.
+
+FINISH
+12. Wipe baseboards and door.
+13. Empty trash, fresh liner.
+14. Fold/replace towels neatly. Sweep and mop last."""),
+
+        ('cleaning', 'Floors — Vacuuming & Mopping by Type', 9, """FLOORS — VACUUM & MOP BY TYPE
+
+Floors are the last thing you clean in every room.
+
+VACUUMING
+- Carpet: slow, overlapping passes; go both directions in high-traffic areas. Get edges and under furniture you can reach.
+- Hard floors: vacuum or sweep first to remove grit that scratches.
+- Stairs: top to bottom; don't skip the edges.
+
+MOPPING (match the floor)
+- Hardwood / laminate: barely-damp microfiber mop + wood-safe cleaner. NEVER soak — standing water warps wood.
+- Tile: standard mop + all-purpose or tile cleaner; get grout lines.
+- Luxury vinyl (LVP): damp mop, pH-neutral cleaner.
+- Natural stone: stone-safe, pH-neutral cleaner only.
+
+TECHNIQUE
+1. Work from the far corner toward the exit so you don't walk on wet floor.
+2. Change mop water when it's dirty — dirty water = streaky floors.
+3. Dry high-traffic/entry spots so no one slips."""),
+
+        ('cleaning', 'Homes with Pets', 10, """HOMES WITH PETS
+
+Many of our clients have pets. Handle them safely and leave the home fur-free.
+
+SAFETY FIRST
+1. Confirm in the work order if pets are present and any instructions.
+2. Keep exterior doors closed at all times so pets can't slip out.
+3. Never let a pet out of a room the owner has closed.
+4. If a pet seems aggressive or anxious, don't force it — message the office.
+
+CLEANING FOR PET HOMES
+5. Pet hair: rubber broom, vacuum with pet attachment, or a slightly damp rubber glove to lift hair off upholstery.
+6. Lint-roll or vacuum furniture where pets rest.
+7. Watch for accidents — clean and disinfect, and note it for the office.
+8. Empty vacuum more often (pet hair fills bags/bins fast).
+9. Avoid strong chemical smells where pets eat/sleep when possible.
+
+Leave no trace of fur — that "wow, no more dog hair!" moment earns 5-star reviews."""),
+
+        # ── Quality Control (added layer) ─────────────────────────
+        ('quality', 'Before & After Photos', 2, """BEFORE & AFTER PHOTOS — HOW & WHY
+
+Photos protect you, prove your great work, and win us reviews. Take them every job.
+
+WHY IT MATTERS
+- Protects YOU: proof of the home's condition before you started (pre-existing damage).
+- Proves quality: shows the transformation.
+- Marketing: great afters (with permission) become social posts that bring in clients.
+
+HOW TO DO IT
+1. BEFORE you touch a room, take a quick photo of each main area (kitchen, each bathroom, living room).
+2. AFTER you finish, take the same angle so the difference is clear.
+3. Good light, steady shot, no people or personal info (no mail, photos, documents) in frame.
+4. Upload/attach them where the office asks, or text them in.
+
+PRIVACY
+- Never post a client's home publicly without the office's OK.
+- Never photograph valuables, safes, or anything personal."""),
+
+        ('quality', 'The Dazzle Final Walkthrough', 3, """THE DAZZLE FINAL WALKTHROUGH
+
+Before you leave, do this every single time. It's the difference between "clean" and "WOW."
+
+STAND IN EACH DOORWAY AND ASK: "Would I say WOW?"
+
+CHECK
+1. Kitchen: counters clear and shining, sink and faucet gleaming, floor clean to the edges, trash emptied.
+2. Bathrooms: no streaks on mirror/glass, toilet spotless (including base), fresh towels, floor mopped.
+3. Bedrooms/living: beds made, surfaces dusted, pillows straight, floors done, nothing out of place.
+4. Whole home: baseboards, switches, and handles wiped; no missed corners.
+5. Smell: the home should smell fresh and clean, not chemical-heavy.
+
+BEFORE LOCKING UP
+6. Turn off lights you turned on; return thermostat/blinds as found.
+7. Collect ALL your supplies and trash — leave nothing behind.
+8. Lock up exactly per the work order and confirm the door is secured.
+9. Take your AFTER photos.
+10. Mark the job complete in your checklist."""),
+
+        # ── Commercial (added layer) ──────────────────────────────
+        ('commercial', 'Airbnb / Vacation Rental Turnover', 2, """AIRBNB / VACATION RENTAL TURNOVER SOP
+
+Turnovers are time-sensitive — the next guest may check in the same day. Speed AND hotel-level detail both matter.
+
+BEFORE YOU START
+1. Confirm checkout is complete and note the checkout/check-in times in the work order.
+2. Report any damage, missing items, or items left behind immediately with photos.
+
+RESET THE SPACE (hotel standard)
+3. Strip and remake all beds with fresh linens; hospital corners, crisp presentation.
+4. Fresh towels folded/staged neatly (fan or roll per the host's style).
+5. Restock supplies the host provides: toilet paper, paper towels, soap, coffee, etc.
+6. Empty ALL trash; fresh liners.
+
+CLEAN
+7. Kitchen: wash/put away or load dishes, wipe all surfaces and appliances, check the fridge for leftovers, sink shining.
+8. Bathrooms: full clean + disinfect, streak-free mirrors, restock.
+9. Living/bedrooms: dust, straighten, vacuum/mop.
+10. Check under beds and couches for guest items.
+
+FINISH
+11. Stage the space to look photo-ready (like the listing photos).
+12. Take after photos for the host.
+13. Lock up per instructions and confirm secured."""),
     ]
 
+    added = 0
     for cat, title, order, content in seeds:
-        s = SOP(category=cat, title=title, sort_order=order, content=content.strip())
-        db.session.add(s)
-    db.session.commit()
+        if SOP.query.filter_by(category=cat, title=title).first():
+            continue  # already exists — keep the owner's version
+        db.session.add(SOP(category=cat, title=title, sort_order=order, content=content.strip()))
+        added += 1
+    if added:
+        db.session.commit()
 
 
 def _seed_pricing_defaults():
