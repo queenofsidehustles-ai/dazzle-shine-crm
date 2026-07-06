@@ -99,6 +99,19 @@ def _apply_template_patches():
         BusinessSetting.set('tmpl_patch_buyout_v1', '1')
         db.session.commit()
 
+    # Patch 2: add the cleaner's "My Day" link to the job-assignment email
+    if not BusinessSetting.get('tmpl_patch_myday_v1'):
+        t = EmailTemplate.query.filter_by(trigger='cleaner_job_assigned').first()
+        if t and 'myday_link' not in (t.body or ''):
+            block = ("See all your jobs, navigate, and open your checklists here:\n{{myday_link}}\n\n")
+            marker = "Please review"
+            if marker in t.body:
+                t.body = t.body.replace(marker, block + marker, 1)
+            else:
+                t.body = (t.body or '').rstrip() + "\n\n" + block
+        BusinessSetting.set('tmpl_patch_myday_v1', '1')
+        db.session.commit()
+
 
 def _migrate_db():
     """Add any missing columns to existing tables safely (idempotent)."""
@@ -664,7 +677,10 @@ Service: {{service_type}}
 Address: {{job_address}}
 Your estimated earnings: ${{earnings}}
 
-Please review the work order checklist in the CRM before arriving. Arrive on time and complete all checklist items before leaving.
+See all your jobs, navigate, and open your checklists here:
+{{myday_link}}
+
+Please review your work order checklist before arriving. Arrive on time and complete all checklist items before leaving.
 
 Have questions about this job? Call us at {{phone}}.
 

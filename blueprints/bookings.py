@@ -322,7 +322,13 @@ def _notify_cleaner(booking):
     decline_url = f"{base}/bookings/{booking.id}/cleaner-response?action=decline&token={token}"
     svc_label = SERVICES.get(booking.service_type, {}).get('label', booking.service_type.title())
 
-    from notifications import send_triggered_email
+    # Each cleaner's personal "My Day" job board link (auto-shared, no manual copy)
+    if not staff.agreement_token:
+        import secrets as _secrets
+        staff.agreement_token = _secrets.token_urlsafe(32)
+    myday_link = f"{base}/contractors/my-day/{staff.agreement_token}"
+
+    from notifications import send_triggered_email, send_sms
     sent = send_triggered_email(
         trigger='cleaner_job_assigned',
         to_email=staff.email,
@@ -335,10 +341,21 @@ def _notify_cleaner(booking):
             'earnings': f'{earnings:.2f}',
             'beds': booking.bedrooms,
             'baths': booking.bathrooms,
+            'myday_link': myday_link,
         }
     )
     booking.cleaner_notified_at = datetime.utcnow()
     db.session.flush()
+
+    # Text the cleaner their job + My Day link (automatic — no copy/paste)
+    if staff.phone:
+        try:
+            send_sms(staff.phone,
+                     f"New job: {booking.preferred_date or 'TBD'} {booking.preferred_time or ''} — "
+                     f"{booking.name}, {booking.address or ''}. You earn ${earnings:.0f}. "
+                     f"See your day + navigate: {myday_link}")
+        except Exception:
+            pass
 
     if sent:
         return True
