@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from auth import login_required
-from models import Booking, ChecklistTemplate, JobChecklist, Staff
+from models import Booking, ChecklistTemplate, JobChecklist, Staff, BookingRating
 from extensions import db
 from notifications import send_email, send_sms
 
@@ -181,6 +181,122 @@ def view_checklist(token):
     )
 
 
+@workorders_bp.route('/checklist/<token>/on-the-way', methods=['POST'])
+def on_the_way(token):
+    """Step 1 — cleaner is heading to the job. Texts + emails the client so they
+    know someone is on the way, and pings the owner."""
+    import os
+    checklist = JobChecklist.query.filter_by(token=token).first_or_404()
+    if not checklist.on_the_way_at:
+        checklist.on_the_way_at = datetime.utcnow()
+        db.session.commit()
+        booking = checklist.booking
+        first = (booking.name or 'there').split(' ')[0]
+        cleaner = booking.assigned_cleaner or 'Your Dazzle & Shine cleaner'
+        # Let the client know
+        if booking.phone:
+            try:
+                send_sms(booking.phone,
+                         f"Hi {first}! {cleaner} from Dazzle & Shine is on the way to your "
+                         f"cleaning now. See you soon! 🧽✨")
+            except Exception:
+                pass
+        if booking.email:
+            try:
+                send_email(
+                    to_email=booking.email, to_name=booking.name or 'there',
+                    subject='Your Dazzle & Shine cleaner is on the way! 🚗',
+                    html=f"""
+<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">On the way! 🚗</h2>
+  <p>Hi {first},</p>
+  <p><strong>{cleaner}</strong> is heading to your home now for your
+     {booking.service_label.lower()}. They'll text you if anything comes up.</p>
+  <p style="color:#9a95ad;font-size:0.85rem">Thank you for choosing Dazzle &amp; Shine Maids!</p>
+</div>""",
+                )
+            except Exception:
+                pass
+        # Ping the owner
+        owner_phone = os.environ.get('OWNER_PHONE', '')
+        if owner_phone:
+            try:
+                send_sms(owner_phone, f"🚗 {cleaner} is on the way to {booking.name}'s job.")
+            except Exception:
+                pass
+    return jsonify({'ok': True})
+
+
+@workorders_bp.route('/checklist/<token>/clock-in', methods=['POST'])
+def clock_in(token):
+    """Step 2 — cleaner arrived and started. Marks the job in progress."""
+    checklist = JobChecklist.query.filter_by(token=token).first_or_404()
+    if not checklist.clock_in_at:
+        checklist.clock_in_at = datetime.utcnow()
+        booking = checklist.booking
+        if booking and booking.status not in ('cancelled', 'completed'):
+            booking.status = 'in_progress'
+        db.session.commit()
+    return jsonify({'ok': True, 'clock_in': checklist.clock_in_at.isoformat() + 'Z'})
+
+
+@workorders_bp.route('/checklist/<token>/clock-out', methods=['POST'])
+def clock_out(token):
+    """Step 5 — cleaner finished the work. Auto-fills hours worked for payroll."""
+    checklist = JobChecklist.query.filter_by(token=token).first_or_404()
+    if not checklist.clock_in_at:
+        return jsonify({'ok': False, 'error': 'Please clock in first.'}), 400
+    if not checklist.clock_out_at:
+        checklist.clock_out_at = datetime.utcnow()
+        hours = checklist.hours_on_site
+        if hours is not None and checklist.booking:
+            checklist.booking.hours_worked = hours
+        db.session.commit()
+    return jsonify({'ok': True, 'hours': checklist.hours_on_site})
+
+
+@workorders_bp.route('/checklist/<token>/sign', methods=['POST'])
+def sign_off(token):
+    """Step 6 — client signs off on the job (optional, only if they're home)."""
+    checklist = JobChecklist.query.filter_by(token=token).first_or_404()
+    data = request.get_json() or {}
+    sig = (data.get('signature') or '').strip()
+    if not sig:
+        return jsonify({'ok': False, 'error': 'No signature captured.'}), 400
+    checklist.client_signature = sig
+    checklist.client_signed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@workorders_bp.route('/checklist/<token>/review', methods=['POST'])
+def submit_review(token):
+    """Step 7 — client leaves a star review on-site (optional). Stored on the
+    checklist AND mirrored to BookingRating so it shows in reports."""
+    checklist = JobChecklist.query.filter_by(token=token).first_or_404()
+    data = request.get_json() or {}
+    try:
+        stars = int(data.get('rating') or 0)
+    except (TypeError, ValueError):
+        stars = 0
+    if stars < 1 or stars > 5:
+        return jsonify({'ok': False, 'error': 'Please pick 1 to 5 stars.'}), 400
+    comment = (data.get('comment') or '').strip()
+    checklist.client_rating = stars
+    checklist.client_review = comment
+    # Mirror into BookingRating (single source for the reviews report)
+    booking = checklist.booking
+    rating = BookingRating.query.filter_by(booking_id=booking.id).first()
+    if not rating:
+        rating = BookingRating(booking_id=booking.id, token=secrets.token_urlsafe(16))
+        db.session.add(rating)
+    rating.rating = stars
+    rating.comment = comment
+    rating.rated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
 @workorders_bp.route('/checklist/<token>/add-photo', methods=['POST'])
 def add_photo(token):
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
@@ -214,9 +330,16 @@ def submit_complete(token):
     checklist.photos_submitted_at = datetime.utcnow()
     if not checklist.completed_at:
         checklist.completed_at = datetime.utcnow()
+    # Safety net: if the cleaner never tapped Clock Out, close the clock now
+    # so payroll hours are still captured.
+    if checklist.clock_in_at and not checklist.clock_out_at:
+        checklist.clock_out_at = datetime.utcnow()
     booking = checklist.booking
-    if booking and booking.status not in ('cancelled',):
-        booking.status = 'completed'
+    if booking:
+        if checklist.hours_on_site is not None:
+            booking.hours_worked = checklist.hours_on_site
+        if booking.status not in ('cancelled',):
+            booking.status = 'completed'
     db.session.commit()
 
     # Notify the owner that the job is closed out and ready for payment review
@@ -224,6 +347,12 @@ def submit_complete(token):
     owner_email = os.environ.get('NOTIFY_EMAIL') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
     try:
         review_url = url_for('bookings.detail', booking_id=booking.id, _external=True, _scheme='https')
+        hours_html = (f"<p>⏱️ <strong>{checklist.hours_on_site} hrs</strong> on site (auto-tracked)</p>"
+                      if checklist.hours_on_site is not None else '')
+        sign_html = ("<p>✍️ Client signed off on the job.</p>"
+                     if checklist.client_signed_at else '')
+        rating_html = (f"<p>⭐ Client left a {checklist.client_rating}-star review on site.</p>"
+                       if checklist.client_rating else '')
         send_email(
             to_email=owner_email, to_name='Dazzle & Shine Maids',
             subject=f'Job completed — {booking.name} ({len(before)} before / {len(after)} after photos)',
@@ -233,6 +362,7 @@ def submit_complete(token):
   <p><strong>{booking.assigned_cleaner or 'Cleaner'}</strong> finished the job for
      <strong>{booking.name}</strong> and submitted photos.</p>
   <p>📸 {len(before)} before photo(s) · {len(after)} after photo(s)</p>
+  {hours_html}{sign_html}{rating_html}
   <p><a href="{review_url}" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Review Photos &amp; Release Payment →</a></p>
 </div>""",
         )

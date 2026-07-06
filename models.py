@@ -194,7 +194,22 @@ class JobChecklist(db.Model):
     before_photos = db.Column(db.Text, default='[]')   # JSON list of Cloudinary URLs
     after_photos = db.Column(db.Text, default='[]')    # JSON list of Cloudinary URLs
     photos_submitted_at = db.Column(db.DateTime)       # when cleaner closed out the job
+    # Guided job workflow — one timestamp per step (drives the stepper + resume)
+    on_the_way_at = db.Column(db.DateTime)             # cleaner tapped "On My Way"
+    clock_in_at = db.Column(db.DateTime)               # cleaner arrived & started
+    clock_out_at = db.Column(db.DateTime)              # cleaner finished (auto-fills hours)
+    client_signature = db.Column(db.Text)              # signature image data URL (client sign-off)
+    client_signed_at = db.Column(db.DateTime)
+    client_rating = db.Column(db.Integer)              # 1-5 stars collected on-site
+    client_review = db.Column(db.Text)                 # optional review comment
     booking = db.relationship('Booking', backref='job_checklists')
+
+    @property
+    def hours_on_site(self):
+        """Elapsed time between clock-in and clock-out, rounded to 2 decimals."""
+        if self.clock_in_at and self.clock_out_at:
+            return round((self.clock_out_at - self.clock_in_at).total_seconds() / 3600, 2)
+        return None
 
     def get_items(self):
         try:

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Job Checklist — Dazzle & Shine Maids</title>
+  <title>Job — Dazzle & Shine Maids</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -11,47 +11,84 @@
     .header { background: #1f1333; color: #fff; padding: 18px 20px; text-align: center; }
     .header .script { font-family: "Allura", cursive; font-size: 2rem; color: #d3a84f; }
     .header .sub { font-size: 0.78rem; letter-spacing: 0.2em; color: rgba(255,255,255,0.5); text-transform: uppercase; margin-top: 2px; }
-    .wrap { max-width: 520px; margin: 0 auto; padding: 24px 16px; }
+    .wrap { max-width: 520px; margin: 0 auto; padding: 24px 16px 60px; }
     .card { background: #fff; border-radius: 14px; border: 1px solid #e4dfef; padding: 22px; margin-bottom: 16px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); }
     .job-info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
     .job-info .item { background: #f6f5fb; border-radius: 9px; padding: 10px 14px; }
     .job-info .item .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em; color: #9a95ad; font-weight: 700; }
     .job-info .item .value { font-weight: 700; color: #1f1333; margin-top: 2px; }
-    .progress-bar { background: #e4dfef; border-radius: 999px; height: 10px; margin: 18px 0 6px; }
+
+    /* ── Guided steps ─────────────────────────────────────────── */
+    .step { position: relative; transition: opacity 0.25s; }
+    .step.locked { opacity: 0.5; }
+    .step.locked .step-body { pointer-events: none; filter: grayscale(0.3); }
+    .step-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .step-num { width: 30px; height: 30px; border-radius: 50%; background: #efeaf8; color: #8b7fb0; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.95rem; transition: all 0.2s; }
+    .step.active .step-num { background: #1f1333; color: #d3a84f; }
+    .step.done .step-num { background: #10b981; color: #fff; }
+    .step-title { font-weight: 700; font-size: 1.05rem; }
+    .step-sub { font-size: 0.8rem; color: #9a95ad; margin-top: 1px; }
+    .step-lock { margin-left: auto; font-size: 0.72rem; color: #b3adc4; font-weight: 600; }
+
+    .big-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; border: none; padding: 18px; border-radius: 12px; font-weight: 700; font-size: 1.1rem; font-family: "Inter", sans-serif; cursor: pointer; transition: transform 0.08s; }
+    .big-btn:active { transform: scale(0.98); }
+    .big-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-gold { background: #d3a84f; color: #1f1333; }
+    .btn-dark { background: #1f1333; color: #fff; }
+    .btn-green { background: #10b981; color: #fff; }
+    .btn-ghost { background: #f6f5fb; color: #6b6386; border: 1px solid #e4dfef; font-size: 0.9rem; padding: 12px; font-weight: 600; }
+    .stamp { text-align: center; font-weight: 700; color: #065f46; background: #d1fae5; border-radius: 10px; padding: 12px; }
+    .timer { text-align: center; font-size: 2rem; font-weight: 700; color: #1f1333; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+    .timer-label { text-align: center; font-size: 0.78rem; color: #9a95ad; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
+
+    /* progress + checklist */
+    .progress-bar { background: #e4dfef; border-radius: 999px; height: 10px; margin: 6px 0; }
     .progress-fill { background: linear-gradient(90deg, #d3a84f, #b98a33); border-radius: 999px; height: 10px; transition: width 0.3s; }
-    .progress-label { font-size: 0.82rem; color: #9a95ad; text-align: right; }
     .checklist-item { display: flex; align-items: flex-start; gap: 14px; padding: 13px 0; border-bottom: 1px solid #f0edf8; cursor: pointer; user-select: none; }
     .checklist-item:last-child { border-bottom: none; }
     .checklist-item .box { width: 24px; height: 24px; border-radius: 6px; border: 2px solid #d3a84f; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 1px; transition: all 0.15s; }
     .checklist-item.done .box { background: #d3a84f; border-color: #d3a84f; }
-    .checklist-item .text { font-size: 0.95rem; font-weight: 500; transition: all 0.15s; }
+    .checklist-item .text { font-size: 0.95rem; font-weight: 500; }
     .checklist-item.done .text { color: #9a95ad; text-decoration: line-through; }
-    .complete-banner { background: #d1fae5; color: #065f46; border-radius: 12px; padding: 18px; text-align: center; font-weight: 700; font-size: 1rem; display: none; margin-top: 16px; }
-    /* Photos */
-    .photo-head { font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
-    .photo-sub { font-size: 0.82rem; color: #9a95ad; margin-bottom: 12px; }
-    .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+
+    /* photos */
+    .photo-head { font-weight: 700; font-size: 0.95rem; margin: 14px 0 4px; }
+    .photo-sub { font-size: 0.8rem; color: #9a95ad; margin-bottom: 10px; }
+    .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 6px; }
     .photo-thumb { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #f0edf8; }
     .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .add-photo { aspect-ratio: 1; border: 2px dashed #d3a84f; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #b98a33; font-size: 0.78rem; font-weight: 600; text-align: center; gap: 4px; background: #fdfaf3; }
+    .add-photo { aspect-ratio: 1; border: 2px dashed #d3a84f; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #b98a33; font-size: 0.76rem; font-weight: 600; text-align: center; gap: 4px; background: #fdfaf3; }
     .add-photo:active { background: #f6ecd6; }
     .add-photo .plus { font-size: 1.6rem; line-height: 1; }
-    .req-tag { display:inline-block; background:#fef3c7; color:#92400e; font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:0.08em; margin-left:6px; }
+    .req-tag { display:inline-block; background:#fef3c7; color:#92400e; font-size:0.66rem; font-weight:700; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:0.06em; margin-left:6px; }
     .done-tag { background:#d1fae5; color:#065f46; }
-    .btn-complete { display:block; width:100%; background:#d3a84f; color:#1f1333; border:none; padding:16px; border-radius:12px; font-weight:700; font-size:1.05rem; font-family:"Inter",sans-serif; cursor:pointer; margin-top:6px; }
-    .btn-complete:disabled { opacity:0.45; cursor:not-allowed; }
-    .photo-err { background:#fff5f5; border:1px solid #fed7d7; color:#c53030; border-radius:9px; padding:11px 14px; font-size:0.85rem; margin-top:10px; display:none; }
     input[type=file] { display:none; }
-    .uploading { font-size:0.8rem; color:#9a95ad; margin-bottom:10px; display:none; }
+    .uploading { font-size:0.8rem; color:#9a95ad; margin:8px 0; display:none; }
+    .err { background:#fff5f5; border:1px solid #fed7d7; color:#c53030; border-radius:9px; padding:11px 14px; font-size:0.85rem; margin-top:10px; display:none; }
+
+    /* signature */
+    .sig-pad { border: 2px dashed #d3a84f; border-radius: 12px; background: #fdfaf3; width: 100%; height: 170px; touch-action: none; display: block; }
+    .sig-row { display: flex; gap: 8px; margin-top: 10px; }
+    .sig-row .btn-ghost { flex: 1; }
+
+    /* stars */
+    .stars { display: flex; justify-content: center; gap: 8px; margin: 6px 0 12px; }
+    .star { font-size: 2.4rem; cursor: pointer; color: #e4dfef; transition: color 0.12s, transform 0.08s; line-height: 1; }
+    .star.lit { color: #f5b301; }
+    .star:active { transform: scale(1.2); }
+    textarea { width: 100%; border: 1px solid #e4dfef; border-radius: 10px; padding: 12px; font-family: "Inter", sans-serif; font-size: 0.92rem; resize: vertical; min-height: 70px; }
+    .muted { font-size: 0.76rem; color: #9a95ad; text-align: center; margin-top: 10px; }
+    .final-banner { background: #d1fae5; color: #065f46; border-radius: 14px; padding: 26px 20px; text-align: center; font-weight: 700; font-size: 1.05rem; }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="script">Dazzle &amp; Shine</div>
-    <div class="sub">Job Checklist</div>
+    <div class="sub">Your Job</div>
   </div>
 
   <div class="wrap">
+    <!-- Job info -->
     <div class="card">
       <div class="job-info">
         <div class="item"><div class="label">Client</div><div class="value">{{ checklist.booking.name }}</div></div>
@@ -61,117 +98,333 @@
       </div>
       <div class="item" style="background:#f6f5fb;border-radius:9px;padding:10px 14px;margin-top:10px">
         <div class="label">Address</div>
-        <div class="value">{{ checklist.booking.address }}, {{ checklist.booking.city }} {{ checklist.booking.zip_code }}</div>
+        <a href="https://maps.google.com/?q={{ checklist.booking.address }}, {{ checklist.booking.city }} {{ checklist.booking.zip_code }}"
+           target="_blank" style="text-decoration:none">
+          <div class="value" style="color:#b98a33">📍 {{ checklist.booking.address }}, {{ checklist.booking.city }} {{ checklist.booking.zip_code }} →</div>
+        </a>
       </div>
+      {% if checklist.booking.phone %}
+      <div class="item" style="background:#f6f5fb;border-radius:9px;padding:10px 14px;margin-top:8px">
+        <div class="label">Client Phone (emergencies only)</div>
+        <a href="tel:{{ checklist.booking.phone }}" style="text-decoration:none"><div class="value" style="color:#b98a33">📞 {{ checklist.booking.phone }}</div></a>
+      </div>
+      {% endif %}
+      {% if checklist.booking.internal_notes or checklist.booking.notes %}
+      <div class="item" style="background:#fdf6e3;border-radius:9px;padding:10px 14px;margin-top:8px">
+        <div class="label">Job Notes</div>
+        <div class="value" style="font-weight:500;font-size:0.9rem">{{ checklist.booking.internal_notes or checklist.booking.notes }}</div>
+      </div>
+      {% endif %}
     </div>
 
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <strong>{{ checklist.template_name }}</strong>
-        <span id="count-label" style="font-size:0.82rem;color:#9a95ad">0 / {{ checklist.get_items()|length }}</span>
-      </div>
-      <div class="progress-bar"><div class="progress-fill" id="progress" style="width:{{ checklist.completion_percent }}%"></div></div>
+    <!-- The whole guided flow lives here; swapped out for a banner once submitted -->
+    <div id="flow">
 
-      <div id="items">
-        {% set completed = checklist.get_completed() %}
-        {% for item in checklist.get_items() %}
-        <div class="checklist-item {{ 'done' if loop.index0 in completed }}"
-             onclick="toggleItem({{ loop.index0 }}, this)">
-          <div class="box">{% if loop.index0 in completed %}<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7l4 4 6-7" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>{% endif %}</div>
-          <div class="text">{{ item }}</div>
+      <!-- STEP 1 · On My Way -->
+      <div class="card step" id="step-onway">
+        <div class="step-head">
+          <div class="step-num">1</div>
+          <div><div class="step-title">On My Way</div><div class="step-sub">Tap when you leave — we'll tell the client</div></div>
+          <span class="step-lock" id="lock-onway"></span>
         </div>
-        {% endfor %}
+        <div class="step-body">
+          <div id="onway-btn-wrap"><button class="big-btn btn-dark" onclick="onTheWay()">🚗 I'm On My Way</button></div>
+          <div class="stamp" id="onway-stamp" style="display:none">✓ Client notified you're on the way</div>
+        </div>
       </div>
-    </div>
 
-    <div class="complete-banner" id="complete-banner">
-      ✅ Checklist complete! Now add your photos below to close out the job.
-    </div>
-
-    {% if not checklist.photos_submitted_at %}
-    <!-- BEFORE PHOTOS -->
-    <div class="card">
-      <div class="photo-head">📸 Before Photos <span class="req-tag" id="before-tag">Required</span></div>
-      <div class="photo-sub">Take these <strong>when you arrive</strong>, before you start. Protects you and shows the starting condition.</div>
-      <div class="photo-grid" id="before-grid">
-        <label class="add-photo">
-          <span class="plus">+</span><span>Add before</span>
-          <input type="file" accept="image/*" capture="environment" onchange="uploadPhoto(this,'before')" />
-        </label>
+      <!-- STEP 2 · Clock In -->
+      <div class="card step" id="step-clockin">
+        <div class="step-head">
+          <div class="step-num">2</div>
+          <div><div class="step-title">Clock In</div><div class="step-sub">Tap when you arrive &amp; start working</div></div>
+          <span class="step-lock" id="lock-clockin"></span>
+        </div>
+        <div class="step-body">
+          <div id="clockin-btn-wrap"><button class="big-btn btn-gold" onclick="clockIn()">⏱️ Clock In</button></div>
+          <div id="clockin-live" style="display:none">
+            <div class="timer" id="timer">00:00</div>
+            <div class="timer-label">On site since <span id="clockin-time"></span></div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- AFTER PHOTOS -->
-    <div class="card">
-      <div class="photo-head">✨ After Photos <span class="req-tag" id="after-tag">Required</span></div>
-      <div class="photo-sub">Take these <strong>when you finish</strong>, showing the completed work.</div>
-      <div class="photo-grid" id="after-grid">
-        <label class="add-photo">
-          <span class="plus">+</span><span>Add after</span>
-          <input type="file" accept="image/*" capture="environment" onchange="uploadPhoto(this,'after')" />
-        </label>
+      <!-- STEP 3 · Checklist -->
+      <div class="card step" id="step-checklist">
+        <div class="step-head">
+          <div class="step-num">3</div>
+          <div><div class="step-title">Work the Checklist</div><div class="step-sub">Tap each task as you finish it</div></div>
+          <span class="step-lock" id="lock-checklist"></span>
+        </div>
+        <div class="step-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <strong style="font-size:0.9rem">{{ checklist.template_name }}</strong>
+            <span id="count-label" style="font-size:0.82rem;color:#9a95ad">0 / {{ checklist.get_items()|length }}</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="progress" style="width:{{ checklist.completion_percent }}%"></div></div>
+          <div id="items">
+            {% set completed = checklist.get_completed() %}
+            {% for item in checklist.get_items() %}
+            <div class="checklist-item {{ 'done' if loop.index0 in completed }}" onclick="toggleItem({{ loop.index0 }}, this)">
+              <div class="box">{% if loop.index0 in completed %}<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7l4 4 6-7" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>{% endif %}</div>
+              <div class="text">{{ item }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="uploading" id="uploading">Uploading photo…</div>
-      <button class="btn-complete" id="btn-complete" onclick="submitComplete()" disabled>
-        Mark Job Complete →
-      </button>
-      <div class="photo-err" id="photo-err"></div>
-      <p style="font-size:0.76rem;color:#9a95ad;text-align:center;margin-top:10px">
-        You need at least one before and one after photo to close out the job.
-      </p>
-    </div>
-    {% else %}
-    <div class="complete-banner" style="display:block">
-      🎉 Job closed out! Your photos were submitted and the office was notified. Thank you!
-    </div>
+      <!-- STEP 4 · Photos -->
+      <div class="card step" id="step-photos">
+        <div class="step-head">
+          <div class="step-num">4</div>
+          <div><div class="step-title">Before &amp; After Photos</div><div class="step-sub">Protects you and shows your great work</div></div>
+          <span class="step-lock" id="lock-photos"></span>
+        </div>
+        <div class="step-body">
+          <div class="photo-head">📸 Before Photos <span class="req-tag" id="before-tag">Required</span></div>
+          <div class="photo-sub">Take these <strong>when you arrive</strong>, before you start.</div>
+          <div class="photo-grid" id="before-grid">
+            <label class="add-photo"><span class="plus">+</span><span>Add before</span>
+              <input type="file" accept="image/*" capture="environment" onchange="uploadPhoto(this,'before')" /></label>
+          </div>
+          <div class="photo-head">✨ After Photos <span class="req-tag" id="after-tag">Required</span></div>
+          <div class="photo-sub">Take these <strong>when you finish</strong>, showing the results.</div>
+          <div class="photo-grid" id="after-grid">
+            <label class="add-photo"><span class="plus">+</span><span>Add after</span>
+              <input type="file" accept="image/*" capture="environment" onchange="uploadPhoto(this,'after')" /></label>
+          </div>
+          <div class="uploading" id="uploading">Uploading photo…</div>
+          <div class="err" id="photo-err"></div>
+        </div>
+      </div>
+
+      <!-- STEP 5 · Clock Out -->
+      <div class="card step" id="step-clockout">
+        <div class="step-head">
+          <div class="step-num">5</div>
+          <div><div class="step-title">Clock Out</div><div class="step-sub">Finish the clock — this fills in your hours</div></div>
+          <span class="step-lock" id="lock-clockout"></span>
+        </div>
+        <div class="step-body">
+          <div id="clockout-btn-wrap"><button class="big-btn btn-gold" onclick="clockOut()">⏱️ Clock Out</button></div>
+          <div class="stamp" id="clockout-stamp" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- STEP 6 · Client Sign-off -->
+      <div class="card step" id="step-sign">
+        <div class="step-head">
+          <div class="step-num">6</div>
+          <div><div class="step-title">Client Sign-off</div><div class="step-sub">If the client is home, do a walkthrough &amp; have them sign</div></div>
+          <span class="step-lock" id="lock-sign"></span>
+        </div>
+        <div class="step-body">
+          <div id="sign-area">
+            <canvas class="sig-pad" id="sigpad"></canvas>
+            <div class="sig-row">
+              <button class="btn-ghost big-btn" onclick="clearSig()">Clear</button>
+              <button class="btn-ghost big-btn" onclick="skipSign()">Client not home — skip</button>
+            </div>
+            <button class="big-btn btn-dark" style="margin-top:8px" onclick="saveSig()">✍️ Save Signature</button>
+            <div class="err" id="sign-err"></div>
+          </div>
+          <div class="stamp" id="sign-stamp" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- STEP 7 · Review -->
+      <div class="card step" id="step-review">
+        <div class="step-head">
+          <div class="step-num">7</div>
+          <div><div class="step-title">Ask for a Review</div><div class="step-sub">If they're happy, ask for a quick star rating</div></div>
+          <span class="step-lock" id="lock-review"></span>
+        </div>
+        <div class="step-body">
+          <div id="review-area">
+            <div class="stars" id="stars">
+              <span class="star" data-v="1">★</span><span class="star" data-v="2">★</span>
+              <span class="star" data-v="3">★</span><span class="star" data-v="4">★</span>
+              <span class="star" data-v="5">★</span>
+            </div>
+            <textarea id="review-comment" placeholder="Anything the client said? (optional)"></textarea>
+            <div class="sig-row">
+              <button class="btn-ghost big-btn" onclick="skipReview()">Skip review</button>
+              <button class="big-btn btn-dark" style="flex:1" onclick="saveReview()">⭐ Save Review</button>
+            </div>
+            <div class="err" id="review-err"></div>
+          </div>
+          <div class="stamp" id="review-stamp" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- FINISH -->
+      <div class="card step" id="step-finish">
+        <div class="step-body">
+          <button class="big-btn btn-green" id="btn-finish" onclick="finishJob()" disabled>✅ Close Out Job</button>
+          <div class="err" id="finish-err"></div>
+          <div class="muted">Finishing sends your photos to the office and closes the job.</div>
+        </div>
+      </div>
+
+    </div><!-- /flow -->
+
+    {% if checklist.photos_submitted_at %}
+    <script>window.__ALREADY_DONE__ = true;</script>
     {% endif %}
   </div>
 
   <script>
     const TOKEN = '{{ checklist.token }}';
     const TOTAL = {{ checklist.get_items()|length }};
-    let completed = new Set({{ checklist.get_completed()|list|tojson }});
+    const CLOUD_NAME = {{ cloud_name | tojson }};
+    const UPLOAD_PRESET = {{ upload_preset | tojson }};
 
-    function updateUI() {
-      const pct = TOTAL > 0 ? Math.round(completed.size / TOTAL * 100) : 0;
-      document.getElementById('progress').style.width = pct + '%';
-      document.getElementById('count-label').textContent = completed.size + ' / ' + TOTAL;
-      document.getElementById('complete-banner').style.display = completed.size === TOTAL ? 'block' : 'none';
+    // ── Server state (drives resume) ──────────────────────────────────────────
+    const S = {
+      onTheWay:  {{ 'true' if checklist.on_the_way_at else 'false' }},
+      clockIn:   {{ 'true' if checklist.clock_in_at else 'false' }},
+      clockInAt: {{ (checklist.clock_in_at.isoformat() + 'Z') | tojson if checklist.clock_in_at else 'null' }},
+      clockOut:  {{ 'true' if checklist.clock_out_at else 'false' }},
+      hours:     {{ checklist.hours_on_site | tojson if checklist.hours_on_site is not none else 'null' }},
+      signed:    {{ 'true' if checklist.client_signed_at else 'false' }},
+      rating:    {{ checklist.client_rating | tojson if checklist.client_rating else 'null' }},
+    };
+    let signSkipped = S.signed;      // if already signed, the sign step is settled
+    let reviewSkipped = S.rating != null;
+    let chosenStars = S.rating || 0;
+
+    let completed = new Set({{ checklist.get_completed() | list | tojson }});
+    let beforePhotos = {{ checklist.get_before_photos() | tojson }};
+    let afterPhotos = {{ checklist.get_after_photos() | tojson }};
+
+    const $ = id => document.getElementById(id);
+
+    // ── Derived gates ─────────────────────────────────────────────────────────
+    const checklistDone = () => TOTAL === 0 || completed.size >= TOTAL;
+    const photosReady   = () => beforePhotos.length > 0 && afterPhotos.length > 0;
+    const canClockOut   = () => S.clockIn && checklistDone() && photosReady();
+    const signSettled   = () => S.signed || signSkipped;
+    const reviewSettled = () => S.rating != null || reviewSkipped;
+    const canFinish     = () => S.clockOut && photosReady() && signSettled() && reviewSettled();
+
+    // ── Render the whole stepper ──────────────────────────────────────────────
+    function setStep(id, {locked, done, active}) {
+      const el = $('step-' + id);
+      el.classList.toggle('locked', !!locked);
+      el.classList.toggle('done', !!done);
+      el.classList.toggle('active', !!active);
+      const lock = $('lock-' + id);
+      if (lock) lock.textContent = locked ? '🔒 Locked' : (done ? '✓ Done' : '');
+      const num = el.querySelector('.step-num');
+      if (num && done) num.innerHTML = '✓';
     }
 
+    function render() {
+      // Step 1
+      setStep('onway', { done: S.onTheWay, active: !S.onTheWay });
+      $('onway-btn-wrap').style.display = S.onTheWay ? 'none' : 'block';
+      $('onway-stamp').style.display = S.onTheWay ? 'block' : 'none';
+
+      // Step 2
+      setStep('clockin', { locked: !S.onTheWay, done: S.clockIn, active: S.onTheWay && !S.clockIn });
+      $('clockin-btn-wrap').style.display = S.clockIn ? 'none' : 'block';
+      $('clockin-live').style.display = S.clockIn ? 'block' : 'none';
+
+      // Step 3
+      setStep('checklist', { locked: !S.clockIn, done: S.clockIn && checklistDone(), active: S.clockIn && !checklistDone() });
+
+      // Step 4
+      setStep('photos', { locked: !S.clockIn, done: S.clockIn && photosReady(), active: S.clockIn && !photosReady() });
+
+      // Step 5
+      const clockoutActive = canClockOut() && !S.clockOut;
+      setStep('clockout', { locked: !canClockOut() && !S.clockOut, done: S.clockOut, active: clockoutActive });
+      $('clockout-btn-wrap').style.display = S.clockOut ? 'none' : 'block';
+      if (S.clockOut) {
+        $('clockout-stamp').style.display = 'block';
+        $('clockout-stamp').textContent = '✓ Clocked out' + (S.hours != null ? ' · ' + S.hours + ' hrs logged' : '');
+      }
+
+      // Step 6
+      setStep('sign', { locked: !S.clockOut, done: signSettled(), active: S.clockOut && !signSettled() });
+      $('sign-area').style.display = signSettled() ? 'none' : 'block';
+      if (signSettled()) {
+        $('sign-stamp').style.display = 'block';
+        $('sign-stamp').textContent = S.signed ? '✓ Client signed off' : '↷ Skipped — client not home';
+      }
+
+      // Step 7
+      setStep('review', { locked: !signSettled(), done: reviewSettled(), active: signSettled() && !reviewSettled() });
+      $('review-area').style.display = reviewSettled() ? 'none' : 'block';
+      if (reviewSettled()) {
+        $('review-stamp').style.display = 'block';
+        $('review-stamp').textContent = S.rating != null ? ('✓ ' + S.rating + '-star review saved') : '↷ Review skipped';
+      }
+
+      // Finish
+      $('btn-finish').disabled = !canFinish();
+
+      // Checklist progress
+      const pct = TOTAL > 0 ? Math.round(completed.size / TOTAL * 100) : 100;
+      $('progress').style.width = pct + '%';
+      $('count-label').textContent = completed.size + ' / ' + TOTAL;
+
+      renderPhotos('before'); renderPhotos('after');
+    }
+
+    // ── Step 1 ────────────────────────────────────────────────────────────────
+    async function onTheWay() {
+      S.onTheWay = true; render();
+      try { await post('/on-the-way'); } catch (e) {}
+      scrollToStep('clockin');
+    }
+
+    // ── Step 2 ────────────────────────────────────────────────────────────────
+    let timerInt = null;
+    function startTimer() {
+      if (!S.clockInAt) return;
+      const start = new Date(S.clockInAt).getTime();
+      $('clockin-time').textContent = new Date(S.clockInAt)
+        .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const tick = () => {
+        if (S.clockOut) { clearInterval(timerInt); return; }
+        const secs = Math.max(0, Math.floor((Date.now() - start) / 1000));
+        const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+        $('timer').textContent = (h > 0 ? h + ':' : '') +
+          String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+      };
+      tick(); timerInt = setInterval(tick, 1000);
+    }
+    async function clockIn() {
+      const res = await post('/clock-in');
+      S.clockIn = true;
+      S.clockInAt = (res && res.clock_in) || new Date().toISOString();
+      render(); startTimer(); scrollToStep('checklist');
+    }
+
+    // ── Step 3 ────────────────────────────────────────────────────────────────
     async function toggleItem(idx, el) {
+      if (!S.clockIn) return;   // locked
       el.classList.toggle('done');
       const box = el.querySelector('.box');
       if (el.classList.contains('done')) {
         completed.add(idx);
         box.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7l4 4 6-7" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
-      } else {
-        completed.delete(idx);
-        box.innerHTML = '';
-      }
-      updateUI();
-      await fetch('/workorders/checklist/' + TOKEN + '/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index: idx }),
-      });
+      } else { completed.delete(idx); box.innerHTML = ''; }
+      render();
+      try {
+        await fetch('/workorders/checklist/' + TOKEN + '/check', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ index: idx }),
+        });
+      } catch (e) {}
     }
 
-    updateUI();
-
-    // ── Photos ──────────────────────────────────────────────────────────────
-    const CLOUD_NAME = {{ cloud_name | tojson }};
-    const UPLOAD_PRESET = {{ upload_preset | tojson }};
-    let beforePhotos = {{ checklist.get_before_photos() | tojson }};
-    let afterPhotos = {{ checklist.get_after_photos() | tojson }};
-
+    // ── Step 4 ────────────────────────────────────────────────────────────────
     function renderPhotos(phase) {
-      const grid = document.getElementById(phase + '-grid');
+      const grid = $(phase + '-grid');
       const list = phase === 'before' ? beforePhotos : afterPhotos;
-      // Clear all thumbs (keep the add button which is the last child)
       grid.querySelectorAll('.photo-thumb').forEach(t => t.remove());
       const addBtn = grid.querySelector('.add-photo');
       list.forEach(url => {
@@ -180,70 +433,136 @@
         div.innerHTML = '<img src="' + url + '" />';
         grid.insertBefore(div, addBtn);
       });
-      // Update the required tag
-      const tag = document.getElementById(phase + '-tag');
+      const tag = $(phase + '-tag');
       if (list.length > 0) { tag.textContent = list.length + ' added'; tag.classList.add('done-tag'); }
       else { tag.textContent = 'Required'; tag.classList.remove('done-tag'); }
-      updateCompleteBtn();
     }
-
-    function updateCompleteBtn() {
-      const btn = document.getElementById('btn-complete');
-      if (btn) btn.disabled = !(beforePhotos.length > 0 && afterPhotos.length > 0);
-    }
-
     async function uploadPhoto(input, phase) {
       if (!input.files || !input.files[0]) return;
       const file = input.files[0];
-      const up = document.getElementById('uploading');
-      up.style.display = 'block';
-      document.getElementById('photo-err').style.display = 'none';
+      $('uploading').style.display = 'block';
+      $('photo-err').style.display = 'none';
       try {
         const fd = new FormData();
-        fd.append('file', file);
-        fd.append('upload_preset', UPLOAD_PRESET);
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-          { method: 'POST', body: fd });
+        fd.append('file', file); fd.append('upload_preset', UPLOAD_PRESET);
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: fd });
         const cloud = await res.json();
         if (!cloud.secure_url) throw new Error(cloud.error?.message || 'Upload failed');
-
         await fetch('/workorders/checklist/' + TOKEN + '/add-photo', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phase: phase, url: cloud.secure_url }),
+          body: JSON.stringify({ phase, url: cloud.secure_url }),
         });
-        if (phase === 'before') beforePhotos.push(cloud.secure_url);
-        else afterPhotos.push(cloud.secure_url);
-        renderPhotos(phase);
+        if (phase === 'before') beforePhotos.push(cloud.secure_url); else afterPhotos.push(cloud.secure_url);
+        render();
       } catch (e) {
-        const err = document.getElementById('photo-err');
+        const err = $('photo-err');
         err.textContent = 'Could not upload that photo. Please try again. (' + e.message + ')';
         err.style.display = 'block';
-      } finally {
-        up.style.display = 'none';
-        input.value = '';
-      }
+      } finally { $('uploading').style.display = 'none'; input.value = ''; }
     }
 
-    async function submitComplete() {
-      const btn = document.getElementById('btn-complete');
-      const err = document.getElementById('photo-err');
-      err.style.display = 'none';
-      btn.disabled = true; btn.textContent = 'Submitting…';
+    // ── Step 5 ────────────────────────────────────────────────────────────────
+    async function clockOut() {
+      const res = await post('/clock-out');
+      if (res && res.ok === false) { alert(res.error || 'Please clock in first.'); return; }
+      S.clockOut = true; S.hours = res ? res.hours : null;
+      if (timerInt) clearInterval(timerInt);
+      render(); scrollToStep('sign');
+    }
+
+    // ── Step 6 · signature pad ────────────────────────────────────────────────
+    let sigCtx, drawing = false, sigDirty = false;
+    function initSig() {
+      const c = $('sigpad');
+      c.width = c.offsetWidth; c.height = c.offsetHeight;
+      sigCtx = c.getContext('2d');
+      sigCtx.lineWidth = 2.5; sigCtx.lineCap = 'round'; sigCtx.strokeStyle = '#1f1333';
+      const pos = e => {
+        const r = c.getBoundingClientRect();
+        const p = e.touches ? e.touches[0] : e;
+        return { x: p.clientX - r.left, y: p.clientY - r.top };
+      };
+      const start = e => { drawing = true; sigDirty = true; const {x,y} = pos(e); sigCtx.beginPath(); sigCtx.moveTo(x,y); e.preventDefault(); };
+      const move  = e => { if (!drawing) return; const {x,y} = pos(e); sigCtx.lineTo(x,y); sigCtx.stroke(); e.preventDefault(); };
+      const end   = () => { drawing = false; };
+      c.addEventListener('mousedown', start); c.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', end);
+      c.addEventListener('touchstart', start, {passive:false});
+      c.addEventListener('touchmove', move, {passive:false});
+      c.addEventListener('touchend', end);
+    }
+    function clearSig() { const c = $('sigpad'); sigCtx.clearRect(0,0,c.width,c.height); sigDirty = false; }
+    async function saveSig() {
+      if (!sigDirty) { showErr('sign-err', 'Please have the client sign, or tap “Client not home”.'); return; }
+      const dataUrl = $('sigpad').toDataURL('image/png');
+      try {
+        const res = await post('/sign', { signature: dataUrl });
+        if (res && res.ok === false) throw new Error(res.error);
+        S.signed = true; render(); scrollToStep('review');
+      } catch (e) { showErr('sign-err', 'Could not save signature. Try again.'); }
+    }
+    function skipSign() { signSkipped = true; render(); scrollToStep('review'); }
+
+    // ── Step 7 · stars ────────────────────────────────────────────────────────
+    function paintStars() {
+      document.querySelectorAll('#stars .star').forEach(s =>
+        s.classList.toggle('lit', Number(s.dataset.v) <= chosenStars));
+    }
+    document.querySelectorAll('#stars .star').forEach(s =>
+      s.addEventListener('click', () => { chosenStars = Number(s.dataset.v); paintStars(); }));
+    async function saveReview() {
+      if (chosenStars < 1) { showErr('review-err', 'Tap the stars to pick a rating.'); return; }
+      try {
+        const res = await post('/review', { rating: chosenStars, comment: $('review-comment').value });
+        if (res && res.ok === false) throw new Error(res.error);
+        S.rating = chosenStars; render(); scrollToStep('finish');
+      } catch (e) { showErr('review-err', 'Could not save review. Try again.'); }
+    }
+    function skipReview() { reviewSkipped = true; render(); scrollToStep('finish'); }
+
+    // ── Finish ────────────────────────────────────────────────────────────────
+    async function finishJob() {
+      const btn = $('btn-finish');
+      btn.disabled = true; btn.textContent = 'Closing out…';
       try {
         const res = await fetch('/workorders/checklist/' + TOKEN + '/submit-complete', { method: 'POST' });
         const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'Could not submit');
-        document.querySelector('.wrap').innerHTML =
-          '<div class="complete-banner" style="display:block">🎉 Job closed out! Your before &amp; after photos were submitted and the office was notified. Great work — thank you!</div>';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (!data.ok) throw new Error(data.error || 'Could not close out');
+        showDone();
       } catch (e) {
-        err.textContent = e.message; err.style.display = 'block';
-        btn.disabled = false; btn.textContent = 'Mark Job Complete →';
+        showErr('finish-err', e.message);
+        btn.disabled = false; btn.textContent = '✅ Close Out Job';
       }
     }
 
-    // Initial render of any already-uploaded photos
-    if (document.getElementById('before-grid')) { renderPhotos('before'); renderPhotos('after'); }
+    function showDone() {
+      $('flow').innerHTML =
+        '<div class="card"><div class="final-banner">🎉 Job closed out!<br><span style="font-weight:500;font-size:0.92rem">Your photos were sent to the office. Great work — thank you!</span></div></div>';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    async function post(path, body) {
+      const res = await fetch('/workorders/checklist/' + TOKEN + path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      try { return await res.json(); } catch (e) { return null; }
+    }
+    function showErr(id, msg) { const e = $(id); e.textContent = msg; e.style.display = 'block'; }
+    function scrollToStep(id) {
+      setTimeout(() => $('step-' + id).scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
+    }
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    if (window.__ALREADY_DONE__) {
+      showDone();
+    } else {
+      initSig();
+      if (S.clockIn && !S.clockOut) startTimer();
+      if (S.rating) { chosenStars = S.rating; paintStars(); }
+      render();
+    }
   </script>
 </body>
 </html>

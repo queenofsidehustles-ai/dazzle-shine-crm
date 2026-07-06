@@ -219,6 +219,14 @@ def _migrate_db():
         ('job_checklist', 'before_photos',       "TEXT DEFAULT '[]'"),
         ('job_checklist', 'after_photos',        "TEXT DEFAULT '[]'"),
         ('job_checklist', 'photos_submitted_at', 'TIMESTAMP'),
+        # Guided job workflow — step timestamps + client sign-off
+        ('job_checklist', 'on_the_way_at',    'TIMESTAMP'),
+        ('job_checklist', 'clock_in_at',      'TIMESTAMP'),
+        ('job_checklist', 'clock_out_at',     'TIMESTAMP'),
+        ('job_checklist', 'client_signature', 'TEXT'),
+        ('job_checklist', 'client_signed_at', 'TIMESTAMP'),
+        ('job_checklist', 'client_rating',    'INTEGER'),
+        ('job_checklist', 'client_review',    'TEXT'),
         # Background check candidate upload
         ('contractor_application', 'bgcheck_upload_token',  'VARCHAR(64)'),
         ('contractor_application', 'bgcheck_uploaded_url',  'VARCHAR(500)'),
