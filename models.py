@@ -432,6 +432,7 @@ class Staff(db.Model):
     roster_start_date = db.Column(db.String(20))              # date they're ready to start receiving jobs (YYYY-MM-DD)
     onboarding_reminder_at = db.Column(db.DateTime)           # last "finish your onboarding" nudge
     onboarding_reminder_count = db.Column(db.Integer, default=0)
+    schedule_reminder_date = db.Column(db.String(20))         # last date we sent a day-before schedule reminder
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property

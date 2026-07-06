@@ -74,7 +74,7 @@ def run_lifecycle_emails():
     now = datetime.utcnow()
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
          'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
-         'onboarding_reminder': 0}
+         'onboarding_reminder': 0, 'schedule_reminder': 0}
 
     # ── A4 — final lead follow-up (~5 days after the last-chance drip) ──
     for lead in Lead.query.filter(Lead.drip_step == 3, Lead.status == 'new').all():
@@ -186,6 +186,34 @@ def run_lifecycle_emails():
         c['onboarding_reminder'] += 1
         s.onboarding_reminder_at = now
         s.onboarding_reminder_count = (s.onboarding_reminder_count or 0) + 1
+        db.session.commit()
+
+    # ── Day-before schedule reminder — text/email cleaners about tomorrow's jobs ──
+    from notifications import send_sms
+    today_str = now.date().isoformat()
+    tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    for s in Staff.query.filter(Staff.is_active.is_(True)).all():
+        if s.schedule_reminder_date == today_str or not s.agreement_token:
+            continue
+        jobs = Booking.query.filter(
+            db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+            Booking.status != 'cancelled',
+            Booking.preferred_date == tomorrow,
+        ).all()
+        if not jobs:
+            continue
+        n = len(jobs)
+        myday = f"{CRM_BASE}/contractors/my-day/{s.agreement_token}"
+        _send_transactional('cleaner_schedule_reminder', s.email, s.name,
+                            {'job_count': n, 'tomorrow_date': tomorrow, 'myday_link': myday})
+        if s.phone:
+            try:
+                send_sms(s.phone, f"Reminder: you have {n} job(s) tomorrow ({tomorrow}). "
+                                  f"See your day: {myday}")
+            except Exception:
+                pass
+        s.schedule_reminder_date = today_str
+        c['schedule_reminder'] += 1
         db.session.commit()
 
     return c

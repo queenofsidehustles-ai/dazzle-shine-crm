@@ -224,6 +224,7 @@ def _migrate_db():
         ('staff', 'roster_start_date',        'VARCHAR(20)'),
         ('staff', 'onboarding_reminder_at',   'TIMESTAMP'),
         ('staff', 'onboarding_reminder_count', 'INTEGER DEFAULT 0'),
+        ('staff', 'schedule_reminder_date',   'VARCHAR(20)'),
         # Interview response transcripts
         ('interview_response', 'transcript',       'TEXT'),
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),
@@ -810,6 +811,20 @@ We'd love to make your home shine again. See you soon!"""),
 Comment: {{comment}}
 
 Please reach out to make it right as soon as possible. Log in to the CRM for details."""),
+
+        ('cleaner_schedule_reminder', 'cleaner', 'Day-Before Schedule Reminder',
+         'Texts/emails a cleaner the day before, reminding them of their jobs tomorrow',
+         "Reminder: you have {{job_count}} job(s) tomorrow — {{business_name}}",
+         """Hi {{first_name}},
+
+Quick reminder — you have {{job_count}} job(s) scheduled for tomorrow ({{tomorrow_date}}).
+
+See your full schedule, addresses, navigation, and checklists here:
+{{myday_link}}
+
+Please arrive on time and bring your supplies. Questions? Reply or call {{phone}}.
+
+Thanks — let's make it a great day!"""),
 
         ('contractor_onboarding_reminder', 'cleaner', 'Onboarding Reminder',
          'Nudges a new hire every ~2 days until they finish onboarding (up to 3 times)',
