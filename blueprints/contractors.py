@@ -1182,15 +1182,13 @@ def onboarding_forms(token):
     if request.method == 'POST':
         s.emergency_contact_name = request.form.get('emergency_contact_name', '').strip() or s.emergency_contact_name
         s.emergency_contact_phone = request.form.get('emergency_contact_phone', '').strip() or s.emergency_contact_phone
-        s.shirt_size = request.form.get('shirt_size', '').strip()
-        s.payment_pref = request.form.get('payment_pref', '').strip()
-        s.payment_notes = request.form.get('payment_notes', '').strip()
         s.welcome_forms_at = datetime.utcnow()
-        # Auto-complete three onboarding steps at once
+        # Mark only the forms step done. Payment (payment_info) is marked complete
+        # by _sync_stripe_status when Stripe payouts actually go live — not here —
+        # and uniform_size is employee-only, so contractors never get it.
         steps = s.get_onboarding()
-        for step in ('welcome_forms', 'payment_info', 'uniform_size'):
-            if step not in steps:
-                steps.append(step)
+        if 'welcome_forms' not in steps:
+            steps.append('welcome_forms')
         s.onboarding_steps = json.dumps(steps)
         db.session.commit()
 
@@ -1205,9 +1203,6 @@ def onboarding_forms(token):
                 html=f"""<div style="font-family:Inter,sans-serif;max-width:500px;margin:0 auto;color:#1f1333">
   <h3 style="color:#b98a33">Onboarding Forms Received</h3>
   <p><strong>{s.name}</strong> just completed their onboarding forms.</p>
-  <p><strong>Shirt size:</strong> {s.shirt_size or '—'}</p>
-  <p><strong>Payment preference:</strong> {s.payment_pref or '—'}</p>
-  <p><strong>Payment notes:</strong> {s.payment_notes or '—'}</p>
   <p><strong>Emergency contact:</strong> {s.emergency_contact_name or '—'} — {s.emergency_contact_phone or '—'}</p>
   <p>Log in to the CRM to continue their onboarding.</p>
 </div>""",

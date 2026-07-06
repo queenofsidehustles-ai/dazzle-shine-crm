@@ -53,35 +53,15 @@
                value="{{ s.emergency_contact_phone or '' }}"
                placeholder="(407) 000-0000" />
 
-        <h3 style="font-size:0.95rem;font-weight:700;color:#3b2460;margin:20px 0 16px;padding-bottom:10px;border-bottom:1px solid #f0edf8">
-          Uniform & Gear
-        </h3>
-        <label>T-Shirt Size</label>
-        <select name="shirt_size" required>
-          <option value="">-- Select your size --</option>
-          {% for size in ['XS','S','M','L','XL','2XL','3XL'] %}
-          <option value="{{ size }}" {{ 'selected' if s.shirt_size == size }}>{{ size }}</option>
-          {% endfor %}
-        </select>
-
-        <h3 style="font-size:0.95rem;font-weight:700;color:#3b2460;margin:20px 0 16px;padding-bottom:10px;border-bottom:1px solid #f0edf8">
-          How Would You Like to Be Paid?
-        </h3>
-        <label>Payment Preference</label>
-        <select name="payment_pref" required>
-          <option value="">-- Select --</option>
-          <option value="Zelle" {{ 'selected' if s.payment_pref == 'Zelle' }}>Zelle</option>
-          <option value="Direct Deposit" {{ 'selected' if s.payment_pref == 'Direct Deposit' }}>Direct Deposit</option>
-          <option value="Check" {{ 'selected' if s.payment_pref == 'Check' }}>Check</option>
-          <option value="Cash App" {{ 'selected' if s.payment_pref == 'Cash App' }}>Cash App</option>
-        </select>
-        <label>Your Zelle Phone/Email or Notes</label>
-        <input type="text" name="payment_notes"
-               value="{{ s.payment_notes or '' }}"
-               placeholder="e.g. (407) 555-1234 or payments@email.com" />
+        <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:8px;padding:14px 16px;margin:6px 0 18px">
+          <p style="color:#1e5638;font-size:0.85rem;line-height:1.6;margin:0">
+            💳 <strong>Getting paid?</strong> Your payouts are handled securely through Stripe on your
+            onboarding checklist — there's no payment info to enter here.
+          </p>
+        </div>
 
         <button type="submit" class="btn">Submit My Onboarding Forms</button>
-        <p class="notice">This information is kept confidential and used only for payroll and emergency contact purposes.</p>
+        <p class="notice">This information is kept confidential and used only for emergency contact purposes.</p>
       </form>
     </div>
   </div>

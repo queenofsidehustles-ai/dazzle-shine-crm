@@ -247,14 +247,19 @@ def resend_offer(app_id):
     """Re-send the conditional offer / background-check email at any stage —
     e.g. for candidates approved before the conditional-offer email existed."""
     app_rec = ContractorApplication.query.get_or_404(app_id)
+    # Has the candidate already sent in their background check? If so, the reminder
+    # should NOT ask for it again — only nudge them to accept the offer.
+    bg_done = bool(app_rec.bgcheck_uploaded_at or app_rec.bgcheck_results_received)
+
     if not app_rec.bgcheck_upload_token:
         app_rec.bgcheck_upload_token = secrets.token_urlsafe(32)
-    # Make sure they're flagged as awaiting a background check
-    if app_rec.status not in ('hired', 'onboarding', 'rejected'):
-        app_rec.status = 'reviewing'
-    if app_rec.background_check_status in (None, '', 'not_started'):
-        app_rec.background_check_status = 'requested'
-        app_rec.bgcheck_request_sent_at = datetime.utcnow()
+    # Only (re)flag them as awaiting a background check if they haven't sent one
+    if not bg_done:
+        if app_rec.status not in ('hired', 'onboarding', 'rejected'):
+            app_rec.status = 'reviewing'
+        if app_rec.background_check_status in (None, '', 'not_started'):
+            app_rec.background_check_status = 'requested'
+            app_rec.bgcheck_request_sent_at = datetime.utcnow()
     app_rec.offer_sent_at = datetime.utcnow()
     app_rec.offer_sent_count = (app_rec.offer_sent_count or 0) + 1
     if not app_rec.offer_token:
@@ -267,12 +272,19 @@ def resend_offer(app_id):
     accept_url = url_for('contractors.accept_offer',
                          token=app_rec.offer_token, _external=True)
     pay_chart_url = url_for('pricing_public.pay_chart', _external=True, _scheme='https')
+    subject = (f"One Step Left — Accept Your Offer — {biz}" if bg_done
+               else f"Welcome to the Team (Pending Your Background Check) — {biz}")
     send_email(
         to_email=app_rec.email, to_name=app_rec.name,
-        subject=f"Welcome to the Team (Pending Your Background Check) — {biz}",
-        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url, pay_chart_url),
+        subject=subject,
+        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url,
+                                  pay_chart_url, include_bgcheck=not bg_done),
     )
-    flash(f'Conditional offer email sent to {app_rec.name}.', 'success')
+    if bg_done:
+        flash(f'Reminder sent to {app_rec.name} — background check already received, '
+              f'so we only asked them to accept the offer.', 'success')
+    else:
+        flash(f'Conditional offer email sent to {app_rec.name}.', 'success')
     return redirect(request.referrer or url_for('contractors.application_detail', app_id=app_rec.id))
 
 
@@ -331,7 +343,8 @@ def send_invite(app_id):
     return redirect(request.referrer or url_for('interviews.admin_interviews'))
 
 
-def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_url=None):
+def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_url=None,
+                         include_bgcheck=True):
     first = (name or 'there').split()[0]
     chart_line = ''
     if pay_chart_url:
@@ -351,6 +364,51 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
         ✅ Accept This Offer →
       </a>
     </div>"""
+
+    # Background-check blocks — hidden once the candidate has already uploaded it,
+    # so a reminder never re-asks for something they've already submitted.
+    bg_en = '' if not include_bgcheck else f"""
+    <!-- BACKGROUND CHECK -->
+    <div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:10px;padding:22px 24px;margin-bottom:22px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Your One Remaining Step — Background Check</div>
+      <p style="color:#7c4a04;line-height:1.7;margin:0 0 12px">
+        Your offer is contingent on a clear background check, at your own cost (typically $20–$40).
+        Use <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">Checkr.com</a>, or submit a recent
+        Care.com check if you already have one. Please complete it within <strong>7 days</strong> and upload your results below.
+      </p>
+      <div style="text-align:center;margin-top:14px">
+        <a href="{upload_url}"
+           style="background:#1f1333;color:#d3a84f;padding:14px 32px;border-radius:8px;
+                  text-decoration:none;font-weight:700;font-size:1rem;display:inline-block">
+          📎 Submit My Background Check →
+        </a>
+      </div>
+      <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0;line-height:1.5;text-align:center">
+        Just upload a PDF or a clear screenshot of your results.
+      </p>
+    </div>"""
+
+    bg_es = '' if not include_bgcheck else f"""
+    <!-- VERIFICACIÓN -->
+    <div style="background:#fef9ec;border:2px solid #5d4f7d;border-radius:10px;padding:22px 24px;margin-bottom:22px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Tu Único Paso Restante — Verificación de Antecedentes</div>
+      <p style="color:#7c4a04;line-height:1.7;margin:0 0 12px">
+        Tu oferta está sujeta a una verificación de antecedentes sin problemas, por tu cuenta (generalmente $20–$40).
+        Usa <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">Checkr.com</a>, o envía una verificación
+        reciente de Care.com si ya la tienes. Complétala dentro de <strong>7 días</strong> y sube tus resultados abajo.
+      </p>
+      <div style="text-align:center;margin-top:14px">
+        <a href="{upload_url}"
+           style="background:#1f1333;color:#d3a84f;padding:14px 32px;border-radius:8px;
+                  text-decoration:none;font-weight:700;font-size:1rem;display:inline-block">
+          📎 Enviar mi Verificación de Antecedentes →
+        </a>
+      </div>
+      <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0;line-height:1.5;text-align:center">
+        Solo sube un PDF o una captura de pantalla clara de tus resultados.
+      </p>
+    </div>"""
+
     return f"""
 <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
   <div style="background:#1f1333;padding:28px;border-radius:12px 12px 0 0;text-align:center">
@@ -404,26 +462,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
         <li>You choose your schedule by accepting the jobs that work for you.</li>
       </ul>
     </div>
-
-    <!-- BACKGROUND CHECK -->
-    <div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:10px;padding:22px 24px;margin-bottom:22px">
-      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Your One Remaining Step — Background Check</div>
-      <p style="color:#7c4a04;line-height:1.7;margin:0 0 12px">
-        Your offer is contingent on a clear background check, at your own cost (typically $20–$40).
-        Use <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">Checkr.com</a>, or submit a recent
-        Care.com check if you already have one. Please complete it within <strong>7 days</strong> and upload your results below.
-      </p>
-      <div style="text-align:center;margin-top:14px">
-        <a href="{upload_url}"
-           style="background:#1f1333;color:#d3a84f;padding:14px 32px;border-radius:8px;
-                  text-decoration:none;font-weight:700;font-size:1rem;display:inline-block">
-          📎 Submit My Background Check →
-        </a>
-      </div>
-      <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0;line-height:1.5;text-align:center">
-        Just upload a PDF or a clear screenshot of your results.
-      </p>
-    </div>
+    {bg_en}
 
     <!-- NEXT STEPS -->
     <div style="margin-bottom:8px">
@@ -482,26 +521,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
         <li>Eliges tu horario aceptando los trabajos que te convengan.</li>
       </ul>
     </div>
-
-    <!-- VERIFICACIÓN -->
-    <div style="background:#fef9ec;border:2px solid #5d4f7d;border-radius:10px;padding:22px 24px;margin-bottom:22px">
-      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">🔍 Tu Único Paso Restante — Verificación de Antecedentes</div>
-      <p style="color:#7c4a04;line-height:1.7;margin:0 0 12px">
-        Tu oferta está sujeta a una verificación de antecedentes sin problemas, por tu cuenta (generalmente $20–$40).
-        Usa <a href="https://checkr.com" style="color:#d3a84f;font-weight:600">Checkr.com</a>, o envía una verificación
-        reciente de Care.com si ya la tienes. Complétala dentro de <strong>7 días</strong> y sube tus resultados abajo.
-      </p>
-      <div style="text-align:center;margin-top:14px">
-        <a href="{upload_url}"
-           style="background:#1f1333;color:#d3a84f;padding:14px 32px;border-radius:8px;
-                  text-decoration:none;font-weight:700;font-size:1rem;display:inline-block">
-          📎 Enviar mi Verificación de Antecedentes →
-        </a>
-      </div>
-      <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0;line-height:1.5;text-align:center">
-        Solo sube un PDF o una captura de pantalla clara de tus resultados.
-      </p>
-    </div>
+    {bg_es}
 
     <!-- SIGUIENTE -->
     <div>
