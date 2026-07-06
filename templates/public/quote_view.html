@@ -72,10 +72,10 @@
     {% if q.monthly_price or q.price_per_visit %}
     <div class="price-box">
       {% if q.monthly_price %}
-      <div class="amount">${{ '%,.2f' % q.monthly_price }}<span style="font-size:1rem;font-weight:500">/mo</span></div>
+      <div class="amount">${{ '{:,.2f}'.format(q.monthly_price) }}<span style="font-size:1rem;font-weight:500">/mo</span></div>
       {% endif %}
       {% if q.price_per_visit %}
-      <div class="sub">${{ '%,.2f' % q.price_per_visit }} per visit</div>
+      <div class="sub">${{ '{:,.2f}'.format(q.price_per_visit) }} per visit</div>
       {% endif %}
     </div>
     {% endif %}

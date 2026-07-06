@@ -2,7 +2,13 @@
 {% block title %}{{ client.name }} — Dazzle & Shine CRM{% endblock %}
 {% block page_title %}{{ client.name }}{% endblock %}
 {% block topbar_right %}
-  <a href="{{ url_for('bookings.clients') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← All Clients</a>
+  <div style="display:flex;gap:8px">
+    <a href="{{ url_for('bookings.clients') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← All Clients</a>
+    <form method="POST" action="{{ url_for('bookings.delete_client', client_id=client.id) }}"
+          onsubmit="return confirm('Delete {{ client.name }} and all their bookings? This cannot be undone.')">
+      <button type="submit" class="btn" style="padding:6px 14px;font-size:0.85rem;background:#fee2e2;color:#991b1b;border:1px solid #f5c6cb">Delete Client</button>
+    </form>
+  </div>
 {% endblock %}
 
 {% block content %}

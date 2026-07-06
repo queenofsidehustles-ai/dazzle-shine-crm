@@ -156,6 +156,22 @@ def client_detail(client_id):
     return render_template('admin/client_detail.html', client=client)
 
 
+@bookings_bp.route('/clients/<int:client_id>/delete', methods=['POST'])
+@login_required
+def delete_client(client_id):
+    from models import JobChecklist, BookingRating
+    client = Client.query.get_or_404(client_id)
+    # Delete this client's bookings and their child records first
+    for b in Booking.query.filter_by(client_id=client.id).all():
+        JobChecklist.query.filter_by(booking_id=b.id).delete()
+        BookingRating.query.filter_by(booking_id=b.id).delete()
+        db.session.delete(b)
+    db.session.delete(client)
+    db.session.commit()
+    flash('Client deleted.', 'success')
+    return redirect(url_for('bookings.clients'))
+
+
 # ── Cleaner accept / decline ────────────────────────────────────────────────────
 
 @bookings_bp.route('/<int:booking_id>/cleaner-response', methods=['GET'])
