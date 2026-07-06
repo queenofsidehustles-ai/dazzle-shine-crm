@@ -374,6 +374,7 @@ class CommercialQuote(db.Model):
     token = db.Column(db.String(64), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     sent_at = db.Column(db.DateTime)
+    viewed_at = db.Column(db.DateTime)      # first time the contact opened the proposal
     responded_at = db.Column(db.DateTime)
 
 

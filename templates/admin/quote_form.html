@@ -91,14 +91,34 @@
           {% endfor %}
         </select>
       </div>
+      <!-- ESTIMATE HELPER -->
+      <div style="background:#fef9ec;border:1px solid #d3a84f;border-radius:10px;padding:16px 18px;margin-bottom:16px">
+        <div style="font-weight:700;color:#7c4a04;font-size:0.9rem;margin-bottom:4px">💡 Estimate Helper</div>
+        <p style="font-size:0.78rem;color:#9a7a3a;margin-bottom:12px;line-height:1.5">Enter the square footage above and pick an intensity — we'll suggest a starting price. Always adjust for the real property.</p>
+        <div class="form-group" style="margin-bottom:10px">
+          <label style="font-size:0.8rem">Cleaning Intensity</label>
+          <select id="est-intensity" onchange="runEstimate()">
+            <option value="0.08">Light — offices, common areas ($0.08/sq ft)</option>
+            <option value="0.12" selected>Standard — general commercial ($0.12/sq ft)</option>
+            <option value="0.18">Intensive — medical, post-construction ($0.18/sq ft)</option>
+          </select>
+        </div>
+        <div id="est-result" style="display:none;background:#fff;border-radius:8px;padding:12px 14px;font-size:0.85rem;color:#1f1333">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#9a95ad">Suggested per visit</span><strong id="est-visit">—</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:#9a95ad">Suggested monthly</span><strong id="est-monthly">—</strong></div>
+          <button type="button" onclick="applyEstimate()" style="width:100%;margin-top:10px;background:#d3a84f;color:#1f1333;border:none;padding:9px;border-radius:7px;font-weight:700;font-size:0.82rem;cursor:pointer">Use this estimate ↓</button>
+        </div>
+        <div id="est-hint" style="font-size:0.78rem;color:#9a7a3a">Enter square footage &amp; frequency to see a suggestion.</div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group">
           <label>Price per Visit ($)</label>
-          <input type="number" name="price_per_visit" step="0.01" value="{{ quote.price_per_visit if quote else '' }}" placeholder="0.00" />
+          <input type="number" name="price_per_visit" id="price_per_visit" step="0.01" value="{{ quote.price_per_visit if quote else '' }}" placeholder="0.00" />
         </div>
         <div class="form-group">
           <label>Monthly Total ($)</label>
-          <input type="number" name="monthly_price" step="0.01" value="{{ quote.monthly_price if quote else '' }}" placeholder="0.00" />
+          <input type="number" name="monthly_price" id="monthly_price" step="0.01" value="{{ quote.monthly_price if quote else '' }}" placeholder="0.00" />
         </div>
       </div>
       <div class="form-group">
@@ -120,11 +140,18 @@
     </form>
     {% elif quote.status == 'sent' %}
     <div style="background:#dbeafe;color:#1e40af;padding:12px 16px;border-radius:10px;font-weight:600;font-size:0.9rem;text-align:center">
-      Sent — waiting for response
-      <br><a href="{{ url_for('quotes.view', token=quote.token) }}" target="_blank" style="color:#1e40af;font-size:0.82rem">Preview what they see →</a>
+      {% if quote.viewed_at %}
+        👁 Opened by {{ quote.contact_name.split()[0] }} on {{ quote.viewed_at.strftime('%b %d at %I:%M %p') }}
+      {% else %}
+        Sent — not opened yet
+      {% endif %}
+      <br><a href="{{ url_for('quotes.view', token=quote.token, preview=1) }}" target="_blank" style="color:#1e40af;font-size:0.82rem">Preview what they see →</a>
     </div>
     {% elif quote.status == 'accepted' %}
-    <div style="background:#d1fae5;color:#065f46;padding:12px 16px;border-radius:10px;font-weight:700;text-align:center">Accepted ✓</div>
+    <div style="background:#d1fae5;color:#065f46;padding:12px 16px;border-radius:10px;font-weight:700;text-align:center">
+      Accepted ✓
+      {% if quote.viewed_at %}<br><span style="font-size:0.78rem;font-weight:500">Opened {{ quote.viewed_at.strftime('%b %d') }}</span>{% endif %}
+    </div>
     {% elif quote.status == 'declined' %}
     <div style="background:#fee2e2;color:#991b1b;padding:12px 16px;border-radius:10px;font-weight:700;text-align:center">Declined</div>
     {% endif %}
@@ -138,4 +165,49 @@
 
 </div>
 </form>
+
+<script>
+  // Visits per month by frequency
+  const VISITS_PER_MONTH = { daily: 22, weekly: 4.33, biweekly: 2.17, monthly: 1, as_needed: 1 };
+  const MIN_PER_VISIT = 80;   // don't quote below this per visit
+  let lastEstimate = null;
+
+  function runEstimate() {
+    const sqftRaw = document.querySelector('input[name="sqft"]').value || '';
+    const sqft = parseFloat(sqftRaw.replace(/[^0-9.]/g, '')) || 0;
+    const rate = parseFloat(document.getElementById('est-intensity').value);
+    const freq = document.querySelector('select[name="frequency"]').value;
+    const visits = VISITS_PER_MONTH[freq] || 1;
+
+    const resultBox = document.getElementById('est-result');
+    const hint = document.getElementById('est-hint');
+
+    if (sqft <= 0) {
+      resultBox.style.display = 'none';
+      hint.style.display = 'block';
+      hint.textContent = 'Enter square footage above to see a suggestion.';
+      return;
+    }
+
+    const perVisit = Math.max(MIN_PER_VISIT, Math.round(sqft * rate));
+    const monthly = Math.round(perVisit * visits);
+    lastEstimate = { perVisit, monthly };
+
+    document.getElementById('est-visit').textContent = '$' + perVisit.toLocaleString();
+    document.getElementById('est-monthly').textContent = '$' + monthly.toLocaleString();
+    resultBox.style.display = 'block';
+    hint.style.display = 'none';
+  }
+
+  function applyEstimate() {
+    if (!lastEstimate) return;
+    document.getElementById('price_per_visit').value = lastEstimate.perVisit.toFixed(2);
+    document.getElementById('monthly_price').value = lastEstimate.monthly.toFixed(2);
+  }
+
+  // Re-run when sqft or frequency changes
+  document.querySelector('input[name="sqft"]').addEventListener('input', runEstimate);
+  document.querySelector('select[name="frequency"]').addEventListener('change', runEstimate);
+  runEstimate();
+</script>
 {% endblock %}

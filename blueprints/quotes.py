@@ -188,6 +188,11 @@ def delete(quote_id):
 @quotes_bp.route('/view/<token>')
 def view(token):
     q = CommercialQuote.query.filter_by(token=token).first_or_404()
+    # Track the first time the contact opens it — but not the owner's own preview
+    is_preview = request.args.get('preview') == '1'
+    if not is_preview and q.status == 'sent' and not q.viewed_at:
+        q.viewed_at = datetime.utcnow()
+        db.session.commit()
     freq_label = dict(FREQUENCIES).get(q.frequency, q.frequency)
     term_label = dict(CONTRACT_TERMS).get(q.contract_term, q.contract_term)
     services_list = [s.strip() for s in (q.services or '').split(',') if s.strip()]

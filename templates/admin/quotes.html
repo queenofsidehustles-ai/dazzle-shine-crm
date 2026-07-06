@@ -32,6 +32,7 @@
           <td>
             {% set colors = {'draft':'status-pending','sent':'status-confirmed','accepted':'status-completed','declined':'status-cancelled'} %}
             <span class="status {{ colors.get(q.status,'status-pending') }}">{{ q.status }}</span>
+            {% if q.status == 'sent' and q.viewed_at %}<br><span style="font-size:0.72rem;color:#1e7e34;font-weight:600">👁 opened</span>{% endif %}
           </td>
           <td style="font-size:0.82rem;color:#9a95ad">{{ q.created_at.strftime('%b %d') }}</td>
           <td style="display:flex;gap:6px">

@@ -152,6 +152,7 @@ def _migrate_db():
         ('commercial_quote', 'scope_notes',      'TEXT'),
         ('commercial_quote', 'status',           "VARCHAR(20) DEFAULT 'draft'"),
         ('commercial_quote', 'sent_at',          'TIMESTAMP'),
+        ('commercial_quote', 'viewed_at',        'TIMESTAMP'),
         ('commercial_quote', 'responded_at',     'TIMESTAMP'),
         # Booking cleaner tracking
         ('booking', 'cleaner_notified_at', 'TIMESTAMP'),
