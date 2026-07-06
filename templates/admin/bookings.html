@@ -40,7 +40,12 @@
           <td style="color:#5f5878">{{ b.bedrooms or '—' }} bd / {{ b.bathrooms or '—' }} ba</td>
           <td style="color:#5f5878">{{ b.preferred_date or '—' }}</td>
           <td style="color:#5f5878">{{ b.preferred_time or '—' }}</td>
-          <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
+          <td>
+            <span class="status status-{{ b.status }}">{{ b.status }}</span>
+            {% if b.cleaner_response == 'declined' and not b.assigned_cleaner and b.status not in ('completed','cancelled') %}
+            <br><span style="display:inline-block;margin-top:4px;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap">⚠️ Needs cleaner</span>
+            {% endif %}
+          </td>
           <td style="color:#5f5878">{{ ('$%.0f' % b.price) if b.price else '—' }}</td>
           <td>
             <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end">

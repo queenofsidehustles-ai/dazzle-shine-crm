@@ -185,18 +185,57 @@ def cleaner_response(booking_id):
     expected = hashlib.sha256(f"{booking_id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
     if token != expected:
         return 'Invalid link.', 400
+    who = booking.assigned_cleaner or 'The cleaner'
     if action == 'accept':
         booking.cleaner_response = 'accepted'
         booking.internal_notes = (booking.internal_notes or '') + f'\n[Cleaner accepted job on {datetime.utcnow().strftime("%b %d %Y")}]'
         db.session.commit()
+        _alert_owner_response(booking, who, accepted=True)
         return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#065f46">✅ Job accepted! We\'ll see you on ' + (booking.preferred_date or 'the scheduled date') + '.</h2>'
     elif action == 'decline':
         booking.cleaner_response = 'declined'
-        booking.assigned_cleaner = ''
-        booking.internal_notes = (booking.internal_notes or '') + f'\n[Cleaner declined job on {datetime.utcnow().strftime("%b %d %Y")} — needs reassignment]'
+        booking.internal_notes = (booking.internal_notes or '') + f'\n[{who} declined job on {datetime.utcnow().strftime("%b %d %Y")} — needs reassignment]'
         db.session.commit()
-        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#991b1b">Job declined. We\'ve been notified and will reassign. Thank you for letting us know.</h2>'
+        _alert_owner_response(booking, who, accepted=False)
+        booking.assigned_cleaner = ''      # unassign after the alert so we know who declined
+        db.session.commit()
+        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#991b1b">Job declined. We\'ve let the office know and will reassign. Thank you for telling us!</h2>'
     return 'Unknown action.', 400
+
+
+def _alert_owner_response(booking, cleaner_name, accepted):
+    """Text + email the owner when a cleaner accepts or (importantly) declines a job."""
+    import os
+    from models import BusinessSetting
+    from notifications import send_email, send_sms
+    owner_email = (BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL')
+                   or os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com'))
+    owner_phone = BusinessSetting.get('phone') or os.environ.get('OWNER_PHONE')
+    base = 'https://dazzle-shine-crm-production.up.railway.app'
+    link = f"{base}/bookings/{booking.id}"
+    when = f"{booking.preferred_date or 'TBD'} {booking.preferred_time or ''}".strip()
+    if accepted:
+        subject = f"✅ {cleaner_name} accepted the {when} job"
+        line = f"{cleaner_name} accepted the job for {booking.name} on {when}. They're locked in — nothing to do."
+        sms = f"✅ {cleaner_name} accepted the {when} job for {booking.name}."
+        color = '#276749'
+    else:
+        subject = f"⚠️ {cleaner_name} DECLINED — reassign the {when} job"
+        line = f"{cleaner_name} declined the job for {booking.name} on {when}. It's now unassigned and needs a new cleaner."
+        sms = f"⚠️ {cleaner_name} DECLINED the {when} job for {booking.name}. Reassign: {link}"
+        color = '#c53030'
+    try:
+        send_email(to_email=owner_email, to_name='Dazzle & Shine', subject=subject,
+                   html=f'<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f1333">'
+                        f'<h2 style="color:{color}">{subject}</h2><p>{line}</p>'
+                        f'<p><a href="{link}" style="color:#d3a84f;font-weight:700">Open the booking →</a></p></div>')
+    except Exception:
+        pass
+    if owner_phone:
+        try:
+            send_sms(owner_phone, sms)
+        except Exception:
+            pass
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -347,13 +386,13 @@ def _notify_cleaner(booking):
     booking.cleaner_notified_at = datetime.utcnow()
     db.session.flush()
 
-    # Text the cleaner their job + My Day link (automatic — no copy/paste)
+    # Text the cleaner the job + tappable Accept/Decline links (respond by text)
     if staff.phone:
         try:
             send_sms(staff.phone,
-                     f"New job: {booking.preferred_date or 'TBD'} {booking.preferred_time or ''} — "
-                     f"{booking.name}, {booking.address or ''}. You earn ${earnings:.0f}. "
-                     f"See your day + navigate: {myday_link}")
+                     f"New job {booking.preferred_date or 'TBD'} {booking.preferred_time or ''} — "
+                     f"{booking.name}. You earn ${earnings:.0f}.\n"
+                     f"✅ Accept: {accept_url}\n❌ Decline: {decline_url}")
         except Exception:
             pass
 
