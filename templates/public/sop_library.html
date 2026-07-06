@@ -31,8 +31,8 @@
 
     {% for g in groups %}
     <div class="cat">
-      <h2>{{ g.label }}</h2>
-      {% for s in g.items %}
+      <h2>{{ g['label'] }}</h2>
+      {% for s in g['items'] %}
       <details class="sop">
         <summary>{{ s.title }}</summary>
         <div class="sop-body"><pre class="content">{{ s.content }}</pre></div>
