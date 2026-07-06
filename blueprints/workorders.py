@@ -134,6 +134,11 @@ def create_and_send_workorder(booking, template_id=None):
     time_text = booking.preferred_time or 'TBD'
     extras_html = f"<p><strong>Add-ons:</strong> {booking.extras}</p>" if booking.extras else ''
     notes_html = f"<p><strong>Notes:</strong> {booking.internal_notes or booking.notes}</p>" if (booking.internal_notes or booking.notes) else ''
+    access_html = (f'<div style="background:#fff8e1;border:1px solid #f0d488;border-radius:8px;padding:12px 14px;margin:12px 0;color:#7c4a04">'
+                   f'🔑 <strong>Getting in:</strong> {booking.access_notes}</div>') if booking.access_notes else ''
+    import urllib.parse as _url
+    nav_dest = _url.quote(f"{booking.address}, {booking.city or ''} {booking.zip_code or ''}")
+    nav_url = f"https://www.google.com/maps/dir/?api=1&destination={nav_dest}"
 
     if cleaner_email:
         send_email(
@@ -144,9 +149,10 @@ def create_and_send_workorder(booking, template_id=None):
   <h2 style="color:#b98a33">Work Order — {date_text}</h2>
   <p><strong>Client:</strong> {booking.name} &nbsp; <a href="tel:{booking.phone}">{booking.phone}</a></p>
   <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
+  <p><a href="{nav_url}" style="color:#1f1333;font-weight:700">🧭 Navigate there →</a></p>
   <p><strong>Service:</strong> {booking.service_label} &nbsp; <strong>Time:</strong> {time_text}</p>
   <p><strong>Bedrooms:</strong> {booking.bedrooms} &nbsp; <strong>Bathrooms:</strong> {booking.bathrooms}</p>
-  {extras_html}{notes_html}
+  {access_html}{extras_html}{notes_html}
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <p><a href="{checklist_url}" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Open Job Checklist →</a></p>
   <p style="font-size:0.82rem;color:#9a95ad">Check off each item as you complete it. Need a refresher? <a href="{sop_url}" style="color:#b98a33">See our cleaning SOPs →</a></p>

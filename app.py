@@ -193,6 +193,7 @@ def _migrate_db():
         ('contractor_application', 'offer_sent_count',             'INTEGER DEFAULT 0'),
         ('contractor_application', 'offer_token',                  'VARCHAR(64)'),
         ('contractor_application', 'offer_accepted_at',            'TIMESTAMP'),
+        ('booking', 'access_notes',    'TEXT'),
         # Booking lifecycle email tracking
         ('booking', 'completed_at',    'TIMESTAMP'),
         ('booking', 'morning_note_at', 'TIMESTAMP'),

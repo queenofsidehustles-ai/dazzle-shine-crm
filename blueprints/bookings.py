@@ -82,6 +82,7 @@ def detail(booking_id):
         booking.preferred_date = request.form.get('preferred_date', booking.preferred_date)
         booking.preferred_time = request.form.get('preferred_time', booking.preferred_time)
         booking.internal_notes = request.form.get('internal_notes', booking.internal_notes)
+        booking.access_notes = request.form.get('access_notes', booking.access_notes)
         booking.assigned_cleaner = request.form.get('assigned_cleaner', booking.assigned_cleaner)
         hours_raw = request.form.get('hours_worked', '').strip()
         booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
@@ -284,6 +285,7 @@ def _create_next_recurring(booking):
         address=booking.address,
         city=booking.city,
         zip_code=booking.zip_code,
+        access_notes=booking.access_notes,
         assigned_cleaner=booking.assigned_cleaner,
         status='pending',
         price=booking.price,

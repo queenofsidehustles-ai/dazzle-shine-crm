@@ -94,7 +94,11 @@
           <input type="number" name="hours_worked" step="0.25" placeholder="e.g. 2.5" value="{{ booking.hours_worked or '' }}" />
         </div>
         <div class="form-group">
-          <label>Internal Notes</label>
+          <label>🔑 Entry / Access Notes <span style="font-weight:400;color:#9a95ad">(the cleaner sees this)</span></label>
+          <textarea name="access_notes" placeholder="Gate code, where the key is, parking, alarm code, pets...">{{ booking.access_notes or '' }}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Internal Notes <span style="font-weight:400;color:#9a95ad">(private to you)</span></label>
           <textarea name="internal_notes" placeholder="Notes for your team only...">{{ booking.internal_notes or '' }}</textarea>
         </div>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save Changes</button>

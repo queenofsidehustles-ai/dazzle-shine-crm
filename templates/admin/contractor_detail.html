@@ -86,6 +86,20 @@
   <!-- Right: Onboarding + Jobs -->
   <div style="display:flex;flex-direction:column;gap:18px">
 
+    <!-- My Day link (share with the cleaner) -->
+    {% if s.agreement_token %}
+    <div class="card" style="background:#f0f7ff;border-color:#bcd7f5">
+      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;color:#2b6cb0;text-transform:uppercase;letter-spacing:0.1em">📅 {{ s.name.split()[0] }}'s "My Day" Link</h2>
+      <p style="font-size:0.8rem;color:#5f5878;margin-bottom:8px">Send this so they can see their jobs, navigate, and open checklists. They can bookmark it.</p>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" readonly value="{{ url_for('contractors.my_day', token=s.agreement_token, _external=True) }}"
+               style="flex:1;font-size:0.72rem;padding:7px 10px;border:1px solid #bcd7f5;border-radius:6px;color:#2b6cb0;background:#fff" onclick="this.select()">
+        <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
+                class="btn btn-outline" style="padding:6px 12px;font-size:0.75rem;flex-shrink:0">Copy</button>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Onboarding Quick Links -->
     {% if s.agreement_token and (not s.welcome_forms_at or not s.orientation_completed_at) %}
     <div class="card" style="background:#fffbef;border-color:#ffc107">

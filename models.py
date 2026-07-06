@@ -70,6 +70,7 @@ class Booking(db.Model):
     # Admin fields
     notes = db.Column(db.Text)
     internal_notes = db.Column(db.Text)
+    access_notes = db.Column(db.Text)   # entry info for the cleaner: gate code, key, parking, alarm, pets
     assigned_cleaner = db.Column(db.String(100))
     cleaner_notified_at = db.Column(db.DateTime)        # when job notification was last sent
     cleaner_response = db.Column(db.String(20))         # accepted, declined, None

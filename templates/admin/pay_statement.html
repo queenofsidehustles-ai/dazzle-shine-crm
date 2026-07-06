@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pay Statement — {{ s.name }}</title>
+  <style>
+    body { font-family: Inter, -apple-system, sans-serif; background:#f6f5fb; margin:0; color:#1f1333; }
+    .sheet { max-width:720px; margin:0 auto; padding:28px 24px; background:#fff; }
+    .head { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #1f1333; padding-bottom:16px; margin-bottom:20px; }
+    .biz { font-size:1.4rem; font-weight:800; color:#1f1333; }
+    .biz .sub { font-size:0.75rem; letter-spacing:0.12em; text-transform:uppercase; color:#9a95ad; font-weight:600; }
+    .meta { text-align:right; font-size:0.85rem; color:#5f5878; line-height:1.7; }
+    h1 { font-size:1.1rem; margin:0 0 4px; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; }
+    th, td { text-align:left; padding:10px 12px; font-size:0.88rem; border-bottom:1px solid #eee; }
+    th { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:#9a95ad; }
+    td.amt, th.amt { text-align:right; }
+    .total { display:flex; justify-content:space-between; margin-top:18px; padding:14px 16px; background:#f0fff4; border:1px solid #c6f6d5; border-radius:10px; }
+    .total .lbl { font-weight:700; color:#276749; }
+    .total .val { font-weight:800; font-size:1.3rem; color:#1a7a44; }
+    .note { margin-top:14px; font-size:0.78rem; color:#9a95ad; line-height:1.6; }
+    .printbtn { display:inline-block; margin:20px auto 0; background:#d3a84f; color:#1f1333; border:none; padding:11px 24px;
+                border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; }
+    .wrap { max-width:720px; margin:0 auto; padding:16px; text-align:center; }
+    @media print { .printbtn, .wrap { display:none; } body { background:#fff; } .sheet { padding:0; } }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="head">
+      <div>
+        <div class="biz">{{ biz }}</div>
+        <div class="sub">Contractor Pay Statement</div>
+      </div>
+      <div class="meta">
+        <strong>{{ s.name }}</strong><br>
+        {{ s.pay_label() }}<br>
+        Period: {{ start }} → {{ end }}
+      </div>
+    </div>
+
+    <h1>Completed Jobs</h1>
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Client</th><th>Service</th><th class="amt">Job Price</th><th class="amt">You Earned</th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.booking.preferred_date or '—' }}</td>
+          <td>{{ r.booking.name }}</td>
+          <td>{{ r.booking.service_label }}</td>
+          <td class="amt">${{ '%.2f'|format(r.booking.price or 0) }}</td>
+          <td class="amt" style="font-weight:700">${{ '%.2f'|format(r.earned) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align:center;color:#9a95ad;padding:24px">No completed jobs in this period.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="total">
+      <span class="lbl">Total Pay — {{ rows|length }} job{{ 's' if rows|length != 1 }}</span>
+      <span class="val">${{ '%.2f'|format(total) }}</span>
+    </div>
+
+    <p class="note">Paid as an independent contractor (1099). You are responsible for your own taxes. This statement reflects completed jobs in the period shown.</p>
+  </div>
+
+  <div class="wrap">
+    <button class="printbtn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  </div>
+</body>
+</html>

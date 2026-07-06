@@ -40,7 +40,11 @@
 <div class="card" style="margin-bottom:18px">
   <div class="section-header">
     <h2>{{ name }} — <span style="color:#b98a33">${{ '%.2f' % data.total }} owed</span></h2>
-    <span style="font-size:0.85rem;color:#9a95ad">{{ data.staff.pay_label() }}</span>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:0.85rem;color:#9a95ad">{{ data.staff.pay_label() }}</span>
+      <a href="{{ url_for('contractors.pay_statement', staff_id=data.staff.id, start=week_start, end=week_end) }}"
+         target="_blank" class="btn btn-outline" style="padding:5px 12px;font-size:0.8rem">📄 Statement</a>
+    </div>
   </div>
   <div class="table-wrap">
     <table>

@@ -748,6 +748,27 @@ def onboarding_start_date(token):
     return redirect(url_for('contractors.onboarding_hub', token=token))
 
 
+@contractors_bp.route('/my-day/<token>')
+def my_day(token):
+    """A cleaner's personal daily job board — today + next 7 days, with navigate,
+    access notes, payout, and checklist links. Public, token-gated per cleaner."""
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    today = date.today()
+    horizon = (today + timedelta(days=7)).isoformat()
+    jobs = Booking.query.filter(
+        db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+        Booking.status != 'cancelled',
+        Booking.preferred_date >= today.isoformat(),
+        Booking.preferred_date <= horizon,
+    ).order_by(Booking.preferred_date, Booking.preferred_time).all()
+    days = {}
+    for b in jobs:
+        days.setdefault(b.preferred_date, []).append(b)
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    return render_template('public/my_day.html', s=s, days=days,
+                           today=today.isoformat(), biz=biz)
+
+
 @contractors_bp.route('/onboarding/<token>/guide')
 def onboarding_guide(token):
     """Public training & supply guide the contractor reviews during onboarding."""
@@ -954,6 +975,30 @@ def payroll():
         payroll=payroll_data, grand_total=round(grand_total, 2),
         week_start=week_start_str, week_end=week_end_str,
     )
+
+
+@contractors_bp.route('/payroll/statement/<int:staff_id>')
+@login_required
+def pay_statement(staff_id):
+    """Printable pay statement for one cleaner over a date range (Save as PDF)."""
+    s = Staff.query.get_or_404(staff_id)
+    today = date.today()
+    start = request.args.get('start', (today - timedelta(days=today.weekday())).isoformat())
+    end = request.args.get('end', (today - timedelta(days=today.weekday()) + timedelta(days=6)).isoformat())
+    jobs = Booking.query.filter(
+        db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+        Booking.status == 'completed',
+        Booking.preferred_date >= start,
+        Booking.preferred_date <= end,
+    ).order_by(Booking.preferred_date).all()
+    rows, total = [], 0.0
+    for j in jobs:
+        earned = s.calc_pay(job_price=j.price or 0, hours_worked=j.hours_worked or 0)
+        total += earned
+        rows.append({'booking': j, 'earned': earned})
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    return render_template('admin/pay_statement.html', s=s, rows=rows,
+                           total=round(total, 2), start=start, end=end, biz=biz)
 
 
 # ── Public application form ────────────────────────────────────────────────────
