@@ -1,3 +1,4 @@
+import os
 import secrets
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
@@ -129,7 +130,7 @@ def send_quote(quote_id):
     if q.monthly_price:
         price_html += f"<p><strong>Monthly total:</strong> ${float(q.monthly_price):,.2f}</p>"
 
-    send_email(
+    ok, detail = send_email(
         to_email=q.email, to_name=q.contact_name,
         subject=f'Cleaning Services Proposal — Dazzle & Shine Maids',
         html=f"""
@@ -166,10 +167,34 @@ def send_quote(quote_id):
   </div>
 </div>""",
     )
+    if not ok:
+        flash(f"Quote could NOT be emailed to {q.email}. {detail}", 'error')
+        return redirect(url_for('quotes.detail', quote_id=q.id))
+
     q.status = 'sent'
     q.sent_at = datetime.utcnow()
     db.session.commit()
-    flash(f'Quote sent to {q.email}!', 'success')
+
+    # Send the owner a copy so there's always a record in your inbox
+    owner_email = os.environ.get('NOTIFY_EMAIL') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    if owner_email and owner_email.lower() != (q.email or '').lower():
+        try:
+            send_email(
+                to_email=owner_email, to_name='Dazzle & Shine Maids',
+                subject=f'Copy: quote sent to {q.company} ({q.contact_name})',
+                html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">Quote Sent — Your Copy</h2>
+  <p>A commercial proposal was just emailed to <strong>{q.contact_name}</strong> at {q.email}.</p>
+  <p><strong>Company:</strong> {q.company}<br>
+     <strong>Monthly:</strong> ${float(q.monthly_price or 0):,.2f}</p>
+  <p><a href="{quote_url}" style="color:#d3a84f;font-weight:700">View the proposal they received →</a></p>
+</div>""",
+            )
+        except Exception:
+            pass
+
+    flash(f'Quote sent to {q.email}! A copy was sent to you.', 'success')
     return redirect(url_for('quotes.index'))
 
 
