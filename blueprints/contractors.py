@@ -207,30 +207,6 @@ def email_test():
     )
 
 
-@contractors_bp.route('/sms-test')
-@login_required
-def sms_test():
-    """Diagnostic: send a real test text and show exactly what Twilio says."""
-    to = request.args.get('to', '').strip()
-    if not to:
-        return ('<div style="font-family:sans-serif;max-width:560px;margin:40px auto;padding:0 16px">'
-                '<h2>📲 Text (Twilio) Test</h2>'
-                '<p>Add your phone to the web address to send yourself a test text. For example:</p>'
-                '<p style="background:#faf9fd;padding:12px;border-radius:8px;font-family:monospace">'
-                '/contractors/sms-test?to=4075551234</p></div>')
-    from notifications import send_sms
-    ok, detail = send_sms(to, '✅ Dazzle & Shine test text — your texting (Twilio) is working!')
-    color, bg = ('#155724', '#d4edda') if ok else ('#842029', '#f8d7da')
-    return (
-        f'<div style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 16px">'
-        f'<div style="background:{bg};color:{color};padding:18px 22px;border-radius:10px;font-weight:700">'
-        f'{"✅ Test text sent!" if ok else "❌ Text did NOT send"}</div>'
-        f'<p style="margin-top:16px;color:#1f1333"><strong>To:</strong> {to}<br>'
-        f'<strong>Result:</strong> {detail}</p>'
-        f'<p style="margin-top:20px"><a href="{url_for("contractors.team")}" style="color:#7c3aed">← Back to Team</a></p></div>'
-    )
-
-
 # ── Applications ───────────────────────────────────────────────────────────────
 
 SOURCES = ['Indeed', 'Facebook', 'Nextdoor', 'Craigslist', 'Referral', 'Walk-in', 'Website', 'Other']
