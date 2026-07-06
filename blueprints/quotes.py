@@ -194,7 +194,7 @@ def send_quote(quote_id):
         except Exception:
             pass
 
-    flash(f'Quote sent to {q.email}! A copy was sent to you.', 'success')
+    flash(f'Quote sent to {q.email}! ({detail}) A copy was also sent to you.', 'success')
     return redirect(url_for('quotes.index'))
 
 

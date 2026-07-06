@@ -156,6 +156,14 @@
     <div style="background:#fee2e2;color:#991b1b;padding:12px 16px;border-radius:10px;font-weight:700;text-align:center">Declined</div>
     {% endif %}
 
+    {% if quote.status != 'draft' %}
+    <form method="POST" action="{{ url_for('quotes.send_quote', quote_id=quote.id) }}">
+      <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:11px">
+        ↻ Resend Quote to {{ quote.email }}
+      </button>
+    </form>
+    {% endif %}
+
     <form method="POST" action="{{ url_for('quotes.delete', quote_id=quote.id) }}"
           onsubmit="return confirm('Delete this quote?')">
       <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">Delete Quote</button>
