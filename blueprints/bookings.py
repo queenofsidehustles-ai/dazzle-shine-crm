@@ -313,6 +313,8 @@ def _send_rating_request(booking):
 
 def _send_followup_email(booking):
     from notifications import send_email
+    from blueprints.ratings import review_link
+    _review = review_link()
     send_email(
         to_email=booking.email,
         to_name=booking.name,
@@ -325,7 +327,7 @@ def _send_followup_email(booking):
   <p>Your feedback means the world to us. If you have 60 seconds,
      we'd love a quick Google review:</p>
   <p style="margin:20px 0">
-    <a href="https://g.page/r/dazzle-and-shine-maids/review"
+    <a href="{_review}"
        style="background:#d3a84f;color:#1a1225;padding:11px 22px;border-radius:999px;
               text-decoration:none;font-weight:700">Leave a Review</a>
   </p>

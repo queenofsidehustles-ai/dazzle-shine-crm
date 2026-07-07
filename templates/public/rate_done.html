@@ -19,12 +19,12 @@
     <span class="script">Thank You!</span>
 
     {% if just_rated %}
-      {% if r.rating == 5 %}
+      {% if r.rating >= 4 %}
       <div style="font-size:2.5rem;margin-bottom:10px">🌟</div>
       <h1 style="font-size:1.4rem;font-weight:700;margin-bottom:8px">You're amazing!</h1>
-      <p style="color:#5f5878;margin-bottom:6px">We're thrilled you had a 5-star experience, {{ r.booking.name.split()[0] }}!</p>
+      <p style="color:#5f5878;margin-bottom:6px">We're thrilled you had a great experience, {{ r.booking.name.split()[0] }}!</p>
       <p style="color:#5f5878;font-size:0.9rem">Would you mind sharing your experience on Google? It takes 60 seconds and helps us so much.</p>
-      <a href="https://g.page/r/dazzle-and-shine-maids/review" class="btn-google" target="_blank">⭐ Leave a Google Review</a>
+      <a href="{{ review_link }}" class="btn-google" target="_blank">⭐ Leave a Google Review</a>
       <p style="font-size:0.78rem;color:#9a95ad;margin-top:16px">No pressure — just a link if you're feeling generous 😊</p>
       {% else %}
       <div style="font-size:2.5rem;margin-bottom:10px">💛</div>

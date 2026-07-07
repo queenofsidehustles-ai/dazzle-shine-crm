@@ -7,6 +7,15 @@ from extensions import db
 
 ratings_bp = Blueprint('ratings', __name__, url_prefix='/rate')
 
+# Owner's Google review link. Editable via the 'google_review_link' business
+# setting; falls back to Dazzle & Shine's real link.
+DEFAULT_REVIEW_LINK = 'https://g.page/r/CZLGfXgsWHtVEBM/review'
+
+
+def review_link():
+    from models import BusinessSetting
+    return BusinessSetting.get('google_review_link') or DEFAULT_REVIEW_LINK
+
 
 def _alert_low_rating(r):
     """Email the owner when a customer rates below 4 stars, so they can make it right."""
@@ -57,5 +66,5 @@ def page(token):
             r.rated_at = datetime.utcnow()
             db.session.commit()
             _alert_low_rating(r)
-            return render_template('public/rate_done.html', r=r, just_rated=True)
+            return render_template('public/rate_done.html', r=r, just_rated=True, review_link=review_link())
     return render_template('public/rate.html', r=r)
