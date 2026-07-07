@@ -185,14 +185,18 @@
           <div class="photo-head">📸 Before Photos <span class="req-tag" id="before-tag">Required</span></div>
           <div class="photo-sub">Take these <strong>when you arrive</strong>, before you start.</div>
           <div class="photo-grid" id="before-grid">
-            <label class="add-photo"><span class="plus">+</span><span>Add before</span>
+            <label class="add-photo"><span class="plus">📷</span><span>Take photo</span>
               <input type="file" accept="image/*" capture="environment" onchange="uploadPhoto(this,'before')" /></label>
+            <label class="add-photo"><span class="plus">🖼️</span><span>Upload</span>
+              <input type="file" accept="image/*" onchange="uploadPhoto(this,'before')" /></label>
           </div>
           <div class="photo-head">✨ After Photos <span class="req-tag" id="after-tag">Required</span></div>
           <div class="photo-sub">Take these <strong>when you finish</strong>, showing the results.</div>
           <div class="photo-grid" id="after-grid">
-            <label class="add-photo"><span class="plus">+</span><span>Add after</span>
+            <label class="add-photo"><span class="plus">📷</span><span>Take photo</span>
               <input type="file" accept="image/*" capture="environment" onchange="uploadPhoto(this,'after')" /></label>
+            <label class="add-photo"><span class="plus">🖼️</span><span>Upload</span>
+              <input type="file" accept="image/*" onchange="uploadPhoto(this,'after')" /></label>
           </div>
           <div class="uploading" id="uploading">Uploading photo…</div>
           <div class="err" id="photo-err"></div>
@@ -315,7 +319,7 @@
       el.classList.toggle('done', !!done);
       el.classList.toggle('active', !!active);
       const lock = $('lock-' + id);
-      if (lock) lock.textContent = locked ? '🔒 Locked' : (done ? '✓ Done' : '');
+      if (lock) lock.textContent = locked ? (arguments[1].lockLabel || '🔒 Locked') : (done ? '✓ Done' : '');
       const num = el.querySelector('.step-num');
       if (num && done) num.innerHTML = '✓';
     }
@@ -339,7 +343,7 @@
 
       // Step 5
       const clockoutActive = canClockOut() && !S.clockOut;
-      setStep('clockout', { locked: !canClockOut() && !S.clockOut, done: S.clockOut, active: clockoutActive });
+      setStep('clockout', { locked: !canClockOut() && !S.clockOut, done: S.clockOut, active: clockoutActive, lockLabel: '🔒 Finish checklist + photos first' });
       $('clockout-btn-wrap').style.display = S.clockOut ? 'none' : 'block';
       if (S.clockOut) {
         $('clockout-stamp').style.display = 'block';
@@ -347,7 +351,7 @@
       }
 
       // Step 6
-      setStep('sign', { locked: !S.clockOut, done: signSettled(), active: S.clockOut && !signSettled() });
+      setStep('sign', { locked: !S.clockOut, done: signSettled(), active: S.clockOut && !signSettled(), lockLabel: '🔒 Clock out first' });
       $('sign-area').style.display = signSettled() ? 'none' : 'block';
       if (signSettled()) {
         $('sign-stamp').style.display = 'block';
