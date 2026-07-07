@@ -118,6 +118,34 @@ def detail(booking_id):
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff)
 
 
+@bookings_bp.route('/_fixdb')
+@login_required
+def fixdb():
+    """Diagnostic + self-heal: run the column migration on-demand and report the
+    real DB state / error. Visit /bookings/_fixdb while logged in."""
+    import traceback
+    from sqlalchemy import inspect as _inspect
+    out = []
+    try:
+        from app import _migrate_db
+        _migrate_db()
+        out.append('✅ _migrate_db() ran')
+    except Exception:
+        out.append('❌ _migrate_db() ERROR:\n' + traceback.format_exc())
+    for tbl in ('booking', 'staff'):
+        try:
+            cols = [c['name'] for c in _inspect(db.engine).get_columns(tbl)]
+            has = 'access_notes' in cols if tbl == 'booking' else 'schedule_reminder_date' in cols
+            out.append(f'{tbl}: {len(cols)} cols · key column present = {has}\n  ' + ', '.join(cols))
+        except Exception:
+            out.append(f'{tbl} inspect ERROR:\n' + traceback.format_exc())
+    try:
+        out.append(f'✅ Booking.query.count() = {Booking.query.count()}')
+    except Exception:
+        out.append('❌ Booking query ERROR:\n' + traceback.format_exc())
+    return '<pre style="font-family:monospace;font-size:13px;padding:20px;white-space:pre-wrap">' + '\n\n'.join(out) + '</pre>'
+
+
 @bookings_bp.route('/<int:booking_id>/charge-balance', methods=['POST'])
 @login_required
 def charge_balance(booking_id):
