@@ -341,9 +341,14 @@ def _notify_cleaner(booking):
     from pricing import SERVICES
 
     cleaner_name = booking.assigned_cleaner or ''
-    staff = Staff.query.filter(Staff.name.ilike(f'%{cleaner_name.split()[0]}%')).first() if cleaner_name else None
-    if not staff or not staff.email:
-        return False  # No email on file
+    staff = None
+    if cleaner_name:
+        # Exact full-name match first (reliable), then loose first-name fallback
+        staff = Staff.query.filter(db.func.lower(Staff.name) == cleaner_name.lower()).first()
+        if not staff:
+            staff = Staff.query.filter(Staff.name.ilike(f'%{cleaner_name.split()[0]}%')).first()
+    if not staff:
+        return False  # cleaner not found
 
     # Calculate cleaner earnings
     price = booking.price or 0
@@ -368,36 +373,42 @@ def _notify_cleaner(booking):
     myday_link = f"{base}/contractors/my-day/{staff.agreement_token}"
 
     from notifications import send_triggered_email, send_sms
-    sent = send_triggered_email(
-        trigger='cleaner_job_assigned',
-        to_email=staff.email,
-        to_name=staff.name,
-        variables={
-            'job_date': booking.preferred_date or 'TBD',
-            'booking_time': booking.preferred_time or 'TBD',
-            'service_type': svc_label,
-            'job_address': f'{booking.address}, {booking.city}' if booking.address else 'See work order',
-            'earnings': f'{earnings:.2f}',
-            'beds': booking.bedrooms,
-            'baths': booking.bathrooms,
-            'myday_link': myday_link,
-        }
-    )
+    sent = False
+    if staff.email:
+        sent = send_triggered_email(
+            trigger='cleaner_job_assigned',
+            to_email=staff.email,
+            to_name=staff.name,
+            variables={
+                'job_date': booking.preferred_date or 'TBD',
+                'booking_time': booking.preferred_time or 'TBD',
+                'service_type': svc_label,
+                'job_address': f'{booking.address}, {booking.city}' if booking.address else 'See work order',
+                'earnings': f'{earnings:.2f}',
+                'beds': booking.bedrooms,
+                'baths': booking.bathrooms,
+                'myday_link': myday_link,
+            }
+        )
     booking.cleaner_notified_at = datetime.utcnow()
     db.session.flush()
 
-    # Text the cleaner the job + tappable Accept/Decline links (respond by text)
+    # Text the cleaner the job + tappable Accept/Decline links — fires even with no email on file
+    sent_sms = False
     if staff.phone:
         try:
-            send_sms(staff.phone,
+            ok, _ = send_sms(staff.phone,
                      f"New job {booking.preferred_date or 'TBD'} {booking.preferred_time or ''} — "
                      f"{booking.name}. You earn ${earnings:.0f}.\n"
-                     f"✅ Accept: {accept_url}\n❌ Decline: {decline_url}")
+                     f"Accept: {accept_url}\nDecline: {decline_url}")
+            sent_sms = bool(ok)
         except Exception:
             pass
 
     if sent:
         return True
+    if not staff.email:
+        return sent_sms   # no email on file — at least the text may have gone out
 
     send_email(
         to_email=staff.email, to_name=staff.name,
