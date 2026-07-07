@@ -87,31 +87,46 @@ def detail(booking_id):
         hours_raw = request.form.get('hours_worked', '').strip()
         booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
 
-        if booking.status == 'completed' and old_status != 'completed':
+        newly_completed = (booking.status == 'completed' and old_status != 'completed')
+        if newly_completed:
             from datetime import datetime as _dt
             booking.completed_at = _dt.utcnow()
-            _send_followup_email(booking)
-            _send_rating_request(booking)
-            _create_next_recurring(booking)
 
-        # Notify cleaner when newly assigned (compare against old value, not new)
+        # 1) Save the booking FIRST so the edit always sticks, even if a
+        #    notification step later errors. The save itself must never 500.
+        db.session.commit()
+
+        # 2) Notifications are best-effort. Any failure is captured and shown
+        #    as a message instead of crashing the whole save.
         new_cleaner = request.form.get('assigned_cleaner', '').strip()
-        if new_cleaner and new_cleaner != old_cleaner:
-            notified = _notify_cleaner(booking)
-            # Auto-send the job checklist to the newly assigned cleaner
-            try:
+        newly_assigned = bool(new_cleaner) and new_cleaner != old_cleaner
+        notify_err = None
+        notified = False
+        try:
+            if newly_completed:
+                _send_followup_email(booking)
+                _send_rating_request(booking)
+                _create_next_recurring(booking)
+            if newly_assigned:
+                notified = _notify_cleaner(booking)
                 from blueprints.workorders import create_and_send_workorder
                 create_and_send_workorder(booking)
-            except Exception:
-                pass
-            if notified:
-                flash(f'Booking updated — notification + checklist sent to {new_cleaner}.', 'success')
-            else:
-                flash(f'Booking updated — ⚠️ no email on file for {new_cleaner}, notify them manually.', 'warning')
+            db.session.commit()
+        except Exception:
+            import traceback
+            db.session.rollback()
+            notify_err = traceback.format_exc()
+
+        if notify_err:
+            flash('Booking saved ✅ — but a notification step errored: '
+                  + notify_err.strip().splitlines()[-1], 'warning')
+        elif newly_assigned and notified:
+            flash(f'Booking updated — notification + checklist sent to {new_cleaner}.', 'success')
+        elif newly_assigned:
+            flash(f'Booking updated — ⚠️ no email on file for {new_cleaner}, notify them manually.', 'warning')
         else:
             flash('Booking updated.', 'success')
 
-        db.session.commit()
         return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     active_staff = Staff.query.filter_by(is_active=True).order_by(Staff.name).all()
