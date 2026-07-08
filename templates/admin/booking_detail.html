@@ -185,7 +185,54 @@
 
     <!-- Balance Collection Card -->
     <div class="card" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Balance Collection</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">💳 Payment</h2>
+
+      {% if booking.paid_at %}
+      <div style="background:#d1fae5;color:#065f46;padding:12px 14px;border-radius:9px;font-weight:700;margin-bottom:6px">
+        ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % (booking.price or 0) }}
+      </div>
+      <p style="font-size:0.8rem;color:#9a95ad">Paid {{ booking.paid_at.strftime('%b %-d, %Y') }}.</p>
+      {% else %}
+      <div class="detail-row"><span class="dl">Amount due</span><span class="dv" style="font-size:1.2rem">${{ '%.2f' % due }}</span></div>
+
+      <!-- Take payment on-site -->
+      <a href="{{ pay_url }}" target="_blank" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px">💳 Take Payment (open card page)</a>
+
+      <p style="font-size:0.8rem;color:#9a95ad;margin:12px 0 6px;text-align:center">Or have the customer scan this with their phone:</p>
+      <div style="text-align:center">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=170x170&data={{ pay_url | urlencode }}"
+             alt="Payment QR code" style="border:1px solid var(--border);border-radius:10px;padding:6px;background:#fff" width="170" height="170" />
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <input type="text" readonly value="{{ pay_url }}" onclick="this.select()"
+               style="flex:1;font-size:0.72rem;padding:8px 10px;border:1px solid var(--border);border-radius:8px;color:#5f5878;background:#faf9fd">
+        <button type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
+                class="btn btn-outline" style="padding:6px 12px;font-size:0.75rem;flex-shrink:0">Copy</button>
+      </div>
+
+      <form method="POST" action="{{ url_for('bookings.send_payment_link_route', booking_id=booking.id) }}" style="margin-top:10px">
+        <input type="hidden" name="kind" value="full">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📩 Email + text this payment link</button>
+      </form>
+
+      <!-- Mark as paid manually (cash / Zelle / etc.) -->
+      <form method="POST" action="{{ url_for('bookings.mark_paid_route', booking_id=booking.id) }}"
+            style="display:flex;gap:8px;margin-top:10px"
+            onsubmit="return confirm('Mark this booking as paid in full?')">
+        <select name="method" style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
+          <option value="cash">Cash</option>
+          <option value="zelle">Zelle</option>
+          <option value="venmo">Venmo</option>
+          <option value="other">Other</option>
+        </select>
+        <button type="submit" class="btn btn-outline" style="flex-shrink:0">✓ Mark paid</button>
+      </form>
+      {% endif %}
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Balance Collection <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.78rem">(saved-card auto-charge)</span></h2>
       <div class="detail-row"><span class="dl">Total Price</span><span class="dv">${{ '%.2f' % (booking.price or 0) }}</span></div>
       <div class="detail-row"><span class="dl">Deposit Paid</span><span class="dv">$50.00 {% if booking.deposit_paid %}<span style="color:#065f46">✓</span>{% endif %}</span></div>
       <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:#1f1333">${{ '%.2f' % (booking.balance_due or 0) }}</span></div>

@@ -87,16 +87,21 @@ def new():
         db.session.add(b)
         db.session.commit()
 
-        # Confirm to the customer (email + text), unless she unchecked it.
-        confirm_note = ''
-        if request.form.get('notify_customer') and (b.email or b.phone):
-            try:
+        # Payment: send a deposit/full link now, else just a booking confirmation.
+        pay_option = request.form.get('payment_option', 'none')
+        extra = ''
+        try:
+            if pay_option in ('deposit', 'full') and (b.email or b.phone):
+                from blueprints.payments import send_payment_link
+                send_payment_link(b, kind=pay_option)
+                extra = ' Payment link sent 💳'
+            elif request.form.get('notify_customer') and (b.email or b.phone):
                 _send_booking_confirmation(b)
-                confirm_note = ' Customer confirmation sent 📩'
-            except Exception:
-                confirm_note = ' (⚠️ couldn’t send the customer confirmation)'
+                extra = ' Customer confirmation sent 📩'
+        except Exception:
+            extra = ' (⚠️ a customer message failed to send)'
 
-        flash(f'Booking created ✅ — now assign a cleaner below to text + email them the job.{confirm_note}', 'success')
+        flash(f'Booking created ✅ — now assign a cleaner below to text + email them the job.{extra}', 'success')
         return redirect(url_for('bookings.detail', booking_id=b.id))
 
     from pricing import FREQUENCY_LABELS as _FREQ
@@ -214,7 +219,40 @@ def detail(booking_id):
         return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     active_staff = Staff.query.filter_by(is_active=True).order_by(Staff.name).all()
-    return render_template('admin/booking_detail.html', booking=booking, staff=active_staff)
+    from blueprints.payments import payment_link_url, amount_due
+    pay_url = payment_link_url(booking, 'full')          # ensures pay_token exists
+    return render_template('admin/booking_detail.html', booking=booking, staff=active_staff,
+                           pay_url=pay_url, due=amount_due(booking))
+
+
+@bookings_bp.route('/<int:booking_id>/send-payment-link', methods=['POST'])
+@login_required
+def send_payment_link_route(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    kind = request.form.get('kind', 'full')
+    from blueprints.payments import send_payment_link
+    if not (booking.email or booking.phone):
+        flash('This booking has no email or phone to send a link to.', 'warning')
+    else:
+        ok = send_payment_link(booking, kind=kind)
+        flash('Payment link sent 💳' if ok else 'Could not send the link — check email/phone.',
+              'success' if ok else 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/mark-paid', methods=['POST'])
+@login_required
+def mark_paid_route(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    method = request.form.get('method', 'cash')
+    from blueprints.payments import mark_paid
+    try:
+        mark_paid(booking, method=method)
+        flash(f'Marked as paid ✅ ({method}).', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Could not mark as paid.', 'error')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
 @bookings_bp.route('/_fixdb')

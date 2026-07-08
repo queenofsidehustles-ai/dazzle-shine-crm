@@ -60,6 +60,10 @@ class Booking(db.Model):
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
     balance_due = db.Column(db.Float)
     balance_collected = db.Column(db.Boolean, default=False)
+    pay_token = db.Column(db.String(64))       # unique link for paying the full amount (invoice / on-site)
+    paid_at = db.Column(db.DateTime)           # when paid in full (card or manual)
+    paid_method = db.Column(db.String(20))     # card, cash, zelle, venmo, other
+    invoice_sent_at = db.Column(db.DateTime)   # morning-of invoice sent (one per day guard)
 
     # Lead fee — advertising cost baked into the customer price but EXCLUDED
     # from the contractor's commission (invisible to the customer).

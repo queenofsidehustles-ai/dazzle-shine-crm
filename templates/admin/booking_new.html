@@ -125,9 +125,23 @@
       <textarea name="notes" rows="2"></textarea>
     </div>
 
+    <hr style="border:none;border-top:1px solid #efecf6;margin:18px 0">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px">💳 Payment</h2>
+    <div class="form-group" style="margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500">
+        <input type="radio" name="payment_option" value="none" checked style="width:auto"> No prepayment — collect later (invoice auto-sends the morning of the job)
+      </label>
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500;margin-top:8px">
+        <input type="radio" name="payment_option" value="deposit" style="width:auto"> Send a $50 deposit link now
+      </label>
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500;margin-top:8px">
+        <input type="radio" name="payment_option" value="full" style="width:auto"> Send a full-payment link now
+      </label>
+    </div>
+
     <label style="display:flex;align-items:center;gap:9px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin:6px 0 14px;cursor:pointer;font-weight:600;color:#166534">
       <input type="checkbox" name="notify_customer" value="1" checked style="width:auto">
-      📩 Send the customer a confirmation email + text
+      📩 Send a booking confirmation (used when "No prepayment" is selected)
     </label>
 
     <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:6px">✅ Create Booking</button>

@@ -74,7 +74,7 @@ def run_lifecycle_emails():
     now = datetime.utcnow()
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
          'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
-         'onboarding_reminder': 0, 'schedule_reminder': 0}
+         'onboarding_reminder': 0, 'schedule_reminder': 0, 'invoice': 0}
 
     # ── A4 — final lead follow-up (~5 days after the last-chance drip) ──
     for lead in Lead.query.filter(Lead.drip_step == 3, Lead.status == 'new').all():
@@ -97,6 +97,21 @@ def run_lifecycle_emails():
         _send_transactional('booking_morning_of', b.email, b.name, {})
         c['morning_of'] += 1
         b.morning_note_at = now
+        db.session.commit()
+
+    # ── Morning-of INVOICE — unpaid jobs today with no saved card get a pay link ──
+    from blueprints.payments import send_payment_link
+    for b in Booking.query.filter(Booking.status.in_(['pending', 'confirmed']),
+                                  Booking.preferred_date == today,
+                                  Booking.paid_at.is_(None),
+                                  Booking.stripe_payment_method_id.is_(None),
+                                  Booking.invoice_sent_at.is_(None)).all():
+        try:
+            send_payment_link(b, kind='full')
+            c['invoice'] += 1
+        except Exception:
+            pass
+        b.invoice_sent_at = now
         db.session.commit()
 
     # ── C3 — review nudge (rating request 3+ days old, still unrated) ──
