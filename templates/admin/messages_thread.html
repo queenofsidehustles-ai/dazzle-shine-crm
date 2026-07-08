@@ -55,8 +55,10 @@
 
   <!-- Reply box -->
   <form method="POST" action="{{ url_for('messages.send', phone=phone) }}" style="display:flex;gap:8px;align-items:flex-end;border-top:1px solid #efecf6;padding-top:12px">
-    <textarea name="body" rows="2" required placeholder="Type a text…"
+    <textarea id="reply-body" name="body" rows="2" required placeholder="Type or tap 🎤 to talk…"
               style="flex:1;border:1px solid #d8d3e6;border-radius:12px;padding:10px 12px;font-family:inherit;font-size:0.92rem;resize:none"></textarea>
+    <button type="button" id="mic-btn" title="Speak your message"
+            style="background:#f0eef6;border:1px solid #d8d3e6;border-radius:12px;width:44px;height:44px;font-size:1.2rem;cursor:pointer;flex-shrink:0">🎤</button>
     <button type="submit" class="btn btn-primary" style="padding:10px 18px;white-space:nowrap">Send ➤</button>
   </form>
 </div>
@@ -65,5 +67,33 @@
   // Jump to the latest message on load.
   var t = document.getElementById('thread');
   if (t) t.scrollTop = t.scrollHeight;
+
+  // 🎤 Voice-to-text (speak your message). Uses the browser's built-in speech
+  // recognition — no keys, no cost. Hidden if the browser doesn't support it.
+  (function () {
+    const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const micBtn = document.getElementById('mic-btn');
+    const ta = document.getElementById('reply-body');
+    if (!Rec || !micBtn) { if (micBtn) micBtn.style.display = 'none'; return; }
+    const rec = new Rec();
+    rec.lang = 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+    let listening = false, base = '';
+    micBtn.addEventListener('click', () => {
+      if (listening) { rec.stop(); return; }
+      base = ta.value ? ta.value.replace(/\s+$/, '') + ' ' : '';
+      try { rec.start(); } catch (e) {}
+    });
+    rec.onstart = () => { listening = true; micBtn.textContent = '🔴'; micBtn.style.background = '#fee2e2'; micBtn.title = 'Listening… tap to stop'; };
+    const reset = () => { listening = false; micBtn.textContent = '🎤'; micBtn.style.background = '#f0eef6'; micBtn.title = 'Speak your message'; };
+    rec.onend = reset;
+    rec.onerror = reset;
+    rec.onresult = (e) => {
+      let txt = '';
+      for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+      ta.value = base + txt;
+    };
+  })();
 </script>
 {% endblock %}
