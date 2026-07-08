@@ -769,6 +769,33 @@ def my_day(token):
                            today=today.isoformat(), biz=biz)
 
 
+@contractors_bp.route('/sample-day')
+def sample_day():
+    """A demo 'My Day' with one made-up job — for showing new hires the layout."""
+    class _FakeStaff:
+        name = 'Maria'
+        def calc_pay(self, job_price=0, hours_worked=0):
+            return round((job_price or 0) * 0.5, 2)
+
+    class _FakeJob:
+        job_checklists = []
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+        @property
+        def service_label(self):
+            return 'Standard House Cleaning'
+
+    today = date.today()
+    job = _FakeJob(preferred_time='10:00 AM', name='The Johnson Family', bedrooms='3',
+                   bathrooms='2', address='123 Palm Ave', city='Orlando', zip_code='32801',
+                   price=180, hours_worked=0,
+                   access_notes='Gate code 1234 · key under the blue mat · friendly dog named Max 🐶')
+    days = {today.isoformat(): [job]}
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    return render_template('public/my_day.html', s=_FakeStaff(), days=days,
+                           today=today.isoformat(), biz=biz)
+
+
 @contractors_bp.route('/onboarding/<token>/guide')
 def onboarding_guide(token):
     """Public training & supply guide the contractor reviews during onboarding."""

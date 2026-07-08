@@ -603,6 +603,14 @@ class EmailOptOut(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class MessageTemplate(db.Model):
+    """Reusable text-message templates with {placeholders} for the inbox."""
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(120), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class Message(db.Model):
     """One text message in a two-way conversation with a cleaner or applicant.
     Threads are grouped by `phone` (last-10 digits). direction 'in' = they

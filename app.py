@@ -91,8 +91,37 @@ def create_app():
         _seed_email_templates()
         _apply_template_patches()
         _seed_pricing_defaults()
+        _seed_message_templates()
 
     return app
+
+
+def _seed_message_templates():
+    """Seed the reusable text-message templates once (idempotent by title)."""
+    from models import MessageTemplate, BusinessSetting
+    if not BusinessSetting.get('owner_name'):
+        BusinessSetting.set('owner_name', 'Monica')
+        db.session.commit()
+    defaults = [
+        ('Personal Welcome',
+         "Hi {name} 💛 This is {owner}, the owner of {business}. I just had to reach out "
+         "personally to say how genuinely happy I am to have you with us! 🎉 I know starting "
+         "somewhere new can feel like a lot, so hear this straight from me: you're never on "
+         "your own here. I'm always just a text away — any question, big or small, anytime. "
+         "So glad you're here. Welcome to the family! — {owner}"),
+        ('Welcome + Start Date + Sample',
+         "Welcome to the {business} family, {name}! 🎉 We are SO excited to have you on the "
+         "team 💛 Your first day is set for {start_date} — just reply “yes” to confirm "
+         "that works and we'll get everything ready for you. Here's a little sneak peek of what "
+         "your daily assignments will look like, so you'll always know exactly where to go and "
+         "what to do: {sample_link} Everything — the address, checklist, directions, and how to "
+         "get in — will be right there in one spot. And remember, I'm always here if you need "
+         "anything at all. Can't wait to work with you! — {owner}"),
+    ]
+    for title, body in defaults:
+        if not MessageTemplate.query.filter_by(title=title).first():
+            db.session.add(MessageTemplate(title=title, body=body))
+    db.session.commit()
 
 
 def _apply_template_patches():

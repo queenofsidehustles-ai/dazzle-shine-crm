@@ -4,10 +4,11 @@ come back via the /messages/incoming webhook and land in the same thread.
 The owner is pinged on her personal cell for every inbound message."""
 from datetime import datetime
 from flask import (Blueprint, render_template, request, redirect, url_for,
-                   flash, Response)
+                   flash, Response, jsonify)
 from auth import login_required
 from extensions import db
-from models import Message, Staff, ContractorApplication, BusinessSetting
+from models import (Message, Staff, ContractorApplication, BusinessSetting,
+                    MessageTemplate)
 from notifications import send_sms
 from translate import translate
 
@@ -62,6 +63,71 @@ def thread_lang(phone10):
 def set_thread_lang(phone10, lang):
     BusinessSetting.set(f'lang:{phone10}', lang)
     db.session.commit()
+
+
+def fill_placeholders(body, phone10, contact):
+    """Swap {name}, {owner}, {business}, {myday_link}, {sample_link}, {start_date}
+    with real values for this contact."""
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    owner = BusinessSetting.get('owner_name', 'Monica')
+    full = contact.get('name') or ''
+    first = full.split()[0] if full else 'there'
+    sample = f"{CRM_BASE}/contractors/sample-day"
+    myday = sample
+    start = '[your start date]'
+    if contact.get('staff_id'):
+        s = Staff.query.get(contact['staff_id'])
+        if s:
+            if getattr(s, 'agreement_token', None):
+                myday = f"{CRM_BASE}/contractors/my-day/{s.agreement_token}"
+            if getattr(s, 'roster_start_date', None):
+                start = s.roster_start_date
+    return (body.replace('{name}', first).replace('{owner}', owner)
+                .replace('{business}', biz).replace('{myday_link}', myday)
+                .replace('{sample_link}', sample).replace('{start_date}', start))
+
+
+# ── Insert a template into the reply box (placeholders auto-filled) ─────────
+@messages_bp.route('/thread/<phone>/fill')
+@login_required
+def fill_template(phone):
+    phone10 = norm_phone(phone)
+    tpl = MessageTemplate.query.get_or_404(request.args.get('id', type=int))
+    contact = resolve_contact(phone10)
+    return jsonify({'body': fill_placeholders(tpl.body, phone10, contact)})
+
+
+# ── Manage reusable templates ───────────────────────────────────────────────
+@messages_bp.route('/templates', methods=['GET', 'POST'])
+@login_required
+def templates():
+    if request.method == 'POST':
+        title = (request.form.get('title') or '').strip()
+        body = (request.form.get('body') or '').strip()
+        tid = request.form.get('id', type=int)
+        if title and body:
+            if tid:
+                t = MessageTemplate.query.get(tid)
+                if t:
+                    t.title, t.body = title, body
+            else:
+                db.session.add(MessageTemplate(title=title, body=body))
+            db.session.commit()
+            flash('Template saved.', 'success')
+        return redirect(url_for('messages.templates'))
+    return render_template('admin/messages_templates.html',
+                           templates=MessageTemplate.query.order_by(MessageTemplate.id).all())
+
+
+@messages_bp.route('/templates/<int:tid>/delete', methods=['POST'])
+@login_required
+def delete_template(tid):
+    t = MessageTemplate.query.get(tid)
+    if t:
+        db.session.delete(t)
+        db.session.commit()
+        flash('Template deleted.', 'success')
+    return redirect(url_for('messages.templates'))
 
 
 def deliver(phone10, body_en, contact):
@@ -127,7 +193,8 @@ def thread(phone):
         app_rec = ContractorApplication.query.get(contact['application_id'])
     return render_template('admin/messages_thread.html', msgs=msgs, phone=phone10,
                            pretty=pretty_phone(phone10), name=name,
-                           contact=contact, app_rec=app_rec, lang=thread_lang(phone10))
+                           contact=contact, app_rec=app_rec, lang=thread_lang(phone10),
+                           templates=MessageTemplate.query.order_by(MessageTemplate.id).all())
 
 
 # ── Toggle a conversation between English and Spanish auto-translation ───────

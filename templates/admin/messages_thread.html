@@ -53,6 +53,18 @@
   </form>
   {% endif %}
 
+  <!-- Template picker -->
+  {% if templates %}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px;align-items:center">
+    <span style="font-size:0.75rem;color:#9a95ad;font-weight:600">Quick templates:</span>
+    {% for t in templates %}
+    <button type="button" class="tpl-chip" data-id="{{ t.id }}"
+            style="background:#f0eef6;border:1px solid #d8d3e6;border-radius:999px;padding:5px 12px;font-size:0.78rem;cursor:pointer">{{ t.title }}</button>
+    {% endfor %}
+    <a href="{{ url_for('messages.templates') }}" style="font-size:0.75rem;color:#6b46c1;text-decoration:none;margin-left:auto">✏️ Manage</a>
+  </div>
+  {% endif %}
+
   <!-- Reply box -->
   <form method="POST" action="{{ url_for('messages.send', phone=phone) }}" style="display:flex;gap:8px;align-items:flex-end;border-top:1px solid #efecf6;padding-top:12px">
     <textarea id="reply-body" name="body" rows="2" required placeholder="Type or tap 🎤 to talk…"
@@ -94,6 +106,23 @@
       for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
       ta.value = base + txt;
     };
+  })();
+
+  // Quick templates → fill the reply box (placeholders auto-filled server-side)
+  (function () {
+    const ta = document.getElementById('reply-body');
+    document.querySelectorAll('.tpl-chip').forEach(chip => {
+      chip.addEventListener('click', async () => {
+        chip.disabled = true;
+        try {
+          const res = await fetch('{{ url_for("messages.fill_template", phone=phone) }}?id=' + chip.dataset.id);
+          const d = await res.json();
+          ta.value = d.body || '';
+          ta.focus();
+        } catch (e) {}
+        chip.disabled = false;
+      });
+    });
   })();
 </script>
 {% endblock %}

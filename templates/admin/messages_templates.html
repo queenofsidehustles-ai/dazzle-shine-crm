@@ -1,0 +1,60 @@
+{% extends "base_admin.html" %}
+{% block title %}Message Templates — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Message Templates{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:14px">
+  <a href="{{ url_for('messages.inbox') }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem">← Back to Messages</a>
+</div>
+
+<div class="card" style="margin-bottom:18px;background:#f0f7ff;border-color:#bcd7f5">
+  <strong style="color:#2b6cb0">Auto-fill placeholders</strong>
+  <p style="font-size:0.88rem;color:#5f5878;margin-top:6px">Type any of these in a template and they fill in automatically when you use it in a chat:</p>
+  <p style="font-size:0.84rem;color:#1f1333;margin-top:6px;line-height:1.9">
+    <code>{name}</code> their first name ·
+    <code>{owner}</code> your name ·
+    <code>{business}</code> your business name ·
+    <code>{start_date}</code> their start date ·
+    <code>{myday_link}</code> their personal My Day link ·
+    <code>{sample_link}</code> the sample assignment page
+  </p>
+</div>
+
+{% for t in templates %}
+<div class="card" style="margin-bottom:14px">
+  <form method="POST" action="{{ url_for('messages.templates') }}">
+    <input type="hidden" name="id" value="{{ t.id }}">
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" name="title" value="{{ t.title }}" required>
+    </div>
+    <div class="form-group">
+      <label>Message</label>
+      <textarea name="body" rows="5" required>{{ t.body }}</textarea>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="submit" class="btn btn-gold">Save</button>
+    </div>
+  </form>
+  <form method="POST" action="{{ url_for('messages.delete_template', tid=t.id) }}"
+        onsubmit="return confirm('Delete this template?')" style="margin-top:8px">
+    <button type="submit" class="btn btn-outline" style="color:#c53030;border-color:#fed7d7">🗑 Delete</button>
+  </form>
+</div>
+{% endfor %}
+
+<div class="card">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">➕ New template</h2>
+  <form method="POST" action="{{ url_for('messages.templates') }}">
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" name="title" placeholder="e.g. First-day reminder" required>
+    </div>
+    <div class="form-group">
+      <label>Message</label>
+      <textarea name="body" rows="5" placeholder="Hi {name}, ..." required></textarea>
+    </div>
+    <button type="submit" class="btn btn-gold">Add template</button>
+  </form>
+</div>
+{% endblock %}
