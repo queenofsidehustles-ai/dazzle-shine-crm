@@ -7,8 +7,14 @@
     <h1>Interview Review</h1>
     <div style="font-size:0.85rem;color:var(--softer);margin-top:2px">{{ app.name }}</div>
   </div>
-  <a href="{{ url_for('interviews.admin_interviews') }}"
-     style="color:var(--muted);font-size:0.88rem;text-decoration:none">← Back to Interviews</a>
+  <div style="display:flex;gap:10px;align-items:center">
+    {% if app.phone %}
+    <a href="{{ url_for('messages.thread', phone=app.phone, name=app.name) }}"
+       class="btn btn-primary" style="padding:7px 14px;font-size:0.85rem">💬 Message</a>
+    {% endif %}
+    <a href="{{ url_for('interviews.admin_interviews') }}"
+       style="color:var(--muted);font-size:0.88rem;text-decoration:none">← Back to Interviews</a>
+  </div>
 </div>
 
 <div class="content">

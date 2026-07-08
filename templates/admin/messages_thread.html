@@ -1,0 +1,49 @@
+{% extends "base_admin.html" %}
+{% block title %}{{ name }} — Messages{% endblock %}
+{% block page_title %}💬 {{ name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:12px">
+  <a href="{{ url_for('messages.inbox') }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem">← All messages</a>
+  <span style="color:#b3adc4;font-size:0.85rem;margin-left:8px">{{ pretty }}</span>
+  {% if contact.staff_id %}
+  <a href="{{ url_for('contractors.staff_detail', staff_id=contact.staff_id) }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem;margin-left:10px">View team profile →</a>
+  {% elif contact.application_id %}
+  <a href="{{ url_for('interviews.review_interview', app_id=contact.application_id) }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem;margin-left:10px">View application →</a>
+  {% endif %}
+</div>
+
+<div class="card" style="padding:16px">
+  <!-- Thread -->
+  <div id="thread" style="display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow-y:auto;padding:6px 2px 12px">
+    {% for m in msgs %}
+      <div style="align-self:{{ 'flex-end' if m.direction == 'out' else 'flex-start' }};max-width:78%">
+        <div style="background:{{ '#6b46c1' if m.direction == 'out' else '#f0eef6' }};color:{{ '#fff' if m.direction == 'out' else '#1f1333' }};padding:9px 13px;border-radius:14px;font-size:0.92rem;line-height:1.35;white-space:pre-wrap;word-break:break-word">{{ m.body }}</div>
+        <div style="font-size:0.68rem;color:#b3adc4;margin-top:2px;text-align:{{ 'right' if m.direction == 'out' else 'left' }}">{{ m.created_at.strftime('%b %-d, %-I:%M %p') }}</div>
+      </div>
+    {% else %}
+      <p style="color:#9a95ad;text-align:center;padding:20px 0;font-size:0.9rem">No messages yet — say hello 👋</p>
+    {% endfor %}
+  </div>
+
+  <!-- Quick actions -->
+  {% if app_rec %}
+  <form method="POST" action="{{ url_for('messages.request_bgcheck', phone=phone) }}" style="margin:6px 0 10px">
+    <button type="submit" class="btn btn-outline" style="font-size:0.8rem;padding:7px 12px">🔄 Request background-check re-upload</button>
+  </form>
+  {% endif %}
+
+  <!-- Reply box -->
+  <form method="POST" action="{{ url_for('messages.send', phone=phone) }}" style="display:flex;gap:8px;align-items:flex-end;border-top:1px solid #efecf6;padding-top:12px">
+    <textarea name="body" rows="2" required placeholder="Type a text…"
+              style="flex:1;border:1px solid #d8d3e6;border-radius:12px;padding:10px 12px;font-family:inherit;font-size:0.92rem;resize:none"></textarea>
+    <button type="submit" class="btn btn-primary" style="padding:10px 18px;white-space:nowrap">Send ➤</button>
+  </form>
+</div>
+
+<script>
+  // Jump to the latest message on load.
+  var t = document.getElementById('thread');
+  if (t) t.scrollTop = t.scrollHeight;
+</script>
+{% endblock %}

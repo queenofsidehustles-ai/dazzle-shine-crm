@@ -86,6 +86,12 @@
   <!-- Right: Onboarding + Jobs -->
   <div style="display:flex;flex-direction:column;gap:18px">
 
+    <!-- Message this team member -->
+    {% if s.phone %}
+    <a href="{{ url_for('messages.thread', phone=s.phone, name=s.name) }}"
+       class="btn btn-primary" style="text-align:center">💬 Message {{ s.name.split()[0] }}</a>
+    {% endif %}
+
     <!-- My Day link (share with the cleaner) -->
     {% if s.agreement_token %}
     <div class="card" style="background:#f0f7ff;border-color:#bcd7f5">

@@ -593,3 +593,19 @@ class EmailOptOut(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Message(db.Model):
+    """One text message in a two-way conversation with a cleaner or applicant.
+    Threads are grouped by `phone` (last-10 digits). direction 'in' = they
+    texted us, 'out' = we texted them."""
+    id = db.Column(db.Integer, primary_key=True)
+    phone = db.Column(db.String(20), index=True)         # last-10 digits — the thread key
+    direction = db.Column(db.String(3))                  # 'in' or 'out'
+    body = db.Column(db.Text)
+    contact_name = db.Column(db.String(120))             # cached display name
+    staff_id = db.Column(db.Integer)                     # optional link to Staff
+    application_id = db.Column(db.Integer)               # optional link to ContractorApplication
+    twilio_sid = db.Column(db.String(64))
+    read_at = db.Column(db.DateTime)                     # inbound: when the owner viewed it
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)

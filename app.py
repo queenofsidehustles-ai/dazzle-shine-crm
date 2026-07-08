@@ -19,6 +19,7 @@ from blueprints.email_templates import email_templates_bp
 from blueprints.interviews import interviews_bp
 from blueprints.pricing_public import pricing_public_bp
 from blueprints.deposit import deposit_bp
+from blueprints.messages import messages_bp
 
 
 def create_app():
@@ -65,6 +66,19 @@ def create_app():
     app.register_blueprint(interviews_bp)
     app.register_blueprint(pricing_public_bp)
     app.register_blueprint(deposit_bp)
+    app.register_blueprint(messages_bp)
+
+    # Unread-message count for the sidebar badge (all admin pages).
+    @app.context_processor
+    def inject_nav_unread():
+        try:
+            from flask import session
+            if not session.get('logged_in'):
+                return {}
+            from models import Message
+            return {'nav_unread': Message.query.filter_by(direction='in', read_at=None).count()}
+        except Exception:
+            return {}
 
     with app.app_context():
         db.create_all()
