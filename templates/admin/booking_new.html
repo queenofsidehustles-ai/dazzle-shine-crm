@@ -97,6 +97,22 @@
       <p style="font-size:0.78rem;color:#5f5878;margin-top:6px">Set to <strong>0</strong> for referrals or repeat customers that didn't cost you an ad.</p>
     </div>
 
+    <!-- LIVE RUNNING TOTAL -->
+    <div style="background:#1f1333;color:#fff;border-radius:12px;padding:16px 18px;margin:4px 0 4px">
+      <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:rgba(255,255,255,0.7);padding:2px 0">
+        <span>Cleaning price</span><span id="rt-cleaning">$0.00</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:rgba(255,255,255,0.7);padding:2px 0">
+        <span>Lead fee</span><span id="rt-fee">$0.00</span>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700">Customer pays</span>
+        <span id="rt-total" style="font-weight:700;font-size:1.5rem;color:#d3a84f">$0.00</span>
+      </div>
+      <p style="font-size:0.72rem;color:rgba(255,255,255,0.45);margin-top:6px">Cleaner is paid 50% of the cleaning price only — never the lead fee.</p>
+    </div>
+
     <hr style="border:none;border-top:1px solid #efecf6;margin:18px 0">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">📅 Schedule</h2>
     <div class="detail-grid" style="gap:14px">
@@ -148,4 +164,37 @@
     <p style="font-size:0.8rem;color:var(--softer);text-align:center;margin-top:10px">Next you'll be able to assign a cleaner, which texts + emails them the job.</p>
   </div>
 </form>
+
+<script>
+  (function () {
+    const form = document.querySelector('form');
+    const $ = n => form.querySelector('[name="' + n + '"]');
+    const money = v => '$' + (Number(v) || 0).toFixed(2);
+    let timer = null;
+
+    async function updateTotal() {
+      const params = new URLSearchParams({
+        service_type: $('service_type').value,
+        bedrooms: $('bedrooms').value,
+        bathrooms: $('bathrooms').value,
+        frequency: $('frequency').value,
+        cleaning_price: $('cleaning_price').value,
+        lead_fee: $('lead_fee').value,
+        extras: Array.from(form.querySelectorAll('[name="extras"]:checked')).map(e => e.value).join(','),
+      });
+      try {
+        const res = await fetch('{{ url_for("bookings.price_preview") }}?' + params.toString());
+        const d = await res.json();
+        document.getElementById('rt-cleaning').textContent = money(d.cleaning);
+        document.getElementById('rt-fee').textContent = money(d.lead_fee);
+        document.getElementById('rt-total').textContent = money(d.total);
+      } catch (e) { /* leave last value */ }
+    }
+    function debounced() { clearTimeout(timer); timer = setTimeout(updateTotal, 250); }
+
+    form.addEventListener('input', debounced);
+    form.addEventListener('change', updateTotal);
+    updateTotal();   // initial
+  })();
+</script>
 {% endblock %}

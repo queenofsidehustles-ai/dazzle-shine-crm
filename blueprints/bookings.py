@@ -1,6 +1,6 @@
 import calendar as cal_module
 from datetime import date, timedelta, datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from auth import login_required
 from models import Booking, Client, Staff
 from extensions import db
@@ -25,6 +25,41 @@ def index():
         'cancelled': Booking.query.filter_by(status='cancelled').count(),
     }
     return render_template('admin/bookings.html', bookings=bookings, counts=counts, status_filter=status_filter)
+
+
+@bookings_bp.route('/price-preview')
+@login_required
+def price_preview():
+    """Live running total for the New Booking form — mirrors new()'s save math exactly."""
+    from pricing import calculate_price, get_lead_fee
+    service = request.args.get('service_type', 'standard')
+    beds = request.args.get('bedrooms', '1')
+    baths = request.args.get('bathrooms', '1')
+    extras = request.args.get('extras', '')
+    freq = request.args.get('frequency', 'one_time')
+
+    manual = request.args.get('cleaning_price', '').strip().replace('$', '')
+    cleaning = None
+    if manual:
+        try:
+            cleaning = float(manual)
+        except ValueError:
+            cleaning = None
+    if cleaning is None:
+        try:
+            cleaning = calculate_price(service_type=service, bedrooms=beds,
+                                       bathrooms=baths, extras=extras, frequency=freq)
+        except Exception:
+            cleaning = 0.0
+
+    fee_raw = request.args.get('lead_fee', '').strip().replace('$', '')
+    try:
+        fee = float(fee_raw) if fee_raw != '' else float(get_lead_fee())
+    except ValueError:
+        fee = float(get_lead_fee())
+
+    return jsonify({'cleaning': round(cleaning or 0, 2), 'lead_fee': round(fee, 2),
+                    'total': round((cleaning or 0) + fee, 2)})
 
 
 @bookings_bp.route('/new', methods=['GET', 'POST'])
