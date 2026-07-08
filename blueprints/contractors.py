@@ -796,6 +796,28 @@ def sample_day():
                            today=today.isoformat(), biz=biz)
 
 
+@contractors_bp.route('/start-date/<token>', methods=['GET', 'POST'])
+def confirm_start_date(token):
+    """Public, token-gated page where a new hire picks/confirms their start date."""
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    if request.method == 'POST':
+        chosen = (request.form.get('start_date') or '').strip()
+        if chosen:
+            s.roster_start_date = chosen
+            db.session.commit()
+            phone = BusinessSetting.get('owner_alert_phone') or BusinessSetting.get('phone')
+            if phone:
+                try:
+                    send_sms(phone, f"📅 {s.name} confirmed their start date: {chosen}.")
+                except Exception:
+                    pass
+            return render_template('public/start_date.html', s=s, biz=biz,
+                                   saved=True, chosen=chosen, today=date.today().isoformat())
+    return render_template('public/start_date.html', s=s, biz=biz, saved=False,
+                           chosen=s.roster_start_date or '', today=date.today().isoformat())
+
+
 @contractors_bp.route('/onboarding/<token>/guide')
 def onboarding_guide(token):
     """Public training & supply guide the contractor reviews during onboarding."""

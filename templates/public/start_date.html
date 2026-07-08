@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Confirm Your Start Date — {{ biz }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Inter,sans-serif;background:#f6f5fb;color:#1f1333;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px}
+    .card{background:#fff;border:1px solid #e4dfef;border-radius:16px;max-width:440px;width:100%;padding:34px 28px;text-align:center;box-shadow:0 8px 40px rgba(15,7,40,0.09)}
+    .script{font-family:Allura,cursive;font-size:2rem;color:#d3a84f;display:block;line-height:1;margin-bottom:6px}
+    h1{font-size:1.3rem;margin:10px 0 6px}
+    p{color:#5f5878;line-height:1.6;font-size:0.95rem}
+    label{display:block;text-align:left;font-weight:600;font-size:0.85rem;color:#5f5878;margin:22px 0 6px}
+    input[type=date]{width:100%;padding:14px;border:1px solid #d8d3e6;border-radius:10px;font-size:1.05rem;font-family:inherit;color:#1f1333}
+    button{width:100%;background:linear-gradient(135deg,#f4d07a,#d3a84f);color:#1a1225;border:none;border-radius:999px;padding:15px;font-weight:700;font-size:1.05rem;cursor:pointer;margin-top:18px;font-family:inherit}
+    .check{font-size:3rem;margin-bottom:10px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="script">{{ biz }}</span>
+    {% if saved %}
+      <div class="check">🎉</div>
+      <h1>You're confirmed, {{ s.name.split()[0] }}!</h1>
+      <p>Your first day is set for <strong>{{ chosen }}</strong>. We're so excited to have you — we'll be in touch with everything you need. See you then! 💛</p>
+    {% else %}
+      <h1>Welcome, {{ s.name.split()[0] }}! 👋</h1>
+      <p>Let's lock in your first day. Pick the date you'd like to start — you can always text us if you need to change it.</p>
+      <form method="POST">
+        <label>Your start date</label>
+        <input type="date" name="start_date" required min="{{ today }}" value="{{ chosen }}">
+        <button type="submit">✅ Confirm my start date</button>
+      </form>
+    {% endif %}
+  </div>
+</body>
+</html>

@@ -102,6 +102,22 @@ def _seed_message_templates():
     if not BusinessSetting.get('owner_name'):
         BusinessSetting.set('owner_name', 'Monica')
         db.session.commit()
+    welcome_v1 = (
+        "Welcome to the {business} family, {name}! 🎉 We are SO excited to have you on the "
+        "team 💛 Your first day is set for {start_date} — just reply “yes” to confirm "
+        "that works and we'll get everything ready for you. Here's a little sneak peek of what "
+        "your daily assignments will look like, so you'll always know exactly where to go and "
+        "what to do: {sample_link} Everything — the address, checklist, directions, and how to "
+        "get in — will be right there in one spot. And remember, I'm always here if you need "
+        "anything at all. Can't wait to work with you! — {owner}")
+    welcome_v2 = (
+        "Welcome to the {business} family, {name}! 🎉 We are SO excited to have you on the "
+        "team 💛 Let's lock in your first day — just tap here to pick the start date that "
+        "works best for you: {start_link} And here's a little sneak peek of what your daily "
+        "assignments will look like, so you'll always know exactly where to go and what to do: "
+        "{sample_link} Everything — the address, checklist, directions, and how to get in — "
+        "will be right there in one spot. I'm always here if you need anything at all. Can't "
+        "wait to work with you! — {owner}")
     defaults = [
         ('Personal Welcome',
          "Hi {name} 💛 This is {owner}, the owner of {business}. I just had to reach out "
@@ -109,18 +125,15 @@ def _seed_message_templates():
          "somewhere new can feel like a lot, so hear this straight from me: you're never on "
          "your own here. I'm always just a text away — any question, big or small, anytime. "
          "So glad you're here. Welcome to the family! — {owner}"),
-        ('Welcome + Start Date + Sample',
-         "Welcome to the {business} family, {name}! 🎉 We are SO excited to have you on the "
-         "team 💛 Your first day is set for {start_date} — just reply “yes” to confirm "
-         "that works and we'll get everything ready for you. Here's a little sneak peek of what "
-         "your daily assignments will look like, so you'll always know exactly where to go and "
-         "what to do: {sample_link} Everything — the address, checklist, directions, and how to "
-         "get in — will be right there in one spot. And remember, I'm always here if you need "
-         "anything at all. Can't wait to work with you! — {owner}"),
+        ('Welcome + Start Date + Sample', welcome_v2),
     ]
     for title, body in defaults:
         if not MessageTemplate.query.filter_by(title=title).first():
             db.session.add(MessageTemplate(title=title, body=body))
+    # Auto-upgrade the un-customized welcome template to the start-date-link version.
+    w = MessageTemplate.query.filter_by(title='Welcome + Start Date + Sample').first()
+    if w and w.body.strip() == welcome_v1.strip():
+        w.body = welcome_v2
     db.session.commit()
 
 

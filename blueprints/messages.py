@@ -74,17 +74,23 @@ def fill_placeholders(body, phone10, contact):
     first = full.split()[0] if full else 'there'
     sample = f"{CRM_BASE}/contractors/sample-day"
     myday = sample
-    start = '[your start date]'
+    start = 'to be confirmed'
+    start_link = ''
     if contact.get('staff_id'):
         s = Staff.query.get(contact['staff_id'])
         if s:
-            if getattr(s, 'agreement_token', None):
-                myday = f"{CRM_BASE}/contractors/my-day/{s.agreement_token}"
+            if not getattr(s, 'agreement_token', None):
+                import secrets
+                s.agreement_token = secrets.token_urlsafe(32)
+                db.session.commit()
+            myday = f"{CRM_BASE}/contractors/my-day/{s.agreement_token}"
+            start_link = f"{CRM_BASE}/contractors/start-date/{s.agreement_token}"
             if getattr(s, 'roster_start_date', None):
                 start = s.roster_start_date
     return (body.replace('{name}', first).replace('{owner}', owner)
                 .replace('{business}', biz).replace('{myday_link}', myday)
-                .replace('{sample_link}', sample).replace('{start_date}', start))
+                .replace('{sample_link}', sample).replace('{start_link}', start_link)
+                .replace('{start_date}', start))
 
 
 # ── Insert a template into the reply box (placeholders auto-filled) ─────────
