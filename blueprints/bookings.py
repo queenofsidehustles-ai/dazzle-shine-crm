@@ -86,7 +86,17 @@ def new():
         )
         db.session.add(b)
         db.session.commit()
-        flash('Booking created ✅ — now assign a cleaner below to text + email them the job.', 'success')
+
+        # Confirm to the customer (email + text), unless she unchecked it.
+        confirm_note = ''
+        if request.form.get('notify_customer') and (b.email or b.phone):
+            try:
+                _send_booking_confirmation(b)
+                confirm_note = ' Customer confirmation sent 📩'
+            except Exception:
+                confirm_note = ' (⚠️ couldn’t send the customer confirmation)'
+
+        flash(f'Booking created ✅ — now assign a cleaner below to text + email them the job.{confirm_note}', 'success')
         return redirect(url_for('bookings.detail', booking_id=b.id))
 
     from pricing import FREQUENCY_LABELS as _FREQ
@@ -412,6 +422,48 @@ def _send_followup_email(booking):
   <p style="color:#9a95ad;font-size:13px">Dazzle &amp; Shine Maids · Orlando, FL</p>
 </div>""",
     )
+
+
+def _send_booking_confirmation(booking):
+    """Confirm a hand-created booking to the customer via email + text.
+    No deposit language — a simple 'you're booked' note. Best-effort."""
+    from notifications import send_email, send_sms
+    from models import BusinessSetting
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    first = (booking.name or 'there').split()[0]
+    date_text = booking.preferred_date or 'the scheduled date'
+    time_text = booking.preferred_time or ''
+    when = f"{date_text}{(' at ' + time_text) if time_text else ''}"
+    price_text = f"${booking.price:.2f}" if booking.price else ''
+
+    if booking.email:
+        addr = ', '.join([p for p in [booking.address, booking.city, booking.zip_code] if p])
+        send_email(
+            to_email=booking.email, to_name=booking.name,
+            subject=f"You're booked with {biz}! ✨",
+            html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">You're all set, {first}! ✨</h2>
+  <p>Thank you for booking with {biz}. Here are your details:</p>
+  <div style="background:#f6f5fb;border-radius:10px;padding:16px 18px;margin:16px 0">
+    <p style="margin:4px 0"><strong>Service:</strong> {booking.service_label}</p>
+    <p style="margin:4px 0"><strong>When:</strong> {when}</p>
+    {f'<p style="margin:4px 0"><strong>Address:</strong> {addr}</p>' if addr else ''}
+    {f'<p style="margin:4px 0"><strong>Total:</strong> {price_text}</p>' if price_text else ''}
+  </div>
+  <p>If anything changes or you have questions, just reply to this email or text us — we're happy to help.</p>
+  <p style="margin-top:18px">See you soon!<br><strong>{biz}</strong></p>
+</div>""",
+        )
+
+    if booking.phone:
+        msg = (f"Hi {first}! ✨ Your {biz} cleaning is booked for {when}."
+               + (f" Total {price_text}." if price_text else "")
+               + " Reply here with any questions. Reply STOP to opt out.")
+        try:
+            send_sms(booking.phone, msg)
+        except Exception:
+            pass
 
 
 def _create_next_recurring(booking):
