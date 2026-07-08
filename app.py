@@ -202,7 +202,7 @@ def _migrate_db():
         ('staff',   'language',                 "VARCHAR(5) DEFAULT 'en'"),
         ('contractor_application', 'language',   "VARCHAR(5) DEFAULT 'en'"),
         ('staff',   'pay_type',                 "VARCHAR(20) DEFAULT 'percent'"),
-        ('staff',   'pay_rate',                 'FLOAT DEFAULT 40'),
+        ('staff',   'pay_rate',                 'FLOAT DEFAULT 50'),
         ('staff',   'experience_level',         "VARCHAR(20) DEFAULT 'new'"),
         ('staff',   'emergency_contact_name',   'VARCHAR(100)'),
         ('staff',   'emergency_contact_phone',  'VARCHAR(20)'),
