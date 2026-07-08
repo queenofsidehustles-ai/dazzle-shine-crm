@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Available — {{ biz }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Inter,sans-serif;background:#f6f5fb;color:#1f1333;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+    .card{background:#fff;border:1px solid #e4dfef;border-radius:16px;max-width:440px;width:100%;padding:30px 26px;box-shadow:0 8px 40px rgba(15,7,40,0.09)}
+    .script{font-family:Allura,cursive;font-size:1.8rem;color:#d3a84f;display:block;text-align:center;line-height:1;margin-bottom:4px}
+    h1{font-size:1.3rem;text-align:center;margin:8px 0 16px}
+    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0eef6;font-size:0.95rem}
+    .row .k{color:#9a95ad}.row .v{font-weight:700;text-align:right}
+    .pay{background:#1f1333;border-radius:12px;padding:16px;text-align:center;margin:18px 0}
+    .pay .l{color:rgba(255,255,255,0.55);font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase}
+    .pay .a{color:#d3a84f;font-size:2.2rem;font-weight:800;line-height:1.1}
+    button{width:100%;border:none;border-radius:999px;padding:16px;font-weight:800;font-size:1.05rem;cursor:pointer;font-family:inherit}
+    .claim{background:linear-gradient(135deg,#34d399,#059669);color:#fff}
+    .release{background:#fff;border:1px solid #fecaca;color:#b91c1c;font-weight:700;margin-top:12px}
+    .banner{border-radius:10px;padding:14px 16px;text-align:center;font-weight:600;line-height:1.5}
+    .taken{background:#fef3c7;color:#92400e}
+    .clash{background:#fee2e2;color:#991b1b}
+    .good{background:#d1fae5;color:#065f46}
+    .big{font-size:2.6rem;text-align:center;margin-bottom:6px}
+    .muted{color:#9a95ad;font-size:0.85rem;text-align:center;margin-top:12px}
+    a.btnlink{display:block;text-align:center;background:#d3a84f;color:#1f1333;border-radius:999px;padding:14px;font-weight:800;text-decoration:none;margin-top:14px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="script">{{ biz }}</span>
+
+    {% if state == 'open' %}
+      <h1>New job available! 🧹</h1>
+      <div class="row"><span class="k">When</span><span class="v">{{ b.preferred_date or 'TBD' }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
+      <div class="row"><span class="k">Service</span><span class="v">{{ b.service_label }} · {{ b.bedrooms or '?' }}bd/{{ b.bathrooms or '?' }}ba</span></div>
+      <div class="row"><span class="k">Area</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
+      <div class="pay"><div class="l">You'd earn</div><div class="a">${{ '%.0f'|format(pay) }}</div></div>
+      {% if clash %}
+        <div class="banner clash">⚠️ {{ clash }}</div>
+      {% else %}
+        <form method="POST" action="{{ url_for('claims.claim_do', ctoken=b.claim_token, stoken=s.agreement_token) }}">
+          <button class="claim" type="submit">✋ Claim this job</button>
+        </form>
+        <p class="muted">First to claim gets it. The full address appears once it's yours.</p>
+      {% endif %}
+
+    {% elif state == 'mine' %}
+      <div class="big">🎉</div>
+      <h1>It's yours, {{ s.name.split()[0] }}!</h1>
+      <div class="banner good">You claimed this job. Here are the full details:</div>
+      <div class="row" style="margin-top:10px"><span class="k">When</span><span class="v">{{ b.preferred_date }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
+      <div class="row"><span class="k">Client</span><span class="v">{{ b.name }}</span></div>
+      <div class="row"><span class="k">Address</span><span class="v">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span></div>
+      <div class="pay"><div class="l">You'll earn</div><div class="a">${{ '%.0f'|format(pay) }}</div></div>
+      <a class="btnlink" href="{{ myday }}">📅 See it in My Day</a>
+      <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"
+            onsubmit="return confirm('Release this job back to the team? Someone else will be able to grab it.')">
+        <button class="release" type="submit">Can't make it? Release job</button>
+      </form>
+
+    {% elif state == 'clash' %}
+      <div class="big">😬</div>
+      <h1>Can't take this one</h1>
+      <div class="banner clash">{{ clash }}</div>
+      <p class="muted">This keeps your day from double-booking. Check back for other jobs!</p>
+
+    {% else %}
+      <div class="big">🙌</div>
+      <h1>This job's been taken</h1>
+      <div class="banner taken">Someone grabbed this one first — but more jobs come through all the time. Keep an eye on your texts!</div>
+    {% endif %}
+  </div>
+</body>
+</html>

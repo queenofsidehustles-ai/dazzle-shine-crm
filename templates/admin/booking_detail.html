@@ -130,6 +130,23 @@
       </form>
     </div>
 
+    <!-- Offer to the team (first to claim wins) -->
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">📣 Offer to the Team</h2>
+      {% if booking.open_for_claim %}
+      <div style="background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
+        ⏳ Open on the board — waiting for someone to claim it. {% if booking.broadcast_at %}Offered {{ booking.broadcast_at.strftime('%b %-d, %-I:%M %p') }}.{% endif %}
+      </div>
+      {% endif %}
+      <p style="font-size:0.85rem;color:#5f5878;margin:8px 0 12px">Text every available cleaner — the first to claim it gets the job (blocks anyone whose day would clash).</p>
+      <form method="POST" action="{{ url_for('bookings.broadcast', booking_id=booking.id) }}"
+            onsubmit="return confirm('Offer this job to the whole team? First to claim it gets it.')">
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">
+          {{ '🔁 Re-offer to the team' if booking.open_for_claim else '📣 Offer to the team' }}
+        </button>
+      </form>
+    </div>
+
     <!-- Work Order Card -->
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Work Order / Checklist</h2>

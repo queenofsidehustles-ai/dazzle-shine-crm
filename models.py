@@ -82,6 +82,9 @@ class Booking(db.Model):
     assigned_cleaner = db.Column(db.String(100))
     cleaner_notified_at = db.Column(db.DateTime)        # when job notification was last sent
     cleaner_response = db.Column(db.String(20))         # accepted, declined, None
+    open_for_claim = db.Column(db.Boolean, default=False)  # broadcast to team, first to claim wins
+    claim_token = db.Column(db.String(64))              # link token for the claim page
+    broadcast_at = db.Column(db.DateTime)               # when it was last offered to the team
     status = db.Column(db.String(20), default='pending')  # pending, confirmed, in_progress, completed, cancelled
     price = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

@@ -275,6 +275,16 @@ def send_payment_link_route(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+@bookings_bp.route('/<int:booking_id>/broadcast', methods=['POST'])
+@login_required
+def broadcast(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    from blueprints.claims import broadcast_job
+    n = broadcast_job(booking)
+    flash(f'📣 Offered to {n} cleaner(s) — first to claim it gets it.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
 @bookings_bp.route('/<int:booking_id>/mark-paid', methods=['POST'])
 @login_required
 def mark_paid_route(booking_id):

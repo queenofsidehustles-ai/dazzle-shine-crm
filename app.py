@@ -21,6 +21,7 @@ from blueprints.pricing_public import pricing_public_bp
 from blueprints.deposit import deposit_bp
 from blueprints.messages import messages_bp
 from blueprints.payments import payments_bp
+from blueprints.claims import claims_bp
 
 
 def create_app():
@@ -69,6 +70,7 @@ def create_app():
     app.register_blueprint(deposit_bp)
     app.register_blueprint(messages_bp)
     app.register_blueprint(payments_bp)
+    app.register_blueprint(claims_bp)
 
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor
@@ -194,6 +196,9 @@ def _migrate_db():
         ('booking', 'paid_method',              'VARCHAR(20)'),
         ('booking', 'invoice_sent_at',          'TIMESTAMP'),
         ('message', 'body_translated',          'TEXT'),
+        ('booking', 'open_for_claim',           'BOOLEAN DEFAULT FALSE'),
+        ('booking', 'claim_token',              'VARCHAR(64)'),
+        ('booking', 'broadcast_at',             'TIMESTAMP'),
         ('staff',   'language',                 "VARCHAR(5) DEFAULT 'en'"),
         ('contractor_application', 'language',   "VARCHAR(5) DEFAULT 'en'"),
         ('staff',   'pay_type',                 "VARCHAR(20) DEFAULT 'percent'"),

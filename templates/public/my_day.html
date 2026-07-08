@@ -58,6 +58,12 @@
           <a class="btn list" href="{{ url_for('workorders.view_checklist', token=jc.token) }}">📋 Job Checklist</a>
           {% endif %}
         </div>
+        {% if s.agreement_token and b.id %}
+        <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"
+              onsubmit="return confirm('Release this job back to the team? Someone else will be able to grab it.')" style="margin-top:8px">
+          <button type="submit" style="background:none;border:none;color:#b91c1c;font-size:0.8rem;font-weight:600;cursor:pointer;padding:0">Can't make it? Release job ↩️</button>
+        </form>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
