@@ -3,6 +3,9 @@
 {% block page_title %}Bookings{% endblock %}
 
 {% block content %}
+<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+  <a href="{{ url_for('bookings.new') }}" class="btn btn-gold">➕ New Booking</a>
+</div>
 <div class="filter-tabs">
   <a href="{{ url_for('bookings.index') }}" class="filter-tab {{ 'active' if not status_filter }}">All ({{ counts.all }})</a>
   <a href="{{ url_for('bookings.index', status='pending') }}" class="filter-tab {{ 'active' if status_filter == 'pending' }}">Pending ({{ counts.pending }})</a>

@@ -27,6 +27,64 @@ def index():
     return render_template('admin/bookings.html', bookings=bookings, counts=counts, status_filter=status_filter)
 
 
+@bookings_bp.route('/new', methods=['GET', 'POST'])
+@login_required
+def new():
+    """Create a booking by hand — for customers who book by phone/text/in person."""
+    from pricing import calculate_price, SERVICE_LABELS, EXTRAS
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        if not name:
+            flash('Customer name is required.', 'error')
+            return redirect(url_for('bookings.new'))
+        service_type = request.form.get('service_type', 'standard')
+        bedrooms = request.form.get('bedrooms', '1')
+        bathrooms = request.form.get('bathrooms', '1')
+        extras = ','.join(request.form.getlist('extras'))
+        frequency = request.form.get('frequency', 'one_time')
+
+        # Price: use the number she typed, else auto-calculate from the matrix.
+        price_raw = request.form.get('price', '').strip().replace('$', '')
+        price = None
+        if price_raw:
+            try:
+                price = float(price_raw)
+            except ValueError:
+                price = None
+        if price is None:
+            try:
+                price = calculate_price(service_type=service_type, bedrooms=bedrooms,
+                                        bathrooms=bathrooms, extras=extras, frequency=frequency)
+            except Exception:
+                price = None
+
+        b = Booking(
+            name=name,
+            email=(request.form.get('email', '').strip().lower() or None),
+            phone=request.form.get('phone', '').strip(),
+            service_type=service_type,
+            bedrooms=bedrooms, bathrooms=bathrooms, extras=extras,
+            frequency=frequency,
+            preferred_date=request.form.get('preferred_date', '').strip(),
+            preferred_time=request.form.get('preferred_time', '').strip(),
+            address=request.form.get('address', '').strip(),
+            city=request.form.get('city', '').strip(),
+            zip_code=request.form.get('zip_code', '').strip(),
+            notes=(request.form.get('notes', '').strip() or None),
+            access_notes=(request.form.get('access_notes', '').strip() or None),
+            status=request.form.get('status', 'confirmed'),
+            price=price,
+        )
+        db.session.add(b)
+        db.session.commit()
+        flash('Booking created ✅ — now assign a cleaner below to text + email them the job.', 'success')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    from pricing import FREQUENCY_LABELS as _FREQ
+    return render_template('admin/booking_new.html',
+                           service_labels=SERVICE_LABELS, extras=EXTRAS, frequency_labels=_FREQ)
+
+
 @bookings_bp.route('/calendar')
 @login_required
 def calendar():
