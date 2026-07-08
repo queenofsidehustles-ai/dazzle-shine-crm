@@ -194,6 +194,8 @@ def _migrate_db():
         ('booking', 'paid_method',              'VARCHAR(20)'),
         ('booking', 'invoice_sent_at',          'TIMESTAMP'),
         ('message', 'body_translated',          'TEXT'),
+        ('staff',   'language',                 "VARCHAR(5) DEFAULT 'en'"),
+        ('contractor_application', 'language',   "VARCHAR(5) DEFAULT 'en'"),
         ('staff',   'pay_type',                 "VARCHAR(20) DEFAULT 'percent'"),
         ('staff',   'pay_rate',                 'FLOAT DEFAULT 40'),
         ('staff',   'experience_level',         "VARCHAR(20) DEFAULT 'new'"),

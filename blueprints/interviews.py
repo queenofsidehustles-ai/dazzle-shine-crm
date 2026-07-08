@@ -208,6 +208,16 @@ def review_interview(app_id):
         app=app_rec, responses=responses, questions_en=QUESTIONS_EN)
 
 
+@interviews_bp.route('/admin/interviews/<int:app_id>/language', methods=['POST'])
+@login_required
+def set_app_language(app_id):
+    app_rec = ContractorApplication.query.get_or_404(app_id)
+    app_rec.language = 'es' if request.form.get('language') == 'es' else 'en'
+    db.session.commit()
+    flash(f"Marked as {'Spanish 🇪🇸' if app_rec.language=='es' else 'English 🇺🇸'} — carries over when hired.", 'success')
+    return redirect(url_for('interviews.review_interview', app_id=app_id))
+
+
 @interviews_bp.route('/admin/interviews/<int:app_id>/approve', methods=['POST'])
 @login_required
 def approve_interview(app_id):

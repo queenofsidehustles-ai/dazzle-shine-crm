@@ -26,8 +26,10 @@
         {{ s.name[0].upper() }}
       </div>
       <div>
-        <div style="font-weight:700;color:#1f1333">{{ s.name }}</div>
-        <div style="font-size:0.8rem;color:#9a95ad">{{ s.experience_level.title() if s.experience_level else 'Cleaner' }}</div>
+        <div style="font-weight:700;color:#1f1333">{{ s.name }}
+          {% if s.language == 'es' %}<span title="Spanish-speaking — texts auto-translate" style="font-size:0.85rem">🇪🇸</span>{% endif %}
+        </div>
+        <div style="font-size:0.8rem;color:#9a95ad">{{ s.experience_level.title() if s.experience_level else 'Cleaner' }}{% if s.language == 'es' %} · Spanish{% endif %}</div>
       </div>
       {% if not s.is_active %}
       <span class="status status-cancelled" style="margin-left:auto;font-size:0.72rem">Inactive</span>

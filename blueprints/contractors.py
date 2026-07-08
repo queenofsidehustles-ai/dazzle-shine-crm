@@ -572,6 +572,7 @@ def hire(app_id):
         has_supplies=a.has_supplies,
         worker_model=worker_model,
         color=default_color, is_active=True,
+        language=getattr(a, 'language', 'en') or 'en',
     )
     token = secrets.token_urlsafe(32)
     s.agreement_token = token
@@ -678,6 +679,7 @@ def accept_offer(token):
             has_transportation=a.has_transportation, has_supplies=a.has_supplies,
             worker_model=BusinessSetting.get('worker_model', 'contractor'),
             color='#7c3aed', is_active=True,
+            language=getattr(a, 'language', 'en') or 'en',
         )
         s.agreement_token = secrets.token_urlsafe(32)
         db.session.add(s)
@@ -943,6 +945,17 @@ def delete_staff(staff_id):
 def team():
     staff = Staff.query.order_by(Staff.is_active.desc(), Staff.name).all()
     return render_template('admin/team.html', staff=staff, exp_levels=EXP_LEVELS)
+
+
+@contractors_bp.route('/team/<int:staff_id>/language', methods=['POST'])
+@login_required
+def set_staff_language(staff_id):
+    s = Staff.query.get_or_404(staff_id)
+    lang = request.form.get('language', 'en')
+    s.language = 'es' if lang == 'es' else 'en'
+    db.session.commit()
+    flash(f"{s.name} set to {'Spanish 🇪🇸 — messages will auto-translate' if s.language=='es' else 'English 🇺🇸'}.", 'success')
+    return redirect(request.referrer or url_for('contractors.staff_detail', staff_id=staff_id))
 
 
 @contractors_bp.route('/team/<int:staff_id>', methods=['GET', 'POST'])

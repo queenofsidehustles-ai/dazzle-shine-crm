@@ -320,6 +320,7 @@ class ContractorApplication(db.Model):
     agrees_to_ic_terms = db.Column(db.Boolean, default=False)
     why_interested = db.Column(db.Text)
     source = db.Column(db.String(50), default='Website')  # Indeed, Facebook, Website, etc.
+    language = db.Column(db.String(5), default='en')      # preferred language: 'en' or 'es'
     status = db.Column(db.String(20), default='new')  # new, reviewing, phone_screen, bg_check, hired, rejected
     admin_notes = db.Column(db.Text)
     # Hiring pipeline tracking
@@ -438,6 +439,7 @@ class Staff(db.Model):
     pay_schedule = db.Column(db.String(10), default='daily')  # daily (per job) or weekly
     insurance_reminder_sent_at = db.Column(db.DateTime)       # friendly "get insurance" nudge after a few jobs
     roster_start_date = db.Column(db.String(20))              # date they're ready to start receiving jobs (YYYY-MM-DD)
+    language = db.Column(db.String(5), default='en')          # preferred language: 'en' or 'es' (drives message translation)
     onboarding_reminder_at = db.Column(db.DateTime)           # last "finish your onboarding" nudge
     onboarding_reminder_count = db.Column(db.Integer, default=0)
     schedule_reminder_date = db.Column(db.String(20))         # last date we sent a day-before schedule reminder

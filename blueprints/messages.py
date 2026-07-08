@@ -56,8 +56,21 @@ def record_outbound(phone10, body, contact_name=None, twilio_sid=None,
 
 
 def thread_lang(phone10):
-    """Per-conversation language for the cleaner. 'en' (default) or 'es'."""
-    return BusinessSetting.get(f'lang:{phone10}') or 'en'
+    """Language for the conversation. An explicit per-thread override wins;
+    otherwise it follows the contact's marked language (Staff/applicant)."""
+    override = BusinessSetting.get(f'lang:{phone10}')
+    if override:
+        return override
+    contact = resolve_contact(phone10)
+    if contact.get('staff_id'):
+        s = Staff.query.get(contact['staff_id'])
+        if s and getattr(s, 'language', None):
+            return s.language
+    if contact.get('application_id'):
+        a = ContractorApplication.query.get(contact['application_id'])
+        if a and getattr(a, 'language', None):
+            return a.language
+    return 'en'
 
 
 def set_thread_lang(phone10, lang):

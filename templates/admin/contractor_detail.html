@@ -92,6 +92,16 @@
        class="btn btn-primary" style="text-align:center">💬 Message {{ s.name.split()[0] }}</a>
     {% endif %}
 
+    <!-- Preferred language (drives message auto-translation) -->
+    <form method="POST" action="{{ url_for('contractors.set_staff_language', staff_id=s.id) }}"
+          style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #e4dfef;border-radius:10px;padding:11px 13px">
+      <span style="font-size:0.85rem;font-weight:600;color:#5f5878;white-space:nowrap">🗣️ Speaks:</span>
+      <select name="language" onchange="this.form.submit()" style="flex:1;padding:7px 9px;border:1px solid #e4dfef;border-radius:8px;font-family:inherit">
+        <option value="en" {{ 'selected' if (s.language or 'en') == 'en' }}>🇺🇸 English</option>
+        <option value="es" {{ 'selected' if s.language == 'es' }}>🇪🇸 Spanish — auto-translate texts</option>
+      </select>
+    </form>
+
     <!-- My Day link (share with the cleaner) -->
     {% if s.agreement_token %}
     <div class="card" style="background:#f0f7ff;border-color:#bcd7f5">

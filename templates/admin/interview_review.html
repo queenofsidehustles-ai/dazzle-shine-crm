@@ -8,6 +8,13 @@
     <div style="font-size:0.85rem;color:var(--softer);margin-top:2px">{{ app.name }}</div>
   </div>
   <div style="display:flex;gap:10px;align-items:center">
+    <form method="POST" action="{{ url_for('interviews.set_app_language', app_id=app.id) }}" style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:0.82rem;color:var(--muted)">🗣️</span>
+      <select name="language" onchange="this.form.submit()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.82rem">
+        <option value="en" {{ 'selected' if (app.language or 'en') == 'en' }}>🇺🇸 English</option>
+        <option value="es" {{ 'selected' if app.language == 'es' }}>🇪🇸 Spanish</option>
+      </select>
+    </form>
     {% if app.phone %}
     <a href="{{ url_for('messages.thread', phone=app.phone, name=app.name) }}"
        class="btn btn-primary" style="padding:7px 14px;font-size:0.85rem">💬 Message</a>
