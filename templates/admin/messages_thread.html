@@ -13,13 +13,33 @@
   {% endif %}
 </div>
 
+<!-- 🌐 Spanish translation toggle -->
+<form method="POST" action="{{ url_for('messages.toggle_lang', phone=phone) }}" style="margin-bottom:12px">
+  {% if lang == 'es' %}
+  <input type="hidden" name="lang" value="en">
+  <div style="display:flex;align-items:center;gap:10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:9px 13px">
+    <span style="font-size:0.85rem;color:#3730a3;font-weight:600">🌐 Spanish translation is ON — you type English, they get Spanish.</span>
+    <button type="submit" class="btn btn-outline" style="margin-left:auto;font-size:0.78rem;padding:5px 12px">Turn off</button>
+  </div>
+  {% else %}
+  <input type="hidden" name="lang" value="es">
+  <button type="submit" class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px">🌐 Translate this chat to Spanish</button>
+  {% endif %}
+</form>
+
 <div class="card" style="padding:16px">
   <!-- Thread -->
   <div id="thread" style="display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow-y:auto;padding:6px 2px 12px">
     {% for m in msgs %}
-      <div style="align-self:{{ 'flex-end' if m.direction == 'out' else 'flex-start' }};max-width:78%">
-        <div style="background:{{ '#6b46c1' if m.direction == 'out' else '#f0eef6' }};color:{{ '#fff' if m.direction == 'out' else '#1f1333' }};padding:9px 13px;border-radius:14px;font-size:0.92rem;line-height:1.35;white-space:pre-wrap;word-break:break-word">{{ m.body }}</div>
-        <div style="font-size:0.68rem;color:#b3adc4;margin-top:2px;text-align:{{ 'right' if m.direction == 'out' else 'left' }}">{{ m.created_at.strftime('%b %-d, %-I:%M %p') }}</div>
+      {% set is_out = m.direction == 'out' %}
+      {% set main = (m.body if is_out else (m.body_translated or m.body)) %}
+      {% set sub = (m.body_translated if is_out else (m.body if m.body_translated else None)) %}
+      <div style="align-self:{{ 'flex-end' if is_out else 'flex-start' }};max-width:78%">
+        <div style="background:{{ '#6b46c1' if is_out else '#f0eef6' }};color:{{ '#fff' if is_out else '#1f1333' }};padding:9px 13px;border-radius:14px;font-size:0.92rem;line-height:1.35;white-space:pre-wrap;word-break:break-word">{{ main }}</div>
+        {% if sub %}
+        <div style="font-size:0.74rem;color:#8b84a3;margin-top:3px;padding:0 4px;font-style:italic;text-align:{{ 'right' if is_out else 'left' }}">🌐 {{ 'sent in Spanish' if is_out else 'original' }}: {{ sub }}</div>
+        {% endif %}
+        <div style="font-size:0.68rem;color:#b3adc4;margin-top:2px;text-align:{{ 'right' if is_out else 'left' }}">{{ m.created_at.strftime('%b %-d, %-I:%M %p') }}</div>
       </div>
     {% else %}
       <p style="color:#9a95ad;text-align:center;padding:20px 0;font-size:0.9rem">No messages yet — say hello 👋</p>

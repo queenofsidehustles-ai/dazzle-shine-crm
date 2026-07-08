@@ -9,6 +9,7 @@ from auth import login_required
 from extensions import db
 from models import Message, Staff, ContractorApplication, BusinessSetting
 from notifications import send_sms
+from translate import translate
 
 messages_bp = Blueprint('messages', __name__, url_prefix='/messages')
 
@@ -44,13 +45,39 @@ def resolve_contact(phone10):
 
 
 def record_outbound(phone10, body, contact_name=None, twilio_sid=None,
-                    staff_id=None, application_id=None):
-    m = Message(phone=phone10, direction='out', body=body, contact_name=contact_name,
-                twilio_sid=twilio_sid, staff_id=staff_id, application_id=application_id,
-                created_at=datetime.utcnow())
+                    staff_id=None, application_id=None, translated=None):
+    m = Message(phone=phone10, direction='out', body=body, body_translated=translated,
+                contact_name=contact_name, twilio_sid=twilio_sid, staff_id=staff_id,
+                application_id=application_id, created_at=datetime.utcnow())
     db.session.add(m)
     db.session.commit()
     return m
+
+
+def thread_lang(phone10):
+    """Per-conversation language for the cleaner. 'en' (default) or 'es'."""
+    return BusinessSetting.get(f'lang:{phone10}') or 'en'
+
+
+def set_thread_lang(phone10, lang):
+    BusinessSetting.set(f'lang:{phone10}', lang)
+    db.session.commit()
+
+
+def deliver(phone10, body_en, contact):
+    """Send an owner-typed (English) message, auto-translating to the thread's
+    language if needed. Records the English + the translation. Returns (ok, detail)."""
+    lang = thread_lang(phone10)
+    translated = None
+    to_send = body_en
+    if lang != 'en':
+        translated = translate(body_en, target=lang)
+        to_send = translated or body_en
+    ok, detail = send_sms(phone10, to_send)
+    record_outbound(phone10, body_en, contact_name=contact.get('name'),
+                    staff_id=contact.get('staff_id'), application_id=contact.get('application_id'),
+                    translated=translated)
+    return ok, detail
 
 
 # ── Inbox — every conversation, newest reply on top ─────────────────────────
@@ -100,7 +127,21 @@ def thread(phone):
         app_rec = ContractorApplication.query.get(contact['application_id'])
     return render_template('admin/messages_thread.html', msgs=msgs, phone=phone10,
                            pretty=pretty_phone(phone10), name=name,
-                           contact=contact, app_rec=app_rec)
+                           contact=contact, app_rec=app_rec, lang=thread_lang(phone10))
+
+
+# ── Toggle a conversation between English and Spanish auto-translation ───────
+@messages_bp.route('/thread/<phone>/lang', methods=['POST'])
+@login_required
+def toggle_lang(phone):
+    phone10 = norm_phone(phone)
+    new_lang = request.form.get('lang', 'en')
+    set_thread_lang(phone10, 'es' if new_lang == 'es' else 'en')
+    if new_lang == 'es':
+        flash('🌐 Spanish translation ON — you type English, they get Spanish; their replies show in English.', 'success')
+    else:
+        flash('Translation off — messages send as-is.', 'success')
+    return redirect(url_for('messages.thread', phone=phone10))
 
 
 # ── Send a reply ────────────────────────────────────────────────────────────
@@ -113,9 +154,7 @@ def send(phone):
         flash('Type a message first.', 'warning')
         return redirect(url_for('messages.thread', phone=phone10))
     contact = resolve_contact(phone10)
-    ok, detail = send_sms(phone10, body)
-    record_outbound(phone10, body, contact_name=contact['name'],
-                    staff_id=contact['staff_id'], application_id=contact['application_id'])
+    ok, detail = deliver(phone10, body, contact)
     if not ok:
         flash('Saved, but the text may not have sent: ' + detail, 'warning')
     return redirect(url_for('messages.thread', phone=phone10))
@@ -139,9 +178,7 @@ def request_bgcheck(phone):
     first = (app_rec.name or 'there').split()[0]
     body = (f"Hi {first}, it looks like your background check didn’t come through. "
             f"Could you please re-upload it here? {link} — thank you! – Dazzle & Shine")
-    ok, detail = send_sms(phone10, body)
-    record_outbound(phone10, body, contact_name=app_rec.name,
-                    application_id=app_rec.id)
+    ok, detail = deliver(phone10, body, contact)
     flash('Re-upload request sent.' if ok else ('Saved, but the text may not have sent: ' + detail),
           'success' if ok else 'warning')
     return redirect(url_for('messages.thread', phone=phone10))
@@ -161,15 +198,20 @@ def incoming():
                         mimetype='text/xml')
 
     contact = resolve_contact(phone10)
-    m = Message(phone=phone10, direction='in', body=body, contact_name=contact['name'],
-                twilio_sid=sid, staff_id=contact['staff_id'],
+    # If this conversation is bilingual, translate their reply to English.
+    translated = None
+    if thread_lang(phone10) != 'en':
+        translated = translate(body, target='en')
+    m = Message(phone=phone10, direction='in', body=body, body_translated=translated,
+                contact_name=contact['name'], twilio_sid=sid, staff_id=contact['staff_id'],
                 application_id=contact['application_id'], created_at=datetime.utcnow())
     db.session.add(m)
     db.session.commit()
 
-    # Ping the owner's cell so she never has to sit in the CRM.
+    # Ping the owner's cell so she never has to sit in the CRM (in English).
     who = contact['name'] or pretty_phone(phone10)
-    snippet = body if len(body) <= 90 else body[:90] + '…'
+    alert_body = translated or body
+    snippet = alert_body if len(alert_body) <= 90 else alert_body[:90] + '…'
     link = f"{CRM_BASE}{url_for('messages.thread', phone=phone10)}"
     try:
         send_sms(owner_alert_phone(), f"📩 {who}: {snippet}\nReply: {link}")

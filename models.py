@@ -610,7 +610,8 @@ class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     phone = db.Column(db.String(20), index=True)         # last-10 digits — the thread key
     direction = db.Column(db.String(3))                  # 'in' or 'out'
-    body = db.Column(db.Text)
+    body = db.Column(db.Text)                            # original language as typed/received
+    body_translated = db.Column(db.Text)                 # translation shown/sent (if thread is bilingual)
     contact_name = db.Column(db.String(120))             # cached display name
     staff_id = db.Column(db.Integer)                     # optional link to Staff
     application_id = db.Column(db.Integer)               # optional link to ContractorApplication
