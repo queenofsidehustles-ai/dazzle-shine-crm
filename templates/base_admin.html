@@ -237,10 +237,49 @@
     .detail-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
     .detail-row .dl { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--softer); font-weight: 600; }
     .detail-row .dv { font-weight: 600; color: var(--text); }
+
+    /* HAMBURGER (mobile menu button) + off-canvas overlay */
+    .hamburger {
+      display: none; align-items: center; justify-content: center;
+      width: 40px; height: 40px; flex-shrink: 0;
+      border: 1px solid var(--border); background: #fff; border-radius: 10px;
+      font-size: 1.35rem; line-height: 1; cursor: pointer; color: var(--purple);
+    }
+    .nav-overlay { display: none; position: fixed; inset: 0; background: rgba(15,7,40,0.45); z-index: 9; }
+    .nav-overlay.show { display: block; }
+    img, canvas, video { max-width: 100%; }
+
+    /* ── MOBILE LAYOUT ─────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        width: 260px;
+        box-shadow: 0 0 50px rgba(0,0,0,0.35);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar nav a { padding: 13px 18px; font-size: 1rem; }   /* bigger touch targets */
+      .main-wrap { margin-left: 0; }
+      .topbar {
+        padding: 12px 14px;
+        justify-content: flex-start; gap: 12px;
+        position: sticky; top: 0; z-index: 8;
+      }
+      .topbar h1 { font-size: 1.05rem; }
+      .topbar > div:last-child { margin-left: auto; }
+      .hamburger { display: inline-flex; }
+      .content { padding: 16px 14px; }
+      .card { padding: 16px; }
+      /* Wide tables scroll sideways instead of crushing */
+      .table-wrap { -webkit-overflow-scrolling: touch; }
+      .table-wrap table { min-width: 560px; }
+      .stat-card .value { font-size: 1.7rem; }
+    }
   </style>
 </head>
 <body>
-  <aside class="sidebar">
+  <div class="nav-overlay" id="navOverlay" onclick="closeNav()"></div>
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <span class="script">Dazzle &amp; Shine</span>
       <span class="sub">Back Office</span>
@@ -315,6 +354,7 @@
 
   <div class="main-wrap">
     <div class="topbar">
+      <button class="hamburger" onclick="toggleNav()" aria-label="Open menu">☰</button>
       <h1>{% block page_title %}Dashboard{% endblock %}</h1>
       <div>{% block topbar_right %}{% endblock %}</div>
     </div>
@@ -327,5 +367,16 @@
       {% block content %}{% endblock %}
     </div>
   </div>
+
+  <script>
+    function toggleNav() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('navOverlay').classList.toggle('show');
+    }
+    function closeNav() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('navOverlay').classList.remove('show');
+    }
+  </script>
 </body>
 </html>
