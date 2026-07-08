@@ -144,6 +144,7 @@ def _migrate_db():
         ('booking', 'discount_code',            'VARCHAR(50)'),
         ('booking', 'discount_amount',          'FLOAT DEFAULT 0'),
         ('booking', 'hours_worked',             'FLOAT'),
+        ('booking', 'lead_fee',                 'FLOAT DEFAULT 0'),
         ('staff',   'pay_type',                 "VARCHAR(20) DEFAULT 'percent'"),
         ('staff',   'pay_rate',                 'FLOAT DEFAULT 40'),
         ('staff',   'experience_level',         "VARCHAR(20) DEFAULT 'new'"),

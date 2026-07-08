@@ -76,6 +76,7 @@ FREQUENCY_LABELS = {
 
 DEPOSIT_AMOUNT       = 50   # dollars
 CONTRACTOR_SPLIT_PCT = 50   # percent
+LEAD_FEE_DEFAULT     = 25   # dollars — ad cost added to customer price, not shared with contractor
 SQFT_SURCHARGE_RATE  = 15   # dollars per 200 sqft over standard
 
 
@@ -114,6 +115,12 @@ def get_extra_price(extra_name):
 
 def get_contractor_split():
     return _db_get('contractor_split', CONTRACTOR_SPLIT_PCT)
+
+
+def get_lead_fee():
+    """Advertising/lead cost added to the customer price but never shared with
+    the contractor. Editable via the 'lead_fee' business setting."""
+    return _db_get('lead_fee', LEAD_FEE_DEFAULT)
 
 
 def get_sqft_surcharge_rate():

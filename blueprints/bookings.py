@@ -31,7 +31,7 @@ def index():
 @login_required
 def new():
     """Create a booking by hand — for customers who book by phone/text/in person."""
-    from pricing import calculate_price, SERVICE_LABELS, EXTRAS
+    from pricing import calculate_price, SERVICE_LABELS, EXTRAS, get_lead_fee
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         if not name:
@@ -43,20 +43,28 @@ def new():
         extras = ','.join(request.form.getlist('extras'))
         frequency = request.form.get('frequency', 'one_time')
 
-        # Price: use the number she typed, else auto-calculate from the matrix.
-        price_raw = request.form.get('price', '').strip().replace('$', '')
-        price = None
-        if price_raw:
+        # Cleaning price: use the number she typed, else auto-calc from the matrix.
+        cleaning_raw = request.form.get('cleaning_price', '').strip().replace('$', '')
+        cleaning = None
+        if cleaning_raw:
             try:
-                price = float(price_raw)
+                cleaning = float(cleaning_raw)
             except ValueError:
-                price = None
-        if price is None:
+                cleaning = None
+        if cleaning is None:
             try:
-                price = calculate_price(service_type=service_type, bedrooms=bedrooms,
-                                        bathrooms=bathrooms, extras=extras, frequency=frequency)
+                cleaning = calculate_price(service_type=service_type, bedrooms=bedrooms,
+                                           bathrooms=bathrooms, extras=extras, frequency=frequency)
             except Exception:
-                price = None
+                cleaning = 0.0
+
+        # Lead fee — added to the customer total, excluded from contractor pay.
+        fee_raw = request.form.get('lead_fee', '').strip().replace('$', '')
+        try:
+            lead_fee = float(fee_raw) if fee_raw != '' else float(get_lead_fee())
+        except ValueError:
+            lead_fee = float(get_lead_fee())
+        price = round((cleaning or 0) + lead_fee, 2)   # what the customer pays
 
         b = Booking(
             name=name,
@@ -74,6 +82,7 @@ def new():
             access_notes=(request.form.get('access_notes', '').strip() or None),
             status=request.form.get('status', 'confirmed'),
             price=price,
+            lead_fee=lead_fee,
         )
         db.session.add(b)
         db.session.commit()
@@ -82,7 +91,8 @@ def new():
 
     from pricing import FREQUENCY_LABELS as _FREQ
     return render_template('admin/booking_new.html',
-                           service_labels=SERVICE_LABELS, extras=EXTRAS, frequency_labels=_FREQ)
+                           service_labels=SERVICE_LABELS, extras=EXTRAS, frequency_labels=_FREQ,
+                           default_lead_fee=get_lead_fee())
 
 
 @bookings_bp.route('/calendar')
@@ -137,6 +147,12 @@ def detail(booking_id):
         old_cleaner = booking.assigned_cleaner or ''
         booking.status = request.form.get('status', booking.status)
         booking.price = request.form.get('price') or None
+        _fee = request.form.get('lead_fee', '').strip()
+        if _fee != '':
+            try:
+                booking.lead_fee = float(_fee)
+            except ValueError:
+                pass
         booking.preferred_date = request.form.get('preferred_date', booking.preferred_date)
         booking.preferred_time = request.form.get('preferred_time', booking.preferred_time)
         booking.internal_notes = request.form.get('internal_notes', booking.internal_notes)

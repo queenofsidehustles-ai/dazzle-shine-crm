@@ -61,6 +61,10 @@ class Booking(db.Model):
     balance_due = db.Column(db.Float)
     balance_collected = db.Column(db.Boolean, default=False)
 
+    # Lead fee — advertising cost baked into the customer price but EXCLUDED
+    # from the contractor's commission (invisible to the customer).
+    lead_fee = db.Column(db.Float, default=0)
+
     # Discount
     discount_code = db.Column(db.String(50))
     discount_amount = db.Column(db.Float, default=0)

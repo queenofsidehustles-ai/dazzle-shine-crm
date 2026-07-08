@@ -50,8 +50,15 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Price ($)</label>
+          <label>Total price ($) <span style="font-weight:400;color:var(--softer)">— what the customer pays</span></label>
           <input type="number" name="price" step="0.01" placeholder="e.g. 150" value="{{ booking.price or '' }}" />
+        </div>
+        <div class="form-group">
+          <label>📣 Lead fee ($) <span style="font-weight:400;color:var(--softer)">— ad cost, part of the total but excluded from the cleaner's cut</span></label>
+          <input type="number" name="lead_fee" step="0.01" placeholder="0" value="{{ booking.lead_fee or '' }}" />
+          {% if booking.price %}
+          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">Cleaner is paid on <strong>${{ '%.2f' % ((booking.price or 0) - (booking.lead_fee or 0)) }}</strong> (total − lead fee).</p>
+          {% endif %}
         </div>
         <div class="form-group">
           <label>Confirmed Date</label>

@@ -964,7 +964,7 @@ def payroll():
         s = staff_map.get(name)
         if not s:
             continue
-        earned = s.calc_pay(job_price=job.price or 0, hours_worked=job.hours_worked or 0)
+        earned = s.calc_pay(job_price=(job.price or 0) - (job.lead_fee or 0), hours_worked=job.hours_worked or 0)
         if name not in payroll_data:
             payroll_data[name] = {'staff': s, 'jobs': [], 'total': 0}
         payroll_data[name]['jobs'].append({'booking': job, 'earned': earned})
@@ -993,7 +993,7 @@ def pay_statement(staff_id):
     ).order_by(Booking.preferred_date).all()
     rows, total = [], 0.0
     for j in jobs:
-        earned = s.calc_pay(job_price=j.price or 0, hours_worked=j.hours_worked or 0)
+        earned = s.calc_pay(job_price=(j.price or 0) - (j.lead_fee or 0), hours_worked=j.hours_worked or 0)
         total += earned
         rows.append({'booking': j, 'earned': earned})
     biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
