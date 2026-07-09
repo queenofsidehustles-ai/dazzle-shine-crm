@@ -190,6 +190,18 @@ def _apply_template_patches():
         BusinessSetting.set('tmpl_patch_myday_v1', '1')
         db.session.commit()
 
+    # Patch 3: square-footage pricing disclaimer on quotes + confirmations
+    if not BusinessSetting.get('tmpl_patch_sqft_disclaimer_v1'):
+        disclaimer = ("💡 Pricing note: Your quote is based on an average-size home for this "
+                      "many bedrooms. Larger homes may have a small size adjustment — always "
+                      "confirmed with you first. No surprises!")
+        for trig in ('lead_quote', 'booking_confirmed'):
+            t = EmailTemplate.query.filter_by(trigger=trig).first()
+            if t and 'average-size home' not in (t.body or ''):
+                t.body = (t.body or '').rstrip() + "\n\n" + disclaimer
+        BusinessSetting.set('tmpl_patch_sqft_disclaimer_v1', '1')
+        db.session.commit()
+
 
 def _migrate_db():
     """Add any missing columns to existing tables safely (idempotent)."""

@@ -572,6 +572,7 @@ def _send_booking_confirmation(booking):
     {f'<p style="margin:4px 0"><strong>Address:</strong> {addr}</p>' if addr else ''}
     {f'<p style="margin:4px 0"><strong>Total:</strong> {price_text}</p>' if price_text else ''}
   </div>
+  <p style="font-size:0.82rem;color:#9a95ad;background:#f6f5fb;border-radius:8px;padding:10px 12px">💡 Your price is based on an average-size home for this many bedrooms. Larger homes may have a small size adjustment — always confirmed with you first. No surprises!</p>
   <p>If anything changes or you have questions, just reply to this email or text us — we're happy to help.</p>
   <p style="margin-top:18px">See you soon!<br><strong>{biz}</strong></p>
 </div>""",
