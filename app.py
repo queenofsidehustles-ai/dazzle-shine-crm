@@ -94,8 +94,26 @@ def create_app():
         _apply_template_patches()
         _seed_pricing_defaults()
         _seed_message_templates()
+        _patch_pay_rate_40_to_50()
 
     return app
+
+
+def _patch_pay_rate_40_to_50():
+    """One-time fix: bump percent-based cleaners stuck at the old 40% default
+    up to the 50% policy. Skips hourly staff (their 40 means $40/hr). Runs once."""
+    from models import Staff, BusinessSetting
+    if BusinessSetting.get('patch_payrate_40to50'):
+        return
+    fixed = 0
+    for s in Staff.query.filter(Staff.pay_rate == 40).all():
+        if (s.pay_type or 'percent') == 'percent':
+            s.pay_rate = 50
+            fixed += 1
+    BusinessSetting.set('patch_payrate_40to50', 'done')
+    db.session.commit()
+    if fixed:
+        print(f"[patch] Bumped {fixed} contractor(s) from 40% to 50%.")
 
 
 def _seed_message_templates():
