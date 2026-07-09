@@ -214,6 +214,7 @@ def _migrate_db():
         ('booking', 'paid_method',              'VARCHAR(20)'),
         ('booking', 'invoice_sent_at',          'TIMESTAMP'),
         ('message', 'body_translated',          'TEXT'),
+        ('booking', 'sqft',                     'INTEGER'),
         ('booking', 'open_for_claim',           'BOOLEAN DEFAULT FALSE'),
         ('booking', 'claim_token',              'VARCHAR(64)'),
         ('booking', 'broadcast_at',             'TIMESTAMP'),

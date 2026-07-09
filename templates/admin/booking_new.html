@@ -65,6 +65,10 @@
         </select>
       </div>
     </div>
+    <div class="form-group">
+      <label>Square footage <span style="font-weight:400;color:var(--softer)">— optional; adds a surcharge for larger-than-average homes</span></label>
+      <input type="number" name="sqft" step="50" placeholder="Leave blank for standard size" />
+    </div>
 
     <div class="form-group">
       <label>Add-ons</label>
@@ -177,6 +181,7 @@
         service_type: $('service_type').value,
         bedrooms: $('bedrooms').value,
         bathrooms: $('bathrooms').value,
+        sqft: $('sqft').value,
         frequency: $('frequency').value,
         cleaning_price: $('cleaning_price').value,
         lead_fee: $('lead_fee').value,

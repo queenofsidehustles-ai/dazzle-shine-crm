@@ -111,6 +111,7 @@ def capture_quote():
         bathrooms=data.get('bathrooms', 1),
         extras=data.get('extras', ''),
         frequency=data.get('frequency', 'one_time'),
+        sqft=data.get('sqft'),
     ) + get_lead_fee()   # bake in the (invisible) lead fee
 
     from models import Lead
@@ -386,6 +387,7 @@ def get_price():
         bathrooms=data.get('bathrooms', 1),
         extras=data.get('extras', ''),
         frequency=data.get('frequency', 'one_time'),
+        sqft=data.get('sqft'),
     ) + get_lead_fee()   # bake in the (invisible) lead fee
     resp = jsonify({
         'total': total,

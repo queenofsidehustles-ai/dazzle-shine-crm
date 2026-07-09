@@ -219,9 +219,13 @@ SERVICES = {
 }
 
 
-def calculate_price(service_type, bedrooms, bathrooms, extras=None, frequency='one_time'):
+def calculate_price(service_type, bedrooms, bathrooms, extras=None, frequency='one_time', sqft=None):
     extras_str = extras if isinstance(extras, str) else (','.join(extras) if extras else '')
-    return calculate_job(service_type, bedrooms, bathrooms,
+    try:
+        sqft_val = int(sqft) if sqft not in (None, '') else None
+    except (ValueError, TypeError):
+        sqft_val = None
+    return calculate_job(service_type, bedrooms, bathrooms, sqft=sqft_val,
                          extras=extras_str, frequency=frequency)['client_price']
 
 

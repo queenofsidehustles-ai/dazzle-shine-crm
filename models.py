@@ -35,6 +35,7 @@ class Booking(db.Model):
     service_type = db.Column(db.String(50), nullable=False)
     bedrooms = db.Column(db.String(10))
     bathrooms = db.Column(db.String(10))
+    sqft = db.Column(db.Integer)        # optional home size — drives the sqft surcharge
     extras = db.Column(db.String(200))  # comma-separated: oven, fridge, laundry
 
     # Frequency

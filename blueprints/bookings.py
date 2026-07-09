@@ -38,6 +38,7 @@ def price_preview():
     extras = request.args.get('extras', '')
     freq = request.args.get('frequency', 'one_time')
 
+    sqft = request.args.get('sqft', '').strip()
     manual = request.args.get('cleaning_price', '').strip().replace('$', '')
     cleaning = None
     if manual:
@@ -48,7 +49,7 @@ def price_preview():
     if cleaning is None:
         try:
             cleaning = calculate_price(service_type=service, bedrooms=beds,
-                                       bathrooms=baths, extras=extras, frequency=freq)
+                                       bathrooms=baths, extras=extras, frequency=freq, sqft=sqft)
         except Exception:
             cleaning = 0.0
 
@@ -77,6 +78,11 @@ def new():
         bathrooms = request.form.get('bathrooms', '1')
         extras = ','.join(request.form.getlist('extras'))
         frequency = request.form.get('frequency', 'one_time')
+        sqft_raw = request.form.get('sqft', '').strip()
+        try:
+            sqft = int(sqft_raw) if sqft_raw else None
+        except ValueError:
+            sqft = None
 
         # Cleaning price: use the number she typed, else auto-calc from the matrix.
         cleaning_raw = request.form.get('cleaning_price', '').strip().replace('$', '')
@@ -89,7 +95,7 @@ def new():
         if cleaning is None:
             try:
                 cleaning = calculate_price(service_type=service_type, bedrooms=bedrooms,
-                                           bathrooms=bathrooms, extras=extras, frequency=frequency)
+                                           bathrooms=bathrooms, extras=extras, frequency=frequency, sqft=sqft)
             except Exception:
                 cleaning = 0.0
 
@@ -106,7 +112,7 @@ def new():
             email=(request.form.get('email', '').strip().lower() or None),
             phone=request.form.get('phone', '').strip(),
             service_type=service_type,
-            bedrooms=bedrooms, bathrooms=bathrooms, extras=extras,
+            bedrooms=bedrooms, bathrooms=bathrooms, sqft=sqft, extras=extras,
             frequency=frequency,
             preferred_date=request.form.get('preferred_date', '').strip(),
             preferred_time=request.form.get('preferred_time', '').strip(),
