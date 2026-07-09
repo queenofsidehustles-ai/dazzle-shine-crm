@@ -978,24 +978,29 @@ def staff_detail(staff_id):
             s.onboarding_steps = json.dumps(steps)
             db.session.commit()
             return jsonify({'ok': True, 'completed': steps})
-        # Full profile update
-        s.name = request.form.get('name', s.name).strip()
-        s.phone = request.form.get('phone', s.phone or '').strip()
-        s.email = request.form.get('email', s.email or '').strip()
-        s.experience_level = request.form.get('experience_level', s.experience_level)
-        s.pay_type = request.form.get('pay_type', s.pay_type)
-        s.pay_rate = float(request.form.get('pay_rate', s.pay_rate or 50))
-        s.emergency_contact_name = request.form.get('emergency_contact_name', '').strip()
-        s.emergency_contact_phone = request.form.get('emergency_contact_phone', '').strip()
-        s.has_transportation = 'has_transportation' in request.form
-        s.has_supplies = 'has_supplies' in request.form
-        s.color = request.form.get('color', s.color)
-        s.is_active = 'is_active' in request.form
-        s.pay_schedule = request.form.get('pay_schedule', s.pay_schedule or 'daily')
-        s.roster_start_date = request.form.get('roster_start_date', s.roster_start_date or '').strip()
-        s.notes = request.form.get('notes', '').strip()
+        # Which card was submitted? Only touch that card's fields so, e.g., the
+        # "Update Pay" form never wipes checkboxes it doesn't contain.
+        section = request.form.get('section', 'profile')
+        if section == 'pay':
+            s.experience_level = request.form.get('experience_level', s.experience_level)
+            s.pay_type = request.form.get('pay_type', s.pay_type)
+            if (request.form.get('pay_rate') or '') != '':
+                s.pay_rate = float(request.form.get('pay_rate'))
+        else:  # profile card
+            s.name = request.form.get('name', s.name).strip()
+            s.phone = request.form.get('phone', s.phone or '').strip()
+            s.email = request.form.get('email', s.email or '').strip()
+            s.emergency_contact_name = request.form.get('emergency_contact_name', s.emergency_contact_name or '').strip()
+            s.emergency_contact_phone = request.form.get('emergency_contact_phone', s.emergency_contact_phone or '').strip()
+            s.roster_start_date = request.form.get('roster_start_date', s.roster_start_date or '').strip()
+            s.pay_schedule = request.form.get('pay_schedule', s.pay_schedule or 'daily')
+            s.has_transportation = 'has_transportation' in request.form
+            s.has_supplies = 'has_supplies' in request.form
+            s.is_active = 'is_active' in request.form
+            s.color = request.form.get('color', s.color)
+            s.notes = request.form.get('notes', s.notes or '').strip()
         db.session.commit()
-        flash('Profile updated!', 'success')
+        flash('Saved!', 'success')
         return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
     if s.stripe_account_id:
         _sync_stripe_status(s)   # auto-refresh payment status on page load
