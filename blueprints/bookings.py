@@ -275,6 +275,38 @@ def send_payment_link_route(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+@bookings_bp.route('/<int:booking_id>/notify-pay', methods=['POST'])
+@login_required
+def notify_pay(booking_id):
+    """Text the assigned cleaner their current (corrected) pay for this job."""
+    import secrets as _secrets
+    from models import BusinessSetting
+    from notifications import send_sms
+    from translate import translate
+    b = Booking.query.get_or_404(booking_id)
+    name = b.assigned_cleaner or ''
+    s = Staff.query.filter(db.func.lower(Staff.name) == name.lower()).first() if name else None
+    if not s or not s.phone:
+        flash('No assigned cleaner with a phone number to notify.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if not s.agreement_token:
+        s.agreement_token = _secrets.token_urlsafe(32)
+        db.session.commit()
+    pay = s.calc_pay(job_price=b.commissionable_price, hours_worked=b.hours_worked or 0)
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    base = 'https://dazzle-shine-crm-production.up.railway.app'
+    myday = f"{base}/contractors/my-day/{s.agreement_token}"
+    first = (s.name or '').split()[0]
+    msg = (f"Hi {first}! Quick update on your {b.preferred_date or ''} job — your pay is "
+           f"${pay:.2f}. Full details here: {myday} — {biz}")
+    if (s.language or 'en') == 'es':
+        msg = translate(msg, target='es')
+    ok, detail = send_sms(s.phone, msg)
+    flash(f'Updated pay (${pay:.2f}) sent to {s.name}.' if ok else 'Could not send: ' + detail,
+          'success' if ok else 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
 @bookings_bp.route('/<int:booking_id>/broadcast', methods=['POST'])
 @login_required
 def broadcast(booking_id):
@@ -604,8 +636,8 @@ def _notify_cleaner(booking):
     if not staff:
         return False  # cleaner not found
 
-    # Calculate cleaner earnings
-    price = booking.price or 0
+    # Calculate cleaner earnings (on the cleaning price — excludes the lead fee)
+    price = booking.commissionable_price
     if staff.pay_type == 'percent':
         earnings = round(price * staff.pay_rate / 100, 2)
         pay_label = f'{staff.pay_rate:.0f}% of ${price:.2f}'

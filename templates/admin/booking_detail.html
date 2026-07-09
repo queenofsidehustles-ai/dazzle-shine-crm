@@ -123,6 +123,12 @@
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save Changes</button>
       </form>
 
+      {% if booking.assigned_cleaner and not booking.open_for_claim %}
+      <form method="POST" action="{{ url_for('bookings.notify_pay', booking_id=booking.id) }}" style="margin-top:12px">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📲 Text {{ booking.assigned_cleaner.split()[0] }} their updated pay</button>
+      </form>
+      {% endif %}
+
       <form method="POST" action="{{ url_for('bookings.delete', booking_id=booking.id) }}"
             onsubmit="return confirm('Delete this booking permanently?')"
             style="margin-top:12px">

@@ -113,6 +113,11 @@ class Booking(db.Model):
     }
 
     @property
+    def commissionable_price(self):
+        """Amount the contractor's cut is based on — total minus the lead fee."""
+        return round((self.price or 0) - (self.lead_fee or 0), 2)
+
+    @property
     def service_label(self):
         return self.SERVICE_LABELS.get(self.service_type, self.service_type.title())
 

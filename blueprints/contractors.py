@@ -781,11 +781,15 @@ def sample_day():
 
     class _FakeJob:
         job_checklists = []
+        lead_fee = 0
         def __init__(self, **kw):
             self.__dict__.update(kw)
         @property
         def service_label(self):
             return 'Standard House Cleaning'
+        @property
+        def commissionable_price(self):
+            return round((self.price or 0) - (self.lead_fee or 0), 2)
 
     today = date.today()
     job = _FakeJob(preferred_time='10:00 AM', name='The Johnson Family', bedrooms='3',
