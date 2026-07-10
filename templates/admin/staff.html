@@ -38,7 +38,20 @@
             {% endif %}
           </td>
           <td>
-            <a href="{{ url_for('staff.edit', staff_id=s.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a>
+            <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+              <a href="{{ url_for('staff.edit', staff_id=s.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a>
+              {% if s.is_active %}
+              <form method="POST" action="{{ url_for('staff.toggle_active', staff_id=s.id) }}"
+                    onsubmit="return confirm('Deactivate {{ s.name }}? They will stop getting job assignments and notifications right away. No message is sent to them, and you can reactivate anytime.')"
+                    style="margin:0">
+                <button type="submit" class="btn btn-danger" style="padding:5px 12px;font-size:0.82rem">Deactivate</button>
+              </form>
+              {% else %}
+              <form method="POST" action="{{ url_for('staff.toggle_active', staff_id=s.id) }}" style="margin:0">
+                <button type="submit" class="btn btn-gold" style="padding:5px 12px;font-size:0.82rem">Reactivate</button>
+              </form>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% endfor %}

@@ -47,6 +47,22 @@ def edit(staff_id):
     return render_template('admin/staff_form.html', staff=s)
 
 
+@staff_bp.route('/<int:staff_id>/toggle', methods=['POST'])
+@login_required
+def toggle_active(staff_id):
+    """Silently activate/deactivate a team member. Deactivating removes them
+    from all job broadcasts, the assignment dropdown, and reminder emails.
+    No notification is ever sent to the team member."""
+    s = Staff.query.get_or_404(staff_id)
+    s.is_active = not s.is_active
+    db.session.commit()
+    if s.is_active:
+        flash(f'{s.name} is active again and can receive job assignments.', 'success')
+    else:
+        flash(f'{s.name} has been deactivated — they will no longer receive job assignments or notifications.', 'success')
+    return redirect(url_for('staff.index'))
+
+
 @staff_bp.route('/<int:staff_id>/delete', methods=['POST'])
 @login_required
 def delete(staff_id):
