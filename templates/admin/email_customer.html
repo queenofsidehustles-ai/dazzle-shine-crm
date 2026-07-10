@@ -11,16 +11,16 @@
 
     {% if not booking.email %}
     <p style="color:#b45309;background:#fef3c7;padding:12px 14px;border-radius:8px;margin:0 0 16px">
-      ⚠️ This booking has no email address on file, so there's no one to send to.
+      ⚠️ No email was on file for this booking — just type one in the "To" box below.
     </p>
     {% endif %}
 
-    <div style="font-size:0.85rem;color:#5f5878;margin-bottom:16px;background:#faf9fd;border:1px solid #e4dfef;border-radius:8px;padding:12px 14px">
-      <div><strong>To:</strong> {{ booking.name or 'Customer' }} &lt;{{ booking.email or '— no email —' }}&gt;</div>
-      <div style="margin-top:4px;color:#9a95ad">Sends from your Dazzle &amp; Shine address. Any reply comes straight to your inbox.</div>
-    </div>
-
     <form method="POST">
+      <div class="form-group">
+        <label>To — {{ booking.name or 'Customer' }}'s email</label>
+        <input type="email" name="to_email" required value="{{ booking.email or '' }}" placeholder="customer@example.com" />
+        <span style="font-size:0.78rem;color:#9a95ad">You can edit this. Sends from your Dazzle &amp; Shine address · any reply comes to your inbox.</span>
+      </div>
       <div class="form-group">
         <label>Subject</label>
         <input type="text" name="subject" required
@@ -44,7 +44,7 @@ Dazzle & Shine Maids
 (689) 999-0194</textarea>
         <span style="font-size:0.78rem;color:#9a95ad">Edit anything above before sending. Your Dazzle &amp; Shine branding is added around the message automatically.</span>
       </div>
-      <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center"{{ ' disabled' if not booking.email }}>
+      <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">
         ✉️ Send Email
       </button>
     </form>

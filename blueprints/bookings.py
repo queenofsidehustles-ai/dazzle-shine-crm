@@ -289,17 +289,22 @@ def email_customer(booking_id):
     Monica's Gmail (configured in send_email)."""
     booking = Booking.query.get_or_404(booking_id)
     if request.method == 'POST':
+        to_email = (request.form.get('to_email') or '').strip()
         subject = (request.form.get('subject') or '').strip()
         message = (request.form.get('message') or '').strip()
-        if not booking.email:
-            flash('This booking has no email address on file.', 'warning')
-            return redirect(url_for('bookings.detail', booking_id=booking_id))
+        if not to_email or '@' not in to_email:
+            flash('Please enter a valid email address to send to.', 'warning')
+            return redirect(url_for('bookings.email_customer', booking_id=booking_id))
         if not subject or not message:
             flash('Please fill in both a subject and a message.', 'warning')
             return redirect(url_for('bookings.email_customer', booking_id=booking_id))
+        # Keep the booking's email in sync if it was corrected or added here.
+        if to_email != (booking.email or ''):
+            booking.email = to_email
+            db.session.commit()
         from notifications import send_email, _wrap_html
         html = _wrap_html(message, 'Dazzle & Shine Maids')
-        ok, detail = send_email(to_email=booking.email, to_name=(booking.name or 'there'),
+        ok, detail = send_email(to_email=to_email, to_name=(booking.name or 'there'),
                                 subject=subject, html=html)
         if ok:
             flash(f'Email sent to {booking.email} ✅', 'success')
