@@ -281,6 +281,34 @@ def send_payment_link_route(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+@bookings_bp.route('/<int:booking_id>/email-customer', methods=['GET', 'POST'])
+@login_required
+def email_customer(booking_id):
+    """Compose and send a custom email to the customer on this booking.
+    Sends from the branded bookings@ address via Resend; replies go to
+    Monica's Gmail (configured in send_email)."""
+    booking = Booking.query.get_or_404(booking_id)
+    if request.method == 'POST':
+        subject = (request.form.get('subject') or '').strip()
+        message = (request.form.get('message') or '').strip()
+        if not booking.email:
+            flash('This booking has no email address on file.', 'warning')
+            return redirect(url_for('bookings.detail', booking_id=booking_id))
+        if not subject or not message:
+            flash('Please fill in both a subject and a message.', 'warning')
+            return redirect(url_for('bookings.email_customer', booking_id=booking_id))
+        from notifications import send_email, _wrap_html
+        html = _wrap_html(message, 'Dazzle & Shine Maids')
+        ok, detail = send_email(to_email=booking.email, to_name=(booking.name or 'there'),
+                                subject=subject, html=html)
+        if ok:
+            flash(f'Email sent to {booking.email} ✅', 'success')
+            return redirect(url_for('bookings.detail', booking_id=booking_id))
+        flash(f'Could not send the email — {detail}', 'warning')
+        return redirect(url_for('bookings.email_customer', booking_id=booking_id))
+    return render_template('admin/email_customer.html', booking=booking)
+
+
 @bookings_bp.route('/<int:booking_id>/notify-pay', methods=['POST'])
 @login_required
 def notify_pay(booking_id):

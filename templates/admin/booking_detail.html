@@ -251,6 +251,9 @@
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📩 Email + text this payment link</button>
       </form>
 
+      <a href="{{ url_for('bookings.email_customer', booking_id=booking.id) }}"
+         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">✉️ Email the customer</a>
+
       <!-- Mark as paid manually (cash / Zelle / etc.) -->
       <form method="POST" action="{{ url_for('bookings.mark_paid_route', booking_id=booking.id) }}"
             style="display:flex;gap:8px;margin-top:10px"

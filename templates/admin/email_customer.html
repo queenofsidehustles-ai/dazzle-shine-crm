@@ -1,0 +1,53 @@
+{% extends "base_admin.html" %}
+{% block title %}Email {{ booking.name }} — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Email the Customer{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('bookings.detail', booking_id=booking.id) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Back to Booking</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:620px">
+  <div class="card">
+
+    {% if not booking.email %}
+    <p style="color:#b45309;background:#fef3c7;padding:12px 14px;border-radius:8px;margin:0 0 16px">
+      ⚠️ This booking has no email address on file, so there's no one to send to.
+    </p>
+    {% endif %}
+
+    <div style="font-size:0.85rem;color:#5f5878;margin-bottom:16px;background:#faf9fd;border:1px solid #e4dfef;border-radius:8px;padding:12px 14px">
+      <div><strong>To:</strong> {{ booking.name or 'Customer' }} &lt;{{ booking.email or '— no email —' }}&gt;</div>
+      <div style="margin-top:4px;color:#9a95ad">Sends from your Dazzle &amp; Shine address. Any reply comes straight to your inbox.</div>
+    </div>
+
+    <form method="POST">
+      <div class="form-group">
+        <label>Subject</label>
+        <input type="text" name="subject" required
+               value="A heartfelt thank you — and a free cleaning on us" />
+      </div>
+      <div class="form-group">
+        <label>Message</label>
+        <textarea name="message" rows="16" required style="line-height:1.6">Hi {{ booking.name or 'there' }},
+
+Thank you so much for welcoming Dazzle & Shine Maids into your home. I wanted to reach out personally because I hold our work to a very high standard, and I don't feel your recent cleaning fully reflected the care and quality you deserve.
+
+I'm truly sorry for that — and I'm committed to making it right.
+
+As a thank-you for your patience and understanding, I'd love to offer you a complimentary cleaning next month, completely free of charge. I'll personally make sure it's handled by our best team and meets the standard you should expect from us every single time.
+
+I'll follow up to find a date that works best for you. In the meantime, please don't hesitate to reach out to me directly with anything at all.
+
+With gratitude,
+Monica
+Dazzle & Shine Maids
+(689) 999-0194</textarea>
+        <span style="font-size:0.78rem;color:#9a95ad">Edit anything above before sending. Your Dazzle &amp; Shine branding is added around the message automatically.</span>
+      </div>
+      <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center"{{ ' disabled' if not booking.email }}>
+        ✉️ Send Email
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
