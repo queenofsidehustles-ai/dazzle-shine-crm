@@ -120,6 +120,13 @@
           <label>Internal Notes <span style="font-weight:400;color:#9a95ad">(private to you)</span></label>
           <textarea name="internal_notes" placeholder="Notes for your team only...">{{ booking.internal_notes or '' }}</textarea>
         </div>
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;background:#faf9fd;border:1px solid #e4dfef;border-radius:8px;padding:11px 12px;margin-bottom:14px">
+          <input type="checkbox" name="skip_review" style="width:auto;margin-top:3px" {{ 'checked' if booking.skip_review }} />
+          <span style="font-size:0.86rem;color:#5f5878">
+            <strong style="color:#3a3350">Don't ask this customer for a review</strong><br>
+            Skips the rating &amp; review-request emails when this job is completed — for customers you'd rather not prompt yet.
+          </span>
+        </label>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save Changes</button>
       </form>
 

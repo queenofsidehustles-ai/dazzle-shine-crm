@@ -213,6 +213,7 @@ def detail(booking_id):
         booking.preferred_time = request.form.get('preferred_time', booking.preferred_time)
         booking.internal_notes = request.form.get('internal_notes', booking.internal_notes)
         booking.access_notes = request.form.get('access_notes', booking.access_notes)
+        booking.skip_review = 'skip_review' in request.form
         booking.assigned_cleaner = request.form.get('assigned_cleaner', booking.assigned_cleaner)
         hours_raw = request.form.get('hours_worked', '').strip()
         booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
@@ -235,7 +236,8 @@ def detail(booking_id):
         try:
             if newly_completed:
                 _send_followup_email(booking)
-                _send_rating_request(booking)
+                if not booking.skip_review:
+                    _send_rating_request(booking)
                 _create_next_recurring(booking)
             if newly_assigned:
                 notified = _notify_cleaner(booking)
@@ -550,25 +552,22 @@ def _send_rating_request(booking):
 
 
 def _send_followup_email(booking):
+    # A pure thank-you. It intentionally does NOT link to Google reviews —
+    # the ONLY path to a public review is the star-rating email, which shows
+    # the Google link solely to customers who first tap 4-5 stars. This keeps
+    # unhappy customers from ever being handed a public-review link.
     from notifications import send_email
-    from blueprints.ratings import review_link
-    _review = review_link()
     send_email(
         to_email=booking.email,
         to_name=booking.name,
-        subject='How did we do? — Dazzle & Shine Maids',
+        subject='Thank you from Dazzle & Shine Maids',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <h2 style="color:#b98a33">Thank you for choosing Dazzle &amp; Shine!</h2>
   <p>Hi {booking.name},</p>
   <p>Your cleaning is complete — we hope everything sparkles! ✨</p>
-  <p>Your feedback means the world to us. If you have 60 seconds,
-     we'd love a quick Google review:</p>
-  <p style="margin:20px 0">
-    <a href="{_review}"
-       style="background:#d3a84f;color:#1a1225;padding:11px 22px;border-radius:999px;
-              text-decoration:none;font-weight:700">Leave a Review</a>
-  </p>
+  <p>It was a pleasure serving you. If there's anything at all we can make
+     better, just reply to this email — we're always here to help.</p>
   <p>Ready to book your next cleaning?
      <a href="https://www.dazzleandshinemaids.com/#book" style="color:#b98a33">Book again here →</a>
   </p>

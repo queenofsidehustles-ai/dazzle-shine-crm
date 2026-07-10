@@ -118,7 +118,7 @@ def run_lifecycle_emails():
     for r in BookingRating.query.filter(BookingRating.rating.is_(None),
                                         BookingRating.created_at <= now - timedelta(days=3)).all():
         b = r.booking
-        if not b or b.review_nudge_at:
+        if not b or b.review_nudge_at or b.skip_review:
             continue
         if _send_marketing('review_nudge', b.email, b.name,
                            {'rate_link': f"{CRM_BASE}/rate/{r.token}"}):

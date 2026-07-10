@@ -93,6 +93,7 @@ class Booking(db.Model):
     # Lifecycle email tracking (one send each, never repeats)
     morning_note_at = db.Column(db.DateTime)            # morning-of note
     review_nudge_at = db.Column(db.DateTime)            # review reminder
+    skip_review = db.Column(db.Boolean, default=False)  # owner opted this customer out of review/rating requests
     upsell_sent_at = db.Column(db.DateTime)             # one-time → recurring upsell
     upsell_nudge_at = db.Column(db.DateTime)            # upsell 2nd nudge
     winback_sent_at = db.Column(db.DateTime)            # "we miss you" win-back

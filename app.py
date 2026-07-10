@@ -272,6 +272,8 @@ def _migrate_db():
         # Booking cleaner tracking
         ('booking', 'cleaner_notified_at', 'TIMESTAMP'),
         ('booking', 'cleaner_response',    'VARCHAR(20)'),
+        # Per-booking review-request opt-out
+        ('booking', 'skip_review',         'BOOLEAN DEFAULT FALSE'),
         # Staff worker model
         ('staff', 'worker_model', "VARCHAR(20) DEFAULT 'contractor'"),
         # Contractor application hiring pipeline
