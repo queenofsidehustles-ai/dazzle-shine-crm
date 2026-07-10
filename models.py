@@ -637,3 +637,18 @@ class Message(db.Model):
     twilio_sid = db.Column(db.String(64))
     read_at = db.Column(db.DateTime)                     # inbound: when the owner viewed it
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class OutboundLog(db.Model):
+    """A record of every outbound SMS/email the system sends, from anywhere in
+    the app — pay updates, work orders, confirmations, reminders, payment links,
+    custom customer emails, etc. Gives the owner a single 'Sent' history."""
+    id = db.Column(db.Integer, primary_key=True)
+    channel = db.Column(db.String(10))       # 'sms' or 'email'
+    to_address = db.Column(db.String(200))   # phone number or email address
+    to_name = db.Column(db.String(120))      # recipient name if known
+    subject = db.Column(db.String(300))      # email subject (blank for SMS)
+    body = db.Column(db.Text)                # message content (HTML for emails)
+    status = db.Column(db.String(10))        # 'sent' or 'failed'
+    detail = db.Column(db.String(400))       # provider detail or error reason
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)

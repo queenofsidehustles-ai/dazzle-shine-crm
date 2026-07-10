@@ -5,6 +5,29 @@ import base64
 import requests as http_requests
 
 
+def _log_outbound(channel, to_address, to_name, subject, body, ok, detail):
+    """Record every outbound SMS/email in OutboundLog so the owner has a single
+    'Sent' history. Uses its OWN short-lived DB session so it can never touch or
+    prematurely commit the caller's transaction. Never raises."""
+    try:
+        from extensions import db
+        from models import OutboundLog
+        from sqlalchemy.orm import Session
+        with Session(db.engine) as s:
+            s.add(OutboundLog(
+                channel=channel,
+                to_address=(to_address or '')[:200],
+                to_name=(to_name or None),
+                subject=(subject or None),
+                body=(body or ''),
+                status='sent' if ok else 'failed',
+                detail=(detail or '')[:400],
+            ))
+            s.commit()
+    except Exception:
+        pass
+
+
 # ── Marketing opt-out (unsubscribe) ─────────────────────────────────────────────
 
 def _unsub_secret():
@@ -130,10 +153,13 @@ def send_email(to_email, to_name, subject, html, from_name=None):
             timeout=10,
         )
         if 200 <= resp.status_code < 300:
-            return True, f'Sent OK (from {from_email}).'
-        return False, f'Resend error {resp.status_code}: {resp.text[:400]}'
+            ok, detail = True, f'Sent OK (from {from_email}).'
+        else:
+            ok, detail = False, f'Resend error {resp.status_code}: {resp.text[:400]}'
     except Exception as e:
-        return False, f'Could not reach Resend: {e}'
+        ok, detail = False, f'Could not reach Resend: {e}'
+    _log_outbound('email', to_email, to_name, subject, html, ok, detail)
+    return ok, detail
 
 
 def add_to_mailerlite(email, name, group_id=None):
@@ -179,6 +205,8 @@ def send_sms(to_phone, message):
         formatted = ('+1' + digits) if not to_phone.startswith('+') else to_phone
         client = Client(account_sid, auth_token)
         msg = client.messages.create(body=message, from_=from_phone, to=formatted)
-        return True, f'Sent OK to {formatted} (Twilio id {msg.sid}).'
+        ok, detail = True, f'Sent OK to {formatted} (Twilio id {msg.sid}).'
     except Exception as e:
-        return False, f'Twilio error: {e}'
+        ok, detail = False, f'Twilio error: {e}'
+    _log_outbound('sms', to_phone, None, None, message, ok, detail)
+    return ok, detail

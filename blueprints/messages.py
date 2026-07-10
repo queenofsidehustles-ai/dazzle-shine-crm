@@ -8,7 +8,7 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
 from auth import login_required
 from extensions import db
 from models import (Message, Staff, ContractorApplication, BusinessSetting,
-                    MessageTemplate)
+                    MessageTemplate, OutboundLog)
 from notifications import send_sms
 from translate import translate
 
@@ -27,6 +27,21 @@ def norm_phone(p):
 def pretty_phone(p):
     d = norm_phone(p)
     return f"({d[0:3]}) {d[3:6]}-{d[6:10]}" if len(d) == 10 else (p or '')
+
+
+@messages_bp.route('/sent')
+@login_required
+def sent_log():
+    """A single 'Sent' history of every outbound text and email the system has
+    sent from anywhere in the app (pay updates, work orders, confirmations,
+    reminders, payment links, custom customer emails)."""
+    channel = request.args.get('channel', '')
+    q = OutboundLog.query
+    if channel in ('sms', 'email'):
+        q = q.filter(OutboundLog.channel == channel)
+    logs = q.order_by(OutboundLog.created_at.desc()).limit(300).all()
+    return render_template('admin/sent_log.html', logs=logs,
+                           pretty_phone=pretty_phone, channel=channel)
 
 
 def owner_alert_phone():
