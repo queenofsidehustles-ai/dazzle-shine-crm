@@ -1008,6 +1008,22 @@ def staff_detail(staff_id):
     return render_template('admin/contractor_detail.html', s=s, recent_jobs=recent_jobs, exp_levels=EXP_LEVELS)
 
 
+@contractors_bp.route('/team/<int:staff_id>/toggle', methods=['POST'])
+@login_required
+def staff_toggle_active(staff_id):
+    """One-click activate/deactivate. Deactivating silently removes the cleaner
+    from job broadcasts, the assignment dropdown, work orders, and payroll.
+    No text or email is ever sent to the team member."""
+    s = Staff.query.get_or_404(staff_id)
+    s.is_active = not s.is_active
+    db.session.commit()
+    if s.is_active:
+        flash(f'{s.name} is active again and can receive job assignments.', 'success')
+    else:
+        flash(f'{s.name} has been deactivated — they will no longer receive job assignments or notifications. No message was sent to them.', 'success')
+    return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+
 # ── Payroll ────────────────────────────────────────────────────────────────────
 
 @contractors_bp.route('/payroll')

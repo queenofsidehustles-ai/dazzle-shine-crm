@@ -51,6 +51,26 @@
         <div class="form-group"><label>Notes</label><textarea name="notes" placeholder="Anything useful to know...">{{ s.notes or '' }}</textarea></div>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save Profile</button>
       </form>
+
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e4dfef">
+        {% if s.is_active %}
+        <div style="font-size:0.82rem;color:#9a95ad;margin-bottom:8px">
+          Status: <span class="status status-confirmed">Active</span> — receiving job assignments.
+        </div>
+        <form method="POST" action="{{ url_for('contractors.staff_toggle_active', staff_id=s.id) }}"
+              onsubmit="return confirm('Deactivate {{ s.name }}? They will immediately stop getting job assignments and notifications. No message is sent to them, and you can reactivate anytime.')"
+              style="margin:0">
+          <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">🚫 Deactivate — stop sending jobs</button>
+        </form>
+        {% else %}
+        <div style="font-size:0.82rem;color:#9a95ad;margin-bottom:8px">
+          Status: <span class="status status-cancelled">Inactive</span> — not receiving any jobs.
+        </div>
+        <form method="POST" action="{{ url_for('contractors.staff_toggle_active', staff_id=s.id) }}" style="margin:0">
+          <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">✅ Reactivate — allow jobs again</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
 
     <!-- Pay Settings -->
