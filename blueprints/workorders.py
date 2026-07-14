@@ -147,7 +147,7 @@ def create_and_send_workorder(booking, template_id=None):
             html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <h2 style="color:#b98a33">Work Order — {date_text}</h2>
-  <p><strong>Client:</strong> {booking.name} &nbsp; <a href="tel:{booking.phone}">{booking.phone}</a></p>
+  <p><strong>Client:</strong> {booking.name}</p>
   <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
   <p><a href="{nav_url}" style="color:#1f1333;font-weight:700">🧭 Navigate there →</a></p>
   <p><strong>Service:</strong> {booking.service_label} &nbsp; <strong>Time:</strong> {time_text}</p>
