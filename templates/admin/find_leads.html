@@ -124,10 +124,15 @@
             </form>
           </td>
           <td>
-            <form method="POST" action="{{ url_for('places_finder.delete', prospect_id=p.id) }}"
-                  onsubmit="return confirm('Remove {{ p.business_name }} from the call list?')">
-              <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:#e53e3e">✕</button>
-            </form>
+            <div style="display:flex;gap:4px;align-items:center">
+              <a href="{{ url_for('commercial.convert', prospect_id=p.id) }}" class="btn"
+                 title="Won them? Turn into a commercial account"
+                 style="padding:5px 9px;font-size:0.78rem">🎉</a>
+              <form method="POST" action="{{ url_for('places_finder.delete', prospect_id=p.id) }}"
+                    onsubmit="return confirm('Remove {{ p.business_name }} from the call list?')">
+                <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:#e53e3e">✕</button>
+              </form>
+            </div>
           </td>
         </tr>
         {% endfor %}

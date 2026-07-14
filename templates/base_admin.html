@@ -317,6 +317,9 @@
       <a href="{{ url_for('places_finder.dashboard') }}" class="{{ 'active' if request.blueprint == 'places_finder' }}">
         <span class="icon">🎯</span> Find Leads
       </a>
+      <a href="{{ url_for('commercial.index') }}" class="{{ 'active' if request.blueprint == 'commercial' }}">
+        <span class="icon">🏢</span> Commercial
+      </a>
       <a href="{{ url_for('quotes.index') }}" class="{{ 'active' if request.blueprint == 'quotes' }}">
         <span class="icon">📄</span> Quotes
       </a>

@@ -1,0 +1,39 @@
+{% extends "base_admin.html" %}
+{% block title %}Convert to Account — Commercial{% endblock %}
+{% block page_title %}Won! 🎉 Set up the account{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:14px"><a href="{{ url_for('places_finder.dashboard') }}" style="color:#9a95ad;font-size:0.9rem">← Back to Find Leads</a></div>
+
+<div class="card" style="margin-bottom:18px;background:rgba(211,168,79,0.08)">
+  <strong style="font-size:1.05rem">{{ p.business_name }}</strong>
+  <div style="font-size:0.85rem;color:#9a95ad;margin-top:2px">
+    {{ p.category_label }}{% if p.phone %} · {{ p.phone }}{% endif %}{% if p.address %}<br>{{ p.address }}{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <p style="color:#9a95ad;font-size:0.88rem;margin:0 0 16px">
+    Fill in what you agreed on the call, and this becomes an active commercial account.
+  </p>
+  <form method="POST" action="{{ url_for('commercial.convert', prospect_id=p.id) }}"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+    <div><label class="lbl">Contact person</label><input class="inp" name="contact_name" placeholder="Who you spoke to"></div>
+    <div><label class="lbl">Email</label><input class="inp" name="email" placeholder="for invoices"></div>
+    <div><label class="lbl">Phone</label><input class="inp" name="phone" value="{{ p.phone or '' }}"></div>
+    <div><label class="lbl">How often</label>
+      <select class="inp" name="frequency">{% for f in frequencies %}<option value="{{ f }}" {{ 'selected' if f=='weekly' }}>{{ freq_labels[f] }}</option>{% endfor %}</select></div>
+    <div><label class="lbl">Billing</label>
+      <select class="inp" name="billing_type"><option value="monthly">Per month</option><option value="per_visit">Per visit</option></select></div>
+    <div><label class="lbl">Amount ($)</label><input class="inp" name="billing_amount" placeholder="600"></div>
+    <div style="grid-column:1/-1"><label class="lbl">Notes</label><textarea class="inp" name="notes" rows="2" placeholder="e.g. after-hours, 3 floors, start next Monday">{{ p.notes or '' }}</textarea></div>
+    {% include 'admin/_comm_calc.html' %}
+    <div style="grid-column:1/-1"><button type="submit" class="btn" style="padding:11px 26px">🎉 Create commercial account</button></div>
+  </form>
+</div>
+
+<style>
+  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem;font-family:inherit}
+</style>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base_admin.html" %}
+{% block title %}Commercial Pricing — Settings{% endblock %}
+{% block page_title %}Commercial Pricing{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:14px"><a href="{{ url_for('commercial.index') }}" style="color:#9a95ad;font-size:0.9rem">← Commercial accounts</a></div>
+
+<div class="card">
+  <p style="color:#9a95ad;font-size:0.88rem;margin:0 0 16px">
+    These numbers power the <strong>Confident price helper</strong> when you set up a commercial account.
+    Change them anytime — every quote stays profitable because the price is built up from your real cost.
+  </p>
+  <form method="POST" action="{{ url_for('settings.commercial') }}"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+    <div><label class="lbl">Your cleaner cost ($/hour)</label>
+      <input class="inp" name="comm_hourly_cost" value="{{ '%.2f' % cfg.hourly }}"></div>
+    <div><label class="lbl">Target labor % of price</label>
+      <input class="inp" name="comm_target_labor" value="{{ '%.0f' % (cfg.target*100) }}">
+      <div style="font-size:0.72rem;color:#9a95ad;margin-top:2px">Lower % → higher prices &amp; more profit. ~40% is typical.</div></div>
+    <div><label class="lbl">Minimum per visit ($)</label>
+      <input class="inp" name="comm_min_visit" value="{{ '%.0f' % cfg.min_visit }}"></div>
+
+    <div style="grid-column:1/-1;border-top:1px solid #eee;padding-top:12px">
+      <strong style="font-size:0.9rem">Production rates — sq ft one cleaner covers per hour</strong>
+      <div style="font-size:0.75rem;color:#9a95ad">Lower = slower / more detailed work = higher price (e.g. medical &lt; office).</div>
+    </div>
+    {% for c, rate in cfg.prod_rates.items() %}
+    <div><label class="lbl">{{ category_labels.get(c, c) }}</label>
+      <input class="inp" name="comm_prod_{{ c }}" value="{{ '%.0f' % rate }}"></div>
+    {% endfor %}
+
+    <div style="grid-column:1/-1"><button type="submit" class="btn" style="padding:10px 24px">💾 Save pricing</button></div>
+  </form>
+</div>
+<style>
+  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem}
+</style>
+{% endblock %}

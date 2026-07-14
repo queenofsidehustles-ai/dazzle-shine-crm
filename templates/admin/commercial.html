@@ -1,0 +1,85 @@
+{% extends "base_admin.html" %}
+{% block title %}Commercial — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Commercial Accounts{% endblock %}
+
+{% block content %}
+
+{% if session.get('role', 'owner') == 'owner' %}
+<div style="text-align:right;margin-bottom:8px"><a href="{{ url_for('settings.commercial') }}" style="font-size:0.85rem;color:#b98a33">⚙️ Commercial pricing settings</a></div>
+{% endif %}
+
+<!-- Monthly pipeline value -->
+<div class="card" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:0.8rem;color:#9a95ad">Recurring monthly revenue (active accounts)</div>
+    <div style="font-size:2rem;font-weight:800;color:#b98a33">${{ '%.0f' % monthly_total }}<span style="font-size:1rem;color:#9a95ad">/mo</span></div>
+  </div>
+  <div style="font-size:0.85rem;color:#9a95ad;text-align:right">
+    {{ counts['active'] }} active · {{ counts['lead'] }} in talks · {{ counts['paused'] }} paused
+  </div>
+</div>
+
+<!-- Add account (collapsible) -->
+<details class="card" style="margin-bottom:18px">
+  <summary style="cursor:pointer;font-weight:700;color:#1f1333">➕ Add a commercial account by hand</summary>
+  <form method="POST" action="{{ url_for('commercial.new') }}" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+    <div><label class="lbl">Business name *</label><input class="inp" name="business_name" required></div>
+    <div><label class="lbl">Contact person</label><input class="inp" name="contact_name"></div>
+    <div><label class="lbl">Email</label><input class="inp" name="email"></div>
+    <div><label class="lbl">Phone</label><input class="inp" name="phone"></div>
+    <div><label class="lbl">Type</label>
+      <select class="inp" name="category">{% for c in categories %}<option value="{{ c }}">{{ category_labels[c] }}</option>{% endfor %}</select></div>
+    <div><label class="lbl">How often</label>
+      <select class="inp" name="frequency">{% for f in frequencies %}<option value="{{ f }}" {{ 'selected' if f=='weekly' }}>{{ freq_labels[f] }}</option>{% endfor %}</select></div>
+    <div><label class="lbl">Billing</label>
+      <select class="inp" name="billing_type"><option value="monthly">Per month</option><option value="per_visit">Per visit</option></select></div>
+    <div><label class="lbl">Amount ($)</label><input class="inp" name="billing_amount" placeholder="600"></div>
+    <div style="grid-column:1/-1"><label class="lbl">Notes</label><input class="inp" name="notes" placeholder="e.g. after-hours only, 3 floors"></div>
+    {% include 'admin/_comm_calc.html' %}
+    <div style="grid-column:1/-1"><button type="submit" class="btn" style="padding:10px 22px">Create account</button></div>
+  </form>
+</details>
+
+<!-- Status tabs -->
+<div class="filter-tabs">
+  {% for s, label in [('','All'),('active','Active'),('lead','In talks'),('paused','Paused')] %}
+  <a href="{{ url_for('commercial.index', status=s) }}" class="filter-tab {{ 'active' if status_filter == s }}">
+    {{ label }} ({{ counts['all' if not s else s] }})
+  </a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  {% if accounts %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Business</th><th>Contact</th><th>Type</th><th>Schedule</th><th>Billing</th><th>~Monthly</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for a in accounts %}
+        {% set colors = {'active':'status-completed','paused':'status-pending','lead':'status-confirmed'} %}
+        <tr>
+          <td><strong>{{ a.business_name }}</strong>{% if a.city %}<br><span style="font-size:0.8rem;color:#9a95ad">{{ a.city }}</span>{% endif %}</td>
+          <td style="font-size:0.85rem">{{ a.contact_name or '—' }}{% if a.phone %}<br><span style="color:#9a95ad">{{ a.phone }}</span>{% endif %}</td>
+          <td style="font-size:0.82rem">{{ a.category_label }}</td>
+          <td style="font-size:0.85rem">{{ a.frequency_label }}</td>
+          <td style="font-size:0.85rem">${{ '%.0f' % (a.billing_amount or 0) }}{{ '/mo' if a.billing_type=='monthly' else '/visit' }}</td>
+          <td style="font-weight:700;color:#b98a33">${{ '%.0f' % a.monthly_value }}</td>
+          <td><span class="status {{ colors.get(a.status,'status-pending') }}">{{ a.status_label }}</span></td>
+          <td><a href="{{ url_for('commercial.detail', account_id=a.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+    No commercial accounts yet. Close a business in <a href="{{ url_for('places_finder.dashboard') }}">Find Leads</a> and convert it here, or add one by hand above. 🏢
+  </p>
+  {% endif %}
+</div>
+
+<style>
+  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem}
+</style>
+{% endblock %}

@@ -1,10 +1,33 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from auth import login_required, owner_required
-from models import PricingSetting, BusinessSetting
+from models import PricingSetting, BusinessSetting, Prospect
 from extensions import db
 from pricing import SERVICES, EXTRAS, DEPOSIT_AMOUNT
 
 settings_bp = Blueprint('settings', __name__, url_prefix='/settings')
+
+
+@settings_bp.route('/commercial', methods=['GET', 'POST'])
+@owner_required
+def commercial():
+    import commercial_pricing as cp
+    if request.method == 'POST':
+        PricingSetting.set('comm_hourly_cost', request.form.get('comm_hourly_cost') or 20)
+        try:
+            pct = float(request.form.get('comm_target_labor') or 40)
+        except ValueError:
+            pct = 40
+        PricingSetting.set('comm_target_labor', round(pct / 100.0, 4))
+        PricingSetting.set('comm_min_visit', request.form.get('comm_min_visit') or 80)
+        for c in cp.PROD_RATES:
+            v = request.form.get(f'comm_prod_{c}')
+            if v:
+                PricingSetting.set(f'comm_prod_{c}', v)
+        db.session.commit()
+        flash('Commercial pricing updated.', 'success')
+        return redirect(url_for('settings.commercial'))
+    return render_template('admin/settings_commercial.html',
+                           cfg=cp.get_config(), category_labels=Prospect.CATEGORY_LABELS)
 
 
 @settings_bp.route('/pricing', methods=['GET', 'POST'])

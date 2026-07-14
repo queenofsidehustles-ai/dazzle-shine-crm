@@ -1,0 +1,59 @@
+{% extends "base_admin.html" %}
+{% block title %}{{ a.business_name }} — Commercial{% endblock %}
+{% block page_title %}{{ a.business_name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:14px"><a href="{{ url_for('commercial.index') }}" style="color:#9a95ad;font-size:0.9rem">← All commercial accounts</a></div>
+
+<div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
+  <div>
+    <div style="font-size:0.8rem;color:#9a95ad">Estimated monthly value</div>
+    <div style="font-size:1.8rem;font-weight:800;color:#b98a33">${{ '%.0f' % a.monthly_value }}<span style="font-size:0.95rem;color:#9a95ad">/mo</span></div>
+  </div>
+  <div style="font-size:0.82rem;color:#9a95ad;text-align:right">
+    {{ a.category_label }} · {{ a.frequency_label }}<br>
+    {% if a.source == 'find_leads' %}📞 closed from Find Leads{% else %}✍️ added by hand{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <form method="POST" action="{{ url_for('commercial.detail', account_id=a.id) }}"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+    <div><label class="lbl">Business name</label><input class="inp" name="business_name" value="{{ a.business_name }}"></div>
+    <div><label class="lbl">Contact person</label><input class="inp" name="contact_name" value="{{ a.contact_name or '' }}"></div>
+    <div><label class="lbl">Email</label><input class="inp" name="email" value="{{ a.email or '' }}"></div>
+    <div><label class="lbl">Phone</label><input class="inp" name="phone" value="{{ a.phone or '' }}"></div>
+    <div><label class="lbl">Address</label><input class="inp" name="address" value="{{ a.address or '' }}"></div>
+    <div><label class="lbl">City</label><input class="inp" name="city" value="{{ a.city or '' }}"></div>
+    <div><label class="lbl">Type</label>
+      <select class="inp" name="category">{% for c in categories %}<option value="{{ c }}" {{ 'selected' if a.category==c }}>{{ category_labels[c] }}</option>{% endfor %}</select></div>
+    <div><label class="lbl">How often</label>
+      <select class="inp" name="frequency">{% for f in frequencies %}<option value="{{ f }}" {{ 'selected' if a.frequency==f }}>{{ freq_labels[f] }}</option>{% endfor %}</select></div>
+    <div><label class="lbl">Billing</label>
+      <select class="inp" name="billing_type"><option value="monthly" {{ 'selected' if a.billing_type=='monthly' }}>Per month</option><option value="per_visit" {{ 'selected' if a.billing_type=='per_visit' }}>Per visit</option></select></div>
+    <div><label class="lbl">Amount ($)</label><input class="inp" name="billing_amount" value="{{ '%.0f' % (a.billing_amount or 0) }}"></div>
+    <div><label class="lbl">Status</label>
+      <select class="inp" name="status">{% for s, sl in status_labels.items() %}<option value="{{ s }}" {{ 'selected' if a.status==s }}>{{ sl }}</option>{% endfor %}</select></div>
+    <div style="grid-column:1/-1"><label class="lbl">Notes</label><textarea class="inp" name="notes" rows="3">{{ a.notes or '' }}</textarea></div>
+    {% include 'admin/_comm_calc.html' %}
+    <div style="grid-column:1/-1;display:flex;gap:10px">
+      <button type="submit" class="btn" style="padding:10px 24px">💾 Save changes</button>
+    </div>
+  </form>
+</div>
+
+<!-- Roadmap hint -->
+<div class="card" style="margin-top:18px;border-left:4px solid #d3a84f;background:rgba(211,168,79,0.08)">
+  <strong>Coming next (Phase 2):</strong> auto-repeating visits on your calendar and monthly invoices for this account. 🗓️🧾
+</div>
+
+<form method="POST" action="{{ url_for('commercial.delete', account_id=a.id) }}"
+      onsubmit="return confirm('Delete {{ a.business_name }}? This cannot be undone.')" style="margin-top:16px">
+  <button type="submit" class="btn btn-outline" style="padding:7px 14px;font-size:0.82rem;color:#e53e3e">Delete account</button>
+</form>
+
+<style>
+  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem;font-family:inherit}
+</style>
+{% endblock %}

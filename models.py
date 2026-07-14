@@ -732,3 +732,55 @@ class User(db.Model):
     @property
     def role_label(self):
         return '👑 Owner' if self.role == 'owner' else '👤 Team'
+
+
+class CommercialAccount(db.Model):
+    """A commercial cleaning client — an ongoing ACCOUNT, not a one-off booking.
+    Think 'Sunrise Daycare — cleaned every Friday, $600/month'. Created when the
+    VA closes a business from Find Leads (the Won → Customer hand-off), or added
+    by hand. Kept separate from residential Bookings, which think in bedrooms."""
+    id = db.Column(db.Integer, primary_key=True)
+    business_name = db.Column(db.String(200), nullable=False)
+    contact_name = db.Column(db.String(120))          # the person we deal with
+    email = db.Column(db.String(200))
+    phone = db.Column(db.String(40))
+    address = db.Column(db.String(300))
+    city = db.Column(db.String(100))
+    square_footage = db.Column(db.Integer)                     # drives the cost-based quote
+    category = db.Column(db.String(40), default='office')      # reuses Prospect categories
+    frequency = db.Column(db.String(30), default='weekly')     # nightly/weekly/biweekly/monthly/custom
+    billing_type = db.Column(db.String(20), default='monthly') # 'monthly' or 'per_visit'
+    billing_amount = db.Column(db.Float, default=0)
+    status = db.Column(db.String(20), default='active')        # active/paused/lead
+    notes = db.Column(db.Text)
+    source = db.Column(db.String(50), default='find_leads')
+    prospect_id = db.Column(db.Integer)                        # origin prospect, if converted
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    FREQ_LABELS = {
+        'nightly': 'Nightly', 'weekly': 'Weekly', 'biweekly': 'Every 2 weeks',
+        'monthly': 'Monthly', 'custom': 'Custom',
+    }
+    STATUS_LABELS = {'active': 'Active', 'paused': 'Paused', 'lead': 'Lead'}
+    # roughly how many billing periods land in a month, to estimate monthly value
+    _PER_MONTH = {'nightly': 22, 'weekly': 4.3, 'biweekly': 2.15, 'monthly': 1, 'custom': 1}
+
+    @property
+    def category_label(self):
+        return Prospect.CATEGORY_LABELS.get(self.category, self.category or 'Other')
+
+    @property
+    def frequency_label(self):
+        return self.FREQ_LABELS.get(self.frequency, self.frequency or 'Weekly')
+
+    @property
+    def status_label(self):
+        return self.STATUS_LABELS.get(self.status, self.status or 'Active')
+
+    @property
+    def monthly_value(self):
+        """Estimated monthly revenue — used for the pipeline total."""
+        amt = self.billing_amount or 0
+        if self.billing_type == 'monthly':
+            return round(amt, 2)
+        return round(amt * self._PER_MONTH.get(self.frequency, 4.3), 2)
