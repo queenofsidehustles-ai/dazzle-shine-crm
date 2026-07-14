@@ -122,19 +122,21 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
 </div>"""
 
 
-def send_email(to_email, to_name, subject, html, from_name=None):
+def send_email(to_email, to_name, subject, html, from_name=None,
+               from_email=None, reply_to=None):
     """Send via Resend. Returns (ok: bool, detail: str) so callers/diagnostics
     can see what happened. Existing callers that ignore the return value are
-    unaffected."""
+    unaffected. from_email/reply_to let a branded caller (e.g. a commercial
+    quote) override the sender identity per brand."""
     api_key = os.environ.get('RESEND_API_KEY')
-    from_email = os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
+    from_email = from_email or os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
     if not from_name:
         from_name = os.environ.get('FROM_NAME', 'Dazzle & Shine Maids')
     if not api_key:
         return False, 'RESEND_API_KEY is not set in Railway — no email service connected.'
-    # Replies go to the inbox Monica actually checks (her Gmail), even though
-    # the email is sent "from" the branded domain address.
-    reply_to = os.environ.get('REPLY_TO_EMAIL') or \
+    # Replies go to the inbox Monica actually checks, even though the email is
+    # sent "from" the branded domain address.
+    reply_to = reply_to or os.environ.get('REPLY_TO_EMAIL') or \
         os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
     try:
         resp = http_requests.post(

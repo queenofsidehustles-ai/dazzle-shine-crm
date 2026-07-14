@@ -3,9 +3,10 @@ import secrets
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from auth import login_required
-from models import CommercialQuote
+from models import CommercialQuote, CommercialAccount
 from extensions import db
 from notifications import send_email
+import brands
 
 quotes_bp = Blueprint('quotes', __name__, url_prefix='/quotes')
 
@@ -30,6 +31,38 @@ CONTRACT_TERMS = [
     ('6_months', '6-Month Contract'),
     ('annual', 'Annual Contract'),
 ]
+
+# property_type (from the quote form) → CommercialAccount category
+_CAT_MAP = {
+    'apartment complex': 'apartment',
+    'student housing': 'apartment',
+    'office building': 'office',
+    'retail / commercial': 'other',
+    'property management portfolio': 'property_manager',
+}
+# quote frequency → account frequency
+_FREQ_MAP = {'daily': 'nightly', 'weekly': 'weekly', 'biweekly': 'biweekly',
+             'monthly': 'monthly', 'as_needed': 'custom'}
+
+
+def _account_from_quote(q):
+    """When a quote is accepted, create the ongoing Commercial Account (won customer)."""
+    existing = CommercialAccount.query.filter_by(business_name=q.company, email=q.email).first()
+    if existing:
+        return existing
+    acc = CommercialAccount(
+        business_name=q.company, contact_name=q.contact_name, email=q.email, phone=q.phone,
+        address=q.property_address, city='',
+        category=_CAT_MAP.get((q.property_type or '').lower(), 'office'),
+        frequency=_FREQ_MAP.get(q.frequency, 'weekly'),
+        billing_type='monthly' if q.monthly_price else 'per_visit',
+        billing_amount=(q.monthly_price or q.price_per_visit or 0),
+        status='active', source='quote',
+        notes=f'Created from accepted quote (brand: {q.brand or "lm"}).',
+    )
+    db.session.add(acc)
+    db.session.commit()
+    return acc
 
 
 @quotes_bp.route('/')
@@ -73,6 +106,7 @@ def new():
             scope_notes=request.form.get('scope_notes', '').strip(),
             token=secrets.token_urlsafe(32),
             status='draft',
+            brand=(request.form.get('brand') or brands.brand_for_property(request.form.get('property_type', ''))),
         )
         db.session.add(q)
         db.session.commit()
@@ -103,6 +137,7 @@ def detail(quote_id):
         q.price_per_visit = request.form.get('price_per_visit') or None
         q.monthly_price = request.form.get('monthly_price') or None
         q.scope_notes = request.form.get('scope_notes', q.scope_notes).strip()
+        q.brand = request.form.get('brand') or q.brand or brands.brand_for_property(q.property_type)
         db.session.commit()
         flash('Quote updated.', 'success')
         return redirect(url_for('quotes.detail', quote_id=quote_id))
@@ -130,42 +165,32 @@ def send_quote(quote_id):
     if q.monthly_price:
         price_html += f"<p><strong>Monthly total:</strong> ${float(q.monthly_price):,.2f}</p>"
 
+    brand = q.brand or brands.brand_for_property(q.property_type)
+    b = brands.get_brand(brand)
+    from_name, from_email, reply_to = brands.send_identity(brand)
+    units_html = f'<br>Units: {q.units}' if q.units else ''
+    sqft_html = f' · {q.sqft} sq ft' if q.sqft else ''
+    scope_html = (f'<div style="background:#f6f5fb;border-radius:9px;padding:14px;margin-top:10px">'
+                  f'<strong>Scope of Work:</strong><br>{q.scope_notes}</div>') if q.scope_notes else ''
+    inner = (
+        f'<p>Dear {q.contact_name},</p>'
+        f'<p>Thank you for the opportunity to quote cleaning services for <strong>{q.company}</strong>. '
+        f'Please find your customized proposal below.</p>'
+        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Property</h3>'
+        f'<p>{q.property_type or ""}{(" · " + q.property_address) if q.property_address else ""}{units_html}{sqft_html}</p>'
+        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Services Included</h3>'
+        f'<ul style="padding-left:20px;line-height:1.9">{services_html}</ul>'
+        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Schedule &amp; Pricing</h3>'
+        f'<p><strong>Frequency:</strong> {freq_label}<br><strong>Contract term:</strong> {term_label}</p>'
+        f'{price_html}{scope_html}'
+        f'<p style="text-align:center;margin-top:16px">Ready to move forward? Review and accept below.</p>'
+    )
+    html = brands.email_shell(brand, 'Your Cleaning Proposal', inner,
+                              cta_text='Review &amp; Accept Quote →', cta_url=quote_url)
     ok, detail = send_email(
         to_email=q.email, to_name=q.contact_name,
-        subject=f'Cleaning Services Proposal — Dazzle & Shine Maids',
-        html=f"""
-<div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;color:#1f1333">
-  <div style="background:#1f1333;padding:24px;text-align:center;border-radius:12px 12px 0 0">
-    <h1 style="font-family:Georgia,serif;color:#d3a84f;margin:0;font-size:1.8rem">Dazzle &amp; Shine Maids</h1>
-    <p style="color:rgba(255,255,255,0.6);margin:4px 0 0;font-size:0.85rem;letter-spacing:0.15em;text-transform:uppercase">Professional Cleaning Proposal</p>
-  </div>
-  <div style="padding:30px;background:#fff;border:1px solid #e4dfef;border-top:none;border-radius:0 0 12px 12px">
-    <p>Dear {q.contact_name},</p>
-    <p>Thank you for your interest in Dazzle &amp; Shine Maids. Please find your customized cleaning proposal below.</p>
-    <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-    <h3 style="color:#b98a33;margin-bottom:10px">Property Details</h3>
-    <p><strong>Property:</strong> {q.company}</p>
-    <p><strong>Type:</strong> {q.property_type}</p>
-    <p><strong>Address:</strong> {q.property_address}</p>
-    {'<p><strong>Units:</strong> ' + q.units + '</p>' if q.units else ''}
-    {'<p><strong>Square Footage:</strong> ' + q.sqft + ' sq ft</p>' if q.sqft else ''}
-    <h3 style="color:#b98a33;margin:20px 0 10px">Services Included</h3>
-    <ul style="padding-left:20px;line-height:2">{services_html}</ul>
-    <h3 style="color:#b98a33;margin:20px 0 10px">Schedule &amp; Pricing</h3>
-    <p><strong>Frequency:</strong> {freq_label}</p>
-    <p><strong>Contract Term:</strong> {term_label}</p>
-    {price_html}
-    {'<div style="background:#f6f5fb;border-radius:9px;padding:14px;margin-top:10px"><strong>Scope of Work:</strong><br>' + q.scope_notes + '</div>' if q.scope_notes else ''}
-    <hr style="border:none;border-top:1px solid #e4dfef;margin:24px 0"/>
-    <p style="text-align:center;font-size:1rem">Ready to move forward?</p>
-    <div style="text-align:center;margin:20px 0">
-      <a href="{quote_url}" style="background:#d3a84f;color:#1a1225;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:700;font-size:1rem">Review &amp; Accept Quote →</a>
-    </div>
-    <p style="font-size:0.85rem;color:#9a95ad;text-align:center">You can review the full proposal, accept, or decline at the link above.</p>
-    <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-    <p style="font-size:0.85rem;color:#9a95ad">Questions? Contact us at (689) 999-0194 or reply to this email.<br>Dazzle &amp; Shine Maids · Orlando, FL</p>
-  </div>
-</div>""",
+        subject=f'Cleaning Services Proposal — {b["name"]}',
+        html=html, from_name=from_name, from_email=from_email, reply_to=reply_to,
     )
     if not ok:
         flash(f"Quote could NOT be emailed to {q.email}. {detail}", 'error')
@@ -173,6 +198,8 @@ def send_quote(quote_id):
 
     q.status = 'sent'
     q.sent_at = datetime.utcnow()
+    q.drip_step = 0          # (re)start the follow-up nurture clock
+    q.last_drip_at = None
     db.session.commit()
 
     # Send the owner a copy so there's always a record in your inbox
@@ -234,6 +261,10 @@ def accept(token):
     q.status = 'accepted'
     try:
         q.responded_at = datetime.utcnow()
+    except Exception:
+        pass
+    try:
+        _account_from_quote(q)   # accepted quote becomes an ongoing Commercial Account
     except Exception:
         pass
     try:

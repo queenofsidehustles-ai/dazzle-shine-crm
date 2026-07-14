@@ -36,6 +36,28 @@ VISITS_PER_MONTH = {
     'nightly': 22, 'weekly': 4.3, 'biweekly': 2.15, 'monthly': 1, 'custom': 4.3,
 }
 
+# The quote comes back as a range so you can quote confidently, never below cost.
+RANGE_LOW = 0.85
+RANGE_HIGH = 1.20
+
+# Friendly facility choices shown as Step-1 buttons (key, label, one-line help).
+FACILITY_TYPES = [
+    ('office', '🏢 Office', 'Offices, cubicles, meeting rooms'),
+    ('daycare', '🧸 Daycare', 'Childcare centers & preschools'),
+    ('medical_office', '🩺 Medical', 'Doctor / dental offices, clinics'),
+    ('apartment', '🏘️ Apartments', 'Complexes, common areas, turnovers'),
+    ('property_manager', '🏢 Property Mgmt', 'Managed buildings'),
+    ('other', '📦 Other', 'Retail, gyms, churches, etc.'),
+]
+
+# Optional scope add-ons (key, label, % added to the price).
+EXTRAS = [
+    ('restrooms', '🚻 Restroom deep-clean', 0.10),
+    ('breakroom', '🍽️ Break room / kitchen', 0.08),
+    ('trash', '🗑️ Trash & liner service', 0.05),
+    ('disinfection', '🧴 Disinfect high-touch', 0.08),
+]
+
 
 def _get(key):
     """Read an owner override from PricingSetting, else the default."""
@@ -60,8 +82,9 @@ def prod_rate(category):
     return PROD_RATES.get(category, 3000)
 
 
-def quote(square_footage, category='office', frequency='weekly'):
-    """Return a confident, profitable price for one commercial account."""
+def quote(square_footage, category='office', frequency='weekly', extras=None):
+    """Return a confident, profitable price with a low/standard/premium range."""
+    extras = extras or []
     sqft = max(0.0, float(square_footage or 0))
     rate = prod_rate(category) or 3000
     hourly = _get('comm_hourly_cost')
@@ -71,16 +94,24 @@ def quote(square_footage, category='office', frequency='weekly'):
     hours = sqft / rate if rate else 0.0
     labor = hours * hourly
     price = (labor / target) if target else labor
+    extra_pct = sum(pct for key, _lbl, pct in EXTRAS if key in extras)
+    price = price * (1 + extra_pct)
     price = max(price, min_visit if sqft else 0.0)
-    vpm = VISITS_PER_MONTH.get(frequency, 4.3)
 
+    vpm = VISITS_PER_MONTH.get(frequency, 4.3)
+    standard = round(price)
+    monthly = round(standard * vpm)
     return {
         'square_footage': int(sqft),
         'hours': round(hours, 2),
         'labor_cost': round(labor, 2),
-        'price_per_visit': round(price, 2),
-        'monthly': round(price * vpm, 2),
-        'your_profit_per_visit': round(price - labor, 2),
+        'low': round(price * RANGE_LOW),
+        'standard': standard,
+        'premium': round(price * RANGE_HIGH),
+        'per_visit': standard,          # what we save on the account
+        'monthly': monthly,
+        'annual': monthly * 12,
+        'profit_per_visit': round(standard - labor),
     }
 
 
@@ -92,4 +123,7 @@ def get_config():
         'min_visit': _get('comm_min_visit'),
         'prod_rates': {c: prod_rate(c) for c in PROD_RATES},
         'visits_per_month': VISITS_PER_MONTH,
+        'facility_types': [{'key': k, 'label': l, 'desc': d} for k, l, d in FACILITY_TYPES],
+        'extras': [{'key': k, 'label': l, 'pct': p} for k, l, p in EXTRAS],
+        'range_low': RANGE_LOW, 'range_high': RANGE_HIGH,
     }

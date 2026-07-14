@@ -68,13 +68,47 @@ def _send_transactional(trigger, email, name, variables):
         return False
 
 
+def _send_quote_followup(q, n):
+    """Send nurture follow-up #n for a sent-but-unanswered commercial quote,
+    branded to the quote's brand (L & M or Dazzle)."""
+    import brands
+    from notifications import send_email, unsubscribe_token
+    brand = q.brand or brands.brand_for_property(q.property_type)
+    from_name, from_email, reply_to = brands.send_identity(brand)
+    url = f"{CRM_BASE}/quotes/view/{q.token}"
+    first = (q.contact_name or '').split()[0] if q.contact_name else 'there'
+    company = q.company or 'your property'
+    MSGS = {
+        1: ("Just checking in on your cleaning proposal",
+            f"<p>Hi {first},</p><p>Just making sure our cleaning proposal for <strong>{company}</strong> "
+            f"reached you. Whenever you're ready, you can review everything and accept it right here.</p>"),
+        2: ("Any questions about your cleaning quote?",
+            f"<p>Hi {first},</p><p>Following up on the proposal for <strong>{company}</strong>. I'd be glad to "
+            f"answer questions, adjust the scope, or tweak the schedule — just reply and let me know. "
+            f"Your full quote is still ready here:</p>"),
+        3: ("Still here whenever you're ready",
+            f"<p>Hi {first},</p><p>Last quick note on your cleaning proposal for <strong>{company}</strong>. "
+            f"No pressure at all — whenever the timing is right, your quote is ready and waiting. "
+            f"We'd love to earn your business.</p>"),
+    }
+    subject, inner = MSGS.get(n, MSGS[1])
+    unsub = f"{CRM_BASE}/api/unsubscribe/{unsubscribe_token(q.email)}"
+    foot = ("You're receiving this because we sent you a cleaning quote. "
+            f'<a href="{unsub}" style="color:#9a95ad">Unsubscribe</a>.')
+    html = brands.email_shell(brand, None, inner, cta_text='View &amp; Accept Quote →',
+                              cta_url=url, footer_note=foot)
+    return send_email(q.email, q.contact_name, subject, html,
+                      from_name=from_name, from_email=from_email, reply_to=reply_to)
+
+
 def run_lifecycle_emails():
     """Process every lifecycle stage. Returns a dict of how many of each were sent."""
     from models import Booking, Lead, BookingRating, Staff
     now = datetime.utcnow()
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
          'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
-         'onboarding_reminder': 0, 'schedule_reminder': 0, 'invoice': 0}
+         'onboarding_reminder': 0, 'schedule_reminder': 0, 'invoice': 0,
+         'quote_followup': 0}
 
     # ── A4 — final lead follow-up (~5 days after the last-chance drip) ──
     for lead in Lead.query.filter(Lead.drip_step == 3, Lead.status == 'new').all():
@@ -88,6 +122,28 @@ def run_lifecycle_emails():
         lead.drip_step = 4
         lead.last_drip_at = now
         db.session.commit()
+
+    # ── Commercial quote nurture — follow up on sent, unanswered quotes (day 2/5/9) ──
+    from models import CommercialQuote
+    QUOTE_SCHEDULE = [(2, 1), (5, 2), (9, 3)]
+    for q in CommercialQuote.query.filter(CommercialQuote.status == 'sent').all():
+        if not q.email or is_opted_out(q.email):
+            continue
+        base = q.sent_at or q.created_at
+        if not base:
+            continue
+        step = q.drip_step or 0
+        for days, target in QUOTE_SCHEDULE:
+            if step < target and base <= now - timedelta(days=days):
+                try:
+                    _send_quote_followup(q, target)
+                    c['quote_followup'] += 1
+                except Exception:
+                    pass
+                q.drip_step = target
+                q.last_drip_at = now
+                db.session.commit()
+                break
 
     # ── B3 — morning-of note (job scheduled today) ──
     today = now.date().isoformat()

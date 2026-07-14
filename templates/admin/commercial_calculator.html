@@ -1,0 +1,149 @@
+{% extends "base_admin.html" %}
+{% block title %}Price a Job — Commercial{% endblock %}
+{% block page_title %}Price a Commercial Job{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:14px"><a href="{{ url_for('commercial.index') }}" style="color:#9a95ad;font-size:0.9rem">← Commercial accounts</a></div>
+<p style="color:#9a95ad;font-size:0.92rem;margin:0 0 18px;max-width:640px">
+  Answer 3 quick questions and get a confident price you can quote on the spot — built from your real costs, so it's always profitable. 💪
+</p>
+
+<form method="POST" action="{{ url_for('commercial.new') }}" id="calcForm">
+  <input type="hidden" name="category" id="f_category" value="office">
+  <input type="hidden" name="frequency" id="f_frequency" value="weekly">
+  <input type="hidden" name="billing_type" value="per_visit">
+  <input type="hidden" name="billing_amount" id="f_amount" value="">
+  <input type="hidden" name="notes" id="f_notes" value="">
+
+  <div class="card step">
+    <div class="steph"><span class="stepn">1</span> What kind of place is it?</div>
+    <div class="grid-pick" id="typePick">
+      {% for t in pricing_config.facility_types %}
+      <button type="button" class="pick" data-val="{{ t.key }}" onclick="pickType(this)">
+        <div style="font-weight:700">{{ t.label }}</div>
+        <div class="hint">{{ t.desc }}</div>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card step">
+    <div class="steph"><span class="stepn">2</span> How big is it?</div>
+    <input class="inp big" type="number" name="square_footage" id="f_sqft" min="0" placeholder="e.g. 5000" oninput="recalc()">
+    <div class="hint">Square feet. Not sure? Check the lease, or Google the business address.</div>
+  </div>
+
+  <div class="card step">
+    <div class="steph"><span class="stepn">3</span> How often will you clean it?</div>
+    <div class="grid-pick" id="freqPick">
+      {% for f in frequencies if f != 'custom' %}
+      <button type="button" class="pick" data-val="{{ f }}" onclick="pickFreq(this)">{{ freq_labels[f] }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card step">
+    <div class="steph"><span class="stepn">4</span> Anything extra? <span class="hint" style="font-weight:400">— optional</span></div>
+    <div class="grid-pick">
+      {% for e in pricing_config.extras %}
+      <label class="chk"><input type="checkbox" value="{{ e.key }}" onchange="recalc()"> {{ e.label }}</label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card" id="resultCard" style="border:2px solid #d3a84f;background:rgba(211,168,79,0.09)">
+    <div id="result"></div>
+  </div>
+
+  <div class="card">
+    <div class="steph"><span class="stepn" style="background:#276749">✓</span> Turn this into an account <span class="hint" style="font-weight:400">— optional</span></div>
+    <div class="hint" style="margin-bottom:12px">Just needed a number for a quote? You're done. To keep it, add the business name and save.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+      <div><label class="lbl">Business name</label><input class="inp" name="business_name" placeholder="Sunrise Daycare"></div>
+      <div><label class="lbl">Contact person</label><input class="inp" name="contact_name"></div>
+      <div><label class="lbl">Email</label><input class="inp" name="email"></div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+      <button type="submit" class="btn" style="padding:11px 24px">💾 Save as new account</button>
+      <button type="button" class="btn btn-outline" onclick="resetCalc()" style="padding:11px 20px">↻ Start over</button>
+    </div>
+  </div>
+</form>
+
+<style>
+  .step{margin-bottom:16px}
+  .steph{font-weight:700;color:#1f1333;font-size:1.02rem;display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .stepn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#d3a84f;color:#fff;font-size:0.85rem;flex-shrink:0}
+  .grid-pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .pick{text-align:left;background:#fff;border:1.5px solid #e3e0ec;border-radius:10px;padding:12px;cursor:pointer;font-size:0.92rem;color:#1f1333;transition:all .12s}
+  .pick:hover{border-color:#d3a84f}
+  .pick.on{border-color:#d3a84f;background:rgba(211,168,79,0.14);box-shadow:0 0 0 1px #d3a84f}
+  .hint{font-size:0.78rem;color:#9a95ad;margin-top:3px}
+  .chk{display:flex;align-items:center;gap:8px;background:#fff;border:1.5px solid #e3e0ec;border-radius:10px;padding:11px 12px;cursor:pointer;font-size:0.9rem}
+  .chk input{width:17px;height:17px}
+  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem}
+  .inp.big{font-size:1.3rem;padding:12px;max-width:220px;font-weight:700}
+</style>
+
+<script>
+const CFG = {{ pricing_config|tojson }};
+let curType = 'office', curFreq = 'weekly';
+
+function pickType(btn){ curType = btn.dataset.val; highlight('typePick', btn, 'f_category'); recalc(); }
+function pickFreq(btn){ curFreq = btn.dataset.val; highlight('freqPick', btn, 'f_frequency'); recalc(); }
+function highlight(group, btn, hiddenId){
+  document.querySelectorAll('#'+group+' .pick').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById(hiddenId).value = btn.dataset.val;
+}
+function selectedExtras(){ return Array.from(document.querySelectorAll('.chk input:checked')).map(c => c.value); }
+
+function recalc(){
+  const sqft = parseFloat(document.getElementById('f_sqft').value) || 0;
+  const out = document.getElementById('result');
+  if(!sqft){
+    out.innerHTML = '<div style="color:#9a95ad;text-align:center;padding:6px">👆 Enter the size above to see your price.</div>';
+    document.getElementById('f_amount').value = '';
+    return;
+  }
+  const rate = CFG.prod_rates[curType] || 3000;
+  const hours = sqft / rate;
+  const labor = hours * CFG.hourly;
+  let price = CFG.target ? labor / CFG.target : labor;
+  let pct = 0;
+  selectedExtras().forEach(k => { const e = CFG.extras.find(x => x.key === k); if(e) pct += e.pct; });
+  price = price * (1 + pct);
+  price = Math.max(price, CFG.min_visit);
+  const vpm = CFG.visits_per_month[curFreq] || 4.3;
+  const std = Math.round(price), low = Math.round(price*CFG.range_low), prem = Math.round(price*CFG.range_high);
+  const monthly = Math.round(std*vpm), annual = monthly*12;
+  document.getElementById('f_amount').value = std;
+  document.getElementById('f_notes').value = 'Quote: ' + Math.round(sqft) + ' sq ft ' + curType + ', ' + curFreq +
+    (selectedExtras().length ? (' + ' + selectedExtras().join(', ')) : '');
+  out.innerHTML =
+    '<div style="text-align:center">' +
+      '<div style="font-size:0.82rem;color:#9a95ad">Your confident price</div>' +
+      '<div style="font-size:2rem;font-weight:800;color:#1f1333;line-height:1.1;margin-top:2px">$' + low + ' – $' + prem +
+        '<span style="font-size:1rem;color:#9a95ad"> / visit</span></div>' +
+      '<div style="color:#b98a33;font-weight:700;margin-top:2px">Most quote around $' + std + ' / visit</div>' +
+      '<div style="margin-top:10px;font-size:1rem">≈ <b>$' + monthly + '/month</b> &middot; $' + annual + '/year</div>' +
+      '<div style="margin-top:10px;font-size:0.82rem;color:#9a95ad">~' + hours.toFixed(1) + ' hrs of work &middot; ' +
+        'pay your cleaner ~$' + Math.round(labor) + ' &middot; you keep ~$' + (std - Math.round(labor)) + '/visit</div>' +
+    '</div>';
+}
+function resetCalc(){
+  document.getElementById('calcForm').reset();
+  curType = 'office'; curFreq = 'weekly';
+  document.querySelectorAll('.pick').forEach(b => b.classList.remove('on'));
+  const t = document.querySelector('#typePick .pick[data-val=office]'); if(t) t.classList.add('on');
+  const f = document.querySelector('#freqPick .pick[data-val=weekly]'); if(f) f.classList.add('on');
+  recalc();
+}
+document.addEventListener('DOMContentLoaded', function(){
+  const t = document.querySelector('#typePick .pick[data-val=office]'); if(t) t.classList.add('on');
+  const f = document.querySelector('#freqPick .pick[data-val=weekly]'); if(f) f.classList.add('on');
+  recalc();
+});
+</script>
+{% endblock %}

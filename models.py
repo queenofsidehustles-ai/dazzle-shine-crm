@@ -408,6 +408,9 @@ class CommercialQuote(db.Model):
     scope_notes = db.Column(db.Text)
     status = db.Column(db.String(20), default='draft')  # draft, sent, accepted, declined
     token = db.Column(db.String(64), unique=True, nullable=False)
+    brand = db.Column(db.String(10), default='lm')      # 'lm' (L & M) or 'dazzle'
+    drip_step = db.Column(db.Integer, default=0)        # nurture follow-ups already sent
+    last_drip_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     sent_at = db.Column(db.DateTime)
     viewed_at = db.Column(db.DateTime)      # first time the contact opened the proposal

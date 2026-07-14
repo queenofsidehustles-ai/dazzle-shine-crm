@@ -282,6 +282,9 @@ def _migrate_db():
         ('commercial_quote', 'sent_at',          'TIMESTAMP'),
         ('commercial_quote', 'viewed_at',        'TIMESTAMP'),
         ('commercial_quote', 'responded_at',     'TIMESTAMP'),
+        ('commercial_quote', 'brand',            "VARCHAR(10) DEFAULT 'lm'"),
+        ('commercial_quote', 'drip_step',        'INTEGER DEFAULT 0'),
+        ('commercial_quote', 'last_drip_at',     'TIMESTAMP'),
         # Booking cleaner tracking
         ('booking', 'cleaner_notified_at', 'TIMESTAMP'),
         ('booking', 'cleaner_response',    'VARCHAR(20)'),

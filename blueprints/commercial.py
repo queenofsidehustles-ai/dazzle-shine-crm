@@ -59,6 +59,12 @@ def index():
         monthly_total=monthly_total))
 
 
+@commercial_bp.route('/calculator')
+@login_required
+def calculator():
+    return render_template('admin/commercial_calculator.html', **_tmpl_args())
+
+
 @commercial_bp.route('/new', methods=['POST'])
 @login_required
 def new():
