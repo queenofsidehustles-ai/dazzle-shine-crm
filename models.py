@@ -1,5 +1,6 @@
 from extensions import db
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 import json
 
 
@@ -703,3 +704,31 @@ class Prospect(db.Model):
     @property
     def status_label(self):
         return self.STATUS_LABELS.get(self.status, self.status or 'New')
+
+
+class User(db.Model):
+    """A person who can log into the CRM.
+    role 'owner'  → sees everything, money included (that's Monica).
+    role 'team'   → VAs / future hires: everything EXCEPT money pages
+                    (payroll, contractor pay, reports, settings).
+    Monica's original env-based login still works and is always an owner."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), default='team')   # 'owner' or 'team'
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime)
+
+    def set_password(self, pw):
+        # pbkdf2:sha256 is supported on every Python build; werkzeug's newer
+        # default (scrypt) needs OpenSSL scrypt support that some builds lack.
+        self.password_hash = generate_password_hash(pw, method='pbkdf2:sha256')
+
+    def check_password(self, pw):
+        return check_password_hash(self.password_hash, pw)
+
+    @property
+    def role_label(self):
+        return '👑 Owner' if self.role == 'owner' else '👤 Team'

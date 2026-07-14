@@ -3,7 +3,7 @@ import secrets
 import threading
 from datetime import datetime, date, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
-from auth import login_required
+from auth import login_required, owner_required
 from models import Staff, ContractorApplication, Booking, BusinessSetting, ContractorPayment
 from extensions import db
 from notifications import send_email, send_sms
@@ -1027,7 +1027,7 @@ def staff_toggle_active(staff_id):
 # ── Payroll ────────────────────────────────────────────────────────────────────
 
 @contractors_bp.route('/payroll')
-@login_required
+@owner_required
 def payroll():
     today = date.today()
     # Default: this week (Mon-Sun)

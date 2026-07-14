@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from auth import login_required
+from auth import login_required, owner_required
 from models import PricingSetting, BusinessSetting
 from extensions import db
 from pricing import SERVICES, EXTRAS, DEPOSIT_AMOUNT
@@ -8,7 +8,7 @@ settings_bp = Blueprint('settings', __name__, url_prefix='/settings')
 
 
 @settings_bp.route('/pricing', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def pricing():
     if request.method == 'POST':
         # Save deposit
@@ -50,7 +50,7 @@ def pricing():
 
 
 @settings_bp.route('/business', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def business():
     fields = ['business_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'website',
               'worker_model', 'reception_model', 'agreement_template',

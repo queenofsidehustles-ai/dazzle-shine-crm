@@ -1,6 +1,6 @@
 import json
 from flask import Blueprint, render_template, request, session, redirect, url_for
-from auth import login_required, check_credentials
+from auth import login_required, owner_required, authenticate
 from models import Booking, Client, Lead
 from extensions import db
 from sqlalchemy import func
@@ -33,7 +33,7 @@ def dashboard():
 
 
 @admin_bp.route('/reports')
-@login_required
+@owner_required
 def reports():
     today = date.today()
 
@@ -131,8 +131,12 @@ def reports():
 def login():
     error = None
     if request.method == 'POST':
-        if check_credentials(request.form['username'], request.form['password']):
+        ok, info = authenticate(request.form['username'], request.form['password'])
+        if ok:
             session['logged_in'] = True
+            session['role'] = info['role']
+            session['user_id'] = info['user_id']
+            session['user_name'] = info['name']
             return redirect(url_for('admin.dashboard'))
         error = 'Wrong username or password.'
     return render_template('admin/login.html', error=error)

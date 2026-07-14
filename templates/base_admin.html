@@ -287,6 +287,7 @@
       <span class="sub">Back Office</span>
     </div>
     <nav>
+      {% set is_owner = session.get('role', 'owner') == 'owner' %}
       <a href="{{ url_for('admin.dashboard') }}" class="{{ 'active' if request.endpoint == 'admin.dashboard' }}">
         <span class="icon">🏠</span> Dashboard
       </a>
@@ -333,9 +334,11 @@
       <a href="{{ url_for('interviews.admin_interviews') }}" class="{{ 'active' if request.blueprint == 'interviews' }}">
         <span class="icon">🎥</span> Interviews
       </a>
+      {% if is_owner %}
       <a href="{{ url_for('contractors.payroll') }}" class="{{ 'active' if request.endpoint == 'contractors.payroll' }}">
         <span class="icon">💰</span> Payroll
       </a>
+      {% endif %}
 
       <div class="nav-sec">Toolkit</div>
       <a href="{{ url_for('workorders.templates') }}" class="{{ 'active' if request.blueprint == 'workorders' }}">
@@ -354,6 +357,7 @@
         <span class="icon">🗒️</span> VA Scripts
       </a>
 
+      {% if is_owner %}
       <div class="nav-sec">Analytics</div>
       <a href="{{ url_for('admin.reports') }}" class="{{ 'active' if request.endpoint == 'admin.reports' }}">
         <span class="icon">📊</span> Reports
@@ -361,8 +365,13 @@
       <a href="{{ url_for('settings.pricing') }}" class="{{ 'active' if request.blueprint == 'settings' }}">
         <span class="icon">⚙️</span> Settings
       </a>
+      <a href="{{ url_for('team_logins.index') }}" class="{{ 'active' if request.blueprint == 'team_logins' }}">
+        <span class="icon">🔐</span> Team Logins
+      </a>
+      {% endif %}
     </nav>
     <div class="sidebar-footer">
+      {% if session.get('user_name') %}<div style="font-size:0.75rem;color:#9a95ad;margin-bottom:6px">{{ session.get('user_name') }}{% if not is_owner %} · Team{% endif %}</div>{% endif %}
       <a href="{{ url_for('admin.logout') }}">Sign out</a>
     </div>
   </aside>
