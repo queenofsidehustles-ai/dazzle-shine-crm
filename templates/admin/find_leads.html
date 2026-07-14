@@ -1,0 +1,143 @@
+{% extends "base_admin.html" %}
+{% block title %}Find Leads — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Find Leads{% endblock %}
+
+{% block content %}
+
+{% if demo %}
+<div class="card" style="border-left:4px solid #d3a84f;background:rgba(211,168,79,0.10);margin-bottom:18px">
+  <strong>👀 Demo mode.</strong> You're seeing <em>sample</em> businesses so you can try the whole flow.
+  Add a <code>GOOGLE_PLACES_API_KEY</code> and real Orlando businesses will show up instead.
+  <span style="color:#9a95ad">(The fake numbers below are 555 placeholders — don't call them 😊)</span>
+</div>
+{% endif %}
+
+<!-- ── Search box ───────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:18px">
+  <form method="POST" action="{{ url_for('places_finder.search') }}"
+        style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+    <div style="flex:1;min-width:180px">
+      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Who do you want to call?</label>
+      <select name="category" style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.95rem">
+        {% for c in categories %}
+        <option value="{{ c }}" {{ 'selected' if c == search_category }}>{{ category_labels[c] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="flex:1;min-width:180px">
+      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Where?</label>
+      <input type="text" name="location" value="{{ search_location }}" placeholder="Orlando, FL"
+             style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.95rem">
+    </div>
+    <button type="submit" class="btn" style="padding:11px 22px">🎯 Find Businesses</button>
+  </form>
+</div>
+
+<!-- ── Search results (only after a search) ─────────────────── -->
+{% if results is not none %}
+<div class="card" style="margin-bottom:18px">
+  <h3 style="margin:0 0 12px">{{ results|length }} found — tick the ones to add to your call list</h3>
+  {% if results %}
+  <form method="POST" action="{{ url_for('places_finder.import_selected') }}">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Business</th><th>Phone</th><th>Rating</th><th></th></tr></thead>
+        <tbody>
+          {% for r in results %}
+          <tr>
+            <td>
+              {% if r.already %}
+                <span style="font-size:0.75rem;color:#9a95ad">✓ added</span>
+              {% else %}
+                <input type="checkbox" name="selected" value="{{ r.place_id }}" checked style="width:18px;height:18px">
+                <input type="hidden" name="payload_{{ r.place_id }}" value='{{ r|tojson }}'>
+              {% endif %}
+            </td>
+            <td>
+              <strong>{{ r.business_name }}</strong><br>
+              <span style="font-size:0.8rem;color:#9a95ad">{{ r.address }}</span>
+            </td>
+            <td>{{ r.phone or '—' }}</td>
+            <td>{{ '⭐ %.1f' % r.rating if r.rating else '—' }}</td>
+            <td>{% if r.website %}<a href="{{ r.website }}" target="_blank" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem">Site</a>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:14px">
+      <button type="submit" class="btn" style="padding:11px 22px">➕ Add selected to call list</button>
+    </div>
+  </form>
+  {% else %}
+  <p style="color:#9a95ad;text-align:center;padding:20px 0">No businesses found. Try a broader area or a different category.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ── The call list (VA cockpit) ───────────────────────────── -->
+<div class="filter-tabs">
+  {% for s, label in [('','All'),('new','New'),('called','Called'),('interested','Interested'),('won','Won')] %}
+  <a href="{{ url_for('places_finder.dashboard', status=s) }}"
+     class="filter-tab {{ 'active' if status_filter == s }}">
+    {{ label }} ({{ counts['all' if not s else s] }})
+  </a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h3 style="margin:0 0 4px">📞 Call List</h3>
+  <p style="color:#9a95ad;font-size:0.85rem;margin:0 0 14px">
+    Tap a phone number to call. Set the status after each call — "Won 🎉" means they said yes.
+  </p>
+  {% if prospects %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Business</th><th>Category</th><th>Call</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+      <tbody>
+        {% for p in prospects %}
+        {% set colors = {'new':'status-pending','called':'status-confirmed','no_answer':'status-cancelled','callback':'status-pending','interested':'status-confirmed','not_interested':'status-cancelled','won':'status-completed'} %}
+        <tr>
+          <td>
+            <strong>{{ p.business_name }}</strong>
+            {% if p.rating %}<span style="font-size:0.78rem;color:#9a95ad"> ⭐{{ '%.1f' % p.rating }}</span>{% endif %}
+            {% if p.website %}<br><a href="{{ p.website }}" target="_blank" style="font-size:0.78rem;color:#b98a33">website ↗</a>{% endif %}
+          </td>
+          <td style="font-size:0.82rem">{{ p.category_label }}</td>
+          <td>
+            {% if p.phone %}
+            <a href="tel:{{ p.phone }}" class="btn" style="padding:7px 14px;font-size:0.85rem;white-space:nowrap">📞 {{ p.phone }}</a>
+            {% else %}<span style="color:#9a95ad">no phone</span>{% endif %}
+          </td>
+          <td colspan="2">
+            <form method="POST" action="{{ url_for('places_finder.update_status', prospect_id=p.id, status=status_filter) }}"
+                  style="display:flex;gap:6px;align-items:center">
+              <select name="status" onchange="this.form.submit()"
+                      style="padding:6px;border:1px solid #e3e0ec;border-radius:6px;font-size:0.82rem">
+                {% for sv, sl in status_labels.items() %}
+                <option value="{{ sv }}" {{ 'selected' if p.status == sv }}>{{ sl }}</option>
+                {% endfor %}
+              </select>
+              <input type="text" name="notes" value="{{ p.notes or '' }}" placeholder="notes…"
+                     style="flex:1;min-width:90px;padding:6px;border:1px solid #e3e0ec;border-radius:6px;font-size:0.82rem">
+              <button type="submit" class="btn btn-outline" style="padding:6px 10px;font-size:0.82rem">💾</button>
+            </form>
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('places_finder.delete', prospect_id=p.id) }}"
+                  onsubmit="return confirm('Remove {{ p.business_name }} from the call list?')">
+              <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:#e53e3e">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:36px 0">
+    Your call list is empty. Search above to find businesses, then add them here. 🎣
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

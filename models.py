@@ -653,3 +653,53 @@ class OutboundLog(db.Model):
     status = db.Column(db.String(10))        # 'sent' or 'failed'
     detail = db.Column(db.String(400))       # provider detail or error reason
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class Prospect(db.Model):
+    """A cold-outreach business to CALL — the 'Big Fish Finder' call list.
+    Kept separate from Lead (inbound quote requests) on purpose: prospects are
+    businesses we go hunt (property managers, realtors, Airbnb hosts) and must
+    NOT be swept into the customer email drip. When a prospect says yes, the VA
+    converts them into a real Lead/Booking."""
+    id = db.Column(db.Integer, primary_key=True)
+    business_name = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(40), default='property_manager')  # property_manager / realtor / airbnb / apartment / other
+    phone = db.Column(db.String(40))
+    website = db.Column(db.String(300))
+    address = db.Column(db.String(300))
+    city = db.Column(db.String(100))
+    rating = db.Column(db.Float)                 # Google star rating (helps prioritise calls)
+    place_id = db.Column(db.String(220), index=True)  # Google Place id — used to de-duplicate imports
+    status = db.Column(db.String(30), default='new')  # new / called / no_answer / callback / interested / not_interested / won
+    notes = db.Column(db.Text)
+    source = db.Column(db.String(50), default='google_places')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    called_at = db.Column(db.DateTime)
+
+    CATEGORY_LABELS = {
+        'property_manager': '🏢 Property Manager',
+        'realtor': '🔑 Realtor',
+        'airbnb': '🛏️ Airbnb / STR Host',
+        'apartment': '🏘️ Apartment Complex',
+        'daycare': '🧸 Daycare / Childcare',
+        'medical_office': '🩺 Doctor / Medical Office',
+        'office': '💼 Office Space',
+        'other': '📇 Other',
+    }
+    STATUS_LABELS = {
+        'new': 'New',
+        'called': 'Called',
+        'no_answer': 'No Answer',
+        'callback': 'Call Back',
+        'interested': 'Interested',
+        'not_interested': 'Not Interested',
+        'won': 'Won 🎉',
+    }
+
+    @property
+    def category_label(self):
+        return self.CATEGORY_LABELS.get(self.category, self.category or 'Other')
+
+    @property
+    def status_label(self):
+        return self.STATUS_LABELS.get(self.status, self.status or 'New')

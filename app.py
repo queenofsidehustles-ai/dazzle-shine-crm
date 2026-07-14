@@ -1,4 +1,11 @@
 import os
+try:
+    # Load a local .env file if present (safe no-op in production, where
+    # Railway injects real env vars). Lets GOOGLE_PLACES_API_KEY etc. work locally.
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
 from flask import Flask
 from extensions import db
 from blueprints.admin import admin_bp
@@ -22,6 +29,7 @@ from blueprints.deposit import deposit_bp
 from blueprints.messages import messages_bp
 from blueprints.payments import payments_bp
 from blueprints.claims import claims_bp
+from blueprints.places_finder import places_finder_bp
 
 
 def create_app():
@@ -71,6 +79,7 @@ def create_app():
     app.register_blueprint(messages_bp)
     app.register_blueprint(payments_bp)
     app.register_blueprint(claims_bp)
+    app.register_blueprint(places_finder_bp)
 
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor
