@@ -102,6 +102,7 @@ def create_app():
         _migrate_db()
         _seed_checklists()
         _seed_scripts()
+        _seed_sales_scripts()
         _seed_sops()
         _seed_email_templates()
         _apply_template_patches()
@@ -473,6 +474,172 @@ def _seed_checklists():
         if not exists:
             t = ChecklistTemplate(name=name, service_type=svc_type, items=_json.dumps(items))
             db.session.add(t)
+    db.session.commit()
+
+
+def _seed_sales_scripts():
+    """Add the deep, psychology-backed cold-call scripts for both brands.
+    Idempotent (guarded by a BusinessSetting flag). Lines starting with 💡 render
+    as tap-to-open 'Why this works' notes so the VA reads clean during a call."""
+    from models import Script, BusinessSetting
+
+    scripts = [
+        ('outbound', '🏢 Cold Call Opening + Discovery — L & M Commercial (offices · daycares · medical)', 0, """[When they answer]
+"Hi, this is [Your Name] with L & M Commercial Cleaners here in Orlando — did I catch you at an okay time?"
+💡 Asking "is now okay?" hands them control and lowers their guard. People relax the moment they feel free to say no.
+
+[If they say go ahead]
+"Thanks — I'll be quick and real with you. You weren't expecting my call, so I'll get right to the point."
+💡 Naming the awkwardness ("you weren't expecting my call") disarms suspicion. Radical honesty builds instant trust.
+
+"We handle commercial cleaning for a handful of offices and daycares around Orlando, and I'm reaching out to a few local spots to see if we're a fit. Quick question — who handles your cleaning right now, in-house or an outside company?"
+💡 "A handful of local spots" is social proof + quiet scarcity (we're selective). The open question gets THEM talking instead of you pitching.
+
+[Listen. Then diagnose — don't sell yet.]
+"Got it. And how's that been working out for you?"
+💡 A calibrated question. Their answer reveals the pain — no-shows, inconsistency — that you can solve. Diagnose before you prescribe.
+
+[If they hint at any frustration, label it:]
+"It sounds like reliability has been a bit of a headache."
+💡 Labeling their feeling makes them feel understood, and they open up more. This is tactical empathy, not flattery.
+
+"That's exactly what we hear most. Here's all I'd suggest, no pressure: let me do a quick 10-minute walkthrough of your space and put together a clear quote. If it's a fit, great — if not, no hard feelings. Would it be unreasonable to grab 10 minutes this week?"
+💡 "Would it be unreasonable to…?" is a no-oriented question — it's easy to say "no, that's fine," which really means yes. And a 10-minute walkthrough is a tiny commitment, not a contract (foot-in-the-door)."""),
+
+        ('outbound', '🏘️ Cold Call Opening + Discovery — Dazzle & Shine (apartments · property managers)', 1, """[When they answer]
+"Hi, this is [Your Name] with Dazzle & Shine Maids here in Orlando — did I catch you at a bad time?"
+💡 "Bad time?" invites a safe "no" and disarms. It beats "How are you today?", which instantly signals a sales pitch.
+
+"Thanks for a sec. I'll be straight with you — I'm reaching out to property managers around Orlando because turnovers and move-outs are usually where cleaning falls apart. Who's handling your unit turnover cleans right now?"
+💡 Leading with THEIR known pain (turnovers) proves you understand their world. Specific beats generic every time.
+
+[Listen]
+"And when a unit turns and your cleaner cancels last minute — how big a problem is that for you?"
+💡 A calibrated question that surfaces loss aversion: a vacant unit that isn't rent-ready costs real money. You're helping them feel the cost of staying put.
+
+"Right — that's the exact gap we fill: reliable turnover cleans so your units are rent-ready on time. Would it be ridiculous to set up a quick walkthrough of one property so I can show you what we'd charge per unit?"
+💡 "Would it be ridiculous to…?" is the safe-no close again. "Per unit" framing matches how property managers actually think about cost."""),
+
+        ('outbound', '🔑 Cold Call Opening + Discovery — Realtors (listing & closing cleans) — Dazzle & Shine', 2, """[When they answer]
+"Hi, is this [Name]? This is [Your Name] with Dazzle & Shine Maids here in Orlando — did I catch you between showings?"
+💡 "Between showings?" shows you get a realtor's crazy schedule and gives a respectful out. Rapport in one line.
+
+"I'll be quick — I work with a few Orlando agents on move-in and move-out cleans, the kind that make a listing photograph beautifully and close smoothly. Do you have a go-to cleaner for your listings right now?"
+💡 Tie cleaning to what a realtor actually cares about: photos, showings, on-time closings. Sell their outcome, not your service.
+
+[Listen]
+"And when a closing's tight and the house has to be spotless fast — who do you call?"
+💡 A calibrated question that surfaces the panic moment (the last-minute clean) where you become the hero. Loss aversion: a delayed close costs them.
+
+"That's exactly what we're great at — fast, reliable turn cleans on your timeline. Would it be crazy to be your on-call cleaner, so your next tight closing is already handled?"
+💡 "Would it be crazy to…?" safe-no close. "On-call" is a tiny yes, not a commitment — and frames you as their safety net."""),
+
+        ('outbound', '🛏️ Cold Call Opening + Discovery — Airbnb / STR Hosts (turnovers) — Dazzle & Shine', 3, """[When they answer]
+"Hi [Name], this is [Your Name] with Dazzle & Shine Maids in Orlando — did I catch you at an okay time?"
+💡 A permission opener — hands control over and lowers the guard.
+
+"I'll keep it short. I help short-term rental hosts around Orlando with guest turnovers — the fast, spotless resets between check-out and check-in. How are you handling your turnovers right now?"
+💡 Speak their language: "turnovers," "check-out/check-in," "5-star clean." Insider words prove you truly get their business.
+
+[Listen]
+"And on a same-day turnaround, when a cleaner flakes and a guest is checking in at 4 — how stressful is that?"
+💡 Name their nightmare. The pain of a bad review over a dirty unit is powerful loss aversion.
+
+"Right — that's the exact gap we fill: dependable same-day turnovers so you never scramble and your reviews stay 5-star. Would it be unreasonable to set up one property so you can see how we do?"
+💡 "Would it be unreasonable to…?" safe-no close, and "one property" shrinks it to a low-risk trial."""),
+
+        ('general', '🔑 Gatekeeper — Getting to the Decision-Maker', 0, """[Front desk / receptionist answers]
+"Hi! Maybe you can help me out — who would I talk to about the cleaning or janitorial services for the building?"
+💡 "Maybe you can help me" turns the gatekeeper into an ally instead of an obstacle. People genuinely like to help.
+
+[If they ask what it's about]
+"Of course — I'm [Your Name] with [Brand]. We do commercial cleaning locally, and I just wanted to see if they're happy with their current setup. Are they around?"
+💡 Honest and low-stakes ("just seeing if they're happy") gives them nothing to block. You're not selling — you're checking in.
+
+[If the decision-maker isn't available]
+"No worries. What's the best way to reach them — and is there a better time of day I'd catch them?"
+💡 Asking for the best TIME (not just "can I leave a message") earns you a real callback window instead of the voicemail graveyard.
+
+[Always get the name]
+"Great — and who should I ask for when I call back?"
+💡 A name turns your next call from cold into warm. Tiny ask, huge payoff."""),
+
+        ('general', '📵 Voicemail Scripts That Actually Get Callbacks', 1, """[Keep it under 20 seconds. Curiosity + an easy reason to call back.]
+"Hi [Name], it's [Your Name] with [Brand] here in Orlando. I had a quick question about how you're handling the cleaning at [Business/Property] — I think we might save you a headache. Call me back at [number]; again that's [number]. Thanks!"
+💡 "A quick question" + "save you a headache" opens a curiosity loop their brain wants to close. Saying the number twice makes calling back effortless.
+
+[Second voicemail, a few days later — reference the first, stay light]
+"Hi [Name], [Your Name] with [Brand] again. Still happy to take the cleaning off your plate whenever the timing's right — no rush at all. [number]."
+💡 "No rush" removes pressure, which paradoxically makes people MORE likely to call back. Persistence without pushiness."""),
+
+        ('objection', '🛡️ Objection Handling — The Top 6 (both brands)', 0, """❝ "We already have a cleaner." ❞
+"That's great — honestly, most of our best clients did when we first met. Can I ask… on their worst day, what's the one thing you wish they did better?"
+💡 Agree first (zero resistance), then a calibrated question that opens a crack. Nobody is 100% happy with their vendor.
+"All I'd ask is to be your backup — so the day they cancel, you've already got someone. Costs you nothing to have us on file."
+💡 "Backup" is a zero-risk foot-in-the-door, and it plants loss aversion around the cancellation that WILL eventually happen.
+
+❝ "Just email me some info." ❞
+"Happy to! So I send something actually useful and not generic — what matters most to you: price, reliability, or flexibility?"
+💡 "Email me" is usually a polite brush-off. This flips it into quick discovery AND earns you a real reason to follow up.
+"Perfect — I'll send that. And so it doesn't get buried, mind if I give you a quick call Thursday?"
+💡 Locking the next step kills the email black hole. You control the follow-up instead of hoping.
+
+❝ "What's your price?" ❞
+"Fair question — it depends on your space, so I won't guess and be wrong. That's exactly why the 10-minute walkthrough helps. Most spots your size land around [range] — want me to get you an exact number?"
+💡 Drop a range so they're not shocked later (anchoring), then pivot back to the walkthrough. Never quote blind over the phone.
+
+❝ "It's too expensive." ❞
+"I hear you. Can I ask — expensive compared to what?"
+💡 A calibrated question that makes THEM define the comparison. Usually it's a cheaper, less reliable option — which opens the value conversation.
+"When a cheap cleaner no-shows, it costs way more than the few dollars saved. We're not the cheapest — we're the ones who actually show up."
+💡 Reframe price as risk. The cost of unreliability dwarfs the price gap (loss aversion).
+
+❝ "I'm not interested." ❞
+"Totally fair, and thanks for being straight with me. Mind if I ask — is it the timing, or just not a priority right now?"
+💡 Accept the no gracefully (that builds trust), then one soft calibrated question. Their answer tells you whether to nurture or move on.
+"No problem at all — I'll check back in a few months, since things change. Have a great one!"
+💡 Leaving warm keeps the door open. Today's "no" is often next quarter's "yes."
+
+❝ "I'll think about it." ❞
+"Absolutely. What's the one thing you'd need to see to feel good about moving forward?"
+💡 Surfaces the REAL hesitation so you can handle it now, instead of losing them to silence."""),
+
+        ('closing', '✅ The Close — Booking the Walkthrough / Quote', 0, """[Assume the yes. Offer a choice of WHEN, not WHETHER.]
+"Perfect — does Tuesday morning or Thursday afternoon work better for a quick walkthrough?"
+💡 The alternative close: both options are a yes. Choosing between two times is far easier than deciding whether to meet at all.
+
+[Lock it in and shrink the commitment]
+"Great, Thursday at 2. It only takes me about 10 minutes, and you'll have a clear quote the same day. What's the best number to text you a reminder?"
+💡 Restating how short it is (10 min) melts resistance. Getting their number confirms it AND gives you a follow-up channel.
+
+[Confirm and create a tiny obligation]
+"You're down for Thursday at 2 — I'll be the one from [Brand], and I'll text when I'm 10 minutes out. Sound good?"
+💡 "Sound good?" earns a final verbal yes. A confirmed micro-commitment sharply cuts no-shows (the consistency principle).
+
+[If they're close but hesitating]
+"Just so I'm not overstepping — is there any reason a quick, no-obligation walkthrough wouldn't make sense?"
+💡 Inviting the objection surfaces it so you can handle it. "No reason" means you're booked."""),
+
+        ('followup', '🔁 Follow-Up — Call + Text + Email Templates', 0, """[FOLLOW-UP CALL — they got a quote and went quiet]
+"Hi [Name], [Your Name] with [Brand]. No pressure at all — I just wanted to make sure the quote made sense and see if any questions came up?"
+💡 "No pressure" + a genuinely helpful reason positions you as a consultant, not a chaser. Openness invites honesty.
+[If they hesitate, label it:]
+"It sounds like now might not be the perfect time — is that fair?"
+💡 A label plus a safe-no question. If they reply "actually, it's just the price," you've found the real objection.
+
+[TEXT — short, friendly, ONE ask]
+"Hi [Name], it's [Your Name] with [Brand] 😊 Just checking you got the cleaning quote — happy to tweak anything. Want me to pencil you in for a start date?"
+💡 One clear ask ("a start date") is easier to answer than "let me know your thoughts." The emoji keeps it human, not corporate.
+
+[EMAIL — subject: "Quick question about your cleaning quote"]
+"Hi [Name], following up on the proposal for [Business]. I'd love to earn your business — is there anything holding you back that I can help with? Even a quick 'not yet' helps me know where you stand. — [Your Name], [Brand]"
+💡 "Even a quick not-yet helps" gives them a low-effort way to reply, which beats silence and often restarts the whole conversation."""),
+    ]
+
+    for cat, title, order, content in scripts:
+        if not Script.query.filter_by(title=title).first():
+            db.session.add(Script(category=cat, title=title, content=content, sort_order=order))
+    BusinessSetting.set('seeded_sales_scripts_v1', '1')
     db.session.commit()
 
 

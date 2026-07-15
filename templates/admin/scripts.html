@@ -7,6 +7,16 @@
 
 {% block content %}
 
+<style>
+  .script-full{background:#faf9fd;border-radius:8px;padding:14px;border:1px solid #e4dfef;line-height:1.6;font-size:0.9rem;color:#3b2460}
+  .say-line{white-space:pre-wrap;margin:2px 0}
+  .say-sp{height:8px}
+  .whybox{margin:6px 0;background:#fef9ec;border:1px solid #f0dca8;border-radius:8px;padding:2px 12px}
+  .whybox summary{cursor:pointer;color:#7c4a04;font-size:0.8rem;font-weight:700;list-style:none;padding:6px 0}
+  .whybox summary::-webkit-details-marker{display:none}
+  .whybox > div{font-size:0.82rem;color:#8a6d3b;padding:2px 0 8px}
+</style>
+
 <div class="filter-tabs">
   {% for cat, label in categories %}
   <a href="{{ url_for('scripts.index', cat=cat) }}"
@@ -29,7 +39,18 @@
           </span>
         </div>
         <p style="font-size:0.84rem;color:#9a95ad;margin:0;white-space:pre-wrap" x-show="!open">{{ s.content[:160] }}{% if s.content|length > 160 %}…{% endif %}</p>
-        <pre style="font-size:0.84rem;color:#3b2460;margin:0;white-space:pre-wrap;font-family:inherit;line-height:1.65;background:#faf9fd;border-radius:8px;padding:14px;border:1px solid #e4dfef" x-show="open">{{ s.content }}</pre>
+        <div class="script-full" x-show="open">
+          {% for raw in s.content.split('\n') %}
+            {%- set l = raw.strip() -%}
+            {% if l.startswith('💡') %}
+            <details class="whybox"><summary>💡 Why this works</summary><div>{{ l[1:] | trim }}</div></details>
+            {% elif not l %}
+            <div class="say-sp"></div>
+            {% else %}
+            <div class="say-line">{{ raw }}</div>
+            {% endif %}
+          {% endfor %}
+        </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
         <button onclick="copyScript(this, `{{ s.content | replace('`','\\`') | replace('\n','\\n') }}`)"
