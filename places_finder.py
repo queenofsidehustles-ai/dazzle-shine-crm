@@ -81,17 +81,33 @@ def search_businesses(category, location, api_key=None):
         return False, [], f'Network error reaching Google Places: {e}'
 
 
+_DEMO_NAMES = {
+    'property_manager': ['Sunshine Property Management', 'Lakeside Rentals & Management',
+                         'Metro Property Partners', 'Palm Grove Property Co.', 'Harbor Point Management'],
+    'realtor': ['Orlando Realty Group', 'Lakeside Real Estate', 'Metro Realty Partners',
+                'Palm Grove Homes', 'Harbor Point Realty'],
+    'airbnb': ['Sunshine STR Co.', 'Lakeside Vacation Rentals', 'Metro Host Management',
+               'Palm Grove Getaways', 'Harbor Point Stays'],
+    'apartment': ['Sunshine Apartments', 'Lakeside Apartment Homes', 'Metro Flats',
+                  'Palm Grove Residences', 'Harbor Point Apartments'],
+    'daycare': ['Sunshine Kids Academy', 'Lakeside Learning Center', 'Little Sprouts Daycare',
+                'Palm Grove Preschool', 'Harbor Point Childcare'],
+    'medical_office': ['Sunshine Family Medicine', 'Lakeside Dental', 'Metro Medical Clinic',
+                       'Palm Grove Pediatrics', 'Harbor Point Health'],
+    'office': ['Sunshine Business Center', 'Lakeside Office Park', 'Metro Corporate Plaza',
+               'Palm Grove Offices', 'Harbor Point Suites'],
+    'other': ['Sunshine Services', 'Lakeside Co.', 'Metro Group', 'Palm Grove LLC', 'Harbor Point Inc.'],
+}
+
+
 def demo_listings(category, location):
     """Sample results shown when no API key is set yet, so the whole flow is
-    visible and clickable tonight. Phone numbers are fake (555) placeholders."""
-    label = CATEGORY_QUERIES.get(category, category).title()
-    samples = [
-        ('Sunshine ' + label.split()[0] + ' Group', '(407) 555-0182', 4.6),
-        ('Lakeside Rentals & Management', '(407) 555-0413', 4.2),
-        ('Metro Realty Partners', '(407) 555-0876', 4.8),
-        ('Palm Grove Property Co.', '(407) 555-0245', 3.9),
-        ('Harbor Point Management', '(407) 555-0631', 4.5),
-    ]
+    visible and clickable. Names match the chosen category. Phone numbers are
+    fake (555) placeholders."""
+    names = _DEMO_NAMES.get(category, _DEMO_NAMES['other'])
+    phones = ['(407) 555-0182', '(407) 555-0413', '(407) 555-0876', '(407) 555-0245', '(407) 555-0631']
+    ratings = [4.6, 4.2, 4.8, 3.9, 4.5]
+    samples = list(zip(names, phones, ratings))
     out = []
     for i, (name, phone, rating) in enumerate(samples):
         out.append({
