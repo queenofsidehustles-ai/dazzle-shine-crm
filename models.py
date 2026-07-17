@@ -14,6 +14,15 @@ class Client(db.Model):
     zip_code = db.Column(db.String(10))
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Customer portal + card on file (auto-pay for recurring clients)
+    portal_token = db.Column(db.String(64), index=True)   # link to their self-serve portal
+    stripe_customer_id = db.Column(db.String(100))        # Stripe vault customer
+    stripe_payment_method_id = db.Column(db.String(100))  # saved card for off-session charges
+    card_brand = db.Column(db.String(20))                 # Visa, Mastercard… (display only)
+    card_last4 = db.Column(db.String(4))                  # last 4 digits (display only)
+    autopay = db.Column(db.Boolean, default=False)        # charge the saved card morning-of
+
     bookings = db.relationship('Booking', backref='client', lazy=True)
 
     @property

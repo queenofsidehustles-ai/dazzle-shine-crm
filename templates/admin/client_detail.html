@@ -22,6 +22,28 @@
       <div class="detail-row"><span class="dl">City</span><span class="dv">{{ client.city or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Client Since</span><span class="dv" style="color:#9a95ad">{{ client.created_at.strftime('%B %d, %Y') }}</span></div>
     </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Customer Portal</h2>
+      {% if client.card_last4 %}
+      <div class="detail-row">
+        <span class="dl">Auto-pay</span>
+        <span class="dv">
+          {% if client.autopay %}<span style="color:#2e7d32;font-weight:700">On ✓</span>{% else %}<span style="color:#9a95ad">Off</span>{% endif %}
+          — {{ client.card_brand or 'Card' }} ending {{ client.card_last4 }}
+        </span>
+      </div>
+      {% else %}
+      <div class="detail-row"><span class="dl">Auto-pay</span><span class="dv" style="color:#9a95ad">No card saved yet</span></div>
+      {% endif %}
+      <p style="color:#5f5878;font-size:0.85rem;margin:10px 0 8px">Private self-serve link — share it so they can save a card, see upcoming cleanings & invoices:</p>
+      <div style="display:flex;gap:8px">
+        <input id="portal-link" value="{{ portal_url }}" readonly
+               style="flex:1;padding:9px 11px;border:1px solid #e4dfef;border-radius:8px;font-size:0.82rem;background:#faf9fd;color:#5f5878" />
+        <button type="button" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem"
+                onclick="navigator.clipboard.writeText(document.getElementById('portal-link').value);this.textContent='Copied!'">Copy</button>
+      </div>
+    </div>
   </div>
 
   <div>

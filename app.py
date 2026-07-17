@@ -34,6 +34,7 @@ from blueprints.team_logins import team_logins_bp
 from blueprints.commercial import commercial_bp
 from blueprints.commissions import commissions_bp
 from blueprints.invoices import invoices_bp
+from blueprints.portal import portal_bp
 
 
 def create_app():
@@ -88,6 +89,7 @@ def create_app():
     app.register_blueprint(commercial_bp)
     app.register_blueprint(commissions_bp)
     app.register_blueprint(invoices_bp)
+    app.register_blueprint(portal_bp)
 
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor
@@ -386,6 +388,13 @@ def _migrate_db():
         ('booking', 'invoice_number',    'VARCHAR(20)'),
         ('booking', 'invoice_issued_at', 'TIMESTAMP'),
         ('booking', 'invoice_due_date',  'VARCHAR(10)'),
+        # Customer portal + card on file (auto-pay)
+        ('client',  'portal_token',             'VARCHAR(64)'),
+        ('client',  'stripe_customer_id',       'VARCHAR(100)'),
+        ('client',  'stripe_payment_method_id', 'VARCHAR(100)'),
+        ('client',  'card_brand',               'VARCHAR(20)'),
+        ('client',  'card_last4',               'VARCHAR(4)'),
+        ('client',  'autopay',                  'BOOLEAN DEFAULT FALSE'),
     ]
     for table, col, col_type in new_cols:
         try:

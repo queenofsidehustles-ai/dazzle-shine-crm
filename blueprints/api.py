@@ -85,6 +85,28 @@ def charge_balances():
         results.append({'booking_id': b.id, 'name': b.name, 'ok': ok, 'error': err})
     db.session.commit()
 
+    # Second pass: portal / recurring auto-pay clients — charge the FULL amount to
+    # the client's card on file. Guarded so a booking already handled above (paid /
+    # balance_collected) is skipped, and only fires when the CLIENT opted into autopay.
+    from payment_service import autocharge
+    auto = Booking.query.filter(
+        Booking.preferred_date == today,
+        Booking.status.in_(['confirmed', 'pending']),
+        Booking.paid_at.is_(None),
+        Booking.balance_collected == False,
+    ).all()
+    for b in auto:
+        client = b.client
+        if not (client and client.autopay):
+            continue
+        has_card = (b.stripe_customer_id and b.stripe_payment_method_id) or \
+                   (client.stripe_customer_id and client.stripe_payment_method_id)
+        if not has_card:
+            continue
+        ok, err = autocharge(b)
+        results.append({'booking_id': b.id, 'name': b.name, 'ok': ok, 'error': err, 'autopay': True})
+    db.session.commit()
+
     return jsonify({'ok': True, 'charged': len([r for r in results if r['ok']]), 'results': results})
 
 

@@ -24,6 +24,9 @@ def _copy_visit(seed, on_date, group):
         access_notes=seed.access_notes, assigned_cleaner=seed.assigned_cleaner,
         status='pending', price=seed.price, balance_due=seed.balance_due,
         source=seed.source, agent=seed.agent,
+        # carry the card on file so morning-of auto-pay works for the whole series
+        stripe_customer_id=seed.stripe_customer_id,
+        stripe_payment_method_id=seed.stripe_payment_method_id,
         recurring_group=group, recurring_active=True,
     )
 

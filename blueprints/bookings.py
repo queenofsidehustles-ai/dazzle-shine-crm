@@ -502,7 +502,10 @@ def clients():
 @login_required
 def client_detail(client_id):
     client = Client.query.get_or_404(client_id)
-    return render_template('admin/client_detail.html', client=client)
+    from blueprints.portal import ensure_portal_token
+    from blueprints.payments import CRM_BASE
+    portal_url = f"{CRM_BASE}/portal/{ensure_portal_token(client)}"
+    return render_template('admin/client_detail.html', client=client, portal_url=portal_url)
 
 
 @bookings_bp.route('/clients/<int:client_id>/delete', methods=['POST'])
