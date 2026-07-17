@@ -212,9 +212,31 @@ def email_test():
 SOURCES = ['Indeed', 'Facebook', 'Nextdoor', 'Craigslist', 'Referral', 'Walk-in', 'Website', 'Other']
 
 
+def _reconcile_hired():
+    """Self-heal the pipeline: anyone who already has a Team (Staff) record but whose
+    application is stuck in new/reviewing is really hired — advance them so the Hired
+    tab reflects the real roster. Runs cheaply each time the page loads."""
+    changed = 0
+    stuck = ContractorApplication.query.filter(
+        ContractorApplication.status.in_(['new', 'reviewing'])).all()
+    for a in stuck:
+        if not a.email:
+            continue
+        s = Staff.query.filter(db.func.lower(Staff.email) == a.email.lower()).first()
+        if s:
+            a.status = 'hired'
+            if hasattr(s, 'application_id') and not s.application_id:
+                s.application_id = a.id
+            changed += 1
+    if changed:
+        db.session.commit()
+    return changed
+
+
 @contractors_bp.route('/applications')
 @login_required
 def applications():
+    _reconcile_hired()
     status_filter = request.args.get('status', '')
     q = ContractorApplication.query.order_by(ContractorApplication.created_at.desc())
     if status_filter:
@@ -577,6 +599,9 @@ def hire(app_id):
     token = secrets.token_urlsafe(32)
     s.agreement_token = token
     db.session.add(s)
+    db.session.flush()          # get s.id so we can link the application
+    if hasattr(s, 'application_id'):
+        s.application_id = a.id
     a.status = 'hired'
     db.session.commit()
 
@@ -686,8 +711,12 @@ def accept_offer(token):
 
     if not a.offer_accepted_at:
         a.offer_accepted_at = datetime.utcnow()
-    if a.status not in ('hired', 'onboarding'):
-        a.status = 'reviewing'
+    # They accepted the offer and are now a Team member (onboarding) — mark hired
+    # so they show on the Hired/Onboarding tab instead of vanishing into Reviewing.
+    if a.status != 'rejected':
+        a.status = 'hired'
+    if hasattr(s, 'application_id') and not s.application_id:
+        s.application_id = a.id
     if not s.agreement_token:            # existing staff may not have one yet
         s.agreement_token = secrets.token_urlsafe(32)
     db.session.commit()

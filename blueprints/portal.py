@@ -8,12 +8,44 @@ import os
 import secrets
 from datetime import date, datetime
 import stripe
-from flask import Blueprint, render_template, request, jsonify, abort
+from flask import Blueprint, render_template, request, jsonify, abort, session, redirect, url_for
 from models import Client, BusinessSetting
 from extensions import db
 from blueprints.payments import amount_due, ensure_pay_token
 
 portal_bp = Blueprint('portal', __name__)
+
+
+def _needs_gate(client):
+    """We can only verify identity if we have a phone or ZIP on file."""
+    return bool((client.phone or '').strip() or (client.zip_code or '').strip())
+
+
+def _verified(client):
+    return session.get(f'portal_ok_{client.id}') is True
+
+
+def _hint(client):
+    if (client.phone or '').strip() and (client.zip_code or '').strip():
+        return 'your ZIP code or the last 4 digits of your phone number'
+    if (client.phone or '').strip():
+        return 'the last 4 digits of your phone number'
+    return 'your ZIP code'
+
+
+def _check_answer(client, answer):
+    """True if the visitor proved they're this client (ZIP or last-4 of phone)."""
+    a = (answer or '').strip()
+    if not a:
+        return False
+    digits = ''.join(ch for ch in a if ch.isdigit())
+    phone_digits = ''.join(ch for ch in (client.phone or '') if ch.isdigit())
+    if phone_digits and len(digits) >= 4 and phone_digits[-4:] == digits[-4:]:
+        return True
+    zc = (client.zip_code or '').strip().replace(' ', '')
+    if zc and a.replace(' ', '').lower() == zc.lower():
+        return True
+    return False
 
 
 def ensure_portal_token(client):
@@ -35,9 +67,22 @@ def _biz():
     return BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
 
 
+@portal_bp.route('/portal/<token>/verify', methods=['POST'])
+def verify(token):
+    client = _client(token)
+    if _check_answer(client, request.form.get('answer', '')):
+        session[f'portal_ok_{client.id}'] = True
+        return redirect(url_for('portal.home', token=token))
+    return render_template('public/portal_verify.html', token=token, biz=_biz(),
+                           hint=_hint(client), error=True)
+
+
 @portal_bp.route('/portal/<token>')
 def home(token):
     client = _client(token)
+    if _needs_gate(client) and not _verified(client):
+        return render_template('public/portal_verify.html', token=token, biz=_biz(),
+                               hint=_hint(client), error=False)
     today = date.today().isoformat()
     active = [b for b in client.bookings if b.status != 'cancelled']
 
@@ -63,6 +108,8 @@ def home(token):
 def setup_intent(token):
     """Start saving a card — creates the client's Stripe customer + a SetupIntent."""
     client = _client(token)
+    if _needs_gate(client) and not _verified(client):
+        return jsonify({'ok': False, 'error': 'Please verify your identity first'}), 403
     stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
     if not stripe.api_key:
         return jsonify({'ok': False, 'error': 'Payments not configured'}), 500
@@ -84,6 +131,8 @@ def save_card(token):
     """Store the confirmed card on the client + turn on auto-pay, and backfill the
     card onto their upcoming unpaid visits so the morning cron can charge them."""
     client = _client(token)
+    if _needs_gate(client) and not _verified(client):
+        return jsonify({'ok': False, 'error': 'Please verify your identity first'}), 403
     data = request.get_json(silent=True) or {}
     pm_id = (data.get('payment_method_id') or '').strip()
     stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
@@ -114,6 +163,8 @@ def save_card(token):
 def toggle_autopay(token):
     """Customer turns auto-pay on/off (card stays on file either way)."""
     client = _client(token)
+    if _needs_gate(client) and not _verified(client):
+        return jsonify({'ok': False, 'error': 'Please verify your identity first'}), 403
     data = request.get_json(silent=True) or {}
     client.autopay = bool(data.get('on'))
     db.session.commit()

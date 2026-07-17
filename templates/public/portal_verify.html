@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verify it's you — {{ biz }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root{--gold:#d3a84f;--gold-deep:#b98a33;--purple:#1f1333;--bg:#f6f5fb;--white:#fff;--border:#e4dfef}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple);min-height:100vh}
+    .header{background:var(--purple);padding:24px;text-align:center}
+    .header .script{font-family:"Allura",cursive;font-size:2.4rem;color:var(--gold);display:block;line-height:1}
+    .header .sub{color:rgba(255,255,255,0.5);font-size:0.72rem;letter-spacing:0.2em;text-transform:uppercase;margin-top:6px;display:block}
+    .wrap{max-width:440px;margin:0 auto;padding:40px 16px 60px}
+    .card{background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:0 4px 24px rgba(15,7,40,0.08);padding:30px 26px}
+    h1{font-size:1.25rem;margin-bottom:8px}
+    p.lead{color:#5f5878;font-size:0.92rem;line-height:1.6;margin-bottom:20px}
+    label{display:block;font-size:0.78rem;font-weight:700;color:#5f5878;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:7px}
+    input{width:100%;padding:14px;border:1px solid var(--border);border-radius:10px;font-size:1.05rem;font-family:"Inter",sans-serif;text-align:center;letter-spacing:0.1em}
+    input:focus{outline:none;border-color:var(--gold)}
+    .btn{display:block;width:100%;background:var(--gold);color:var(--purple);text-align:center;padding:15px;border:none;border-radius:10px;font-weight:700;font-size:1.05rem;cursor:pointer;margin-top:16px;font-family:"Inter",sans-serif}
+    .btn:hover{background:var(--gold-deep)}
+    .err{background:#fff5f5;border:1px solid #fed7d7;color:#c53030;border-radius:9px;padding:11px 13px;font-size:0.86rem;margin-bottom:16px}
+    .lock{font-size:2.2rem;text-align:center;margin-bottom:10px}
+    .secure{text-align:center;color:#9a95ad;font-size:0.78rem;margin-top:16px}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="script">{{ biz }}</span>
+    <span class="sub">Your Account</span>
+  </div>
+  <div class="wrap">
+    <div class="card">
+      <div class="lock">🔒</div>
+      <h1>Quick check — is this you?</h1>
+      <p class="lead">For your security, please enter {{ hint }} to open your account.</p>
+      {% if error %}<div class="err">That didn't match what we have on file. Please try again.</div>{% endif %}
+      <form method="POST" action="{{ url_for('portal.verify', token=token) }}">
+        <label>Enter to continue</label>
+        <input name="answer" autocomplete="off" inputmode="numeric" autofocus placeholder="••••" />
+        <button class="btn" type="submit">View my account →</button>
+      </form>
+      <div class="secure">🔒 This keeps your schedule &amp; payment info private.</div>
+    </div>
+  </div>
+</body>
+</html>

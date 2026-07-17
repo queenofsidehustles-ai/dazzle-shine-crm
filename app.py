@@ -395,6 +395,8 @@ def _migrate_db():
         ('client',  'card_brand',               'VARCHAR(20)'),
         ('client',  'card_last4',               'VARCHAR(4)'),
         ('client',  'autopay',                  'BOOLEAN DEFAULT FALSE'),
+        # Link a Team member back to the application they came from
+        ('staff',   'application_id',           'INTEGER'),
     ]
     for table, col, col_type in new_cols:
         try:

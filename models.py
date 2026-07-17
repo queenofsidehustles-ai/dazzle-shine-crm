@@ -445,6 +445,7 @@ class Staff(db.Model):
     email = db.Column(db.String(120))
     color = db.Column(db.String(7), default='#7c3aed')
     is_active = db.Column(db.Boolean, default=True)
+    application_id = db.Column(db.Integer, db.ForeignKey('contractor_application.id'))  # back-link to the application they came from
     # Pay settings
     pay_type = db.Column(db.String(20), default='percent')  # percent, hourly
     pay_rate = db.Column(db.Float, default=50.0)            # % of job or $/hr
