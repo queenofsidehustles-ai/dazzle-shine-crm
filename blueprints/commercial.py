@@ -1,10 +1,11 @@
 """Commercial Accounts — ongoing commercial cleaning clients (daycares, offices,
 property managers…). Separate from residential Bookings. Accounts are created by
 converting a 'Won' Prospect from Find Leads, or added by hand."""
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from datetime import datetime
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from auth import login_required
 from extensions import db
-from models import CommercialAccount, Prospect
+from models import CommercialAccount, Prospect, User
 import commercial_pricing as cpricing
 
 commercial_bp = Blueprint('commercial', __name__, url_prefix='/commercial')
@@ -26,6 +27,16 @@ def _int(v):
         return int(float(str(v).replace(',', '').strip() or 0))
     except (ValueError, TypeError):
         return None
+
+
+def _agent_from():
+    """Who gets credited: an explicit form choice, else the logged-in team member."""
+    a = (request.form.get('agent') or '').strip()
+    if a:
+        return a
+    if session.get('role') == 'team':
+        return session.get('user_name')
+    return None
 
 
 def _tmpl_args(**extra):
@@ -87,6 +98,7 @@ def new():
         status=request.form.get('status', 'active'),
         notes=(request.form.get('notes') or '').strip(),
         source='manual',
+        agent=_agent_from(),
     )
     db.session.add(a)
     db.session.commit()
@@ -119,6 +131,7 @@ def convert(prospect_id):
             notes=(request.form.get('notes') or p.notes or '').strip(),
             source='find_leads',
             prospect_id=p.id,
+            agent=_agent_from(),
         )
         p.status = 'won'
         db.session.add(a)
@@ -146,10 +159,25 @@ def detail(account_id):
         a.billing_amount = _money(request.form.get('billing_amount'))
         a.status = request.form.get('status', a.status)
         a.notes = (request.form.get('notes') or '').strip()
+        if 'agent' in request.form:
+            a.agent = (request.form.get('agent') or '').strip() or None
         db.session.commit()
         flash('Account updated.', 'success')
         return redirect(url_for('commercial.detail', account_id=a.id))
-    return render_template('admin/commercial_detail.html', **_tmpl_args(a=a))
+    vas = User.query.filter_by(role='team').order_by(User.name).all()
+    return render_template('admin/commercial_detail.html', **_tmpl_args(a=a, vas=vas))
+
+
+@commercial_bp.route('/<int:account_id>/mark-first-paid', methods=['POST'])
+@login_required
+def mark_first_paid(account_id):
+    a = CommercialAccount.query.get_or_404(account_id)
+    if not a.first_paid_at:
+        a.first_paid_at = datetime.utcnow()
+    a.status = 'active'
+    db.session.commit()
+    flash('Marked paid — landing bonus + residuals now count toward commission. 💵', 'success')
+    return redirect(url_for('commercial.detail', account_id=a.id))
 
 
 @commercial_bp.route('/<int:account_id>/delete', methods=['POST'])

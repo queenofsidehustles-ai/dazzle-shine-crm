@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from auth import login_required
-from models import Lead, Booking, Client
+from models import Lead, Booking, Client, User
 from extensions import db
 from pricing import DEPOSIT_AMOUNT
 
@@ -32,10 +32,13 @@ def detail(lead_id):
     if request.method == 'POST':
         lead.status = request.form.get('status', lead.status)
         lead.notes = request.form.get('notes', lead.notes)
+        if 'agent' in request.form:
+            lead.agent = (request.form.get('agent') or '').strip() or None
         db.session.commit()
         flash('Lead updated.', 'success')
         return redirect(url_for('leads.detail', lead_id=lead_id))
-    return render_template('admin/lead_detail.html', lead=lead)
+    vas = User.query.filter_by(role='team').order_by(User.name).all()
+    return render_template('admin/lead_detail.html', lead=lead, vas=vas)
 
 
 @leads_bp.route('/<int:lead_id>/convert', methods=['POST'])
@@ -64,6 +67,8 @@ def convert(lead_id):
         price=lead.quoted_price,
         balance_due=max(0, (lead.quoted_price or 0) - DEPOSIT_AMOUNT),
         status='pending',
+        source=lead.source,
+        agent=lead.agent,
     )
     db.session.add(booking)
     lead.status = 'converted'

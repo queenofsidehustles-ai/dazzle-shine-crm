@@ -32,6 +32,7 @@ from blueprints.claims import claims_bp
 from blueprints.places_finder import places_finder_bp
 from blueprints.team_logins import team_logins_bp
 from blueprints.commercial import commercial_bp
+from blueprints.commissions import commissions_bp
 
 
 def create_app():
@@ -84,6 +85,7 @@ def create_app():
     app.register_blueprint(places_finder_bp)
     app.register_blueprint(team_logins_bp)
     app.register_blueprint(commercial_bp)
+    app.register_blueprint(commissions_bp)
 
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor
@@ -368,6 +370,13 @@ def _migrate_db():
         ('contractor_application', 'bgcheck_uploaded_url',  'VARCHAR(500)'),
         ('contractor_application', 'bgcheck_uploaded_link', 'VARCHAR(500)'),
         ('contractor_application', 'bgcheck_uploaded_at',   'TIMESTAMP'),
+        # VA commission attribution
+        ('booking', 'source',               "VARCHAR(50) DEFAULT 'website'"),
+        ('booking', 'agent',                'VARCHAR(100)'),
+        ('lead', 'agent',                   'VARCHAR(100)'),
+        ('prospect', 'agent',               'VARCHAR(100)'),
+        ('commercial_account', 'agent',         'VARCHAR(100)'),
+        ('commercial_account', 'first_paid_at', 'TIMESTAMP'),
     ]
     for table, col, col_type in new_cols:
         try:

@@ -77,6 +77,10 @@ class Booking(db.Model):
     # Payroll
     hours_worked = db.Column(db.Float)
 
+    # Sales attribution (VA commission)
+    source = db.Column(db.String(50), default='website')  # carried from the Lead's source
+    agent = db.Column(db.String(100))                     # team member (VA) credited for this lead
+
     # Admin fields
     notes = db.Column(db.Text)
     internal_notes = db.Column(db.Text)
@@ -172,6 +176,7 @@ class Lead(db.Model):
     quoted_price = db.Column(db.Float)
     status = db.Column(db.String(20), default='new')  # new, contacted, converted, lost
     source = db.Column(db.String(50), default='website')
+    agent = db.Column(db.String(100))                 # team member (VA) credited for commission
     notes = db.Column(db.Text)
     drip_step = db.Column(db.Integer, default=1)
     last_drip_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -677,6 +682,7 @@ class Prospect(db.Model):
     status = db.Column(db.String(30), default='new')  # new / called / no_answer / callback / interested / not_interested / won
     notes = db.Column(db.Text)
     source = db.Column(db.String(50), default='google_places')
+    agent = db.Column(db.String(100))                 # team member (VA) credited for commission
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     called_at = db.Column(db.DateTime)
 
@@ -757,6 +763,8 @@ class CommercialAccount(db.Model):
     status = db.Column(db.String(20), default='active')        # active/paused/lead
     notes = db.Column(db.Text)
     source = db.Column(db.String(50), default='find_leads')
+    agent = db.Column(db.String(100))                          # team member (VA) credited for commission
+    first_paid_at = db.Column(db.DateTime)                     # first invoice paid → triggers landing bonus + residuals
     prospect_id = db.Column(db.Integer)                        # origin prospect, if converted
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

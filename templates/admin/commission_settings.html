@@ -1,0 +1,40 @@
+{% extends "base_admin.html" %}
+{% block title %}Commission Rates — Settings{% endblock %}
+{% block page_title %}Commission Rates{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:14px"><a href="{{ url_for('commissions.index') }}" style="color:#9a95ad;font-size:0.9rem">← Commissions</a></div>
+<div class="card">
+  <p style="color:#9a95ad;font-size:0.88rem;margin:0 0 16px">This is exactly what your VA earns. Change any number and save — the report recalculates instantly.</p>
+  <form method="POST" action="{{ url_for('commissions.settings') }}">
+    <h3 style="margin:0 0 10px">🏠 Residential</h3>
+    <div class="grid2">
+      <div><label class="lbl">One-time close ($)</label><input class="inp" name="va_direct_lead" value="{{ '%.0f' % rates.va_direct_lead }}"></div>
+      <div><label class="lbl">Per recurring clean ($)</label><input class="inp" name="va_recurring_clean" value="{{ '%.0f' % rates.va_recurring_clean }}"></div>
+    </div>
+
+    <h3 style="margin:18px 0 10px">🏢 Commercial — landing (one-time) + monthly residual</h3>
+    <div class="grid2">
+      <div><label class="lbl">Small (&lt;$1k/mo) — landing ($)</label><input class="inp" name="va_comm_small_land" value="{{ '%.0f' % rates.va_comm_small_land }}"></div>
+      <div><label class="lbl">Small — residual ($/mo)</label><input class="inp" name="va_comm_small_res" value="{{ '%.0f' % rates.va_comm_small_res }}"></div>
+      <div><label class="lbl">Standard ($1k–2.5k) — landing ($)</label><input class="inp" name="va_comm_standard_land" value="{{ '%.0f' % rates.va_comm_standard_land }}"></div>
+      <div><label class="lbl">Standard — residual ($/mo)</label><input class="inp" name="va_comm_standard_res" value="{{ '%.0f' % rates.va_comm_standard_res }}"></div>
+      <div><label class="lbl">Large ($2.5k+) — landing ($)</label><input class="inp" name="va_comm_large_land" value="{{ '%.0f' % rates.va_comm_large_land }}"></div>
+      <div><label class="lbl">Large — residual ($/mo)</label><input class="inp" name="va_comm_large_res" value="{{ '%.0f' % rates.va_comm_large_res }}"></div>
+    </div>
+
+    <h3 style="margin:18px 0 10px">⭐ Momentum bonus</h3>
+    <div class="grid2">
+      <div><label class="lbl">Bonus amount ($)</label><input class="inp" name="va_momentum_bonus" value="{{ '%.0f' % rates.va_momentum_bonus }}"></div>
+      <div><label class="lbl">Closes needed in a month</label><input class="inp" name="va_momentum_threshold" value="{{ '%.0f' % rates.va_momentum_threshold }}"></div>
+    </div>
+
+    <div style="margin-top:18px"><button type="submit" class="btn" style="padding:10px 24px">💾 Save rates</button></div>
+  </form>
+</div>
+<style>
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem}
+</style>
+{% endblock %}

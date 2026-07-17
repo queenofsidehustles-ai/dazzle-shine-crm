@@ -371,6 +371,9 @@
       <a href="{{ url_for('team_logins.index') }}" class="{{ 'active' if request.blueprint == 'team_logins' }}">
         <span class="icon">🔐</span> Team Logins
       </a>
+      <a href="{{ url_for('commissions.index') }}" class="{{ 'active' if request.blueprint == 'commissions' }}">
+        <span class="icon">💵</span> Commissions
+      </a>
       {% endif %}
     </nav>
     <div class="sidebar-footer">

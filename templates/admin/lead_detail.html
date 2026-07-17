@@ -46,6 +46,15 @@
           </select>
         </div>
         <div class="form-group">
+          <label>Closed by — VA credited for commission
+            <span style="font-weight:400;color:#9a95ad;font-size:0.8rem">(leave blank for website / paid-ad leads)</span>
+          </label>
+          <select name="agent">
+            <option value="">— none —</option>
+            {% for v in vas %}<option value="{{ v.name }}" {{ 'selected' if lead.agent==v.name }}>{{ v.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
           <label>Notes</label>
           <textarea name="notes" placeholder="Follow-up notes...">{{ lead.notes or '' }}</textarea>
         </div>

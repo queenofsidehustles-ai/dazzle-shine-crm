@@ -34,12 +34,34 @@
     <div><label class="lbl">Amount ($)</label><input class="inp" name="billing_amount" value="{{ '%.0f' % (a.billing_amount or 0) }}"></div>
     <div><label class="lbl">Status</label>
       <select class="inp" name="status">{% for s, sl in status_labels.items() %}<option value="{{ s }}" {{ 'selected' if a.status==s }}>{{ sl }}</option>{% endfor %}</select></div>
+    <div><label class="lbl">Closed by (VA credited)</label>
+      <select class="inp" name="agent">
+        <option value="">— none / house lead —</option>
+        {% for v in vas %}<option value="{{ v.name }}" {{ 'selected' if a.agent==v.name }}>{{ v.name }}</option>{% endfor %}
+      </select></div>
     <div style="grid-column:1/-1"><label class="lbl">Notes</label><textarea class="inp" name="notes" rows="3">{{ a.notes or '' }}</textarea></div>
     {% include 'admin/_comm_calc.html' %}
     <div style="grid-column:1/-1;display:flex;gap:10px">
       <button type="submit" class="btn" style="padding:10px 24px">💾 Save changes</button>
     </div>
   </form>
+</div>
+
+<!-- Commission / first-invoice status -->
+<div class="card" style="margin-top:18px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
+  <div style="font-size:0.9rem">
+    💵 <strong>First invoice:</strong>
+    {% if a.first_paid_at %}
+      <span style="color:#276749">paid {{ a.first_paid_at.strftime('%b %d, %Y') }}</span> — landing bonus + residuals are counting{% if a.agent %} for <strong>{{ a.agent }}</strong>{% endif %}.
+    {% else %}
+      <span style="color:#c05621">not paid yet</span> — commission starts once you mark it paid.
+    {% endif %}
+  </div>
+  {% if not a.first_paid_at %}
+  <form method="POST" action="{{ url_for('commercial.mark_first_paid', account_id=a.id) }}">
+    <button type="submit" class="btn" style="padding:8px 16px">💵 Mark first invoice paid</button>
+  </form>
+  {% endif %}
 </div>
 
 <!-- Roadmap hint -->
