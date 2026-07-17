@@ -97,7 +97,7 @@
 <!-- Filter tabs -->
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
   <div class="filter-tabs">
-    {% for s, label in [('','All'),('new','New'),('reviewing','Reviewing'),('hired','Hired'),('no_response','No Response'),('rejected','Rejected')] %}
+    {% for s, label in [('','All'),('new','New'),('reviewing','Reviewing'),('awaiting_bg','📎 Awaiting BG Check'),('hired','Hired'),('no_response','No Response'),('rejected','Rejected')] %}
     <a href="{{ url_for('contractors.applications', status=s) }}"
        class="filter-tab {{ 'active' if status_filter == s }}">
       {{ label }} ({{ counts['all' if not s else s] }})

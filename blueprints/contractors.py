@@ -238,14 +238,21 @@ def _reconcile_hired():
 def applications():
     _reconcile_hired()
     status_filter = request.args.get('status', '')
+    # "Awaiting BG Check" = the holding space: an offer is out but they aren't hired
+    # (BG not cleared) or rejected yet. Covers offer-sent, accepted, and BG-in-review.
+    awaiting_filter = (ContractorApplication.offer_sent_at.isnot(None),
+                       ContractorApplication.status.notin_(['hired', 'rejected']))
     q = ContractorApplication.query.order_by(ContractorApplication.created_at.desc())
-    if status_filter:
+    if status_filter == 'awaiting_bg':
+        q = q.filter(*awaiting_filter)
+    elif status_filter:
         q = q.filter_by(status=status_filter)
     apps = q.all()
     counts = {
         'all': ContractorApplication.query.count(),
         'new': ContractorApplication.query.filter_by(status='new').count(),
         'reviewing': ContractorApplication.query.filter_by(status='reviewing').count(),
+        'awaiting_bg': ContractorApplication.query.filter(*awaiting_filter).count(),
         'hired': ContractorApplication.query.filter_by(status='hired').count(),
         'rejected': ContractorApplication.query.filter_by(status='rejected').count(),
         'no_response': ContractorApplication.query.filter_by(status='no_response').count(),
