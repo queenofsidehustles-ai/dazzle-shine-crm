@@ -213,20 +213,20 @@ SOURCES = ['Indeed', 'Facebook', 'Nextdoor', 'Craigslist', 'Referral', 'Walk-in'
 
 
 def _reconcile_hired():
-    """Self-heal the pipeline: anyone who already has a Team (Staff) record but whose
-    application is stuck in new/reviewing is really hired — advance them so the Hired
-    tab reflects the real roster. Runs cheaply each time the page loads."""
+    """Self-heal the pipeline. 'Hired' means the background check has cleared, so:
+    promote cleared-BG applicants to Hired, and back-link any Team (Staff) record to
+    its application. Runs cheaply each time the Applications page loads."""
     changed = 0
-    stuck = ContractorApplication.query.filter(
+    apps = ContractorApplication.query.filter(
         ContractorApplication.status.in_(['new', 'reviewing'])).all()
-    for a in stuck:
-        if not a.email:
-            continue
-        s = Staff.query.filter(db.func.lower(Staff.email) == a.email.lower()).first()
-        if s:
+    for a in apps:
+        s = Staff.query.filter(db.func.lower(Staff.email) == a.email.lower()).first() if a.email else None
+        if s and hasattr(s, 'application_id') and not s.application_id:
+            s.application_id = a.id
+            changed += 1
+        # Only a cleared background check promotes to Hired.
+        if a.background_check_status == 'cleared':
             a.status = 'hired'
-            if hasattr(s, 'application_id') and not s.application_id:
-                s.application_id = a.id
             changed += 1
     if changed:
         db.session.commit()
@@ -556,6 +556,10 @@ def application_detail(app_id):
             a.bgcheck_results_received = bool(request.form.get('bgcheck_results_received'))
             if a.background_check_status == 'ordered' and not a.background_check_at:
                 a.background_check_at = datetime.utcnow()
+            # Clearing the background check is the gate to "Hired" — a conditional
+            # offer only becomes a real hire once the check clears.
+            if a.background_check_status == 'cleared' and a.status not in ('rejected',):
+                a.status = 'hired'
             flash('Background check updated.', 'success')
         elif action == 'references':
             a.ref1_name = request.form.get('ref1_name', '').strip()
@@ -711,10 +715,10 @@ def accept_offer(token):
 
     if not a.offer_accepted_at:
         a.offer_accepted_at = datetime.utcnow()
-    # They accepted the offer and are now a Team member (onboarding) — mark hired
-    # so they show on the Hired/Onboarding tab instead of vanishing into Reviewing.
-    if a.status != 'rejected':
-        a.status = 'hired'
+    # Conditional offer accepted — they can START onboarding, but stay in the
+    # Reviewing holding pen until their background check clears (the gate to Hired).
+    if a.status not in ('hired', 'rejected'):
+        a.status = 'reviewing'
     if hasattr(s, 'application_id') and not s.application_id:
         s.application_id = a.id
     if not s.agreement_token:            # existing staff may not have one yet
