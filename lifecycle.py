@@ -108,7 +108,14 @@ def run_lifecycle_emails():
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
          'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
          'onboarding_reminder': 0, 'schedule_reminder': 0, 'invoice': 0,
-         'quote_followup': 0}
+         'quote_followup': 0, 'recurring_topup': 0}
+
+    # ── Keep recurring plans filled ~12 weeks ahead (rolling generation) ──
+    try:
+        import recurring
+        c['recurring_topup'] = recurring.topup_all()
+    except Exception:
+        pass
 
     # ── A4 — final lead follow-up (~5 days after the last-chance drip) ──
     for lead in Lead.query.filter(Lead.drip_step == 3, Lead.status == 'new').all():

@@ -377,6 +377,9 @@ def _migrate_db():
         ('prospect', 'agent',               'VARCHAR(100)'),
         ('commercial_account', 'agent',         'VARCHAR(100)'),
         ('commercial_account', 'first_paid_at', 'TIMESTAMP'),
+        # Proactive recurring scheduling
+        ('booking', 'recurring_group',  'VARCHAR(32)'),
+        ('booking', 'recurring_active', 'BOOLEAN DEFAULT TRUE'),
     ]
     for table, col, col_type in new_cols:
         try:

@@ -5,6 +5,7 @@ from auth import login_required
 from models import Booking, Client, Staff
 from extensions import db
 from pricing import FREQUENCY_LABELS
+import recurring
 
 bookings_bp = Blueprint('bookings', __name__, url_prefix='/bookings')
 
@@ -264,8 +265,10 @@ def detail(booking_id):
     active_staff = Staff.query.filter_by(is_active=True).order_by(Staff.name).all()
     from blueprints.payments import payment_link_url, amount_due
     pay_url = payment_link_url(booking, 'full')          # ensures pay_token exists
+    recurring_upcoming = recurring.upcoming_count(booking.recurring_group) if booking.recurring_group else 0
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff,
-                           pay_url=pay_url, due=amount_due(booking))
+                           pay_url=pay_url, due=amount_due(booking),
+                           recurring_upcoming=recurring_upcoming)
 
 
 @bookings_bp.route('/<int:booking_id>/send-payment-link', methods=['POST'])
@@ -410,6 +413,28 @@ def charge_balance(booking_id):
     ok, error = do_charge(booking)
     db.session.commit()
     return jsonify({'ok': ok, 'error': error})
+
+
+@bookings_bp.route('/<int:booking_id>/schedule-recurring', methods=['POST'])
+@login_required
+def schedule_recurring(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.frequency in ('one_time', None) or not booking.preferred_date:
+        flash('Set a repeat frequency and a date first, then schedule the plan.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    n = recurring.generate_series(booking, weeks_ahead=12)
+    flash(f'📅 Recurring plan set — {n} future visit{"s" if n != 1 else ""} added to your calendar.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/stop-recurring', methods=['POST'])
+@login_required
+def stop_recurring(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.recurring_group:
+        removed = recurring.stop_series(booking.recurring_group)
+        flash(f'Recurring plan stopped — removed {removed} upcoming visit{"s" if removed != 1 else ""}.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
 @bookings_bp.route('/<int:booking_id>/delete', methods=['POST'])
@@ -621,6 +646,10 @@ def _send_booking_confirmation(booking):
 
 
 def _create_next_recurring(booking):
+    # Proactively-scheduled series already fill the calendar ahead — don't also
+    # create a one-off next visit (that would double-book).
+    if booking.recurring_group:
+        return
     if booking.frequency in ('one_time', None) or not booking.preferred_date:
         return
     try:

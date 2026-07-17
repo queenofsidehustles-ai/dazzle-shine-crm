@@ -160,6 +160,28 @@
       </form>
     </div>
 
+    {% if booking.frequency not in ['one_time', None] %}
+    <!-- Recurring plan -->
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">🔁 Recurring Plan</h2>
+      {% if booking.recurring_group and booking.recurring_active %}
+      <div style="background:#e6f4ea;border:1px solid #b7e0c4;color:#276749;border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
+        ✅ Recurring plan active — {{ recurring_upcoming|default(0) }} upcoming visit{{ 's' if (recurring_upcoming|default(0)) != 1 }} on the calendar.
+      </div>
+      <p style="font-size:0.82rem;color:#9a95ad;margin:8px 0 10px">Visits auto-fill about 12 weeks ahead. To reschedule or skip one, open that visit on the calendar and edit or cancel it.</p>
+      <form method="POST" action="{{ url_for('bookings.stop_recurring', booking_id=booking.id) }}"
+            onsubmit="return confirm('Stop this recurring plan? Upcoming unstarted visits will be removed.')">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;color:#c05621">Stop recurring plan</button>
+      </form>
+      {% else %}
+      <p style="font-size:0.85rem;color:#5f5878;margin:0 0 12px">This is a <strong>{{ booking.frequency }}</strong> client. Fill your calendar with their next ~12 weeks of visits in one click — no more scheduling one at a time.</p>
+      <form method="POST" action="{{ url_for('bookings.schedule_recurring', booking_id=booking.id) }}">
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Schedule recurring visits</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Work Order Card -->
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Work Order / Checklist</h2>

@@ -81,6 +81,10 @@ class Booking(db.Model):
     source = db.Column(db.String(50), default='website')  # carried from the Lead's source
     agent = db.Column(db.String(100))                     # team member (VA) credited for this lead
 
+    # Recurring plan (proactive scheduling)
+    recurring_group = db.Column(db.String(32), index=True)  # links visits in one recurring series
+    recurring_active = db.Column(db.Boolean, default=True)  # keep generating future visits
+
     # Admin fields
     notes = db.Column(db.Text)
     internal_notes = db.Column(db.Text)
