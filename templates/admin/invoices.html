@@ -1,0 +1,36 @@
+{% extends "base_admin.html" %}
+{% block title %}Invoices — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Invoices{% endblock %}
+
+{% block content %}
+<div class="filter-tabs">
+  {% for s, label in [('','All'),('sent','Sent'),('overdue','Overdue'),('paid','Paid'),('draft','Draft')] %}
+  <a href="{{ url_for('invoices.index', status=s) }}" class="filter-tab {{ 'active' if status_filter==s }}">
+    {{ label }} ({{ counts['all' if not s else s] }})</a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  {% if rows %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Invoice</th><th>Customer</th><th>Issued</th><th>Due</th><th style="text-align:right">Amount</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+      {% set colors={'paid':'status-completed','overdue':'status-cancelled','sent':'status-confirmed','draft':'status-pending'} %}
+      <tr>
+        <td><strong>{{ r.b.invoice_number }}</strong></td>
+        <td>{{ r.b.name }}</td>
+        <td style="font-size:0.82rem;color:#9a95ad">{{ r.b.invoice_issued_at.strftime('%b %d') if r.b.invoice_issued_at else '—' }}</td>
+        <td style="font-size:0.82rem;color:#9a95ad">{{ r.b.invoice_due_date or '—' }}</td>
+        <td style="text-align:right;font-weight:700;color:#b98a33">${{ '%.2f'|format(r.due) }}</td>
+        <td><span class="status {{ colors.get(r.status,'status-pending') }}">{{ status_labels[r.status] }}</span></td>
+        <td><a href="{{ url_for('bookings.detail', booking_id=r.b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Open</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:40px 0">No invoices yet. Open a booking and hit <strong>"Send invoice"</strong> to create your first one. 🧾</p>
+  {% endif %}
+</div>
+{% endblock %}

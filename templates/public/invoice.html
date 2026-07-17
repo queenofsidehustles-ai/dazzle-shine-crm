@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Invoice {{ b.invoice_number }} — {{ biz.name }}</title>
+  <style>
+    body{font-family:Inter,Arial,sans-serif;background:#f6f5fb;color:#1f1333;margin:0;padding:24px}
+    .sheet{max-width:640px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(15,7,40,0.10)}
+    .head{background:#1f1333;color:#fff;padding:28px 32px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:flex-start}
+    .brand{font-size:1.5rem;font-weight:800}
+    .brand small{display:block;font-weight:400;font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:4px}
+    .inv-no{text-align:right;font-size:0.85rem;color:rgba(255,255,255,0.85)}
+    .inv-no b{color:#d3a84f;font-size:1.05rem}
+    .body{padding:28px 32px}
+    .badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:0.78rem;font-weight:700}
+    .paid{background:#d1fae5;color:#065f46}.overdue{background:#fee2e2;color:#991b1b}
+    .sent{background:#dbeafe;color:#1e40af}.draft{background:#f0edf8;color:#7c3aed}
+    table{width:100%;border-collapse:collapse;margin:18px 0}
+    td,th{padding:10px 4px;text-align:left;border-bottom:1px solid #eee}
+    th{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:#9a95ad}
+    .amt{text-align:right;white-space:nowrap}
+    .total{font-size:1.5rem;font-weight:800;color:#b98a33}
+    .pay{display:block;text-align:center;background:#d3a84f;color:#1f1333;padding:15px;border-radius:999px;text-decoration:none;font-weight:800;font-size:1.05rem;margin-top:20px}
+    .muted{color:#9a95ad;font-size:0.82rem}
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="head">
+      <div class="brand">{{ biz.name }}<small>{{ biz.city }}{% if biz.phone %} · {{ biz.phone }}{% endif %}</small></div>
+      <div class="inv-no">INVOICE<br><b>{{ b.invoice_number or '—' }}</b>
+        {% if b.invoice_issued_at %}<br>Issued {{ b.invoice_issued_at.strftime('%b %d, %Y') }}{% endif %}
+        {% if b.invoice_due_date %}<br>Due {{ b.invoice_due_date }}{% endif %}
+      </div>
+    </div>
+    <div class="body">
+      <span class="badge {{ status }}">{{ status_labels[status] if status_labels is defined else status|title }}</span>
+      <p style="margin:14px 0 2px"><span class="muted">Bill to</span><br><strong>{{ b.name }}</strong>
+        {% if b.address %}<br>{{ b.address }}, {{ b.city }} {{ b.zip_code }}{% endif %}</p>
+
+      <table>
+        <thead><tr><th>Description</th><th class="amt">Amount</th></tr></thead>
+        <tbody>
+          {% for desc, amt in items %}
+          <tr><td>{{ desc }}</td><td class="amt">{% if amt is not none %}{{ '-$%.2f'|format(-amt) if amt < 0 else '$%.2f'|format(amt) }}{% else %}—{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid #1f1333;padding-top:14px">
+        <span style="font-weight:700">{{ 'Amount paid' if status=='paid' else 'Total due' }}</span>
+        <span class="total">${{ '%.2f'|format(due) }}</span>
+      </div>
+
+      {% if status == 'paid' %}
+        <p style="text-align:center;color:#065f46;font-weight:800;font-size:1.2rem;margin-top:20px">✓ PAID — thank you!</p>
+      {% else %}
+        <a href="{{ pay_url }}" class="pay">💳 Pay this invoice</a>
+      {% endif %}
+
+      <hr style="border:none;border-top:1px solid #eee;margin:22px 0">
+      <p class="muted">Questions? Contact {{ biz.name }}{% if biz.phone %} at {{ biz.phone }}{% endif %}{% if biz.email %} · {{ biz.email }}{% endif %}. Thank you for your business! 💛</p>
+    </div>
+  </div>
+</body>
+</html>

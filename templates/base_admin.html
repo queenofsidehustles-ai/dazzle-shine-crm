@@ -299,6 +299,9 @@
       <a href="{{ url_for('bookings.calendar') }}" class="{{ 'active' if request.endpoint == 'bookings.calendar' }}">
         <span class="icon">📅</span> Calendar
       </a>
+      <a href="{{ url_for('invoices.index') }}" class="{{ 'active' if request.blueprint == 'invoices' }}">
+        <span class="icon">🧾</span> Invoices
+      </a>
       <a href="{{ url_for('messages.inbox') }}" class="{{ 'active' if request.blueprint == 'messages' and request.endpoint != 'messages.sent_log' }}">
         <span class="icon">💬</span> Messages
         {% if nav_unread %}<span style="margin-left:auto;background:#e53e3e;color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}

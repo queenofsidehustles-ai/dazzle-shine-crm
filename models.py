@@ -66,6 +66,9 @@ class Booking(db.Model):
     paid_at = db.Column(db.DateTime)           # when paid in full (card or manual)
     paid_method = db.Column(db.String(20))     # card, cash, zelle, venmo, other
     invoice_sent_at = db.Column(db.DateTime)   # morning-of invoice sent (one per day guard)
+    invoice_number = db.Column(db.String(20))       # e.g. INV-1042 (real invoice)
+    invoice_issued_at = db.Column(db.DateTime)      # when the invoice was issued/sent
+    invoice_due_date = db.Column(db.String(10))     # YYYY-MM-DD net terms
 
     # Lead fee — advertising cost baked into the customer price but EXCLUDED
     # from the contractor's commission (invisible to the customer).

@@ -33,6 +33,7 @@ from blueprints.places_finder import places_finder_bp
 from blueprints.team_logins import team_logins_bp
 from blueprints.commercial import commercial_bp
 from blueprints.commissions import commissions_bp
+from blueprints.invoices import invoices_bp
 
 
 def create_app():
@@ -86,6 +87,7 @@ def create_app():
     app.register_blueprint(team_logins_bp)
     app.register_blueprint(commercial_bp)
     app.register_blueprint(commissions_bp)
+    app.register_blueprint(invoices_bp)
 
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor
@@ -380,6 +382,10 @@ def _migrate_db():
         # Proactive recurring scheduling
         ('booking', 'recurring_group',  'VARCHAR(32)'),
         ('booking', 'recurring_active', 'BOOLEAN DEFAULT TRUE'),
+        # Real invoicing
+        ('booking', 'invoice_number',    'VARCHAR(20)'),
+        ('booking', 'invoice_issued_at', 'TIMESTAMP'),
+        ('booking', 'invoice_due_date',  'VARCHAR(10)'),
     ]
     for table, col, col_type in new_cols:
         try:

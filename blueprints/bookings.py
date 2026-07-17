@@ -415,6 +415,46 @@ def charge_balance(booking_id):
     return jsonify({'ok': ok, 'error': error})
 
 
+@bookings_bp.route('/<int:booking_id>/send-invoice', methods=['POST'])
+@login_required
+def send_invoice(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    import invoicing
+    from blueprints.payments import payment_link_url, amount_due
+    from notifications import send_email
+    from models import BusinessSetting
+    invoicing.issue(booking)
+    payment_link_url(booking, 'full')  # ensure pay_token exists
+    biz = BusinessSetting.get('business_name') or 'Dazzle & Shine Maids'
+    inv_url = request.host_url.rstrip('/') + url_for('invoices.view', token=booking.pay_token)
+    due = amount_due(booking)
+    sent = False
+    if booking.email:
+        html = f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <div style="background:#1f1333;padding:22px;text-align:center;border-radius:12px 12px 0 0">
+    <div style="color:#d3a84f;font-size:1.3rem;font-weight:800">{biz}</div>
+  </div>
+  <div style="padding:26px;background:#fff;border:1px solid #e4dfef;border-top:none;border-radius:0 0 12px 12px">
+    <p>Hi {booking.name or 'there'},</p>
+    <p>Here's your invoice <strong>{booking.invoice_number}</strong> — total due <strong>${due:,.2f}</strong>{(', by ' + booking.invoice_due_date) if booking.invoice_due_date else ''}.</p>
+    <div style="text-align:center;margin:22px 0">
+      <a href="{inv_url}" style="background:#d3a84f;color:#1f1333;padding:14px 30px;border-radius:999px;text-decoration:none;font-weight:800">View &amp; pay invoice →</a>
+    </div>
+    <p style="font-size:0.85rem;color:#9a95ad">Thank you for choosing {biz}! 💛</p>
+  </div>
+</div>"""
+        ok, _ = send_email(booking.email, booking.name, f'Invoice {booking.invoice_number} from {biz}', html)
+        sent = ok
+    booking.invoice_sent_at = datetime.utcnow()
+    db.session.commit()
+    if sent:
+        flash(f'🧾 Invoice {booking.invoice_number} sent to {booking.email}.', 'success')
+    else:
+        flash(f'Invoice {booking.invoice_number} created — share the link manually (no email on file, or send failed).', 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
 @bookings_bp.route('/<int:booking_id>/schedule-recurring', methods=['POST'])
 @login_required
 def schedule_recurring(booking_id):

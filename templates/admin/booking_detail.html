@@ -280,6 +280,17 @@
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📩 Email + text this payment link</button>
       </form>
 
+      <!-- Real invoice -->
+      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}" style="margin-top:10px">
+        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">🧾 {{ 'Resend invoice ' + booking.invoice_number if booking.invoice_number else 'Send invoice' }}</button>
+      </form>
+      {% if booking.invoice_number %}
+      <p style="text-align:center;font-size:0.78rem;color:#9a95ad;margin-top:6px">
+        Invoice <strong>{{ booking.invoice_number }}</strong>{% if booking.invoice_due_date %} · due {{ booking.invoice_due_date }}{% endif %} ·
+        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:#b98a33">view →</a>
+      </p>
+      {% endif %}
+
       <a href="{{ url_for('bookings.email_customer', booking_id=booking.id) }}"
          class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">✉️ Email the customer</a>
 
