@@ -256,6 +256,8 @@
         ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % (booking.price or 0) }}
       </div>
       <p style="font-size:0.8rem;color:#9a95ad">Paid {{ booking.paid_at.strftime('%b %-d, %Y') }}.</p>
+      <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
+         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">💸 Correct price &amp; notify customer</a>
       {% else %}
       <div class="detail-row"><span class="dl">Amount due</span><span class="dv" style="font-size:1.2rem">${{ '%.2f' % due }}</span></div>
 
@@ -290,6 +292,9 @@
         <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:#b98a33">view →</a>
       </p>
       {% endif %}
+
+      <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
+         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">💸 Correct price &amp; notify customer</a>
 
       <a href="{{ url_for('bookings.email_customer', booking_id=booking.id) }}"
          class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">✉️ Email the customer</a>

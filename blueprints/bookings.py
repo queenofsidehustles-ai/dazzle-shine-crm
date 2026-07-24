@@ -319,6 +319,117 @@ def email_customer(booking_id):
     return render_template('admin/email_customer.html', booking=booking)
 
 
+@bookings_bp.route('/<int:booking_id>/correct-price', methods=['GET', 'POST'])
+@login_required
+def correct_price(booking_id):
+    """Fix a booking that went out with the wrong price, then email + text the
+    customer a clear 'we corrected your quote' notice showing old → new."""
+    from pricing import calculate_price
+    booking = Booking.query.get_or_404(booking_id)
+
+    # Recalculate the correct total from the current (fixed) matrix, keeping the
+    # booking's existing lead fee. This is the pre-filled suggestion — editable.
+    try:
+        cleaning = calculate_price(
+            service_type=booking.service_type or 'standard',
+            bedrooms=booking.bedrooms or 1, bathrooms=booking.bathrooms or 1,
+            extras=booking.extras or '', frequency=booking.frequency or 'one_time',
+            sqft=booking.sqft,
+        )
+    except Exception:
+        cleaning = 0.0
+    suggested_total = round((cleaning or 0) + (booking.lead_fee or 0), 2)
+    old_price = round(booking.price or 0, 2)
+
+    if request.method == 'POST':
+        raw = request.form.get('new_price', '').strip().replace('$', '').replace(',', '')
+        try:
+            new_price = round(float(raw), 2)
+        except ValueError:
+            flash('Please enter a valid corrected price.', 'warning')
+            return redirect(url_for('bookings.correct_price', booking_id=booking_id))
+
+        personal_note = (request.form.get('personal_note') or '').strip()
+        channels = request.form.getlist('channel')          # ['email', 'sms']
+        if not channels:
+            channels = ['email', 'sms']
+
+        # 1) Save the corrected price first so the fix always sticks.
+        prev_price = old_price
+        booking.price = new_price
+        deposit_paid = 50 if booking.deposit_paid else 0
+        booking.balance_due = round(max(0.0, new_price - deposit_paid), 2)
+        stamp = datetime.utcnow().strftime('%b %d, %Y')
+        booking.internal_notes = ((booking.internal_notes or '')
+                                  + f'\n[Price corrected ${prev_price:.2f} → ${new_price:.2f} and customer notified on {stamp}]').strip()
+        db.session.commit()
+
+        # 2) Best-effort notify — the save above never depends on this.
+        first = (booking.name or 'there').split()[0]
+        when = f"{booking.preferred_date or ''}{(' at ' + booking.preferred_time) if booking.preferred_time else ''}".strip()
+        results = []
+
+        if 'email' in channels and booking.email:
+            from notifications import send_email
+            note_html = f'<p style="margin:0 0 10px">{personal_note}</p>' if personal_note else ''
+            html = f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:26px 30px;border-radius:12px 12px 0 0">
+    <p style="color:#d3a84f;font-size:1.1rem;font-weight:700;margin:0">Dazzle &amp; Shine Maids</p>
+  </div>
+  <div style="background:#fff;padding:28px 30px;border-radius:0 0 12px 12px;border:1px solid #e4dfef;border-top:none">
+    <p>Hi {first},</p>
+    <p>We found an error in the pricing on your recent quote and want to make it right. Here is your corrected total:</p>
+    <div style="background:#f6f5fb;border-radius:10px;padding:18px 20px;margin:16px 0;text-align:center">
+      <span style="color:#9a95ad;text-decoration:line-through;font-size:1.1rem">${prev_price:,.2f}</span>
+      <span style="color:#9a95ad;margin:0 8px">→</span>
+      <span style="color:#065f46;font-weight:800;font-size:1.7rem">${new_price:,.2f}</span>
+    </div>
+    <div style="background:#faf9fd;border-radius:10px;padding:14px 18px;margin:16px 0;font-size:0.95rem">
+      <p style="margin:4px 0"><strong>Service:</strong> {booking.service_label}</p>
+      {f'<p style="margin:4px 0"><strong>When:</strong> {when}</p>' if when else ''}
+      <p style="margin:4px 0"><strong>Corrected total:</strong> ${new_price:,.2f}</p>
+    </div>
+    {note_html}
+    <p>Sorry for the mix-up! Your booking is confirmed at the corrected total above. Just reply to this email or text us with any questions.</p>
+    <p style="margin-top:16px">Thank you,<br><strong>Dazzle &amp; Shine Maids</strong></p>
+    <hr style="border:none;border-top:1px solid #e4dfef;margin:22px 0">
+    <p style="font-size:0.78rem;color:#9a95ad;margin:0">Dazzle &amp; Shine Maids · Orlando, FL · Reply to this email with any questions.</p>
+  </div>
+</div>"""
+            ok, detail = send_email(to_email=booking.email, to_name=booking.name,
+                                    subject='Your corrected cleaning quote — Dazzle & Shine Maids',
+                                    html=html)
+            results.append(('email', ok, detail))
+
+        if 'sms' in channels and booking.phone:
+            from notifications import send_sms
+            sms = (f"Hi {first}! We corrected an error on your Dazzle & Shine quote. "
+                   f"Your updated total is ${new_price:,.2f} (was ${prev_price:,.2f})"
+                   + (f" for your {when} cleaning" if when else "")
+                   + ". Sorry for the mix-up! Reply with any questions.")
+            if personal_note:
+                sms += f' {personal_note}'
+            ok, detail = send_sms(booking.phone, sms)
+            results.append(('sms', ok, detail))
+
+        sent = [c for c, ok, _ in results if ok]
+        failed = [f'{c} ({d})' for c, ok, d in results if not ok]
+        if sent and not failed:
+            flash(f'Price corrected to ${new_price:,.2f} and customer notified by {", ".join(sent)} ✅', 'success')
+        elif sent and failed:
+            flash(f'Price corrected. Sent by {", ".join(sent)}, but {", ".join(failed)} failed.', 'warning')
+        elif failed:
+            flash(f'Price saved (${new_price:,.2f}) but nothing sent — {", ".join(failed)}', 'warning')
+        else:
+            flash(f'Price corrected to ${new_price:,.2f}, but this booking has no email or phone to notify.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    return render_template('admin/correct_price.html', booking=booking,
+                           old_price=old_price, suggested_total=suggested_total,
+                           cleaning=round(cleaning or 0, 2))
+
+
 @bookings_bp.route('/<int:booking_id>/notify-pay', methods=['POST'])
 @login_required
 def notify_pay(booking_id):
