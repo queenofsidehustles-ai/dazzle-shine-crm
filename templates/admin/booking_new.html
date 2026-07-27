@@ -97,8 +97,8 @@
     </div>
     <div class="form-group" style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:10px;padding:12px">
       <label style="color:#2b6cb0">📣 Lead fee ($) <span style="font-weight:400;color:#5f5878">— your ad cost. Added to the customer total, hidden from them, and NOT part of the cleaner's 50%.</span></label>
-      <input type="text" name="lead_fee" value="{{ '%g' % default_lead_fee }}" />
-      <p style="font-size:0.78rem;color:#5f5878;margin-top:6px">Set to <strong>0</strong> for referrals or repeat customers that didn't cost you an ad.</p>
+      <input type="text" name="lead_fee" value="" placeholder="Leave blank if no ad cost" />
+      <p style="font-size:0.78rem;color:#5f5878;margin-top:6px">Optional — only enter an amount if this customer came from a paid ad. Leave blank for referrals, repeat customers, or walk-ins.</p>
     </div>
 
     <!-- LIVE RUNNING TOTAL -->

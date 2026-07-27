@@ -56,9 +56,9 @@ def price_preview():
 
     fee_raw = request.args.get('lead_fee', '').strip().replace('$', '')
     try:
-        fee = float(fee_raw) if fee_raw != '' else float(get_lead_fee())
+        fee = float(fee_raw) if fee_raw != '' else 0.0   # blank = no lead fee (optional)
     except ValueError:
-        fee = float(get_lead_fee())
+        fee = 0.0
 
     return jsonify({'cleaning': round(cleaning or 0, 2), 'lead_fee': round(fee, 2),
                     'total': round((cleaning or 0) + fee, 2)})
@@ -100,12 +100,13 @@ def new():
             except Exception:
                 cleaning = 0.0
 
-        # Lead fee — added to the customer total, excluded from contractor pay.
+        # Lead fee — optional ad cost. Blank means none (added to the customer
+        # total when present, always excluded from contractor pay).
         fee_raw = request.form.get('lead_fee', '').strip().replace('$', '')
         try:
-            lead_fee = float(fee_raw) if fee_raw != '' else float(get_lead_fee())
+            lead_fee = float(fee_raw) if fee_raw != '' else 0.0
         except ValueError:
-            lead_fee = float(get_lead_fee())
+            lead_fee = 0.0
         price = round((cleaning or 0) + lead_fee, 2)   # what the customer pays
 
         b = Booking(
