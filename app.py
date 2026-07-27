@@ -1815,7 +1815,7 @@ def _seed_pricing_defaults():
     exactly once — after that, admin edits persist across restarts.
     Bump PRICING_VERSION whenever the default matrix changes.
     """
-    PRICING_VERSION = 2  # increment this when defaults change
+    PRICING_VERSION = 3  # increment this when defaults change (v3: raised matrix, 3/2 std $225→$260)
 
     try:
         from models import PricingSetting
