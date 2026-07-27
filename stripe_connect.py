@@ -82,21 +82,29 @@ def get_account_status(account_id):
         return False, str(e)
 
 
-def create_transfer(account_id, amount_dollars, description=''):
+def create_transfer(account_id, amount_dollars, description='', idempotency_key=None):
     """Move money from the platform balance to the contractor's connected account.
     amount_dollars is a float; Stripe wants integer cents. Returns (True, transfer_id)
-    or (False, error). THIS MOVES REAL MONEY in live mode."""
+    or (False, error). THIS MOVES REAL MONEY in live mode.
+
+    Pass a stable idempotency_key (e.g. 'payout-job-<booking_id>') so a retried or
+    double-submitted request can never create a second transfer — Stripe returns the
+    original transfer instead of charging again."""
     if not _init():
         return False, 'Stripe is not configured.'
     try:
         cents = int(round(float(amount_dollars) * 100))
         if cents <= 0:
             return False, 'Amount must be greater than $0.'
+        kwargs = {}
+        if idempotency_key:
+            kwargs['idempotency_key'] = idempotency_key
         tr = stripe.Transfer.create(
             amount=cents,
             currency='usd',
             destination=account_id,
             description=description or 'Contractor payout',
+            **kwargs,
         )
         return True, tr.id
     except stripe.error.StripeError as e:

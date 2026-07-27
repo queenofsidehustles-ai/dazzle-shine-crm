@@ -88,6 +88,8 @@ class Booking(db.Model):
     discount_amount = db.Column(db.Float, default=0)
     # Payroll
     hours_worked = db.Column(db.Float)
+    cleaner_paid_at = db.Column(db.DateTime)             # when the cleaner was paid out for THIS job
+    cleaner_payment_id = db.Column(db.Integer)           # the ContractorPayment.id that paid it
 
     # Sales attribution (VA commission)
     source = db.Column(db.String(50), default='website')  # carried from the Lead's source
@@ -533,6 +535,7 @@ class ContractorPayment(db.Model):
     """A record of paying a contractor — via Stripe (automatic) or manually (Venmo/Zelle/etc.)."""
     id = db.Column(db.Integer, primary_key=True)
     staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'))  # the job this pays for (per-job payout)
     amount = db.Column(db.Float, nullable=False)
     method = db.Column(db.String(20), default='stripe')   # stripe, venmo, zelle, cash, check
     status = db.Column(db.String(20), default='paid')     # paid, pending, failed

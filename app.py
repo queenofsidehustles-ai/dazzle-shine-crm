@@ -397,6 +397,10 @@ def _migrate_db():
         ('client',  'autopay',                  'BOOLEAN DEFAULT FALSE'),
         # Link a Team member back to the application they came from
         ('staff',   'application_id',           'INTEGER'),
+        # Cleaner payout tracking (one-click pay per job) — prevents double-paying
+        ('booking', 'cleaner_paid_at',      'TIMESTAMP'),
+        ('booking', 'cleaner_payment_id',   'INTEGER'),
+        ('contractor_payment', 'booking_id', 'INTEGER'),
     ]
     for table, col, col_type in new_cols:
         try:

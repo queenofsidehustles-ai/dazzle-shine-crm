@@ -1092,16 +1092,82 @@ def payroll():
         if not s:
             continue
         earned = s.calc_pay(job_price=(job.price or 0) - (job.lead_fee or 0), hours_worked=job.hours_worked or 0)
+        paid = bool(job.cleaner_paid_at)
         if name not in payroll_data:
-            payroll_data[name] = {'staff': s, 'jobs': [], 'total': 0}
-        payroll_data[name]['jobs'].append({'booking': job, 'earned': earned})
-        payroll_data[name]['total'] += earned
+            payroll_data[name] = {'staff': s, 'jobs': [], 'total': 0, 'paid_total': 0}
+        payroll_data[name]['jobs'].append({'booking': job, 'earned': earned, 'paid': paid})
+        if paid:
+            payroll_data[name]['paid_total'] += earned
+        else:
+            payroll_data[name]['total'] += earned   # 'total' = still owed (unpaid)
 
     grand_total = sum(v['total'] for v in payroll_data.values())
     return render_template('admin/payroll.html',
         payroll=payroll_data, grand_total=round(grand_total, 2),
         week_start=week_start_str, week_end=week_end_str,
+        stripe_configured=stripe_connect.is_configured(),
     )
+
+
+@contractors_bp.route('/payroll/pay-job/<int:booking_id>', methods=['POST'])
+@owner_required
+def pay_job(booking_id):
+    """Pay the assigned cleaner for ONE completed job — Stripe (default) or a
+    recorded manual payment. Idempotent: a job already paid can't be paid again."""
+    b = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('contractors.payroll',
+                            start=request.form.get('start', ''),
+                            end=request.form.get('end', '')))
+
+    if b.cleaner_paid_at:
+        flash(f"That job was already paid on {b.cleaner_paid_at.strftime('%b %d, %Y')} — not paying again.", 'warning')
+        return back
+
+    name = (b.assigned_cleaner or '').strip()
+    s = Staff.query.filter(db.func.lower(Staff.name) == name.lower()).first() if name else None
+    if not s:
+        flash('No matching team member for this job, so there is no one to pay.', 'error')
+        return back
+
+    earned = s.calc_pay(job_price=(b.price or 0) - (b.lead_fee or 0), hours_worked=b.hours_worked or 0)
+    if earned <= 0:
+        flash(f'{s.name}\'s pay for this job comes to $0 — add hours worked or a price first.', 'warning')
+        return back
+
+    method = request.form.get('method', 'stripe')
+    when = b.preferred_date or ''
+    desc = f'{s.name} — {b.name or "job"} {when}'.strip()
+
+    if method == 'stripe':
+        _sync_stripe_status(s)
+        if not (s.stripe_account_id and s.stripe_payouts_enabled):
+            flash(f"{s.name} isn't set up for Stripe payouts yet — record a manual payment or send their onboarding link.", 'warning')
+            return back
+        ok, result = stripe_connect.create_transfer(
+            s.stripe_account_id, earned, description=desc,
+            idempotency_key=f'payout-job-{b.id}')   # same job can never transfer twice
+        if not ok:
+            flash(f'Stripe payment failed: {result}', 'error')
+            return back
+        pay = ContractorPayment(staff_id=s.id, booking_id=b.id, amount=earned,
+                                method='stripe', status='paid', stripe_transfer_id=result,
+                                note=desc)
+    else:
+        # Manual: Venmo / Zelle / cash / check — recorded, not moved by us.
+        pay = ContractorPayment(staff_id=s.id, booking_id=b.id, amount=earned,
+                                method=method, status='paid', note=desc)
+
+    db.session.add(pay)
+    db.session.flush()                     # get pay.id
+    b.cleaner_paid_at = datetime.utcnow()
+    b.cleaner_payment_id = pay.id
+    db.session.commit()
+
+    if method == 'stripe':
+        flash(f'✅ Sent ${earned:.2f} to {s.name} via Stripe for the {when} job.', 'success')
+    else:
+        flash(f'Recorded ${earned:.2f} paid to {s.name} via {method.title()} for the {when} job.', 'success')
+    return back
 
 
 @contractors_bp.route('/payroll/statement/<int:staff_id>')
