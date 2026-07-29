@@ -204,7 +204,16 @@ class Lead(db.Model):
         'standard': 'Standard House Cleaning', 'deep': 'Deep Cleaning',
         'moveout': 'Move-Out / Move-In Cleaning', 'airbnb': 'Airbnb / Vacation Rental',
         'apartment': 'Apartment & Condo Cleaning', 'luxury': 'Luxury Home Cleaning',
+        'commercial': 'Commercial / Janitorial',
+        'apartment_turnover': 'Apartment Turnover / Make-Ready',
     }
+
+    # Leads priced at a walkthrough, not from the residential matrix
+    COMMERCIAL_TYPES = ('commercial', 'apartment_turnover')
+
+    @property
+    def is_commercial(self):
+        return (self.service_type or '') in self.COMMERCIAL_TYPES
 
     @property
     def service_label(self):

@@ -27,7 +27,7 @@
             <span style="font-size:0.82rem;color:#9a95ad">{{ lead.email }}</span>
           </td>
           <td>{{ lead.service_label }}</td>
-          <td>${{ '%.2f' % (lead.quoted_price or 0) }}</td>
+          <td>{% if lead.is_commercial %}<span style="color:#9a95ad">At walkthrough</span>{% else %}${{ '%.2f' % (lead.quoted_price or 0) }}{% endif %}</td>
           <td style="font-size:0.85rem;color:#9a95ad">{{ lead.source or 'website' }}</td>
           <td>
             {% set colors = {'new':'status-pending','contacted':'status-confirmed','converted':'status-completed','lost':'status-cancelled'} %}

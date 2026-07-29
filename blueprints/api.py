@@ -157,6 +157,133 @@ def capture_quote():
     return add_cors(resp, origin), 201
 
 
+# ── Commercial / janitorial lead capture (from /commercial/) ──────────────────
+
+COMMERCIAL_FACILITY_LABELS = {
+    'office': 'Professional office / suite',
+    'medical': 'Medical or dental practice',
+    'retail': 'Retail center / storefront',
+    'fitness': 'Fitness studio / gym',
+    'childcare': 'Childcare / learning center',
+    'church': 'Church / event hall',
+    'salon': 'Salon, spa or clinic',
+    'warehouse': 'Warehouse / light industrial',
+    'hoa': 'HOA clubhouse / commons',
+    'bank': 'Bank / credit union',
+    'apartment': 'Apartment community / rental portfolio',
+    'other': 'Other facility',
+}
+
+
+@api_bp.route('/commercial-lead', methods=['POST', 'OPTIONS'])
+def capture_commercial_lead():
+    """Walkthrough request from a facility or property manager.
+
+    Deliberately returns NO price. Commercial scope is set per site at the
+    walkthrough, so there is no bed/bath matrix to quote from — sending these
+    leads through /api/quote would email them a residential number that means
+    nothing. This just captures the lead and alerts the owner to call.
+
+    Saved with drip_step=0 so the residential price-drip cron skips them:
+    those drip emails interpolate lead.quoted_price, which is None here.
+    """
+    origin = request.headers.get('Origin', '')
+    if request.method == 'OPTIONS':
+        return add_cors(jsonify({}), origin), 200
+
+    # Same permissive parsing as /api/quote — never silently reject a real lead
+    data = request.get_json(silent=True) or {}
+    if not data:
+        data = request.form.to_dict() or request.values.to_dict() or {}
+
+    name = (data.get('name') or '').strip()
+    email = (data.get('email') or '').strip().lower()
+    phone = (data.get('phone') or '').strip()
+    if not name or not email:
+        return add_cors(jsonify({'ok': False, 'error': 'Name and email required'}), origin), 400
+
+    inquiry = data.get('inquiry_type') or 'commercial'
+    if inquiry not in ('commercial', 'apartment_turnover'):
+        inquiry = 'commercial'
+
+    company = (data.get('company') or '').strip()
+    facility = (data.get('facility_type') or '').strip()
+    sqft = (str(data.get('sqft') or '')).strip()
+    frequency = (data.get('frequency') or '').strip()
+    message = (data.get('message') or '').strip()
+
+    # Lead has no commercial columns and the app uses db.create_all() with no
+    # migrations, so the site detail goes in notes rather than new columns.
+    facility_label = COMMERCIAL_FACILITY_LABELS.get(facility, facility or '—')
+    notes = '\n'.join([
+        'COMMERCIAL WALKTHROUGH REQUEST',
+        f'Company / property: {company or "—"}',
+        f'Facility type: {facility_label}',
+        f'Approx. square footage: {sqft or "—"}',
+        f'Frequency wanted: {frequency or "—"}',
+        f'Notes from them: {message or "—"}',
+    ])
+
+    from models import Lead
+    lead = Lead(
+        name=name, email=email, phone=phone,
+        service_type=inquiry,
+        frequency=frequency or 'custom',
+        city=(data.get('city') or '').strip(),
+        zip_code=(data.get('zip_code') or '').strip(),
+        notes=notes,
+        quoted_price=None,          # priced at walkthrough, never on the website
+        source='website_commercial',
+        status='new',
+        drip_step=0,                # excluded from the residential drip sequence
+    )
+    db.session.add(lead)
+    db.session.commit()
+
+    _send_commercial_alert(lead, company, facility_label, sqft, frequency, message)
+
+    resp = jsonify({'ok': True})
+    return add_cors(resp, origin), 201
+
+
+def _send_commercial_alert(lead, company, facility_label, sqft, frequency, message):
+    """Text + email the owner. No customer-facing price, so no quote text."""
+    from models import BusinessSetting
+    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    owner_phone = (BusinessSetting.get('owner_phone') or BusinessSetting.get('phone')
+                   or os.environ.get('OWNER_PHONE', ''))
+    owner_email = (BusinessSetting.get('email')
+                   or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com'))
+
+    kind = 'APARTMENT TURNOVER' if lead.service_type == 'apartment_turnover' else 'COMMERCIAL'
+    alert = (f"\U0001F3E2 NEW {kind} LEAD — call them now! {lead.name}"
+             f"{' at ' + company if company else ''}, {lead.phone or 'no phone'}. "
+             f"{facility_label}, {sqft or '?'} sqft, {frequency or 'frequency TBD'}.")
+    if owner_phone:
+        send_sms(owner_phone, alert)
+
+    try:
+        send_email(
+            to_email=owner_email, to_name=biz,
+            from_name=biz,
+            subject=f"\U0001F3E2 New {kind.title()} lead: {lead.name} — call them now!",
+            html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">New {kind.title()} Walkthrough Request</h2>
+  <p><strong>Name:</strong> {lead.name} &nbsp; <strong>Phone:</strong> {lead.phone or '—'}</p>
+  <p><strong>Email:</strong> {lead.email}</p>
+  <p><strong>Company / property:</strong> {company or '—'}</p>
+  <p><strong>Facility type:</strong> {facility_label}</p>
+  <p><strong>Approx. square footage:</strong> {sqft or '—'}</p>
+  <p><strong>Frequency wanted:</strong> {frequency or '—'}</p>
+  <p><strong>Notes:</strong> {message or '—'}</p>
+  <p style="color:#5f5878;font-size:0.9rem">No price was quoted — scope is set at the walkthrough.</p>
+</div>""",
+        )
+    except Exception:
+        pass
+
+
 # ── Lead drip emails (cron — use same REMINDER_API_KEY) ───────────────────────
 
 @api_bp.route('/send-drips', methods=['POST'])

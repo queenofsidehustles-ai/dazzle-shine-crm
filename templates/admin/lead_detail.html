@@ -27,8 +27,10 @@
       {% if lead.extras %}
       <div class="detail-row"><span class="dl">Add-ons</span><span class="dv">{{ lead.extras }}</span></div>
       {% endif %}
-      <div class="detail-row"><span class="dl">Quoted Price</span><span class="dv" style="font-size:1.3rem;font-weight:700;color:#b98a33">${{ '%.2f' % (lead.quoted_price or 0) }}</span></div>
+      <div class="detail-row"><span class="dl">Quoted Price</span><span class="dv" style="font-size:1.3rem;font-weight:700;color:#b98a33">{% if lead.is_commercial %}<span style="font-size:1rem;font-weight:600;color:#9a95ad">Set at walkthrough</span>{% else %}${{ '%.2f' % (lead.quoted_price or 0) }}{% endif %}</span></div>
+      {% if not lead.is_commercial %}
       <div class="detail-row"><span class="dl">Drip Step</span><span class="dv" style="color:#9a95ad">{{ lead.drip_step }} of 3 emails sent</span></div>
+      {% endif %}
       <div class="detail-row"><span class="dl">Received</span><span class="dv" style="color:#9a95ad;font-size:0.88rem">{{ lead.created_at.strftime('%B %d, %Y') }}</span></div>
     </div>
   </div>
