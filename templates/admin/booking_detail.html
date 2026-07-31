@@ -205,7 +205,10 @@
           {% endif %}
         </div>
         {% endfor %}
+        {% endif %}
 
+        {# Always available — this is how a job gets given to someone directly,
+           whether it needs one cleaner or a whole crew. #}
         {% if booking.spots_left > 0 %}
         <div style="background:#faf9fd;border:1px solid #e4dfef;border-radius:10px;padding:12px 13px;margin-top:14px">
           <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:7px">
@@ -225,13 +228,15 @@
                    style="width:100px;padding:7px 9px;margin:0" />
             <span style="font-size:0.78rem;color:#9a95ad">blank = auto</span>
           </div>
+          <p style="font-size:0.78rem;color:#5f5878;margin-top:7px">
+            This job pays out <strong>${{ '%.2f' % booking.commissionable_price }}</strong>{% if booking.lead_fee %} (${{ '%.2f' % booking.price }} minus the ${{ '%.2f' % booking.lead_fee }} lead fee){% endif %} — whatever you don't give her, you keep.
+          </p>
           <button type="submit" name="send_now" value="1" class="btn btn-gold"
                   style="width:100%;justify-content:center;margin-top:10px">
             📲 Add &amp; send the job to her now
           </button>
           <p style="font-size:0.76rem;color:#9a95ad;margin-top:6px">She gets a text + email with the address, entry notes, her pay, and the checklist link.</p>
         </div>
-        {% endif %}
         {% endif %}
 
         <div style="display:flex;gap:8px;margin-top:12px">
