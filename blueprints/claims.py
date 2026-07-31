@@ -1,11 +1,14 @@
 """Open-job board: broadcast a job to the whole team, first to claim wins.
-Blocks time-clashing claims and lets a cleaner release a job back to the board."""
+Big houses can be crew jobs (2+ spots) — then the first N to claim get in, each
+with their own pay. Blocks time-clashing claims and lets a cleaner release a job
+back to the board."""
 import re
 import secrets
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for
+from sqlalchemy.exc import IntegrityError
 from extensions import db
-from models import Booking, Staff, BusinessSetting
+from models import Booking, BookingCrew, Staff, BusinessSetting
 from notifications import send_sms
 from translate import translate
 
@@ -59,14 +62,23 @@ def _window(b):
     return (start, start + int(hrs * 60) + 60)
 
 
+def jobs_for(staff, on_date, exclude_id=None):
+    """Every job this cleaner is on that day — solo (assigned_cleaner) or as one
+    of a crew. Both sources matter, or a crew job wouldn't block a double-book."""
+    q = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
+        db.or_(db.func.lower(Booking.assigned_cleaner) == (staff.name or '').lower(),
+               BookingCrew.staff_id == staff.id),
+        Booking.status != 'cancelled',
+        Booking.preferred_date == on_date,
+    )
+    if exclude_id:
+        q = q.filter(Booking.id != exclude_id)
+    return q.distinct().all()
+
+
 def clash_reason(staff, new_booking):
     """Return a human message if claiming would clash with the cleaner's day, else None."""
-    others = Booking.query.filter(
-        db.func.lower(Booking.assigned_cleaner) == (staff.name or '').lower(),
-        Booking.status != 'cancelled',
-        Booking.preferred_date == new_booking.preferred_date,
-        Booking.id != new_booking.id,
-    ).all()
+    others = jobs_for(staff, new_booking.preferred_date, exclude_id=new_booking.id)
     if not others:
         return None
     nw = _window(new_booking)
@@ -82,27 +94,55 @@ def clash_reason(staff, new_booking):
 
 
 # ── Broadcast a job to the whole team ───────────────────────────────────────
+def uses_crew(booking):
+    """True once a job tracks named people with set pay — either because it needs
+    2+ cleaners, or because someone was assigned directly with a fixed amount."""
+    return bool(booking.crew) or booking.is_crew_job
+
+
 def broadcast_job(booking):
-    """Open the job and text every active cleaner a personal claim link."""
+    """Open the job and text every available cleaner a personal claim link.
+
+    Plain job: clears the assignment, first to claim wins.
+    Job with people already on it: keeps them and only offers the spots still
+    open — so re-offering never bumps someone who was assigned directly or
+    already claimed and got their work order. Remove people from the Crew card
+    instead."""
     if not booking.claim_token:
         booking.claim_token = secrets.token_urlsafe(24)
     booking.open_for_claim = True
-    booking.assigned_cleaner = None
     booking.cleaner_response = None
     booking.broadcast_at = datetime.utcnow()
+    if not uses_crew(booking):
+        booking.assigned_cleaner = None
     db.session.commit()
 
+    if uses_crew(booking) and booking.spots_left <= 0:
+        booking.open_for_claim = False      # nothing to offer — keep it off the board
+        db.session.commit()
+        return 0
+
+    already = {c.staff_id for c in booking.crew}
     area = booking.city or booking.zip_code or 'your area'
     when = f"{booking.preferred_date or 'soon'}{(' ' + booking.preferred_time) if booking.preferred_time else ''}"
+    spots = booking.spots_left
     sent = 0
     for s in Staff.query.filter(Staff.is_active.is_(True), Staff.phone.isnot(None)).all():
+        if s.id in already:
+            continue                      # already holds a spot on this job
         if not s.agreement_token:
             s.agreement_token = secrets.token_urlsafe(32)
             db.session.commit()
-        pay = s.calc_pay(job_price=commissionable(booking), hours_worked=0)
         link = f"{CRM_BASE}/claim/{booking.claim_token}/{s.agreement_token}"
-        msg = (f"🧹 New job available! {when} · {booking.service_label} · {area} area · "
-               f"You'd earn ${pay:.0f}. First to claim it gets it 👉 {link}")
+        if booking.is_crew_job:
+            pay = booking.default_crew_pay(s)
+            msg = (f"🧹 Team job — big house, {booking.crew_size} cleaners needed! {when} · "
+                   f"{booking.service_label} · {area} area · You'd earn ${pay:.0f}. "
+                   f"{spots} spot{'s' if spots != 1 else ''} left 👉 {link}")
+        else:
+            pay = s.calc_pay(job_price=commissionable(booking), hours_worked=0)
+            msg = (f"🧹 New job available! {when} · {booking.service_label} · {area} area · "
+                   f"You'd earn ${pay:.0f}. First to claim it gets it 👉 {link}")
         if (s.language or 'en') == 'es':
             msg = translate(msg, target='es')
         try:
@@ -123,21 +163,64 @@ def _alert_owner(text):
 
 
 # ── Claim page (public, personalized link) ──────────────────────────────────
+def _pay_for(booking, staff):
+    """What this cleaner sees as their take on this job — a set amount always
+    beats the automatic percentage."""
+    if uses_crew(booking):
+        row = booking.crew_row_for(staff)
+        if row and row.pay_amount is not None:
+            return row.pay_amount
+        return booking.default_crew_pay(staff)
+    return staff.calc_pay(job_price=commissionable(booking), hours_worked=0)
+
+
+def _claim_state(booking, staff):
+    """open = spot available, mine = they're on it, taken = full."""
+    if uses_crew(booking):
+        if booking.crew_row_for(staff):
+            return 'mine'
+        return 'open' if (booking.open_for_claim and booking.spots_left > 0) else 'taken'
+    if booking.open_for_claim:
+        return 'open'
+    if (booking.assigned_cleaner or '').lower() == (staff.name or '').lower():
+        return 'mine'
+    return 'taken'
+
+
 @claims_bp.route('/claim/<ctoken>/<stoken>')
 def claim_page(ctoken, stoken):
     booking = Booking.query.filter_by(claim_token=ctoken).first_or_404()
     staff = Staff.query.filter_by(agreement_token=stoken).first_or_404()
-    pay = staff.calc_pay(job_price=commissionable(booking), hours_worked=0)
-    mine = (booking.assigned_cleaner or '').lower() == (staff.name or '').lower()
-    if booking.open_for_claim:
-        state = 'open'
-    elif mine:
-        state = 'mine'
-    else:
-        state = 'taken'
-    return render_template('public/claim.html', b=booking, s=staff, pay=pay, state=state,
+    state = _claim_state(booking, staff)
+    return render_template('public/claim.html', b=booking, s=staff,
+                           pay=_pay_for(booking, staff), state=state,
                            clash=clash_reason(staff, booking) if state == 'open' else None,
                            biz=_biz(), myday=f"{CRM_BASE}/contractors/my-day/{staff.agreement_token}")
+
+
+def _take_crew_spot(booking, staff):
+    """Grab one spot on a crew job. Returns True if the spot is theirs.
+
+    Race-safe without locking: everyone inserts, then the lowest N row ids keep
+    their spot and any loser deletes its own row. The unique constraint stops the
+    same person taking two spots."""
+    row = BookingCrew(booking_id=booking.id, staff_id=staff.id,
+                      pay_amount=booking.default_crew_pay(staff),
+                      claimed_at=datetime.utcnow())
+    db.session.add(row)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return True                       # they already held a spot — that's a win
+
+    winners = BookingCrew.query.filter_by(booking_id=booking.id) \
+                               .order_by(BookingCrew.id).limit(booking.crew_size or 1).all()
+    if row.id not in [w.id for w in winners]:
+        db.session.delete(row)            # someone beat them to the last spot
+        db.session.commit()
+        return False
+    return True
 
 
 @claims_bp.route('/claim/<ctoken>/<stoken>/claim', methods=['POST'])
@@ -146,34 +229,49 @@ def claim_do(ctoken, stoken):
     staff = Staff.query.filter_by(agreement_token=stoken).first_or_404()
 
     # Not available anymore?
-    if not booking.open_for_claim:
+    if _claim_state(booking, staff) != 'open':
         return redirect(url_for('claims.claim_page', ctoken=ctoken, stoken=stoken))
 
     # Time clash guard
     reason = clash_reason(staff, booking)
     if reason:
-        pay = staff.calc_pay(job_price=commissionable(booking), hours_worked=0)
-        return render_template('public/claim.html', b=booking, s=staff, pay=pay,
+        return render_template('public/claim.html', b=booking, s=staff,
+                               pay=_pay_for(booking, staff),
                                state='clash', clash=reason, biz=_biz(),
                                myday=f"{CRM_BASE}/contractors/my-day/{staff.agreement_token}")
 
-    # Atomic first-wins: only the update that flips open_for_claim from True succeeds.
-    won = Booking.query.filter_by(id=booking.id, open_for_claim=True).update(
-        {'assigned_cleaner': staff.name, 'open_for_claim': False,
-         'cleaner_response': 'accepted', 'cleaner_notified_at': datetime.utcnow()},
-        synchronize_session=False)
-    db.session.commit()
-    if not won:
-        return redirect(url_for('claims.claim_page', ctoken=ctoken, stoken=stoken))
+    if uses_crew(booking):
+        if not _take_crew_spot(booking, staff):
+            return redirect(url_for('claims.claim_page', ctoken=ctoken, stoken=stoken))
+        if not booking.assigned_cleaner:
+            booking.assigned_cleaner = staff.name      # first in becomes the lead
+        booking.cleaner_notified_at = datetime.utcnow()
+        if booking.spots_left <= 0:                    # crew is full — close the board
+            booking.open_for_claim = False
+            booking.cleaner_response = 'accepted'
+        db.session.commit()
+        left = booking.spots_left
+        note = f"{left} spot{'s' if left != 1 else ''} still open" if left else "crew is full ✅"
+    else:
+        # Atomic first-wins: only the update that flips open_for_claim from True succeeds.
+        won = Booking.query.filter_by(id=booking.id, open_for_claim=True).update(
+            {'assigned_cleaner': staff.name, 'open_for_claim': False,
+             'cleaner_response': 'accepted', 'cleaner_notified_at': datetime.utcnow()},
+            synchronize_session=False)
+        db.session.commit()
+        if not won:
+            return redirect(url_for('claims.claim_page', ctoken=ctoken, stoken=stoken))
+        db.session.refresh(booking)
+        note = None
 
-    db.session.refresh(booking)
     # Send the checklist + notify the owner
     try:
         from blueprints.workorders import create_and_send_workorder
-        create_and_send_workorder(booking)
+        create_and_send_workorder(booking, recipient=staff)
     except Exception:
         pass
-    _alert_owner(f"✅ {staff.name} claimed the {booking.preferred_date} job ({booking.name}).")
+    msg = f"✅ {staff.name} claimed the {booking.preferred_date} job ({booking.name})."
+    _alert_owner(f"{msg} {note}" if note else msg)
     return redirect(url_for('claims.claim_page', ctoken=ctoken, stoken=stoken))
 
 
@@ -182,8 +280,20 @@ def claim_do(ctoken, stoken):
 def release(booking_id, stoken):
     booking = Booking.query.get_or_404(booking_id)
     staff = Staff.query.filter_by(agreement_token=stoken).first_or_404()
-    if (booking.assigned_cleaner or '').lower() != (staff.name or '').lower():
+    row = booking.crew_row_for(staff)
+    if not row and (booking.assigned_cleaner or '').lower() != (staff.name or '').lower():
         return redirect(url_for('contractors.my_day', token=stoken))
+
+    if row:
+        if row.paid_at:      # already paid out — releasing would orphan the payment
+            return redirect(url_for('contractors.my_day', token=stoken))
+        db.session.delete(row)           # frees only their spot; the rest of the crew stays
+        db.session.commit()
+        # If the lead walked, hand the lead label to whoever's left.
+        if (booking.assigned_cleaner or '').lower() == (staff.name or '').lower():
+            booking.assigned_cleaner = booking.crew_names[0] if booking.crew else None
+            db.session.commit()
+
     _alert_owner(f"↩️ {staff.name} released the {booking.preferred_date} job ({booking.name}) — re-offering to the team.")
-    broadcast_job(booking)   # re-opens + re-texts everyone
+    broadcast_job(booking)   # re-opens the empty spot(s) + re-texts everyone else
     return redirect(url_for('contractors.my_day', token=stoken))

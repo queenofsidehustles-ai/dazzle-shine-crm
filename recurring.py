@@ -22,6 +22,9 @@ def _copy_visit(seed, on_date, group):
         name=seed.name, email=seed.email, phone=seed.phone,
         address=seed.address, city=seed.city, zip_code=seed.zip_code,
         access_notes=seed.access_notes, assigned_cleaner=seed.assigned_cleaner,
+        # A big house still needs a crew every visit — but each visit gets claimed
+        # fresh, so carry the size, not the people.
+        crew_size=seed.crew_size or 1,
         status='pending', price=seed.price, balance_due=seed.balance_due,
         source=seed.source, agent=seed.agent,
         # carry the card on file so morning-of auto-pay works for the whole series

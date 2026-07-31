@@ -81,7 +81,8 @@
           <input type="text" name="preferred_time" placeholder="e.g. 10:00 AM" value="{{ booking.preferred_time or '' }}" />
         </div>
         <div class="form-group">
-          <label>Assigned Cleaner</label>
+          <label>{{ 'Lead Cleaner' if booking.is_crew_job else 'Assigned Cleaner' }}
+            {% if booking.is_crew_job %}<span style="font-weight:400;color:#9a95ad">(this is a {{ booking.crew_size }}-cleaner job — manage the full crew below)</span>{% endif %}</label>
           <select name="assigned_cleaner">
             <option value="">— Unassigned —</option>
             {% for s in staff %}
@@ -130,7 +131,11 @@
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save Changes</button>
       </form>
 
-      {% if booking.assigned_cleaner and not booking.open_for_claim %}
+      {% if booking.crew %}
+      <form method="POST" action="{{ url_for('bookings.notify_pay', booking_id=booking.id) }}" style="margin-top:12px">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📲 Text the crew their updated pay</button>
+      </form>
+      {% elif booking.assigned_cleaner and not booking.open_for_claim %}
       <form method="POST" action="{{ url_for('bookings.notify_pay', booking_id=booking.id) }}" style="margin-top:12px">
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📲 Text {{ booking.assigned_cleaner.split()[0] }} their updated pay</button>
       </form>
@@ -143,19 +148,134 @@
       </form>
     </div>
 
+    <!-- Crew — big houses that need more than one cleaner -->
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">👥 Who's Paid For This Job</h2>
+      <form method="POST" action="{{ url_for('bookings.save_crew', booking_id=booking.id) }}">
+        <div class="form-group">
+          <label>How many cleaners are you paying?</label>
+          <select name="crew_size">
+            {% for n in range(1, 7) %}
+            <option value="{{ n }}" {{ 'selected' if (booking.crew_size or 1) == n }}>{{ n }} paid cleaner{{ 's' if n != 1 }}</option>
+            {% endfor %}
+          </select>
+          <p style="font-size:0.8rem;color:#9a95ad;margin-top:6px">
+            Don't count yourself if you're working this one. Working a big house with one cleaner? That's <strong>1 paid cleaner</strong> — add her below with the amount you want and send it straight to her.
+          </p>
+        </div>
+
+        {% if booking.crew or booking.is_crew_job %}
+        {% set pot = booking.commissionable_price %}
+        {% set left = pot - booking.crew_allocated %}
+        <div style="background:#1f1333;color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
+            <span>Pot to divide (job minus lead fee)</span><span>${{ '%.2f' % pot }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
+            <span>Paying {{ 'the crew' if booking.crew|length > 1 else 'the cleaner' }}</span><span>${{ '%.2f' % booking.crew_allocated }}</span>
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:700">{{ 'You keep' if left >= 0 else '⚠️ Over the pot by' }}</span>
+            <span style="font-weight:700;font-size:1.2rem;color:{{ '#d3a84f' if left >= 0 else '#fca5a5' }}">${{ '%.2f' % (left if left >= 0 else -left) }}</span>
+          </div>
+        </div>
+
+        {% for c in booking.crew %}
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #f0eef6">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:0.92rem">{{ c.staff.name if c.staff else 'Unknown' }}
+              {% if booking.assigned_cleaner and c.staff and c.staff.name == booking.assigned_cleaner %}<span style="font-size:0.68rem;color:#3730a3;background:#eef2ff;padding:1px 7px;border-radius:999px;font-weight:700">LEAD</span>{% endif %}
+            </div>
+            <div style="font-size:0.75rem;color:#9a95ad">
+              {% if c.paid_at %}✅ Paid {{ c.paid_at.strftime('%b %-d') }}{% elif c.claimed_at %}Claimed {{ c.claimed_at.strftime('%b %-d') }}{% else %}Assigned by you{% endif %}
+              {% if c.staff %} · {{ c.staff.pay_label() }}{% endif %}
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:3px">
+            <span style="color:#9a95ad">$</span>
+            <input type="number" step="0.01" min="0" name="pay_{{ c.id }}" value="{{ '%.2f' % (c.pay_amount or 0) }}"
+                   {{ 'disabled' if c.paid_at }} style="width:84px;padding:6px 8px;margin:0" />
+          </div>
+          {% if not c.paid_at %}
+          <button type="submit" formaction="{{ url_for('bookings.remove_crew', booking_id=booking.id, crew_id=c.id) }}"
+                  onclick="return confirm('Remove {{ c.staff.name if c.staff else 'this cleaner' }} from this job? Their spot re-opens.')"
+                  title="Remove from crew"
+                  style="background:none;border:1px solid #fecaca;color:#b91c1c;border-radius:7px;padding:5px 9px;cursor:pointer;font-weight:700">✕</button>
+          {% endif %}
+        </div>
+        {% endfor %}
+
+        {% if booking.spots_left > 0 %}
+        <div style="background:#faf9fd;border:1px solid #e4dfef;border-radius:10px;padding:12px 13px;margin-top:14px">
+          <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:7px">
+            ➕ Give this job to a specific cleaner
+            <span style="display:block;font-weight:400;color:#9a95ad;font-size:0.79rem;margin-top:3px">Skips the job board — no claim link, she just gets the work.</span>
+          </label>
+          <select name="add_staff_id" style="margin-bottom:8px">
+            <option value="">— Pick a cleaner —</option>
+            {% for s in staff %}
+              {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}
+            {% endfor %}
+          </select>
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:0.85rem;color:#5f5878;white-space:nowrap">Pay her $</span>
+            <input type="number" step="0.01" min="0" name="add_pay"
+                   placeholder="{{ '%.2f' % (booking.commissionable_price / (booking.crew_size or 1)) }}"
+                   style="width:100px;padding:7px 9px;margin:0" />
+            <span style="font-size:0.78rem;color:#9a95ad">blank = auto</span>
+          </div>
+          <button type="submit" name="send_now" value="1" class="btn btn-gold"
+                  style="width:100%;justify-content:center;margin-top:10px">
+            📲 Add &amp; send the job to her now
+          </button>
+          <p style="font-size:0.76rem;color:#9a95ad;margin-top:6px">She gets a text + email with the address, entry notes, her pay, and the checklist link.</p>
+        </div>
+        {% endif %}
+        {% endif %}
+
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button type="submit" class="btn {{ 'btn-outline' if booking.spots_left > 0 else 'btn-gold' }}" style="flex:1;justify-content:center">Save pay</button>
+          {% if booking.crew|length > 1 %}
+          <button type="submit" name="even_split" value="1" class="btn btn-outline" style="justify-content:center"
+                  title="Reset every unpaid share to an even split">Split evenly</button>
+          {% endif %}
+        </div>
+      </form>
+
+      {% if booking.crew %}
+      <form method="POST" action="{{ url_for('bookings.send_crew', booking_id=booking.id) }}" style="margin-top:10px">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
+          📲 Re-send the job to {{ booking.crew_label }}
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
     <!-- Offer to the team (first to claim wins) -->
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">📣 Offer to the Team</h2>
       {% if booking.open_for_claim %}
       <div style="background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
-        ⏳ Open on the board — waiting for someone to claim it. {% if booking.broadcast_at %}Offered {{ booking.broadcast_at.strftime('%b %-d, %-I:%M %p') }}.{% endif %}
+        ⏳ Open on the board — waiting for
+        {% if booking.is_crew_job %}{{ booking.spots_left }} more cleaner{{ 's' if booking.spots_left != 1 }} to claim a spot{% else %}someone to claim it{% endif %}.
+        {% if booking.broadcast_at %}Offered {{ booking.broadcast_at.strftime('%b %-d, %-I:%M %p') }}.{% endif %}
       </div>
       {% endif %}
-      <p style="font-size:0.85rem;color:#5f5878;margin:8px 0 12px">Text every available cleaner — the first to claim it gets the job (blocks anyone whose day would clash).</p>
+      <p style="font-size:0.85rem;color:#5f5878;margin:8px 0 12px">
+        {% if booking.is_crew_job %}
+        Text every available cleaner — the first {{ booking.spots_left }} to claim take the open spot{{ 's' if booking.spots_left != 1 }}. Anyone already on the crew keeps their spot and won't be texted again.
+        {% else %}
+        Text every available cleaner — the first to claim it gets the job (blocks anyone whose day would clash).
+        {% endif %}
+      </p>
+      {% set no_spots = booking.crew and booking.spots_left <= 0 %}
       <form method="POST" action="{{ url_for('bookings.broadcast', booking_id=booking.id) }}"
-            onsubmit="return confirm('Offer this job to the whole team? First to claim it gets it.')">
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">
-          {{ '🔁 Re-offer to the team' if booking.open_for_claim else '📣 Offer to the team' }}
+            onsubmit="return confirm({{ ('Offer the ' ~ booking.spots_left ~ ' open spot(s) to the team?') | tojson if booking.is_crew_job else '\'Offer this job to the whole team? First to claim it gets it.\'' }})">
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center"
+                {{ 'disabled' if no_spots }}>
+          {% if no_spots %}✅ Already assigned to {{ booking.crew_label }}
+          {% else %}{{ '🔁 Re-offer to the team' if booking.open_for_claim else '📣 Offer to the team' }}{% endif %}
         </button>
       </form>
     </div>

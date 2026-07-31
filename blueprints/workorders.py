@@ -103,10 +103,20 @@ def delete_template(template_id):
     return redirect(url_for('workorders.templates'))
 
 
-def create_and_send_workorder(booking, template_id=None):
-    """Create a job checklist for a booking and email/text it to the assigned
-    cleaner. Reusable from the manual route AND the auto-assign hook.
+def create_and_send_workorder(booking, template_id=None, recipient=None):
+    """Create a job checklist for a booking and email/text it to the cleaner(s).
+    Reusable from the manual route AND the auto-assign hook.
+
+    recipient=<Staff> sends to just that person and reuses the job's existing
+    checklist — that's the crew path, where each cleaner claims their spot at a
+    different time but the whole crew works one shared list. With no recipient, a
+    crew job goes to everyone currently on the crew.
     Returns True if a checklist was created."""
+    if recipient is not None and booking.job_checklists:
+        checklist = booking.job_checklists[-1]
+        _send_workorder_to(booking, checklist, recipient)
+        return True
+
     if template_id:
         tmpl = ChecklistTemplate.query.get(template_id)
         items = tmpl.get_items() if tmpl else DEFAULT_ITEMS.get(booking.service_type, DEFAULT_ITEMS['standard'])
@@ -121,14 +131,45 @@ def create_and_send_workorder(booking, template_id=None):
     db.session.add(checklist)
     db.session.commit()
 
-    cleaner_email, cleaner_phone = None, None
-    if booking.assigned_cleaner:
-        cleaner = Staff.query.filter_by(name=booking.assigned_cleaner, is_active=True).first()
-        if cleaner:
-            cleaner_email = cleaner.email
-            cleaner_phone = cleaner.phone
+    if recipient is not None:
+        _send_workorder_to(booking, checklist, recipient)
+    elif booking.crew:
+        for member in booking.crew:
+            if member.staff:
+                _send_workorder_to(booking, checklist, member.staff)
+    else:
+        cleaner = (Staff.query.filter_by(name=booking.assigned_cleaner, is_active=True).first()
+                   if booking.assigned_cleaner else None)
+        _send_workorder_to(booking, checklist, cleaner)
+    return True
 
-    checklist_url = url_for('workorders.view_checklist', token=token, _external=True, _scheme='https')
+
+def _send_workorder_to(booking, checklist, cleaner):
+    """Email + text one cleaner their work order for this job. No-op if we have
+    no way to reach them."""
+    cleaner_email = cleaner.email if cleaner else None
+    cleaner_phone = cleaner.phone if cleaner else None
+    if not (cleaner_email or cleaner_phone):
+        return
+
+    # Tell them what they earn, and who else is on it if it's a team job.
+    teammates_html = crew_pay_html = sms_crew = ''
+    row = booking.crew_row_for(cleaner) if (cleaner and booking.crew) else None
+    if booking.is_crew_job:
+        mates = [c.staff.name for c in booking.crew
+                 if c.staff and (not cleaner or c.staff_id != cleaner.id)]
+        who = ', '.join(mates) if mates else 'another cleaner (still being assigned)'
+        teammates_html = (f'<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;'
+                          f'padding:12px 14px;margin:12px 0;color:#3730a3">'
+                          f'👥 <strong>Team job</strong> — {booking.crew_size} cleaners. '
+                          f'You\'re working this one with {who}.</div>')
+        sms_crew = f" Team job with {who}."
+    # A set amount always wins over the automatic percentage — say it plainly.
+    if row and row.pay_amount is not None:
+        crew_pay_html = f'<p><strong>Your pay for this job:</strong> ${row.pay_amount:.2f}</p>'
+        sms_crew += f" Your pay: ${row.pay_amount:.0f}."
+
+    checklist_url = url_for('workorders.view_checklist', token=checklist.token, _external=True, _scheme='https')
     sop_url = url_for('sops.library', _external=True, _scheme='https')
     date_text = booking.preferred_date or 'TBD'
     time_text = booking.preferred_time or 'TBD'
@@ -142,7 +183,7 @@ def create_and_send_workorder(booking, template_id=None):
 
     if cleaner_email:
         send_email(
-            to_email=cleaner_email, to_name=booking.assigned_cleaner or 'Team',
+            to_email=cleaner_email, to_name=(cleaner.name if cleaner else None) or 'Team',
             subject=f'Work Order: {booking.name} — {date_text} at {time_text}',
             html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -152,7 +193,7 @@ def create_and_send_workorder(booking, template_id=None):
   <p><a href="{nav_url}" style="color:#1f1333;font-weight:700">🧭 Navigate there →</a></p>
   <p><strong>Service:</strong> {booking.service_label} &nbsp; <strong>Time:</strong> {time_text}</p>
   <p><strong>Bedrooms:</strong> {booking.bedrooms} &nbsp; <strong>Bathrooms:</strong> {booking.bathrooms}</p>
-  {access_html}{extras_html}{notes_html}
+  {teammates_html}{crew_pay_html}{access_html}{extras_html}{notes_html}
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <p><a href="{checklist_url}" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Open Job Checklist →</a></p>
   <p style="font-size:0.82rem;color:#9a95ad">Check off each item as you complete it. Need a refresher? <a href="{sop_url}" style="color:#b98a33">See our cleaning SOPs →</a></p>
@@ -161,9 +202,8 @@ def create_and_send_workorder(booking, template_id=None):
 
     if cleaner_phone:
         send_sms(cleaner_phone,
-                 f"Work Order: {booking.name} · {booking.address} · {date_text} at {time_text}. "
-                 f"Checklist: {checklist_url}")
-    return True
+                 f"Work Order: {booking.name} · {booking.address} · {date_text} at {time_text}."
+                 f"{sms_crew} Checklist: {checklist_url}")
 
 
 @workorders_bp.route('/send/<int:booking_id>', methods=['POST'])

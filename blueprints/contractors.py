@@ -4,7 +4,7 @@ import threading
 from datetime import datetime, date, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from auth import login_required, owner_required
-from models import Staff, ContractorApplication, Booking, BusinessSetting, ContractorPayment
+from models import Staff, ContractorApplication, Booking, BookingCrew, BusinessSetting, ContractorPayment
 from extensions import db
 from notifications import send_email, send_sms
 import stripe_connect
@@ -797,12 +797,14 @@ def my_day(token):
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
     today = date.today()
     horizon = (today + timedelta(days=7)).isoformat()
-    jobs = Booking.query.filter(
-        db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+    # Their solo jobs plus any crew job they hold a spot on (they may not be the lead).
+    jobs = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
+        db.or_(db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+               BookingCrew.staff_id == s.id),
         Booking.status != 'cancelled',
         Booking.preferred_date >= today.isoformat(),
         Booking.preferred_date <= horizon,
-    ).order_by(Booking.preferred_date, Booking.preferred_time).all()
+    ).distinct().order_by(Booking.preferred_date, Booking.preferred_time).all()
     days = {}
     for b in jobs:
         days.setdefault(b.preferred_date, []).append(b)
@@ -1078,29 +1080,35 @@ def payroll():
         Booking.preferred_date >= week_start_str,
         Booking.preferred_date <= week_end_str,
         Booking.status == 'completed',
-        Booking.assigned_cleaner != None,
-        Booking.assigned_cleaner != '',
     ).all()
 
     staff_all = Staff.query.filter_by(is_active=True).order_by(Staff.name).all()
     staff_map = {s.name: s for s in staff_all}
 
     payroll_data = {}
+
+    def add_row(s, job, earned, paid, crew=None):
+        row = payroll_data.setdefault(s.name, {'staff': s, 'jobs': [], 'total': 0, 'paid_total': 0})
+        row['jobs'].append({'booking': job, 'earned': earned, 'paid': paid, 'crew': crew})
+        if paid:
+            row['paid_total'] += earned
+        else:
+            row['total'] += earned          # 'total' = still owed (unpaid)
+
     for job in jobs:
-        name = job.assigned_cleaner
-        s = staff_map.get(name)
+        if job.crew:
+            # Crew job — one payroll line per person, at the split the owner set.
+            for c in job.crew:
+                if c.staff:
+                    add_row(c.staff, job, c.pay_amount or 0, bool(c.paid_at), crew=c)
+            continue
+        s = staff_map.get(job.assigned_cleaner or '')
         if not s:
             continue
         earned = s.calc_pay(job_price=(job.price or 0) - (job.lead_fee or 0), hours_worked=job.hours_worked or 0)
-        paid = bool(job.cleaner_paid_at)
-        if name not in payroll_data:
-            payroll_data[name] = {'staff': s, 'jobs': [], 'total': 0, 'paid_total': 0}
-        payroll_data[name]['jobs'].append({'booking': job, 'earned': earned, 'paid': paid})
-        if paid:
-            payroll_data[name]['paid_total'] += earned
-        else:
-            payroll_data[name]['total'] += earned   # 'total' = still owed (unpaid)
+        add_row(s, job, earned, bool(job.cleaner_paid_at))
 
+    payroll_data = dict(sorted(payroll_data.items()))
     grand_total = sum(v['total'] for v in payroll_data.values())
     return render_template('admin/payroll.html',
         payroll=payroll_data, grand_total=round(grand_total, 2),
@@ -1135,6 +1143,20 @@ def pay_job(booking_id):
         return back
 
     method = request.form.get('method', 'stripe')
+    pay = _send_payout(s, b, earned, method, idem_key=f'payout-job-{b.id}')
+    if pay is None:
+        return back
+    b.cleaner_paid_at = datetime.utcnow()
+    b.cleaner_payment_id = pay.id
+    db.session.commit()
+    return back
+
+
+def _send_payout(s, b, earned, method, idem_key):
+    """Move (or record) one payout and return the saved ContractorPayment.
+    Flashes and returns None if it couldn't go through. Caller stamps whatever
+    it is that got paid — the booking for a solo job, the crew row for one
+    member of a crew — and commits."""
     when = b.preferred_date or ''
     desc = f'{s.name} — {b.name or "job"} {when}'.strip()
 
@@ -1142,13 +1164,13 @@ def pay_job(booking_id):
         _sync_stripe_status(s)
         if not (s.stripe_account_id and s.stripe_payouts_enabled):
             flash(f"{s.name} isn't set up for Stripe payouts yet — record a manual payment or send their onboarding link.", 'warning')
-            return back
+            return None
         ok, result = stripe_connect.create_transfer(
             s.stripe_account_id, earned, description=desc,
-            idempotency_key=f'payout-job-{b.id}')   # same job can never transfer twice
+            idempotency_key=idem_key)   # the same share can never transfer twice
         if not ok:
             flash(f'Stripe payment failed: {result}', 'error')
-            return back
+            return None
         pay = ContractorPayment(staff_id=s.id, booking_id=b.id, amount=earned,
                                 method='stripe', status='paid', stripe_transfer_id=result,
                                 note=desc)
@@ -1159,14 +1181,42 @@ def pay_job(booking_id):
 
     db.session.add(pay)
     db.session.flush()                     # get pay.id
-    b.cleaner_paid_at = datetime.utcnow()
-    b.cleaner_payment_id = pay.id
-    db.session.commit()
-
     if method == 'stripe':
         flash(f'✅ Sent ${earned:.2f} to {s.name} via Stripe for the {when} job.', 'success')
     else:
         flash(f'Recorded ${earned:.2f} paid to {s.name} via {method.title()} for the {when} job.', 'success')
+    return pay
+
+
+@contractors_bp.route('/payroll/pay-crew/<int:crew_id>', methods=['POST'])
+@owner_required
+def pay_crew(crew_id):
+    """Pay ONE cleaner their share of a crew job. Each share is paid separately,
+    so paying Maria never touches what Ana is owed on the same house."""
+    c = BookingCrew.query.get_or_404(crew_id)
+    back = redirect(url_for('contractors.payroll',
+                            start=request.form.get('start', ''),
+                            end=request.form.get('end', '')))
+
+    if c.paid_at:
+        flash(f"That share was already paid on {c.paid_at.strftime('%b %d, %Y')} — not paying again.", 'warning')
+        return back
+    if not c.staff:
+        flash('No team member on that crew spot, so there is no one to pay.', 'error')
+        return back
+
+    earned = c.pay_amount or 0
+    if earned <= 0:
+        flash(f"{c.staff.name}'s share is $0 — set their split on the booking first.", 'warning')
+        return back
+
+    pay = _send_payout(c.staff, c.booking, earned, request.form.get('method', 'stripe'),
+                       idem_key=f'payout-crew-{c.id}')
+    if pay is None:
+        return back
+    c.paid_at = datetime.utcnow()
+    c.payment_id = pay.id
+    db.session.commit()
     return back
 
 
@@ -1178,15 +1228,22 @@ def pay_statement(staff_id):
     today = date.today()
     start = request.args.get('start', (today - timedelta(days=today.weekday())).isoformat())
     end = request.args.get('end', (today - timedelta(days=today.weekday()) + timedelta(days=6)).isoformat())
-    jobs = Booking.query.filter(
-        db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+    # Solo jobs plus crew jobs they worked — on a crew job they're only owed
+    # their own share, not the whole job.
+    jobs = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
+        db.or_(db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+               BookingCrew.staff_id == s.id),
         Booking.status == 'completed',
         Booking.preferred_date >= start,
         Booking.preferred_date <= end,
-    ).order_by(Booking.preferred_date).all()
+    ).distinct().order_by(Booking.preferred_date).all()
     rows, total = [], 0.0
     for j in jobs:
-        earned = s.calc_pay(job_price=(j.price or 0) - (j.lead_fee or 0), hours_worked=j.hours_worked or 0)
+        crew_row = j.crew_row_for(s) if j.crew else None
+        if j.crew and not crew_row:
+            continue          # crew job they aren't actually on (they're just the stale lead)
+        earned = (crew_row.pay_amount or 0) if crew_row else \
+            s.calc_pay(job_price=(j.price or 0) - (j.lead_fee or 0), hours_worked=j.hours_worked or 0)
         total += earned
         rows.append({'booking': j, 'earned': earned})
     biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')

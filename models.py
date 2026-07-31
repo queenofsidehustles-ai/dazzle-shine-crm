@@ -103,7 +103,8 @@ class Booking(db.Model):
     notes = db.Column(db.Text)
     internal_notes = db.Column(db.Text)
     access_notes = db.Column(db.Text)   # entry info for the cleaner: gate code, key, parking, alarm, pets
-    assigned_cleaner = db.Column(db.String(100))
+    assigned_cleaner = db.Column(db.String(100))        # solo job: the cleaner. Crew job: the lead.
+    crew_size = db.Column(db.Integer, default=1)        # 2+ = big house needing a crew (see BookingCrew)
     cleaner_notified_at = db.Column(db.DateTime)        # when job notification was last sent
     cleaner_response = db.Column(db.String(20))         # accepted, declined, None
     open_for_claim = db.Column(db.Boolean, default=False)  # broadcast to team, first to claim wins
@@ -149,6 +150,71 @@ class Booking(db.Model):
     @property
     def status_color(self):
         return self.STATUS_COLORS.get(self.status, '#9ca3af')
+
+    # ── Crew jobs (2+ cleaners on one house) ────────────────────────────────
+    @property
+    def is_crew_job(self):
+        return (self.crew_size or 1) > 1
+
+    @property
+    def spots_filled(self):
+        return len(self.crew)
+
+    @property
+    def spots_left(self):
+        return max(0, (self.crew_size or 1) - len(self.crew))
+
+    @property
+    def crew_names(self):
+        return [c.staff.name for c in self.crew if c.staff]
+
+    @property
+    def crew_label(self):
+        """'Maria + Ana' for a crew job, the single name for a solo job."""
+        names = self.crew_names
+        return ' + '.join(names) if names else (self.assigned_cleaner or '')
+
+    @property
+    def crew_allocated(self):
+        """Total already handed out to the crew — compare against the pot."""
+        return round(sum(c.pay_amount or 0 for c in self.crew), 2)
+
+    def default_crew_pay(self, staff, size=None):
+        """Suggested pay for one crew member: an even slice of the commissionable
+        pot run through their own rate. Only a starting number — the owner sets
+        the real split by hand. Hourly cleaners bill their own hours, so their
+        pay is never sliced."""
+        size = size or self.crew_size or 1
+        share = self.commissionable_price / max(1, size)
+        return staff.calc_pay(job_price=share, hours_worked=self.hours_worked or 0)
+
+    def crew_row_for(self, staff):
+        sid = getattr(staff, 'id', staff)
+        return next((c for c in self.crew if c.staff_id == sid), None)
+
+
+class BookingCrew(db.Model):
+    """One cleaner's spot on a multi-cleaner job — a 2-cleaner job has 2 rows.
+
+    Pay is set per person by the owner, so the crew can split the job's
+    commissionable amount any way she likes. On a crew job THIS is the source of
+    truth for payroll and payouts; solo jobs have no rows here and still run off
+    Booking.assigned_cleaner."""
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=False, index=True)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
+    pay_amount = db.Column(db.Float)        # what THIS cleaner earns for the job
+    claimed_at = db.Column(db.DateTime)     # set if they grabbed the spot off the board
+    paid_at = db.Column(db.DateTime)        # when this person's share was paid out
+    payment_id = db.Column(db.Integer)      # the ContractorPayment.id that paid it
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # One spot per person per job — stops a double-claim outright.
+    __table_args__ = (db.UniqueConstraint('booking_id', 'staff_id', name='uq_crew_booking_staff'),)
+
+    booking = db.relationship('Booking', backref=db.backref(
+        'crew', lazy=True, cascade='all, delete-orphan', order_by='BookingCrew.id'))
+    staff = db.relationship('Staff')
 
 
 class PricingSetting(db.Model):

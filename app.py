@@ -401,6 +401,9 @@ def _migrate_db():
         ('booking', 'cleaner_paid_at',      'TIMESTAMP'),
         ('booking', 'cleaner_payment_id',   'INTEGER'),
         ('contractor_payment', 'booking_id', 'INTEGER'),
+        # Crew jobs — 2+ cleaners on one big house (booking_crew table is created
+        # by create_all; this is just the size flag on the booking itself)
+        ('booking', 'crew_size',            'INTEGER DEFAULT 1'),
     ]
     for table, col, col_type in new_cols:
         try:

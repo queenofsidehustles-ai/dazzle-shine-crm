@@ -103,7 +103,7 @@ def _send_quote_followup(q, n):
 
 def run_lifecycle_emails():
     """Process every lifecycle stage. Returns a dict of how many of each were sent."""
-    from models import Booking, Lead, BookingRating, Staff
+    from models import Booking, BookingCrew, Lead, BookingRating, Staff
     now = datetime.utcnow()
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
          'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
@@ -234,9 +234,10 @@ def run_lifecycle_emails():
                                 Staff.insurance_reminder_sent_at.is_(None)).all():
         if not s.email or (s.worker_model or 'contractor') == 'employee':
             continue
-        done = Booking.query.filter(
-            db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
-            Booking.status == 'completed').count()
+        done = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
+            db.or_(db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+                   BookingCrew.staff_id == s.id),
+            Booking.status == 'completed').distinct().count()
         if done < INSURANCE_AFTER_JOBS:
             continue
         _send_transactional('contractor_insurance_reminder', s.email, s.name, {})
@@ -273,11 +274,13 @@ def run_lifecycle_emails():
     for s in Staff.query.filter(Staff.is_active.is_(True)).all():
         if s.schedule_reminder_date == today_str or not s.agreement_token:
             continue
-        jobs = Booking.query.filter(
-            db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+        # Crew members who aren't the lead still need tomorrow's reminder.
+        jobs = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
+            db.or_(db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
+                   BookingCrew.staff_id == s.id),
             Booking.status != 'cancelled',
             Booking.preferred_date == tomorrow,
-        ).all()
+        ).distinct().all()
         if not jobs:
             continue
         n = len(jobs)

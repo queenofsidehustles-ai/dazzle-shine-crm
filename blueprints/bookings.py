@@ -2,7 +2,7 @@ import calendar as cal_module
 from datetime import date, timedelta, datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from auth import login_required
-from models import Booking, Client, Staff
+from models import Booking, BookingCrew, Client, Staff
 from extensions import db
 from pricing import FREQUENCY_LABELS
 import recurring
@@ -434,32 +434,48 @@ def correct_price(booking_id):
 @bookings_bp.route('/<int:booking_id>/notify-pay', methods=['POST'])
 @login_required
 def notify_pay(booking_id):
-    """Text the assigned cleaner their current (corrected) pay for this job."""
+    """Text the cleaner their current (corrected) pay for this job. On a crew job
+    every member gets their own share, not the job total."""
     import secrets as _secrets
     from models import BusinessSetting
     from notifications import send_sms
     from translate import translate
     b = Booking.query.get_or_404(booking_id)
-    name = b.assigned_cleaner or ''
-    s = Staff.query.filter(db.func.lower(Staff.name) == name.lower()).first() if name else None
-    if not s or not s.phone:
+
+    if b.crew:
+        targets = [(c.staff, c.pay_amount or 0) for c in b.crew if c.staff]
+    else:
+        name = b.assigned_cleaner or ''
+        s = Staff.query.filter(db.func.lower(Staff.name) == name.lower()).first() if name else None
+        targets = [(s, s.calc_pay(job_price=b.commissionable_price,
+                                  hours_worked=b.hours_worked or 0))] if s else []
+    targets = [(s, p) for s, p in targets if s and s.phone]
+    if not targets:
         flash('No assigned cleaner with a phone number to notify.', 'warning')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
-    if not s.agreement_token:
-        s.agreement_token = _secrets.token_urlsafe(32)
-        db.session.commit()
-    pay = s.calc_pay(job_price=b.commissionable_price, hours_worked=b.hours_worked or 0)
+
     biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
     base = 'https://dazzle-shine-crm-production.up.railway.app'
-    myday = f"{base}/contractors/my-day/{s.agreement_token}"
-    first = (s.name or '').split()[0]
-    msg = (f"Hi {first}! Quick update on your {b.preferred_date or ''} job — your pay is "
-           f"${pay:.2f}. Full details here: {myday} — {biz}")
-    if (s.language or 'en') == 'es':
-        msg = translate(msg, target='es')
-    ok, detail = send_sms(s.phone, msg)
-    flash(f'Updated pay (${pay:.2f}) sent to {s.name}.' if ok else 'Could not send: ' + detail,
-          'success' if ok else 'warning')
+    sent, failed = [], None
+    for s, pay in targets:
+        if not s.agreement_token:
+            s.agreement_token = _secrets.token_urlsafe(32)
+            db.session.commit()
+        myday = f"{base}/contractors/my-day/{s.agreement_token}"
+        first = (s.name or '').split()[0]
+        msg = (f"Hi {first}! Quick update on your {b.preferred_date or ''} job — your pay is "
+               f"${pay:.2f}. Full details here: {myday} — {biz}")
+        if (s.language or 'en') == 'es':
+            msg = translate(msg, target='es')
+        ok, detail = send_sms(s.phone, msg)
+        if ok:
+            sent.append(f'{s.name} (${pay:.2f})')
+        else:
+            failed = detail
+    if sent:
+        flash('Updated pay sent to ' + ', '.join(sent) + '.', 'success')
+    else:
+        flash('Could not send: ' + (failed or 'unknown error'), 'warning')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -469,7 +485,157 @@ def broadcast(booking_id):
     booking = Booking.query.get_or_404(booking_id)
     from blueprints.claims import broadcast_job
     n = broadcast_job(booking)
-    flash(f'📣 Offered to {n} cleaner(s) — first to claim it gets it.', 'success')
+    if booking.crew or booking.is_crew_job:
+        left = booking.spots_left
+        if not left:
+            flash(f'This job is already assigned to {booking.crew_label} — '
+                  f'remove them from the Crew card first to put it back on the board.', 'warning')
+        else:
+            flash(f'📣 Offered to {n} cleaner(s) — the first {left} to claim get the {left} open spot(s).', 'success')
+    else:
+        flash(f'📣 Offered to {n} cleaner(s) — first to claim it gets it.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+# ── Crew & pay: who is being paid for this job, and how much ────────────────
+@bookings_bp.route('/<int:booking_id>/crew', methods=['POST'])
+@login_required
+def save_crew(booking_id):
+    """Set how many cleaners are being PAID for this job, put specific people on
+    it, and set each person's pay by hand.
+
+    This works for one cleaner as much as for a crew — if the owner is working
+    the house herself alongside one cleaner, that's 1 paid cleaner at whatever
+    amount she decides, which the automatic percentage can't express."""
+    b = Booking.query.get_or_404(booking_id)
+    msgs = []
+
+    # 1) How many paid cleaners
+    try:
+        size = max(1, min(6, int(request.form.get('crew_size') or b.crew_size or 1)))
+    except ValueError:
+        size = b.crew_size or 1
+    if size != (b.crew_size or 1):
+        # Never shrink past the people already on it — that would strand someone,
+        # and for an already-paid share it would orphan the payment record.
+        if size < len(b.crew):
+            extra = len(b.crew) - size
+            flash(f'Remove {extra} cleaner{"s" if extra != 1 else ""} from this job first, then set it to {size}.', 'error')
+            return redirect(url_for('bookings.detail', booking_id=booking_id))
+        b.crew_size = size
+        msgs.append(f'set to {size} paid cleaner{"s" if size != 1 else ""}')
+
+    # 2) Put a specific cleaner on the job (no job board, no claim link)
+    add_id = (request.form.get('add_staff_id') or '').strip()
+    added = None
+    if add_id:
+        s = Staff.query.get(int(add_id))
+        if not s:
+            pass
+        elif b.crew_row_for(s):
+            msgs.append(f'{s.name} was already on this job')
+        elif len(b.crew) >= (b.crew_size or 1):
+            flash(f'This job is set to {b.crew_size} paid cleaner(s) and those spots are filled — '
+                  f'raise the count to add another.', 'error')
+            return redirect(url_for('bookings.detail', booking_id=booking_id))
+        else:
+            raw = (request.form.get('add_pay') or '').strip()
+            try:
+                amount = round(float(raw), 2) if raw else b.default_crew_pay(s)
+            except ValueError:
+                amount = b.default_crew_pay(s)
+            db.session.add(BookingCrew(booking_id=b.id, staff_id=s.id, pay_amount=amount))
+            if not b.assigned_cleaner:
+                b.assigned_cleaner = s.name
+            b.open_for_claim = False        # assigned directly — it's off the board
+            added = s
+            msgs.append(f'added {s.name} at ${amount:.2f}')
+    db.session.commit()
+
+    # 3) Pay amounts — even-split reset, or whatever she typed per person
+    if request.form.get('even_split'):
+        for c in b.crew:
+            if c.staff and not c.paid_at:
+                c.pay_amount = b.default_crew_pay(c.staff, size=len(b.crew) or 1)
+        msgs.append('split evenly')
+    else:
+        for c in b.crew:
+            raw = (request.form.get(f'pay_{c.id}') or '').strip()
+            if raw == '' or c.paid_at:
+                continue              # already-paid shares are locked
+            try:
+                c.pay_amount = round(float(raw), 2)
+            except ValueError:
+                pass
+    db.session.commit()
+
+    over = b.crew_allocated - b.commissionable_price
+    if over > 0.01:
+        flash(f'Heads up: you\'ve set ${b.crew_allocated:.2f} in pay, which is '
+              f'${over:.2f} MORE than the ${b.commissionable_price:.2f} this job earns.', 'warning')
+
+    # Send the job straight to whoever was just added, if asked.
+    if added and request.form.get('send_now'):
+        return _send_job_to(b, [added])
+
+    flash('Saved — ' + ', '.join(msgs) + '.' if msgs else 'Pay saved.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+def _send_job_to(b, people):
+    """Email + text these cleaners the job: address, access notes, their pay, and
+    the checklist link. This is the direct alternative to the claim board — they
+    get the work, not an offer to accept."""
+    from blueprints.workorders import create_and_send_workorder
+    sent, failed = [], []
+    for s in people:
+        try:
+            create_and_send_workorder(b, recipient=s)
+            sent.append(s.name)
+        except Exception:
+            failed.append(s.name)
+    if sent:
+        from datetime import datetime as _dt
+        b.cleaner_notified_at = _dt.utcnow()
+        b.cleaner_response = 'accepted'      # assigned directly, not an offer
+        db.session.commit()
+        flash(f'📲 Job sent to {", ".join(sent)} — address, pay, and checklist. '
+              f'No claim link, it\'s already theirs.', 'success')
+    if failed:
+        flash(f'Could not reach {", ".join(failed)} — check their phone/email on the Team page.', 'warning')
+    return redirect(url_for('bookings.detail', booking_id=b.id))
+
+
+@bookings_bp.route('/<int:booking_id>/crew/send', methods=['POST'])
+@login_required
+def send_crew(booking_id):
+    """Send the job directly to everyone on it (or one person via crew_id)."""
+    b = Booking.query.get_or_404(booking_id)
+    crew_id = request.form.get('crew_id')
+    rows = [c for c in b.crew if c.staff and (not crew_id or str(c.id) == crew_id)]
+    if not rows:
+        flash('Nobody is on this job yet — add a cleaner first.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    return _send_job_to(b, [c.staff for c in rows])
+
+
+@bookings_bp.route('/<int:booking_id>/crew/remove/<int:crew_id>', methods=['POST'])
+@login_required
+def remove_crew(booking_id, crew_id):
+    b = Booking.query.get_or_404(booking_id)
+    c = BookingCrew.query.filter_by(id=crew_id, booking_id=b.id).first_or_404()
+    if c.paid_at:
+        flash(f'{c.staff.name if c.staff else "That cleaner"} was already paid for this job — '
+              f'removing them would orphan the payment.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    name = c.staff.name if c.staff else 'Cleaner'
+    was_lead = (b.assigned_cleaner or '').lower() == name.lower()
+    db.session.delete(c)
+    db.session.commit()
+    if was_lead:
+        b.assigned_cleaner = b.crew_names[0] if b.crew else None
+        db.session.commit()
+    flash(f'{name} removed from the crew — that spot is open again. Offer it to the team to refill it.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 

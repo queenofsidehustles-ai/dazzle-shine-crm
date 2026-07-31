@@ -23,6 +23,7 @@
     .taken{background:#fef3c7;color:#92400e}
     .clash{background:#fee2e2;color:#991b1b}
     .good{background:#d1fae5;color:#065f46}
+    .crew{background:#eef2ff;color:#3730a3;font-size:0.9rem;margin-bottom:10px}
     .big{font-size:2.6rem;text-align:center;margin-bottom:6px}
     .muted{color:#9a95ad;font-size:0.85rem;text-align:center;margin-top:12px}
     a.btnlink{display:block;text-align:center;background:#d3a84f;color:#1f1333;border-radius:999px;padding:14px;font-weight:800;text-decoration:none;margin-top:14px}
@@ -33,28 +34,37 @@
     <span class="script">{{ biz }}</span>
 
     {% if state == 'open' %}
-      <h1>New job available! 🧹</h1>
+      <h1>{{ 'Team job available! 🧹👥' if b.is_crew_job else 'New job available! 🧹' }}</h1>
+      {% if b.is_crew_job %}
+      <div class="banner crew">👥 Big house — <b>{{ b.crew_size }} cleaners</b> on this one.
+        {{ b.spots_left }} spot{{ 's' if b.spots_left != 1 }} left{% if b.crew_names %}, working with {{ b.crew_names | join(', ') }}{% endif %}.</div>
+      {% endif %}
       <div class="row"><span class="k">When</span><span class="v">{{ b.preferred_date or 'TBD' }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">Service</span><span class="v">{{ b.service_label }} · {{ b.bedrooms or '?' }}bd/{{ b.bathrooms or '?' }}ba</span></div>
       <div class="row"><span class="k">Area</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
-      <div class="pay"><div class="l">You'd earn</div><div class="a">${{ '%.0f'|format(pay) }}</div></div>
+      <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'd earn" }}</div><div class="a">${{ '%.0f'|format(pay) }}</div></div>
       {% if clash %}
         <div class="banner clash">⚠️ {{ clash }}</div>
       {% else %}
         <form method="POST" action="{{ url_for('claims.claim_do', ctoken=b.claim_token, stoken=s.agreement_token) }}">
-          <button class="claim" type="submit">✋ Claim this job</button>
+          <button class="claim" type="submit">{{ '✋ Claim my spot' if b.is_crew_job else '✋ Claim this job' }}</button>
         </form>
-        <p class="muted">First to claim gets it. The full address appears once it's yours.</p>
+        <p class="muted">{{ 'First ' ~ b.spots_left ~ ' to claim get the open spots.' if b.is_crew_job else 'First to claim gets it.' }} The full address appears once it's yours.</p>
       {% endif %}
 
     {% elif state == 'mine' %}
       <div class="big">🎉</div>
-      <h1>It's yours, {{ s.name.split()[0] }}!</h1>
-      <div class="banner good">You claimed this job. Here are the full details:</div>
+      <h1>{{ "Your spot's locked in" if b.is_crew_job else "It's yours" }}, {{ s.name.split()[0] }}!</h1>
+      <div class="banner good">You claimed this {{ 'spot' if b.is_crew_job else 'job' }}. Here are the full details:</div>
+      {% if b.is_crew_job %}
+      {% set mates = b.crew_names | reject('equalto', s.name) | list %}
+      <div class="banner crew" style="margin-top:10px">👥 Team job — {{ b.crew_size }} cleaners.
+        {% if mates %}You're working with <b>{{ mates | join(', ') }}</b>.{% else %}Still filling the other spot{{ 's' if b.spots_left != 1 }} — we'll text you who joins.{% endif %}</div>
+      {% endif %}
       <div class="row" style="margin-top:10px"><span class="k">When</span><span class="v">{{ b.preferred_date }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">Client</span><span class="v">{{ b.name }}</span></div>
       <div class="row"><span class="k">Address</span><span class="v">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span></div>
-      <div class="pay"><div class="l">You'll earn</div><div class="a">${{ '%.0f'|format(pay) }}</div></div>
+      <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'll earn" }}</div><div class="a">${{ '%.0f'|format(pay) }}</div></div>
       <a class="btnlink" href="{{ myday }}">📅 See it in My Day</a>
       <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"
             onsubmit="return confirm('Release this job back to the team? Someone else will be able to grab it.')">
@@ -69,8 +79,8 @@
 
     {% else %}
       <div class="big">🙌</div>
-      <h1>This job's been taken</h1>
-      <div class="banner taken">Someone grabbed this one first — but more jobs come through all the time. Keep an eye on your texts!</div>
+      <h1>{{ 'This crew is full' if b.is_crew_job else "This job's been taken" }}</h1>
+      <div class="banner taken">{{ 'All the spots got claimed' if b.is_crew_job else 'Someone grabbed this one first' }} — but more jobs come through all the time. Keep an eye on your texts!</div>
     {% endif %}
   </div>
 </body>

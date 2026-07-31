@@ -59,27 +59,32 @@
       <thead><tr><th>Date</th><th>Client</th><th>Service</th><th>Job Price</th><th>Hours</th><th>Earned</th><th style="text-align:right">Pay</th></tr></thead>
       <tbody>
         {% for row in data.jobs %}
+        {# Crew jobs pay each share separately, so the button targets the crew spot, not the booking. #}
+        {% set pay_url = url_for('contractors.pay_crew', crew_id=row.crew.id) if row.crew else url_for('contractors.pay_job', booking_id=row.booking.id) %}
+        {% set paid_on = row.crew.paid_at if row.crew else row.booking.cleaner_paid_at %}
         <tr>
           <td>{{ row.booking.preferred_date or '—' }}</td>
-          <td><a href="{{ url_for('bookings.detail', booking_id=row.booking.id) }}" style="color:#5d4f7d;font-weight:600">{{ row.booking.name }}</a></td>
+          <td><a href="{{ url_for('bookings.detail', booking_id=row.booking.id) }}" style="color:#5d4f7d;font-weight:600">{{ row.booking.name }}</a>
+            {% if row.crew %}<div style="font-size:0.72rem;color:#3730a3;font-weight:700">👥 crew of {{ row.booking.crew_size }} · your share</div>{% endif %}
+          </td>
           <td style="font-size:0.85rem;color:#9a95ad">{{ row.booking.service_label }}</td>
           <td>${{ '%.2f' % (row.booking.price or 0) }}</td>
           <td style="color:#9a95ad">{{ row.booking.hours_worked or '—' }}</td>
           <td style="font-weight:700;color:#065f46">${{ '%.2f' % row.earned }}</td>
           <td style="text-align:right;white-space:nowrap">
             {% if row.paid %}
-              <span style="font-size:0.78rem;color:#065f46;font-weight:700">✅ Paid{% if row.booking.cleaner_paid_at %} {{ row.booking.cleaner_paid_at.strftime('%b %-d') }}{% endif %}</span>
+              <span style="font-size:0.78rem;color:#065f46;font-weight:700">✅ Paid{% if paid_on %} {{ paid_on.strftime('%b %-d') }}{% endif %}</span>
             {% elif row.earned <= 0 %}
-              <span style="font-size:0.78rem;color:#9a95ad">Add hours</span>
+              <span style="font-size:0.78rem;color:#9a95ad">{{ 'Set their split' if row.crew else 'Add hours' }}</span>
             {% elif data.staff.stripe_payouts_enabled %}
-              <form method="POST" action="{{ url_for('contractors.pay_job', booking_id=row.booking.id) }}" style="display:inline"
+              <form method="POST" action="{{ pay_url }}" style="display:inline"
                     onsubmit="return confirm('Send ${{ '%.2f' % row.earned }} to {{ name }} via Stripe for this job? This moves real money.')">
                 <input type="hidden" name="method" value="stripe">
                 <input type="hidden" name="start" value="{{ week_start }}"><input type="hidden" name="end" value="{{ week_end }}">
                 <button type="submit" class="btn btn-gold" style="padding:5px 12px;font-size:0.8rem">💸 Pay ${{ '%.2f' % row.earned }}</button>
               </form>
             {% else %}
-              <form method="POST" action="{{ url_for('contractors.pay_job', booking_id=row.booking.id) }}" style="display:inline-flex;gap:5px;align-items:center"
+              <form method="POST" action="{{ pay_url }}" style="display:inline-flex;gap:5px;align-items:center"
                     onsubmit="return confirm('Record ${{ '%.2f' % row.earned }} paid to {{ name }} for this job?')">
                 <select name="method" style="padding:5px 7px;border:1px solid var(--border);border-radius:7px;font-size:0.78rem">
                   <option value="venmo">Venmo</option><option value="zelle">Zelle</option>
