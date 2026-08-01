@@ -35,6 +35,7 @@ from blueprints.commercial import commercial_bp
 from blueprints.commissions import commissions_bp
 from blueprints.invoices import invoices_bp
 from blueprints.portal import portal_bp
+from blueprints.money import money_bp
 
 
 def create_app():
@@ -90,6 +91,7 @@ def create_app():
     app.register_blueprint(commissions_bp)
     app.register_blueprint(invoices_bp)
     app.register_blueprint(portal_bp)
+    app.register_blueprint(money_bp)
 
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor
@@ -404,6 +406,11 @@ def _migrate_db():
         # Crew jobs — 2+ cleaners on one big house (booking_crew table is created
         # by create_all; this is just the size flag on the booking itself)
         ('booking', 'crew_size',            'INTEGER DEFAULT 1'),
+        # Bookkeeping (expense, recurring_expense, commission_payment and
+        # processing_fee tables are created by create_all)
+        ('expense', 'miles',                'FLOAT'),
+        ('expense', 'rate_per_mile',        'FLOAT'),
+        ('expense', 'receipt_url',          'VARCHAR(400)'),
     ]
     for table, col, col_type in new_cols:
         try:

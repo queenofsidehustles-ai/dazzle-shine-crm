@@ -1,0 +1,284 @@
+{% extends "base_admin.html" %}
+{% block title %}Expenses — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Expenses{% endblock %}
+
+{% block content %}
+{% macro period_fields() %}
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <input type="hidden" name="year" value="{{ year }}">
+  <input type="hidden" name="month" value="{{ month }}">
+{% endmacro %}
+
+<!-- Period picker -->
+<div class="card" style="margin-bottom:18px">
+  <form method="GET" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <div class="form-group" style="margin:0">
+      <label style="font-size:0.82rem">Show</label>
+      <select name="period" style="width:auto">
+        <option value="month" {{ 'selected' if kind == 'month' }}>One month</option>
+        <option value="quarter" {{ 'selected' if kind == 'quarter' }}>Quarter</option>
+        <option value="year" {{ 'selected' if kind == 'year' }}>Whole year</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:0.82rem">Month</label>
+      <select name="month" style="width:auto">
+        {% for m in range(1, 13) %}
+        <option value="{{ m }}" {{ 'selected' if month == m }}>{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:0.82rem">Year</label>
+      <input type="number" name="year" value="{{ year }}" style="width:100px" />
+    </div>
+    <button type="submit" class="btn btn-dark" style="padding:9px 20px">Show</button>
+    <a href="{{ url_for('money.pnl', period=kind, year=year, month=month) }}"
+       class="btn btn-outline" style="padding:9px 18px">📊 Profit &amp; Loss →</a>
+  </form>
+</div>
+
+<!-- Add an expense -->
+<div class="card" style="margin-bottom:18px">
+  <div class="section-header"><h2>➕ Log an expense</h2></div>
+  <form method="POST" action="{{ url_for('money.add_expense') }}" id="expForm">
+    {{ period_fields() }}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
+      <div class="form-group" style="margin:0">
+        <label>What was it for?</label>
+        <select name="category" id="catSel" required>
+          <option value="">— Pick a category —</option>
+          {% set groups = [] %}
+          {% for key, label, group, sched in categories %}
+            {% if group not in groups %}{% set _ = groups.append(group) %}{% endif %}
+          {% endfor %}
+          {% for g in groups %}
+          <optgroup label="{{ g }}">
+            {% for key, label, group, sched in categories %}
+              {% if group == g %}<option value="{{ key }}">{{ label }}</option>{% endif %}
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Date</label>
+        <input type="date" name="date" value="{{ today }}" required />
+      </div>
+      <div class="form-group" style="margin:0" id="amtWrap">
+        <label>Amount ($)</label>
+        <input type="number" step="0.01" min="0" name="amount" placeholder="49.99" />
+      </div>
+      <div class="form-group" style="margin:0;display:none" id="mileWrap">
+        <label>Miles driven</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="number" step="0.1" min="0" name="miles" placeholder="42" style="margin:0" />
+          <span style="font-size:0.8rem;color:#9a95ad;white-space:nowrap">× $</span>
+          <input type="number" step="0.01" min="0" name="rate_per_mile" value="{{ '%.2f' % mileage_rate }}" style="width:80px;margin:0" />
+        </div>
+        <p style="font-size:0.75rem;color:#9a95ad;margin-top:4px">IRS standard rate. <span id="mileCalc"></span></p>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Paid to <span style="font-weight:400;color:#9a95ad">(optional)</span></label>
+        <input type="text" name="vendor" placeholder="Google Ads, Costco, State Farm..." />
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Paid with</label>
+        <select name="method">
+          <option value="card">Card</option><option value="bank">Bank / ACH</option>
+          <option value="cash">Cash</option><option value="zelle">Zelle</option>
+          <option value="check">Check</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Note <span style="font-weight:400;color:#9a95ad">(optional)</span></label>
+      <input type="text" name="note" placeholder="What this was for — helps at tax time" />
+    </div>
+
+    <!-- Receipt photo -->
+    <div style="background:#faf9fd;border:1px solid #e4dfef;border-radius:10px;padding:12px 13px;margin-bottom:12px">
+      <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:7px">
+        📷 Receipt photo <span style="font-weight:400;color:#9a95ad">(optional, but worth it if you're ever audited)</span>
+      </label>
+      <input type="file" accept="image/*" id="receiptFile" style="font-size:0.85rem" />
+      <input type="hidden" name="receipt_url" id="receiptUrl" />
+      <div id="receiptStatus" style="font-size:0.8rem;color:#9a95ad;margin-top:6px"></div>
+    </div>
+
+    <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Log this expense</button>
+  </form>
+</div>
+
+<!-- The ledger -->
+<div class="card" style="margin-bottom:18px">
+  <div class="section-header">
+    <h2>{{ period_label }} — <span style="color:#b98a33">${{ '%.2f' % total }}</span></h2>
+    <span style="font-size:0.85rem;color:#9a95ad">{{ expenses|length }} expense{{ 's' if expenses|length != 1 }}</span>
+  </div>
+  {% if expenses %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Category</th><th>Paid to</th><th>Note</th><th>Receipt</th><th>Amount</th><th></th></tr></thead>
+      <tbody>
+        {% for e in expenses %}
+        <tr>
+          <td style="white-space:nowrap">{{ e.date }}</td>
+          <td>{{ e.category_label }}{% if e.recurring_id %} <span style="font-size:0.68rem;color:#3730a3;background:#eef2ff;padding:1px 7px;border-radius:999px;font-weight:700">AUTO</span>{% endif %}</td>
+          <td style="color:#5f5878">{{ e.vendor or '—' }}</td>
+          <td style="font-size:0.85rem;color:#9a95ad">
+            {{ e.note or '' }}
+            {% if e.is_mileage %}<span style="color:#5f5878">{{ '%g' % e.miles }} mi @ ${{ '%.2f' % e.rate_per_mile }}</span>{% endif %}
+          </td>
+          <td>{% if e.receipt_url %}<a href="{{ e.receipt_url }}" target="_blank" title="View receipt">📷</a>{% else %}<span style="color:#d8d4e4">—</span>{% endif %}</td>
+          <td style="font-weight:700;color:#b91c1c;white-space:nowrap">−${{ '%.2f' % (e.amount or 0) }}</td>
+          <td style="text-align:right">
+            <form method="POST" action="{{ url_for('money.delete_expense', expense_id=e.id) }}" style="display:inline"
+                  onsubmit="return confirm('Delete this ${{ '%.2f' % (e.amount or 0) }} expense?')">
+              {{ period_fields() }}
+              <button type="submit" title="Delete"
+                      style="background:none;border:1px solid #fecaca;color:#b91c1c;border-radius:7px;padding:4px 8px;cursor:pointer">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        <tr style="background:#f6f5fb">
+          <td colspan="5" style="font-weight:700;text-align:right">Total for {{ period_label }}:</td>
+          <td style="font-weight:700;color:#b91c1c;font-size:1.05rem">−${{ '%.2f' % total }}</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:38px 20px;color:#9a95ad">
+    <p style="font-size:2rem;margin-bottom:10px">🧾</p>
+    <p style="font-weight:700;margin-bottom:5px">No expenses logged for {{ period_label }}</p>
+    <p style="font-size:0.88rem">Add your ad spend, supplies, gas, and insurance above — then check Profit &amp; Loss to see what you really kept.</p>
+  </div>
+  {% endif %}
+  <p style="font-size:0.8rem;color:#9a95ad;margin-top:10px">
+    Cleaner pay, card fees, and VA commissions aren't listed here — they're totalled straight from your payroll, Stripe, and commission records so they can't get counted twice. They all show on the <a href="{{ url_for('money.pnl', period=kind, year=year, month=month) }}" style="color:#b98a33;font-weight:600">Profit &amp; Loss</a>.
+  </p>
+</div>
+
+<!-- Recurring monthly costs -->
+<div class="card">
+  <div class="section-header">
+    <h2>🔁 Every month, automatically</h2>
+    <form method="POST" action="{{ url_for('money.run_recurring') }}" style="display:inline">
+      <button type="submit" class="btn btn-outline" style="padding:5px 12px;font-size:0.8rem">Post anything due now</button>
+    </form>
+  </div>
+  <p style="font-size:0.85rem;color:#5f5878;margin:0 0 12px">Insurance, software, phone — set it once and it posts itself each month, so the deduction never gets missed.</p>
+
+  {% if recurring %}
+  <div class="table-wrap" style="margin-bottom:14px">
+    <table>
+      <thead><tr><th>Category</th><th>Paid to</th><th>Day</th><th>Amount</th><th>Last posted</th><th></th></tr></thead>
+      <tbody>
+        {% for r in recurring %}
+        <tr style="{{ 'opacity:0.5' if not r.active }}">
+          <td>{{ r.category_label }}</td>
+          <td style="color:#5f5878">{{ r.vendor or '—' }}</td>
+          <td>{{ r.day_of_month }}</td>
+          <td style="font-weight:700">${{ '%.2f' % r.amount }}</td>
+          <td style="font-size:0.85rem;color:#9a95ad">{{ r.last_posted or 'not yet' }}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <form method="POST" action="{{ url_for('money.toggle_recurring', rec_id=r.id) }}" style="display:inline">
+              <button type="submit" class="btn btn-outline" style="padding:4px 10px;font-size:0.76rem">{{ 'Pause' if r.active else 'Resume' }}</button>
+            </form>
+            <form method="POST" action="{{ url_for('money.delete_recurring', rec_id=r.id) }}" style="display:inline"
+                  onsubmit="return confirm('Stop this recurring cost? Costs it already posted are kept.')">
+              <button type="submit" style="background:none;border:1px solid #fecaca;color:#b91c1c;border-radius:7px;padding:4px 8px;cursor:pointer">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('money.add_recurring') }}">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+      <div class="form-group" style="margin:0">
+        <label style="font-size:0.8rem">Category</label>
+        <select name="category" required>
+          <option value="">— Pick —</option>
+          {% for key, label, group, sched in categories %}
+          <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:0.8rem">Paid to</label>
+        <input type="text" name="vendor" placeholder="State Farm" />
+      </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:0.8rem">Amount ($)</label>
+        <input type="number" step="0.01" min="0" name="amount" placeholder="145.00" required />
+      </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:0.8rem">Day of month</label>
+        <input type="number" min="1" max="28" name="day_of_month" value="1" />
+      </div>
+    </div>
+    <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">Add recurring cost</button>
+  </form>
+</div>
+
+<script>
+  // Mileage entries log a trip; everything else logs a dollar amount.
+  const catSel = document.getElementById('catSel');
+  const amtWrap = document.getElementById('amtWrap');
+  const mileWrap = document.getElementById('mileWrap');
+  const amtInput = amtWrap.querySelector('input');
+  const milesInput = mileWrap.querySelector('input[name=miles]');
+  const rateInput = mileWrap.querySelector('input[name=rate_per_mile]');
+  const mileCalc = document.getElementById('mileCalc');
+
+  function syncMode() {
+    const isMileage = catSel.value === 'mileage';
+    mileWrap.style.display = isMileage ? '' : 'none';
+    amtWrap.style.display = isMileage ? 'none' : '';
+    amtInput.required = !isMileage;
+    milesInput.required = isMileage;
+  }
+  function calcMiles() {
+    const m = parseFloat(milesInput.value || 0), r = parseFloat(rateInput.value || 0);
+    mileCalc.textContent = (m > 0 && r > 0) ? `That's a $${(m * r).toFixed(2)} deduction.` : '';
+  }
+  catSel.addEventListener('change', syncMode);
+  milesInput.addEventListener('input', calcMiles);
+  rateInput.addEventListener('input', calcMiles);
+  syncMode();
+
+  // Receipt straight to Cloudinary, same unsigned upload the job photos use.
+  const CLOUD_NAME = {{ cloud_name | tojson }};
+  const UPLOAD_PRESET = {{ upload_preset | tojson }};
+  const fileInput = document.getElementById('receiptFile');
+  const urlInput = document.getElementById('receiptUrl');
+  const status = document.getElementById('receiptStatus');
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    status.textContent = 'Uploading receipt…';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('upload_preset', UPLOAD_PRESET);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+                              { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!data.secure_url) throw new Error(data.error?.message || 'upload failed');
+      urlInput.value = data.secure_url;
+      status.innerHTML = '✅ Receipt attached — <a href="' + data.secure_url + '" target="_blank">view</a>';
+    } catch (err) {
+      // The expense still saves without the photo; don't block her on this.
+      status.textContent = "Couldn't upload that photo — the expense will still save without it.";
+    }
+  });
+</script>
+{% endblock %}

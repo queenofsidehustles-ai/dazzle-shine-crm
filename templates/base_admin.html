@@ -340,9 +340,20 @@
       <a href="{{ url_for('interviews.admin_interviews') }}" class="{{ 'active' if request.blueprint == 'interviews' }}">
         <span class="icon">🎥</span> Interviews
       </a>
+
       {% if is_owner %}
+      <div class="nav-sec">Money</div>
+      <a href="{{ url_for('money.pnl') }}" class="{{ 'active' if request.endpoint.startswith('money.pnl') or request.endpoint == 'money.sync_fees' }}">
+        <span class="icon">📈</span> Profit &amp; Loss
+      </a>
+      <a href="{{ url_for('money.expenses') }}" class="{{ 'active' if request.blueprint == 'money' and not request.endpoint.startswith('money.pnl') and request.endpoint != 'money.sync_fees' }}">
+        <span class="icon">🧾</span> Expenses
+      </a>
       <a href="{{ url_for('contractors.payroll') }}" class="{{ 'active' if request.endpoint == 'contractors.payroll' }}">
         <span class="icon">💰</span> Payroll
+      </a>
+      <a href="{{ url_for('commissions.index') }}" class="{{ 'active' if request.blueprint == 'commissions' }}">
+        <span class="icon">🤝</span> VA Commissions
       </a>
       {% endif %}
 
@@ -373,9 +384,6 @@
       </a>
       <a href="{{ url_for('team_logins.index') }}" class="{{ 'active' if request.blueprint == 'team_logins' }}">
         <span class="icon">🔐</span> Team Logins
-      </a>
-      <a href="{{ url_for('commissions.index') }}" class="{{ 'active' if request.blueprint == 'commissions' }}">
-        <span class="icon">💵</span> Commissions
       </a>
       {% endif %}
     </nav>

@@ -108,12 +108,19 @@ def run_lifecycle_emails():
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
          'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
          'onboarding_reminder': 0, 'schedule_reminder': 0, 'invoice': 0,
-         'quote_followup': 0, 'recurring_topup': 0}
+         'quote_followup': 0, 'recurring_topup': 0, 'recurring_expenses': 0}
 
     # ── Keep recurring plans filled ~12 weeks ahead (rolling generation) ──
     try:
         import recurring
         c['recurring_topup'] = recurring.topup_all()
+    except Exception:
+        pass
+
+    # ── Post monthly costs whose day has come (insurance, software, phone) ──
+    try:
+        from blueprints.money import post_due_recurring
+        c['recurring_expenses'] = post_due_recurring(now.date())
     except Exception:
         pass
 

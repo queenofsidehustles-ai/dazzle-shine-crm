@@ -1,0 +1,196 @@
+{% extends "base_admin.html" %}
+{% block title %}Profit &amp; Loss — Dazzle & Shine CRM{% endblock %}
+{% block page_title %}Profit &amp; Loss{% endblock %}
+
+{% block content %}
+<!-- Period picker -->
+<div class="card" style="margin-bottom:18px">
+  <form method="GET" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <div class="form-group" style="margin:0">
+      <label style="font-size:0.82rem">Show</label>
+      <select name="period" style="width:auto">
+        <option value="month" {{ 'selected' if kind == 'month' }}>One month</option>
+        <option value="quarter" {{ 'selected' if kind == 'quarter' }}>Quarter</option>
+        <option value="year" {{ 'selected' if kind == 'year' }}>Whole year</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:0.82rem">Month</label>
+      <select name="month" style="width:auto">
+        {% for m in range(1, 13) %}
+        <option value="{{ m }}" {{ 'selected' if month == m }}>{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label style="font-size:0.82rem">Year</label>
+      <input type="number" name="year" value="{{ year }}" style="width:100px" />
+    </div>
+    <button type="submit" class="btn btn-dark" style="padding:9px 20px">Show</button>
+    <a href="{{ url_for('money.export_csv', period=kind, year=year, month=month) }}"
+       class="btn btn-outline" style="padding:9px 18px">📄 Export CSV</a>
+    <a href="{{ url_for('money.expenses', period=kind, year=year, month=month) }}"
+       class="btn btn-outline" style="padding:9px 18px">🧾 Expenses →</a>
+  </form>
+</div>
+
+<!-- Headline -->
+<div class="stat-grid" style="margin-bottom:22px">
+  <div class="stat-card">
+    <div class="label">Money in</div>
+    <div class="value" style="color:#065f46">${{ '%.2f' % p.revenue }}</div>
+    <div class="sub">{{ p.jobs_paid }} job{{ 's' if p.jobs_paid != 1 }} paid</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Money out</div>
+    <div class="value" style="color:#b91c1c">${{ '%.2f' % p.total_out }}</div>
+    <div class="sub">everything, including cleaner pay</div>
+  </div>
+  <div class="stat-card" style="border-color:#d3a84f;background:linear-gradient(135deg,#fff9ec,#fff)">
+    <div class="label">Net profit — {{ period_label }}</div>
+    <div class="value" style="color:{{ '#b98a33' if p.net_profit >= 0 else '#b91c1c' }}">${{ '%.2f' % p.net_profit }}</div>
+    <div class="sub">{{ '%.1f' % p.margin }}% of what came in</div>
+  </div>
+</div>
+
+{% if p.fee_months_missing and stripe_ready %}
+<div class="card" style="margin-bottom:18px;border-color:#f0d488;background:#fff8e1">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="color:#7c4a04;font-size:0.9rem">
+      ⚠️ <strong>Card fees aren't counted yet</strong> for {{ p.fee_months_missing|length }} month{{ 's' if p.fee_months_missing|length != 1 }} in this period —
+      so your profit below is flattering by whatever Stripe kept.
+    </div>
+    <form method="POST" action="{{ url_for('money.sync_fees', period=kind, year=year, month=month) }}">
+      <button type="submit" class="btn btn-gold" style="padding:8px 16px;white-space:nowrap">Pull fees from Stripe</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<!-- The statement -->
+<div class="card" style="margin-bottom:18px">
+  <div class="section-header">
+    <h2>{{ period_label }}</h2>
+    <span style="font-size:0.8rem;color:#9a95ad">Cash basis — counted when the money actually landed</span>
+  </div>
+
+  <table style="width:100%;font-size:0.94rem">
+    <tbody>
+      <tr><td style="padding:9px 0;font-weight:700">Money in from jobs</td>
+          <td style="text-align:right;font-weight:700;color:#065f46">${{ '%.2f' % p.revenue }}</td></tr>
+
+      <tr><td colspan="2" style="padding-top:14px;font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:#9a95ad;font-weight:700">Cost of doing the work</td></tr>
+      <tr><td style="padding:7px 0 7px 14px;color:#5f5878">Cleaner pay <span style="font-size:0.72rem;color:#9a95ad">· from payroll</span></td>
+          <td style="text-align:right;color:#b91c1c">−${{ '%.2f' % p.contractor_pay }}</td></tr>
+      <tr><td style="padding:7px 0 7px 14px;color:#5f5878">Card processing fees <span style="font-size:0.72rem;color:#9a95ad">· from Stripe</span></td>
+          <td style="text-align:right;color:#b91c1c">−${{ '%.2f' % p.processing_fees }}</td></tr>
+      <tr style="border-top:1px solid #e4dfef">
+          <td style="padding:9px 0;font-weight:700">Gross profit</td>
+          <td style="text-align:right;font-weight:700">${{ '%.2f' % p.gross_profit }}</td></tr>
+
+      <tr><td colspan="2" style="padding-top:14px;font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:#9a95ad;font-weight:700">Running the business</td></tr>
+      {% if p.commissions %}
+      <tr><td style="padding:7px 0 7px 14px;color:#5f5878">VA commissions <span style="font-size:0.72rem;color:#9a95ad">· from commission payouts</span></td>
+          <td style="text-align:right;color:#b91c1c">−${{ '%.2f' % p.commissions }}</td></tr>
+      {% endif %}
+      {% for c in p.categories %}
+      <tr><td style="padding:7px 0 7px 14px;color:#5f5878">{{ c.label }}
+            <span style="font-size:0.72rem;color:#9a95ad">· {{ c.count }} entr{{ 'ies' if c.count != 1 else 'y' }}{% if c.miles %}, {{ '%g' % c.miles }} mi{% endif %}</span></td>
+          <td style="text-align:right;color:#b91c1c">−${{ '%.2f' % c.amount }}</td></tr>
+      {% endfor %}
+      {% if not p.categories and not p.commissions %}
+      <tr><td style="padding:7px 0 7px 14px;color:#9a95ad" colspan="2">
+            Nothing logged yet — <a href="{{ url_for('money.expenses', period=kind, year=year, month=month) }}" style="color:#b98a33;font-weight:600">add your ad spend and supplies</a> to make this real.</td></tr>
+      {% endif %}
+
+      <tr style="border-top:2px solid #1f1333">
+          <td style="padding:12px 0;font-weight:800;font-size:1.05rem">Net profit</td>
+          <td style="text-align:right;font-weight:800;font-size:1.15rem;color:{{ '#b98a33' if p.net_profit >= 0 else '#b91c1c' }}">${{ '%.2f' % p.net_profit }}</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Is advertising paying for itself? -->
+<div class="card" style="margin-bottom:18px">
+  <div class="section-header"><h2>📣 Is your advertising paying for itself?</h2></div>
+  <p style="font-size:0.85rem;color:#5f5878;margin:0 0 12px">
+    The lead fee you build into each price is meant to cover what you spend getting that customer. This checks whether it actually does.
+  </p>
+  <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <div><div style="font-size:0.75rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;font-weight:700">Lead fees collected</div>
+         <div style="font-size:1.3rem;font-weight:800;color:#065f46">${{ '%.2f' % p.lead_fees_collected }}</div></div>
+    <div style="font-size:1.2rem;color:#9a95ad">−</div>
+    <div><div style="font-size:0.75rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;font-weight:700">Spent on ads</div>
+         <div style="font-size:1.3rem;font-weight:800;color:#b91c1c">${{ '%.2f' % p.ad_spend }}</div></div>
+    <div style="font-size:1.2rem;color:#9a95ad">=</div>
+    <div><div style="font-size:0.75rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;font-weight:700">Difference</div>
+         <div style="font-size:1.3rem;font-weight:800;color:{{ '#b98a33' if p.lead_fee_delta >= 0 else '#b91c1c' }}">
+           {{ '+' if p.lead_fee_delta >= 0 else '−' }}${{ '%.2f' % (p.lead_fee_delta if p.lead_fee_delta >= 0 else -p.lead_fee_delta) }}</div></div>
+  </div>
+  <div style="margin-top:12px;border-radius:9px;padding:11px 14px;font-size:0.88rem;font-weight:600;
+              background:{{ '#e6f4ea' if p.lead_fee_delta >= 0 else '#fee2e2' }};
+              color:{{ '#276749' if p.lead_fee_delta >= 0 else '#991b1b' }}">
+    {% if p.ad_spend == 0 and p.lead_fees_collected == 0 %}
+      Nothing to compare yet — log your Google/Thumbtack spend under Expenses and this will start tracking.
+    {% elif p.lead_fee_delta >= 0 %}
+      ✅ Your lead fees covered your ad spend with ${{ '%.2f' % p.lead_fee_delta }} to spare.
+    {% else %}
+      ⚠️ You spent ${{ '%.2f' % (-p.lead_fee_delta) }} more on ads than your lead fees brought back. Consider raising the lead fee on new bookings.
+    {% endif %}
+  </div>
+</div>
+
+<!-- Trend -->
+<div class="card" style="margin-bottom:18px">
+  <div class="section-header"><h2>Last 6 months</h2></div>
+  <canvas id="trendChart" height="90"></canvas>
+</div>
+
+<!-- Context -->
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Booked this period</div>
+    <div class="value" style="font-size:1.4rem;color:#5d4f7d">${{ '%.2f' % p.booked_value }}</div>
+    <div class="sub">jobs written up — not all paid yet</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Still owed to you</div>
+    <div class="value" style="font-size:1.4rem;color:#c05621">${{ '%.2f' % p.unpaid_outstanding }}</div>
+    <div class="sub">confirmed or done, not yet paid</div>
+  </div>
+  {% if p.mileage_miles %}
+  <div class="stat-card">
+    <div class="label">Miles logged</div>
+    <div class="value" style="font-size:1.4rem">{{ '%g' % p.mileage_miles }}</div>
+    <div class="sub">{{ period_label }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<p style="font-size:0.8rem;color:#9a95ad;margin-top:14px">
+  Money in counts a job on the day it was <strong>paid</strong>, so this matches your bank — not the day it was booked.
+  Cleaner pay, card fees, and VA commissions come straight from their own records, so they're never double-counted.
+</p>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  const ctx = document.getElementById('trendChart');
+  if (ctx && window.Chart) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: {{ trend_labels | tojson }},
+        datasets: [
+          { label: 'Money in', data: {{ trend_revenue | tojson }}, backgroundColor: '#d3a84f', borderRadius: 6 },
+          { label: 'Net profit', data: {{ trend_profit | tojson }}, backgroundColor: '#1f1333', borderRadius: 6 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v } } }
+      }
+    });
+  }
+</script>
+{% endblock %}

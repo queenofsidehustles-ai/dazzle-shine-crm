@@ -1,0 +1,223 @@
+"""The money picture: what came in, what went out, what's actually left.
+
+Revenue here is CASH BASIS — a job counts on the day the money landed
+(Booking.paid_at), not the day it was booked. The dashboard used to sum every
+confirmed booking by its created_at date, which counted jobs that hadn't
+happened yet and filed them in the month they were booked rather than the month
+they were paid. That's booked value, not income, and subtracting real expenses
+from it produces a profit figure that's confidently wrong.
+
+Money going out comes from three places that each own their own records:
+  · cleaner pay      → ContractorPayment  (written by the payroll screen)
+  · card fees        → ProcessingFee      (synced from Stripe)
+  · VA commissions   → CommissionPayment  (written by the commissions screen)
+Everything else the owner spends is typed into Expense. Those four are kept
+separate on purpose: a payout that could also be hand-entered as an expense is a
+payout that eventually gets counted twice.
+"""
+from calendar import monthrange
+from datetime import date, datetime, timedelta
+
+from sqlalchemy import func
+
+from extensions import db
+from models import (ADVERTISING_CATEGORIES, CATEGORY_GROUP, CATEGORY_LABELS,
+                    CATEGORY_SCHEDULE_C, Booking, CommissionPayment,
+                    ContractorPayment, Expense, ProcessingFee)
+
+
+# ── Periods ─────────────────────────────────────────────────────────────────
+def month_bounds(year, month):
+    """First and last day of a month, inclusive."""
+    return date(year, month, 1), date(year, month, monthrange(year, month)[1])
+
+
+def period_bounds(kind, year, month):
+    """(start, end, label) for the period the user picked."""
+    if kind == 'quarter':
+        q = (month - 1) // 3
+        start = date(year, q * 3 + 1, 1)
+        end_month = q * 3 + 3
+        end = date(year, end_month, monthrange(year, end_month)[1])
+        return start, end, f'Q{q + 1} {year}'
+    if kind == 'year':
+        return date(year, 1, 1), date(year, 12, 31), f'{year}'
+    start, end = month_bounds(year, month)
+    return start, end, start.strftime('%B %Y')
+
+
+def months_in(start, end):
+    """Every (year, month) the range touches."""
+    out, y, m = [], start.year, start.month
+    while (y, m) <= (end.year, end.month):
+        out.append((y, m))
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def _dt_bounds(start, end):
+    """Datetime range covering the whole of both end days."""
+    return datetime.combine(start, datetime.min.time()), \
+           datetime.combine(end + timedelta(days=1), datetime.min.time())
+
+
+# ── Money in ────────────────────────────────────────────────────────────────
+def revenue_between(start, end):
+    """Cash actually received in the period — jobs by the date they were PAID."""
+    lo, hi = _dt_bounds(start, end)
+    total = db.session.query(func.sum(Booking.price)).filter(
+        Booking.paid_at.isnot(None), Booking.paid_at >= lo, Booking.paid_at < hi,
+    ).scalar()
+    return round(float(total or 0), 2)
+
+
+def jobs_paid_between(start, end):
+    lo, hi = _dt_bounds(start, end)
+    return db.session.query(func.count(Booking.id)).filter(
+        Booking.paid_at.isnot(None), Booking.paid_at >= lo, Booking.paid_at < hi,
+    ).scalar() or 0
+
+
+def booked_value_between(start, end):
+    """The OLD measure — confirmed + completed by booking date. Kept so the P&L
+    can show what's in the pipeline next to what's actually banked."""
+    lo, hi = _dt_bounds(start, end)
+    total = db.session.query(func.sum(Booking.price)).filter(
+        Booking.status.in_(['completed', 'confirmed']),
+        Booking.created_at >= lo, Booking.created_at < hi,
+    ).scalar()
+    return round(float(total or 0), 2)
+
+
+def unpaid_outstanding():
+    """Work that's done or confirmed but nobody has paid for yet."""
+    total = db.session.query(func.sum(Booking.price)).filter(
+        Booking.paid_at.is_(None),
+        Booking.status.in_(['confirmed', 'completed']),
+    ).scalar()
+    return round(float(total or 0), 2)
+
+
+def lead_fees_collected_between(start, end):
+    """Advertising money recovered inside the prices customers paid."""
+    lo, hi = _dt_bounds(start, end)
+    total = db.session.query(func.sum(Booking.lead_fee)).filter(
+        Booking.paid_at.isnot(None), Booking.paid_at >= lo, Booking.paid_at < hi,
+    ).scalar()
+    return round(float(total or 0), 2)
+
+
+# ── Money out ───────────────────────────────────────────────────────────────
+def contractor_pay_between(start, end):
+    """Every payout written by the payroll screen — solo jobs and crew shares."""
+    lo, hi = _dt_bounds(start, end)
+    total = db.session.query(func.sum(ContractorPayment.amount)).filter(
+        ContractorPayment.created_at >= lo, ContractorPayment.created_at < hi,
+        ContractorPayment.status == 'paid',
+    ).scalar()
+    return round(float(total or 0), 2)
+
+
+def commissions_paid_between(start, end):
+    lo, hi = _dt_bounds(start, end)
+    total = db.session.query(func.sum(CommissionPayment.amount)).filter(
+        CommissionPayment.paid_at >= lo, CommissionPayment.paid_at < hi,
+    ).scalar()
+    return round(float(total or 0), 2)
+
+
+def processing_fees_between(start, end):
+    """What Stripe kept. Returns (amount, months_missing) so the page can say
+    'sync August' instead of quietly reporting $0 as though cards were free."""
+    wanted = months_in(start, end)
+    rows = ProcessingFee.query.filter(
+        db.tuple_(ProcessingFee.year, ProcessingFee.month).in_(wanted)
+    ).all() if wanted else []
+    have = {(r.year, r.month) for r in rows}
+    missing = [ym for ym in wanted if ym not in have]
+    return round(sum(r.amount or 0 for r in rows), 2), missing
+
+
+def expenses_between(start, end):
+    """Hand-entered costs, newest first."""
+    return Expense.query.filter(
+        Expense.date >= start.isoformat(), Expense.date <= end.isoformat(),
+    ).order_by(Expense.date.desc(), Expense.id.desc()).all()
+
+
+# ── The whole picture ───────────────────────────────────────────────────────
+def profit_and_loss(start, end):
+    """Everything the P&L page needs, in one pass."""
+    revenue = revenue_between(start, end)
+    contractor = contractor_pay_between(start, end)
+    commissions = commissions_paid_between(start, end)
+    fees, fee_months_missing = processing_fees_between(start, end)
+
+    rows = expenses_between(start, end)
+    by_cat = {}
+    for e in rows:
+        c = by_cat.setdefault(e.category or 'other', {
+            'key': e.category or 'other',
+            'label': CATEGORY_LABELS.get(e.category, (e.category or 'Other').title()),
+            'group': CATEGORY_GROUP.get(e.category, 'Overhead'),
+            'schedule_c': CATEGORY_SCHEDULE_C.get(e.category, 'Line 27a — Other'),
+            'amount': 0.0, 'count': 0, 'miles': 0.0,
+        })
+        c['amount'] += e.amount or 0
+        c['count'] += 1
+        c['miles'] += e.miles or 0
+    for c in by_cat.values():
+        c['amount'] = round(c['amount'], 2)
+    categories = sorted(by_cat.values(), key=lambda c: c['amount'], reverse=True)
+
+    typed_total = round(sum(c['amount'] for c in categories), 2)
+    # Cleaner pay and card fees are direct costs of doing the job — taking them
+    # off first shows what the work itself actually yields.
+    gross_profit = round(revenue - contractor - fees, 2)
+    net_profit = round(gross_profit - commissions - typed_total, 2)
+
+    ad_spend = round(sum(c['amount'] for c in categories
+                         if c['key'] in ADVERTISING_CATEGORIES), 2)
+    lead_fees = lead_fees_collected_between(start, end)
+
+    return {
+        'start': start, 'end': end,
+        'revenue': revenue,
+        'jobs_paid': jobs_paid_between(start, end),
+        'contractor_pay': contractor,
+        'processing_fees': fees,
+        'fee_months_missing': fee_months_missing,
+        'commissions': commissions,
+        'gross_profit': gross_profit,
+        'categories': categories,
+        'expense_total': typed_total,
+        'total_out': round(contractor + fees + commissions + typed_total, 2),
+        'net_profit': net_profit,
+        'margin': round(net_profit / revenue * 100, 1) if revenue else 0.0,
+        'mileage_miles': round(sum(c['miles'] for c in categories), 1),
+        # Is the lead fee baked into prices actually covering the ad bills?
+        'lead_fees_collected': lead_fees,
+        'ad_spend': ad_spend,
+        'lead_fee_delta': round(lead_fees - ad_spend, 2),
+        # Context, not income
+        'booked_value': booked_value_between(start, end),
+        'unpaid_outstanding': unpaid_outstanding(),
+        'expenses': rows,
+    }
+
+
+def monthly_trend(months=6, today=None):
+    """Revenue vs net profit for the last N months, oldest first — for the chart."""
+    today = today or date.today()
+    out = []
+    y, m = today.year, today.month
+    stack = []
+    for _ in range(months):
+        stack.append((y, m))
+        y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    for yy, mm in reversed(stack):
+        s, e = month_bounds(yy, mm)
+        p = profit_and_loss(s, e)
+        out.append({'month': s.strftime('%b %Y'),
+                    'revenue': p['revenue'], 'profit': p['net_profit']})
+    return out

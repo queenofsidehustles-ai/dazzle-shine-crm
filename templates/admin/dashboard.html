@@ -3,6 +3,32 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
+{% if money %}
+<!-- This month's money, cash basis — what actually landed and what's left -->
+<div class="stat-grid" style="margin-bottom:22px">
+  <a href="{{ url_for('money.pnl') }}" class="stat-card" style="text-decoration:none;color:inherit">
+    <div class="label">Money in — {{ this_month }}</div>
+    <div class="value" style="color:#065f46">${{ '%.2f' % money.revenue }}</div>
+    <div class="sub">{{ money.jobs_paid }} job{{ 's' if money.jobs_paid != 1 }} paid</div>
+  </a>
+  <a href="{{ url_for('money.expenses') }}" class="stat-card" style="text-decoration:none;color:inherit">
+    <div class="label">Money out — {{ this_month }}</div>
+    <div class="value" style="color:#b91c1c">${{ '%.2f' % money.total_out }}</div>
+    <div class="sub">pay, fees &amp; expenses</div>
+  </a>
+  <a href="{{ url_for('money.pnl') }}" class="stat-card" style="text-decoration:none;color:inherit;border-color:#d3a84f;background:linear-gradient(135deg,#fff9ec,#fff)">
+    <div class="label">Net profit — {{ this_month }}</div>
+    <div class="value" style="color:{{ '#b98a33' if money.net_profit >= 0 else '#b91c1c' }}">${{ '%.2f' % money.net_profit }}</div>
+    <div class="sub">{{ '%.1f' % money.margin }}% margin</div>
+  </a>
+  <div class="stat-card">
+    <div class="label">Still owed to you</div>
+    <div class="value" style="color:#c05621">${{ '%.2f' % money.unpaid_outstanding }}</div>
+    <div class="sub">booked or done, not paid</div>
+  </div>
+</div>
+{% endif %}
+
 <div class="stat-grid">
   <div class="stat-card">
     <div class="label">Pending</div>

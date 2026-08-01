@@ -622,6 +622,134 @@ class ContractorPayment(db.Model):
                             order_by='ContractorPayment.created_at.desc()'))
 
 
+# ── Bookkeeping: what goes out, so profit is a real number ──────────────────
+# Categories are grouped for the P&L and tagged with the Schedule C line they
+# belong on, so the year-end export drops straight onto the tax form.
+EXPENSE_CATEGORIES = [
+    # (key,          label,                                  group,         schedule C)
+    ('ads_google',   'Advertising — Google leads',            'Advertising', 'Line 8 — Advertising'),
+    ('ads_promo',    'Advertising — Promotional items',       'Advertising', 'Line 8 — Advertising'),
+    ('ads_other',    'Advertising — Thumbtack, Yelp, other',  'Advertising', 'Line 8 — Advertising'),
+    ('supplies',     'Cleaning supplies',                     'Operations',  'Line 22 — Supplies'),
+    ('equipment',    'Equipment (vacuums, machines)',         'Operations',  'Line 13 — Depreciation / Sec 179'),
+    ('mileage',      'Vehicle mileage',                       'Vehicle',     'Line 9 — Car & truck'),
+    ('vehicle',      'Vehicle — gas, repairs, parking',       'Vehicle',     'Line 9 — Car & truck'),
+    ('insurance',    'Insurance',                             'Overhead',    'Line 15 — Insurance'),
+    ('software',     'Software & subscriptions',              'Overhead',    'Line 18 — Office expense'),
+    ('phone',        'Phone & internet',                      'Overhead',    'Line 25 — Utilities'),
+    ('office',       'Office supplies',                       'Overhead',    'Line 18 — Office expense'),
+    ('licenses',     'Licenses & permits',                    'Overhead',    'Line 23 — Taxes & licenses'),
+    ('uniforms',     'Uniforms',                              'Operations',  'Line 27a — Other'),
+    ('training',     'Training & education',                  'Overhead',    'Line 27a — Other'),
+    ('meals',        'Meals (50% deductible)',                'Overhead',    'Line 24b — Meals'),
+    ('bank',         'Bank fees',                             'Overhead',    'Line 27a — Other'),
+    ('other',        'Other',                                 'Overhead',    'Line 27a — Other'),
+]
+
+# These are never typed by hand — they're totalled from records the CRM already
+# keeps (payroll, Stripe, VA commissions). Letting them be entered manually is
+# how a books gets silently double-counted.
+AUTO_CATEGORIES = {
+    'contractor_pay':  'Cleaner pay',
+    'processing_fees': 'Card processing fees',
+    'va_commission':   'VA commissions',
+}
+
+CATEGORY_LABELS = {k: label for k, label, _g, _s in EXPENSE_CATEGORIES}
+CATEGORY_LABELS.update(AUTO_CATEGORIES)
+CATEGORY_GROUP = {k: g for k, _l, g, _s in EXPENSE_CATEGORIES}
+CATEGORY_SCHEDULE_C = {k: s for k, _l, _g, s in EXPENSE_CATEGORIES}
+ADVERTISING_CATEGORIES = {k for k, _l, g, _s in EXPENSE_CATEGORIES if g == 'Advertising'}
+
+IRS_MILEAGE_RATE = 0.70   # cents-per-mile deduction; editable per entry
+
+
+class Expense(db.Model):
+    """One cost out of the business — the ledger the P&L is built from.
+
+    Only money the owner spends directly. Cleaner pay, card fees, and VA
+    commissions are deliberately NOT stored here; they're totalled from their
+    own records so a payout can never be counted twice."""
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.String(10), index=True)     # YYYY-MM-DD — when the money went out
+    category = db.Column(db.String(40), index=True)
+    amount = db.Column(db.Float, nullable=False)
+    vendor = db.Column(db.String(120))
+    note = db.Column(db.String(300))
+    method = db.Column(db.String(20))               # card, cash, zelle, check, bank
+    receipt_url = db.Column(db.String(400))         # photo of the receipt (Cloudinary)
+    # Mileage entries log the trip; the amount is miles × rate.
+    miles = db.Column(db.Float)
+    rate_per_mile = db.Column(db.Float)
+    recurring_id = db.Column(db.Integer, db.ForeignKey('recurring_expense.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def category_label(self):
+        return CATEGORY_LABELS.get(self.category, (self.category or 'Other').title())
+
+    @property
+    def group(self):
+        return CATEGORY_GROUP.get(self.category, 'Overhead')
+
+    @property
+    def schedule_c(self):
+        return CATEGORY_SCHEDULE_C.get(self.category, 'Line 27a — Other')
+
+    @property
+    def is_mileage(self):
+        return self.category == 'mileage' and (self.miles or 0) > 0
+
+
+class RecurringExpense(db.Model):
+    """A cost that repeats every month — insurance, software, phone. Posts itself
+    so the deduction never gets forgotten."""
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(40), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    vendor = db.Column(db.String(120))
+    note = db.Column(db.String(300))
+    method = db.Column(db.String(20))
+    day_of_month = db.Column(db.Integer, default=1)     # clamped to short months
+    active = db.Column(db.Boolean, default=True)
+    last_posted = db.Column(db.String(7))               # 'YYYY-MM' guard — one post per month
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    expenses = db.relationship('Expense', backref='recurring', lazy=True)
+
+    @property
+    def category_label(self):
+        return CATEGORY_LABELS.get(self.category, (self.category or 'Other').title())
+
+
+class CommissionPayment(db.Model):
+    """Records that a VA was actually PAID their commission for a month. The
+    commission calculator says what's owed; this says what left the account."""
+    id = db.Column(db.Integer, primary_key=True)
+    agent = db.Column(db.String(100), nullable=False, index=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    method = db.Column(db.String(20), default='zelle')
+    note = db.Column(db.String(200))
+    paid_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (db.UniqueConstraint('agent', 'year', 'month', name='uq_commission_agent_month'),)
+
+
+class ProcessingFee(db.Model):
+    """What Stripe actually kept in a given month, pulled from their balance
+    transactions. One authoritative number per month beats guessing 2.9% + 30¢,
+    and it picks up refund and payout fees too."""
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    amount = db.Column(db.Float, default=0)
+    synced_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('year', 'month', name='uq_processing_fee_month'),)
+
+
 class EmailTemplate(db.Model):
     """Editable email templates — each trigger key maps to one automated email."""
     id = db.Column(db.Integer, primary_key=True)

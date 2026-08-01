@@ -30,8 +30,37 @@
 {% else %}
 
 <div class="card" style="margin-bottom:18px;text-align:center;background:rgba(211,168,79,0.09);border:2px solid #d3a84f">
-  <div style="font-size:0.85rem;color:#9a95ad">Owed to {{ report.agent }} for {{ month_str }}</div>
-  <div style="font-size:2.4rem;font-weight:800;color:#b98a33">${{ '%.2f' % report.total }}</div>
+  <div style="font-size:0.85rem;color:#9a95ad">{{ 'Paid to' if paid else 'Owed to' }} {{ report.agent }} for {{ month_str }}</div>
+  <div style="font-size:2.4rem;font-weight:800;color:#b98a33">${{ '%.2f' % (paid.amount if paid else report.total) }}</div>
+
+  {# Recording the payout is what turns a calculated figure into a real expense
+     the Profit & Loss can subtract. #}
+  {% if paid %}
+  <div style="margin-top:10px;background:#e6f4ea;border:1px solid #b7e0c4;color:#276749;border-radius:9px;padding:10px 14px;font-weight:600;font-size:0.88rem">
+    ✅ Paid {{ paid.paid_at.strftime('%b %-d, %Y') }} via {{ (paid.method or 'zelle').title() }} — counted in your
+    <a href="{{ url_for('money.pnl', period='month', year=paid.year, month=paid.month) }}" style="color:#276749;font-weight:700">Profit &amp; Loss</a>.
+  </div>
+  <form method="POST" action="{{ url_for('commissions.unmark_paid', payment_id=paid.id) }}" style="margin-top:8px"
+        onsubmit="return confirm('Undo this payment record? It will stop counting as an expense.')">
+    <button type="submit" class="btn btn-outline" style="padding:5px 14px;font-size:0.78rem">Undo — mark unpaid</button>
+  </form>
+  {% elif report.total > 0 %}
+  <form method="POST" action="{{ url_for('commissions.mark_paid') }}"
+        style="margin-top:12px;display:flex;gap:7px;align-items:center;justify-content:center;flex-wrap:wrap"
+        onsubmit="return confirm('Record ${{ '%.2f' % report.total }} as paid to {{ report.agent }}? It becomes an expense on your P&L.')">
+    <input type="hidden" name="agent" value="{{ report.agent }}">
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <input type="hidden" name="amount" value="{{ '%.2f' % report.total }}">
+    <select name="method" style="width:auto;padding:7px 10px;margin:0">
+      <option value="zelle">Zelle</option><option value="venmo">Venmo</option>
+      <option value="bank">Bank / ACH</option><option value="cash">Cash</option>
+      <option value="check">Check</option><option value="paypal">PayPal</option>
+    </select>
+    <button type="submit" class="btn btn-gold" style="padding:8px 18px">Record as paid</button>
+  </form>
+  <p style="font-size:0.76rem;color:#9a95ad;margin-top:7px">Recording it here is what makes it show up as a cost on your Profit &amp; Loss.</p>
+  {% endif %}
 </div>
 
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px">

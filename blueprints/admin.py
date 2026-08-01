@@ -6,6 +6,8 @@ from extensions import db
 from sqlalchemy import func
 from datetime import datetime, date, timedelta
 
+import finance
+
 admin_bp = Blueprint('admin', __name__)
 
 
@@ -20,6 +22,14 @@ def dashboard():
     total_clients = Client.query.count()
     today_bookings = Booking.query.filter_by(preferred_date=today).all()
     recent = Booking.query.order_by(Booking.created_at.desc()).limit(8).all()
+
+    # This month's money, cash basis — only the owner sees the money tiles.
+    money = None
+    if session.get('role', 'owner') == 'owner':
+        d = date.today()
+        start, end = finance.month_bounds(d.year, d.month)
+        money = finance.profit_and_loss(start, end)
+
     return render_template(
         'admin/dashboard.html',
         total_bookings=total_bookings,
@@ -29,6 +39,8 @@ def dashboard():
         total_clients=total_clients,
         today_bookings=today_bookings,
         recent=recent,
+        money=money,
+        this_month=date.today().strftime('%B'),
     )
 
 
@@ -37,41 +49,29 @@ def dashboard():
 def reports():
     today = date.today()
 
-    # Build last 6 months list
+    # Revenue is CASH BASIS everywhere — counted on the day payment landed, not
+    # the day the job was booked. See finance.py for why that change was made.
     monthly_data = []
     for i in range(5, -1, -1):
         year, month = today.year, today.month - i
         while month <= 0:
             month += 12
             year -= 1
-        m_start = datetime(year, month, 1)
-        m_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
-        rev = db.session.query(func.sum(Booking.price)).filter(
-            Booking.status.in_(['completed', 'confirmed']),
-            Booking.created_at >= m_start,
-            Booking.created_at < m_end,
-        ).scalar() or 0
-        monthly_data.append({'month': m_start.strftime('%b %Y'), 'revenue': round(float(rev), 2)})
+        m_start, m_end = finance.month_bounds(year, month)
+        monthly_data.append({'month': m_start.strftime('%b %Y'),
+                             'revenue': finance.revenue_between(m_start, m_end)})
+
+    this_start, this_end = finance.month_bounds(today.year, today.month)
+    ly, lm = (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
+    last_start, last_end = finance.month_bounds(ly, lm)
+
+    revenue_this_month = finance.revenue_between(this_start, this_end)
+    revenue_last_month = finance.revenue_between(last_start, last_end)
+    revenue_ytd = finance.revenue_between(date(today.year, 1, 1), today)
+    profit_this_month = finance.profit_and_loss(this_start, this_end)['net_profit']
+    profit_ytd = finance.profit_and_loss(date(today.year, 1, 1), today)['net_profit']
 
     this_month_start = datetime(today.year, today.month, 1)
-    last_month_start = datetime(today.year, today.month - 1, 1) if today.month > 1 else datetime(today.year - 1, 12, 1)
-    this_year_start = datetime(today.year, 1, 1)
-
-    revenue_this_month = db.session.query(func.sum(Booking.price)).filter(
-        Booking.status.in_(['completed', 'confirmed']),
-        Booking.created_at >= this_month_start,
-    ).scalar() or 0
-
-    revenue_last_month = db.session.query(func.sum(Booking.price)).filter(
-        Booking.status.in_(['completed', 'confirmed']),
-        Booking.created_at >= last_month_start,
-        Booking.created_at < this_month_start,
-    ).scalar() or 0
-
-    revenue_ytd = db.session.query(func.sum(Booking.price)).filter(
-        Booking.status.in_(['completed', 'confirmed']),
-        Booking.created_at >= this_year_start,
-    ).scalar() or 0
 
     balance_outstanding = db.session.query(func.sum(Booking.balance_due)).filter(
         Booking.balance_collected == False,
@@ -113,9 +113,11 @@ def reports():
     return render_template('admin/reports.html',
         monthly_labels=json.dumps([d['month'] for d in monthly_data]),
         monthly_values=json.dumps([d['revenue'] for d in monthly_data]),
-        revenue_this_month=round(float(revenue_this_month), 2),
-        revenue_last_month=round(float(revenue_last_month), 2),
-        revenue_ytd=round(float(revenue_ytd), 2),
+        revenue_this_month=revenue_this_month,
+        revenue_last_month=revenue_last_month,
+        revenue_ytd=revenue_ytd,
+        profit_this_month=profit_this_month,
+        profit_ytd=profit_ytd,
         balance_outstanding=round(float(balance_outstanding), 2),
         deposits_collected=deposits_collected,
         service_data=service_data,
