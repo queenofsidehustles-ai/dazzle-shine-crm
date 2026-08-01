@@ -16,7 +16,7 @@ import stripe_fees
 from auth import owner_required
 from extensions import db
 from models import (AUTO_CATEGORIES, EXPENSE_CATEGORIES, IRS_MILEAGE_RATE,
-                    Expense, RecurringExpense)
+                    BusinessSetting, Expense, RecurringExpense)
 
 money_bp = Blueprint('money', __name__, url_prefix='/money')
 
@@ -281,7 +281,8 @@ def export_csv():
 
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow([f'Dazzle & Shine Maids — Profit & Loss', label])
+    # White-label: the business name comes from settings, never hardcoded.
+    w.writerow([f'{BusinessSetting.get("business_name", "Profit & Loss")} — Profit & Loss', label])
     w.writerow(['Basis', 'Cash — income counted when payment was received'])
     w.writerow([])
     w.writerow(['Date', 'Type', 'Category', 'Schedule C', 'Vendor', 'Note', 'Amount'])
