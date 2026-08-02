@@ -73,26 +73,36 @@
           <td style="font-weight:700;color:#065f46">${{ '%.2f' % row.earned }}</td>
           <td style="text-align:right;white-space:nowrap">
             {% if row.paid %}
-              <span style="font-size:0.78rem;color:#065f46;font-weight:700">✅ Paid{% if paid_on %} {{ paid_on.strftime('%b %-d') }}{% endif %}</span>
+              <span style="font-size:0.78rem;color:#065f46;font-weight:700">✅ Paid{% if paid_on %} {{ paid_on.strftime('%b %-d') }}{% endif %}
+                {% if row.method %}<span style="font-weight:400;color:#9a95ad">· {{ row.method.title() }}</span>{% endif %}</span>
             {% elif row.earned <= 0 %}
               <span style="font-size:0.78rem;color:#9a95ad">{{ 'Set their split' if row.crew else 'Add hours' }}</span>
-            {% elif data.staff.stripe_payouts_enabled %}
-              <form method="POST" action="{{ pay_url }}" style="display:inline"
-                    onsubmit="return confirm('Send ${{ '%.2f' % row.earned }} to {{ name }} via Stripe for this job? This moves real money.')">
-                <input type="hidden" name="method" value="stripe">
-                <input type="hidden" name="start" value="{{ week_start }}"><input type="hidden" name="end" value="{{ week_end }}">
-                <button type="submit" class="btn btn-gold" style="padding:5px 12px;font-size:0.8rem">💸 Pay ${{ '%.2f' % row.earned }}</button>
-              </form>
             {% else %}
-              <form method="POST" action="{{ pay_url }}" style="display:inline-flex;gap:5px;align-items:center"
-                    onsubmit="return confirm('Record ${{ '%.2f' % row.earned }} paid to {{ name }} for this job?')">
-                <select name="method" style="padding:5px 7px;border:1px solid var(--border);border-radius:7px;font-size:0.78rem">
-                  <option value="venmo">Venmo</option><option value="zelle">Zelle</option>
-                  <option value="cash">Cash</option><option value="check">Check</option>
-                </select>
-                <input type="hidden" name="start" value="{{ week_start }}"><input type="hidden" name="end" value="{{ week_end }}">
-                <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.78rem">Record paid</button>
-              </form>
+              {# Two separate actions, always both available. Sending money and
+                 recording money you already handed over are different things —
+                 a Stripe-ready cleaner still gets paid in cash on the day. #}
+              <div style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                {% if data.staff.stripe_payouts_enabled %}
+                <form method="POST" action="{{ pay_url }}" style="display:inline"
+                      onsubmit="return confirm('SEND ${{ '%.2f' % row.earned }} to {{ name }} via Stripe now?\n\nThis moves real money. If you already paid her, use “Already paid” instead.')">
+                  <input type="hidden" name="method" value="stripe">
+                  <input type="hidden" name="start" value="{{ week_start }}"><input type="hidden" name="end" value="{{ week_end }}">
+                  <button type="submit" class="btn btn-gold" style="padding:5px 12px;font-size:0.8rem">💸 Pay ${{ '%.2f' % row.earned }}</button>
+                </form>
+                {% endif %}
+                <form method="POST" action="{{ pay_url }}" style="display:inline-flex;gap:4px;align-items:center"
+                      onsubmit="return confirm('Record ${{ '%.2f' % row.earned }} as ALREADY paid to {{ name }} for this job?\n\nThis sends no money — it just puts it in your books.')">
+                  <select name="method" title="How you paid her"
+                          style="padding:5px 7px;border:1px solid var(--border);border-radius:7px;font-size:0.78rem">
+                    <option value="cash">Cash</option><option value="zelle">Zelle</option>
+                    <option value="venmo">Venmo</option><option value="check">Check</option>
+                    <option value="bank">Bank / ACH</option>
+                  </select>
+                  <input type="hidden" name="start" value="{{ week_start }}"><input type="hidden" name="end" value="{{ week_end }}">
+                  <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.78rem"
+                          title="Already paid her outside the CRM — just record it">✓ Already paid</button>
+                </form>
+              </div>
             {% endif %}
           </td>
         </tr>

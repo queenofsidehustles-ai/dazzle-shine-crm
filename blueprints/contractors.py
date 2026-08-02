@@ -1087,9 +1087,19 @@ def payroll():
 
     payroll_data = {}
 
+    # How each already-paid job was settled — so the row can say "✅ Paid · Cash"
+    # rather than leaving her guessing whether it went through Stripe.
+    pay_ids = [b.cleaner_payment_id for b in jobs if b.cleaner_payment_id]
+    pay_ids += [c.payment_id for b in jobs for c in b.crew if c.payment_id]
+    methods = {p.id: p.method for p in
+               ContractorPayment.query.filter(ContractorPayment.id.in_(pay_ids)).all()} \
+        if pay_ids else {}
+
     def add_row(s, job, earned, paid, crew=None):
         row = payroll_data.setdefault(s.name, {'staff': s, 'jobs': [], 'total': 0, 'paid_total': 0})
-        row['jobs'].append({'booking': job, 'earned': earned, 'paid': paid, 'crew': crew})
+        pid = crew.payment_id if crew else job.cleaner_payment_id
+        row['jobs'].append({'booking': job, 'earned': earned, 'paid': paid, 'crew': crew,
+                            'method': methods.get(pid)})
         if paid:
             row['paid_total'] += earned
         else:
