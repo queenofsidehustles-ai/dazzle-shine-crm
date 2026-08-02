@@ -377,10 +377,29 @@
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">💳 Payment</h2>
 
       {% if booking.paid_at %}
-      <div style="background:#d1fae5;color:#065f46;padding:12px 14px;border-radius:9px;font-weight:700;margin-bottom:6px">
-        ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % (booking.price or 0) }}
+      {# One paid banner, holding the amount, the date, and the way to correct
+         the date — the date decides which month this income lands in on the P&L. #}
+      <div style="background:#d1fae5;color:#065f46;padding:12px 14px;border-radius:9px;margin-bottom:10px">
+        <div style="font-weight:700">
+          ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % (booking.price or 0) }}
+        </div>
+        <div style="font-size:0.82rem;margin-top:3px">
+          Received <strong>{{ booking.paid_at.strftime('%b %-d, %Y') }}</strong> — counts as {{ booking.paid_at.strftime('%B') }} income.
+        </div>
+        <details style="margin-top:7px">
+          <summary style="cursor:pointer;font-size:0.78rem">✎ Wrong date? Fix it</summary>
+          <p style="font-size:0.76rem;margin:6px 0;color:#276749">
+            Use the day the money actually arrived. Your Profit &amp; Loss re-sorts itself the moment you save.
+          </p>
+          <form method="POST" action="{{ url_for('bookings.fix_payment_date', booking_id=booking.id) }}"
+                style="display:flex;gap:6px;align-items:center">
+            <input type="date" name="paid_on" required
+                   value="{{ booking.paid_at.strftime('%Y-%m-%d') }}"
+                   style="padding:7px 9px;border:1px solid #b7e0c4;border-radius:7px;font-size:0.82rem" />
+            <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.8rem">Save date</button>
+          </form>
+        </details>
       </div>
-      <p style="font-size:0.8rem;color:#9a95ad">Paid {{ booking.paid_at.strftime('%b %-d, %Y') }}.</p>
       <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
          class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">💸 Correct price &amp; notify customer</a>
       {% else %}
@@ -441,28 +460,6 @@
                style="padding:9px 10px;border:1px solid var(--border);border-radius:8px;width:150px" />
         <button type="submit" class="btn btn-outline" style="flex-shrink:0">✓ Mark paid</button>
       </form>
-      {% endif %}
-
-      {% if booking.paid_at %}
-      <!-- Paid already: let the date be corrected, since revenue is counted by it -->
-      <div style="margin-top:10px;background:#e6f4ea;border:1px solid #b7e0c4;border-radius:9px;padding:11px 13px">
-        <div style="color:#276749;font-weight:700;font-size:0.88rem">
-          ✅ Paid {{ booking.paid_at.strftime('%b %-d, %Y') }}{% if booking.paid_method %} · {{ booking.paid_method.title() }}{% endif %}
-        </div>
-        <details style="margin-top:6px">
-          <summary style="cursor:pointer;font-size:0.78rem;color:#276749">✎ Wrong date? Fix it</summary>
-          <p style="font-size:0.76rem;color:#5f5878;margin:6px 0">
-            This decides which month the income lands in on your Profit &amp; Loss.
-          </p>
-          <form method="POST" action="{{ url_for('bookings.fix_payment_date', booking_id=booking.id) }}"
-                style="display:flex;gap:6px;align-items:center">
-            <input type="date" name="paid_on" required
-                   value="{{ booking.paid_at.strftime('%Y-%m-%d') }}"
-                   style="padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:0.82rem" />
-            <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.8rem">Save date</button>
-          </form>
-        </details>
-      </div>
       {% endif %}
     </div>
 
