@@ -189,10 +189,12 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
     std_hours = get_std_hours(beds, baths)
     hours = round(std_hours * multiplier, 2)
 
-    # Contractor earnings — 50/50 straight, no minimum
-    split = get_contractor_split() / 100
-    contractor_earnings = round(client_price * split, 2)
-    hourly_rate = round(contractor_earnings / hours, 2) if hours > 0 else 0
+    # Contractor earnings — the work in the job at the flat hourly rate.
+    # Deliberately not a share of client_price: that's what made a discount cut
+    # the cleaner's pay, and made big homes pay worse per hour than small ones.
+    labor_rate = get_labor_rate()
+    contractor_earnings = round(hours * labor_rate, 2)
+    hourly_rate = labor_rate
 
     return {
         'client_price':         client_price,

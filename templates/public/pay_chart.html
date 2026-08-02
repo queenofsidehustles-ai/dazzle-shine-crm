@@ -101,13 +101,19 @@
 
 <div style="max-width:760px;margin:0 auto 8px;padding:0 16px">
   <div style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:12px;padding:16px 18px;color:#1f1333">
-    <div style="font-weight:700;color:#2b6cb0;margin-bottom:6px">💡 About pricing &amp; your pay</div>
+    <div style="font-weight:700;color:#2b6cb0;margin-bottom:6px">💡 How your pay works</div>
     <p style="font-size:0.9rem;line-height:1.5;margin:0">
-      The total a customer pays may include a small <strong>lead fee</strong> that covers advertising —
-      what it takes to find and book the job (Google ads, etc.). This fee is <strong>not</strong> cleaning
-      revenue, so it's <strong>not</strong> part of the split. <strong>Your {{ split }}% is always
-      calculated on the cleaning-service price shown in this chart</strong> — never reduced, never hidden.
-      We believe in paying you your full, fair share and being upfront about how pricing works.
+      You're paid <strong>${{ '%.0f'|format(labor_rate) }} for every hour of work in a job</strong> — the same rate
+      on every job type, for every cleaner. A job's pay is simply <strong>its hours × ${{ '%.0f'|format(labor_rate) }}</strong>.
+    </p>
+    <p style="font-size:0.9rem;line-height:1.5;margin:10px 0 0">
+      <strong>Your pay does not depend on what the customer is charged.</strong> If we discount a job to win
+      the work, that comes out of our side — your pay doesn't change. It's set by the work, not the price.
+    </p>
+    <p style="font-size:0.9rem;line-height:1.5;margin:10px 0 0">
+      <strong>Working with someone else?</strong> The job's hours are shared between you, so you each earn
+      ${{ '%.0f'|format(labor_rate) }} an hour and finish in about half the time — then you're free to take
+      another job.
     </p>
   </div>
 </div>
@@ -251,7 +257,7 @@
     {% for name, price in extras.items() %}
     <div class="extra-card">
       <span class="en">{{ name }}</span>
-      <span class="ep">+${{ price|int }} → you earn ${{ (price * split / 100)|int }}</span>
+      <span class="ep">+${{ price|int }} to the customer</span>
     </div>
     {% endfor %}
   </div>
@@ -260,9 +266,11 @@
 <!-- NOTE -->
 <div class="note" style="margin-top:20px;margin-bottom:40px">
   <div class="note-inner">
-    <p><strong>How you get paid:</strong> {{ split }}% of the client price goes directly to you after each completed job.
-    Hours shown are estimates — move efficiently and your effective hourly rate goes up.
-    Add-ons are split the same way. You will be notified of each job assignment via text and email.</p>
+    <p><strong>How you get paid:</strong> ${{ '%.0f'|format(labor_rate) }} per hour of work, paid after each completed job.
+    Every job offer tells you the hours and your exact dollar amount <em>before</em> you accept it —
+    so you always know what you're taking on. Hours shown here are estimates for a typical home; if a
+    job is bigger or harder than usual, the hours on that job are set higher, and your pay goes up with them.
+    You will be notified of each job assignment via text and email.</p>
   </div>
 </div>
 

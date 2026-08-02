@@ -86,6 +86,7 @@ def quote_calculator():
 
 @pricing_public_bp.route('/pay-chart')
 def pay_chart():
+    from pricing import get_labor_rate
     rows = build_full_matrix()
     extras = {name: get_extra_price(name) for name in EXTRAS}
     split = int(get_contractor_split())
@@ -93,5 +94,6 @@ def pay_chart():
         rows=rows,
         extras=extras,
         split=split,
+        labor_rate=get_labor_rate(),
         service_labels=SERVICE_LABELS,
     )
