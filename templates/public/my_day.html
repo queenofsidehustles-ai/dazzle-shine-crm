@@ -42,9 +42,8 @@
       <p class="dayhdr {{ 'today' if day == today }}">{{ '📍 Today' if day == today else day }}</p>
       {% for b in jobs %}
       {% set jc = (b.job_checklists | sort(attribute='sent_at', reverse=True) | first) if b.job_checklists else none %}
-      {% set mine = b.crew_row_for(s) if b.crew else none %}
       <div class="job">
-        <span class="pay">You earn ${{ '%.0f'|format(mine.pay_amount or 0 if mine else s.calc_pay(job_price=b.commissionable_price, hours_worked=b.hours_worked or 0)) }}</span>
+        <span class="pay">You earn ${{ '%.0f'|format(b.pay_for(s)) }}</span>
         <span class="time">{{ b.preferred_time or 'Time TBD' }}</span>
         <div class="client">{{ b.name }}</div>
         <div class="svc">{{ b.service_label }} · {{ b.bedrooms or '?' }} bd / {{ b.bathrooms or '?' }} ba</div>

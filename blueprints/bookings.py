@@ -447,8 +447,7 @@ def notify_pay(booking_id):
     else:
         name = b.assigned_cleaner or ''
         s = Staff.query.filter(db.func.lower(Staff.name) == name.lower()).first() if name else None
-        targets = [(s, s.calc_pay(job_price=b.commissionable_price,
-                                  hours_worked=b.hours_worked or 0))] if s else []
+        targets = [(s, b.pay_for(s))] if s else []
     targets = [(s, p) for s, p in targets if s and s.phone]
     if not targets:
         flash('No assigned cleaner with a phone number to notify.', 'warning')
@@ -1067,15 +1066,18 @@ def _notify_cleaner(booking):
     if not staff:
         return False  # cleaner not found
 
-    # Calculate cleaner earnings (on the cleaning price — excludes the lead fee)
-    price = booking.commissionable_price
-    if staff.pay_type == 'percent':
-        earnings = round(price * staff.pay_rate / 100, 2)
-        pay_label = f'{staff.pay_rate:.0f}% of ${price:.2f}'
+    # One source of truth for pay (models.Booking.pay_for) — this used to
+    # reimplement the formula inline, which meant it could drift out of step
+    # with payroll and quote the cleaner a different number than she was paid.
+    earnings = booking.pay_for(staff)
+    hrs = booking.hours_each()
+    if hrs:
+        from pricing import get_labor_rate
+        pay_label = f'{hrs:g} hrs × ${get_labor_rate():.0f}/hr'
+    elif staff.pay_type == 'percent':
+        pay_label = f'{staff.pay_rate:.0f}% of ${booking.commissionable_price:.2f}'
     else:
-        hours = booking.hours_worked or 0
-        earnings = round(hours * staff.pay_rate, 2)
-        pay_label = f'{hours}h × ${staff.pay_rate:.2f}/hr'
+        pay_label = f'{booking.hours_worked or 0}h × ${staff.pay_rate:.2f}/hr'
 
     base = 'https://dazzle-shine-crm-production.up.railway.app'
     token = hashlib.sha256(f"{booking.id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]

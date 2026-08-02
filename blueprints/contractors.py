@@ -816,14 +816,20 @@ def my_day(token):
 @contractors_bp.route('/sample-day')
 def sample_day():
     """A demo 'My Day' with one made-up job — for showing new hires the layout."""
+    from pricing import get_labor_rate
+
     class _FakeStaff:
         name = 'Maria'
-        def calc_pay(self, job_price=0, hours_worked=0):
-            return round((job_price or 0) * 0.5, 2)
 
     class _FakeJob:
+        """Stands in for a real Booking on the demo page — it has to answer the
+        same questions the template asks of a real one."""
         job_checklists = []
         lead_fee = 0
+        crew = []
+        crew_size = 1
+        is_crew_job = False
+        crew_names = []
         def __init__(self, **kw):
             self.__dict__.update(kw)
         @property
@@ -832,11 +838,18 @@ def sample_day():
         @property
         def commissionable_price(self):
             return round((self.price or 0) - (self.lead_fee or 0), 2)
+        @property
+        def labor_budget(self):
+            return round((self.estimated_hours or 0) * get_labor_rate(), 2)
+        def crew_row_for(self, staff):
+            return None
+        def pay_for(self, staff):
+            return self.labor_budget
 
     today = date.today()
     job = _FakeJob(preferred_time='10:00 AM', name='The Johnson Family', bedrooms='3',
                    bathrooms='2', address='123 Palm Ave', city='Orlando', zip_code='32801',
-                   price=180, hours_worked=0,
+                   price=180, hours_worked=0, estimated_hours=3.0,
                    access_notes='Gate code 1234 · key under the blue mat · friendly dog named Max 🐶')
     days = {today.isoformat(): [job]}
     biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
@@ -1115,8 +1128,7 @@ def payroll():
         s = staff_map.get(job.assigned_cleaner or '')
         if not s:
             continue
-        earned = s.calc_pay(job_price=(job.price or 0) - (job.lead_fee or 0), hours_worked=job.hours_worked or 0)
-        add_row(s, job, earned, bool(job.cleaner_paid_at))
+        add_row(s, job, job.pay_for(s), bool(job.cleaner_paid_at))
 
     payroll_data = dict(sorted(payroll_data.items()))
     grand_total = sum(v['total'] for v in payroll_data.values())
@@ -1147,9 +1159,9 @@ def pay_job(booking_id):
         flash('No matching team member for this job, so there is no one to pay.', 'error')
         return back
 
-    earned = s.calc_pay(job_price=(b.price or 0) - (b.lead_fee or 0), hours_worked=b.hours_worked or 0)
+    earned = b.pay_for(s)
     if earned <= 0:
-        flash(f'{s.name}\'s pay for this job comes to $0 — add hours worked or a price first.', 'warning')
+        flash(f'{s.name}\'s pay for this job comes to $0 — set the job\'s hours or price first.', 'warning')
         return back
 
     method = request.form.get('method', 'stripe')
@@ -1304,11 +1316,9 @@ def pay_statement(staff_id):
     ).distinct().order_by(Booking.preferred_date).all()
     rows, total = [], 0.0
     for j in jobs:
-        crew_row = j.crew_row_for(s) if j.crew else None
-        if j.crew and not crew_row:
+        if j.crew and not j.crew_row_for(s):
             continue          # crew job they aren't actually on (they're just the stale lead)
-        earned = (crew_row.pay_amount or 0) if crew_row else \
-            s.calc_pay(job_price=(j.price or 0) - (j.lead_fee or 0), hours_worked=j.hours_worked or 0)
+        earned = j.pay_for(s)
         total += earned
         rows.append({'booking': j, 'earned': earned})
     biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')

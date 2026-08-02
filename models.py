@@ -207,13 +207,42 @@ class Booking(db.Model):
         return round(sum(c.pay_amount or 0 for c in self.crew), 2)
 
     def default_crew_pay(self, staff, size=None):
-        """Suggested pay for one crew member: an even slice of the commissionable
-        pot run through their own rate. Only a starting number — the owner sets
-        the real split by hand. Hourly cleaners bill their own hours, so their
-        pay is never sliced."""
-        size = size or self.crew_size or 1
-        share = self.commissionable_price / max(1, size)
-        return staff.calc_pay(job_price=share, hours_worked=self.hours_worked or 0)
+        """Suggested pay for one cleaner on this job — an even slice of the
+        labor budget. One cleaner takes the whole pot; two split it in half and
+        each finish in half the time, so the hourly rate is the same either way.
+
+        Still only a suggestion: the owner can type over any figure.
+
+        Jobs with no estimated hours fall back to the old percentage split, so
+        anything booked before this existed keeps paying what it always did."""
+        size = max(1, size or self.crew_size or 1)
+        budget = self.labor_budget
+        if budget is None:
+            share = self.commissionable_price / size
+            return staff.calc_pay(job_price=share, hours_worked=self.hours_worked or 0)
+        return round(budget / size, 2)
+
+    def hours_each(self, size=None):
+        """Person-hours each cleaner works, for showing alongside their pay."""
+        if not self.estimated_hours:
+            return None
+        return round(self.estimated_hours / max(1, size or self.crew_size or 1), 2)
+
+    def pay_for(self, staff):
+        """What this one cleaner earns on this job — the single answer every
+        screen should use, so the offer, My Day, payroll and the payout can
+        never disagree with each other.
+
+        Order: a pay amount already agreed on their crew row wins; otherwise a
+        solo cleaner takes the whole labor budget; otherwise the old percentage."""
+        if self.crew:
+            row = self.crew_row_for(staff)
+            return round(row.pay_amount or 0, 2) if row else 0.0
+        budget = self.labor_budget
+        if budget is not None:
+            return budget
+        return staff.calc_pay(job_price=self.commissionable_price,
+                              hours_worked=self.hours_worked or 0)
 
     def crew_row_for(self, staff):
         sid = getattr(staff, 'id', staff)

@@ -140,7 +140,7 @@ def broadcast_job(booking):
                    f"{booking.service_label} · {area} area · You'd earn ${pay:.0f}. "
                    f"{spots} spot{'s' if spots != 1 else ''} left 👉 {link}")
         else:
-            pay = s.calc_pay(job_price=commissionable(booking), hours_worked=0)
+            pay = booking.pay_for(s)
             msg = (f"🧹 New job available! {when} · {booking.service_label} · {area} area · "
                    f"You'd earn ${pay:.0f}. First to claim it gets it 👉 {link}")
         if (s.language or 'en') == 'es':
@@ -164,14 +164,15 @@ def _alert_owner(text):
 
 # ── Claim page (public, personalized link) ──────────────────────────────────
 def _pay_for(booking, staff):
-    """What this cleaner sees as their take on this job — a set amount always
-    beats the automatic percentage."""
+    """What this cleaner sees as their take on this job. An amount already
+    agreed on their crew row wins; an open spot is quoted at its share of the
+    labor budget."""
     if uses_crew(booking):
         row = booking.crew_row_for(staff)
         if row and row.pay_amount is not None:
             return row.pay_amount
         return booking.default_crew_pay(staff)
-    return staff.calc_pay(job_price=commissionable(booking), hours_worked=0)
+    return booking.pay_for(staff)
 
 
 def _claim_state(booking, staff):
