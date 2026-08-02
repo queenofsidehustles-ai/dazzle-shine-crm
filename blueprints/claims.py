@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from extensions import db
 from models import Booking, BookingCrew, Staff, BusinessSetting
 from notifications import send_sms
+from pricing import get_labor_rate
 from translate import translate
 
 claims_bp = Blueprint('claims', __name__)
@@ -134,15 +135,19 @@ def broadcast_job(booking):
             s.agreement_token = secrets.token_urlsafe(32)
             db.session.commit()
         link = f"{CRM_BASE}/claim/{booking.claim_token}/{s.agreement_token}"
+        # Show the hours and the rate, not just a total — they can check the
+        # maths themselves and see it's the same rate on every job.
+        hrs = booking.hours_each()
+        rate_note = f"{hrs:g} hrs × ${get_labor_rate():.0f}/hr = " if hrs else "You'd earn "
         if booking.is_crew_job:
             pay = booking.default_crew_pay(s)
             msg = (f"🧹 Team job — big house, {booking.crew_size} cleaners needed! {when} · "
-                   f"{booking.service_label} · {area} area · You'd earn ${pay:.0f}. "
+                   f"{booking.service_label} · {area} area · {rate_note}${pay:.2f} each. "
                    f"{spots} spot{'s' if spots != 1 else ''} left 👉 {link}")
         else:
             pay = booking.pay_for(s)
             msg = (f"🧹 New job available! {when} · {booking.service_label} · {area} area · "
-                   f"You'd earn ${pay:.0f}. First to claim it gets it 👉 {link}")
+                   f"{rate_note}${pay:.2f}. First to claim it gets it 👉 {link}")
         if (s.language or 'en') == 'es':
             msg = translate(msg, target='es')
         try:
@@ -195,6 +200,7 @@ def claim_page(ctoken, stoken):
     state = _claim_state(booking, staff)
     return render_template('public/claim.html', b=booking, s=staff,
                            pay=_pay_for(booking, staff), state=state,
+                           hours_each=booking.hours_each(), labor_rate=get_labor_rate(),
                            clash=clash_reason(staff, booking) if state == 'open' else None,
                            biz=_biz(), myday=f"{CRM_BASE}/contractors/my-day/{staff.agreement_token}")
 
@@ -238,6 +244,7 @@ def claim_do(ctoken, stoken):
     if reason:
         return render_template('public/claim.html', b=booking, s=staff,
                                pay=_pay_for(booking, staff),
+                               hours_each=booking.hours_each(), labor_rate=get_labor_rate(),
                                state='clash', clash=reason, biz=_biz(),
                                myday=f"{CRM_BASE}/contractors/my-day/{staff.agreement_token}")
 

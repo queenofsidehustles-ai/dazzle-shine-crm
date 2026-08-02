@@ -42,7 +42,9 @@
       <div class="row"><span class="k">When</span><span class="v">{{ b.preferred_date or 'TBD' }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">Service</span><span class="v">{{ b.service_label }} · {{ b.bedrooms or '?' }}bd/{{ b.bathrooms or '?' }}ba</span></div>
       <div class="row"><span class="k">Area</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
-      <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'd earn" }}</div><div class="a">${{ '%.0f'|format(pay) }}</div></div>
+      <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'd earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
+        {% if hours_each %}<div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">{{ '%g'|format(hours_each) }} hours × ${{ '%.0f'|format(labor_rate) }}/hr</div>{% endif %}
+      </div>
       {% if clash %}
         <div class="banner clash">⚠️ {{ clash }}</div>
       {% else %}
@@ -64,7 +66,9 @@
       <div class="row" style="margin-top:10px"><span class="k">When</span><span class="v">{{ b.preferred_date }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">Client</span><span class="v">{{ b.name }}</span></div>
       <div class="row"><span class="k">Address</span><span class="v">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span></div>
-      <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'll earn" }}</div><div class="a">${{ '%.0f'|format(pay) }}</div></div>
+      <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'll earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
+        {% if hours_each %}<div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">{{ '%g'|format(hours_each) }} hours × ${{ '%.0f'|format(labor_rate) }}/hr</div>{% endif %}
+      </div>
       <a class="btnlink" href="{{ myday }}">📅 See it in My Day</a>
       <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"
             onsubmit="return confirm('Release this job back to the team? Someone else will be able to grab it.')">
