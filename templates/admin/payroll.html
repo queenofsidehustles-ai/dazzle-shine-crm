@@ -75,6 +75,21 @@
             {% if row.paid %}
               <span style="font-size:0.78rem;color:#065f46;font-weight:700">✅ Paid{% if paid_on %} {{ paid_on.strftime('%b %-d') }}{% endif %}
                 {% if row.method %}<span style="font-weight:400;color:#9a95ad">· {{ row.method.title() }}</span>{% endif %}</span>
+              {% if row.payment_id %}
+              {# The P&L sorts by this date, so it has to be correctable — a payment
+                 logged a few days late otherwise lands in the wrong month. #}
+              <details style="display:inline-block;margin-left:6px;vertical-align:middle">
+                <summary style="cursor:pointer;font-size:0.72rem;color:#9a95ad;list-style:none">✎ date</summary>
+                <form method="POST" action="{{ url_for('contractors.fix_payment_date', payment_id=row.payment_id) }}"
+                      style="display:inline-flex;gap:4px;align-items:center;margin-top:5px">
+                  <input type="date" name="paid_on" required
+                         value="{{ paid_on.strftime('%Y-%m-%d') if paid_on else '' }}"
+                         style="padding:4px 6px;font-size:0.76rem;margin:0" />
+                  <input type="hidden" name="start" value="{{ week_start }}"><input type="hidden" name="end" value="{{ week_end }}">
+                  <button type="submit" class="btn btn-outline" style="padding:4px 9px;font-size:0.74rem">Save</button>
+                </form>
+              </details>
+              {% endif %}
             {% elif row.earned <= 0 %}
               <span style="font-size:0.78rem;color:#9a95ad">{{ 'Set their split' if row.crew else 'Add hours' }}</span>
             {% else %}
@@ -98,6 +113,11 @@
                     <option value="venmo">Venmo</option><option value="check">Check</option>
                     <option value="bank">Bank / ACH</option>
                   </select>
+                  {# Defaults to the job's own date — she pays on the day she cleans,
+                     which is usually not the day she gets round to recording it. #}
+                  <input type="date" name="paid_on" title="The day you actually paid her"
+                         value="{{ row.booking.preferred_date or '' }}"
+                         style="padding:5px 6px;font-size:0.76rem;margin:0;width:130px" />
                   <input type="hidden" name="start" value="{{ week_start }}"><input type="hidden" name="end" value="{{ week_end }}">
                   <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.78rem"
                           title="Already paid her outside the CRM — just record it">✓ Already paid</button>

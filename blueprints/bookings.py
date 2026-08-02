@@ -645,13 +645,55 @@ def mark_paid_route(booking_id):
     booking = Booking.query.get_or_404(booking_id)
     method = request.form.get('method', 'cash')
     from blueprints.payments import mark_paid
+    # Revenue counts on the day the money arrived, which for cash is the day of
+    # the job — not whenever she gets round to recording it.
+    when = _payment_date(request.form.get('paid_on'), booking)
     try:
-        mark_paid(booking, method=method)
-        flash(f'Marked as paid ✅ ({method}).', 'success')
+        mark_paid(booking, method=method, when=when)
+        flash(f'Marked as paid ✅ ({method}) — dated {when.strftime("%b %-d, %Y")}.', 'success')
     except Exception:
         db.session.rollback()
         flash('Could not mark as paid.', 'error')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+def _payment_date(raw, booking=None):
+    """Parse the date money changed hands: what she typed, else the job's own
+    date, else now."""
+    from datetime import datetime as _dt
+    for candidate in (raw, getattr(booking, 'preferred_date', None)):
+        if candidate:
+            try:
+                return _dt.strptime(str(candidate)[:10], '%Y-%m-%d')
+            except ValueError:
+                continue
+    return _dt.utcnow()
+
+
+@bookings_bp.route('/<int:booking_id>/payment-date', methods=['POST'])
+@login_required
+def fix_payment_date(booking_id):
+    """Correct the date a customer's payment landed, so revenue sits in the
+    right month on the P&L."""
+    from datetime import datetime as _dt
+    b = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    if not b.paid_at:
+        flash('That booking isn\'t marked paid yet.', 'warning')
+        return back
+    try:
+        when = _dt.strptime((request.form.get('paid_on') or '')[:10], '%Y-%m-%d')
+    except ValueError:
+        flash('Enter the date as a real calendar date.', 'error')
+        return back
+    was = b.paid_at
+    b.paid_at = when
+    db.session.commit()
+    moved = was.strftime('%b %Y') != when.strftime('%b %Y')
+    flash(f'Payment re-dated to {when.strftime("%b %-d, %Y")}.'
+          + (f' This income now counts in {when.strftime("%B")}, not {was.strftime("%B")}.' if moved else ''),
+          'success')
+    return back
 
 
 @bookings_bp.route('/_fixdb')

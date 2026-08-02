@@ -82,10 +82,14 @@ def amount_due(booking):
     return round(max(0.0, (booking.price or 0) - paid), 2)
 
 
-def mark_paid(booking, method='card'):
-    """Flag a booking as paid in full and notify. Idempotent-ish."""
+def mark_paid(booking, method='card', when=None):
+    """Flag a booking as paid in full and notify. Idempotent-ish.
+
+    `when` is the day the money actually arrived. Revenue is counted by this
+    date, so recording a cash payment days after the fact would otherwise book
+    the income in the wrong month. Card payments happen now by definition."""
     if not booking.paid_at:
-        booking.paid_at = datetime.utcnow()
+        booking.paid_at = when or datetime.utcnow()
     booking.paid_method = method
     booking.balance_collected = True
     booking.deposit_paid = True

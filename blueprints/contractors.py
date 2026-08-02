@@ -1099,7 +1099,7 @@ def payroll():
         row = payroll_data.setdefault(s.name, {'staff': s, 'jobs': [], 'total': 0, 'paid_total': 0})
         pid = crew.payment_id if crew else job.cleaner_payment_id
         row['jobs'].append({'booking': job, 'earned': earned, 'paid': paid, 'crew': crew,
-                            'method': methods.get(pid)})
+                            'method': methods.get(pid), 'payment_id': pid})
         if paid:
             row['paid_total'] += earned
         else:
@@ -1153,22 +1153,42 @@ def pay_job(booking_id):
         return back
 
     method = request.form.get('method', 'stripe')
-    pay = _send_payout(s, b, earned, method, idem_key=f'payout-job-{b.id}')
+    when = _paid_on(request.form.get('paid_on'), b)
+    pay = _send_payout(s, b, earned, method, idem_key=f'payout-job-{b.id}', when=when)
     if pay is None:
         return back
-    b.cleaner_paid_at = datetime.utcnow()
+    b.cleaner_paid_at = when
     b.cleaner_payment_id = pay.id
     db.session.commit()
     return back
 
 
-def _send_payout(s, b, earned, method, idem_key):
+def _paid_on(raw, booking=None):
+    """When the money actually changed hands.
+
+    Cash gets handed over on the day of the job, but she might not record it
+    until days later — and the P&L sorts costs by this date, so stamping it with
+    the click time drops the expense into the wrong month. Falls back to the
+    job's own date, then to now."""
+    for candidate in (raw, getattr(booking, 'preferred_date', None)):
+        if candidate:
+            try:
+                return datetime.strptime(str(candidate)[:10], '%Y-%m-%d')
+            except ValueError:
+                continue
+    return datetime.utcnow()
+
+
+def _send_payout(s, b, earned, method, idem_key, when=None):
     """Move (or record) one payout and return the saved ContractorPayment.
     Flashes and returns None if it couldn't go through. Caller stamps whatever
     it is that got paid — the booking for a solo job, the crew row for one
     member of a crew — and commits."""
-    when = b.preferred_date or ''
-    desc = f'{s.name} — {b.name or "job"} {when}'.strip()
+    job_date = b.preferred_date or ''
+    desc = f'{s.name} — {b.name or "job"} {job_date}'.strip()
+    # A Stripe transfer happens now by definition; a recorded payment happened
+    # whenever she says it did.
+    when = datetime.utcnow() if method == 'stripe' else (when or datetime.utcnow())
 
     if method == 'stripe':
         _sync_stripe_status(s)
@@ -1183,18 +1203,19 @@ def _send_payout(s, b, earned, method, idem_key):
             return None
         pay = ContractorPayment(staff_id=s.id, booking_id=b.id, amount=earned,
                                 method='stripe', status='paid', stripe_transfer_id=result,
-                                note=desc)
+                                note=desc, created_at=when)
     else:
         # Manual: Venmo / Zelle / cash / check — recorded, not moved by us.
         pay = ContractorPayment(staff_id=s.id, booking_id=b.id, amount=earned,
-                                method=method, status='paid', note=desc)
+                                method=method, status='paid', note=desc, created_at=when)
 
     db.session.add(pay)
     db.session.flush()                     # get pay.id
     if method == 'stripe':
-        flash(f'✅ Sent ${earned:.2f} to {s.name} via Stripe for the {when} job.', 'success')
+        flash(f'✅ Sent ${earned:.2f} to {s.name} via Stripe for the {job_date} job.', 'success')
     else:
-        flash(f'Recorded ${earned:.2f} paid to {s.name} via {method.title()} for the {when} job.', 'success')
+        flash(f'Recorded ${earned:.2f} paid to {s.name} via {method.title()} for the {job_date} job '
+              f'— dated {when.strftime("%b %-d, %Y")}.', 'success')
     return pay
 
 
@@ -1220,13 +1241,47 @@ def pay_crew(crew_id):
         flash(f"{c.staff.name}'s share is $0 — set their split on the booking first.", 'warning')
         return back
 
+    when = _paid_on(request.form.get('paid_on'), c.booking)
     pay = _send_payout(c.staff, c.booking, earned, request.form.get('method', 'stripe'),
-                       idem_key=f'payout-crew-{c.id}')
+                       idem_key=f'payout-crew-{c.id}', when=when)
     if pay is None:
         return back
-    c.paid_at = datetime.utcnow()
+    c.paid_at = pay.created_at
     c.payment_id = pay.id
     db.session.commit()
+    return back
+
+
+@contractors_bp.route('/payroll/payment-date/<int:payment_id>', methods=['POST'])
+@owner_required
+def fix_payment_date(payment_id):
+    """Correct the date on a payment that's already recorded.
+
+    The P&L sorts costs by this date, so a payment logged a few days late lands
+    in the wrong month and makes both months wrong. This moves it, and keeps the
+    booking's and crew row's stamps in step so nothing drifts apart."""
+    pay = ContractorPayment.query.get_or_404(payment_id)
+    back = redirect(url_for('contractors.payroll',
+                            start=request.form.get('start', ''),
+                            end=request.form.get('end', '')))
+    raw = (request.form.get('paid_on') or '').strip()
+    try:
+        when = datetime.strptime(raw[:10], '%Y-%m-%d')
+    except ValueError:
+        flash('Enter the date as a real calendar date.', 'error')
+        return back
+
+    was = pay.created_at
+    pay.created_at = when
+    # Keep every stamp that points at this payment in agreement.
+    Booking.query.filter_by(cleaner_payment_id=pay.id).update({'cleaner_paid_at': when})
+    BookingCrew.query.filter_by(payment_id=pay.id).update({'paid_at': when})
+    db.session.commit()
+
+    moved = was and was.strftime('%b %Y') != when.strftime('%b %Y')
+    flash(f'Payment re-dated to {when.strftime("%b %-d, %Y")}.'
+          + (f' It now counts in {when.strftime("%B")}, not {was.strftime("%B")}.' if moved else ''),
+          'success')
     return back
 
 
