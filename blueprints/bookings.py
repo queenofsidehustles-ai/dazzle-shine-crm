@@ -68,7 +68,7 @@ def price_preview():
 @login_required
 def new():
     """Create a booking by hand — for customers who book by phone/text/in person."""
-    from pricing import calculate_price, SERVICE_LABELS, EXTRAS, get_lead_fee
+    from pricing import calculate_price, calculate_job, SERVICE_LABELS, EXTRAS, get_lead_fee
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         if not name:
@@ -109,7 +109,23 @@ def new():
             lead_fee = 0.0
         price = round((cleaning or 0) + lead_fee, 2)   # what the customer pays
 
+        # Person-hours of work in this job — what the cleaner's pay is built
+        # from. Taken from the bed/bath estimate unless she overrides it.
+        hours_raw = request.form.get('estimated_hours', '').strip()
+        est_hours = None
+        if hours_raw:
+            try:
+                est_hours = float(hours_raw)
+            except ValueError:
+                est_hours = None
+        if est_hours is None:
+            try:
+                est_hours = calculate_job(service_type, bedrooms, bathrooms).get('hours')
+            except Exception:
+                est_hours = None
+
         b = Booking(
+            estimated_hours=est_hours,
             name=name,
             email=(request.form.get('email', '').strip().lower() or None),
             phone=request.form.get('phone', '').strip(),
@@ -219,6 +235,13 @@ def detail(booking_id):
         booking.assigned_cleaner = request.form.get('assigned_cleaner', booking.assigned_cleaner)
         hours_raw = request.form.get('hours_worked', '').strip()
         booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
+        # Person-hours of work — the basis for cleaner pay on this job.
+        est_raw = request.form.get('estimated_hours', '').strip()
+        if est_raw != '':
+            try:
+                booking.estimated_hours = float(est_raw)
+            except ValueError:
+                pass
 
         newly_completed = (booking.status == 'completed' and old_status != 'completed')
         if newly_completed:
@@ -265,11 +288,13 @@ def detail(booking_id):
 
     active_staff = Staff.query.filter_by(is_active=True).order_by(Staff.name).all()
     from blueprints.payments import payment_link_url, amount_due
+    from pricing import get_labor_rate
     pay_url = payment_link_url(booking, 'full')          # ensures pay_token exists
     recurring_upcoming = recurring.upcoming_count(booking.recurring_group) if booking.recurring_group else 0
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff,
                            pay_url=pay_url, due=amount_due(booking),
-                           recurring_upcoming=recurring_upcoming)
+                           recurring_upcoming=recurring_upcoming,
+                           labor_rate=get_labor_rate())
 
 
 @bookings_bp.route('/<int:booking_id>/send-payment-link', methods=['POST'])
