@@ -411,6 +411,10 @@ def _migrate_db():
         ('expense', 'miles',                'FLOAT'),
         ('expense', 'rate_per_mile',        'FLOAT'),
         ('expense', 'receipt_url',          'VARCHAR(400)'),
+        # Labor-based pay: person-hours of work in a job, which sets what the
+        # cleaner(s) are paid. Null on every existing booking, which is what
+        # keeps them on the old percentage until they're re-estimated.
+        ('booking', 'estimated_hours',      'FLOAT'),
     ]
     for table, col, col_type in new_cols:
         try:

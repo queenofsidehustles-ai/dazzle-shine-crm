@@ -75,7 +75,8 @@ FREQUENCY_LABELS = {
 }
 
 DEPOSIT_AMOUNT       = 50   # dollars
-CONTRACTOR_SPLIT_PCT = 50   # percent
+CONTRACTOR_SPLIT_PCT = 50   # percent — LEGACY, only used by jobs with no estimated hours
+LABOR_RATE_DEFAULT   = 43   # dollars per person-hour paid to cleaners (the new model)
 LEAD_FEE_DEFAULT     = 25   # dollars — ad cost added to customer price, not shared with contractor
 SQFT_SURCHARGE_RATE  = 15   # dollars per 200 sqft over standard
 
@@ -115,6 +116,17 @@ def get_extra_price(extra_name):
 
 def get_contractor_split():
     return _db_get('contractor_split', CONTRACTOR_SPLIT_PCT)
+
+
+def get_labor_rate():
+    """Dollars paid per person-hour of work — the same for every cleaner and
+    every job type.
+
+    This is what replaces the old 'half the job price' rule. Pay is a function
+    of how much work a job contains, not of what the customer happened to be
+    charged, so discounting a job no longer quietly cuts the cleaner's pay.
+    Editable in Settings → Pricing."""
+    return _db_get('labor_rate', LABOR_RATE_DEFAULT)
 
 
 def get_lead_fee():

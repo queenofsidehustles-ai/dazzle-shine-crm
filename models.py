@@ -87,6 +87,7 @@ class Booking(db.Model):
     discount_code = db.Column(db.String(50))
     discount_amount = db.Column(db.Float, default=0)
     # Payroll
+    estimated_hours = db.Column(db.Float)   # person-hours of WORK in this job — drives cleaner pay
     hours_worked = db.Column(db.Float)
     cleaner_paid_at = db.Column(db.DateTime)             # when the cleaner was paid out for THIS job
     cleaner_payment_id = db.Column(db.Integer)           # the ContractorPayment.id that paid it
@@ -140,8 +141,34 @@ class Booking(db.Model):
 
     @property
     def commissionable_price(self):
-        """Amount the contractor's cut is based on — total minus the lead fee."""
+        """LEGACY. Base for the old percentage model — total minus the lead fee.
+        Only still used by jobs that have no estimated_hours (see labor_budget)."""
         return round((self.price or 0) - (self.lead_fee or 0), 2)
+
+    # ── Labor budget: what the WORK is worth, not what the customer paid ─────
+    @property
+    def labor_budget(self):
+        """The pot of money the cleaners on this job share.
+
+        person-hours of work × the hourly rate. Deliberately has nothing to do
+        with the price — discount a job and this doesn't move, so a discount
+        comes out of the owner's margin instead of the cleaner's pay.
+
+        Returns None when the job has no estimated hours, which is how every
+        booking made before this existed behaves. Callers fall back to the old
+        percentage in that case, so nothing already on the books changes."""
+        if not self.estimated_hours:
+            return None
+        from pricing import get_labor_rate
+        return round(self.estimated_hours * get_labor_rate(), 2)
+
+    @property
+    def labor_percent(self):
+        """Labor as a share of what the customer pays — the margin warning light."""
+        budget = self.labor_budget
+        if budget is None or not self.price:
+            return None
+        return round(budget / self.price * 100, 1)
 
     @property
     def service_label(self):
