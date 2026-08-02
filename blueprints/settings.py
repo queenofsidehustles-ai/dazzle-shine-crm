@@ -33,9 +33,15 @@ def commercial():
 @settings_bp.route('/pricing', methods=['GET', 'POST'])
 @owner_required
 def pricing():
+    from pricing import get_labor_rate, LABOR_RATE_DEFAULT
     if request.method == 'POST':
         # Save deposit
         PricingSetting.set('deposit_amount', request.form.get('deposit_amount', DEPOSIT_AMOUNT))
+
+        # What a cleaner earns per person-hour — the basis for all job pay.
+        rate = (request.form.get('labor_rate') or '').strip()
+        if rate:
+            PricingSetting.set('labor_rate', rate)
 
         # Save service prices
         for svc_key in SERVICES:
@@ -59,6 +65,7 @@ def pricing():
     # Build current values (DB overrides defaults)
     current = {}
     current['deposit_amount'] = PricingSetting.get('deposit_amount', DEPOSIT_AMOUNT)
+    current['labor_rate'] = get_labor_rate()
     for svc_key, svc in SERVICES.items():
         for field in ('base', 'per_extra_bed', 'per_extra_bath'):
             form_key = f"{svc_key}_{field}"

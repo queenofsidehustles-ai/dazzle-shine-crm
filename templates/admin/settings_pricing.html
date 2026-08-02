@@ -17,6 +17,28 @@
     <p style="font-size:0.85rem;color:#9a95ad;margin-top:-8px">This amount is charged at booking and goes toward the total.</p>
   </div>
 
+  <div class="card" style="margin-bottom:20px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Cleaner Pay</h2>
+    <div class="form-group" style="max-width:220px">
+      <label>Pay per person-hour ($)</label>
+      <input type="number" name="labor_rate" step="0.50" min="0" value="{{ current.labor_rate }}" />
+    </div>
+    <p style="font-size:0.85rem;color:#5f5878;margin-top:-8px">
+      What a cleaner earns for one hour of work — the same rate for everyone, on every job type.
+      A job's pay is <strong>its hours × this rate</strong>, split between whoever is assigned.
+      One cleaner takes the whole amount; two split it and each finish in half the time, so the
+      hourly rate is identical either way.
+    </p>
+    <p style="font-size:0.82rem;color:#9a95ad;margin-top:8px">
+      Because pay comes from the hours and not the price, discounting a job no longer reduces
+      what the cleaner earns — the discount comes out of your margin instead. Each job's page
+      shows labor as a % of that job's price so you can see when it's getting thin.
+    </p>
+    <p style="font-size:0.82rem;color:#9a95ad;margin-top:8px">
+      Changing this affects jobs that haven't been paid yet. Anything already paid stays as it was.
+    </p>
+  </div>
+
   {% for svc_key, svc in services.items() %}
   <div class="card" style="margin-bottom:16px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">{{ svc.label }}</h2>
