@@ -108,6 +108,16 @@ def lead_fees_collected_between(start, end):
 
 
 # ── Money out ───────────────────────────────────────────────────────────────
+def contractor_payments_between(start, end):
+    """The individual payouts behind the cleaner-pay total, so the figure on the
+    P&L can be opened up and checked rather than taken on trust."""
+    lo, hi = _dt_bounds(start, end)
+    return ContractorPayment.query.filter(
+        ContractorPayment.created_at >= lo, ContractorPayment.created_at < hi,
+        ContractorPayment.status == 'paid',
+    ).order_by(ContractorPayment.created_at).all()
+
+
 def contractor_pay_between(start, end):
     """Every payout written by the payroll screen — solo jobs and crew shares."""
     lo, hi = _dt_bounds(start, end)
@@ -185,6 +195,7 @@ def profit_and_loss(start, end):
         'revenue': revenue,
         'jobs_paid': jobs_paid_between(start, end),
         'contractor_pay': contractor,
+        'contractor_payments': contractor_payments_between(start, end),
         'processing_fees': fees,
         'fee_months_missing': fee_months_missing,
         'commissions': commissions,

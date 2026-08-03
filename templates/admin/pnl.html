@@ -80,8 +80,40 @@
           <td style="text-align:right;font-weight:700;color:#065f46">${{ '%.2f' % p.revenue }}</td></tr>
 
       <tr><td colspan="2" style="padding-top:14px;font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:#9a95ad;font-weight:700">Cost of doing the work</td></tr>
-      <tr><td style="padding:7px 0 7px 14px;color:#5f5878">Cleaner pay <span style="font-size:0.72rem;color:#9a95ad">· from payroll</span></td>
-          <td style="text-align:right;color:#b91c1c">−${{ '%.2f' % p.contractor_pay }}</td></tr>
+      <tr><td style="padding:7px 0 7px 14px;color:#5f5878">
+            Cleaner pay <span style="font-size:0.72rem;color:#9a95ad">· from payroll</span>
+            {% if p.contractor_payments %}
+            {# Every total on this page should be openable — otherwise a figure
+               you don't recognise has no way of explaining itself. #}
+            <details style="margin-top:5px">
+              <summary style="cursor:pointer;font-size:0.75rem;color:#b98a33">show the {{ p.contractor_payments|length }} payment{{ 's' if p.contractor_payments|length != 1 }} behind this</summary>
+              <table style="width:100%;margin-top:7px;font-size:0.8rem">
+                <thead><tr style="color:#9a95ad;text-align:left">
+                  <th style="font-weight:600;padding:3px 0">Paid on</th><th style="font-weight:600">Cleaner</th>
+                  <th style="font-weight:600">For the job</th><th style="font-weight:600;text-align:right">Amount</th></tr></thead>
+                <tbody>
+                {% for cp in p.contractor_payments %}
+                <tr>
+                  <td style="padding:3px 0;white-space:nowrap">{{ cp.created_at.strftime('%b %-d') }}</td>
+                  <td>{{ cp.staff.name if cp.staff else '—' }}</td>
+                  <td style="color:#9a95ad">
+                    {% if cp.booking_id %}
+                      <a href="{{ url_for('bookings.detail', booking_id=cp.booking_id) }}" style="color:#5d4f7d">{{ cp.note or 'job' }}</a>
+                    {% else %}{{ cp.note or '—' }}{% endif %}
+                  </td>
+                  <td style="text-align:right;font-weight:600">${{ '%.2f' % (cp.amount or 0) }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+              <p style="font-size:0.73rem;color:#9a95ad;margin:6px 0 0">
+                A payment lands in the month of its <strong>Paid on</strong> date, which may differ from the job's date.
+                Wrong month? Fix the date on the Payroll page.
+              </p>
+            </details>
+            {% endif %}
+          </td>
+          <td style="text-align:right;color:#b91c1c;vertical-align:top">−${{ '%.2f' % p.contractor_pay }}</td></tr>
       <tr><td style="padding:7px 0 7px 14px;color:#5f5878">Card processing fees <span style="font-size:0.72rem;color:#9a95ad">· from Stripe</span></td>
           <td style="text-align:right;color:#b91c1c">−${{ '%.2f' % p.processing_fees }}</td></tr>
       <tr style="border-top:1px solid #e4dfef">
