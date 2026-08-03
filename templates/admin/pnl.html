@@ -135,6 +135,21 @@
             Nothing logged yet — <a href="{{ url_for('money.expenses', period=kind, year=year, month=month) }}" style="color:#b98a33;font-weight:600">add your ad spend and supplies</a> to make this real.</td></tr>
       {% endif %}
 
+      {% if p.tips_collected or p.tips_passed_on %}
+      {# Deliberately below the line: tips are the customer's money passing
+         through, so they must not touch revenue, labor or profit. #}
+      <tr><td colspan="2" style="padding-top:14px;font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:#9a95ad;font-weight:700">Tips — not yours, not counted</td></tr>
+      <tr><td style="padding:7px 0 7px 14px;color:#5f5878">Collected from customers</td>
+          <td style="text-align:right;color:#9a95ad">${{ '%.2f' % p.tips_collected }}</td></tr>
+      <tr><td style="padding:7px 0 7px 14px;color:#5f5878">Passed on to cleaners</td>
+          <td style="text-align:right;color:#9a95ad">−${{ '%.2f' % p.tips_passed_on }}</td></tr>
+      {% if p.tips_owed > 0.01 %}
+      <tr><td style="padding:4px 0 7px 14px;color:#c05621;font-size:0.84rem">
+            ⏳ ${{ '%.2f' % p.tips_owed }} of tips still to hand over — pay it out on the Payroll page.</td>
+          <td></td></tr>
+      {% endif %}
+      {% endif %}
+
       <tr style="border-top:2px solid #1f1333">
           <td style="padding:12px 0;font-weight:800;font-size:1.05rem">Net profit</td>
           <td style="text-align:right;font-weight:800;font-size:1.15rem;color:{{ '#b98a33' if p.net_profit >= 0 else '#b91c1c' }}">${{ '%.2f' % p.net_profit }}</td></tr>

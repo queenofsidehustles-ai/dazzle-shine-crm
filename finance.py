@@ -119,13 +119,31 @@ def contractor_payments_between(start, end):
 
 
 def contractor_pay_between(start, end):
-    """Every payout written by the payroll screen — solo jobs and crew shares."""
+    """Every payout written by the payroll screen — solo jobs and crew shares.
+
+    Labor only. Tips are excluded on purpose: they're the customer's money
+    passing through, so counting them here would inflate labor, drag margin
+    down on every tipped job, and trip the floor-price warnings for no reason."""
     lo, hi = _dt_bounds(start, end)
     total = db.session.query(func.sum(ContractorPayment.amount)).filter(
         ContractorPayment.created_at >= lo, ContractorPayment.created_at < hi,
         ContractorPayment.status == 'paid',
     ).scalar()
     return round(float(total or 0), 2)
+
+
+def tips_between(start, end):
+    """Tips collected from customers and handed to cleaners. In and straight
+    out — never revenue, never a cost, no effect on profit."""
+    lo, hi = _dt_bounds(start, end)
+    collected = db.session.query(func.sum(Booking.tip_amount)).filter(
+        Booking.paid_at.isnot(None), Booking.paid_at >= lo, Booking.paid_at < hi,
+    ).scalar()
+    passed_on = db.session.query(func.sum(ContractorPayment.tip_amount)).filter(
+        ContractorPayment.created_at >= lo, ContractorPayment.created_at < hi,
+        ContractorPayment.status == 'paid',
+    ).scalar()
+    return round(float(collected or 0), 2), round(float(passed_on or 0), 2)
 
 
 def commissions_paid_between(start, end):
@@ -163,6 +181,8 @@ def profit_and_loss(start, end):
     commissions = commissions_paid_between(start, end)
     fees, fee_months_missing = processing_fees_between(start, end)
 
+    tips_collected, tips_passed_on = tips_between(start, end)
+
     rows = expenses_between(start, end)
     by_cat = {}
     for e in rows:
@@ -196,6 +216,9 @@ def profit_and_loss(start, end):
         'jobs_paid': jobs_paid_between(start, end),
         'contractor_pay': contractor,
         'contractor_payments': contractor_payments_between(start, end),
+        'tips_collected': tips_collected,
+        'tips_passed_on': tips_passed_on,
+        'tips_owed': round(tips_collected - tips_passed_on, 2),
         'processing_fees': fees,
         'fee_months_missing': fee_months_missing,
         'commissions': commissions,

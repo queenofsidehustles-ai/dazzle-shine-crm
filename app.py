@@ -417,6 +417,10 @@ def _migrate_db():
         ('booking', 'estimated_hours',      'FLOAT'),
         ('booking', 'labor_rate_applied',   'FLOAT'),
         ('booking', 'below_floor_reason',   'VARCHAR(200)'),
+        # Tips — the customer's, passed straight to the cleaner. Kept separate
+        # from price and from labor so they never distort revenue or margin.
+        ('booking', 'tip_amount',           'FLOAT DEFAULT 0'),
+        ('contractor_payment', 'tip_amount', 'FLOAT DEFAULT 0'),
     ]
     for table, col, col_type in new_cols:
         try:

@@ -141,9 +141,24 @@ def _alert_owner_paid(booking, method):
 def pay_page(token):
     booking = Booking.query.filter_by(pay_token=token).first_or_404()
     pk = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+    # Name the cleaner on the tip prompt — people tip a person, not a company.
+    cleaner = booking.crew_label or booking.assigned_cleaner or ''
     return render_template('public/pay.html', booking=booking, token=token,
                            stripe_pk=pk, due=amount_due(booking),
+                           cleaner_first=cleaner.split()[0] if cleaner else '',
                            already_paid=bool(booking.paid_at), biz=_biz())
+
+
+def _read_tip(payload):
+    """A tip the customer typed. Belongs entirely to the cleaner, so it's kept
+    apart from the price and never counted as revenue."""
+    try:
+        tip = float((payload or {}).get('tip') or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if tip <= 0:
+        return 0.0
+    return round(min(tip, 2000), 2)      # cap catches a mistyped amount
 
 
 @payments_bp.route('/pay/<token>/intent', methods=['POST'])
@@ -152,6 +167,7 @@ def create_intent(token):
     due = amount_due(booking)
     if due <= 0:
         return jsonify({'ok': False, 'error': 'This booking is already paid.'}), 400
+    tip = _read_tip(request.get_json(silent=True))
     stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
     if not stripe.api_key:
         return jsonify({'ok': False, 'error': 'Payments not configured'}), 500
@@ -164,10 +180,12 @@ def create_intent(token):
             customer_id = customer.id
             booking.stripe_customer_id = customer_id
         intent = stripe.PaymentIntent.create(
-            amount=int(due * 100), currency='usd', customer=customer_id,
+            amount=int(round((due + tip) * 100)), currency='usd', customer=customer_id,
             metadata={'booking_id': str(booking.id), 'pay_token': token,
-                      'kind': 'full_payment', 'customer_name': booking.name or ''},
+                      'kind': 'full_payment', 'customer_name': booking.name or '',
+                      'tip': f'{tip:.2f}'},
         )
+        booking.tip_amount = tip
         booking.stripe_payment_intent = intent.id
         db.session.commit()
         return jsonify({'ok': True, 'client_secret': intent.client_secret})

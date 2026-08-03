@@ -1112,6 +1112,7 @@ def payroll():
         row = payroll_data.setdefault(s.name, {'staff': s, 'jobs': [], 'total': 0, 'paid_total': 0})
         pid = crew.payment_id if crew else job.cleaner_payment_id
         row['jobs'].append({'booking': job, 'earned': earned, 'paid': paid, 'crew': crew,
+                            'tip': job.tip_for(s),
                             'method': methods.get(pid), 'payment_id': pid})
         if paid:
             row['paid_total'] += earned
@@ -1166,7 +1167,8 @@ def pay_job(booking_id):
 
     method = request.form.get('method', 'stripe')
     when = _paid_on(request.form.get('paid_on'), b)
-    pay = _send_payout(s, b, earned, method, idem_key=f'payout-job-{b.id}', when=when)
+    pay = _send_payout(s, b, earned, method, idem_key=f'payout-job-{b.id}', when=when,
+                       tip=b.tip_for(s))
     if pay is None:
         return back
     b.cleaner_paid_at = when
@@ -1191,13 +1193,19 @@ def _paid_on(raw, booking=None):
     return datetime.utcnow()
 
 
-def _send_payout(s, b, earned, method, idem_key, when=None):
+def _send_payout(s, b, earned, method, idem_key, when=None, tip=0.0):
     """Move (or record) one payout and return the saved ContractorPayment.
     Flashes and returns None if it couldn't go through. Caller stamps whatever
     it is that got paid — the booking for a solo job, the crew row for one
     member of a crew — and commits."""
     job_date = b.preferred_date or ''
     desc = f'{s.name} — {b.name or "job"} {job_date}'.strip()
+    # The tip is the customer's money passing through — it goes out with the
+    # payout but is recorded separately so it never counts as a business cost.
+    tip = round(tip or 0, 2)
+    total = round(earned + tip, 2)
+    if tip:
+        desc += f' (incl. ${tip:.2f} tip)'
     # A Stripe transfer happens now by definition; a recorded payment happened
     # whenever she says it did.
     when = datetime.utcnow() if method == 'stripe' else (when or datetime.utcnow())
@@ -1208,26 +1216,29 @@ def _send_payout(s, b, earned, method, idem_key, when=None):
             flash(f"{s.name} isn't set up for Stripe payouts yet — record a manual payment or send their onboarding link.", 'warning')
             return None
         ok, result = stripe_connect.create_transfer(
-            s.stripe_account_id, earned, description=desc,
+            s.stripe_account_id, total, description=desc,
             idempotency_key=idem_key)   # the same share can never transfer twice
         if not ok:
             flash(f'Stripe payment failed: {result}', 'error')
             return None
         pay = ContractorPayment(staff_id=s.id, booking_id=b.id, amount=earned,
-                                method='stripe', status='paid', stripe_transfer_id=result,
-                                note=desc, created_at=when)
+                                tip_amount=tip, method='stripe', status='paid',
+                                stripe_transfer_id=result, note=desc, created_at=when)
     else:
         # Manual: Venmo / Zelle / cash / check — recorded, not moved by us.
         pay = ContractorPayment(staff_id=s.id, booking_id=b.id, amount=earned,
-                                method=method, status='paid', note=desc, created_at=when)
+                                tip_amount=tip, method=method, status='paid',
+                                note=desc, created_at=when)
 
     db.session.add(pay)
     db.session.flush()                     # get pay.id
     if method == 'stripe':
-        flash(f'✅ Sent ${earned:.2f} to {s.name} via Stripe for the {job_date} job.', 'success')
+        flash(f'✅ Sent ${total:.2f} to {s.name} via Stripe for the {job_date} job'
+              + (f' (${earned:.2f} pay + ${tip:.2f} tip).' if tip else '.'), 'success')
     else:
-        flash(f'Recorded ${earned:.2f} paid to {s.name} via {method.title()} for the {job_date} job '
-              f'— dated {when.strftime("%b %-d, %Y")}.', 'success')
+        flash(f'Recorded ${total:.2f} paid to {s.name} via {method.title()} for the {job_date} job'
+              + (f' (${earned:.2f} pay + ${tip:.2f} tip)' if tip else '')
+              + f' — dated {when.strftime("%b %-d, %Y")}.', 'success')
     return pay
 
 
@@ -1255,7 +1266,8 @@ def pay_crew(crew_id):
 
     when = _paid_on(request.form.get('paid_on'), c.booking)
     pay = _send_payout(c.staff, c.booking, earned, request.form.get('method', 'stripe'),
-                       idem_key=f'payout-crew-{c.id}', when=when)
+                       idem_key=f'payout-crew-{c.id}', when=when,
+                       tip=c.booking.tip_for(c.staff))
     if pay is None:
         return back
     c.paid_at = pay.created_at

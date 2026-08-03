@@ -65,9 +65,27 @@
         {% endif %}
       </div>
 
+      {% if stripe_pk %}
+      {# Tipping a named person gets a far better response than tipping a company. #}
+      <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:12px;padding:14px 16px;margin:4px 0 14px">
+        <div style="font-weight:700;color:#1e5638;margin-bottom:3px">💚 Add a tip{% if cleaner_first %} for {{ cleaner_first }}{% endif %}?</div>
+        <div style="font-size:0.85rem;color:#1e7e34;margin-bottom:9px">Optional — <strong>100% goes to your cleaner</strong>.</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:1.2rem;font-weight:700;color:#1e5638">$</span>
+          <input type="number" id="tip-input" min="0" max="2000" step="1" placeholder="0"
+                 inputmode="decimal"
+                 style="flex:1;padding:11px 13px;border:1px solid #a3cfbb;border-radius:9px;font-size:1.05rem;font-weight:600" />
+        </div>
+        <div id="tip-err" style="display:none;color:#b91c1c;font-size:0.82rem;margin-top:6px"></div>
+      </div>
+      {% endif %}
+
       <div class="amt-banner">
         <div class="lbl">Amount Due</div>
-        <div class="amt">${{ '%.0f'|format(due) }}</div>
+        <div class="amt" id="total-amt">${{ '%.0f'|format(due) }}</div>
+        <div class="lbl" id="tip-line" style="display:none;margin-top:4px;text-transform:none;letter-spacing:0">
+          ${{ '%.2f'|format(due) }} cleaning + <span id="tip-shown">$0</span> tip
+        </div>
       </div>
 
       {% if stripe_pk %}
@@ -100,6 +118,35 @@
   const card = elements.create('card', { style: { base: { fontFamily: 'Inter, sans-serif', fontSize: '16px', color: '#1f1333' } } });
   card.mount('#card-element');
   const payBtn = document.getElementById('pay-btn');
+
+  // Tip: free-form, optional. The running total updates as they type so the
+  // number on the button is always the number that gets charged.
+  const DUE = {{ '%.2f'|format(due) }};
+  const tipInput = document.getElementById('tip-input');
+  const tipLine = document.getElementById('tip-line');
+  const tipShown = document.getElementById('tip-shown');
+  const totalAmt = document.getElementById('total-amt');
+  const tipErr = document.getElementById('tip-err');
+
+  function readTip() {
+    const v = parseFloat(tipInput && tipInput.value);
+    if (!isFinite(v) || v <= 0) return 0;
+    return Math.round(v * 100) / 100;
+  }
+  function refreshTotal() {
+    const tip = readTip();
+    const total = DUE + tip;
+    totalAmt.textContent = '$' + total.toFixed(2);
+    payBtn.textContent = 'Pay $' + total.toFixed(2) + ' →';
+    tipLine.style.display = tip > 0 ? '' : 'none';
+    tipShown.textContent = '$' + tip.toFixed(2);
+    // A mistyped tip is easy to make and expensive; say something before they pay.
+    const raw = parseFloat(tipInput.value);
+    const silly = isFinite(raw) && raw > Math.max(200, DUE);
+    tipErr.style.display = silly ? 'block' : 'none';
+    if (silly) tipErr.textContent = "That's a bigger tip than the cleaning itself — double-check the amount?";
+  }
+  if (tipInput) tipInput.addEventListener('input', refreshTotal);
   const errBox = document.getElementById('err-box');
   const custName = {{ booking.name | tojson }};
   const custEmail = {{ booking.email | tojson }};
@@ -109,7 +156,11 @@
   payBtn.addEventListener('click', async () => {
     errBox.style.display = 'none'; payBtn.disabled = true; payBtn.textContent = 'Processing…';
     try {
-      const intentRes = await fetch(`/pay/${TOKEN}/intent`, { method: 'POST' });
+      const intentRes = await fetch(`/pay/${TOKEN}/intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tip: readTip() }),
+      });
       const intentData = await intentRes.json();
       if (!intentData.ok) throw new Error(intentData.error || 'Could not start payment');
       const { error, paymentIntent } = await stripe.confirmCardPayment(intentData.client_secret, {

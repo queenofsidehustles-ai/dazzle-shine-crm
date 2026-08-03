@@ -69,6 +69,7 @@ class Booking(db.Model):
     stripe_payment_method_id = db.Column(db.String(100))
     deposit_paid = db.Column(db.Boolean, default=False)
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
+    tip_amount = db.Column(db.Float, default=0)  # customer's tip — belongs to the cleaner, never revenue
     balance_due = db.Column(db.Float)
     balance_collected = db.Column(db.Boolean, default=False)
     pay_token = db.Column(db.String(64))       # unique link for paying the full amount (invoice / on-site)
@@ -273,6 +274,25 @@ class Booking(db.Model):
         if not self.estimated_hours:
             return None
         return round(self.estimated_hours / max(1, size or self.crew_size or 1), 2)
+
+    def tip_for(self, staff):
+        """This cleaner's share of the customer's tip.
+
+        Solo: all of it. Crew: split in proportion to their pay, so the person
+        who did more of the work gets more of the tip. The owner never keeps
+        any part of it."""
+        tip = round(self.tip_amount or 0, 2)
+        if tip <= 0:
+            return 0.0
+        if not self.crew:
+            return tip
+        total = sum(c.pay_amount or 0 for c in self.crew)
+        row = self.crew_row_for(staff)
+        if not row:
+            return 0.0
+        if total <= 0:                       # no split set — share it evenly
+            return round(tip / len(self.crew), 2)
+        return round(tip * (row.pay_amount or 0) / total, 2)
 
     def pay_for(self, staff):
         """What this one cleaner earns on this job — the single answer every
@@ -713,7 +733,8 @@ class ContractorPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
     booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'))  # the job this pays for (per-job payout)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(db.Float, nullable=False)          # labor only — what the P&L counts as a cost
+    tip_amount = db.Column(db.Float, default=0)           # customer's tip passed through, NOT a business cost
     method = db.Column(db.String(20), default='stripe')   # stripe, venmo, zelle, cash, check
     status = db.Column(db.String(20), default='paid')     # paid, pending, failed
     stripe_transfer_id = db.Column(db.String(64))         # tr_... when paid via Stripe
