@@ -120,7 +120,10 @@ def new():
                 est_hours = None
         if est_hours is None:
             try:
-                est_hours = calculate_job(service_type, bedrooms, bathrooms).get('hours')
+                # Pass the add-ons — each one carries its own time, and leaving
+                # them out would pay the cleaner nothing for that extra work.
+                est_hours = calculate_job(service_type, bedrooms, bathrooms,
+                                          sqft=sqft, extras=extras).get('hours')
             except Exception:
                 est_hours = None
 

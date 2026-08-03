@@ -51,12 +51,15 @@ def pricing():
                 if val:
                     PricingSetting.set(form_key, val)
 
-        # Save extras
+        # Save extras — price and the time each one takes
         for extra_name in EXTRAS:
-            form_key = f"extra_{extra_name.lower().replace(' ', '_')}"
-            val = request.form.get(form_key)
+            slug = extra_name.lower().replace(' ', '_')
+            val = request.form.get(f'extra_{slug}')
             if val:
-                PricingSetting.set(form_key, val)
+                PricingSetting.set(f'extra_{slug}', val)
+            hrs = request.form.get(f'extrahrs_{slug}')
+            if hrs not in (None, ''):     # 0 is a legitimate answer here
+                PricingSetting.set(f'extrahrs_{slug}', hrs)
 
         db.session.commit()
         flash('Pricing updated successfully!', 'success')
@@ -70,9 +73,11 @@ def pricing():
         for field in ('base', 'per_extra_bed', 'per_extra_bath'):
             form_key = f"{svc_key}_{field}"
             current[form_key] = PricingSetting.get(form_key, svc[field])
+    from pricing import get_extra_hours
     for extra_name, price in EXTRAS.items():
-        form_key = f"extra_{extra_name.lower().replace(' ', '_')}"
-        current[form_key] = PricingSetting.get(form_key, price)
+        slug = extra_name.lower().replace(' ', '_')
+        current[f'extra_{slug}'] = PricingSetting.get(f'extra_{slug}', price)
+        current[f'extrahrs_{slug}'] = get_extra_hours(extra_name)
 
     return render_template('admin/settings_pricing.html',
                            services=SERVICES, extras=EXTRAS,

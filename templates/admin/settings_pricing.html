@@ -60,14 +60,39 @@
   {% endfor %}
 
   <div class="card" style="margin-bottom:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Add-On Prices</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
-      {% for extra_name, price in extras.items() %}
-      <div class="form-group">
-        <label>{{ extra_name }}</label>
-        <input type="number" name="extra_{{ extra_name.lower().replace(' ', '_') }}" step="1" value="{{ current['extra_' + extra_name.lower().replace(' ', '_')] }}" />
-      </div>
-      {% endfor %}
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Add-Ons</h2>
+    <p style="font-size:0.85rem;color:#5f5878;margin:0 0 16px">
+      Each add-on has a price <em>and</em> the time it takes. The hours are added to the job, so the
+      cleaner is paid for the extra work — set them to 0 and they'd be doing it for free.
+      Watch the labor % on the right: anything red costs you more in labor than you charge for it.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Add-on</th><th>Price ($)</th><th>Takes (hrs)</th><th>Labor cost</th><th>Labor %</th><th style="text-align:right">You keep</th></tr></thead>
+        <tbody>
+          {% for extra_name, price in extras.items() %}
+          {% set key = extra_name.lower().replace(' ', '_') %}
+          {% set hrs = current['extrahrs_' + key] %}
+          {% set p = current['extra_' + key] | float %}
+          {% set labor = hrs | float * current.labor_rate | float %}
+          {% set pct = (labor / p * 100) if p else 0 %}
+          <tr>
+            <td style="font-weight:600">{{ extra_name }}</td>
+            <td><input type="number" name="extra_{{ key }}" step="1" min="0"
+                       value="{{ current['extra_' + key] }}" style="width:90px;margin:0" /></td>
+            <td><input type="number" name="extrahrs_{{ key }}" step="0.25" min="0"
+                       value="{{ hrs }}" style="width:90px;margin:0" /></td>
+            <td style="color:#9a95ad">${{ '%.2f' % labor }}</td>
+            <td style="font-weight:700;color:{{ '#b91c1c' if pct > 100 else ('#c05621' if pct > 65 else '#065f46') }}">
+              {{ '%.0f' % pct }}%{% if pct > 100 %} ⚠️{% endif %}
+            </td>
+            <td style="text-align:right;font-weight:700;color:{{ '#b91c1c' if (p - labor) < 0 else '#1f1333' }}">
+              ${{ '%.2f' % (p - labor) }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 

@@ -60,6 +60,19 @@ EXTRAS = {
     'Inside cabinets': 30,
 }
 
+# How long each add-on actually takes, in person-hours. These add to the job's
+# estimated hours, which is what the cleaner is paid on — without them an add-on
+# would raise the customer's price and pay the cleaner nothing extra for the work.
+# Starting points from typical trade task times; editable in Settings → Pricing
+# once real jobs have been timed.
+EXTRA_HOURS = {
+    'Inside oven':     0.5,   # degreaser dwell + scrub racks and door glass
+    'Inside fridge':   0.5,   # empty, wash and dry shelves and drawers, replace
+    'Laundry':         0.75,  # one load: sort, load, transfer, fold, put away
+    'Inside windows':  0.75,  # interior panes and sills, typical 3-bed home
+    'Inside cabinets': 1.0,   # empty, wipe interiors, replace contents — slow work
+}
+
 FREQUENCY_DISCOUNTS = {
     'one_time': 0,
     'monthly':  5,
@@ -112,6 +125,12 @@ def get_multiplier(service_type):
 def get_extra_price(extra_name):
     key = f"extra_{extra_name.lower().replace(' ', '_')}"
     return _db_get(key, EXTRAS.get(extra_name, 0))
+
+
+def get_extra_hours(extra_name):
+    """Person-hours an add-on adds to the job — and therefore to cleaner pay."""
+    key = f"extrahrs_{extra_name.lower().replace(' ', '_')}"
+    return _db_get(key, EXTRA_HOURS.get(extra_name, 0))
 
 
 def get_contractor_split():
@@ -185,9 +204,13 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
 
     client_price = round(subtotal, 2)
 
-    # Hours
+    # Hours — the base clean scaled by service type, plus the time each add-on
+    # genuinely takes. Add-ons used to raise the price without raising the hours,
+    # which under hours-based pay would mean the cleaner did the extra work free.
     std_hours = get_std_hours(beds, baths)
     hours = round(std_hours * multiplier, 2)
+    extras_hours = round(sum(get_extra_hours(e) for e in extra_list), 2)
+    hours = round(hours + extras_hours, 2)
 
     # Contractor earnings — the work in the job at the flat hourly rate.
     # Deliberately not a share of client_price: that's what made a discount cut
@@ -200,6 +223,7 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
         'client_price':         client_price,
         'contractor_earnings':  contractor_earnings,
         'hours':                hours,
+        'extras_hours':         extras_hours,
         'hourly_rate':          hourly_rate,
         'base_price':           base_price,
         'sqft_surcharge':       sqft_surcharge,
