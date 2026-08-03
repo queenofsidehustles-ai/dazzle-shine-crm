@@ -1,45 +1,93 @@
 # Contractor Pay Policy — Dazzle & Shine Maids
 
-## The split: start at 50%, grow to 55%
+## The model: a flat rate per hour of work
 
-Contractors earn a percentage of each job they complete (paid after the clean).
-They provide their own supplies, transportation, and pay their own taxes (1099).
+Contractors are paid **$43 for every person-hour of work in a job**, paid after the
+clean. Same rate for every cleaner, every job type. They provide their own
+supplies and transportation and pay their own taxes (1099).
 
-| Stage | Contractor keeps | You keep |
-|---|---|---|
-| **Starting rate** (all new contractors) | **50%** | 50% |
-| **Top performer** (earned) | **55%** | 45% |
+```
+job pay = person-hours of work × $43
+```
 
-### How a contractor earns the raise to 55%
+A 3-bed/2-bath standard clean contains about 3 hours of work, so it pays **$129**.
 
-A contractor moves from 50% → 55% once they've proven themselves. Suggested bar:
+The rate lives in **Settings → Pricing → Cleaner Pay**, not in the code.
 
-- **15+ completed jobs**, AND
-- **4.5★ or higher average rating**, AND
-- Reliable (no-shows / late cancellations in good standing)
+## Why this replaced "50% of the job price"
 
-You can adjust this bar however you like — it's your call who has earned it.
+The old model paid half of whatever the customer was charged. Three things were
+broken, all from the same root — tying pay to price instead of to work:
 
-### Why it's set up this way
+1. **Crews were punished.** Two cleaners splitting one 50% share each earned half
+   of a solo cleaner's take, so nobody wanted big jobs.
+2. **Discounts were silently shared.** Discounting a job to win a lead cut the
+   cleaner's pay too. They never saw it happen and never agreed to it.
+3. **Big homes paid worst.** The price matrix charges less per hour as homes get
+   bigger, so a 5-bed paid ~$35/hour against ~$57/hour on a 1-bed. The jobs
+   hardest to staff were the ones that paid least.
 
-- **50% start** is already competitive for Orlando (~$35–$48/hour gross), so it
-  recruits well without giving away margin.
-- **Raising to 55%** rewards your keepers and is a strong recruiting pitch
-  ("earn 50%, grow to 55%") — and it's far easier to raise a rate than to cut one.
-- You keep more margin while you're spending the most on marketing (paid leads),
-  and your real profit comes from recurring clients who cost nothing to rebook.
+Under the flat rate every job pays the same per hour, a crew of two earns the same
+hourly as a solo cleaner (and finishes in half the time), and a discount comes out
+of the owner's margin, where it belongs.
 
-## How to give a contractor their 55% raise (in the CRM)
+## How a crew splits the work
 
-1. Go to **Team** → open the contractor's profile.
-2. Set their **pay rate** to **55** (percent).
-3. Save. All future jobs calculate at 55% for that person automatically.
+The job's hours are the pot. One cleaner takes it all; two split it and each
+finish in about half the time.
 
-> New hires default to 50%. Only bump the individuals who've earned it — never
-> cut an existing contractor's rate.
+| 3bd/2ba · 3.0 hours · $129 pot | Each earns | Each works | Hourly |
+|---|---|---|---|
+| One cleaner | $129 | 3.0 hrs | $43 |
+| Two cleaners | $64.50 | 1.5 hrs | $43 |
 
-## What the candidate sees
+## When a job is harder than the chart says
 
-The conditional-offer email (sent when you approve their video interview) states:
-"You start at 50% of every job… Our top performers grow to 55% with great reviews
-and reliability." The pay examples in that letter use the 50% starting rate.
+**Raise the hours, never the rate.** The rate stays $43 for everyone — that's what
+makes it simple to explain and impossible to argue about. If a house genuinely
+takes longer, that job's estimate should say so, and the pay follows automatically.
+
+Every job's hours are editable on its own booking page.
+
+## Add-ons and bigger homes
+
+Both add time as well as price, so the cleaner is paid for the extra work:
+
+| | Adds |
+|---|---|
+| Inside oven | 0.5 hrs |
+| Inside fridge | 0.5 hrs |
+| Laundry | 0.75 hrs |
+| Inside windows | 0.75 hrs |
+| Inside cabinets | 1.0 hrs |
+| Each 200 sq ft over standard | 0.4 hrs |
+
+All editable in **Settings → Pricing**.
+
+## Rate history
+
+Each job locks in the rate it was quoted at, so changing the rate in settings
+never restates an existing job. An unpaid job can be moved onto the current rate
+with the **Re-rate** button on that job. A job someone has already been paid for
+cannot be changed at all.
+
+## Floor price
+
+A job's floor is the least it can be sold for while keeping labor under **60%** of
+the price. Jobs below their floor are flagged red on the booking and listed on
+**Money → Job Economics**. Flagged, not blocked — sometimes it's still the right
+call, and there's a box to record why.
+
+## What a candidate is told
+
+The conditional-offer email (sent when a video interview is approved) states the
+hourly rate, gives two worked examples, and says plainly that pay never depends on
+what the customer is charged. The public pay chart says the same. Both are
+generated from the rate in settings, so they can't drift out of date.
+
+## ⚖️ Before changing any of this
+
+Pay terms are part of the contractor agreement. Have an employment attorney review
+the agreement text before announcing a change to the team — particularly anything
+touching how hours are set or how work is directed, which are the facts that bear
+on independent-contractor classification in Florida.

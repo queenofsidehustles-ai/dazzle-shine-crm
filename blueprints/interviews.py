@@ -356,6 +356,8 @@ def send_invite(app_id):
 def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_url=None,
                          include_bgcheck=True):
     first = (name or 'there').split()[0]
+    from pricing import get_labor_rate
+    labor_rate = get_labor_rate()   # quoted in both the English and Spanish blocks below
     chart_line = ''
     if pay_chart_url:
         chart_line = (f'<div style="text-align:center;margin-top:14px">'
@@ -449,15 +451,15 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
     <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
       <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 What You'll Earn</div>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        You start at <strong>50% of every job</strong> you complete, paid after each clean. In real terms,
-        that's about <strong>$35–$48 an hour</strong> depending on the home. For example:
+        <strong>${labor_rate:.0f} for every hour of work</strong>, paid after each clean. The same rate on
+        every job type, for every cleaner — no tiers, no haggling. For example:
       </p>
       <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
-        <li>A 1-bed/1-bath standard clean is a $145 job — <strong>you earn $72.50</strong> for about 1.5 hours (~$48/hr).</li>
-        <li>A 3-bed/2-bath standard clean is a $225 job — <strong>you earn $112.50</strong> for about 3 hours (~$37/hr).</li>
+        <li>A 1-bed/1-bath standard clean is about 1.5 hours — <strong>you earn ${labor_rate * 1.5:.2f}</strong>.</li>
+        <li>A 3-bed/2-bath standard clean is about 3 hours — <strong>you earn ${labor_rate * 3:.2f}</strong>.</li>
       </ul>
-      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">⭐ Our top performers grow to 55% of every job — earn it with great reviews and reliability.</p>
-      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">The more efficiently you work, the higher your effective hourly rate.</p>
+      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ Your pay never depends on what the customer is charged. If we discount a job, that comes out of our side — not yours.</p>
+      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">Every job offer shows you the hours and your exact dollar amount <em>before</em> you accept it. Working alongside someone? The hours are shared, so you both earn ${labor_rate:.0f}/hour and finish sooner.</p>
       {chart_line}
     </div>
     {accept_block}
@@ -509,15 +511,15 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
     <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
       <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 Lo que Ganarás</div>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        Comienzas con el <strong>50% de cada trabajo</strong> que completes, pagado después de cada limpieza. En términos reales,
-        eso es aproximadamente <strong>$35–$48 por hora</strong> según el hogar. Por ejemplo:
+        <strong>${labor_rate:.0f} por cada hora de trabajo</strong>, pagado después de cada limpieza. La misma
+        tarifa en todos los tipos de trabajo, para todos los limpiadores — sin niveles, sin negociar. Por ejemplo:
       </p>
       <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
-        <li>Una limpieza estándar de 1 hab/1 baño es un trabajo de $145 — <strong>ganas $72.50</strong> por aprox. 1.5 horas (~$48/hr).</li>
-        <li>Una limpieza estándar de 3 hab/2 baños es un trabajo de $225 — <strong>ganas $112.50</strong> por aprox. 3 horas (~$37/hr).</li>
+        <li>Una limpieza estándar de 1 hab/1 baño toma aprox. 1.5 horas — <strong>ganas ${labor_rate * 1.5:.2f}</strong>.</li>
+        <li>Una limpieza estándar de 3 hab/2 baños toma aprox. 3 horas — <strong>ganas ${labor_rate * 3:.2f}</strong>.</li>
       </ul>
-      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">⭐ Nuestros mejores contratistas crecen al 55% de cada trabajo — gánalo con excelentes reseñas y confiabilidad.</p>
-      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">Cuanto más eficiente trabajes, mayor será tu tarifa por hora.</p>
+      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ Tu pago nunca depende de lo que se le cobra al cliente. Si damos un descuento, sale de nuestra parte — no de la tuya.</p>
+      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">Cada oferta de trabajo te muestra las horas y tu monto exacto <em>antes</em> de aceptarla. ¿Trabajas junto a otra persona? Las horas se reparten, así que ambos ganan ${labor_rate:.0f}/hora y terminan más rápido.</p>
     </div>
 
     <!-- EXPECTATIVAS IC -->
