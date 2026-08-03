@@ -44,6 +44,15 @@
       figure ÷ {{ current.max_labor_pct }}%. Jobs under their floor are flagged red on the booking,
       and listed on the Job Economics report. Flagged, not blocked — sometimes it's still the right call.
     </p>
+    <div class="form-group" style="max-width:220px;margin-top:14px">
+      <label>Card fee taken off tips (%)</label>
+      <input type="number" name="tip_fee_pct" step="0.1" min="0" max="20" value="{{ current.tip_fee_pct }}" />
+    </div>
+    <p style="font-size:0.85rem;color:#5f5878;margin-top:-8px">
+      What the card processor charges on a tip, deducted before it's handed on — so a
+      ${{ '%.0f' % 25 }} tip passes on ${{ '%.2f' % (25 - 25 * (current.tip_fee_pct | float) / 100) }}.
+      Set to 0 to absorb it yourself. The payment page tells customers the card fee comes off.
+    </p>
     <p style="font-size:0.82rem;color:#9a95ad;margin-top:8px">
       Each job locks in the rate it was quoted at, so changing the rate here never restates an
       existing job. Unpaid jobs offer a <strong>Re-rate</strong> button if you want them moved.

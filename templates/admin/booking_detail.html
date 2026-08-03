@@ -190,9 +190,32 @@
             {% if booking.labor_budget is none %}
               No estimate yet, so this job still pays the old 50%. Add hours and press <strong>Save Changes</strong> above to switch it over.
             {% else %}
-              Two cleaners split this and each finish in half the time — same ${{ '%.0f' % labor_rate }}/hour either way. Change the hours if this job is harder than the chart assumes.
+              Two cleaners split this and each finish in half the time — same ${{ '%.0f' % booking.rate_applied }}/hour either way. Change the hours if this job is harder than the chart assumes.
             {% endif %}
           </p>
+
+          {# Working it herself takes hours out of the paid pot and earns her a
+             share of the tip — she isn't paying herself, but she is doing work. #}
+          <div style="background:#faf9fd;border:1px solid #e4dfef;border-radius:9px;padding:10px 12px;margin-top:10px">
+            <label style="font-size:0.84rem;font-weight:700;display:block;margin-bottom:5px">🧽 Are you working this job?</label>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <input type="number" step="0.25" min="0" name="owner_hours" form="jobEditForm"
+                     value="{{ booking.owner_hours or '' }}" placeholder="0"
+                     style="width:80px;margin:0" />
+              <span style="font-size:0.83rem;color:#9a95ad">of the {{ '%g' % (booking.estimated_hours or 0) }} hours are yours</span>
+            </div>
+            {% if booking.owner_hours %}
+            <p style="font-size:0.78rem;color:#276749;margin-top:6px">
+              You're doing {{ '%g' % booking.owner_hours }} hrs, so the cleaners are paid for
+              <strong>{{ '%g' % booking.payable_hours }} hrs</strong> — not the full {{ '%g' % booking.estimated_hours }}.
+              {% if booking.tip_amount %}You keep <strong>${{ '%.2f' % booking.owner_tip_share }}</strong> of the tip.{% endif %}
+            </p>
+            {% else %}
+            <p style="font-size:0.76rem;color:#9a95ad;margin-top:5px">
+              Leave blank if a cleaner does the whole job. Put your hours in and they come out of the paid pot — and you take that share of any tip.
+            </p>
+            {% endif %}
+          </div>
         </div>
 
         {% if booking.below_floor_by %}

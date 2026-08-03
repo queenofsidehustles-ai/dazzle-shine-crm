@@ -421,6 +421,7 @@ def _migrate_db():
         # from price and from labor so they never distort revenue or margin.
         ('booking', 'tip_amount',           'FLOAT DEFAULT 0'),
         ('contractor_payment', 'tip_amount', 'FLOAT DEFAULT 0'),
+        ('booking', 'owner_hours',          'FLOAT DEFAULT 0'),
     ]
     for table, col, col_type in new_cols:
         try:

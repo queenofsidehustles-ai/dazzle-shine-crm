@@ -255,6 +255,12 @@ def detail(booking_id):
             except ValueError:
                 pass
         booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
+        own_raw = request.form.get('owner_hours', '').strip()
+        if own_raw != '':
+            try:
+                booking.owner_hours = max(0.0, float(own_raw))
+            except ValueError:
+                pass
 
         newly_completed = (booking.status == 'completed' and old_status != 'completed')
         if newly_completed:

@@ -88,7 +88,8 @@ class Booking(db.Model):
     discount_code = db.Column(db.String(50))
     discount_amount = db.Column(db.Float, default=0)
     # Payroll
-    estimated_hours = db.Column(db.Float)   # person-hours of WORK in this job — drives cleaner pay
+    estimated_hours = db.Column(db.Float)   # total person-hours of WORK in this job
+    owner_hours = db.Column(db.Float, default=0)  # hours the owner works herself — unpaid, but shares the tip
     labor_rate_applied = db.Column(db.Float)  # $/hr locked in when quoted, so raising the rate never restates old jobs
     below_floor_reason = db.Column(db.String(200))  # why this was taken under the floor price
     hours_worked = db.Column(db.Float)
@@ -160,10 +161,18 @@ class Booking(db.Model):
         return get_labor_rate()
 
     @property
+    def payable_hours(self):
+        """Hours somebody gets PAID for — the job's work minus whatever the owner
+        does herself. She doesn't pay herself, so her hours leave the pot."""
+        if not self.estimated_hours:
+            return None
+        return max(0.0, round(self.estimated_hours - (self.owner_hours or 0), 2))
+
+    @property
     def labor_budget(self):
         """The pot of money the cleaners on this job share.
 
-        person-hours of work × the hourly rate this job was quoted at.
+        payable person-hours × the hourly rate this job was quoted at.
         Deliberately has nothing to do with the price — discount a job and this
         doesn't move, so a discount comes out of the owner's margin instead of
         the cleaner's pay.
@@ -173,7 +182,7 @@ class Booking(db.Model):
         percentage in that case, so nothing already on the books changes."""
         if not self.estimated_hours:
             return None
-        return round(self.estimated_hours * self.rate_applied, 2)
+        return round((self.payable_hours or 0) * self.rate_applied, 2)
 
     @property
     def rate_is_stale(self):
@@ -270,29 +279,58 @@ class Booking(db.Model):
         return round(budget / size, 2)
 
     def hours_each(self, size=None):
-        """Person-hours each cleaner works, for showing alongside their pay."""
+        """Paid hours each cleaner works, for showing alongside their pay."""
         if not self.estimated_hours:
             return None
-        return round(self.estimated_hours / max(1, size or self.crew_size or 1), 2)
+        return round((self.payable_hours or 0) / max(1, size or self.crew_size or 1), 2)
+
+    @property
+    def tip_fee(self):
+        """The card fee on the tip itself. Stripe charges its percentage on the
+        whole payment, so the tip's own share of that is what gets deducted —
+        not the flat per-transaction cent, which would have been charged on the
+        cleaning anyway."""
+        gross = round(self.tip_amount or 0, 2)
+        if gross <= 0:
+            return 0.0
+        from pricing import get_tip_fee_percent
+        return round(gross * (get_tip_fee_percent() or 0) / 100.0, 2)
+
+    @property
+    def tip_net(self):
+        """What's actually left of the tip to hand out."""
+        return round(max(0.0, (self.tip_amount or 0) - self.tip_fee), 2)
+
+    @property
+    def owner_tip_share(self):
+        """The owner's cut of the tip when she worked the job herself, in
+        proportion to the hours she did. Working half the job means half the
+        tip; not working it at all means none."""
+        net = self.tip_net
+        hrs = self.owner_hours or 0
+        total = self.estimated_hours or 0
+        if net <= 0 or hrs <= 0 or total <= 0:
+            return 0.0
+        return round(net * min(hrs, total) / total, 2)
 
     def tip_for(self, staff):
-        """This cleaner's share of the customer's tip.
+        """This cleaner's share of the tip, after the card fee and after the
+        owner's share if she worked the job too.
 
-        Solo: all of it. Crew: split in proportion to their pay, so the person
-        who did more of the work gets more of the tip. The owner never keeps
-        any part of it."""
-        tip = round(self.tip_amount or 0, 2)
-        if tip <= 0:
+        Solo cleaner: everything left. Crew: split in proportion to their pay,
+        so whoever did more of the work gets more of the tip."""
+        pool = round(self.tip_net - self.owner_tip_share, 2)
+        if pool <= 0:
             return 0.0
         if not self.crew:
-            return tip
+            return pool
         total = sum(c.pay_amount or 0 for c in self.crew)
         row = self.crew_row_for(staff)
         if not row:
             return 0.0
         if total <= 0:                       # no split set — share it evenly
-            return round(tip / len(self.crew), 2)
-        return round(tip * (row.pay_amount or 0) / total, 2)
+            return round(pool / len(self.crew), 2)
+        return round(pool * (row.pay_amount or 0) / total, 2)
 
     def pay_for(self, staff):
         """What this one cleaner earns on this job — the single answer every

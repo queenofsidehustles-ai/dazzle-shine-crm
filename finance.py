@@ -133,17 +133,31 @@ def contractor_pay_between(start, end):
 
 
 def tips_between(start, end):
-    """Tips collected from customers and handed to cleaners. In and straight
-    out — never revenue, never a cost, no effect on profit."""
+    """Where the tip money went: what customers gave, what the card processor
+    took, the owner's share when she worked the job herself, and what reached
+    the cleaners.
+
+    Only the owner's share is hers — that part is income. The rest passes
+    through and must never touch revenue, labor or margin."""
     lo, hi = _dt_bounds(start, end)
-    collected = db.session.query(func.sum(Booking.tip_amount)).filter(
+    paid_jobs = Booking.query.filter(
         Booking.paid_at.isnot(None), Booking.paid_at >= lo, Booking.paid_at < hi,
-    ).scalar()
+        Booking.tip_amount > 0,
+    ).all()
+    collected = round(sum(b.tip_amount or 0 for b in paid_jobs), 2)
+    card_fee = round(sum(b.tip_fee for b in paid_jobs), 2)
+    owner_share = round(sum(b.owner_tip_share for b in paid_jobs), 2)
     passed_on = db.session.query(func.sum(ContractorPayment.tip_amount)).filter(
         ContractorPayment.created_at >= lo, ContractorPayment.created_at < hi,
         ContractorPayment.status == 'paid',
     ).scalar()
-    return round(float(collected or 0), 2), round(float(passed_on or 0), 2)
+    return {
+        'collected': collected,
+        'card_fee': card_fee,
+        'owner_share': owner_share,
+        'passed_on': round(float(passed_on or 0), 2),
+        'still_owed': round(collected - card_fee - owner_share - float(passed_on or 0), 2),
+    }
 
 
 def commissions_paid_between(start, end):
@@ -181,7 +195,7 @@ def profit_and_loss(start, end):
     commissions = commissions_paid_between(start, end)
     fees, fee_months_missing = processing_fees_between(start, end)
 
-    tips_collected, tips_passed_on = tips_between(start, end)
+    tips = tips_between(start, end)
 
     rows = expenses_between(start, end)
     by_cat = {}
@@ -204,7 +218,7 @@ def profit_and_loss(start, end):
     # Cleaner pay and card fees are direct costs of doing the job — taking them
     # off first shows what the work itself actually yields.
     gross_profit = round(revenue - contractor - fees, 2)
-    net_profit = round(gross_profit - commissions - typed_total, 2)
+    net_profit = round(gross_profit - commissions - typed_total + tips['owner_share'], 2)
 
     ad_spend = round(sum(c['amount'] for c in categories
                          if c['key'] in ADVERTISING_CATEGORIES), 2)
@@ -216,9 +230,7 @@ def profit_and_loss(start, end):
         'jobs_paid': jobs_paid_between(start, end),
         'contractor_pay': contractor,
         'contractor_payments': contractor_payments_between(start, end),
-        'tips_collected': tips_collected,
-        'tips_passed_on': tips_passed_on,
-        'tips_owed': round(tips_collected - tips_passed_on, 2),
+        'tips': tips,
         'processing_fees': fees,
         'fee_months_missing': fee_months_missing,
         'commissions': commissions,

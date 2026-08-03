@@ -91,6 +91,7 @@ DEPOSIT_AMOUNT       = 50   # dollars
 CONTRACTOR_SPLIT_PCT = 50   # percent — LEGACY, only used by jobs with no estimated hours
 LABOR_RATE_DEFAULT   = 43   # dollars per person-hour paid to cleaners (the new model)
 MAX_LABOR_PCT_DEFAULT = 60  # labor may not exceed this share of a job's price — sets the floor
+TIP_FEE_PCT_DEFAULT  = 2.9  # card processing taken off a tip before it's handed on
 LEAD_FEE_DEFAULT     = 25   # dollars — ad cost added to customer price, not shared with contractor
 SQFT_SURCHARGE_RATE  = 30   # dollars per 200 sqft over standard
 # Time those extra square feet actually take. Derived from this pricing matrix
@@ -141,6 +142,13 @@ def get_extra_hours(extra_name):
 
 def get_contractor_split():
     return _db_get('contractor_split', CONTRACTOR_SPLIT_PCT)
+
+
+def get_tip_fee_percent():
+    """Card processing deducted from a tip before it reaches the cleaner.
+    Stripe's percentage only — the flat per-transaction cent isn't included,
+    because that would have been charged on the cleaning anyway."""
+    return _db_get('tip_fee_pct', TIP_FEE_PCT_DEFAULT)
 
 
 def get_max_labor_percent():
