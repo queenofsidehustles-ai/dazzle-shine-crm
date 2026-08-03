@@ -206,6 +206,104 @@ def profit_and_loss(start, end):
     }
 
 
+def job_economics(start, end):
+    """Per-job margin, and the aggregates behind it.
+
+    Answers the questions the P&L can't: which jobs actually make money, what
+    discounting really costs, which lead sources are worth buying, and what each
+    cleaner is genuinely earning per hour — the last being the early warning
+    that someone is about to quit.
+
+    Counted by job date, not payment date: this is about whether the WORK is
+    profitable, which is a different question from when cash moved."""
+    jobs = Booking.query.filter(
+        Booking.preferred_date >= start.isoformat(),
+        Booking.preferred_date <= end.isoformat(),
+        Booking.status.in_(['completed', 'confirmed', 'in_progress']),
+    ).order_by(Booking.preferred_date).all()
+
+    rows, by_source, by_cleaner, below_floor = [], {}, {}, []
+    for b in jobs:
+        labor = b.labor_budget
+        if labor is None:                       # legacy percentage job
+            labor = round(b.commissionable_price * 0.5, 2)
+        price = b.price or 0
+        lead_fee = b.lead_fee or 0
+        discount = b.discount_amount or 0
+        # What's left after paying for the cleaning and the ad that won it.
+        margin = round(price - labor - lead_fee, 2)
+        row = {
+            'booking': b,
+            'price': price,
+            'baseline': round(price + discount, 2),
+            'discount': discount,
+            'labor': labor,
+            'lead_fee': lead_fee,
+            'margin': margin,
+            'labor_pct': round(labor / price * 100, 1) if price else 0,
+            'margin_pct': round(margin / price * 100, 1) if price else 0,
+            'hours': b.estimated_hours,
+            'floor': b.floor_price,
+            'under_floor': b.below_floor_by,
+        }
+        rows.append(row)
+        if b.below_floor_by:
+            below_floor.append(row)
+
+        src = (b.source or 'unknown').strip().lower() or 'unknown'
+        s = by_source.setdefault(src, {'source': src, 'jobs': 0, 'revenue': 0.0,
+                                       'labor': 0.0, 'lead_fee': 0.0, 'discount': 0.0,
+                                       'margin': 0.0})
+        s['jobs'] += 1
+        for k, v in (('revenue', price), ('labor', labor), ('lead_fee', lead_fee),
+                     ('discount', discount), ('margin', margin)):
+            s[k] += v
+
+        # Effective hourly per cleaner — what they're really earning.
+        if b.crew:
+            people = [(c.staff.name, c.pay_amount or 0, b.hours_each() or 0)
+                      for c in b.crew if c.staff]
+        elif b.assigned_cleaner:
+            people = [(b.assigned_cleaner, labor, b.estimated_hours or 0)]
+        else:
+            people = []
+        for name, paid, hrs in people:
+            c = by_cleaner.setdefault(name, {'name': name, 'jobs': 0, 'paid': 0.0, 'hours': 0.0})
+            c['jobs'] += 1
+            c['paid'] += paid
+            c['hours'] += hrs
+
+    for s in by_source.values():
+        for k in ('revenue', 'labor', 'lead_fee', 'discount', 'margin'):
+            s[k] = round(s[k], 2)
+        s['margin_pct'] = round(s['margin'] / s['revenue'] * 100, 1) if s['revenue'] else 0
+        s['cost_per_job'] = round(s['lead_fee'] / s['jobs'], 2) if s['jobs'] else 0
+    for c in by_cleaner.values():
+        c['paid'] = round(c['paid'], 2)
+        c['hours'] = round(c['hours'], 2)
+        c['effective_hourly'] = round(c['paid'] / c['hours'], 2) if c['hours'] else None
+
+    revenue = round(sum(r['price'] for r in rows), 2)
+    labor_total = round(sum(r['labor'] for r in rows), 2)
+    return {
+        'start': start, 'end': end,
+        'rows': rows,
+        'jobs': len(rows),
+        'revenue': revenue,
+        'baseline': round(sum(r['baseline'] for r in rows), 2),
+        'discount_total': round(sum(r['discount'] for r in rows), 2),
+        'labor_total': labor_total,
+        'lead_fee_total': round(sum(r['lead_fee'] for r in rows), 2),
+        'margin_total': round(sum(r['margin'] for r in rows), 2),
+        'labor_pct': round(labor_total / revenue * 100, 1) if revenue else 0,
+        'margin_pct': round(sum(r['margin'] for r in rows) / revenue * 100, 1) if revenue else 0,
+        'by_source': sorted(by_source.values(), key=lambda s: s['margin'], reverse=True),
+        'by_cleaner': sorted(by_cleaner.values(),
+                             key=lambda c: c['effective_hourly'] or 0),
+        'below_floor': below_floor,
+    }
+
+
 def monthly_trend(months=6, today=None):
     """Revenue vs net profit for the last N months, oldest first — for the chart."""
     today = today or date.today()

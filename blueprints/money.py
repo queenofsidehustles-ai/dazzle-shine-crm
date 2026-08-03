@@ -270,6 +270,18 @@ def sync_fees():
     return redirect(url_for('money.pnl', period=kind, year=year, month=month))
 
 
+@money_bp.route('/jobs')
+@owner_required
+def job_economics():
+    """Which jobs make money, what discounting costs, and what each cleaner is
+    really earning per hour."""
+    kind, year, month = _period_from_request()
+    start, end, label = finance.period_bounds(kind, year, month)
+    return render_template('admin/job_economics.html',
+        e=finance.job_economics(start, end), period_label=label,
+        kind=kind, year=year, month=month)
+
+
 @money_bp.route('/pnl/export')
 @owner_required
 def export_csv():
