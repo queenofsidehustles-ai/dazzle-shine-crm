@@ -88,6 +88,8 @@ class Booking(db.Model):
     discount_amount = db.Column(db.Float, default=0)
     # Payroll
     estimated_hours = db.Column(db.Float)   # person-hours of WORK in this job — drives cleaner pay
+    labor_rate_applied = db.Column(db.Float)  # $/hr locked in when quoted, so raising the rate never restates old jobs
+    below_floor_reason = db.Column(db.String(200))  # why this was taken under the floor price
     hours_worked = db.Column(db.Float)
     cleaner_paid_at = db.Column(db.DateTime)             # when the cleaner was paid out for THIS job
     cleaner_payment_id = db.Column(db.Integer)           # the ContractorPayment.id that paid it
@@ -147,20 +149,41 @@ class Booking(db.Model):
 
     # ── Labor budget: what the WORK is worth, not what the customer paid ─────
     @property
+    def rate_applied(self):
+        """The $/hour this job was quoted at. Locked at quote time, so changing
+        the company rate tomorrow can never restate what a job from last month
+        was worth."""
+        if self.labor_rate_applied:
+            return self.labor_rate_applied
+        from pricing import get_labor_rate
+        return get_labor_rate()
+
+    @property
     def labor_budget(self):
         """The pot of money the cleaners on this job share.
 
-        person-hours of work × the hourly rate. Deliberately has nothing to do
-        with the price — discount a job and this doesn't move, so a discount
-        comes out of the owner's margin instead of the cleaner's pay.
+        person-hours of work × the hourly rate this job was quoted at.
+        Deliberately has nothing to do with the price — discount a job and this
+        doesn't move, so a discount comes out of the owner's margin instead of
+        the cleaner's pay.
 
         Returns None when the job has no estimated hours, which is how every
         booking made before this existed behaves. Callers fall back to the old
         percentage in that case, so nothing already on the books changes."""
         if not self.estimated_hours:
             return None
+        return round(self.estimated_hours * self.rate_applied, 2)
+
+    @property
+    def rate_is_stale(self):
+        """True when the company rate has moved since this job was quoted and
+        the job hasn't been paid — the only case where re-rating is safe."""
         from pricing import get_labor_rate
-        return round(self.estimated_hours * get_labor_rate(), 2)
+        if not self.labor_rate_applied or self.cleaner_paid_at:
+            return False
+        if any(c.paid_at for c in self.crew):
+            return False
+        return abs(self.labor_rate_applied - get_labor_rate()) > 0.001
 
     @property
     def labor_percent(self):
@@ -169,6 +192,29 @@ class Booking(db.Model):
         if budget is None or not self.price:
             return None
         return round(budget / self.price * 100, 1)
+
+    @property
+    def floor_price(self):
+        """The least this job can be sold for and still be worth doing.
+
+        Worked back from the labor it takes: if labor must stay under, say, 60%
+        of the price, then the price can't drop below labor ÷ 0.60. The lead fee
+        rides on top, because that money is recovering ad spend, not paying for
+        cleaning."""
+        budget = self.labor_budget
+        if budget is None:
+            return None
+        from pricing import get_max_labor_percent
+        cap = (get_max_labor_percent() or 60) / 100.0
+        return round(budget / cap + (self.lead_fee or 0), 2)
+
+    @property
+    def below_floor_by(self):
+        """Dollars this job is under its floor, or None when it's fine."""
+        floor = self.floor_price
+        if floor is None or not self.price or self.price >= floor:
+            return None
+        return round(floor - self.price, 2)
 
     @property
     def service_label(self):

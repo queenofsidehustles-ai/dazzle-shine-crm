@@ -155,6 +155,9 @@
       </form>
     </div>
 
+    {# Sits outside the crew form so its button can post on its own #}
+    <form method="POST" id="reRateForm" action="{{ url_for('bookings.re_rate', booking_id=booking.id) }}"></form>
+
     <!-- Crew — big houses that need more than one cleaner -->
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">👥 Who's Paid For This Job</h2>
@@ -169,11 +172,20 @@
             <input type="number" step="0.25" min="0" name="estimated_hours" form="jobEditForm"
                    value="{{ booking.estimated_hours or '' }}" placeholder="e.g. 3"
                    style="width:90px;margin:0" />
-            <span style="color:#9a95ad;font-size:0.9rem">hours × ${{ '%.0f' % labor_rate }}/hr =</span>
+            <span style="color:#9a95ad;font-size:0.9rem">hours × ${{ '%.0f' % booking.rate_applied }}/hr =</span>
             <strong style="font-size:1.05rem;color:#b98a33">
               {{ '$%.2f' % booking.labor_budget if booking.labor_budget is not none else '—' }}
             </strong>
           </div>
+          {% if booking.rate_is_stale %}
+          {# The job keeps the rate it was quoted at. Moving it is deliberate. #}
+          <div style="background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:8px;padding:9px 12px;margin-top:8px;font-size:0.83rem">
+            This job was quoted at <strong>${{ '%.0f' % booking.labor_rate_applied }}/hr</strong>; your current rate is
+            <strong>${{ '%.0f' % labor_rate }}/hr</strong>. It keeps the old rate unless you move it.
+            <button type="submit" form="reRateForm" class="btn btn-outline"
+                    style="padding:4px 12px;font-size:0.78rem;margin-left:6px">Re-rate to ${{ '%.0f' % labor_rate }}</button>
+          </div>
+          {% endif %}
           <p style="font-size:0.78rem;color:#9a95ad;margin-top:5px">
             {% if booking.labor_budget is none %}
               No estimate yet, so this job still pays the old 50%. Add hours and press <strong>Save Changes</strong> above to switch it over.
@@ -183,13 +195,27 @@
           </p>
         </div>
 
-        {% if booking.labor_percent is not none %}
+        {% if booking.below_floor_by %}
+        {# Priced under what the work costs plus overhead. Flagged, not blocked —
+           sometimes a job below the floor is still the right call. #}
+        <div style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;border-radius:9px;padding:11px 13px;margin-bottom:14px">
+          <div style="font-weight:700;font-size:0.9rem">🚩 ${{ '%.2f' % booking.below_floor_by }} below your floor price</div>
+          <div style="font-size:0.82rem;margin-top:3px">
+            This job needs <strong>${{ '%.2f' % booking.floor_price }}</strong> to cover
+            ${{ '%.2f' % booking.labor_budget }} of labor at your {{ '%.0f' % max_labor_pct }}% cap.
+            You're charging ${{ '%.2f' % booking.price }}.
+          </div>
+          <input type="text" name="below_floor_reason" form="jobEditForm"
+                 value="{{ booking.below_floor_reason or '' }}"
+                 placeholder="Taking it anyway? Say why — e.g. long-standing client, first job of a recurring plan"
+                 style="width:100%;margin-top:8px;padding:7px 9px;font-size:0.82rem;border:1px solid #fecaca;border-radius:7px" />
+        </div>
+        {% elif booking.labor_percent is not none %}
         {% set lp = booking.labor_percent %}
         <div style="border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:0.86rem;font-weight:600;
-                    background:{{ '#fee2e2' if lp > 55 else ('#fff8e1' if lp > 48 else '#e6f4ea') }};
-                    color:{{ '#991b1b' if lp > 55 else ('#7c4a04' if lp > 48 else '#276749') }}">
-          {% if lp > 55 %}⚠️ Labor is {{ lp }}% of this job's price — thin. Raise the price or lower the hours.
-          {% elif lp > 48 %}Labor is {{ lp }}% of this job's price.
+                    background:{{ '#fff8e1' if lp > 48 else '#e6f4ea' }};
+                    color:{{ '#7c4a04' if lp > 48 else '#276749' }}">
+          {% if lp > 48 %}Labor is {{ lp }}% of this job's price. Floor is ${{ '%.2f' % booking.floor_price }}.
           {% else %}✅ Labor is {{ lp }}% of this job's price — healthy.{% endif %}
         </div>
         {% endif %}

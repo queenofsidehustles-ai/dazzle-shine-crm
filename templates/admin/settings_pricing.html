@@ -34,8 +34,20 @@
       what the cleaner earns — the discount comes out of your margin instead. Each job's page
       shows labor as a % of that job's price so you can see when it's getting thin.
     </p>
+    <div class="form-group" style="max-width:220px;margin-top:14px">
+      <label>Floor: labor may not exceed (%)</label>
+      <input type="number" name="max_labor_pct" step="1" min="1" max="100" value="{{ current.max_labor_pct }}" />
+    </div>
+    <p style="font-size:0.85rem;color:#5f5878;margin-top:-8px">
+      Sets each job's <strong>floor price</strong> — the least it can be sold for and still be worth
+      doing. A job needing ${{ '%.0f' % current.labor_rate }}×hours of labor can't drop below that
+      figure ÷ {{ current.max_labor_pct }}%. Jobs under their floor are flagged red on the booking,
+      and listed on the Job Economics report. Flagged, not blocked — sometimes it's still the right call.
+    </p>
     <p style="font-size:0.82rem;color:#9a95ad;margin-top:8px">
-      Changing this affects jobs that haven't been paid yet. Anything already paid stays as it was.
+      Each job locks in the rate it was quoted at, so changing the rate here never restates an
+      existing job. Unpaid jobs offer a <strong>Re-rate</strong> button if you want them moved.
+      Anything already paid is untouchable.
     </p>
   </div>
 

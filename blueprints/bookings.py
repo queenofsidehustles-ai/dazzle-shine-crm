@@ -127,8 +127,12 @@ def new():
             except Exception:
                 est_hours = None
 
+        # Lock the rate this job was quoted at. Raising the company rate later
+        # must never change what an old job was worth.
+        from pricing import get_labor_rate as _rate
         b = Booking(
             estimated_hours=est_hours,
+            labor_rate_applied=_rate() if est_hours else None,
             name=name,
             email=(request.form.get('email', '').strip().lower() or None),
             phone=request.form.get('phone', '').strip(),
@@ -243,8 +247,14 @@ def detail(booking_id):
         if est_raw != '':
             try:
                 booking.estimated_hours = float(est_raw)
+                # First time a job gets hours, lock in today's rate. Never
+                # re-stamp after — that's what "Re-rate" below is for.
+                if booking.estimated_hours and not booking.labor_rate_applied:
+                    from pricing import get_labor_rate as _rate
+                    booking.labor_rate_applied = _rate()
             except ValueError:
                 pass
+        booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
 
         newly_completed = (booking.status == 'completed' and old_status != 'completed')
         if newly_completed:
@@ -291,13 +301,14 @@ def detail(booking_id):
 
     active_staff = Staff.query.filter_by(is_active=True).order_by(Staff.name).all()
     from blueprints.payments import payment_link_url, amount_due
-    from pricing import get_labor_rate
+    from pricing import get_labor_rate, get_max_labor_percent
     pay_url = payment_link_url(booking, 'full')          # ensures pay_token exists
     recurring_upcoming = recurring.upcoming_count(booking.recurring_group) if booking.recurring_group else 0
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff,
                            pay_url=pay_url, due=amount_due(booking),
                            recurring_upcoming=recurring_upcoming,
-                           labor_rate=get_labor_rate())
+                           labor_rate=get_labor_rate(),
+                           max_labor_pct=get_max_labor_percent())
 
 
 @bookings_bp.route('/<int:booking_id>/send-payment-link', methods=['POST'])
@@ -631,6 +642,29 @@ def _send_job_to(b, people):
     if failed:
         flash(f'Could not reach {", ".join(failed)} — check their phone/email on the Team page.', 'warning')
     return redirect(url_for('bookings.detail', booking_id=b.id))
+
+
+@bookings_bp.route('/<int:booking_id>/re-rate', methods=['POST'])
+@login_required
+def re_rate(booking_id):
+    """Move an unpaid job onto the current hourly rate.
+
+    Deliberately a separate, explicit action. Jobs keep the rate they were
+    quoted at so raising the company rate can't quietly restate work already
+    agreed — but an unpaid job sometimes should move, and this is the only way
+    it does."""
+    from pricing import get_labor_rate
+    b = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    if b.cleaner_paid_at or any(c.paid_at for c in b.crew):
+        flash('Someone has already been paid for this job — its rate stays as it was.', 'error')
+        return back
+    was, now = b.labor_rate_applied, get_labor_rate()
+    b.labor_rate_applied = now
+    db.session.commit()
+    flash(f'Re-rated from ${was:.0f} to ${now:.0f} per hour — this job now pays '
+          f'${b.labor_budget:.2f}.', 'success')
+    return back
 
 
 @bookings_bp.route('/<int:booking_id>/crew/send', methods=['POST'])

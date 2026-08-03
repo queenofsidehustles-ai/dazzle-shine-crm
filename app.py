@@ -415,6 +415,8 @@ def _migrate_db():
         # cleaner(s) are paid. Null on every existing booking, which is what
         # keeps them on the old percentage until they're re-estimated.
         ('booking', 'estimated_hours',      'FLOAT'),
+        ('booking', 'labor_rate_applied',   'FLOAT'),
+        ('booking', 'below_floor_reason',   'VARCHAR(200)'),
     ]
     for table, col, col_type in new_cols:
         try:

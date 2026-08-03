@@ -44,7 +44,7 @@ def pricing():
             PricingSetting.set('labor_rate', rate)
 
         # Bigger-home surcharge: price and the time it adds
-        for key in ('sqft_surcharge', 'sqft_hours'):
+        for key in ('sqft_surcharge', 'sqft_hours', 'max_labor_pct'):
             val = request.form.get(key)
             if val not in (None, ''):     # 0 is a legitimate answer
                 PricingSetting.set(key, val)
@@ -78,6 +78,8 @@ def pricing():
     from pricing import get_sqft_surcharge_rate, get_sqft_hours_rate
     current['sqft_surcharge'] = get_sqft_surcharge_rate()
     current['sqft_hours'] = get_sqft_hours_rate()
+    from pricing import get_max_labor_percent
+    current['max_labor_pct'] = get_max_labor_percent()
     for svc_key, svc in SERVICES.items():
         for field in ('base', 'per_extra_bed', 'per_extra_bath'):
             form_key = f"{svc_key}_{field}"
