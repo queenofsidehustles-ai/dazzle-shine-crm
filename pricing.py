@@ -91,7 +91,12 @@ DEPOSIT_AMOUNT       = 50   # dollars
 CONTRACTOR_SPLIT_PCT = 50   # percent — LEGACY, only used by jobs with no estimated hours
 LABOR_RATE_DEFAULT   = 43   # dollars per person-hour paid to cleaners (the new model)
 LEAD_FEE_DEFAULT     = 25   # dollars — ad cost added to customer price, not shared with contractor
-SQFT_SURCHARGE_RATE  = 15   # dollars per 200 sqft over standard
+SQFT_SURCHARGE_RATE  = 30   # dollars per 200 sqft over standard
+# Time those extra square feet actually take. Derived from this pricing matrix
+# itself, which implies ~528 sqft per cleaning hour across every home size — so
+# 200 sqft is a shade under 0.4 of an hour. Both numbers are editable in
+# Settings → Pricing, and any single job's hours can be typed over on the job.
+SQFT_HOURS_PER_200   = 0.4  # person-hours per 200 sqft over standard
 
 
 # ── DB getters (fall back to defaults above) ──────────────────────────────────
@@ -158,6 +163,12 @@ def get_sqft_surcharge_rate():
     return _db_get('sqft_surcharge', SQFT_SURCHARGE_RATE)
 
 
+def get_sqft_hours_rate():
+    """Person-hours added per 200 sqft over standard — what the cleaner is paid
+    for the extra ground to cover."""
+    return _db_get('sqft_hours', SQFT_HOURS_PER_200)
+
+
 def get_deposit():
     return _db_get('deposit_amount', DEPOSIT_AMOUNT)
 
@@ -177,12 +188,15 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
     multiplier = get_multiplier(service_type)
     base_price = round(std_price * multiplier, 2)
 
-    # Square footage surcharge
+    # Square footage surcharge — extra ground costs the customer more AND takes
+    # the cleaner longer, so it has to move both numbers together.
     sqft_surcharge = 0
+    sqft_increments = 0
     if sqft:
         standard_sqft = STANDARD_SQFT.get(beds, 800)
         over = max(0, int(sqft) - standard_sqft)
-        sqft_surcharge = (over // 200) * get_sqft_surcharge_rate()
+        sqft_increments = over // 200
+        sqft_surcharge = sqft_increments * get_sqft_surcharge_rate()
 
     # Add-ons
     extras_total = 0
@@ -210,7 +224,8 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
     std_hours = get_std_hours(beds, baths)
     hours = round(std_hours * multiplier, 2)
     extras_hours = round(sum(get_extra_hours(e) for e in extra_list), 2)
-    hours = round(hours + extras_hours, 2)
+    sqft_hours = round(sqft_increments * get_sqft_hours_rate(), 2)
+    hours = round(hours + extras_hours + sqft_hours, 2)
 
     # Contractor earnings — the work in the job at the flat hourly rate.
     # Deliberately not a share of client_price: that's what made a discount cut
@@ -224,6 +239,7 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
         'contractor_earnings':  contractor_earnings,
         'hours':                hours,
         'extras_hours':         extras_hours,
+        'sqft_hours':           sqft_hours,
         'hourly_rate':          hourly_rate,
         'base_price':           base_price,
         'sqft_surcharge':       sqft_surcharge,

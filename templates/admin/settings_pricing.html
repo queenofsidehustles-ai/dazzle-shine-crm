@@ -60,6 +60,35 @@
   {% endfor %}
 
   <div class="card" style="margin-bottom:20px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Bigger Homes</h2>
+    <p style="font-size:0.85rem;color:#5f5878;margin:0 0 14px">
+      For homes larger than usual for their bedroom count, charged per 200 sq ft over standard.
+      Extra ground costs the customer more <em>and</em> takes longer, so both move together.
+    </p>
+    {% set sq_labor = current.sqft_hours | float * current.labor_rate | float %}
+    {% set sq_pct = (sq_labor / (current.sqft_surcharge | float) * 100) if (current.sqft_surcharge | float) else 0 %}
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+      <div class="form-group" style="margin:0">
+        <label>Charge per 200 sq ft ($)</label>
+        <input type="number" name="sqft_surcharge" step="1" min="0" value="{{ current.sqft_surcharge }}" style="width:130px" />
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Adds to the job (hrs)</label>
+        <input type="number" name="sqft_hours" step="0.05" min="0" value="{{ current.sqft_hours }}" style="width:130px" />
+      </div>
+      <div style="padding-bottom:10px;font-size:0.88rem">
+        <span style="color:#9a95ad">Labor ${{ '%.2f' % sq_labor }} ·</span>
+        <strong style="color:{{ '#b91c1c' if sq_pct > 100 else ('#c05621' if sq_pct > 65 else '#065f46') }}">{{ '%.0f' % sq_pct }}% labor</strong>
+        <span style="color:#9a95ad">· you keep ${{ '%.2f' % ((current.sqft_surcharge | float) - sq_labor) }}</span>
+      </div>
+    </div>
+    <p style="font-size:0.8rem;color:#9a95ad;margin-top:10px">
+      Your price matrix works out to roughly 500 sq ft an hour, which is where 0.4 comes from.
+      Standard sizes: 1bd 800 · 2bd 1,200 · 3bd 1,800 · 4bd 2,400 · 5bd 3,200 sq ft.
+    </p>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Add-Ons</h2>
     <p style="font-size:0.85rem;color:#5f5878;margin:0 0 16px">
       Each add-on has a price <em>and</em> the time it takes. The hours are added to the job, so the

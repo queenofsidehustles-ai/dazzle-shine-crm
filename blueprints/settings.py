@@ -43,6 +43,12 @@ def pricing():
         if rate:
             PricingSetting.set('labor_rate', rate)
 
+        # Bigger-home surcharge: price and the time it adds
+        for key in ('sqft_surcharge', 'sqft_hours'):
+            val = request.form.get(key)
+            if val not in (None, ''):     # 0 is a legitimate answer
+                PricingSetting.set(key, val)
+
         # Save service prices
         for svc_key in SERVICES:
             for field in ('base', 'per_extra_bed', 'per_extra_bath'):
@@ -69,6 +75,9 @@ def pricing():
     current = {}
     current['deposit_amount'] = PricingSetting.get('deposit_amount', DEPOSIT_AMOUNT)
     current['labor_rate'] = get_labor_rate()
+    from pricing import get_sqft_surcharge_rate, get_sqft_hours_rate
+    current['sqft_surcharge'] = get_sqft_surcharge_rate()
+    current['sqft_hours'] = get_sqft_hours_rate()
     for svc_key, svc in SERVICES.items():
         for field in ('base', 'per_extra_bed', 'per_extra_bath'):
             form_key = f"{svc_key}_{field}"
