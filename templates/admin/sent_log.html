@@ -3,10 +3,45 @@
 {% block page_title %}Sent Messages Log{% endblock %}
 
 {% block content %}
+{# Connection status first. An empty log means one of two very different things
+   and the page has to say which. #}
+{% if not health.sms_ready or not health.email_ready %}
+<div class="card" style="margin-bottom:18px;border-color:#fecaca;background:#fff5f5">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:8px;color:#991b1b">⚠️ Messages can't go out</h2>
+  {% if not health.sms_ready %}
+  <p style="color:#991b1b;margin:0 0 6px;font-size:0.92rem">
+    <strong>📱 Texting is not connected.</strong> No text has been sent to anyone —
+    customers or cleaners. Missing in Railway:
+    <code style="background:#fff;padding:1px 6px;border-radius:5px">{{ health.sms_missing | join('</code>, <code style="background:#fff;padding:1px 6px;border-radius:5px">') | safe }}</code>
+  </p>
+  {% endif %}
+  {% if not health.email_ready %}
+  <p style="color:#991b1b;margin:0 0 6px;font-size:0.92rem">
+    <strong>✉️ Email is not connected.</strong> No email has been sent to anyone. Missing in Railway:
+    <code style="background:#fff;padding:1px 6px;border-radius:5px">RESEND_API_KEY</code>
+  </p>
+  {% endif %}
+  <p style="color:#7c4a04;font-size:0.85rem;margin:8px 0 0">
+    Add the missing values in your Railway project under <strong>Variables</strong>, then redeploy.
+    Until then the CRM keeps working, but nothing reaches a customer or a cleaner.
+  </p>
+</div>
+{% else %}
+<div class="card" style="margin-bottom:18px;border-color:#b7e0c4;background:#f4fbf6">
+  <p style="margin:0;color:#276749;font-weight:600;font-size:0.92rem">
+    ✅ Texting and email are both connected.
+    {% if health.failed_recently %}
+    <span style="color:#c05621">{{ health.failed_recently }} message{{ 's' if health.failed_recently != 1 }} failed — look for the red rows below to see why.</span>
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+
 <div class="card">
   <p style="color:#5f5878;margin:0 0 14px">
-    Every text and email the system has sent — from any page (pay updates, work orders, confirmations,
-    reminders, payment links, and customer emails). Newest first. Showing the latest 300.
+    Every text and email the system has <strong>tried</strong> to send — from any page (pay updates, work
+    orders, confirmations, reminders, payment links, and customer emails). Failures are recorded here too,
+    with the reason. Newest first. Showing the latest 300.
   </p>
 
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">

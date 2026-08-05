@@ -35,12 +35,24 @@ def sent_log():
     """A single 'Sent' history of every outbound text and email the system has
     sent from anywhere in the app (pay updates, work orders, confirmations,
     reminders, payment links, custom customer emails)."""
+    import os as _os
     channel = request.args.get('channel', '')
     q = OutboundLog.query
     if channel in ('sms', 'email'):
         q = q.filter(OutboundLog.channel == channel)
     logs = q.order_by(OutboundLog.created_at.desc()).limit(300).all()
-    return render_template('admin/sent_log.html', logs=logs,
+
+    # Whether the services are even connected. Without this the page can't tell
+    # you the difference between "nothing to send" and "nothing can be sent".
+    sms_missing = [n for n in ('TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE')
+                   if not _os.environ.get(n)]
+    health = {
+        'sms_ready': not sms_missing,
+        'sms_missing': sms_missing,
+        'email_ready': bool(_os.environ.get('RESEND_API_KEY')),
+        'failed_recently': OutboundLog.query.filter_by(status='failed').count(),
+    }
+    return render_template('admin/sent_log.html', logs=logs, health=health,
                            pretty_phone=pretty_phone, channel=channel)
 
 

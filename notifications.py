@@ -133,7 +133,16 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     if not from_name:
         from_name = os.environ.get('FROM_NAME', 'Dazzle & Shine Maids')
     if not api_key:
-        return False, 'RESEND_API_KEY is not set in Railway — no email service connected.'
+        # Log it. Returning silently made a missing key look like nothing was
+        # ever attempted — the Sent Log stayed empty and there was no way to
+        # tell "we tried and failed" from "we never tried".
+        detail = 'RESEND_API_KEY is not set in Railway — no email service connected.'
+        _log_outbound('email', to_email, to_name, subject, html, False, detail)
+        return False, detail
+    if not to_email:
+        detail = 'No email address on this record to send to.'
+        _log_outbound('email', to_email, to_name, subject, html, False, detail)
+        return False, detail
     # Replies go to the inbox Monica actually checks, even though the email is
     # sent "from" the branded domain address.
     reply_to = reply_to or os.environ.get('REPLY_TO_EMAIL') or \
@@ -198,9 +207,16 @@ def send_sms(to_phone, message):
         missing = [n for n, v in (('TWILIO_ACCOUNT_SID', account_sid),
                                   ('TWILIO_AUTH_TOKEN', auth_token),
                                   ('TWILIO_PHONE', from_phone)) if not v]
-        return False, 'Texting not connected — missing in Railway: ' + ', '.join(missing)
+        # Log it rather than returning silently — an unconfigured Twilio used to
+        # leave the Sent Log completely empty, which reads as "nothing happened"
+        # when the truth is "nothing could happen, and here's why".
+        detail = 'Texting not connected — missing in Railway: ' + ', '.join(missing)
+        _log_outbound('sms', to_phone, None, None, message, False, detail)
+        return False, detail
     if not to_phone:
-        return False, 'No phone number to send to.'
+        detail = 'No phone number on this record to send to.'
+        _log_outbound('sms', to_phone, None, None, message, False, detail)
+        return False, detail
     try:
         from twilio.rest import Client
         digits = ''.join(filter(str.isdigit, to_phone))
