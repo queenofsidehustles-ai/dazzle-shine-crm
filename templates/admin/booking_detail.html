@@ -521,6 +521,28 @@
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📩 Email + text this payment link</button>
       </form>
 
+      {# The confirmation used to fire only at the moment a booking was created.
+         If it didn't go then, there was no way to send it at all. #}
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 13px;margin-top:12px">
+        <div style="font-weight:700;font-size:0.88rem;color:#166534;margin-bottom:3px">📩 Send the booking confirmation</div>
+        <p style="font-size:0.79rem;color:#166534;margin:0 0 9px">
+          The full details — service, date, time, address and price — by email and text.
+          Add a payment request to the same send if you want one.
+        </p>
+        <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
+              style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+          <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid #bbf7d0;border-radius:8px;margin:0">
+            <option value="none">Confirmation only</option>
+            <option value="deposit" selected>+ ask for the deposit</option>
+            <option value="full">+ ask for the full amount</option>
+          </select>
+          <button type="submit" class="btn btn-gold" style="flex-shrink:0">Send</button>
+        </form>
+        {% if not booking.email and not booking.phone %}
+        <p style="font-size:0.78rem;color:#991b1b;margin:8px 0 0">⚠️ This booking has no email or phone — nothing can be sent.</p>
+        {% endif %}
+      </div>
+
       <!-- Real invoice -->
       <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}" style="margin-top:10px">
         <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">🧾 {{ 'Resend invoice ' + booking.invoice_number if booking.invoice_number else 'Send invoice' }}</button>

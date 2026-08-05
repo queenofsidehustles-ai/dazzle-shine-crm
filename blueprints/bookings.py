@@ -153,45 +153,11 @@ def new():
         db.session.add(b)
         db.session.commit()
 
-        # What the customer hears about. These used to be either/or — asking for
-        # a payment silently cancelled the confirmation, so a customer could be
-        # booked and told nothing at all if the payment link then failed.
-        # They're independent now, and each reports its own outcome.
-        pay_option = request.form.get('payment_option', 'none')
-        reachable = bool(b.email or b.phone)
-        sent, failed = [], []
-
-        if request.form.get('notify_customer') and reachable:
-            try:
-                _send_booking_confirmation(b)
-                sent.append('confirmation 📩')
-            except Exception as e:
-                failed.append(f'confirmation ({e})')
-
-        if pay_option in ('deposit', 'full') and reachable:
-            try:
-                from blueprints.payments import send_payment_link
-                send_payment_link(b, kind=pay_option)
-                sent.append('payment link 💳')
-            except Exception as e:
-                failed.append(f'payment link ({e})')
-
-        extra = ''
-        if sent:
-            extra += ' Sent the ' + ' and '.join(sent) + '.'
-        if not reachable:
-            extra += ' ⚠️ No email or phone on this booking, so the customer was told nothing.'
-        for f in failed:
-            # Say what broke, and record it, rather than discarding the reason.
-            flash(f'⚠️ Could not send the {f} to {b.name or "the customer"}. '
-                  f'Check the Sent Log for details.', 'warning')
-            try:
-                from notifications import _log_outbound
-                _log_outbound('email', b.email or b.phone, b.name,
-                              'Booking confirmation / payment link', '', False, f)
-            except Exception:
-                pass
-
+        extra = _notify_customer(
+            b,
+            confirmation=bool(request.form.get('notify_customer')),
+            pay_kind=request.form.get('payment_option', 'none'),
+        )
         flash(f'Booking created ✅ — now assign a cleaner below to text + email them the job.{extra}', 'success')
         return redirect(url_for('bookings.detail', booking_id=b.id))
 
@@ -340,6 +306,69 @@ def detail(booking_id):
                            recurring_upcoming=recurring_upcoming,
                            labor_rate=get_labor_rate(),
                            max_labor_pct=get_max_labor_percent())
+
+
+def _notify_customer(b, confirmation=True, pay_kind='none'):
+    """Tell the customer about their booking — the confirmation, a payment
+    request, or both. Returns a sentence for the flash message.
+
+    Shared by booking creation and the resend button so the two can't drift
+    apart. Confirmation and payment are independent: asking for money used to
+    silently cancel the confirmation, which meant a failed payment link left
+    the customer hearing nothing at all.
+
+    Each send reports separately and a failure keeps its reason, rather than
+    being swallowed into one vague warning that vanishes on the next click."""
+    reachable = bool(b.email or b.phone)
+    if not reachable:
+        return ' ⚠️ No email or phone on this booking, so the customer was told nothing.'
+
+    sent, failed = [], []
+    if confirmation:
+        try:
+            _send_booking_confirmation(b)
+            sent.append('confirmation 📩')
+        except Exception as e:
+            failed.append(f'confirmation ({e})')
+
+    if pay_kind in ('deposit', 'full'):
+        label = 'deposit request 💳' if pay_kind == 'deposit' else 'payment link 💳'
+        try:
+            from blueprints.payments import send_payment_link
+            send_payment_link(b, kind=pay_kind)
+            sent.append(label)
+        except Exception as e:
+            failed.append(f'{label} ({e})')
+
+    for f in failed:
+        flash(f'⚠️ Could not send the {f} to {b.name or "the customer"}. '
+              f'Check the Sent Log for details.', 'warning')
+        try:
+            from notifications import _log_outbound
+            _log_outbound('email', b.email or b.phone, b.name,
+                          'Booking confirmation / payment request', '', False, f)
+        except Exception:
+            pass
+
+    return (' Sent the ' + ' and '.join(sent) + '.') if sent else ''
+
+
+@bookings_bp.route('/<int:booking_id>/send-confirmation', methods=['POST'])
+@login_required
+def send_confirmation(booking_id):
+    """Send (or resend) the booking confirmation on an existing booking, with
+    an optional deposit or full payment request alongside it.
+
+    Previously the confirmation only ever fired the moment a booking was
+    created — so if it didn't go out then, there was no way to send it at all
+    short of writing the whole email by hand."""
+    b = Booking.query.get_or_404(booking_id)
+    note = _notify_customer(b, confirmation=True,
+                            pay_kind=request.form.get('pay_kind', 'none'))
+    flash(f'{b.name or "Customer"} —{note}' if note.strip()
+          else 'Nothing was sent — check the Sent Log for why.',
+          'success' if note.strip() else 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
 @bookings_bp.route('/<int:booking_id>/send-payment-link', methods=['POST'])
