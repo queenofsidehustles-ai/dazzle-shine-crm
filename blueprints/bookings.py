@@ -153,19 +153,44 @@ def new():
         db.session.add(b)
         db.session.commit()
 
-        # Payment: send a deposit/full link now, else just a booking confirmation.
+        # What the customer hears about. These used to be either/or — asking for
+        # a payment silently cancelled the confirmation, so a customer could be
+        # booked and told nothing at all if the payment link then failed.
+        # They're independent now, and each reports its own outcome.
         pay_option = request.form.get('payment_option', 'none')
-        extra = ''
-        try:
-            if pay_option in ('deposit', 'full') and (b.email or b.phone):
+        reachable = bool(b.email or b.phone)
+        sent, failed = [], []
+
+        if request.form.get('notify_customer') and reachable:
+            try:
+                _send_booking_confirmation(b)
+                sent.append('confirmation 📩')
+            except Exception as e:
+                failed.append(f'confirmation ({e})')
+
+        if pay_option in ('deposit', 'full') and reachable:
+            try:
                 from blueprints.payments import send_payment_link
                 send_payment_link(b, kind=pay_option)
-                extra = ' Payment link sent 💳'
-            elif request.form.get('notify_customer') and (b.email or b.phone):
-                _send_booking_confirmation(b)
-                extra = ' Customer confirmation sent 📩'
-        except Exception:
-            extra = ' (⚠️ a customer message failed to send)'
+                sent.append('payment link 💳')
+            except Exception as e:
+                failed.append(f'payment link ({e})')
+
+        extra = ''
+        if sent:
+            extra += ' Sent the ' + ' and '.join(sent) + '.'
+        if not reachable:
+            extra += ' ⚠️ No email or phone on this booking, so the customer was told nothing.'
+        for f in failed:
+            # Say what broke, and record it, rather than discarding the reason.
+            flash(f'⚠️ Could not send the {f} to {b.name or "the customer"}. '
+                  f'Check the Sent Log for details.', 'warning')
+            try:
+                from notifications import _log_outbound
+                _log_outbound('email', b.email or b.phone, b.name,
+                              'Booking confirmation / payment link', '', False, f)
+            except Exception:
+                pass
 
         flash(f'Booking created ✅ — now assign a cleaner below to text + email them the job.{extra}', 'success')
         return redirect(url_for('bookings.detail', booking_id=b.id))
