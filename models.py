@@ -778,6 +778,24 @@ class Staff(db.Model):
         return round((job_price or 0) * ((self.pay_rate or 0) / 100), 2)
 
 
+class Availability(db.Model):
+    """One cleaner's answer for one day: can they work it or not.
+
+    Collected by texting each of them a personal link once a week, so the
+    answers arrive as data the schedule can be built from rather than as a pile
+    of replies to read and remember."""
+    id = db.Column(db.Integer, primary_key=True)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False, index=True)
+    day = db.Column(db.String(10), nullable=False, index=True)   # YYYY-MM-DD
+    available = db.Column(db.Boolean, default=False)
+    note = db.Column(db.String(200))          # "after 2pm", "half day" …
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('staff_id', 'day', name='uq_availability_staff_day'),)
+
+    staff = db.relationship('Staff', backref=db.backref('availability', lazy=True))
+
+
 class ContractorPayment(db.Model):
     """A record of paying a contractor — via Stripe (automatic) or manually (Venmo/Zelle/etc.)."""
     id = db.Column(db.Integer, primary_key=True)

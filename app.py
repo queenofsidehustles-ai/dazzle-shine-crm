@@ -36,6 +36,7 @@ from blueprints.commissions import commissions_bp
 from blueprints.invoices import invoices_bp
 from blueprints.portal import portal_bp
 from blueprints.money import money_bp
+from blueprints.team import team_bp, availability_bp
 
 
 def create_app():
@@ -92,6 +93,8 @@ def create_app():
     app.register_blueprint(invoices_bp)
     app.register_blueprint(portal_bp)
     app.register_blueprint(money_bp)
+    app.register_blueprint(team_bp)
+    app.register_blueprint(availability_bp)
 
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor

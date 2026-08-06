@@ -340,6 +340,14 @@
       <a href="{{ url_for('interviews.admin_interviews') }}" class="{{ 'active' if request.blueprint == 'interviews' }}">
         <span class="icon">🎥</span> Interviews
       </a>
+      {% if is_owner %}
+      <a href="{{ url_for('team.availability') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('team.availability') or request.endpoint == 'team.ask_availability' }}">
+        <span class="icon">📅</span> Availability
+      </a>
+      <a href="{{ url_for('team.broadcast') }}" class="{{ 'active' if request.endpoint == 'team.broadcast' }}">
+        <span class="icon">📣</span> Message the Team
+      </a>
+      {% endif %}
 
       {% if is_owner %}
       <div class="nav-sec">Money</div>
