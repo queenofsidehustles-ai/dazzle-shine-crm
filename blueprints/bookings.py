@@ -223,7 +223,17 @@ def detail(booking_id):
         old_status = booking.status
         old_cleaner = booking.assigned_cleaner or ''
         booking.status = request.form.get('status', booking.status)
-        booking.price = request.form.get('price') or None
+        # Parse it. This used to assign the raw form string straight onto a Float
+        # column — SQLAlchemy coerced it on write, but anything doing arithmetic
+        # with booking.price in the same request hit 'str' - 'int' and blew up.
+        price_raw = (request.form.get('price') or '').strip().replace('$', '').replace(',', '')
+        if price_raw:
+            try:
+                booking.price = round(float(price_raw), 2)
+            except ValueError:
+                flash('That price is not a number — leaving it as it was.', 'warning')
+        else:
+            booking.price = None
         _fee = request.form.get('lead_fee', '').strip()
         if _fee != '':
             try:
@@ -251,6 +261,11 @@ def detail(booking_id):
             except ValueError:
                 pass
         booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
+        # Keep the balance in step with the price. It used to be written only by
+        # the price-correction route, so editing the price here left the
+        # Balance Collection card — and its charge button — showing a stale $0.
+        from blueprints.payments import amount_due as _due
+        booking.balance_due = _due(booking)
         own_raw = request.form.get('owner_hours', '').strip()
         if own_raw != '':
             try:

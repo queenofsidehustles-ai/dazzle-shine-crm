@@ -4,20 +4,31 @@ from notifications import send_email, send_sms
 
 
 def charge_balance(booking) -> tuple:
-    """Charge saved card for the remaining balance. Returns (success: bool, error: str)."""
+    """Charge saved card for the remaining balance. Returns (success: bool, error: str).
+
+    The amount comes from amount_due() — price minus any deposit, worked out
+    fresh. It used to come from the stored balance_due column, which is only
+    ever written by the price-correction route: never at booking, never when the
+    price is edited. So on a hand-made booking it sat at $0 and this refused to
+    charge anything at all."""
+    from blueprints.payments import amount_due
     stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
     notify_email = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
 
     if not stripe.api_key:
         return False, 'Stripe not configured'
+    if booking.paid_at:
+        return False, 'This booking is already paid in full'
     if booking.balance_collected:
         return False, 'Balance already collected'
     if not booking.stripe_customer_id or not booking.stripe_payment_method_id:
         return False, 'No saved payment method on file'
 
-    amount_cents = int((booking.balance_due or 0) * 100)
+    due = amount_due(booking)
+    booking.balance_due = due          # keep the stored figure honest
+    amount_cents = int(round(due * 100))
     if amount_cents <= 0:
-        return False, 'No balance due'
+        return False, 'No balance due — check the total price on this booking.'
 
     try:
         intent = stripe.PaymentIntent.create(

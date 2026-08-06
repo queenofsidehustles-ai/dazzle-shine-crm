@@ -629,16 +629,17 @@
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Balance Collection <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.78rem">(saved-card auto-charge)</span></h2>
       <div class="detail-row"><span class="dl">Total Price</span><span class="dv">${{ '%.2f' % (booking.price or 0) }}</span></div>
       <div class="detail-row"><span class="dl">Deposit Paid</span><span class="dv">$50.00 {% if booking.deposit_paid %}<span style="color:#065f46">✓</span>{% endif %}</span></div>
-      <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:#1f1333">${{ '%.2f' % (booking.balance_due or 0) }}</span></div>
+      <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:#1f1333">${{ '%.2f' % due }}</span></div>
 
       {% if booking.balance_collected %}
       <div style="background:#d1fae5;color:#065f46;padding:11px 14px;border-radius:9px;font-weight:700;font-size:0.9rem;margin-top:10px">
         Balance collected ✓
       </div>
       {% elif booking.stripe_payment_method_id %}
-      <button onclick="chargeBalance({{ booking.id }}, {{ booking.balance_due or 0 }})"
-              id="charge-btn" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px">
-        Charge ${{ '%.2f' % (booking.balance_due or 0) }} Now
+      <button onclick="chargeBalance({{ booking.id }}, {{ due }})"
+              id="charge-btn" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px"
+              {{ 'disabled' if due <= 0 }}>
+        {{ 'Nothing to charge' if due <= 0 else 'Charge $%.2f Now' % due }}
       </button>
       <p id="charge-msg" style="display:none;margin-top:8px;font-size:0.85rem;font-weight:600;border-radius:8px;padding:9px 12px"></p>
       <p style="font-size:0.78rem;color:#9a95ad;margin-top:6px">Card saved — also auto-charges on the morning of the cleaning.</p>
