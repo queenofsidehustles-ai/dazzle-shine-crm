@@ -60,6 +60,13 @@
       {% endif %}
 
       <hr style="border:none;border-top:1px solid #eee;margin:22px 0">
+      {# Terms on the invoice itself. A dispute is decided on documents, and this
+         is the document the customer actually keeps. #}
+      <div style="font-size:0.72rem;color:#5f5878">
+        <p style="font-weight:800;margin:0 0 6px;text-transform:uppercase;letter-spacing:0.08em;font-size:0.68rem;color:#9a95ad">Service &amp; payment terms</p>
+        {{ terms | safe }}
+      </div>
+      <hr style="border:none;border-top:1px solid #eee;margin:22px 0">
       <p class="muted">Questions? Contact {{ biz.name }}{% if biz.phone %} at {{ biz.phone }}{% endif %}{% if biz.email %} · {{ biz.email }}{% endif %}. Thank you for your business! 💛</p>
     </div>
   </div>

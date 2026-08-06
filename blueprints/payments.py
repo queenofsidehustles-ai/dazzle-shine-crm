@@ -142,8 +142,10 @@ def pay_page(token):
     booking = Booking.query.filter_by(pay_token=token).first_or_404()
     pk = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
     # Name the cleaner on the tip prompt — people tip a person, not a company.
+    import customer_terms
     cleaner = booking.crew_label or booking.assigned_cleaner or ''
     return render_template('public/pay.html', booking=booking, token=token,
+                           terms=customer_terms.as_html(),
                            stripe_pk=pk, due=amount_due(booking),
                            cleaner_first=cleaner.split()[0] if cleaner else '',
                            already_paid=bool(booking.paid_at), biz=_biz())

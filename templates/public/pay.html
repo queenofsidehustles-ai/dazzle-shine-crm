@@ -94,6 +94,18 @@
       <div class="err" id="err-box"></div>
       <button class="btn" id="pay-btn">Pay ${{ '%.0f'|format(due) }} →</button>
       <div class="secure">🔒 Secure payment powered by Stripe</div>
+
+      {# The terms travel with the money — a policy only on a website page is a
+         policy the customer never saw. #}
+      <details style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px">
+        <summary style="cursor:pointer;font-size:0.82rem;color:#5f5878;font-weight:600">
+          Service &amp; payment terms
+        </summary>
+        <div style="font-size:0.78rem;color:#5f5878;margin-top:10px">{{ terms | safe }}</div>
+      </details>
+      <p style="font-size:0.74rem;color:#9a95ad;margin-top:10px;text-align:center">
+        By paying you agree to our service &amp; payment terms above.
+      </p>
       {% else %}
       <div class="err" style="display:block">Online payment isn't set up yet. Please contact us to pay.</div>
       {% endif %}

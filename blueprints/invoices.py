@@ -39,6 +39,8 @@ def index():
 def view(token):
     b = Booking.query.filter_by(pay_token=token).first_or_404()
     from blueprints.payments import amount_due, payment_link_url
+    import customer_terms
     return render_template('public/invoice.html', b=b, biz=_biz(),
                            items=invoicing.line_items(b), due=amount_due(b),
+                           terms=customer_terms.as_html(),
                            status=invoicing.status(b), pay_url=payment_link_url(b, 'full'))

@@ -86,6 +86,18 @@
                 placeholder="Leave blank to use the built-in default for your worker model. Paste your custom agreement text here to override it.">{{ current.agreement_template }}</textarea>
       <span style="font-size:0.76rem;color:#9a95ad">Cleaners see this when they click their signing link. Leave blank to use the built-in IC or Employee agreement based on the worker model above.</span>
     </div>
+
+    <div class="form-group" style="margin-top:18px">
+      <label>📜 Customer Service &amp; Payment Terms</label>
+      <textarea name="customer_terms" rows="18"
+                style="font-family:monospace;font-size:0.82rem;line-height:1.7">{{ current.customer_terms }}</textarea>
+      <span style="font-size:0.76rem;color:#9a95ad">
+        Shown on every payment page and printed on every invoice, so the terms travel with the bill.
+        Wrap a line in <code>**stars**</code> to make it a heading.
+        <strong>These apply from the moment a customer sees them — they don't reach back to bookings already made.</strong>
+      </span>
+    </div>
+
     <button type="submit" class="btn btn-gold" style="margin-top:8px">Save Model Settings</button>
   </form>
 </div>
@@ -95,7 +107,7 @@
   <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Hiring Workflow</h2>
   <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">These power the one-click email buttons on each application. Set them once and the CRM does the rest.</p>
   <form method="POST">
-    {% for f in ['business_name','phone','email','address','city','state','zip_code','website','worker_model','reception_model','agreement_template'] %}
+    {% for f in ['business_name','phone','email','address','city','state','zip_code','website','worker_model','reception_model','agreement_template','customer_terms'] %}
     <input type="hidden" name="{{ f }}" value="{{ current[f] }}" />
     {% endfor %}
     <div class="form-group">

@@ -101,7 +101,8 @@ def pricing():
 def business():
     fields = ['business_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'website',
               'worker_model', 'reception_model', 'agreement_template',
-              'interview_calendar_link', 'bgcheck_provider_url', 'bgcheck_provider_name']
+              'interview_calendar_link', 'bgcheck_provider_url', 'bgcheck_provider_name',
+              'customer_terms']
     if request.method == 'POST':
         for f in fields:
             BusinessSetting.set(f, request.form.get(f, ''))
@@ -110,6 +111,9 @@ def business():
         return redirect(url_for('settings.business'))
 
     current = {f: BusinessSetting.get(f) for f in fields}
+    if not current.get('customer_terms'):
+        import customer_terms as _ct
+        current['customer_terms'] = _ct.DEFAULT_TERMS
     if not current['worker_model']:
         current['worker_model'] = 'contractor'
     if not current['reception_model']:
