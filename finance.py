@@ -146,17 +146,18 @@ def tips_between(start, end):
     ).all()
     collected = round(sum(b.tip_amount or 0 for b in paid_jobs), 2)
     card_fee = round(sum(b.tip_fee for b in paid_jobs), 2)
-    owner_share = round(sum(b.owner_tip_share for b in paid_jobs), 2)
     passed_on = db.session.query(func.sum(ContractorPayment.tip_amount)).filter(
         ContractorPayment.created_at >= lo, ContractorPayment.created_at < hi,
         ContractorPayment.status == 'paid',
     ).scalar()
+    passed_on = round(float(passed_on or 0), 2)
+    # Whatever's left after the card fee and what she handed out is hers —
+    # derived from what actually happened rather than from any split rule.
     return {
         'collected': collected,
         'card_fee': card_fee,
-        'owner_share': owner_share,
-        'passed_on': round(float(passed_on or 0), 2),
-        'still_owed': round(collected - card_fee - owner_share - float(passed_on or 0), 2),
+        'passed_on': passed_on,
+        'owner_share': round(collected - card_fee - passed_on, 2),
     }
 
 

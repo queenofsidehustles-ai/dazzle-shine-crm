@@ -1112,7 +1112,6 @@ def payroll():
         row = payroll_data.setdefault(s.name, {'staff': s, 'jobs': [], 'total': 0, 'paid_total': 0})
         pid = crew.payment_id if crew else job.cleaner_payment_id
         row['jobs'].append({'booking': job, 'earned': earned, 'paid': paid, 'crew': crew,
-                            'tip': job.tip_for(s),
                             'method': methods.get(pid), 'payment_id': pid})
         if paid:
             row['paid_total'] += earned
@@ -1168,13 +1167,26 @@ def pay_job(booking_id):
     method = request.form.get('method', 'stripe')
     when = _paid_on(request.form.get('paid_on'), b)
     pay = _send_payout(s, b, earned, method, idem_key=f'payout-job-{b.id}', when=when,
-                       tip=b.tip_for(s))
+                       tip=_typed_tip(request.form))
     if pay is None:
         return back
     b.cleaner_paid_at = when
     b.cleaner_payment_id = pay.id
     db.session.commit()
     return back
+
+
+def _typed_tip(form):
+    """The tip share SHE typed for this person on the payroll row.
+
+    Nothing is calculated. Tips get divided between whoever was actually on the
+    job — her, the cleaner, sometimes her daughter, who isn't in the CRM — so no
+    rule could get it right. She knows the split; the CRM records it."""
+    try:
+        tip = float((form.get('tip') or '').strip() or 0)
+    except ValueError:
+        return 0.0
+    return round(max(0.0, tip), 2)
 
 
 def _paid_on(raw, booking=None):
@@ -1267,7 +1279,7 @@ def pay_crew(crew_id):
     when = _paid_on(request.form.get('paid_on'), c.booking)
     pay = _send_payout(c.staff, c.booking, earned, request.form.get('method', 'stripe'),
                        idem_key=f'payout-crew-{c.id}', when=when,
-                       tip=c.booking.tip_for(c.staff))
+                       tip=_typed_tip(request.form))
     if pay is None:
         return back
     c.paid_at = pay.created_at

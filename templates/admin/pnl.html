@@ -136,8 +136,9 @@
       {% endif %}
 
       {% if p.tips.collected or p.tips.passed_on %}
-      {# Tips pass through, EXCEPT the share she earned by working the job
-         herself — that part is hers and does count toward profit. #}
+      {# Tips pass through, except whatever is left after the card fee and what
+         she handed out — that remainder is hers and counts toward profit. The
+         CRM never decides the split; she types each share when she pays. #}
       <tr><td colspan="2" style="padding-top:14px;font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:#9a95ad;font-weight:700">Tips</td></tr>
       <tr><td style="padding:7px 0 7px 14px;color:#5f5878">Collected from customers</td>
           <td style="text-align:right;color:#9a95ad">${{ '%.2f' % p.tips.collected }}</td></tr>
@@ -148,13 +149,8 @@
       <tr><td style="padding:7px 0 7px 28px;color:#9a95ad;font-size:0.9rem">less passed to cleaners</td>
           <td style="text-align:right;color:#9a95ad">−${{ '%.2f' % p.tips.passed_on }}</td></tr>
       {% if p.tips.owner_share %}
-      <tr><td style="padding:7px 0 7px 14px;color:#276749;font-weight:600">Your share — you worked those jobs</td>
+      <tr><td style="padding:7px 0 7px 14px;color:#276749;font-weight:600">Your share — what you kept</td>
           <td style="text-align:right;color:#276749;font-weight:700">+${{ '%.2f' % p.tips.owner_share }}</td></tr>
-      {% endif %}
-      {% if p.tips.still_owed > 0.01 %}
-      <tr><td style="padding:4px 0 7px 14px;color:#c05621;font-size:0.84rem">
-            ⏳ ${{ '%.2f' % p.tips.still_owed }} of tips still to hand over — pay it out on the Payroll page.</td>
-          <td></td></tr>
       {% endif %}
       {% endif %}
 

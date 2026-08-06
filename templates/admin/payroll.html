@@ -71,7 +71,14 @@
           <td>${{ '%.2f' % (row.booking.price or 0) }}</td>
           <td style="color:#9a95ad">{{ row.booking.hours_worked or '—' }}</td>
           <td style="font-weight:700;color:#065f46">${{ '%.2f' % row.earned }}
-            {% if row.tip %}<div style="font-size:0.72rem;font-weight:700;color:#1e7e34">+ ${{ '%.2f' % row.tip }} tip</div>{% endif %}
+            {% if row.booking.tip_amount %}
+            {# What the customer gave. Monica divides it herself, so this is
+               shown as information — the CRM allocates none of it. #}
+            <div style="font-size:0.7rem;font-weight:600;color:#1e7e34;margin-top:2px">
+              customer tipped ${{ '%.2f' % row.booking.tip_amount }}{% if row.booking.tip_fee %}<br>
+              <span style="color:#9a95ad;font-weight:400">${{ '%.2f' % row.booking.tip_net }} after card fee</span>{% endif %}
+            </div>
+            {% endif %}
           </td>
           <td style="text-align:right;white-space:nowrap">
             {% if row.paid %}
@@ -101,20 +108,29 @@
               <div style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
                 {% if data.staff.stripe_payouts_enabled %}
                 <form method="POST" action="{{ pay_url }}" style="display:inline"
-                      onsubmit="return confirm('SEND ${{ '%.2f' % (row.earned + (row.tip or 0)) }} to {{ name }} via Stripe now?\n\nThis moves real money. If you already paid her, use “Already paid” instead.')">
+                      onsubmit="return confirm('Send {{ name }} her ${{ '%.2f' % row.earned }} pay plus whatever tip you typed, via Stripe now?\n\nThis moves real money. If you already paid her, use “Already paid” instead.')">
                   <input type="hidden" name="method" value="stripe">
+                  <span style="font-size:0.74rem;color:#1e7e34;white-space:nowrap">tip $</span>
+                  <input type="number" step="0.01" min="0" name="tip" placeholder="0"
+                         title="Their share of the tip — you decide the split"
+                         style="width:72px;padding:5px 7px;font-size:0.78rem;margin:0" />
                   <input type="hidden" name="start" value="{{ week_start }}"><input type="hidden" name="end" value="{{ week_end }}">
-                  <button type="submit" class="btn btn-gold" style="padding:5px 12px;font-size:0.8rem">💸 Pay ${{ '%.2f' % (row.earned + (row.tip or 0)) }}</button>
+                  <button type="submit" class="btn btn-gold" style="padding:5px 12px;font-size:0.8rem">💸 Pay ${{ '%.2f' % row.earned }}+</button>
                 </form>
                 {% endif %}
                 <form method="POST" action="{{ pay_url }}" style="display:inline-flex;gap:4px;align-items:center"
-                      onsubmit="return confirm('Record ${{ '%.2f' % (row.earned + (row.tip or 0)) }} as ALREADY paid to {{ name }} for this job?\n\nThis sends no money — it just puts it in your books.')">
+                      onsubmit="return confirm('Record {{ name }}\'s ${{ '%.2f' % row.earned }} pay plus whatever tip you typed as ALREADY paid?\n\nThis sends no money — it just puts it in your books.')">
                   <select name="method" title="How you paid her"
                           style="padding:5px 7px;border:1px solid var(--border);border-radius:7px;font-size:0.78rem">
                     <option value="cash">Cash</option><option value="zelle">Zelle</option>
                     <option value="venmo">Venmo</option><option value="check">Check</option>
                     <option value="bank">Bank / ACH</option>
                   </select>
+                  <span style="font-size:0.74rem;color:#1e7e34;white-space:nowrap">tip $</span>
+                  <input type="number" step="0.01" min="0" name="tip" placeholder="0"
+                         title="Their share of the tip — you decide the split"
+                         style="width:72px;padding:5px 7px;font-size:0.78rem;margin:0" />
+
                   {# Defaults to the job's own date — she pays on the day she cleans,
                      which is usually not the day she gets round to recording it. #}
                   <input type="date" name="paid_on" title="The day you actually paid her"

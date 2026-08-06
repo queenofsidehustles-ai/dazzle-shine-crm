@@ -298,10 +298,8 @@ class Booking(db.Model):
 
     @property
     def tip_fee(self):
-        """The card fee on the tip itself. Stripe charges its percentage on the
-        whole payment, so the tip's own share of that is what gets deducted —
-        not the flat per-transaction cent, which would have been charged on the
-        cleaning anyway."""
+        """What the card processor took out of the tip. Shown so she can see the
+        real figure that landed — the CRM doesn't act on it."""
         gross = round(self.tip_amount or 0, 2)
         if gross <= 0:
             return 0.0
@@ -310,39 +308,13 @@ class Booking(db.Model):
 
     @property
     def tip_net(self):
-        """What's actually left of the tip to hand out."""
+        """What actually reached the bank out of the customer's tip.
+
+        Deliberately NOT split or allocated to anybody. Monica divides tips
+        herself — between her, the cleaner, and sometimes her daughter, who
+        isn't in the CRM at all — so no rule here could get it right. She types
+        each person's share when she pays them."""
         return round(max(0.0, (self.tip_amount or 0) - self.tip_fee), 2)
-
-    @property
-    def owner_tip_share(self):
-        """The owner's cut of the tip when she worked the job herself, in
-        proportion to the hours she did. Working half the job means half the
-        tip; not working it at all means none."""
-        net = self.tip_net
-        hrs = self.owner_hours or 0
-        total = self.estimated_hours or 0
-        if net <= 0 or hrs <= 0 or total <= 0:
-            return 0.0
-        return round(net * min(hrs, total) / total, 2)
-
-    def tip_for(self, staff):
-        """This cleaner's share of the tip, after the card fee and after the
-        owner's share if she worked the job too.
-
-        Solo cleaner: everything left. Crew: split in proportion to their pay,
-        so whoever did more of the work gets more of the tip."""
-        pool = round(self.tip_net - self.owner_tip_share, 2)
-        if pool <= 0:
-            return 0.0
-        if not self.crew:
-            return pool
-        total = sum(c.pay_amount or 0 for c in self.crew)
-        row = self.crew_row_for(staff)
-        if not row:
-            return 0.0
-        if total <= 0:                       # no split set — share it evenly
-            return round(pool / len(self.crew), 2)
-        return round(pool * (row.pay_amount or 0) / total, 2)
 
     def pay_for(self, staff):
         """What this one cleaner earns on this job — the single answer every

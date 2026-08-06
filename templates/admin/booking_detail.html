@@ -240,7 +240,7 @@
             <p style="font-size:0.78rem;color:#276749;margin-top:6px">
               You're doing {{ '%g' % booking.owner_hours }} hrs, so the cleaners are paid for
               <strong>{{ '%g' % booking.payable_hours }} hrs</strong> — not the full {{ '%g' % booking.estimated_hours }}.
-              {% if booking.tip_amount %}You keep <strong>${{ '%.2f' % booking.owner_tip_share }}</strong> of the tip.{% endif %}
+
             </p>
             {% else %}
             <p style="font-size:0.76rem;color:#9a95ad;margin-top:5px">
