@@ -422,6 +422,7 @@ def _migrate_db():
         ('booking', 'tip_amount',           'FLOAT DEFAULT 0'),
         ('contractor_payment', 'tip_amount', 'FLOAT DEFAULT 0'),
         ('booking', 'owner_hours',          'FLOAT DEFAULT 0'),
+        ('expense', 'booking_id',           'INTEGER'),
     ]
     for table, col, col_type in new_cols:
         try:

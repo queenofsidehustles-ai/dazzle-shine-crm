@@ -196,27 +196,39 @@ class Booking(db.Model):
         return abs(self.labor_rate_applied - get_labor_rate()) > 0.001
 
     @property
+    def committed_labor(self):
+        """What this job will actually cost in cleaner pay.
+
+        Once people are assigned with amounts against their names, that IS the
+        cost — not the theoretical value of the hours. Measuring the budget
+        instead flagged jobs as underwater when the owner was working them
+        herself and paying out a fraction of it."""
+        if self.crew:
+            return self.crew_allocated
+        return self.labor_budget
+
+    @property
     def labor_percent(self):
         """Labor as a share of what the customer pays — the margin warning light."""
-        budget = self.labor_budget
-        if budget is None or not self.price:
+        labor = self.committed_labor
+        if labor is None or not self.price:
             return None
-        return round(budget / self.price * 100, 1)
+        return round(labor / self.price * 100, 1)
 
     @property
     def floor_price(self):
         """The least this job can be sold for and still be worth doing.
 
-        Worked back from the labor it takes: if labor must stay under, say, 60%
-        of the price, then the price can't drop below labor ÷ 0.60. The lead fee
-        rides on top, because that money is recovering ad spend, not paying for
-        cleaning."""
-        budget = self.labor_budget
-        if budget is None:
+        Worked back from what it actually costs to get cleaned: if labor must
+        stay under, say, 60% of the price, the price can't drop below that cost
+        ÷ 0.60. The lead fee rides on top, because that money is recovering ad
+        spend rather than paying for cleaning."""
+        labor = self.committed_labor
+        if labor is None:
             return None
         from pricing import get_max_labor_percent
         cap = (get_max_labor_percent() or 60) / 100.0
-        return round(budget / cap + (self.lead_fee or 0), 2)
+        return round(labor / cap + (self.lead_fee or 0), 2)
 
     @property
     def below_floor_by(self):
@@ -843,6 +855,9 @@ class Expense(db.Model):
     miles = db.Column(db.Float)
     rate_per_mile = db.Column(db.Float)
     recurring_id = db.Column(db.Integer, db.ForeignKey('recurring_expense.id'))
+    # Ad spend can point at the job it bought, so the lead fee on a booking and
+    # the money actually paid for that lead are entered once, not twice.
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property

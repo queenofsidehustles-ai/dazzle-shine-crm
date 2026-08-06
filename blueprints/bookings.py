@@ -304,13 +304,17 @@ def detail(booking_id):
     active_staff = Staff.query.filter_by(is_active=True).order_by(Staff.name).all()
     from blueprints.payments import payment_link_url, amount_due
     from pricing import get_labor_rate, get_max_labor_percent
+    from models import Expense, EXPENSE_CATEGORIES
     pay_url = payment_link_url(booking, 'full')          # ensures pay_token exists
     recurring_upcoming = recurring.upcoming_count(booking.recurring_group) if booking.recurring_group else 0
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff,
                            pay_url=pay_url, due=amount_due(booking),
                            recurring_upcoming=recurring_upcoming,
                            labor_rate=get_labor_rate(),
-                           max_labor_pct=get_max_labor_percent())
+                           max_labor_pct=get_max_labor_percent(),
+                           ad_expense=Expense.query.filter_by(booking_id=booking.id).first(),
+                           ad_categories=[(k, l) for k, l, g, _s in EXPENSE_CATEGORIES
+                                          if g == 'Advertising'])
 
 
 def _link_client(b):
@@ -761,6 +765,44 @@ def _send_job_to(b, people):
     if failed:
         flash(f'Could not reach {", ".join(failed)} — check their phone/email on the Team page.', 'warning')
     return redirect(url_for('bookings.detail', booking_id=b.id))
+
+
+@bookings_bp.route('/<int:booking_id>/log-ad-cost', methods=['POST'])
+@login_required
+def log_ad_cost(booking_id):
+    """Turn this job's lead fee into the ad expense that actually paid for it.
+
+    The lead fee is a pricing device — a slice of the customer's price set aside
+    to cover advertising. The money paid to Google is a separate, real expense.
+    Both are correct, but typing the same figure twice is friction, so this
+    writes the expense from the fee and links it to the job it bought."""
+    from models import Expense
+    b = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    if not b.lead_fee:
+        flash('There is no lead fee on this job to log.', 'warning')
+        return back
+    if Expense.query.filter_by(booking_id=b.id).first():
+        flash('The ad cost for this job is already in your expenses.', 'warning')
+        return back
+
+    raw = (request.form.get('amount') or '').strip()
+    try:
+        amount = round(float(raw), 2) if raw else round(b.lead_fee, 2)
+    except ValueError:
+        amount = round(b.lead_fee, 2)
+    category = request.form.get('category', 'ads_google')
+
+    db.session.add(Expense(
+        date=b.preferred_date or date.today().isoformat(),
+        category=category, amount=amount, booking_id=b.id,
+        vendor=request.form.get('vendor') or None,
+        note=f'Lead for {b.name or "a job"}', method='card'))
+    db.session.commit()
+    flash(f'Logged ${amount:.2f} of ad cost for {b.name or "this job"} — it now shows in '
+          f'your Expenses and Profit & Loss.', 'success')
+    return back
 
 
 @bookings_bp.route('/<int:booking_id>/re-rate', methods=['POST'])

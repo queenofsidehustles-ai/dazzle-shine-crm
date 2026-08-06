@@ -58,6 +58,37 @@
           <label>📣 Lead fee ($) <span style="font-weight:400;color:var(--softer)">— ad cost, part of the total but excluded from the cleaner's cut</span></label>
           <input type="number" id="f-leadfee" name="lead_fee" step="0.01" placeholder="0" value="{{ booking.lead_fee or '' }}" />
         </div>
+
+        {# The lead fee is pricing — a slice of the customer's price set aside
+           to cover ads. The money paid to Google is a separate real expense.
+           This writes one from the other so the same figure isn't typed twice. #}
+        {% if booking.lead_fee and not ad_expense %}
+        <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:9px;padding:11px 13px;margin:-6px 0 14px">
+          <div style="font-size:0.85rem;color:#3730a3;font-weight:700;margin-bottom:3px">
+            💡 Did you actually pay ${{ '%.2f' % booking.lead_fee }} for this lead?
+          </div>
+          <p style="font-size:0.78rem;color:#3730a3;margin:0 0 8px">
+            The lead fee above is what you built into her price. Logging what you really paid puts it
+            in your Expenses and Profit &amp; Loss — no need to type it again over there.
+          </p>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select name="category" form="adCostForm" style="flex:1;min-width:140px;padding:7px 9px;font-size:0.82rem;margin:0">
+              {% for key, label in ad_categories %}
+              <option value="{{ key }}">{{ label.replace('Advertising — ', '') }}</option>
+              {% endfor %}
+            </select>
+            <span style="font-size:0.85rem;color:#3730a3">$</span>
+            <input type="number" step="0.01" min="0" name="amount" form="adCostForm"
+                   value="{{ '%.2f' % booking.lead_fee }}" style="width:88px;padding:7px 9px;margin:0" />
+            <button type="submit" form="adCostForm" class="btn btn-outline" style="padding:6px 13px;font-size:0.8rem">Log it</button>
+          </div>
+        </div>
+        {% elif ad_expense %}
+        <p style="font-size:0.8rem;color:#276749;margin:-6px 0 14px">
+          ✅ ${{ '%.2f' % ad_expense.amount }} of ad cost logged for this job on {{ ad_expense.date }} —
+          <a href="{{ url_for('money.expenses') }}" style="color:#276749;font-weight:600">see it in Expenses</a>.
+        </p>
+        {% endif %}
         <!-- LIVE breakdown -->
         <div style="background:#1f1333;color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:16px">
           <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
@@ -155,8 +186,9 @@
       </form>
     </div>
 
-    {# Sits outside the crew form so its button can post on its own #}
+    {# Sit outside the other forms so their buttons can post on their own #}
     <form method="POST" id="reRateForm" action="{{ url_for('bookings.re_rate', booking_id=booking.id) }}"></form>
+    <form method="POST" id="adCostForm" action="{{ url_for('bookings.log_ad_cost', booking_id=booking.id) }}"></form>
 
     <!-- Crew — big houses that need more than one cleaner -->
     <div class="card" style="margin-top:18px">
@@ -224,8 +256,11 @@
         <div style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;border-radius:9px;padding:11px 13px;margin-bottom:14px">
           <div style="font-weight:700;font-size:0.9rem">🚩 ${{ '%.2f' % booking.below_floor_by }} below your floor price</div>
           <div style="font-size:0.82rem;margin-top:3px">
+            {# committed_labor, not labor_budget — a job with a crew but no hour
+               estimate has a real cost and no budget, and printing None here
+               took the whole page down. #}
             This job needs <strong>${{ '%.2f' % booking.floor_price }}</strong> to cover
-            ${{ '%.2f' % booking.labor_budget }} of labor at your {{ '%.0f' % max_labor_pct }}% cap.
+            ${{ '%.2f' % booking.committed_labor }} of cleaner pay at your {{ '%.0f' % max_labor_pct }}% cap.
             You're charging ${{ '%.2f' % booking.price }}.
           </div>
           <input type="text" name="below_floor_reason" form="jobEditForm"

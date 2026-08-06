@@ -270,7 +270,9 @@ def job_economics(start, end):
 
     rows, by_source, by_cleaner, below_floor = [], {}, {}, []
     for b in jobs:
-        labor = b.labor_budget
+        # What the job actually costs to get cleaned — the amounts committed to
+        # the people on it, not the theoretical value of its hours.
+        labor = b.committed_labor
         if labor is None:                       # legacy percentage job
             labor = round(b.commissionable_price * 0.5, 2)
         price = b.price or 0
