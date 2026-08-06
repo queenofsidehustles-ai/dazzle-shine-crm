@@ -552,6 +552,16 @@
         Invoice <strong>{{ booking.invoice_number }}</strong>{% if booking.invoice_due_date %} · due {{ booking.invoice_due_date }}{% endif %} ·
         <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:#b98a33">view →</a>
       </p>
+      {# An invoice already issued keeps its dates. Re-dating one the customer
+         already has is deliberate, never a side effect of resending. #}
+      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}"
+            onsubmit="return confirm('Re-date this invoice to today and resend it? The customer will see the new due date.')"
+            style="margin-top:6px">
+        <input type="hidden" name="reissue_dates" value="1">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:6px;font-size:0.78rem">
+          🗓️ Re-date to today &amp; resend
+        </button>
+      </form>
       {% endif %}
 
       <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"

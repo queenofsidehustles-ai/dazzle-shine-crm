@@ -153,6 +153,11 @@ def new():
         db.session.add(b)
         db.session.commit()
 
+        # Bookings made by hand never created a customer record — only ones
+        # coming through the website did — so the Clients page stayed empty no
+        # matter how much work went through the CRM.
+        _link_client(b)
+
         extra = _notify_customer(
             b,
             confirmation=bool(request.form.get('notify_customer')),
@@ -306,6 +311,60 @@ def detail(booking_id):
                            recurring_upcoming=recurring_upcoming,
                            labor_rate=get_labor_rate(),
                            max_labor_pct=get_max_labor_percent())
+
+
+def _link_client(b):
+    """Attach this booking to a customer record, creating one if they're new.
+
+    Matches on email first, then phone, so the same person booking twice builds
+    a history instead of a second entry. Skips anyone with neither, since
+    there'd be nothing to match on and every booking would make a duplicate."""
+    if b.client_id:
+        return None
+    email = (b.email or '').strip().lower()
+    phone_digits = ''.join(filter(str.isdigit, b.phone or ''))
+    if not email and not phone_digits:
+        return None
+
+    client = None
+    if email:
+        client = Client.query.filter(db.func.lower(Client.email) == email).first()
+    if not client and phone_digits:
+        for cand in Client.query.filter(Client.phone.isnot(None)).all():
+            if ''.join(filter(str.isdigit, cand.phone or '')) == phone_digits:
+                client = cand
+                break
+    if not client:
+        client = Client(name=b.name or 'Customer', email=email or '',
+                        phone=b.phone or '', address=b.address or '',
+                        city=b.city or '', zip_code=b.zip_code or '')
+        db.session.add(client)
+        db.session.flush()
+    b.client_id = client.id
+    db.session.commit()
+    return client
+
+
+@bookings_bp.route('/clients/rebuild', methods=['POST'])
+@login_required
+def rebuild_clients():
+    """Build the client list from bookings that were never linked to one.
+
+    Only adds and links — no booking is altered beyond gaining a client_id, and
+    nothing is deleted."""
+    made, linked = 0, 0
+    before = Client.query.count()
+    for b in Booking.query.filter(Booking.client_id.is_(None)).order_by(Booking.created_at).all():
+        if _link_client(b):
+            linked += 1
+    made = Client.query.count() - before
+    if linked:
+        flash(f'Built your client list — {made} new client{"s" if made != 1 else ""} '
+              f'from {linked} booking{"s" if linked != 1 else ""}.', 'success')
+    else:
+        flash('Nothing to import — every booking with contact details is already linked to a client.',
+              'success')
+    return redirect(url_for('bookings.clients'))
 
 
 def _notify_customer(b, confirmation=True, pay_kind='none'):
@@ -864,6 +923,11 @@ def send_invoice(booking_id):
     from blueprints.payments import payment_link_url, amount_due
     from notifications import send_email
     from models import BusinessSetting
+    # An invoice already issued keeps its dates unless she asks for new ones —
+    # a document the customer already has shouldn't change under them silently.
+    if request.form.get('reissue_dates'):
+        booking.invoice_issued_at = None
+        booking.invoice_due_date = None
     invoicing.issue(booking)
     payment_link_url(booking, 'full')  # ensure pay_token exists
     biz = BusinessSetting.get('business_name') or 'Dazzle & Shine Maids'
@@ -936,7 +1000,13 @@ def delete(booking_id):
 @login_required
 def clients():
     all_clients = Client.query.order_by(Client.created_at.desc()).all()
-    return render_template('admin/clients.html', clients=all_clients)
+    # Bookings that never got a customer record — offer to build them.
+    unlinked = Booking.query.filter(
+        Booking.client_id.is_(None),
+        db.or_(db.and_(Booking.email.isnot(None), Booking.email != ''),
+               db.and_(Booking.phone.isnot(None), Booking.phone != '')),
+    ).count()
+    return render_template('admin/clients.html', clients=all_clients, unlinked=unlinked)
 
 
 @bookings_bp.route('/clients/<int:client_id>')

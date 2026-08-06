@@ -6,7 +6,20 @@ real 'Invoice #INV-1042', not just a pay link.
 """
 from datetime import datetime, date, timedelta
 
-NET_DAYS = 14  # payment due this many days after issuing
+# Residential cleaning is due when it's invoiced — the work is done, the customer
+# is standing in a clean house. Net terms are a commercial convention that only
+# makes sense when a business is paying on an AP cycle, so they're a per-call
+# option rather than the default. Editable in Settings → Business.
+NET_DAYS_DEFAULT = 0        # residential: due the day it's issued
+NET_DAYS_COMMERCIAL = 14    # for a future commercial invoice caller
+
+
+def default_net_days():
+    from models import BusinessSetting
+    try:
+        return int(float(BusinessSetting.get('invoice_net_days') or NET_DAYS_DEFAULT))
+    except (TypeError, ValueError):
+        return NET_DAYS_DEFAULT
 
 
 def next_invoice_number():
@@ -20,15 +33,20 @@ def next_invoice_number():
     return f'INV-{cur}'
 
 
-def issue(booking):
-    """Assign an invoice number + dates if this booking hasn't been invoiced yet."""
+def issue(booking, net_days=None):
+    """Assign an invoice number + dates if this booking hasn't been invoiced yet.
+
+    net_days=None uses the business default (0 — due on issue). A commercial
+    caller can pass NET_DAYS_COMMERCIAL to get terms instead."""
     from extensions import db
+    if net_days is None:
+        net_days = default_net_days()
     if not booking.invoice_number:
         booking.invoice_number = next_invoice_number()
     if not booking.invoice_issued_at:
         booking.invoice_issued_at = datetime.utcnow()
     if not booking.invoice_due_date:
-        booking.invoice_due_date = (date.today() + timedelta(days=NET_DAYS)).isoformat()
+        booking.invoice_due_date = (date.today() + timedelta(days=net_days)).isoformat()
     db.session.commit()
     return booking
 
