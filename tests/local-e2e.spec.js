@@ -236,3 +236,34 @@ test.describe('CRM end-to-end — local', () => {
     expect(broken, `broken nav pages: ${broken.join(', ')}`).toEqual([]);
   });
 });
+
+test.describe('Calendar — drag to reschedule', () => {
+  test.beforeEach(async ({ page }) => { await login(page); });
+
+  test('dragging a job to another day moves it', async ({ page }) => {
+    // A job on a known date so we can find and move it.
+    await page.goto(CRM + '/bookings/new');
+    await page.fill('input[name="name"]', 'Drag Me');
+    await page.fill('input[name="address"]', '5 Drag St');
+    await page.fill('input[name="cleaning_price"]', '260');
+    await page.fill('input[name="preferred_date"]', '2026-08-05');
+    const notify = page.locator('input[name="notify_customer"]');
+    if (await notify.count() && await notify.isChecked()) await notify.uncheck();
+    await page.click('button[type="submit"]');
+
+    await page.goto(CRM + '/bookings/calendar?year=2026&month=8');
+    const chip = page.locator('.jobchip', { hasText: 'Drag' }).first();
+    await expect(chip, 'the job should be on the calendar and draggable').toBeVisible();
+
+    const target = page.locator('.daycell[data-date="2026-08-19"]');
+    await expect(target).toBeVisible();
+    await chip.dragTo(target);
+
+    // The toast confirms, then the page reloads with the job on its new day.
+    await expect(page.locator('#dropToast')).toContainText('Moved Drag Me to 2026-08-19');
+    await page.waitForTimeout(1500);
+    await page.goto(CRM + '/bookings/calendar?year=2026&month=8');
+    const moved = page.locator('.daycell[data-date="2026-08-19"] .jobchip', { hasText: 'Drag' });
+    await expect(moved, 'the job should now sit on the 19th').toBeVisible();
+  });
+});

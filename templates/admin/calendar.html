@@ -32,13 +32,19 @@
         {% else %}
           {% set day_bookings = bookings_by_day.get(day, []) %}
           {% set is_today = (year == today.year and month == today.month and day == today.day) %}
-        <div style="min-height:90px;background:white;border-radius:8px;padding:6px;border:1px solid {{ '#d3a84f' if is_today else '#e4dfef' }};{{ 'box-shadow:0 0 0 2px rgba(211,168,79,0.2)' if is_today }}">
+        <div class="daycell" data-date="{{ '%04d-%02d-%02d'|format(year, month, day) }}"
+             style="min-height:90px;background:white;border-radius:8px;padding:6px;border:1px solid {{ '#d3a84f' if is_today else '#e4dfef' }};{{ 'box-shadow:0 0 0 2px rgba(211,168,79,0.2)' if is_today }};transition:background 0.12s,border-color 0.12s">
           <div style="font-size:0.8rem;font-weight:700;color:{{ '#d3a84f' if is_today else '#5f5878' }};margin-bottom:4px">{{ day }}</div>
           {% for b in day_bookings %}
+          {# Completed and cancelled jobs stay put — dragging them would rewrite
+             history that's already been worked and paid. #}
+          {% set movable = b.status not in ('completed', 'cancelled') %}
           <a href="{{ url_for('bookings.detail', booking_id=b.id) }}"
-             title="{{ b.name }} — {{ b.service_label }}"
+             {% if movable %}draggable="true" class="jobchip" data-id="{{ b.id }}"{% endif %}
+             title="{{ b.name }} — {{ b.service_label }}{% if movable %} · drag to move it{% endif %}"
              style="display:block;font-size:0.7rem;padding:2px 5px;border-radius:4px;margin-bottom:2px;
                     text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                    {% if movable %}cursor:grab;{% endif %}
                     {% if b.status == 'confirmed' %}background:#dbeafe;color:#1e40af;
                     {% elif b.status == 'completed' %}background:#d1fae5;color:#065f46;
                     {% elif b.status == 'cancelled' %}background:#fee2e2;color:#991b1b;
@@ -64,6 +70,80 @@
       {{ label }}
     </span>
     {% endfor %}
+    <span style="font-size:0.82rem;color:#9a95ad;margin-left:auto">✋ Drag a job to another day to move it</span>
   </div>
 </div>
+
+<!-- Result of a drag: says what moved and offers to tell the cleaner -->
+<div id="dropToast" style="display:none;position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+     background:#1f1333;color:#fff;padding:13px 18px;border-radius:11px;box-shadow:0 8px 30px rgba(15,7,40,0.3);
+     z-index:900;font-size:0.9rem;max-width:min(560px,92vw);display:none">
+  <span id="dropMsg"></span>
+  <form method="POST" id="notifyForm" style="display:inline;margin-left:10px">
+    <button type="submit" style="background:#d3a84f;color:#1f1333;border:none;border-radius:999px;
+            padding:6px 14px;font-weight:700;font-size:0.82rem;cursor:pointer">📲 Tell them</button>
+  </form>
+</div>
+
+<script>
+  // Plain HTML5 drag and drop — no calendar library, so nothing new to learn
+  // and nothing extra to load.
+  let dragId = null;
+
+  document.querySelectorAll('.jobchip').forEach(chip => {
+    chip.addEventListener('dragstart', e => {
+      dragId = chip.dataset.id;
+      chip.style.opacity = '0.4';
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragId);   // Firefox needs this
+    });
+    chip.addEventListener('dragend', () => { chip.style.opacity = ''; dragId = null; });
+    // A drag that ends in a click would otherwise open the booking.
+    chip.addEventListener('click', e => { if (chip.dataset.justDropped) e.preventDefault(); });
+  });
+
+  document.querySelectorAll('.daycell').forEach(cell => {
+    cell.addEventListener('dragover', e => {
+      if (!dragId) return;
+      e.preventDefault();                     // required to allow a drop
+      cell.style.background = '#fff8e1';
+      cell.style.borderColor = '#d3a84f';
+    });
+    cell.addEventListener('dragleave', () => { cell.style.background = ''; cell.style.borderColor = ''; });
+    cell.addEventListener('drop', async e => {
+      e.preventDefault();
+      cell.style.background = ''; cell.style.borderColor = '';
+      const id = dragId || e.dataTransfer.getData('text/plain');
+      if (!id) return;
+
+      const body = new FormData();
+      body.append('date', cell.dataset.date);
+      try {
+        const res = await fetch(`/bookings/${id}/reschedule`, { method: 'POST', body });
+        const data = await res.json();
+        if (!data.ok) { showToast(data.error || 'Could not move that job.', null); return; }
+        if (!data.moved) return;              // dropped back where it started
+
+        const who = (data.crew || []).join(' and ');
+        showToast(
+          who ? `Moved ${data.client} to ${data.now}. ${who} still ${who.includes(' and ') ? 'think' : 'thinks'} it's ${data.was}.`
+              : `Moved ${data.client} to ${data.now}.`,
+          data.notify_url);
+        // Reload so the grid reflects the move — the server is the source of truth.
+        setTimeout(() => window.location.reload(), who ? 6000 : 900);
+      } catch (err) {
+        showToast('Could not move that job — check your connection.', null);
+      }
+    });
+  });
+
+  function showToast(msg, notifyUrl) {
+    const toast = document.getElementById('dropToast');
+    document.getElementById('dropMsg').textContent = msg;
+    const form = document.getElementById('notifyForm');
+    if (notifyUrl) { form.action = notifyUrl; form.style.display = 'inline'; }
+    else { form.style.display = 'none'; }
+    toast.style.display = 'block';
+  }
+</script>
 {% endblock %}

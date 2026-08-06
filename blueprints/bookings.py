@@ -767,6 +767,79 @@ def _send_job_to(b, people):
     return redirect(url_for('bookings.detail', booking_id=b.id))
 
 
+@bookings_bp.route('/<int:booking_id>/reschedule', methods=['POST'])
+@login_required
+def reschedule(booking_id):
+    """Move a job to another date — used by dragging it on the calendar.
+
+    Deliberately does NOT text anyone. Rearranging a week means dragging jobs
+    around several times, and firing a message on every drop would spam the
+    team. It reports who needs telling and hands back a one-click way to do it."""
+    from datetime import datetime as _dt
+    b = Booking.query.get_or_404(booking_id)
+    raw = (request.form.get('date') or '').strip()
+    try:
+        new_date = _dt.strptime(raw[:10], '%Y-%m-%d').date().isoformat()
+    except ValueError:
+        return jsonify({'ok': False, 'error': 'That is not a valid date.'}), 400
+
+    if b.status in ('completed', 'cancelled'):
+        return jsonify({'ok': False,
+                        'error': f'This job is {b.status} — reopen it before moving it.'}), 400
+
+    was = b.preferred_date
+    if was == new_date:
+        return jsonify({'ok': True, 'moved': False})
+    b.preferred_date = new_date
+    db.session.commit()
+
+    # Anyone already told the old date needs telling again.
+    crew = [c.staff.name for c in b.crew if c.staff] or \
+           ([b.assigned_cleaner] if b.assigned_cleaner else [])
+    return jsonify({
+        'ok': True, 'moved': True, 'was': was, 'now': new_date,
+        'client': b.name or 'Job',
+        'crew': crew,
+        'notify_url': url_for('bookings.notify_moved', booking_id=b.id) if crew else None,
+    })
+
+
+@bookings_bp.route('/<int:booking_id>/notify-moved', methods=['POST'])
+@login_required
+def notify_moved(booking_id):
+    """Text whoever is on this job that its date changed."""
+    import secrets as _secrets
+    from models import BusinessSetting
+    from notifications import send_sms
+    from translate import translate
+    b = Booking.query.get_or_404(booking_id)
+    people = [c.staff for c in b.crew if c.staff]
+    if not people and b.assigned_cleaner:
+        s = Staff.query.filter(db.func.lower(Staff.name) == b.assigned_cleaner.lower()).first()
+        people = [s] if s else []
+
+    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    when = f"{b.preferred_date}{(' at ' + b.preferred_time) if b.preferred_time else ''}"
+    told, failed = [], []
+    for s in people:
+        if not s.phone:
+            failed.append(f'{s.name} (no phone)')
+            continue
+        first = (s.name or '').split()[0]
+        msg = (f"Hi {first} — schedule change: the {b.name or 'job'} at "
+               f"{b.address or 'your job'} has moved to {when}. Same job, new date. — {biz}")
+        if (s.language or 'en') == 'es':
+            msg = translate(msg, target='es')
+        ok, detail = send_sms(s.phone, msg)
+        (told if ok else failed).append(s.name if ok else f'{s.name} ({detail})')
+
+    if told:
+        flash(f'Told {", ".join(told)} the new date.', 'success')
+    for f in failed:
+        flash(f'⚠️ Could not tell {f}.', 'warning')
+    return redirect(request.referrer or url_for('bookings.calendar'))
+
+
 @bookings_bp.route('/<int:booking_id>/log-ad-cost', methods=['POST'])
 @login_required
 def log_ad_cost(booking_id):
