@@ -621,6 +621,12 @@
                value="{{ booking.preferred_date or '' }}"
                style="padding:9px 10px;border:1px solid var(--border);border-radius:8px;width:150px" />
         <button type="submit" class="btn btn-outline" style="flex-shrink:0">✓ Mark paid</button>
+        {# Untick when the payment was already receipted, or on a booking where
+           another email to the customer would do more harm than good. #}
+        <label style="display:flex;align-items:center;gap:7px;width:100%;font-size:0.82rem;color:#5f5878;cursor:pointer;margin-top:2px">
+          <input type="checkbox" name="send_receipt" value="1" checked style="width:auto">
+          Email the customer a receipt
+        </label>
       </form>
       {% endif %}
     </div>

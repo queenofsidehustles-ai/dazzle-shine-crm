@@ -82,12 +82,18 @@ def amount_due(booking):
     return round(max(0.0, (booking.price or 0) - paid), 2)
 
 
-def mark_paid(booking, method='card', when=None):
+def mark_paid(booking, method='card', when=None, notify=True):
     """Flag a booking as paid in full and notify. Idempotent-ish.
 
     `when` is the day the money actually arrived. Revenue is counted by this
     date, so recording a cash payment days after the fact would otherwise book
-    the income in the wrong month. Card payments happen now by definition."""
+    the income in the wrong month. Card payments happen now by definition.
+
+    notify=False records the payment without emailing the customer. That matters
+    when a payment has already been receipted some other way, or on a booking
+    that has turned contentious — a second unexpected receipt can restart a
+    conversation the owner has good reason not to reopen. The books are updated
+    either way; only the customer's inbox is spared."""
     if not booking.paid_at:
         booking.paid_at = when or datetime.utcnow()
     booking.paid_method = method
@@ -96,8 +102,9 @@ def mark_paid(booking, method='card', when=None):
     if booking.status in ('pending', None):
         booking.status = 'confirmed'
     db.session.commit()
-    _send_receipt(booking, method)
-    _alert_owner_paid(booking, method)
+    if notify:
+        _send_receipt(booking, method)
+        _alert_owner_paid(booking, method)
 
 
 def _biz():

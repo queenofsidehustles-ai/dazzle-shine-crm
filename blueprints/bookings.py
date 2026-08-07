@@ -958,9 +958,13 @@ def mark_paid_route(booking_id):
     # Revenue counts on the day the money arrived, which for cash is the day of
     # the job — not whenever she gets round to recording it.
     when = _payment_date(request.form.get('paid_on'), booking)
+    # Unticked means record it and say nothing — for a payment already
+    # receipted elsewhere, or a booking where another email would do harm.
+    notify = bool(request.form.get('send_receipt'))
     try:
-        mark_paid(booking, method=method, when=when)
-        flash(f'Marked as paid ✅ ({method}) — dated {when.strftime("%b %-d, %Y")}.', 'success')
+        mark_paid(booking, method=method, when=when, notify=notify)
+        flash(f'Marked as paid ✅ ({method}) — dated {when.strftime("%b %-d, %Y")}.'
+              + ('' if notify else ' No receipt was sent.'), 'success')
     except Exception:
         db.session.rollback()
         flash('Could not mark as paid.', 'error')
