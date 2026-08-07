@@ -41,20 +41,20 @@ def charge_balance(booking) -> tuple:
             description=f'Balance for Booking #{booking.id} — {booking.service_label}',
         )
         if intent.status == 'succeeded':
-            booking.balance_collected = True
-            send_email(
-                to_email=booking.email,
-                to_name=booking.name,
-                subject='Balance payment received — Dazzle & Shine Maids',
-                html=f"""
-<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2 style="color:#b98a33">Payment Received ✓</h2>
-  <p>Hi {booking.name},</p>
-  <p>Your balance of <strong>${booking.balance_due:.2f}</strong> has been collected. You're all set!</p>
-  <p>Thank you for choosing Dazzle &amp; Shine Maids — we appreciate your business.</p>
-  <p style="color:#9a95ad;font-size:13px">Dazzle &amp; Shine Maids · Orlando, FL</p>
-</div>""",
-            )
+            # Mark the booking PAID, not merely "balance collected".
+            #
+            # This used to set balance_collected and stop there, leaving paid_at
+            # empty. Revenue is counted by paid_at and "still owed" is anything
+            # without it — so a job could be charged in full, the money arrive in
+            # Stripe, and the CRM still report it as unpaid and missing from
+            # income. autocharge() has always called mark_paid; this didn't.
+            #
+            # mark_paid also sends the receipt and the owner alert, so the
+            # bespoke email that used to live here has gone rather than send the
+            # customer two.
+            from blueprints.payments import mark_paid
+            booking.stripe_payment_intent = intent.id
+            mark_paid(booking, method='card')
             return True, ''
         else:
             _notify_failed(booking, notify_email, f'Unexpected status: {intent.status}')
