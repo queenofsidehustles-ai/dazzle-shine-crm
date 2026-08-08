@@ -116,16 +116,57 @@ need access to your Railway project, your database, or your Stripe.
 
 ---
 
-## When you change the code
+## How updates reach them
 
-Both deployments track this repo. Pushing to `main` deploys to **every**
-instance, theirs included. So:
+**Code is shared. Data is not.** That split is the whole thing:
 
-- A bug you ship at 9pm is a bug in their business too.
+| | Where it lives | What a deploy does to it |
+|---|---|---|
+| Bug fixes, new features | This repo — one copy | Reaches every instance |
+| Their prices, branding, terms | *Their* database | Never touched |
+| Their customers, bookings, cleaners, payments | *Their* database | Never touched |
+
+So fixing a bug once fixes it for everyone. You don't repeat the work per
+customer. The flip side is that shipping a bug ships it to everyone too — a bad
+push at 9pm is a bad push in his business, in front of his customers.
+
+### Give yourself a release you control
+
+Don't point his instance at `main`. Point it at a `stable` branch you merge into
+when you're ready:
+
+```
+main     ← you work here; your CRM deploys from this
+  │
+  └──▶ stable   ← his CRM deploys from this. You merge when you're confident.
+```
+
+Set it up once, in Railway → his project → **Settings → Source → Branch** →
+`stable`. Then:
+
+```bash
+# You've shipped something to your own CRM, used it for a few days, and it's good:
+git checkout stable
+git merge main
+git push origin stable      # now his instance updates
+git checkout main
+```
+
+Why bother: **you become his staging environment.** Every change runs in your
+real business first, on your real jobs and your real money, before it reaches
+anyone else. That's a genuinely good safety net and it costs you one extra
+command.
+
+If you'd rather keep it simple to begin with, both instances can track `main` —
+just know that every push is live in his business the moment you make it.
+
+### Either way
+
 - Test locally first. `tests/local-e2e.spec.js` runs the whole flow against a
   throwaway database in about twelve seconds.
-- Their pricing, branding and settings live in *their* database, so a deploy
-  never overwrites what they've configured.
+- `python3 tests/test_whitelabel.py` fails if any of your branding leaks back in.
+- Tell him before a change he'll notice. "Your invoices look different today"
+  should never be a surprise.
 
 ---
 
