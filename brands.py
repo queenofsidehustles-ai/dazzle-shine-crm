@@ -1,67 +1,117 @@
-"""Brand identities for outgoing commercial quotes/emails.
+"""Brand identities for outgoing quotes and emails.
 
-Two brands share the one CRM:
-  - 'lm'     = L & M Commercial Cleaners (offices, daycares, medical, retail…)
-  - 'dazzle' = Dazzle & Shine Maids (apartments + property managers)
+A cleaning company often sells under more than one name — a residential brand
+for homes and apartments, a commercial one for offices, daycares and medical.
+Each quote is branded by property type so the email looks like it came from the
+right side of the business.
 
-Each quote is auto-branded by property type, and every quote email uses the
-right name, colors, and reply-to so it looks like it came from that brand.
+Both identities are read from Settings, not baked into this file. That is what
+lets one deployment serve one company and another deployment serve a different
+company with no code change. A business with only one name never has to fill in
+the commercial fields — the commercial brand quietly falls back to the primary
+one, so its quotes simply go out under the single name it actually uses.
+
+The stored keys 'lm' and 'dazzle' predate this and still exist on old Quote
+rows, so they are kept as aliases rather than rewritten in the database.
 """
 import os
 
-BRANDS = {
-    'lm': {
-        'key': 'lm',
-        'name': 'L & M Commercial Cleaners',
-        'tagline': 'Commercial Cleaning Proposal',
-        'from_email': 'admin@commercialcleanersorlando.com',
-        'reply_to': 'admin@commercialcleanersorlando.com',
-        'phone': '',
-        'website': 'www.commercialcleanersorlando.com',
-        'dark': '#12324a',
-        'accent': '#2a89c4',
-        'accent_text': '#ffffff',
-        # Flip True once commercialcleanersorlando.com is verified in Resend,
-        # then quotes will send FROM admin@commercialcleanersorlando.com.
-        'domain_verified': False,
-    },
-    'dazzle': {
-        'key': 'dazzle',
-        'name': 'Dazzle & Shine Maids',
-        'tagline': 'Professional Cleaning Proposal',
-        'from_email': 'bookings@dazzleandshinemaids.com',
-        'reply_to': 'dazzleandshinemaids@gmail.com',
-        'phone': '(689) 999-0194',
-        'website': 'www.dazzleandshinemaids.com',
-        'dark': '#1f1333',
-        'accent': '#d3a84f',
-        'accent_text': '#1f1333',
-        'domain_verified': True,
-    },
-}
+PRIMARY = 'primary'
+COMMERCIAL = 'commercial'
 
-DEFAULT_BRAND = 'lm'
-# Property types that belong to the Dazzle (residential-adjacent) side.
-_DAZZLE_KEYS = ('apartment', 'student housing', 'property management')
+# Historic keys still present on saved quotes.
+_ALIASES = {'dazzle': PRIMARY, 'lm': COMMERCIAL}
+
+DEFAULT_BRAND = COMMERCIAL
+
+# Property types that belong to the residential/primary side of the business.
+_PRIMARY_KEYS = ('apartment', 'student housing', 'property management')
+
+# Fallback palette for email headers when nothing is set. Deliberately neutral —
+# a new business sees a plain, professional email rather than someone else's colours.
+_DEFAULT_DARK = '#1f2937'
+_DEFAULT_ACCENT = '#2563eb'
+_DEFAULT_ACCENT_TEXT = '#ffffff'
+
+
+def _setting(key, default=''):
+    try:
+        from models import BusinessSetting
+        return (BusinessSetting.get(key) or '').strip() or default
+    except Exception:
+        return default
+
+
+def normalize(key):
+    """Map any stored or passed-in brand key onto a current one."""
+    key = (key or DEFAULT_BRAND).strip().lower()
+    return _ALIASES.get(key, key if key in (PRIMARY, COMMERCIAL) else DEFAULT_BRAND)
 
 
 def brand_for_property(property_type):
     pt = (property_type or '').lower()
-    return 'dazzle' if any(k in pt for k in _DAZZLE_KEYS) else 'lm'
+    return PRIMARY if any(k in pt for k in _PRIMARY_KEYS) else COMMERCIAL
 
 
 def get_brand(key):
-    return BRANDS.get(key or DEFAULT_BRAND, BRANDS[DEFAULT_BRAND])
+    """Build a brand's identity from Settings, every time it's asked for, so a
+    change on the Settings page takes effect on the next email sent."""
+    import branding
+    key = normalize(key)
+
+    name = branding.biz_name()
+    identity = {
+        'key': key,
+        'name': name,
+        'tagline': _setting('brand_tagline', 'Professional Cleaning Proposal'),
+        'from_email': branding.from_email(),
+        'reply_to': branding.reply_to(),
+        'phone': branding.phone(),
+        'website': branding.website(),
+        'dark': _setting('brand_dark', _DEFAULT_DARK),
+        'accent': _setting('brand_accent', _DEFAULT_ACCENT),
+        'accent_text': _setting('brand_accent_text', _DEFAULT_ACCENT_TEXT),
+        'domain_verified': _setting('brand_domain_verified', '') == '1',
+    }
+
+    if key == COMMERCIAL:
+        # Only override what the commercial side actually has its own version of;
+        # anything left blank keeps the primary business's details.
+        overrides = {
+            'name': _setting('commercial_name'),
+            'tagline': _setting('commercial_tagline'),
+            'from_email': _setting('commercial_from_email'),
+            'reply_to': _setting('commercial_reply_to'),
+            'phone': _setting('commercial_phone'),
+            'website': _setting('commercial_website'),
+            'dark': _setting('commercial_dark'),
+            'accent': _setting('commercial_accent'),
+            'accent_text': _setting('commercial_accent_text'),
+        }
+        identity.update({k: v for k, v in overrides.items() if v})
+        identity['domain_verified'] = _setting('commercial_domain_verified', '') == '1'
+
+    return identity
+
+
+def brand_choices():
+    """(key, label) pairs for the quote form's brand picker."""
+    return [(PRIMARY, get_brand(PRIMARY)['name']),
+            (COMMERCIAL, get_brand(COMMERCIAL)['name'])]
 
 
 def send_identity(key):
-    """(from_name, from_email, reply_to) for send_email. Until a brand's domain
-    is verified in Resend we send from the verified default address, but keep the
-    brand's display name and reply-to so replies reach the right inbox."""
+    """(from_name, from_email, reply_to) for send_email.
+
+    Mail may only be sent from a domain verified with the email provider. Until
+    a brand's own domain is verified we send from the deployment's verified
+    default address but keep the brand's display name and reply-to, so the email
+    still reads as that brand and replies still reach the right inbox."""
+    import branding
     b = get_brand(key)
-    verified_default = os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
-    from_email = b['from_email'] if b.get('domain_verified') else verified_default
-    return b['name'], from_email, b['reply_to']
+    verified_default = branding.from_email()
+    from_addr = b['from_email'] if b.get('domain_verified') else verified_default
+    return b['name'], from_addr, b['reply_to']
 
 
 def email_shell(key, heading, inner_html, cta_text=None, cta_url=None, footer_note=None):

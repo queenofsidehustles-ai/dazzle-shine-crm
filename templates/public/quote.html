@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Get a Price — Dazzle & Shine Maids</title>
+  <title>Get a Price — {{ BIZ }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
@@ -82,7 +82,7 @@
 </head>
 <body>
   <div class="header">
-    <span class="script">Dazzle &amp; Shine</span>
+    <span class="script">{{ BIZ }}</span>
     <span class="sub">Get Your Instant Price</span>
   </div>
 
@@ -203,7 +203,7 @@
 
 <script>
   const VALID_BATHS = {{ valid_baths | tojson }};
-  const CRM_URL = 'https://dazzle-shine-crm-production.up.railway.app';
+  const CRM_URL = '{{ CRM_BASE }}';
 
   let pricingData = null;
 
@@ -307,7 +307,7 @@
       extras: extras.join(','),
     });
     document.getElementById('book-btn').href =
-      'https://www.dazzleandshinemaids.com/#book?' + params.toString();
+      '{{ BIZ_BOOKING_LINK }}?' + params.toString();
   }
 
   // Service card selection

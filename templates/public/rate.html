@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rate Your Cleaning — Dazzle & Shine Maids</title>
+  <title>Rate Your Cleaning — {{ BIZ }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -21,7 +21,7 @@
 </head>
 <body>
   <div class="card">
-    <span class="script">Dazzle &amp; Shine</span>
+    <span class="script">{{ BIZ }}</span>
     <p style="font-size:0.78rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.15em;margin-bottom:20px">How did we do?</p>
     <h1 style="font-size:1.3rem;font-weight:700;margin-bottom:6px">Rate Your Cleaning</h1>
     <p style="color:#5f5878;font-size:0.9rem">Hi {{ r.booking.name.split()[0] }}, your feedback means everything to us.</p>

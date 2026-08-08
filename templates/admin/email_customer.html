@@ -1,5 +1,5 @@
 {% extends "base_admin.html" %}
-{% block title %}Email {{ booking.name }} — Dazzle & Shine CRM{% endblock %}
+{% block title %}Email {{ booking.name }} — {{ BIZ }} CRM{% endblock %}
 {% block page_title %}Email the Customer{% endblock %}
 {% block topbar_right %}
   <a href="{{ url_for('bookings.detail', booking_id=booking.id) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Back to Booking</a>
@@ -19,7 +19,7 @@
       <div class="form-group">
         <label>To — {{ booking.name or 'Customer' }}'s email</label>
         <input type="email" name="to_email" required value="{{ booking.email or '' }}" placeholder="customer@example.com" />
-        <span style="font-size:0.78rem;color:#9a95ad">You can edit this. Sends from your Dazzle &amp; Shine address · any reply comes to your inbox.</span>
+        <span style="font-size:0.78rem;color:#9a95ad">You can edit this. Sends from your {{ BIZ }} address · any reply comes to your inbox.</span>
       </div>
       <div class="form-group">
         <label>Subject</label>
@@ -30,7 +30,7 @@
         <label>Message</label>
         <textarea name="message" rows="16" required style="line-height:1.6">Hi {{ booking.name or 'there' }},
 
-Thank you so much for welcoming Dazzle & Shine Maids into your home. I wanted to reach out personally because I hold our work to a very high standard, and I don't feel your recent cleaning fully reflected the care and quality you deserve.
+Thank you so much for welcoming {{ BIZ }} into your home. I wanted to reach out personally because I hold our work to a very high standard, and I don't feel your recent cleaning fully reflected the care and quality you deserve.
 
 I'm truly sorry for that — and I'm committed to making it right.
 
@@ -40,9 +40,9 @@ I'll follow up to find a date that works best for you. In the meantime, please d
 
 With gratitude,
 Monica
-Dazzle & Shine Maids
-(689) 999-0194</textarea>
-        <span style="font-size:0.78rem;color:#9a95ad">Edit anything above before sending. Your Dazzle &amp; Shine branding is added around the message automatically.</span>
+{{ BIZ }}
+{{ BIZ_PHONE }}</textarea>
+        <span style="font-size:0.78rem;color:#9a95ad">Edit anything above before sending. Your {{ BIZ }} branding is added around the message automatically.</span>
       </div>
       <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">
         ✉️ Send Email

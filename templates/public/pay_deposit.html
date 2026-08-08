@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pay Your Deposit — Dazzle & Shine Maids</title>
+  <title>Pay Your Deposit — {{ BIZ }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://js.stripe.com/v3/"></script>
@@ -50,7 +50,7 @@
 </head>
 <body>
   <div class="header">
-    <span class="script">Dazzle &amp; Shine</span>
+    <span class="script">{{ BIZ }}</span>
     <span class="sub">Confirm Your Booking</span>
   </div>
 
@@ -95,7 +95,7 @@
       <div class="secure">🔒 Secure payment powered by Stripe</div>
       {% else %}
       <div class="err" style="display:block">
-        Online payment isn't set up yet. Please call or text us at (689) 999-0194 to pay your deposit.
+        Online payment isn't set up yet. Please call or text us at {{ BIZ_PHONE }} to pay your deposit.
       </div>
       {% endif %}
     </div>
@@ -169,7 +169,7 @@
       document.getElementById('success-card').classList.remove('hidden');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
-      showErr(e.message + ' — or call/text us at (689) 999-0194.');
+      showErr(e.message + ' — or call/text us at {{ BIZ_PHONE }}.');
       payBtn.disabled = false;
       payBtn.textContent = 'Pay Deposit & Confirm →';
     }

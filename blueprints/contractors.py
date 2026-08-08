@@ -8,6 +8,7 @@ from models import Staff, ContractorApplication, Booking, BookingCrew, BusinessS
 from extensions import db
 from notifications import send_email, send_sms
 import stripe_connect
+import branding
 
 contractors_bp = Blueprint('contractors', __name__, url_prefix='/contractors')
 
@@ -16,9 +17,9 @@ EXP_LEVELS = [
     ('top',      'Top Performer', 55),
 ]
 
-DEFAULT_TRAINING_GUIDE = """✨ WELCOME TO THE DAZZLE & SHINE FAMILY ✨
+_DEFAULT_TRAINING_GUIDE = """✨ WELCOME TO THE {biz} FAMILY ✨
 
-You didn't just get a gig — you joined a team that takes real pride in what we do. When you clean a home the Dazzle way, you're giving someone back their time, their peace of mind, and a space they're proud to come home to. That's the Dazzle Difference, and now it's yours to deliver.
+You didn't just get a gig — you joined a team that takes real pride in what we do. When you clean a home the right way, you're giving someone back their time, their peace of mind, and a space they're proud to come home to. That's the {biz} difference, and now it's yours to deliver.
 
 Read this before your first job, keep it handy, and never be afraid to ask questions. We shine brightest as a team. 💛
 
@@ -27,7 +28,7 @@ Read this before your first job, keep it handy, and never be afraid to ask quest
 ━━━━━━━━━━━━━━━━━━━━━━
 Our promise to every client: they come home to a space that sparkles and feels brand new. We treat every home like it's our own.
 
-Three things make you a Dazzle & Shine pro:
+Three things make you a {biz} pro:
 1. CARE — Treat every home, and everything in it, like it's precious.
 2. DETAIL — The little touches (a fan-folded towel, a shined faucet, straight throw pillows) are what make clients say "WOW."
 3. TRUST — Show up on time, be honest, and protect our clients' privacy and property like family.
@@ -37,7 +38,7 @@ Do those three things every time and you'll never run out of work with us.
 ━━━━━━━━━━━━━━━━━━━━━━
 🎥 RECOMMENDED WATCHING
 ━━━━━━━━━━━━━━━━━━━━━━
-Helpful cleaning-technique videos from trusted creators around the web (these aren't ours) — a great way to see pro technique in action before your first job. Watch the routine, then bring it to life the Dazzle way:
+Helpful cleaning-technique videos from trusted creators around the web (these aren't ours) — a great way to see pro technique in action before your first job. Watch the routine, then bring it to life the right way:
 
 - How to Clean a Bathroom (Clean My Space): https://www.youtube.com/watch?v=YKpuELbeZQM
 - Daily Kitchen Cleaning Routine (Clean My Space): https://www.youtube.com/watch?v=Vos3br2docY
@@ -48,7 +49,7 @@ Helpful cleaning-technique videos from trusted creators around the web (these ar
 ━━━━━━━━━━━━━━━━━━━━━━
 🧴 YOUR SUPPLY CHECKLIST
 ━━━━━━━━━━━━━━━━━━━━━━
-As an independent contractor, you bring your own supplies — think of it as your professional toolkit. Here's what a Dazzle pro carries:
+As an independent contractor, you bring your own supplies — think of it as your professional toolkit. Here's what a {biz} pro carries:
 
 Cleaning products:
 - All-purpose cleaner
@@ -113,7 +114,7 @@ WHOLE HOME — THE DAZZLE TOUCHES
 ━━━━━━━━━━━━━━━━━━━━━━
 ⭐ THE DAZZLE STANDARD
 ━━━━━━━━━━━━━━━━━━━━━━
-- Arrive on time, neat, and professional — you represent Dazzle & Shine
+- Arrive on time, neat, and professional — you represent {biz}
 - Treat every home and belonging with care
 - Take BEFORE and AFTER photos of every room — it protects you, proves your great work, and earns us 5-star reviews
 - If anything is damaged or you miss something, tell us right away — honesty always, no exceptions
@@ -122,7 +123,17 @@ WHOLE HOME — THE DAZZLE TOUCHES
 
 ━━━━━━━━━━━━━━━━━━━━━━
 Welcome aboard. Let's make Orlando sparkle, one home at a time. 💛
-— The Dazzle & Shine Family"""
+— The {biz} Family"""
+
+
+def default_training_guide():
+    """The starter welcome guide, with this business's own name in it.
+
+    Kept as a plain template with a {biz} token rather than an f-string: the
+    guide is long prose that an owner can rewrite from the Settings page, and a
+    stray brace in her wording must never crash the page that renders it."""
+    return _DEFAULT_TRAINING_GUIDE.replace('{biz}', branding.biz_name())
+
 
 
 @contractors_bp.route('/sms-test')
@@ -137,7 +148,7 @@ def sms_test():
         detail = 'No number to text. Add ?to=+14075551234 to the web address, or set OWNER_PHONE in Railway.'
         ok = False
     else:
-        ok, detail = send_sms(to, 'Dazzle & Shine test text ✅ — if you got this, your texting is working!')
+        ok, detail = send_sms(to, f'{branding.biz_name()} test text ✅ — if you got this, your texting is working!')
 
     color = '#155724' if ok else '#842029'
     bg = '#d4edda' if ok else '#f8d7da'
@@ -170,16 +181,16 @@ def email_test():
     """Diagnostic: send a real test email and show exactly what Resend says."""
     import os as _os
     to = request.args.get('to') or BusinessSetting.get('email') or \
-        _os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
-    from_email = _os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
+        branding.owner_email()
+    from_email = branding.from_email()
     has_key = bool(_os.environ.get('RESEND_API_KEY'))
 
     ok, detail = send_email(
-        to_email=to, to_name='Dazzle & Shine',
-        subject='✅ Dazzle & Shine — Email Test',
+        to_email=to, to_name=branding.biz_name(),
+        subject=f'✅ {branding.biz_name()} — Email Test',
         html='<div style="font-family:sans-serif;padding:24px">'
              '<h2 style="color:#1f1333">Your email is working! 🎉</h2>'
-             '<p>If you can read this, Dazzle &amp; Shine emails are sending correctly.</p></div>',
+             f'<p>If you can read this, {branding.biz_name()} emails are sending correctly.</p></div>',
     )
 
     color = '#155724' if ok else '#842029'
@@ -346,7 +357,7 @@ def add_applicant():
 def send_application_link(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
     import os
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     apply_url = url_for('contractors.apply', _external=True)
     send_email(
         to_email=a.email, to_name=a.name,
@@ -381,7 +392,7 @@ def send_application_link(app_id):
 def send_interview_invite(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
     import os
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     cal_link = BusinessSetting.get('interview_calendar_link', '')
     if not cal_link:
         flash('Add your calendar link in Settings → Business first.', 'warning')
@@ -422,8 +433,8 @@ def send_interview_invite(app_id):
 def send_spanish_interview(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
     import os
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
-    owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    biz = branding.biz_name()
+    owner_email = branding.owner_email()
     send_email(
         to_email=a.email, to_name=a.name,
         from_name=f'{biz} Contrataciones',
@@ -464,8 +475,8 @@ def send_spanish_interview(app_id):
 def send_bgcheck_request(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
     import os
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
-    owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    biz = branding.biz_name()
+    owner_email = branding.owner_email()
     provider_url = BusinessSetting.get('bgcheck_provider_url', '')
     provider_name = BusinessSetting.get('bgcheck_provider_name', 'the provider below')
     if not provider_url:
@@ -515,7 +526,7 @@ def send_bgcheck_request(app_id):
 def send_rejection(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
     import os
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     send_email(
         to_email=a.email, to_name=a.name,
         from_name=f'{biz} Hiring',
@@ -618,8 +629,8 @@ def hire(app_id):
 
     if s.email:
         import os
-        biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
-        owner_email = BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+        biz = branding.biz_name()
+        owner_email = branding.owner_email()
         hub_url = url_for('contractors.onboarding_hub', token=token, _external=True, _scheme='https')
         send_email(
             to_email=s.email, to_name=s.name,
@@ -664,9 +675,9 @@ def _notify_owner(subject, html):
     """Send the business owner an internal alert email (best-effort)."""
     import os
     owner = (BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL')
-             or os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com'))
+             or branding.owner_email())
     try:
-        send_email(to_email=owner, to_name='Dazzle & Shine', subject=subject, html=html)
+        send_email(to_email=owner, to_name=branding.biz_name(), subject=subject, html=html)
     except Exception:
         pass
 
@@ -746,7 +757,7 @@ def accept_offer(token):
 def onboarding_hub(token):
     """One page for the new contractor: sign agreement + set up Stripe payments."""
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     _sync_stripe_status(s)   # refresh in case they just came back from Stripe
     return render_template('public/onboarding_hub.html', s=s, biz=biz,
                            stripe_configured=stripe_connect.is_configured())
@@ -808,7 +819,7 @@ def my_day(token):
     days = {}
     for b in jobs:
         days.setdefault(b.preferred_date, []).append(b)
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     return render_template('public/my_day.html', s=s, days=days,
                            today=today.isoformat(), biz=biz)
 
@@ -852,7 +863,7 @@ def sample_day():
                    price=180, hours_worked=0, estimated_hours=3.0,
                    access_notes='Gate code 1234 · key under the blue mat · friendly dog named Max 🐶')
     days = {today.isoformat(): [job]}
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     return render_template('public/my_day.html', s=_FakeStaff(), days=days,
                            today=today.isoformat(), biz=biz)
 
@@ -861,7 +872,7 @@ def sample_day():
 def confirm_start_date(token):
     """Public, token-gated page where a new hire picks/confirms their start date."""
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     if request.method == 'POST':
         chosen = (request.form.get('start_date') or '').strip()
         if chosen:
@@ -883,8 +894,8 @@ def confirm_start_date(token):
 def onboarding_guide(token):
     """Public training & supply guide the contractor reviews during onboarding."""
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
-    guide = BusinessSetting.get('training_guide') or DEFAULT_TRAINING_GUIDE
+    biz = branding.biz_name()
+    guide = BusinessSetting.get('training_guide') or default_training_guide()
     # Escape first (safe from any HTML in the owner-edited text), then linkify URLs.
     import html as _html, re as _re
     guide_html = _re.sub(r'(https?://[^\s]+)',
@@ -902,7 +913,7 @@ def training_guide():
         db.session.commit()
         flash('Training & Supply Guide saved!', 'success')
         return redirect(url_for('contractors.training_guide'))
-    guide = BusinessSetting.get('training_guide') or DEFAULT_TRAINING_GUIDE
+    guide = BusinessSetting.get('training_guide') or default_training_guide()
     return render_template('admin/training_guide_edit.html', guide=guide)
 
 
@@ -1345,7 +1356,7 @@ def pay_statement(staff_id):
         earned = j.pay_for(s)
         total += earned
         rows.append({'booking': j, 'earned': earned})
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     return render_template('admin/pay_statement.html', s=s, rows=rows,
                            total=round(total, 2), start=start, end=end, biz=biz)
 
@@ -1405,10 +1416,10 @@ def apply():
 
         # ── Notify Monica of new application ──────────────────────────────────
         import os
-        notify = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+        notify = branding.owner_email()
         send_email(
-            to_email=notify, to_name='Dazzle & Shine Maids',
-            from_name='Dazzle & Shine Hiring',
+            to_email=notify, to_name=branding.biz_name(),
+            from_name=f'{branding.biz_name()} Hiring',
             subject=f'New Cleaner Application: {a.name}',
             html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -1459,7 +1470,7 @@ def apply():
 @contractors_bp.route('/sign-agreement/<token>', methods=['GET', 'POST'])
 def sign_agreement(token):
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     worker_model = BusinessSetting.get('worker_model', 'contractor')
     agreement_label = 'Independent Contractor Agreement' if worker_model == 'contractor' else 'Employment Agreement'
     agreement_text = BusinessSetting.get('agreement_template') or _default_agreement(biz, worker_model)
@@ -1533,7 +1544,7 @@ def resend_agreement(staff_id):
     if not s.agreement_token:
         s.agreement_token = secrets.token_urlsafe(32)
         db.session.commit()
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     worker_model = BusinessSetting.get('worker_model', 'contractor')
     agreement_label = 'Independent Contractor Agreement' if worker_model == 'contractor' else 'Employment Agreement'
     sign_url = url_for('contractors.sign_agreement', token=s.agreement_token, _external=True)
@@ -1568,7 +1579,7 @@ def resend_agreement(staff_id):
 @contractors_bp.route('/onboarding-forms/<token>', methods=['GET', 'POST'])
 def onboarding_forms(token):
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
 
     if s.welcome_forms_at:
         return render_template('public/onboarding_forms_done.html', s=s, biz=biz, already_done=True)
@@ -1611,7 +1622,7 @@ def onboarding_forms(token):
 @contractors_bp.route('/orientation-complete/<token>', methods=['GET', 'POST'])
 def orientation_complete(token):
     s = Staff.query.filter_by(orientation_token=token).first_or_404()
-    biz = BusinessSetting.get('business_name') or 'Dazzle & Shine Maids'
+    biz = branding.biz_name()
     already_done = bool(s.orientation_completed_at)
 
     if request.method == 'POST':
@@ -1662,13 +1673,13 @@ def reset_orientation(staff_id):
 
 
 def _send_auto_rejection(app_rec, reasons_en, reasons_es):
-    biz = 'Dazzle & Shine Maids'
+    biz = branding.biz_name()
     reasons_html_en = ''.join(f'<li style="margin-bottom:6px">{r}</li>' for r in reasons_en)
     reasons_html_es = ''.join(f'<li style="margin-bottom:6px">{r}</li>' for r in reasons_es)
     html = f"""
 <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
   <div style="background:#1f1333;padding:24px;border-radius:12px 12px 0 0;text-align:center">
-    <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0;font-size:1.6rem">Dazzle &amp; Shine Maids</h1>
+    <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0;font-size:1.6rem">{branding.biz_name()}</h1>
   </div>
   <div style="padding:28px 32px;background:#fff;border-left:4px solid #d3a84f">
     <p style="font-size:0.72rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#d3a84f;margin:0 0 14px">🇺🇸 English</p>

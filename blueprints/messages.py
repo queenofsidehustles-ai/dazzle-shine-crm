@@ -11,10 +11,10 @@ from models import (Message, Staff, ContractorApplication, BusinessSetting,
                     MessageTemplate, OutboundLog)
 from notifications import send_sms
 from translate import translate
+import branding
 
 messages_bp = Blueprint('messages', __name__, url_prefix='/messages')
 
-CRM_BASE = 'https://dazzle-shine-crm-production.up.railway.app'
 DEFAULT_OWNER_ALERT_PHONE = '9374773090'   # Monica's cell — editable via 'owner_alert_phone' setting
 
 
@@ -108,11 +108,11 @@ def set_thread_lang(phone10, lang):
 def fill_placeholders(body, phone10, contact):
     """Swap {name}, {owner}, {business}, {myday_link}, {sample_link}, {start_date}
     with real values for this contact."""
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     owner = BusinessSetting.get('owner_name', 'Monica')
     full = contact.get('name') or ''
     first = full.split()[0] if full else 'there'
-    sample = f"{CRM_BASE}/contractors/sample-day"
+    sample = f"{branding.crm_base()}/contractors/sample-day"
     myday = sample
     start = 'to be confirmed'
     start_link = ''
@@ -123,8 +123,8 @@ def fill_placeholders(body, phone10, contact):
                 import secrets
                 s.agreement_token = secrets.token_urlsafe(32)
                 db.session.commit()
-            myday = f"{CRM_BASE}/contractors/my-day/{s.agreement_token}"
-            start_link = f"{CRM_BASE}/contractors/start-date/{s.agreement_token}"
+            myday = f"{branding.crm_base()}/contractors/my-day/{s.agreement_token}"
+            start_link = f"{branding.crm_base()}/contractors/start-date/{s.agreement_token}"
             if getattr(s, 'roster_start_date', None):
                 start = s.roster_start_date
     return (body.replace('{name}', first).replace('{owner}', owner)
@@ -290,7 +290,7 @@ def request_bgcheck(phone):
     link = url_for('interviews.bgcheck_upload_page', token=app_rec.bgcheck_upload_token, _external=True)
     first = (app_rec.name or 'there').split()[0]
     body = (f"Hi {first}, it looks like your background check didn’t come through. "
-            f"Could you please re-upload it here? {link} — thank you! – Dazzle & Shine")
+            f"Could you please re-upload it here? {link} — thank you! – {branding.biz_name()}")
     ok, detail = deliver(phone10, body, contact)
     flash('Re-upload request sent.' if ok else ('Saved, but the text may not have sent: ' + detail),
           'success' if ok else 'warning')
@@ -325,7 +325,7 @@ def incoming():
     who = contact['name'] or pretty_phone(phone10)
     alert_body = translated or body
     snippet = alert_body if len(alert_body) <= 90 else alert_body[:90] + '…'
-    link = f"{CRM_BASE}{url_for('messages.thread', phone=phone10)}"
+    link = f"{branding.crm_base()}{url_for('messages.thread', phone=phone10)}"
     try:
         send_sms(owner_alert_phone(), f"📩 {who}: {snippet}\nReply: {link}")
     except Exception:

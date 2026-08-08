@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Interview Complete — Dazzle & Shine Maids</title>
+  <title>Interview Complete — {{ BIZ }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
@@ -126,7 +126,7 @@
 </head>
 <body>
   <div class="header">
-    <span class="script">Dazzle &amp; Shine</span>
+    <span class="script">{{ BIZ }}</span>
     <span class="sub">Interview Complete</span>
   </div>
 
@@ -140,7 +140,7 @@
       {% else %}
         <h1>You're all done, {{ app.name }}!</h1>
         <p>
-          Thank you for completing your video interview with <strong>Dazzle & Shine Maids</strong>.
+          Thank you for completing your video interview with <strong>{{ BIZ }}</strong>.
           We received all 5 of your answers and our team will review them shortly.
         </p>
       {% endif %}
@@ -162,13 +162,13 @@
 
       <p style="margin-top:24px;font-size:0.88rem;color:#9a95ad">
         Questions? Email us at
-        <a href="mailto:dazzleandshinemaids@gmail.com" style="color:var(--gold)">dazzleandshinemaids@gmail.com</a>
+        <a href="mailto:{{ BIZ_EMAIL }}" style="color:var(--gold)">{{ BIZ_EMAIL }}</a>
       </p>
     </div>
   </main>
 
   <footer>
-    Dazzle &amp; Shine Maids &copy; 2024 &mdash; Thank you for your interest!
+    {{ BIZ }} &copy; 2024 &mdash; Thank you for your interest!
   </footer>
 </body>
 </html>

@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Dazzle & Shine CRM{% endblock %}</title>
+  <title>{% block title %}{{ BIZ }} CRM{% endblock %}</title>
   <!-- Add-to-home-screen (installable app icon) -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}" />
   <meta name="theme-color" content="#1f1333" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Dazzle CRM" />
+  <meta name="apple-mobile-web-app-title" content="{{ BIZ }} CRM" />
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}" />
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon-192.png') }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -283,7 +283,7 @@
   <div class="nav-overlay" id="navOverlay" onclick="closeNav()"></div>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-      <span class="script">Dazzle &amp; Shine</span>
+      <span class="script">{{ BIZ }}</span>
       <span class="sub">Back Office</span>
     </div>
     <nav>

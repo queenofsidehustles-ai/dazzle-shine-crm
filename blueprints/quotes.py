@@ -7,6 +7,7 @@ from models import CommercialQuote, CommercialAccount
 from extensions import db
 from notifications import send_email
 import brands
+import branding
 
 quotes_bp = Blueprint('quotes', __name__, url_prefix='/quotes')
 
@@ -203,11 +204,11 @@ def send_quote(quote_id):
     db.session.commit()
 
     # Send the owner a copy so there's always a record in your inbox
-    owner_email = os.environ.get('NOTIFY_EMAIL') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    owner_email = branding.owner_email()
     if owner_email and owner_email.lower() != (q.email or '').lower():
         try:
             send_email(
-                to_email=owner_email, to_name='Dazzle & Shine Maids',
+                to_email=owner_email, to_name=branding.biz_name(),
                 subject=f'Copy: quote sent to {q.company} ({q.contact_name})',
                 html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -275,10 +276,10 @@ def accept(token):
             "UPDATE commercial_quote SET status='accepted' WHERE token=:t"
         ), {'t': token})
         db.session.commit()
-    notify_email = __import__('os').environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+    notify_email = branding.owner_email()
     send_email(
-        to_email=notify_email, to_name='Dazzle & Shine Maids',
-        from_name='Dazzle & Shine Quotes',
+        to_email=notify_email, to_name=branding.biz_name(),
+        from_name=f'{branding.biz_name()} Quotes',
         subject=f'QUOTE ACCEPTED: {q.company} — ${float(q.monthly_price or 0):,.2f}/mo',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -311,10 +312,10 @@ def decline(token):
             "UPDATE commercial_quote SET status='declined' WHERE token=:t"
         ), {'t': token})
         db.session.commit()
-    notify_email = __import__('os').environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+    notify_email = branding.owner_email()
     send_email(
-        to_email=notify_email, to_name='Dazzle & Shine Maids',
-        from_name='Dazzle & Shine Quotes',
+        to_email=notify_email, to_name=branding.biz_name(),
+        from_name=f'{branding.biz_name()} Quotes',
         subject=f'Quote declined: {q.company}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">

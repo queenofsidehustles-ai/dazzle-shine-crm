@@ -1,5 +1,5 @@
 {% extends "base_admin.html" %}
-{% block title %}{{ 'Edit Quote' if quote else 'New Quote' }} — Dazzle & Shine CRM{% endblock %}
+{% block title %}{{ 'Edit Quote' if quote else 'New Quote' }} — {{ BIZ }} CRM{% endblock %}
 {% block page_title %}{{ 'Edit Quote' if quote else 'New Commercial Quote' }}{% endblock %}
 {% block topbar_right %}
   <a href="{{ url_for('quotes.index') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← All Quotes</a>
@@ -45,10 +45,10 @@
         <label>Send as brand</label>
         <select name="brand">
           {% if not quote %}<option value="">Auto — pick by property type</option>{% endif %}
-          <option value="lm" {{ 'selected' if quote and quote.brand == 'lm' }}>L &amp; M Commercial Cleaners</option>
-          <option value="dazzle" {{ 'selected' if quote and quote.brand == 'dazzle' }}>Dazzle &amp; Shine Maids</option>
+          <option value="commercial" {{ 'selected' if quote and quote.brand in ('lm', 'commercial') }}>{{ BIZ_COMMERCIAL }}</option>
+          <option value="primary" {{ 'selected' if quote and quote.brand in ('dazzle', 'primary') }}>{{ BIZ }}</option>
         </select>
-        <div style="font-size:0.72rem;color:#9a95ad;margin-top:3px">Apartments &amp; property managers → Dazzle; everything else → L &amp; M.</div>
+        <div style="font-size:0.72rem;color:#9a95ad;margin-top:3px">Apartments &amp; property managers → {{ BIZ }}; everything else → {{ BIZ_COMMERCIAL }}.</div>
       </div>
       <div class="form-group">
         <label>Property Address</label>

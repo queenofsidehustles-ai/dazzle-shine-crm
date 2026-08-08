@@ -1,5 +1,5 @@
 {% extends "base_admin.html" %}
-{% block title %}{{ 'Edit' if script else 'Add' }} Script — Dazzle & Shine CRM{% endblock %}
+{% block title %}{{ 'Edit' if script else 'Add' }} Script — {{ BIZ }} CRM{% endblock %}
 {% block page_title %}{{ 'Edit' if script else 'New' }} Script{% endblock %}
 {% block topbar_right %}
   <a href="{{ url_for('scripts.index', cat=category) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Back to Scripts</a>

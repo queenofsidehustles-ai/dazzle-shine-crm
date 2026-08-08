@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Thank You — Dazzle & Shine Maids</title>
+  <title>Thank You — {{ BIZ }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -24,7 +24,7 @@
       <h1 style="font-size:1.4rem;font-weight:700;margin-bottom:8px">You're amazing!</h1>
       <p style="color:#5f5878;margin-bottom:6px">We're thrilled you had a great experience, {{ r.booking.name.split()[0] }}!</p>
       <p style="color:#5f5878;font-size:0.9rem">Would you mind sharing your experience on Google? It takes 60 seconds and helps us so much.</p>
-      <a href="{{ review_link }}" class="btn-google" target="_blank">⭐ Leave a Google Review</a>
+      {% if review_link %}<a href="{{ review_link }}" class="btn-google" target="_blank">⭐ Leave a Google Review</a>{% endif %}
       <p style="font-size:0.78rem;color:#9a95ad;margin-top:16px">No pressure — just a link if you're feeling generous 😊</p>
       {% else %}
       <div style="font-size:2.5rem;margin-bottom:10px">💛</div>

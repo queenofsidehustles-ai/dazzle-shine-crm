@@ -4,13 +4,14 @@ from flask import Blueprint, render_template, request
 from auth import login_required
 from models import Booking, BusinessSetting
 import invoicing
+import branding
 
 invoices_bp = Blueprint('invoices', __name__)
 
 
 def _biz():
     return {
-        'name': BusinessSetting.get('business_name') or 'Dazzle & Shine Maids',
+        'name': branding.biz_name(),
         'phone': BusinessSetting.get('phone') or '',
         'email': BusinessSetting.get('email') or '',
         'address': BusinessSetting.get('address') or '',

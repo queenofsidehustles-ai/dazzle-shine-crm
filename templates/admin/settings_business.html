@@ -1,5 +1,5 @@
 {% extends "base_admin.html" %}
-{% block title %}Business Settings — Dazzle & Shine CRM{% endblock %}
+{% block title %}Business Settings — {{ BIZ }} CRM{% endblock %}
 {% block page_title %}Business Settings{% endblock %}
 
 {% block content %}
@@ -13,11 +13,11 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div class="form-group" style="grid-column:1/-1">
         <label>Business Name</label>
-        <input type="text" name="business_name" value="{{ current.business_name }}" placeholder="Dazzle & Shine Maids" />
+        <input type="text" name="business_name" value="{{ current.business_name }}" placeholder="{{ BIZ }}" />
       </div>
       <div class="form-group">
         <label>Phone</label>
-        <input type="text" name="phone" value="{{ current.phone }}" placeholder="(689) 999-0194" />
+        <input type="text" name="phone" value="{{ current.phone }}" placeholder="(555) 123-4567" />
       </div>
       <div class="form-group">
         <label>Email</label>
@@ -99,6 +99,114 @@
     </div>
 
     <button type="submit" class="btn btn-gold" style="margin-top:8px">Save Model Settings</button>
+  </form>
+</div>
+
+<!-- Branding: what customers see -->
+<div class="card" style="margin-top:20px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Branding &amp; Customer-Facing Details</h2>
+  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">These appear on quotes, invoices, receipts and the emails your customers receive.</p>
+  <form method="POST">
+    <div class="form-group">
+      <label>Google Review Link</label>
+      <input type="url" name="google_review_link" value="{{ current.google_review_link }}"
+             placeholder="https://g.page/r/…/review" />
+      <span style="font-size:0.76rem;color:#9a95ad">Shown to customers who rate you 4 or 5 stars. Leave blank and the review button is hidden entirely — better no button than one pointing at the wrong business.</span>
+    </div>
+    <div class="form-group">
+      <label>Email Tagline</label>
+      <input type="text" name="brand_tagline" value="{{ current.brand_tagline }}"
+             placeholder="Professional Cleaning Proposal" />
+      <span style="font-size:0.76rem;color:#9a95ad">The small line under your name at the top of quote emails.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div class="form-group">
+        <label>Header Colour</label>
+        <input type="text" name="brand_dark" value="{{ current.brand_dark }}" placeholder="#1f2937" />
+      </div>
+      <div class="form-group">
+        <label>Accent Colour</label>
+        <input type="text" name="brand_accent" value="{{ current.brand_accent }}" placeholder="#2563eb" />
+      </div>
+      <div class="form-group">
+        <label>Text On Accent</label>
+        <input type="text" name="brand_accent_text" value="{{ current.brand_accent_text }}" placeholder="#ffffff" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Send Email From Your Own Domain</label>
+      <select name="brand_domain_verified">
+        <option value="" {{ '' if current.brand_domain_verified == '1' else 'selected' }}>Not yet — send from the default address</option>
+        <option value="1" {{ 'selected' if current.brand_domain_verified == '1' }}>Yes — my domain is verified</option>
+      </select>
+      <span style="font-size:0.76rem;color:#9a95ad">Only switch this on once your domain is verified with your email provider. Turning it on too early means your emails stop arriving.</span>
+    </div>
+    <div class="form-group">
+      <label>How You Describe The Business</label>
+      <input type="text" name="content_business_description" value="{{ current.content_business_description }}"
+             placeholder="{{ BIZ }} — professional home cleaning service in {{ BIZ_CITY or 'your city' }}." />
+      <span style="font-size:0.76rem;color:#9a95ad">Used when the CRM writes social posts for you. Leave blank to build it from your name and city.</span>
+    </div>
+    <button type="submit" class="btn btn-gold">Save Branding</button>
+  </form>
+</div>
+
+<!-- Optional second trading name -->
+<div class="card" style="margin-top:20px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Commercial Brand <span style="text-transform:none;letter-spacing:0;font-weight:500">(optional)</span></h2>
+  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">
+    Some cleaning businesses sell commercial work under a separate name. If you do, fill this in and office, medical and retail quotes will go out branded that way.
+    <strong>Leave it all blank if you trade under one name</strong> — those quotes will simply go out as {{ BIZ }}.
+  </p>
+  <form method="POST">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="form-group">
+        <label>Commercial Business Name</label>
+        <input type="text" name="commercial_name" value="{{ current.commercial_name }}" placeholder="Leave blank to use {{ BIZ }}" />
+      </div>
+      <div class="form-group">
+        <label>Tagline</label>
+        <input type="text" name="commercial_tagline" value="{{ current.commercial_tagline }}" placeholder="Commercial Cleaning Proposal" />
+      </div>
+      <div class="form-group">
+        <label>From Email</label>
+        <input type="email" name="commercial_from_email" value="{{ current.commercial_from_email }}" placeholder="admin@yourcommercialdomain.com" />
+      </div>
+      <div class="form-group">
+        <label>Reply-To Email</label>
+        <input type="email" name="commercial_reply_to" value="{{ current.commercial_reply_to }}" placeholder="admin@yourcommercialdomain.com" />
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" name="commercial_phone" value="{{ current.commercial_phone }}" placeholder="(555) 123-4567" />
+      </div>
+      <div class="form-group">
+        <label>Website</label>
+        <input type="text" name="commercial_website" value="{{ current.commercial_website }}" placeholder="www.yourcommercialdomain.com" />
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div class="form-group">
+        <label>Header Colour</label>
+        <input type="text" name="commercial_dark" value="{{ current.commercial_dark }}" placeholder="#12324a" />
+      </div>
+      <div class="form-group">
+        <label>Accent Colour</label>
+        <input type="text" name="commercial_accent" value="{{ current.commercial_accent }}" placeholder="#2a89c4" />
+      </div>
+      <div class="form-group">
+        <label>Text On Accent</label>
+        <input type="text" name="commercial_accent_text" value="{{ current.commercial_accent_text }}" placeholder="#ffffff" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Send From The Commercial Domain</label>
+      <select name="commercial_domain_verified">
+        <option value="" {{ '' if current.commercial_domain_verified == '1' else 'selected' }}>Not yet — send from the default address</option>
+        <option value="1" {{ 'selected' if current.commercial_domain_verified == '1' }}>Yes — that domain is verified</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-gold">Save Commercial Brand</button>
   </form>
 </div>
 

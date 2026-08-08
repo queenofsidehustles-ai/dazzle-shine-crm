@@ -6,6 +6,7 @@ from auth import login_required
 from models import ContractorApplication, InterviewResponse
 from extensions import db
 from notifications import send_email
+import branding
 
 interviews_bp = Blueprint('interviews', __name__)
 
@@ -13,7 +14,7 @@ interviews_bp = Blueprint('interviews', __name__)
 def send_interview_invite_email(app_rec):
     """Send the bilingual interview + background check invitation email.
     Can be called from the admin manual route OR the auto-filter delayed timer."""
-    biz = 'Dazzle & Shine Maids'
+    biz = branding.biz_name()
     interview_url = url_for('interviews.interview_page',
                             token=app_rec.interview_token, _external=True)
     html = _build_invite_html(app_rec.name, interview_url, biz)
@@ -24,21 +25,37 @@ def send_interview_invite_email(app_rec):
         html=html,
     )
 
-QUESTIONS_EN = [
+_QUESTIONS_EN = [
     "Tell me about your cleaning experience.",
     "Are you comfortable working independently without supervision?",
     "Do you have reliable transportation?",
     "Are you available on weekends?",
-    "Why do you want to work with Dazzle & Shine?",
+    "Why do you want to work with {biz}?",
 ]
 
-QUESTIONS_ES = [
+_QUESTIONS_ES = [
     "Cuéntame sobre tu experiencia en limpieza.",
     "¿Te sientes cómodo/a trabajando de forma independiente sin supervisión?",
     "¿Tienes transporte propio y confiable?",
     "¿Estás disponible los fines de semana?",
-    "¿Por qué quieres trabajar con Dazzle & Shine?",
+    "¿Por qué quieres trabajar con {biz}?",
 ]
+
+
+def _fill(questions):
+    """Drop the business's own name into the question list. A plain replace
+    rather than .format() so an apostrophe or a brace in a question can never
+    blow up the interview page."""
+    name = branding.biz_name()
+    return [q.replace('{biz}', name) for q in questions]
+
+
+def QUESTIONS_EN():
+    return _fill(_QUESTIONS_EN)
+
+
+def QUESTIONS_ES():
+    return _fill(_QUESTIONS_ES)
 
 
 # ── Public (no login) ──────────────────────────────────────────────────────────
@@ -59,8 +76,8 @@ def interview_page(token):
 
     return render_template('interview/interview.html',
         app=app_rec,
-        questions_en=QUESTIONS_EN,
-        questions_es=QUESTIONS_ES,
+        questions_en=QUESTIONS_EN(),
+        questions_es=QUESTIONS_ES(),
         answered=answered,
         cloud_name=cloud_name,
         upload_preset=upload_preset,
@@ -154,8 +171,8 @@ def bgcheck_submit(token):
     db.session.commit()
 
     # Notify the owner
-    biz = 'Dazzle & Shine Maids'
-    owner_email = os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    biz = branding.biz_name()
+    owner_email = branding.owner_email()
     try:
         send_email(
             to_email=owner_email,
@@ -205,7 +222,7 @@ def review_interview(app_id):
     responses = InterviewResponse.query.filter_by(application_id=app_id)\
         .order_by(InterviewResponse.question_index).all()
     return render_template('admin/interview_review.html',
-        app=app_rec, responses=responses, questions_en=QUESTIONS_EN)
+        app=app_rec, responses=responses, questions_en=QUESTIONS_EN())
 
 
 @interviews_bp.route('/admin/interviews/<int:app_id>/language', methods=['POST'])
@@ -234,7 +251,7 @@ def approve_interview(app_id):
     db.session.commit()
 
     # Send candidate a focused background check reminder
-    biz = 'Dazzle & Shine Maids'
+    biz = branding.biz_name()
     upload_url = url_for('interviews.bgcheck_upload_page',
                          token=app_rec.bgcheck_upload_token, _external=True)
     accept_url = url_for('contractors.accept_offer',
@@ -276,7 +293,7 @@ def resend_offer(app_id):
         app_rec.offer_token = secrets.token_urlsafe(32)
     db.session.commit()
 
-    biz = 'Dazzle & Shine Maids'
+    biz = branding.biz_name()
     upload_url = url_for('interviews.bgcheck_upload_page',
                          token=app_rec.bgcheck_upload_token, _external=True)
     accept_url = url_for('contractors.accept_offer',
@@ -305,11 +322,11 @@ def reject_interview(app_id):
     app_rec.status = 'rejected'
     db.session.commit()
 
-    biz = 'Dazzle & Shine Maids'
+    biz = branding.biz_name()
     html = f"""
 <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;padding:32px;background:#f6f5fb">
   <div style="background:#1f1333;padding:24px;border-radius:12px;text-align:center;margin-bottom:24px">
-    <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0">Dazzle &amp; Shine Maids</h1>
+    <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0">{branding.biz_name()}</h1>
   </div>
   <h2 style="color:#1f1333">Hi {app_rec.name},</h2>
   <p style="color:#3b2b6b">Thank you so much for taking the time to apply and complete your video interview with {biz}.</p>
@@ -424,7 +441,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
     return f"""
 <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;background:#f6f5fb">
   <div style="background:#1f1333;padding:28px;border-radius:12px 12px 0 0;text-align:center">
-    <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0 0 6px;font-size:1.8rem">Dazzle &amp; Shine Maids</h1>
+    <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0 0 6px;font-size:1.8rem">{branding.biz_name()}</h1>
     <p style="color:rgba(255,255,255,0.6);margin:0;font-size:0.85rem;letter-spacing:0.1em;text-transform:uppercase">
       Welcome to the Team — Pending Your Background Check
     </p>
@@ -434,14 +451,14 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
   <div style="padding:32px;background:#fff;border-left:4px solid #d3a84f">
     <h2 style="color:#1f1333;margin:0 0 12px">Congratulations, {first}! 🎉</h2>
     <p style="color:#3b2b6b;line-height:1.8;margin:0 0 16px">
-      We loved your video interview, and <strong>we'd love to bring you onto the Dazzle &amp; Shine Maids team
+      We loved your video interview, and <strong>we'd love to bring you onto the {branding.biz_name()} team
       as an independent contractor</strong> — contingent on a clear background check.
       Consider this your official welcome (almost)!
     </p>
 
     <div style="background:#f6f5fb;border-left:3px solid #d3a84f;border-radius:6px;padding:14px 18px;margin:0 0 22px">
       <p style="color:#5f5878;line-height:1.7;margin:0;font-style:italic">
-        A personal note from me: I started Dazzle &amp; Shine to build a team of people who take pride in their
+        A personal note from me: I started {branding.biz_name()} to build a team of people who take pride in their
         work and treat every client's home like their own. I'm genuinely excited about the care you'll bring
         to our clients. — Monica, Owner
       </p>
@@ -486,7 +503,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
 
     <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0">
     <p style="color:#5f5878;font-size:0.82rem;line-height:1.6;margin:0">
-      Questions? Just reply to this email. We can't wait to welcome you to the Dazzle &amp; Shine family!
+      Questions? Just reply to this email. We can't wait to welcome you to the {branding.biz_name()} family!
     </p>
   </div>
 
@@ -494,14 +511,14 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
   <div style="padding:32px;background:#fff;border-left:4px solid #5d4f7d;border-top:2px dashed #e4dfef">
     <h2 style="color:#1f1333;margin:0 0 12px">¡Felicidades, {first}! 🎉</h2>
     <p style="color:#3b2b6b;line-height:1.8;margin:0 0 16px">
-      ¡Nos encantó tu entrevista en video y <strong>nos encantaría sumarte al equipo de Dazzle &amp; Shine Maids
+      ¡Nos encantó tu entrevista en video y <strong>nos encantaría sumarte al equipo de {branding.biz_name()}
       como contratista independiente</strong> — sujeto a una verificación de antecedentes sin problemas!
       Considera esta tu bienvenida oficial (casi).
     </p>
 
     <div style="background:#f6f5fb;border-left:3px solid #5d4f7d;border-radius:6px;padding:14px 18px;margin:0 0 22px">
       <p style="color:#5f5878;line-height:1.7;margin:0;font-style:italic">
-        Una nota personal de mi parte: Fundé Dazzle &amp; Shine para formar un equipo de personas que se enorgullecen
+        Una nota personal de mi parte: Fundé {branding.biz_name()} para formar un equipo de personas que se enorgullecen
         de su trabajo y tratan cada hogar como si fuera el suyo. Estoy muy emocionada por el cuidado que les brindarás
         a nuestros clientes. — Monica, Propietaria
       </p>
@@ -558,7 +575,7 @@ def _build_invite_html(name, interview_url, biz):
   <!-- HEADER -->
   <div style="background:#1f1333;padding:28px;border-radius:12px 12px 0 0;text-align:center">
     <h1 style="color:#d3a84f;font-family:Georgia,serif;margin:0 0 6px;font-size:1.8rem">
-      Dazzle &amp; Shine Maids
+      {branding.biz_name()}
     </h1>
     <p style="color:rgba(255,255,255,0.6);margin:0;font-size:0.85rem;letter-spacing:0.1em;
               text-transform:uppercase">
@@ -573,7 +590,7 @@ def _build_invite_html(name, interview_url, biz):
 
     <h2 style="color:#1f1333;margin:0 0 12px">Hi {name}!</h2>
     <p style="color:#3b2b6b;line-height:1.8;margin:0 0 12px">
-      Congratulations — you've been selected to move forward with <strong>Dazzle &amp; Shine Maids</strong>!
+      Congratulations — you've been selected to move forward with <strong>{branding.biz_name()}</strong>!
       Please complete <strong>both steps below</strong> to continue your application.
     </p>
 
@@ -630,8 +647,8 @@ def _build_invite_html(name, interview_url, biz):
       <p style="color:#5f5878;font-size:0.85rem;margin:12px 0 0;line-height:1.6">
         Please complete your background check within <strong>7 days</strong> of receiving this email.
         Email your results to
-        <a href="mailto:dazzleandshinemaids@gmail.com" style="color:#d3a84f">
-          dazzleandshinemaids@gmail.com
+        <a href="mailto:{branding.owner_email()}" style="color:#d3a84f">
+          {branding.owner_email()}
         </a>
       </p>
     </div>
@@ -653,7 +670,7 @@ def _build_invite_html(name, interview_url, biz):
 
     <h2 style="color:#1f1333;margin:0 0 12px">¡Hola {name}!</h2>
     <p style="color:#3b2b6b;line-height:1.8;margin:0 0 12px">
-      ¡Felicitaciones! Has sido seleccionado/a para avanzar con <strong>Dazzle &amp; Shine Maids</strong>.
+      ¡Felicitaciones! Has sido seleccionado/a para avanzar con <strong>{branding.biz_name()}</strong>.
       Por favor completa <strong>los dos pasos a continuación</strong> para continuar tu solicitud.
     </p>
 
@@ -702,8 +719,8 @@ def _build_invite_html(name, interview_url, biz):
       <p style="color:#5f5878;font-size:0.85rem;margin:12px 0 0;line-height:1.6">
         Por favor completa tu verificación de antecedentes dentro de los <strong>7 días</strong>
         de haber recibido este correo. Envía los resultados a
-        <a href="mailto:dazzleandshinemaids@gmail.com" style="color:#d3a84f">
-          dazzleandshinemaids@gmail.com
+        <a href="mailto:{branding.owner_email()}" style="color:#d3a84f">
+          {branding.owner_email()}
         </a>
       </p>
     </div>
@@ -726,7 +743,7 @@ def _build_invite_html(name, interview_url, biz):
 
 def send_interview_invite_email(app_rec):
     """Send the bilingual invite email. Called by admin route and auto-filter timer."""
-    biz = 'Dazzle & Shine Maids'
+    biz = branding.biz_name()
     interview_url = url_for('interviews.interview_page',
                             token=app_rec.interview_token, _external=True)
     send_email(

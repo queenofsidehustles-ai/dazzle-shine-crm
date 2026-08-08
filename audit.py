@@ -5,7 +5,7 @@ Run: python3 audit.py
 import os, sys, time
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
-BASE = "https://dazzle-shine-crm-production.up.railway.app"
+BASE = os.environ.get("CRM_BASE", "http://localhost:5000").rstrip("/")
 USER = os.environ.get("ADMIN_USER", "admin")
 PASS = os.environ.get("ADMIN_PASS", "")
 
@@ -300,7 +300,7 @@ def audit_sops_scripts(page):
 
 def main():
     print(f"\n{'='*60}")
-    print(f"  Dazzle & Shine CRM — Full Process Audit")
+    print("  CRM — Full Process Audit")
     print(f"  Target: {BASE}")
     print(f"{'='*60}\n")
 
@@ -359,7 +359,7 @@ def main():
             print(f"  {e}")
 
     with open("audit_report.txt", "w") as f:
-        f.write("Dazzle & Shine CRM — Process Gap Audit\n")
+        f.write("CRM — Process Gap Audit\n")
         f.write("="*60 + "\n\n")
         f.write("PASSING\n" + "-"*30 + "\n")
         for o in ok: f.write(o + "\n")

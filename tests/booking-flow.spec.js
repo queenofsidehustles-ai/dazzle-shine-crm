@@ -6,7 +6,7 @@
 //   (set TEST_CLEANER_PHONE to a cell YOU control to actually receive the assignment text)
 const { test, expect } = require('@playwright/test');
 
-const CRM = 'https://dazzle-shine-crm-production.up.railway.app';
+const CRM = process.env.CRM_BASE || 'http://localhost:5001';  // set CRM_BASE to point this at a deployed instance
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || '';
 const CLEANER_PHONE = process.env.TEST_CLEANER_PHONE || '';           // your cell to receive the real text

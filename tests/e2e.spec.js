@@ -1,8 +1,8 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
 
-const CRM = 'https://dazzle-shine-crm-production.up.railway.app';
-const SITE = 'https://www.dazzleandshinemaids.com';
+const CRM = process.env.CRM_BASE || 'http://localhost:5001';  // set CRM_BASE to point this at a deployed instance
+const SITE = process.env.SITE_URL || 'http://localhost:8080';  // set SITE_URL to test a live marketing site
 
 // ─── Fill these in before running admin tests ───────────────────────────────
 // Set via environment: ADMIN_USER=admin ADMIN_PASS=yourpassword npx playwright test

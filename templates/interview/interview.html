@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Video Interview — Dazzle & Shine Maids</title>
+  <title>Video Interview — {{ BIZ }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -351,7 +351,7 @@
   <!-- HEADER -->
   <header>
     <div class="header">
-      <span class="script">Dazzle &amp; Shine</span>
+      <span class="script">{{ BIZ }}</span>
       <span class="sub">Contractor Video Interview</span>
     </div>
     <div class="lang-bar" style="background:var(--purple)">
@@ -378,8 +378,8 @@
       <div class="start-card">
         <div class="greeting" x-text="lang==='en' ? 'Hi, ' + applicantName + '!' : '¡Hola, ' + applicantName + '!'"></div>
         <p x-text="lang==='en'
-          ? 'Welcome to your video interview with Dazzle & Shine Maids. This is your chance to let us get to know you!'
-          : 'Bienvenido/a a tu entrevista en video con Dazzle & Shine Maids. ¡Esta es tu oportunidad de que te conozcamos!'">
+          ? 'Welcome to your video interview with {{ BIZ }}. This is your chance to let us get to know you!'
+          : 'Bienvenido/a a tu entrevista en video con {{ BIZ }}. ¡Esta es tu oportunidad de que te conozcamos!'">
         </p>
         <ul class="steps-list">
           <li>
@@ -537,7 +537,7 @@
 
   <!-- FOOTER -->
   <footer style="text-align:center;padding:20px;color:#9a95ad;font-size:0.8rem;border-top:1px solid var(--border)">
-    Dazzle &amp; Shine Maids &copy; 2024 &middot; This link is private and unique to you.
+    {{ BIZ }} &copy; 2024 &middot; This link is private and unique to you.
   </footer>
 
 <script>

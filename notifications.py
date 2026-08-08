@@ -3,6 +3,7 @@ import hmac
 import hashlib
 import base64
 import requests as http_requests
+import branding
 
 
 def _log_outbound(channel, to_address, to_name, subject, body, ok, detail):
@@ -69,7 +70,7 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
     tmpl = EmailTemplate.query.filter_by(trigger=trigger, is_active=True).first()
     if not tmpl:
         return False
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     biz_phone = BusinessSetting.get('phone') or os.environ.get('BUSINESS_PHONE', '')
     v = {
         'business_name': biz,
@@ -129,9 +130,9 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     unaffected. from_email/reply_to let a branded caller (e.g. a commercial
     quote) override the sender identity per brand."""
     api_key = os.environ.get('RESEND_API_KEY')
-    from_email = from_email or os.environ.get('FROM_EMAIL', 'bookings@dazzleandshinemaids.com')
+    from_email = from_email or branding.from_email()
     if not from_name:
-        from_name = os.environ.get('FROM_NAME', 'Dazzle & Shine Maids')
+        from_name = branding.biz_name()
     if not api_key:
         # Log it. Returning silently made a missing key look like nothing was
         # ever attempted — the Sent Log stayed empty and there was no way to
@@ -146,7 +147,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     # Replies go to the inbox Monica actually checks, even though the email is
     # sent "from" the branded domain address.
     reply_to = reply_to or os.environ.get('REPLY_TO_EMAIL') or \
-        os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+        branding.owner_email()
     try:
         resp = http_requests.post(
             'https://api.resend.com/emails',

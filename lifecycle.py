@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 from extensions import db
 from notifications import send_triggered_email, is_opted_out, unsubscribe_token
 from pricing import FREQUENCY_DISCOUNTS
+import branding
 
-CRM_BASE = 'https://dazzle-shine-crm-production.up.railway.app'
 
 
 def _setting(key, fallback):
@@ -26,7 +26,7 @@ def _winback_code():
 
 
 def _unsub_url(email):
-    return f"{CRM_BASE}/api/unsubscribe/{unsubscribe_token(email)}"
+    return f"{branding.crm_base()}/api/unsubscribe/{unsubscribe_token(email)}"
 
 
 def _freq_prices(price):
@@ -70,12 +70,12 @@ def _send_transactional(trigger, email, name, variables):
 
 def _send_quote_followup(q, n):
     """Send nurture follow-up #n for a sent-but-unanswered commercial quote,
-    branded to the quote's brand (L & M or Dazzle)."""
+    branded to the quote's brand (commercial or primary)."""
     import brands
     from notifications import send_email, unsubscribe_token
     brand = q.brand or brands.brand_for_property(q.property_type)
     from_name, from_email, reply_to = brands.send_identity(brand)
-    url = f"{CRM_BASE}/quotes/view/{q.token}"
+    url = f"{branding.crm_base()}/quotes/view/{q.token}"
     first = (q.contact_name or '').split()[0] if q.contact_name else 'there'
     company = q.company or 'your property'
     MSGS = {
@@ -92,7 +92,7 @@ def _send_quote_followup(q, n):
             f"We'd love to earn your business.</p>"),
     }
     subject, inner = MSGS.get(n, MSGS[1])
-    unsub = f"{CRM_BASE}/api/unsubscribe/{unsubscribe_token(q.email)}"
+    unsub = f"{branding.crm_base()}/api/unsubscribe/{unsubscribe_token(q.email)}"
     foot = ("You're receiving this because we sent you a cleaning quote. "
             f'<a href="{unsub}" style="color:#9a95ad">Unsubscribe</a>.')
     html = brands.email_shell(brand, None, inner, cta_text='View &amp; Accept Quote →',
@@ -191,7 +191,7 @@ def run_lifecycle_emails():
         if not b or b.review_nudge_at or b.skip_review:
             continue
         if _send_marketing('review_nudge', b.email, b.name,
-                           {'rate_link': f"{CRM_BASE}/rate/{r.token}"}):
+                           {'rate_link': f"{branding.crm_base()}/rate/{r.token}"}):
             c['review_nudge'] += 1
         b.review_nudge_at = now
         db.session.commit()
@@ -266,7 +266,7 @@ def run_lifecycle_emails():
         last = s.onboarding_reminder_at or s.created_at
         if last and last > now - timedelta(days=2):
             continue                                  # every ~2 days
-        link = f"{CRM_BASE}/contractors/onboarding/{s.agreement_token}"
+        link = f"{branding.crm_base()}/contractors/onboarding/{s.agreement_token}"
         _send_transactional('contractor_onboarding_reminder', s.email, s.name,
                             {'onboarding_link': link})
         c['onboarding_reminder'] += 1
@@ -291,7 +291,7 @@ def run_lifecycle_emails():
         if not jobs:
             continue
         n = len(jobs)
-        myday = f"{CRM_BASE}/contractors/my-day/{s.agreement_token}"
+        myday = f"{branding.crm_base()}/contractors/my-day/{s.agreement_token}"
         _send_transactional('cleaner_schedule_reminder', s.email, s.name,
                             {'job_count': n, 'tomorrow_date': tomorrow, 'myday_link': myday})
         if s.phone:

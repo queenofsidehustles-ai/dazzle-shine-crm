@@ -6,6 +6,7 @@ from models import Booking, BookingCrew, Client, Staff
 from extensions import db
 from pricing import FREQUENCY_LABELS
 import recurring
+import branding
 
 bookings_bp = Blueprint('bookings', __name__, url_prefix='/bookings')
 
@@ -486,7 +487,7 @@ def email_customer(booking_id):
             booking.email = to_email
             db.session.commit()
         from notifications import send_email, _wrap_html
-        html = _wrap_html(message, 'Dazzle & Shine Maids')
+        html = _wrap_html(message, branding.biz_name())
         ok, detail = send_email(to_email=to_email, to_name=(booking.name or 'there'),
                                 subject=subject, html=html)
         if ok:
@@ -553,7 +554,7 @@ def correct_price(booking_id):
             html = f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <div style="background:linear-gradient(135deg,#1f1333,#3b2460);padding:26px 30px;border-radius:12px 12px 0 0">
-    <p style="color:#d3a84f;font-size:1.1rem;font-weight:700;margin:0">Dazzle &amp; Shine Maids</p>
+    <p style="color:#d3a84f;font-size:1.1rem;font-weight:700;margin:0">{branding.biz_name()}</p>
   </div>
   <div style="background:#fff;padding:28px 30px;border-radius:0 0 12px 12px;border:1px solid #e4dfef;border-top:none">
     <p>Hi {first},</p>
@@ -570,19 +571,19 @@ def correct_price(booking_id):
     </div>
     {note_html}
     <p>Sorry for the mix-up! Your booking is confirmed at the corrected total above. Just reply to this email or text us with any questions.</p>
-    <p style="margin-top:16px">Thank you,<br><strong>Dazzle &amp; Shine Maids</strong></p>
+    <p style="margin-top:16px">Thank you,<br><strong>{branding.biz_name()}</strong></p>
     <hr style="border:none;border-top:1px solid #e4dfef;margin:22px 0">
-    <p style="font-size:0.78rem;color:#9a95ad;margin:0">Dazzle &amp; Shine Maids · Orlando, FL · Reply to this email with any questions.</p>
+    <p style="font-size:0.78rem;color:#9a95ad;margin:0">{branding.biz_name()} · Orlando, FL · Reply to this email with any questions.</p>
   </div>
 </div>"""
             ok, detail = send_email(to_email=booking.email, to_name=booking.name,
-                                    subject='Your corrected cleaning quote — Dazzle & Shine Maids',
+                                    subject=f'Your corrected cleaning quote — {branding.biz_name()}',
                                     html=html)
             results.append(('email', ok, detail))
 
         if 'sms' in channels and booking.phone:
             from notifications import send_sms
-            sms = (f"Hi {first}! We corrected an error on your Dazzle & Shine quote. "
+            sms = (f"Hi {first}! We corrected an error on your {branding.biz_name()} quote. "
                    f"Your updated total is ${new_price:,.2f} (was ${prev_price:,.2f})"
                    + (f" for your {when} cleaning" if when else "")
                    + ". Sorry for the mix-up! Reply with any questions.")
@@ -630,8 +631,8 @@ def notify_pay(booking_id):
         flash('No assigned cleaner with a phone number to notify.', 'warning')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
 
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
-    base = 'https://dazzle-shine-crm-production.up.railway.app'
+    biz = branding.biz_name()
+    base = branding.crm_base()
     sent, failed = [], None
     for s, pay in targets:
         if not s.agreement_token:
@@ -833,7 +834,7 @@ def notify_moved(booking_id):
         s = Staff.query.filter(db.func.lower(Staff.name) == b.assigned_cleaner.lower()).first()
         people = [s] if s else []
 
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     when = f"{b.preferred_date}{(' at ' + b.preferred_time) if b.preferred_time else ''}"
     told, failed = [], []
     for s in people:
@@ -1064,7 +1065,7 @@ def send_invoice(booking_id):
         booking.invoice_due_date = None
     invoicing.issue(booking)
     payment_link_url(booking, 'full')  # ensure pay_token exists
-    biz = BusinessSetting.get('business_name') or 'Dazzle & Shine Maids'
+    biz = branding.biz_name()
     inv_url = request.host_url.rstrip('/') + url_for('invoices.view', token=booking.pay_token)
     due = amount_due(booking)
     sent = False
@@ -1148,8 +1149,7 @@ def clients():
 def client_detail(client_id):
     client = Client.query.get_or_404(client_id)
     from blueprints.portal import ensure_portal_token
-    from blueprints.payments import CRM_BASE
-    portal_url = f"{CRM_BASE}/portal/{ensure_portal_token(client)}"
+    portal_url = f"{branding.crm_base()}/portal/{ensure_portal_token(client)}"
     return render_template('admin/client_detail.html', client=client, portal_url=portal_url)
 
 
@@ -1205,9 +1205,9 @@ def _alert_owner_response(booking, cleaner_name, accepted):
     from models import BusinessSetting
     from notifications import send_email, send_sms
     owner_email = (BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL')
-                   or os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com'))
+                   or branding.owner_email())
     owner_phone = BusinessSetting.get('phone') or os.environ.get('OWNER_PHONE')
-    base = 'https://dazzle-shine-crm-production.up.railway.app'
+    base = branding.crm_base()
     link = f"{base}/bookings/{booking.id}"
     when = f"{booking.preferred_date or 'TBD'} {booking.preferred_time or ''}".strip()
     if accepted:
@@ -1221,7 +1221,7 @@ def _alert_owner_response(booking, cleaner_name, accepted):
         sms = f"⚠️ {cleaner_name} DECLINED the {when} job for {booking.name}. Reassign: {link}"
         color = '#c53030'
     try:
-        send_email(to_email=owner_email, to_name='Dazzle & Shine', subject=subject,
+        send_email(to_email=owner_email, to_name=branding.biz_name(), subject=subject,
                    html=f'<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f1333">'
                         f'<h2 style="color:{color}">{subject}</h2><p>{line}</p>'
                         f'<p><a href="{link}" style="color:#d3a84f;font-weight:700">Open the booking →</a></p></div>')
@@ -1244,14 +1244,14 @@ def _send_rating_request(booking):
     db.session.add(r)
     db.session.flush()
     from notifications import send_email
-    base = 'https://dazzle-shine-crm-production.up.railway.app'
+    base = branding.crm_base()
     stars_html = ''.join(
         f'<a href="{base}/rate/{token}/{i}" style="font-size:2.2rem;text-decoration:none;margin:0 4px">⭐</a>'
         for i in range(1, 6)
     )
     send_email(
         to_email=booking.email, to_name=booking.name,
-        subject='How was your cleaning? — Dazzle & Shine Maids',
+        subject=f'How was your cleaning? — {branding.biz_name()}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333;text-align:center">
   <h2 style="color:#b98a33;margin-bottom:6px">How did we do?</h2>
@@ -1259,7 +1259,7 @@ def _send_rating_request(booking):
   <div style="margin:20px 0">{stars_html}</div>
   <p style="font-size:0.82rem;color:#9a95ad">Takes 5 seconds. Your feedback helps us improve.</p>
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p style="color:#9a95ad;font-size:13px">Dazzle &amp; Shine Maids · Orlando, FL</p>
+  <p style="color:#9a95ad;font-size:13px">{branding.biz_name()} · Orlando, FL</p>
 </div>""",
     )
 
@@ -1273,10 +1273,10 @@ def _send_followup_email(booking):
     send_email(
         to_email=booking.email,
         to_name=booking.name,
-        subject='Thank you from Dazzle & Shine Maids',
+        subject=f'Thank you from {branding.biz_name()}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2 style="color:#b98a33">Thank you for choosing Dazzle &amp; Shine!</h2>
+  <h2 style="color:#b98a33">Thank you for choosing {branding.biz_name()}!</h2>
   <p>Hi {booking.name},</p>
   <p>Your cleaning is complete — we hope everything sparkles! ✨</p>
   <p>It was a pleasure serving you. If there's anything at all we can make
@@ -1285,7 +1285,7 @@ def _send_followup_email(booking):
      <a href="https://www.dazzleandshinemaids.com/#book" style="color:#b98a33">Book again here →</a>
   </p>
   <hr style="border:none;border-top:1px solid #e4dfef;margin:22px 0"/>
-  <p style="color:#9a95ad;font-size:13px">Dazzle &amp; Shine Maids · Orlando, FL</p>
+  <p style="color:#9a95ad;font-size:13px">{branding.biz_name()} · Orlando, FL</p>
 </div>""",
     )
 
@@ -1295,7 +1295,7 @@ def _send_booking_confirmation(booking):
     No deposit language — a simple 'you're booked' note. Best-effort."""
     from notifications import send_email, send_sms
     from models import BusinessSetting
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     first = (booking.name or 'there').split()[0]
     date_text = booking.preferred_date or 'the scheduled date'
     time_text = booking.preferred_time or ''
@@ -1405,7 +1405,7 @@ def _notify_cleaner(booking):
     else:
         pay_label = f'{booking.hours_worked or 0}h × ${staff.pay_rate:.2f}/hr'
 
-    base = 'https://dazzle-shine-crm-production.up.railway.app'
+    base = branding.crm_base()
     token = hashlib.sha256(f"{booking.id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
     accept_url = f"{base}/bookings/{booking.id}/cleaner-response?action=accept&token={token}"
     decline_url = f"{base}/bookings/{booking.id}/cleaner-response?action=decline&token={token}"
@@ -1457,7 +1457,7 @@ def _notify_cleaner(booking):
 
     send_email(
         to_email=staff.email, to_name=staff.name,
-        subject=f'New Job Assigned — {booking.preferred_date or "TBD"} · Dazzle & Shine',
+        subject=f'New Job Assigned — {booking.preferred_date or "TBD"} · {branding.biz_name()}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <h2 style="color:#b98a33">You have a new job! 🧹</h2>
@@ -1475,7 +1475,7 @@ def _notify_cleaner(booking):
     <a href="{accept_url}" style="background:#065f46;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700;font-size:0.95rem">✅ Accept Job</a>
     <a href="{decline_url}" style="background:#fee2e2;color:#991b1b;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700;font-size:0.95rem">❌ Decline</a>
   </div>
-  <p style="color:#9a95ad;font-size:12px;margin-top:20px">Questions? Call Monica at (689) 999-0194 · Dazzle &amp; Shine Maids</p>
+  <p style="color:#9a95ad;font-size:12px;margin-top:20px">Questions? {branding.phone_line("Call us at ")} · {branding.biz_name()}</p>
 </div>""",
     )
     return True

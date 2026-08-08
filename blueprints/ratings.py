@@ -4,17 +4,18 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for
 from models import BookingRating
 from extensions import db
+import branding
 
 ratings_bp = Blueprint('ratings', __name__, url_prefix='/rate')
 
-# Owner's Google review link. Editable via the 'google_review_link' business
-# setting; falls back to Dazzle & Shine's real link.
-DEFAULT_REVIEW_LINK = 'https://g.page/r/CZLGfXgsWHtVEBM/review'
-
-
 def review_link():
+    """The owner's Google review page, from Settings.
+
+    There is deliberately no default. A wrong link here would send a delighted
+    customer to leave five stars on somebody else's business, so an unset link
+    returns empty and the template hides the button entirely."""
     from models import BusinessSetting
-    return BusinessSetting.get('google_review_link') or DEFAULT_REVIEW_LINK
+    return BusinessSetting.get('google_review_link') or ''
 
 
 def _alert_low_rating(r):
@@ -25,9 +26,9 @@ def _alert_low_rating(r):
         from models import BusinessSetting
         from notifications import send_triggered_email
         owner = (BusinessSetting.get('email') or os.environ.get('OWNER_EMAIL')
-                 or os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com'))
+                 or branding.owner_email())
         b = r.booking
-        send_triggered_email('owner_low_rating', owner, 'Dazzle & Shine', {
+        send_triggered_email('owner_low_rating', owner, branding.biz_name(), {
             'client_name': (b.name if b else '') or 'A customer',
             'stars': r.rating,
             'comment': r.comment or '—',

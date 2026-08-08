@@ -1,5 +1,5 @@
 {% extends "base_admin.html" %}
-{% block title %}{{ 'Edit' if code else 'New' }} Discount Code — Dazzle & Shine CRM{% endblock %}
+{% block title %}{{ 'Edit' if code else 'New' }} Discount Code — {{ BIZ }} CRM{% endblock %}
 {% block page_title %}{{ 'Edit' if code else 'New' }} Discount Code{% endblock %}
 {% block topbar_right %}
   <a href="{{ url_for('discounts.index') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Back</a>

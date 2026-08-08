@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from auth import login_required
 from models import SOP
 from extensions import db
+import branding
 
 sops_bp = Blueprint('sops', __name__, url_prefix='/sops')
 
@@ -25,7 +26,7 @@ CLEANER_CATEGORIES = ['cleaning', 'commercial', 'quality']
 def library():
     """Public SOP library cleaners can reference anytime (job-relevant categories only)."""
     from models import BusinessSetting
-    biz = BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     label_map = dict(SOP.CATEGORIES)
     groups = []
     for key in CLEANER_CATEGORIES:

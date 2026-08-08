@@ -12,14 +12,14 @@ from models import Booking, BookingCrew, Staff, BusinessSetting
 from notifications import send_sms
 from pricing import get_labor_rate
 from translate import translate
+import branding
 
 claims_bp = Blueprint('claims', __name__)
 
-CRM_BASE = 'https://dazzle-shine-crm-production.up.railway.app'
 
 
 def _biz():
-    return BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    return branding.biz_name()
 
 
 def _owner_phone():
@@ -134,7 +134,7 @@ def broadcast_job(booking):
         if not s.agreement_token:
             s.agreement_token = secrets.token_urlsafe(32)
             db.session.commit()
-        link = f"{CRM_BASE}/claim/{booking.claim_token}/{s.agreement_token}"
+        link = f"{branding.crm_base()}/claim/{booking.claim_token}/{s.agreement_token}"
         # Show the hours and the rate, not just a total — they can check the
         # maths themselves and see it's the same rate on every job.
         hrs = booking.hours_each()
@@ -202,7 +202,7 @@ def claim_page(ctoken, stoken):
                            pay=_pay_for(booking, staff), state=state,
                            hours_each=booking.hours_each(), labor_rate=get_labor_rate(),
                            clash=clash_reason(staff, booking) if state == 'open' else None,
-                           biz=_biz(), myday=f"{CRM_BASE}/contractors/my-day/{staff.agreement_token}")
+                           biz=_biz(), myday=f"{branding.crm_base()}/contractors/my-day/{staff.agreement_token}")
 
 
 def _take_crew_spot(booking, staff):
@@ -246,7 +246,7 @@ def claim_do(ctoken, stoken):
                                pay=_pay_for(booking, staff),
                                hours_each=booking.hours_each(), labor_rate=get_labor_rate(),
                                state='clash', clash=reason, biz=_biz(),
-                               myday=f"{CRM_BASE}/contractors/my-day/{staff.agreement_token}")
+                               myday=f"{branding.crm_base()}/contractors/my-day/{staff.agreement_token}")
 
     if uses_crew(booking):
         if not _take_crew_spot(booking, staff):

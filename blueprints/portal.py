@@ -12,6 +12,7 @@ from flask import Blueprint, render_template, request, jsonify, abort, session, 
 from models import Client, BusinessSetting
 from extensions import db
 from blueprints.payments import amount_due, ensure_pay_token
+import branding
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -64,7 +65,7 @@ def _client(token):
 
 
 def _biz():
-    return BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    return branding.biz_name()
 
 
 @portal_bp.route('/portal/<token>/verify', methods=['POST'])

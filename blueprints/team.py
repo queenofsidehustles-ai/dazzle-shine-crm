@@ -20,16 +20,16 @@ from extensions import db
 from models import Availability, BusinessSetting, Staff
 from notifications import send_email, send_sms
 from translate import translate
+import branding
 
 team_bp = Blueprint('team', __name__, url_prefix='/team')
 # The cleaner's own page sits at the root so the texted link stays short.
 availability_bp = Blueprint('availability', __name__)
 
-CRM_BASE = 'https://dazzle-shine-crm-production.up.railway.app'
 
 
 def _biz():
-    return BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    return branding.biz_name()
 
 
 def _ensure_token(s):
@@ -174,7 +174,7 @@ def ask_availability():
         if not s.phone:
             missed.append(s.name)
             continue
-        link = f"{CRM_BASE}/availability/{_ensure_token(s)}/{start.isoformat()}"
+        link = f"{branding.crm_base()}/availability/{_ensure_token(s)}/{start.isoformat()}"
         first = (s.name or '').split()[0]
         msg = (f"Hi {first}! Which days can you work {label}? "
                f"Tap to tell us — takes 10 seconds 👉 {link} — {_biz()}")

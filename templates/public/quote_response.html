@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{ 'Proposal Accepted' if accepted else 'Proposal Declined' }} — Dazzle & Shine Maids</title>
+  <title>{{ 'Proposal Accepted' if accepted else 'Proposal Declined' }} — {{ BIZ }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -22,15 +22,15 @@
     <h1 style="color:#065f46">Proposal Accepted!</h1>
     <p>Thank you, {{ q.contact_name }}! We're thrilled to partner with <strong>{{ q.company }}</strong>.</p>
     <p>Our team will reach out within 1 business day to confirm your start date and schedule.</p>
-    <p style="margin-top:16px">Questions? Call us at <strong>(689) 999-0194</strong></p>
+    <p style="margin-top:16px">Questions? Call us at <strong>{{ BIZ_PHONE }}</strong></p>
     {% else %}
     <div class="icon">👋</div>
     <h1>No problem at all.</h1>
     <p>Thank you for your time, {{ q.contact_name }}. We appreciate the opportunity.</p>
     <p>If you change your mind or have questions about the proposal, we'd love to chat.</p>
-    <p style="margin-top:16px">Call us at <strong>(689) 999-0194</strong></p>
+    <p style="margin-top:16px">Call us at <strong>{{ BIZ_PHONE }}</strong></p>
     {% endif %}
-    <span class="script">Dazzle &amp; Shine Maids</span>
+    <span class="script">{{ BIZ }}</span>
   </div>
 </body>
 </html>

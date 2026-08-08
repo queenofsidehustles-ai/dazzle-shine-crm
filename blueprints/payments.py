@@ -9,10 +9,10 @@ from flask import Blueprint, render_template, request, jsonify, url_for
 from models import Booking, BusinessSetting
 from extensions import db
 from pricing import DEPOSIT_AMOUNT
+import branding
 
 payments_bp = Blueprint('payments', __name__)
 
-CRM_BASE = 'https://dazzle-shine-crm-production.up.railway.app'
 
 
 def payment_link_url(booking, kind='full'):
@@ -21,9 +21,9 @@ def payment_link_url(booking, kind='full'):
         if not booking.deposit_token:
             booking.deposit_token = secrets.token_urlsafe(32)
             db.session.commit()
-        return f"{CRM_BASE}/pay-deposit/{booking.deposit_token}"
+        return f"{branding.crm_base()}/pay-deposit/{booking.deposit_token}"
     ensure_pay_token(booking)
-    return f"{CRM_BASE}/pay/{booking.pay_token}"
+    return f"{branding.crm_base()}/pay/{booking.pay_token}"
 
 
 def send_payment_link(booking, kind='full'):
@@ -108,7 +108,7 @@ def mark_paid(booking, method='card', when=None, notify=True):
 
 
 def _biz():
-    return BusinessSetting.get('business_name', 'Dazzle & Shine Maids')
+    return branding.biz_name()
 
 
 def _send_receipt(booking, method):

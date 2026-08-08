@@ -4,10 +4,19 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from auth import login_required
 from models import ContentPost
 from extensions import db
+import branding
 
 content_bp = Blueprint('content', __name__, url_prefix='/content')
 
-_BIZ = "Dazzle & Shine Maids — professional home cleaning service in Orlando, FL."
+def _biz_description():
+    """How the business describes itself to the AI writing its social posts."""
+    from models import BusinessSetting
+    import branding
+    custom = (BusinessSetting.get('content_business_description') or '').strip()
+    if custom:
+        return custom
+    where = branding.city_line()
+    return f"{branding.biz_name()} — professional home cleaning service" + (f" in {where}." if where else ".")
 
 _PROMPTS = {
     'before_after': 'Write an engaging caption for a before-and-after cleaning transformation post. Be vivid and celebratory.',
@@ -48,7 +57,7 @@ def generate():
         return redirect(url_for('content.index'))
 
     prompt = (
-        f"Business: {_BIZ}\n\n"
+        f"Business: {_biz_description()}\n\n"
         f"Task: {_PROMPTS.get(post_type, _PROMPTS['tip'])}\n"
         f"Platform: {_PLATFORM.get(platform, _PLATFORM['instagram'])}\n"
         + (f"Additional context: {context}\n" if context else '') +
@@ -108,7 +117,7 @@ def generate_ads():
         return redirect(url_for('content.index'))
     prompt = f"""Create a complete Google Responsive Search Ad for a cleaning business.
 
-Business: Dazzle & Shine Maids — {service_focus} in {location}
+Business: {branding.biz_name()} — {service_focus} in {location}
 {('Key selling points: ' + usp) if usp else 'Key selling points: professional, reliable, insured, easy online booking, $50 deposit to hold your spot'}
 
 Rules:

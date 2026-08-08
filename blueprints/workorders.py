@@ -6,6 +6,7 @@ from auth import login_required
 from models import Booking, ChecklistTemplate, JobChecklist, Staff, BookingRating
 from extensions import db
 from notifications import send_email, send_sms
+import branding
 
 workorders_bp = Blueprint('workorders', __name__, url_prefix='/workorders')
 
@@ -238,12 +239,12 @@ def on_the_way(token):
         db.session.commit()
         booking = checklist.booking
         first = (booking.name or 'there').split(' ')[0]
-        cleaner = booking.assigned_cleaner or 'Your Dazzle & Shine cleaner'
+        cleaner = booking.assigned_cleaner or f'Your {branding.biz_name()} cleaner'
         # Let the client know
         if booking.phone:
             try:
                 send_sms(booking.phone,
-                         f"Hi {first}! {cleaner} from Dazzle & Shine is on the way to your "
+                         f"Hi {first}! {cleaner} from {branding.biz_name()} is on the way to your "
                          f"cleaning now. See you soon! 🧽✨")
             except Exception:
                 pass
@@ -251,14 +252,14 @@ def on_the_way(token):
             try:
                 send_email(
                     to_email=booking.email, to_name=booking.name or 'there',
-                    subject='Your Dazzle & Shine cleaner is on the way! 🚗',
+                    subject=f'Your {branding.biz_name()} cleaner is on the way! 🚗',
                     html=f"""
 <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1f1333">
   <h2 style="color:#b98a33">On the way! 🚗</h2>
   <p>Hi {first},</p>
   <p><strong>{cleaner}</strong> is heading to your home now for your
      {booking.service_label.lower()}. They'll text you if anything comes up.</p>
-  <p style="color:#9a95ad;font-size:0.85rem">Thank you for choosing Dazzle &amp; Shine Maids!</p>
+  <p style="color:#9a95ad;font-size:0.85rem">Thank you for choosing {branding.biz_name()}!</p>
 </div>""",
                 )
             except Exception:
@@ -390,7 +391,7 @@ def submit_complete(token):
 
     # Notify the owner that the job is closed out and ready for payment review
     booking = checklist.booking
-    owner_email = os.environ.get('NOTIFY_EMAIL') or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com')
+    owner_email = branding.owner_email()
     try:
         review_url = url_for('bookings.detail', booking_id=booking.id, _external=True, _scheme='https')
         hours_html = (f"<p>⏱️ <strong>{checklist.hours_on_site} hrs</strong> on site (auto-tracked)</p>"
@@ -400,7 +401,7 @@ def submit_complete(token):
         rating_html = (f"<p>⭐ Client left a {checklist.client_rating}-star review on site.</p>"
                        if checklist.client_rating else '')
         send_email(
-            to_email=owner_email, to_name='Dazzle & Shine Maids',
+            to_email=owner_email, to_name=branding.biz_name(),
             subject=f'Job completed — {booking.name} ({len(before)} before / {len(after)} after photos)',
             html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">

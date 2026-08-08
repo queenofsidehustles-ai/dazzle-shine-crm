@@ -6,7 +6,7 @@
 // Run the FULL flow (needs login):  ADMIN_PASS=yourpassword npx playwright test hiring-flow
 const { test, expect } = require('@playwright/test');
 
-const CRM = 'https://dazzle-shine-crm-production.up.railway.app';
+const CRM = process.env.CRM_BASE || 'http://localhost:5001';  // set CRM_BASE to point this at a deployed instance
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || '';
 // Any email lands in Monica's inbox via the +pwtest tag; override with TEST_EMAIL.

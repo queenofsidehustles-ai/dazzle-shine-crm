@@ -102,10 +102,23 @@ def business():
     fields = ['business_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'website',
               'worker_model', 'reception_model', 'agreement_template',
               'interview_calendar_link', 'bgcheck_provider_url', 'bgcheck_provider_name',
-              'customer_terms']
+              'customer_terms',
+              # Branding — what customers see on emails, quotes and review prompts.
+              'google_review_link', 'content_business_description',
+              'brand_tagline', 'brand_dark', 'brand_accent', 'brand_accent_text',
+              'brand_domain_verified',
+              # An optional second trading name for commercial work.
+              'commercial_name', 'commercial_tagline', 'commercial_from_email',
+              'commercial_reply_to', 'commercial_phone', 'commercial_website',
+              'commercial_dark', 'commercial_accent', 'commercial_accent_text',
+              'commercial_domain_verified']
     if request.method == 'POST':
+        # Save only the fields this particular form actually submitted. The page
+        # has several separate forms, and writing every field on every save
+        # would blank out whichever card the owner wasn't looking at.
         for f in fields:
-            BusinessSetting.set(f, request.form.get(f, ''))
+            if f in request.form:
+                BusinessSetting.set(f, request.form.get(f, ''))
         db.session.commit()
         flash('Business settings updated!', 'success')
         return redirect(url_for('settings.business'))

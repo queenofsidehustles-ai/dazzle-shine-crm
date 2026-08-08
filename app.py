@@ -108,6 +108,30 @@ def create_app():
         except Exception:
             return {}
 
+    # Who this CRM belongs to. Every template that used to say "Dazzle & Shine
+    # Maids" in plain text now reads BIZ, so one deployment can serve one company
+    # and a second deployment can serve another without a line of code changing.
+    @app.context_processor
+    def inject_brand():
+        import branding
+        try:
+            import brands
+            return {
+                'BIZ': branding.biz_name(),
+                'BIZ_COMMERCIAL': brands.get_brand(brands.COMMERCIAL)['name'],
+                'BIZ_PHONE': branding.phone(),
+                'BIZ_EMAIL': branding.reply_to(),
+                'BIZ_WEBSITE': branding.website(),
+                'BIZ_CITY': branding.city_line(),
+                'BIZ_BOOKING_LINK': branding.booking_link(),
+                'CRM_BASE': branding.crm_base(),
+            }
+        except Exception:
+            # A template must never 500 because a setting is missing.
+            return {'BIZ': 'Your Cleaning Company', 'BIZ_COMMERCIAL': 'Your Cleaning Company',
+                    'BIZ_PHONE': '', 'BIZ_EMAIL': '', 'BIZ_WEBSITE': '',
+                    'BIZ_CITY': '', 'BIZ_BOOKING_LINK': '', 'CRM_BASE': ''}
+
     with app.app_context():
         db.create_all()
         _migrate_db()
@@ -120,8 +144,59 @@ def create_app():
         _seed_pricing_defaults()
         _seed_message_templates()
         _patch_pay_rate_40_to_50()
+        _seed_existing_brand_settings()
 
     return app
+
+
+def _seed_existing_brand_settings():
+    """One-time move of Dazzle & Shine's brand details out of code and into Settings.
+
+    Brand identities used to be a hardcoded dictionary in brands.py, which meant
+    the CRM could only ever belong to one company. They are now read from
+    Settings — but that change must not quietly restyle the emails of the
+    business already running on this code, so the old values are written into
+    Settings once, here.
+
+    The guard matters: this only fires on an instance whose business name is
+    already 'Dazzle & Shine Maids'. A CRM deployed for any other company will
+    never match, so it starts clean with its own name and its own colours and
+    never inherits somebody else's branding."""
+    from models import BusinessSetting
+    if BusinessSetting.get('brand_settings_migrated'):
+        return
+    if BusinessSetting.get('business_name', '').strip() != 'Dazzle & Shine Maids':
+        return
+
+    legacy = {
+        # The residential brand — the business's own name and gold palette.
+        'brand_tagline': 'Professional Cleaning Proposal',
+        'brand_dark': '#1f1333',
+        'brand_accent': '#d3a84f',
+        'brand_accent_text': '#1f1333',
+        'brand_domain_verified': '1',
+        # The commercial brand, which sells under a separate name.
+        'commercial_name': 'L & M Commercial Cleaners',
+        'commercial_tagline': 'Commercial Cleaning Proposal',
+        'commercial_from_email': 'admin@commercialcleanersorlando.com',
+        'commercial_reply_to': 'admin@commercialcleanersorlando.com',
+        'commercial_website': 'www.commercialcleanersorlando.com',
+        'commercial_dark': '#12324a',
+        'commercial_accent': '#2a89c4',
+        'commercial_accent_text': '#ffffff',
+        'commercial_domain_verified': '',
+        # The Google review link used to be a code default. It is now a setting
+        # with no default at all — pointing a happy customer at the wrong
+        # company's review page would be worse than showing no button — so the
+        # real link is preserved here for the business already using it.
+        'google_review_link': 'https://g.page/r/CZLGfXgsWHtVEBM/review',
+    }
+    for key, value in legacy.items():
+        if not BusinessSetting.get(key):
+            BusinessSetting.set(key, value)
+    BusinessSetting.set('brand_settings_migrated', '1')
+    db.session.commit()
+    print('  ✅ brand details moved from code into Settings')
 
 
 def _patch_pay_rate_40_to_50():
@@ -564,8 +639,8 @@ def _seed_sales_scripts():
 "That's exactly what we hear most. Here's all I'd suggest, no pressure: let me do a quick 10-minute walkthrough of your space and put together a clear quote. If it's a fit, great — if not, no hard feelings. Would it be unreasonable to grab 10 minutes this week?"
 💡 "Would it be unreasonable to…?" is a no-oriented question — it's easy to say "no, that's fine," which really means yes. And a 10-minute walkthrough is a tiny commitment, not a contract (foot-in-the-door)."""),
 
-        ('outbound', '🏘️ Cold Call Opening + Discovery — Dazzle & Shine (apartments · property managers)', 1, """[When they answer]
-"Hi, this is [Your Name] with Dazzle & Shine Maids here in Orlando — did I catch you at a bad time?"
+        ('outbound', '🏘️ Cold Call Opening + Discovery — [Your Company] (apartments · property managers)', 1, """[When they answer]
+"Hi, this is [Your Name] with [Your Company] — did I catch you at a bad time?"
 💡 "Bad time?" invites a safe "no" and disarms. It beats "How are you today?", which instantly signals a sales pitch.
 
 "Thanks for a sec. I'll be straight with you — I'm reaching out to property managers around Orlando because turnovers and move-outs are usually where cleaning falls apart. Who's handling your unit turnover cleans right now?"
@@ -578,8 +653,8 @@ def _seed_sales_scripts():
 "Right — that's the exact gap we fill: reliable turnover cleans so your units are rent-ready on time. Would it be ridiculous to set up a quick walkthrough of one property so I can show you what we'd charge per unit?"
 💡 "Would it be ridiculous to…?" is the safe-no close again. "Per unit" framing matches how property managers actually think about cost."""),
 
-        ('outbound', '🔑 Cold Call Opening + Discovery — Realtors (listing & closing cleans) — Dazzle & Shine', 2, """[When they answer]
-"Hi, is this [Name]? This is [Your Name] with Dazzle & Shine Maids here in Orlando — did I catch you between showings?"
+        ('outbound', '🔑 Cold Call Opening + Discovery — Realtors (listing & closing cleans) — [Your Company]', 2, """[When they answer]
+"Hi, is this [Name]? This is [Your Name] with [Your Company] — did I catch you between showings?"
 💡 "Between showings?" shows you get a realtor's crazy schedule and gives a respectful out. Rapport in one line.
 
 "I'll be quick — I work with a few Orlando agents on move-in and move-out cleans, the kind that make a listing photograph beautifully and close smoothly. Do you have a go-to cleaner for your listings right now?"
@@ -592,8 +667,8 @@ def _seed_sales_scripts():
 "That's exactly what we're great at — fast, reliable turn cleans on your timeline. Would it be crazy to be your on-call cleaner, so your next tight closing is already handled?"
 💡 "Would it be crazy to…?" safe-no close. "On-call" is a tiny yes, not a commitment — and frames you as their safety net."""),
 
-        ('outbound', '🛏️ Cold Call Opening + Discovery — Airbnb / STR Hosts (turnovers) — Dazzle & Shine', 3, """[When they answer]
-"Hi [Name], this is [Your Name] with Dazzle & Shine Maids in Orlando — did I catch you at an okay time?"
+        ('outbound', '🛏️ Cold Call Opening + Discovery — Airbnb / STR Hosts (turnovers) — [Your Company]', 3, """[When they answer]
+"Hi [Name], this is [Your Name] with [Your Company] — did I catch you at an okay time?"
 💡 A permission opener — hands control over and lowers the guard.
 
 "I'll keep it short. I help short-term rental hosts around Orlando with guest turnovers — the fast, spotless resets between check-out and check-in. How are you handling your turnovers right now?"
@@ -1649,12 +1724,12 @@ Same idea for sponges and scrubbers — bathroom tools stay in the bathroom.""")
 
         ('cleaning', 'Arrival & In-Home Etiquette', 6, """ARRIVAL & IN-HOME ETIQUETTE
 
-You represent Dazzle & Shine the moment you pull up. First impressions win reviews and repeat clients.
+You represent the company the moment you pull up. First impressions win reviews and repeat clients.
 
 ARRIVAL
 1. Arrive on time (aim 5 minutes early). If you're running late, message the office immediately.
 2. Park considerately — never block driveways or neighbors.
-3. Knock/ring; announce yourself warmly: "Hi, I'm ___ with Dazzle & Shine!"
+3. Knock/ring; announce yourself warmly: "Hi, I'm ___ with [Your Company]!"
 4. If entering with a code/key, follow the exact instructions in the work order.
 
 INSIDE THE HOME
@@ -1780,7 +1855,7 @@ PRIVACY
 - Never post a client's home publicly without the office's OK.
 - Never photograph valuables, safes, or anything personal."""),
 
-        ('quality', 'The Dazzle Final Walkthrough', 3, """THE DAZZLE FINAL WALKTHROUGH
+        ('quality', 'The Final Walkthrough', 3, """THE FINAL WALKTHROUGH
 
 Before you leave, do this every single time. It's the difference between "clean" and "WOW."
 

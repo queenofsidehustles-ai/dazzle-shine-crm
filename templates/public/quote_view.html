@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cleaning Proposal — Dazzle & Shine Maids</title>
+  <title>Cleaning Proposal — {{ BIZ }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -34,7 +34,7 @@
 </head>
 <body>
   <div class="header">
-    <div class="script">Dazzle &amp; Shine</div>
+    <div class="script">{{ BIZ }}</div>
     <div class="sub">Commercial Cleaning Proposal</div>
   </div>
 
@@ -83,7 +83,7 @@
     {% if q.status == 'accepted' %}
     <div class="status-banner status-accepted">You accepted this proposal ✓<br><span style="font-size:0.85rem;font-weight:500">We'll be in touch shortly to confirm your start date.</span></div>
     {% elif q.status == 'declined' %}
-    <div class="status-banner status-declined">You declined this proposal.<br><span style="font-size:0.85rem;font-weight:500">Questions? Call us at (689) 999-0194.</span></div>
+    <div class="status-banner status-declined">You declined this proposal.<br><span style="font-size:0.85rem;font-weight:500">Questions? Call us at {{ BIZ_PHONE }}.</span></div>
     {% else %}
     <div class="action-row">
       <form method="POST" action="{{ url_for('quotes.accept', token=q.token) }}">
@@ -94,7 +94,7 @@
         <button type="submit" class="btn-decline">Decline</button>
       </form>
     </div>
-    <p style="text-align:center;font-size:0.8rem;color:#9a95ad;margin-top:14px">Questions before deciding? Call (689) 999-0194 or email us — we're happy to adjust.</p>
+    <p style="text-align:center;font-size:0.8rem;color:#9a95ad;margin-top:14px">Questions before deciding? Call {{ BIZ_PHONE }} or email us — we're happy to adjust.</p>
     {% endif %}
   </div>
 </body>

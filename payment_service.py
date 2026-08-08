@@ -1,6 +1,7 @@
 import os
 import stripe
 from notifications import send_email, send_sms
+import branding
 
 
 def charge_balance(booking) -> tuple:
@@ -13,7 +14,7 @@ def charge_balance(booking) -> tuple:
     charge anything at all."""
     from blueprints.payments import amount_due
     stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
-    notify_email = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+    notify_email = branding.owner_email()
 
     if not stripe.api_key:
         return False, 'Stripe not configured'
@@ -104,7 +105,7 @@ def autocharge(booking) -> tuple:
             return True, ''
         return False, f'Payment status: {intent.status}'
     except stripe.error.CardError as e:
-        notify_email = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+        notify_email = branding.owner_email()
         _notify_failed(booking, notify_email, e.user_message or str(e))
         return False, (e.user_message or str(e))
     except stripe.error.StripeError as e:
@@ -115,8 +116,8 @@ def _notify_failed(booking, notify_email, error_msg):
     amt = booking.balance_due if booking.balance_due else (booking.price or 0)
     send_email(
         to_email=notify_email,
-        to_name='Dazzle & Shine Maids',
-        from_name='Dazzle & Shine Payments',
+        to_name=branding.biz_name(),
+        from_name=f'{branding.biz_name()} Payments',
         subject=f'PAYMENT FAILED: {booking.name} — ${amt:.2f}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -131,6 +132,6 @@ def _notify_failed(booking, notify_email, error_msg):
     )
     send_sms(
         booking.phone,
-        f"Hi {booking.name.split()[0]}, your Dazzle & Shine payment of ${amt:.2f} "
-        f"didn't go through. Please call us at (689) 999-0194. Thank you!",
+        f"Hi {booking.name.split()[0]}, your {branding.biz_name()} payment of ${amt:.2f} "
+        f"didn't go through. {branding.phone_line('Please call us at ')} Thank you!",
     )

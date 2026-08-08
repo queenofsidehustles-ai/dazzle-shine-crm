@@ -7,6 +7,7 @@ from models import Booking, Client
 from extensions import db
 from pricing import calculate_price, SERVICES, EXTRAS, FREQUENCY_LABELS, DEPOSIT_AMOUNT
 from notifications import send_email, send_sms, add_to_mailerlite
+import branding
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -249,11 +250,11 @@ def capture_commercial_lead():
 def _send_commercial_alert(lead, company, facility_label, sqft, frequency, message):
     """Text + email the owner. No customer-facing price, so no quote text."""
     from models import BusinessSetting
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     owner_phone = (BusinessSetting.get('owner_phone') or BusinessSetting.get('phone')
                    or os.environ.get('OWNER_PHONE', ''))
     owner_email = (BusinessSetting.get('email')
-                   or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com'))
+                   or branding.owner_email())
 
     kind = 'APARTMENT TURNOVER' if lead.service_type == 'apartment_turnover' else 'COMMERCIAL'
     alert = (f"\U0001F3E2 NEW {kind} LEAD — call them now! {lead.name}"
@@ -467,10 +468,10 @@ def contractor_apply():
     db.session.add(a)
     db.session.commit()
 
-    notify = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+    notify = branding.owner_email()
     send_email(
-        to_email=notify, to_name='Dazzle & Shine Maids',
-        from_name='Dazzle & Shine Hiring',
+        to_email=notify, to_name=branding.biz_name(),
+        from_name=f'{branding.biz_name()} Hiring',
         subject=f'New Cleaner Application: {a.name}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -711,7 +712,7 @@ def stripe_webhook():
 # ── Notification helpers ───────────────────────────────────────────────────────
 
 def _send_confirmation(booking: Booking):
-    notify_email = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
+    notify_email = branding.owner_email()
     freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')
     date_text = booking.preferred_date or 'Flexible'
     time_text = booking.preferred_time or 'Flexible'
@@ -741,16 +742,16 @@ def _send_confirmation(booking: Booking):
     # SMS to customer
     send_sms(
         booking.phone,
-        f"Hi {booking.name.split()[0]}! Your Dazzle & Shine cleaning is confirmed for {date_text}. "
+        f"Hi {booking.name.split()[0]}! Your {branding.biz_name()} cleaning is confirmed for {date_text}. "
         f"Deposit received. Balance due: ${booking.balance_due:.2f}. "
-        f"Questions? Call (689) 999-0194. Reply STOP to opt out.",
+        f"Questions? {branding.phone_line('Call ')} Reply STOP to opt out.",
     )
 
     # Notification to owner
     send_email(
         to_email=notify_email,
-        to_name='Dazzle & Shine Maids',
-        from_name='Dazzle & Shine Bookings',
+        to_name=branding.biz_name(),
+        from_name=f'{branding.biz_name()} Bookings',
         subject=f'New booking + deposit paid: {booking.name} — {booking.service_label}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -775,8 +776,8 @@ def _send_deposit_request(booking: Booking):
     until the $50 deposit is paid. Includes a secure Pay Deposit link."""
     from flask import url_for
     from models import BusinessSetting
-    notify_email = os.environ.get('NOTIFY_EMAIL', 'dazzleandshinemaids@gmail.com')
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    notify_email = branding.owner_email()
+    biz = branding.biz_name()
     freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')
     date_text = booking.preferred_date or 'Flexible'
     time_text = booking.preferred_time or 'Flexible'
@@ -822,7 +823,7 @@ def _send_deposit_request(booking: Booking):
     </div>
 
     <p style="color:#5f5878;font-size:0.85rem;line-height:1.6;text-align:center;margin:0">
-      Questions or want to change something? Call or text us at (689) 999-0194.
+      Questions or want to change something? {branding.phone_line("Call or text us at ")}
     </p>
   </div>
   <div style="padding:14px;background:#1f1333;border-radius:0 0 12px 12px;text-align:center">
@@ -893,11 +894,11 @@ def _send_speed_to_lead(lead, total):
        1) text the LEAD so they feel taken care of,
        2) alert the OWNER (text + email) so they can call while the lead is hot."""
     from models import BusinessSetting
-    biz = BusinessSetting.get('business_name') or os.environ.get('BUSINESS_NAME', 'Dazzle & Shine Maids')
+    biz = branding.biz_name()
     owner_phone = (BusinessSetting.get('owner_phone') or BusinessSetting.get('phone')
                    or os.environ.get('OWNER_PHONE', ''))
     owner_email = (BusinessSetting.get('email')
-                   or os.environ.get('OWNER_EMAIL', 'dazzleandshinemaids@gmail.com'))
+                   or branding.owner_email())
 
     first = (lead.name or 'there').split()[0]
     service = lead.service_label or 'cleaning'

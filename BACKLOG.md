@@ -2,29 +2,41 @@
 
 Ideas we agreed to build later (not urgent). Newest at top.
 
-## White-labeling (parked 2026-08-01 — do before a second customer touches the CRM)
+## White-labeling — DONE 2026-08-08
 
-The CRM is being built to resell to other cleaning companies. It isn't tenant-safe
-yet. Audit findings, worst first:
+Every item below is finished. Setting up a new company is now a config job, not a
+code job: see **NEW_CUSTOMER_SETUP.md**.
 
-- [ ] **Hardcoded production URL — this one is a real bug, not cosmetic.**
-      `CRM_BASE = 'https://dazzle-shine-crm-production.up.railway.app'` appears in
-      `lifecycle.py:12`, `blueprints/messages.py:17`, `blueprints/claims.py:14`, and
-      `audit.py:8`. Another company's cleaners would get job-claim links pointing at
-      **our** server — they'd tap "Claim this job" and land in someone else's CRM.
-      Fix: derive the base URL from the request host or a per-tenant setting.
-- [ ] **~150 hardcoded "Dazzle & Shine" strings across 25+ files** — emails, page
-      titles, templates. `BusinessSetting` already exists and is the right mechanism;
-      it's just used inconsistently. Heaviest offenders: `blueprints/contractors.py`
-      (31), `blueprints/interviews.py` (18), `blueprints/bookings.py` (17).
-- [ ] **Outgoing email defaults to our addresses.** `notifications.py:132` falls back
-      to `bookings@dazzleandshinemaids.com`, `:140` to the gmail. `payment_service.py`
-      does the same in two places.
-- [ ] **`brands.py` is two hardcoded brand dicts**, not a per-tenant layer. Fine for
-      the L&M / Dazzle split it was built for; won't carry a third company.
-- [ ] **Regression guard:** `tests/local-e2e.spec.js` test 14 already asserts the
-      brand can't leak into the P&L CSV. Extend that idea — a test that boots a
-      blank instance and fails if "Dazzle" appears anywhere user-facing.
+- [x] **Hardcoded production URL.** Gone from all 11 places. Every texted link is
+      built from `branding.crm_base()`, which reads the `CRM_BASE` environment
+      variable and falls back to the live request's own host — so a misconfigured
+      instance links to itself rather than to somebody else's CRM.
+- [x] **217 hardcoded brand strings across 90 files.** All resolve through
+      `branding.py` (code) or the `BIZ` template variable injected by the context
+      processor in `app.py`.
+- [x] **Outgoing email defaults.** `branding.from_email()` / `owner_email()` /
+      `reply_to()`. Settings first so the owner can change them without a redeploy;
+      the *sending* address stays an env var because it must match a verified domain.
+- [x] **`brands.py` rebuilt.** Both identities come from Settings. A business with
+      one trading name leaves the commercial fields blank and its commercial quotes
+      fall back to its single name. Legacy `lm` / `dazzle` keys on saved quotes still
+      resolve, so no history was rewritten.
+- [x] **Google review link no longer defaults to ours** — this was the sharpest
+      leak. Unset means the button hides rather than sending a delighted customer to
+      review the wrong company.
+- [x] **Regression guard.** `test_whitelabel.py` boots a blank instance and fails if
+      any trace of another company appears on 17 admin pages, the payment page, quote
+      emails, the training guide or the interview questions. `test_whitelabel_existing.py`
+      proves the existing business's name, colours, L&M brand and review link all
+      survived the move into Settings.
+
+Still open, and worth doing before this grows past a couple of customers:
+
+- [ ] **Admin UI theming.** Emails and customer-facing pages are fully themeable;
+      the admin CSS is still gold-and-purple. Only the owner sees it.
+- [ ] **A release you promote deliberately.** Right now a push to `main` deploys to
+      every instance at once.
+- [ ] **Staging.** There is still nowhere to try a change before customers see it.
 
 ## Contractor pay
 - [ ] **Auto-flag 55% raise candidates.** When a contractor hits the top-performer
