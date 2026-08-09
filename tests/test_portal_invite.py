@@ -132,3 +132,47 @@ with app.app_context():
     check('Upcoming cleanings' not in r.get_data(as_text=True), 'a wrong ZIP is refused')
 
 print('\n🎉 Monthly plan holds its date, her price sticks, and nothing sends without a preview.')
+
+
+# ── Some customers ask for a day of the week, not a date. ────────────────────
+with app.app_context():
+    print('\n12. A plan can repeat on a weekday instead of a date')
+    c2 = Client(name='Marcus Bell', email='marcus@example.com', phone='4075550199',
+                zip_code='32803', address='7 Oak Row')
+    db.session.add(c2); db.session.commit()
+    seed2 = Booking(client_id=c2.id, service_type='standard', name='Marcus Bell',
+                    email='marcus@example.com', address='7 Oak Row', zip_code='32803',
+                    frequency='monthly', preferred_date='2026-09-09',
+                    price=210.0, status='confirmed')
+    db.session.add(seed2); db.session.commit()
+    check(recurring.describe_weekday(date(2026, 9, 9)) == '2nd Wednesday',
+          'the 9th of September is correctly read as the 2nd Wednesday')
+
+    r = c.post(f'/bookings/{seed2.id}/schedule-recurring',
+               data={'monthly_mode': 'weekday'}, follow_redirects=True)
+    check(r.status_code == 200, 'the plan schedules')
+    v2 = Booking.query.filter_by(recurring_group=seed2.recurring_group)\
+                      .order_by(Booking.preferred_date).all()
+    dows = {date.fromisoformat(v.preferred_date).weekday() for v in v2}
+    check(dows == {2}, f'every visit is a Wednesday (got {sorted(dows)})')
+    positions = {recurring.weekday_position(date.fromisoformat(v.preferred_date))[1] for v in v2}
+    check(positions == {2}, f'and every one is the 2nd Wednesday (got {sorted(positions)})')
+    check(len({v.preferred_date for v in v2}) == len(v2), 'no duplicated visits')
+    check(len(v2) >= 11, f'a year of them ({len(v2)})')
+
+    print('\n13. Switching pattern moves future visits but never touches history')
+    done = v2[1]
+    done.status = 'completed'
+    db.session.commit()
+    before = len(v2)
+    c.post(f'/bookings/{seed2.id}/schedule-recurring',
+           data={'monthly_mode': 'date'}, follow_redirects=True)
+    after = Booking.query.filter_by(recurring_group=seed2.recurring_group).all()
+    kept = Booking.query.get(done.id)
+    check(kept is not None, 'a completed visit survives the change')
+    check(kept.status == 'completed', 'still marked completed')
+    days = {date.fromisoformat(v.preferred_date).day for v in after
+            if v.status == 'pending' and v.preferred_date > date.today().isoformat()}
+    check(days == {9}, f'and the new future visits are all on the 9th (got {sorted(days)})')
+
+print('\n🎉 Monthly plans repeat by date or by weekday, whichever the customer asked for.')

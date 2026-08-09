@@ -313,6 +313,7 @@ def _migrate_db():
     new_cols = [
         # Booking columns added after initial deploy
         ('booking', 'frequency',                "VARCHAR(20) DEFAULT 'one_time'"),
+        ('booking', 'monthly_mode',             'VARCHAR(10)'),
         ('booking', 'internal_notes',           'TEXT'),
         ('booking', 'assigned_cleaner',         'VARCHAR(100)'),
         ('booking', 'stripe_payment_intent',    'VARCHAR(100)'),

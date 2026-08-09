@@ -28,6 +28,48 @@ def horizon_weeks(frequency):
     return HORIZON_WEEKS.get(frequency, DEFAULT_HORIZON_WEEKS)
 
 
+# How a monthly plan repeats. Customers think about their cleaning in one of two
+# ways and both are common: "the 9th of every month", or "the second Wednesday".
+BY_DATE = 'date'
+BY_WEEKDAY = 'weekday'
+
+_ORDINALS = {1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: 'last'}
+_WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+
+def weekday_position(d):
+    """(weekday, ordinal) for a date — Wednesday the 9th is (2, 2): the second
+    Wednesday. An occurrence with no fifth in some months is treated as 'last',
+    so a plan never silently skips a month."""
+    ordinal = (d.day - 1) // 7 + 1
+    if ordinal >= 5 or d.day + 7 > calendar.monthrange(d.year, d.month)[1]:
+        # The last of its kind this month — repeat it as "last", which exists in
+        # every month, rather than a fifth that often doesn't.
+        if d.day + 7 > calendar.monthrange(d.year, d.month)[1]:
+            ordinal = 5
+    return d.weekday(), ordinal
+
+
+def describe_weekday(d):
+    """'2nd Wednesday' — for showing the owner what she's choosing."""
+    weekday, ordinal = weekday_position(d)
+    return f'{_ORDINALS.get(ordinal, str(ordinal))} {_WEEKDAYS[weekday]}'
+
+
+def _nth_weekday(year, month, weekday, ordinal):
+    """The nth given weekday of a month; ordinal 5 means the last one."""
+    first_weekday = date(year, month, 1).weekday()
+    offset = (weekday - first_weekday) % 7
+    last_day = calendar.monthrange(year, month)[1]
+    if ordinal >= 5:
+        day = 1 + offset + ((last_day - 1 - offset) // 7) * 7
+    else:
+        day = 1 + offset + (ordinal - 1) * 7
+        if day > last_day:
+            day -= 7
+    return date(year, month, day)
+
+
 def _add_month(anchor_year, anchor_month, anchor_day, months_out):
     """The same day-of-month, `months_out` months after the anchor.
 
@@ -58,6 +100,7 @@ def _copy_visit(seed, on_date, group):
         # carry the card on file so morning-of auto-pay works for the whole series
         stripe_customer_id=seed.stripe_customer_id,
         stripe_payment_method_id=seed.stripe_payment_method_id,
+        monthly_mode=getattr(seed, 'monthly_mode', None),
         recurring_group=group, recurring_active=True,
     )
 
@@ -71,9 +114,16 @@ def _visit_dates(seed, from_date, horizon, anchor=None):
     would drag every later visit to the 28th for good."""
     if seed.frequency == MONTHLY:
         anchor = anchor or from_date
+        by_weekday = (getattr(seed, 'monthly_mode', None) or BY_DATE) == BY_WEEKDAY
+        weekday, ordinal = weekday_position(anchor)
         out, n = [], 1
         while True:
-            d = _add_month(anchor.year, anchor.month, anchor.day, n)
+            if by_weekday:
+                total = (anchor.year * 12) + (anchor.month - 1) + n
+                year, month = divmod(total, 12)
+                d = _nth_weekday(year, month + 1, weekday, ordinal)
+            else:
+                d = _add_month(anchor.year, anchor.month, anchor.day, n)
             if d > horizon:
                 break
             if d > from_date:
@@ -142,6 +192,28 @@ def stop_series(group):
     removed = 0
     for b in Booking.query.filter_by(recurring_group=group).all():
         b.recurring_active = False
+        if b.status == 'pending' and (b.preferred_date or '') > today:
+            db.session.delete(b)
+            removed += 1
+    db.session.commit()
+    return removed
+
+
+def clear_future(seed):
+    """Remove not-yet-started future visits in this plan, keeping the seed.
+
+    Used when the plan's pattern changes and the generated dates are no longer
+    the right ones. Deliberately narrow: a visit that is confirmed, completed,
+    or already in the past is history and is never touched."""
+    from models import Booking
+    from extensions import db
+    if not seed.recurring_group:
+        return 0
+    today = date.today().isoformat()
+    removed = 0
+    for b in Booking.query.filter_by(recurring_group=seed.recurring_group).all():
+        if b.id == seed.id:
+            continue
         if b.status == 'pending' and (b.preferred_date or '') > today:
             db.session.delete(b)
             removed += 1

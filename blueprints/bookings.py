@@ -323,9 +323,21 @@ def detail(booking_id):
     from models import Expense, EXPENSE_CATEGORIES
     pay_url = payment_link_url(booking, 'full')          # ensures pay_token exists
     recurring_upcoming = recurring.upcoming_count(booking.recurring_group) if booking.recurring_group else 0
+    # Spell out what each monthly pattern would mean for THIS booking's date,
+    # so the choice reads as "the 9th" or "2nd Wednesday" rather than jargon.
+    monthly_choices = None
+    if booking.frequency == 'monthly' and booking.preferred_date:
+        try:
+            _d = date.fromisoformat(booking.preferred_date)
+            monthly_choices = {'date': _d.strftime('the %-d'),
+                               'weekday': recurring.describe_weekday(_d),
+                               'current': booking.monthly_mode or recurring.BY_DATE}
+        except ValueError:
+            monthly_choices = None
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff,
                            pay_url=pay_url, due=amount_due(booking),
                            recurring_upcoming=recurring_upcoming,
+                           monthly_choices=monthly_choices,
                            labor_rate=get_labor_rate(),
                            max_labor_pct=get_max_labor_percent(),
                            ad_expense=Expense.query.filter_by(booking_id=booking.id).first(),
@@ -1102,6 +1114,20 @@ def schedule_recurring(booking_id):
     if booking.frequency in ('one_time', None) or not booking.preferred_date:
         flash('Set a repeat frequency and a date first, then schedule the plan.', 'error')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
+    mode = request.form.get('monthly_mode')
+    if booking.frequency == 'monthly' and mode in (recurring.BY_DATE, recurring.BY_WEEKDAY):
+        if (booking.monthly_mode or recurring.BY_DATE) != mode:
+            # She's changed how the plan repeats, so the visits already generated
+            # are on the wrong days. Clear the future ones and lay them out again.
+            # Only unstarted visits are touched — anything confirmed, completed
+            # or in the past stays exactly where it is.
+            removed = recurring.clear_future(booking)
+            if removed:
+                flash(f'Rescheduled — {removed} future visit'
+                      f'{"s" if removed != 1 else ""} moved to the new pattern.', 'success')
+        booking.monthly_mode = mode
+        db.session.commit()
+
     n = recurring.generate_series(booking)
     if n:
         flash(f'📅 Recurring plan set — {n} future visit{"s" if n != 1 else ""} added to your calendar.', 'success')

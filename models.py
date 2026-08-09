@@ -103,6 +103,7 @@ class Booking(db.Model):
     # Recurring plan (proactive scheduling)
     recurring_group = db.Column(db.String(32), index=True)  # links visits in one recurring series
     recurring_active = db.Column(db.Boolean, default=True)  # keep generating future visits
+    monthly_mode = db.Column(db.String(10))   # 'date' (the 9th) or 'weekday' (2nd Wednesday)
 
     # Admin fields
     notes = db.Column(db.Text)

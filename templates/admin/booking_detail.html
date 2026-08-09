@@ -424,13 +424,42 @@
         ✅ Recurring plan active — {{ recurring_upcoming|default(0) }} upcoming visit{{ 's' if (recurring_upcoming|default(0)) != 1 }} on the calendar.
       </div>
       <p style="font-size:0.82rem;color:#9a95ad;margin:8px 0 10px">Monthly plans fill a year ahead; weekly and fortnightly plans about three months. To reschedule or skip one, open that visit on the calendar and edit or cancel it.</p>
+
+      {% if monthly_choices %}
+      <form method="POST" action="{{ url_for('bookings.schedule_recurring', booking_id=booking.id) }}"
+            style="border-top:1px solid #efecf7;padding-top:12px;margin-bottom:12px">
+        <label style="display:block;font-size:0.82rem;color:#5f5878;margin-bottom:5px">Repeats on</label>
+        <select name="monthly_mode" style="width:100%;padding:9px 11px;border:1px solid #e4dfef;border-radius:8px;margin-bottom:8px">
+          <option value="date" {{ 'selected' if monthly_choices.current == 'date' }}>{{ monthly_choices.date }} of each month</option>
+          <option value="weekday" {{ 'selected' if monthly_choices.current == 'weekday' }}>The {{ monthly_choices.weekday }} of each month</option>
+        </select>
+        <p style="font-size:0.78rem;color:#9a95ad;margin:0 0 9px">
+          Some customers want a date, others a day of the week. Change this and future
+          visits that haven't started yet move to the new pattern — past and confirmed
+          visits stay where they are.
+        </p>
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">🔁 Apply this pattern</button>
+      </form>
+      {% endif %}
+
       <form method="POST" action="{{ url_for('bookings.stop_recurring', booking_id=booking.id) }}"
             onsubmit="return confirm('Stop this recurring plan? Upcoming unstarted visits will be removed.')">
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;color:#c05621">Stop recurring plan</button>
       </form>
       {% else %}
-      <p style="font-size:0.85rem;color:#5f5878;margin:0 0 12px">This is a <strong>{{ booking.frequency }}</strong> client. Fill your calendar with their next ~12 weeks of visits in one click — no more scheduling one at a time.</p>
+      <p style="font-size:0.85rem;color:#5f5878;margin:0 0 12px">This is a <strong>{{ booking.frequency }}</strong> client. Fill their calendar in one click — no more scheduling one visit at a time.</p>
       <form method="POST" action="{{ url_for('bookings.schedule_recurring', booking_id=booking.id) }}">
+        {% if monthly_choices %}
+        <label style="display:block;font-size:0.82rem;color:#5f5878;margin-bottom:5px">Repeat on</label>
+        <select name="monthly_mode" style="width:100%;padding:9px 11px;border:1px solid #e4dfef;border-radius:8px;margin-bottom:10px">
+          <option value="date" {{ 'selected' if monthly_choices.current == 'date' }}>{{ monthly_choices.date }} of each month</option>
+          <option value="weekday" {{ 'selected' if monthly_choices.current == 'weekday' }}>The {{ monthly_choices.weekday }} of each month</option>
+        </select>
+        <p style="font-size:0.78rem;color:#9a95ad;margin:0 0 10px">
+          Pick whichever your customer asked for. Changing this after the plan is set
+          will move future visits that haven't started yet.
+        </p>
+        {% endif %}
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Schedule recurring visits</button>
       </form>
       {% endif %}
