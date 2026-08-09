@@ -50,8 +50,8 @@ with app.app_context():
     check(seed.price == 185.0, 'her price is whatever was typed, not the matrix figure')
 
     print('\n2. The plan lands on the same date every month')
-    made = recurring.generate_series(seed, weeks_ahead=52)
-    check(made >= 10, f'close to a year of visits generated ({made})')
+    made = recurring.generate_series(seed)   # no window passed — same as the button
+    check(made >= 10, f'a monthly plan fills a year by default, not 12 weeks ({made} added)')
     visits = Booking.query.filter_by(recurring_group=seed.recurring_group)\
                           .order_by(Booking.preferred_date).all()
     days = {date.fromisoformat(v.preferred_date).day for v in visits}
@@ -64,10 +64,11 @@ with app.app_context():
     check(all(v.preferred_time == '9:00 AM' for v in visits), 'and keep the same time')
 
     print('\n4. A top-up months later keeps the same day of the month')
+    check(len(visits) >= 11, f'the plan is a year deep before the top-up ({len(visits)})')
     for v in visits[6:]:
         db.session.delete(v)
     db.session.commit()
-    recurring.topup_all(weeks_ahead=52, min_weeks=50)
+    recurring.topup_all()
     after = Booking.query.filter_by(recurring_group=seed.recurring_group).all()
     days = {date.fromisoformat(v.preferred_date).day for v in after}
     check(days == {9}, f'still every visit on the 9th after a top-up (got {sorted(days)})')

@@ -1102,8 +1102,12 @@ def schedule_recurring(booking_id):
     if booking.frequency in ('one_time', None) or not booking.preferred_date:
         flash('Set a repeat frequency and a date first, then schedule the plan.', 'error')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
-    n = recurring.generate_series(booking, weeks_ahead=12)
-    flash(f'📅 Recurring plan set — {n} future visit{"s" if n != 1 else ""} added to your calendar.', 'success')
+    n = recurring.generate_series(booking)
+    if n:
+        flash(f'📅 Recurring plan set — {n} future visit{"s" if n != 1 else ""} added to your calendar.', 'success')
+    else:
+        flash('That plan is already filled in as far ahead as we schedule — '
+              'no new visits needed.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 

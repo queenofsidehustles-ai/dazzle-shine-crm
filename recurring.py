@@ -17,6 +17,16 @@ FREQ_DAYS = {'weekly': 7, 'biweekly': 14}
 # been on the 6th by February. Monthly now lands on the same date each month.
 MONTHLY = 'monthly'
 
+# How far ahead to fill the calendar, by frequency. One flat window doesn't work:
+# 12 weeks is three months of weekly visits but barely two monthly ones, so a
+# monthly client's plan looked like it had failed to generate at all.
+HORIZON_WEEKS = {'weekly': 12, 'biweekly': 16, MONTHLY: 52}
+DEFAULT_HORIZON_WEEKS = 12
+
+
+def horizon_weeks(frequency):
+    return HORIZON_WEEKS.get(frequency, DEFAULT_HORIZON_WEEKS)
+
 
 def _add_month(anchor_year, anchor_month, anchor_day, months_out):
     """The same day-of-month, `months_out` months after the anchor.
@@ -94,14 +104,19 @@ def _fill(seed, group, from_date, horizon, existing_dates, anchor=None):
     return created
 
 
-def generate_series(seed, weeks_ahead=12):
-    """Fill the calendar with future visits for this recurring booking, up to
-    `weeks_ahead` out. Attaches a recurring_group if the booking has none.
-    Returns the number of visits created."""
+def generate_series(seed, weeks_ahead=None):
+    """Fill the calendar with future visits for this recurring booking.
+
+    `weeks_ahead` defaults to a window that suits the frequency — a year for a
+    monthly plan, a quarter for a weekly one — so every plan generates a
+    sensible number of visits rather than whatever a single fixed window
+    happens to yield."""
     from models import Booking
     from extensions import db
     if (seed.frequency not in FREQ_DAYS and seed.frequency != MONTHLY) or not seed.preferred_date:
         return 0
+    if weeks_ahead is None:
+        weeks_ahead = horizon_weeks(seed.frequency)
     if not seed.recurring_group:
         seed.recurring_group = secrets.token_hex(8)
     seed.recurring_active = True
@@ -143,14 +158,13 @@ def upcoming_count(group):
         Booking.preferred_date >= today).count()
 
 
-def topup_all(weeks_ahead=12, min_weeks=8):
-    """Rolling generator — keep every active recurring series filled ~weeks_ahead
-    out. Call from the lifecycle cron. Returns count of visits created."""
+def topup_all(weeks_ahead=None, min_weeks=None):
+    """Rolling generator — keep every active recurring series filled out to a
+    window that suits its own frequency. Call from the lifecycle cron. Returns
+    count of visits created."""
     from models import Booking
     from extensions import db
     today = date.today()
-    min_horizon = today + timedelta(weeks=min_weeks)
-    horizon = today + timedelta(weeks=weeks_ahead)
     groups = {b.recurring_group for b in Booking.query.filter(
         Booking.recurring_group.isnot(None),
         Booking.recurring_active.is_(True)).all() if b.recurring_group}
@@ -164,9 +178,12 @@ def topup_all(weeks_ahead=12, min_weeks=8):
                 dates.append(date.fromisoformat(v.preferred_date))
             except (ValueError, TypeError):
                 pass
-        if not dates or max(dates) >= min_horizon:
-            continue
         seed = max(visits, key=lambda v: v.preferred_date or '')
+        weeks = weeks_ahead if weeks_ahead is not None else horizon_weeks(seed.frequency)
+        floor = min_weeks if min_weeks is not None else max(2, int(weeks * 0.66))
+        horizon = today + timedelta(weeks=weeks)
+        if not dates or max(dates) >= today + timedelta(weeks=floor):
+            continue
         # Anchor on the plan's FIRST visit, not its latest, so a monthly plan
         # keeps the day of the month it started on.
         total += _fill(seed, g, max(dates), horizon,
