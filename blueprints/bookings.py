@@ -1150,7 +1150,75 @@ def client_detail(client_id):
     client = Client.query.get_or_404(client_id)
     from blueprints.portal import ensure_portal_token
     portal_url = f"{branding.crm_base()}/portal/{ensure_portal_token(client)}"
-    return render_template('admin/client_detail.html', client=client, portal_url=portal_url)
+    from models import BusinessSetting
+    return render_template('admin/client_detail.html', client=client, portal_url=portal_url,
+                           invite_sent=BusinessSetting.get(f'portal_invite_sent_{client.id}'))
+
+
+def _portal_email(client, kind):
+    """(subject, html, portal_url) for one of the two portal emails."""
+    import portal_invite
+    from blueprints.portal import ensure_portal_token
+    url = f"{branding.crm_base()}/portal/{ensure_portal_token(client)}"
+    if kind == 'nudge':
+        return portal_invite.card_nudge_subject(client), portal_invite.card_nudge_html(client, url), url
+    return portal_invite.welcome_subject(client), portal_invite.welcome_html(client, url), url
+
+
+@bookings_bp.route('/clients/<int:client_id>/portal-invite/preview')
+@login_required
+def portal_invite_preview(client_id):
+    """Show the email exactly as the customer would receive it.
+
+    Rendered from her real booking data, not a mock-up — the whole point is that
+    what's on screen is what would arrive."""
+    client = Client.query.get_or_404(client_id)
+    kind = 'nudge' if request.args.get('kind') == 'nudge' else 'welcome'
+    subject, html, _ = _portal_email(client, kind)
+    return (f'<div style="background:#f4f2fa;padding:22px;font-family:system-ui,sans-serif">'
+            f'<div style="max-width:600px;margin:0 auto">'
+            f'<p style="font-size:0.8rem;color:#5f5878;margin:0 0 4px">'
+            f'<strong>To:</strong> {client.email or "(no email on file)"}</p>'
+            f'<p style="font-size:0.8rem;color:#5f5878;margin:0 0 14px">'
+            f'<strong>Subject:</strong> {subject}</p>'
+            f'<div style="background:#fff;border-radius:12px;padding:26px">{html}</div>'
+            f'</div></div>')
+
+
+@bookings_bp.route('/clients/<int:client_id>/portal-invite/send', methods=['POST'])
+@login_required
+def portal_invite_send(client_id):
+    """Send the welcome or the card nudge — to the customer, or to the owner
+    first as a test.
+
+    Sending to yourself first is the default path on purpose. A welcome email is
+    the first thing a new client reads from the business, and it cannot be
+    unsent."""
+    from notifications import send_email
+    client = Client.query.get_or_404(client_id)
+    kind = 'nudge' if request.form.get('kind') == 'nudge' else 'welcome'
+    to_self = request.form.get('to') != 'customer'
+
+    subject, html, _ = _portal_email(client, kind)
+    recipient = branding.owner_email() if to_self else (client.email or '')
+    if not recipient:
+        flash('No email address on file for this client.', 'error')
+        return redirect(url_for('bookings.client_detail', client_id=client.id))
+
+    ok, detail = send_email(to_email=recipient, to_name=client.name or 'there',
+                            subject=(f'[TEST] {subject}' if to_self else subject),
+                            html=html)
+    if not ok:
+        flash(f"Couldn't send: {detail}", 'error')
+    elif to_self:
+        flash(f'Test sent to {recipient}. Check it reads the way you want before '
+              f'sending it to {client.name}.', 'success')
+    else:
+        from models import BusinessSetting
+        BusinessSetting.set(f'portal_invite_sent_{client.id}', date.today().isoformat())
+        db.session.commit()
+        flash(f'Welcome email sent to {client.name} at {recipient}.', 'success')
+    return redirect(url_for('bookings.client_detail', client_id=client.id))
 
 
 @bookings_bp.route('/clients/<int:client_id>/delete', methods=['POST'])

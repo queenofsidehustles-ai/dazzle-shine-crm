@@ -36,13 +36,48 @@
       {% else %}
       <div class="detail-row"><span class="dl">Auto-pay</span><span class="dv" style="color:#9a95ad">No card saved yet</span></div>
       {% endif %}
-      <p style="color:#5f5878;font-size:0.85rem;margin:10px 0 8px">Private self-serve link — share it so they can save a card, see upcoming cleanings & invoices:</p>
+      <p style="color:#5f5878;font-size:0.85rem;margin:10px 0 8px">Private self-serve link — share it so they can save a card, see upcoming cleanings &amp; invoices:</p>
       <div style="display:flex;gap:8px">
         <input id="portal-link" value="{{ portal_url }}" readonly
                style="flex:1;padding:9px 11px;border:1px solid #e4dfef;border-radius:8px;font-size:0.82rem;background:#faf9fd;color:#5f5878" />
         <button type="button" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem"
                 onclick="navigator.clipboard.writeText(document.getElementById('portal-link').value);this.textContent='Copied!'">Copy</button>
       </div>
+    </div>
+
+    <!-- Portal emails -->
+    <div class="card" style="margin-top:16px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Send them their page</h2>
+      {% if invite_sent %}
+        <p style="color:#2e7d32;font-size:0.85rem;margin:0 0 14px">✓ Welcome email sent {{ invite_sent }}</p>
+      {% else %}
+        <p style="color:#5f5878;font-size:0.85rem;margin:0 0 14px">Nothing sent yet. Preview it, send yourself a test, then send it on.</p>
+      {% endif %}
+
+      {% for kind, title, note in [
+          ('welcome', '1 · Welcome email', 'Their schedule, their price and their link. Mentions saving a card, but doesn’t ask.'),
+          ('nudge', '2 · Save-a-card email', 'Send after the first cleaning is done. This one asks them to set up auto-pay.')] %}
+      <div style="border:1px solid #e4dfef;border-radius:10px;padding:13px 15px;margin-bottom:10px">
+        <div style="font-weight:700;font-size:0.92rem;margin-bottom:2px">{{ title }}</div>
+        <div style="color:#5f5878;font-size:0.83rem;margin-bottom:11px">{{ note }}</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+          <a href="{{ url_for('bookings.portal_invite_preview', client_id=client.id, kind=kind) }}"
+             target="_blank" class="btn btn-outline" style="padding:5px 13px;font-size:0.82rem">👁 Preview</a>
+          <form method="POST" action="{{ url_for('bookings.portal_invite_send', client_id=client.id) }}" style="margin:0">
+            <input type="hidden" name="kind" value="{{ kind }}" />
+            <input type="hidden" name="to" value="me" />
+            <button type="submit" class="btn btn-outline" style="padding:5px 13px;font-size:0.82rem">✉️ Send test to me</button>
+          </form>
+          <form method="POST" action="{{ url_for('bookings.portal_invite_send', client_id=client.id) }}" style="margin:0"
+                onsubmit="return confirm('Send this to {{ client.name }} at {{ client.email }}?\n\nThis goes to the customer and cannot be unsent.');">
+            <input type="hidden" name="kind" value="{{ kind }}" />
+            <input type="hidden" name="to" value="customer" />
+            <button type="submit" class="btn btn-gold" style="padding:5px 13px;font-size:0.82rem"
+                    {% if not client.email %}disabled title="No email address on file"{% endif %}>Send to {{ client.name.split()[0] }}</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
     </div>
   </div>
 

@@ -6,10 +6,28 @@ schedule shows on the calendar ahead of time. Visits in one plan share a
 `recurring_group` token. A rolling top-up (run from the cron) keeps the window
 filled as time passes.
 """
+import calendar
 import secrets
 from datetime import date, timedelta
 
-FREQ_DAYS = {'weekly': 7, 'biweekly': 14, 'monthly': 30}
+FREQ_DAYS = {'weekly': 7, 'biweekly': 14}
+
+# 'monthly' is deliberately absent above. It used to be 30 days, which drifts
+# about five days a year — a client told "the 9th of every month" would have
+# been on the 6th by February. Monthly now lands on the same date each month.
+MONTHLY = 'monthly'
+
+
+def _add_month(anchor_year, anchor_month, anchor_day, months_out):
+    """The same day-of-month, `months_out` months after the anchor.
+
+    Clamped to the end of short months: a plan anchored on the 31st visits the
+    28th in February and returns to the 31st in March, rather than sliding
+    permanently earlier."""
+    total = (anchor_year * 12) + (anchor_month - 1) + months_out
+    year, month = divmod(total, 12)
+    month += 1
+    return date(year, month, min(anchor_day, calendar.monthrange(year, month)[1]))
 
 
 def _copy_visit(seed, on_date, group):
@@ -34,21 +52,45 @@ def _copy_visit(seed, on_date, group):
     )
 
 
-def _fill(seed, group, from_date, horizon, existing_dates):
-    """Add visits from `from_date` (exclusive) up to `horizon`. Returns count."""
-    from extensions import db
+def _visit_dates(seed, from_date, horizon, anchor=None):
+    """Every date this plan should be cleaned, after `from_date` up to `horizon`.
+
+    `anchor` is the date the plan started, which fixes the day-of-month for a
+    monthly plan. Without it a top-up months later would re-anchor to whatever
+    the last visit happened to be, and a February visit clamped to the 28th
+    would drag every later visit to the 28th for good."""
+    if seed.frequency == MONTHLY:
+        anchor = anchor or from_date
+        out, n = [], 1
+        while True:
+            d = _add_month(anchor.year, anchor.month, anchor.day, n)
+            if d > horizon:
+                break
+            if d > from_date:
+                out.append(d)
+            n += 1
+        return out
+
     delta = FREQ_DAYS.get(seed.frequency)
     if not delta:
-        return 0
-    created = 0
-    d = from_date + timedelta(days=delta)
+        return []
+    out, d = [], from_date + timedelta(days=delta)
     while d <= horizon:
+        out.append(d)
+        d += timedelta(days=delta)
+    return out
+
+
+def _fill(seed, group, from_date, horizon, existing_dates, anchor=None):
+    """Add visits from `from_date` (exclusive) up to `horizon`. Returns count."""
+    from extensions import db
+    created = 0
+    for d in _visit_dates(seed, from_date, horizon, anchor):
         iso = d.isoformat()
         if iso not in existing_dates:
             db.session.add(_copy_visit(seed, d, group))
             existing_dates.add(iso)
             created += 1
-        d += timedelta(days=delta)
     return created
 
 
@@ -58,7 +100,7 @@ def generate_series(seed, weeks_ahead=12):
     Returns the number of visits created."""
     from models import Booking
     from extensions import db
-    if seed.frequency not in FREQ_DAYS or not seed.preferred_date:
+    if (seed.frequency not in FREQ_DAYS and seed.frequency != MONTHLY) or not seed.preferred_date:
         return 0
     if not seed.recurring_group:
         seed.recurring_group = secrets.token_hex(8)
@@ -70,7 +112,8 @@ def generate_series(seed, weeks_ahead=12):
     existing = {b.preferred_date for b in
                 Booking.query.filter_by(recurring_group=seed.recurring_group).all()}
     horizon = date.today() + timedelta(weeks=weeks_ahead)
-    n = _fill(seed, seed.recurring_group, start, horizon, existing)
+    # The first visit's date is the anchor for a monthly plan.
+    n = _fill(seed, seed.recurring_group, start, horizon, existing, anchor=start)
     db.session.commit()
     return n
 
@@ -124,7 +167,10 @@ def topup_all(weeks_ahead=12, min_weeks=8):
         if not dates or max(dates) >= min_horizon:
             continue
         seed = max(visits, key=lambda v: v.preferred_date or '')
-        total += _fill(seed, g, max(dates), horizon, {v.preferred_date for v in visits})
+        # Anchor on the plan's FIRST visit, not its latest, so a monthly plan
+        # keeps the day of the month it started on.
+        total += _fill(seed, g, max(dates), horizon,
+                       {v.preferred_date for v in visits}, anchor=min(dates))
     if total:
         db.session.commit()
     return total
