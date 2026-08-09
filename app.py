@@ -197,53 +197,10 @@ def _skip_setup_for_established_business():
 
 
 def _seed_existing_brand_settings():
-    """One-time move of Dazzle & Shine's brand details out of code and into Settings.
-
-    Brand identities used to be a hardcoded dictionary in brands.py, which meant
-    the CRM could only ever belong to one company. They are now read from
-    Settings — but that change must not quietly restyle the emails of the
-    business already running on this code, so the old values are written into
-    Settings once, here.
-
-    The guard matters: this only fires on an instance whose business name is
-    already 'Dazzle & Shine Maids'. A CRM deployed for any other company will
-    never match, so it starts clean with its own name and its own colours and
-    never inherits somebody else's branding."""
-    from models import BusinessSetting
-    if BusinessSetting.get('brand_settings_migrated'):
-        return
-    if BusinessSetting.get('business_name', '').strip() != 'Dazzle & Shine Maids':
-        return
-
-    legacy = {
-        # The residential brand — the business's own name and gold palette.
-        'brand_tagline': 'Professional Cleaning Proposal',
-        'brand_dark': '#1f1333',
-        'brand_accent': '#d3a84f',
-        'brand_accent_text': '#1f1333',
-        'brand_domain_verified': '1',
-        # The commercial brand, which sells under a separate name.
-        'commercial_name': 'L & M Commercial Cleaners',
-        'commercial_tagline': 'Commercial Cleaning Proposal',
-        'commercial_from_email': 'admin@commercialcleanersorlando.com',
-        'commercial_reply_to': 'admin@commercialcleanersorlando.com',
-        'commercial_website': 'www.commercialcleanersorlando.com',
-        'commercial_dark': '#12324a',
-        'commercial_accent': '#2a89c4',
-        'commercial_accent_text': '#ffffff',
-        'commercial_domain_verified': '',
-        # The Google review link used to be a code default. It is now a setting
-        # with no default at all — pointing a happy customer at the wrong
-        # company's review page would be worse than showing no button — so the
-        # real link is preserved here for the business already using it.
-        'google_review_link': 'https://g.page/r/CZLGfXgsWHtVEBM/review',
-    }
-    for key, value in legacy.items():
-        if not BusinessSetting.get(key):
-            BusinessSetting.set(key, value)
-    BusinessSetting.set('brand_settings_migrated', '1')
-    db.session.commit()
-    print('  ✅ brand details moved from code into Settings')
+    """Restore the original business's identity into Settings — see legacy_brands."""
+    import legacy_brands
+    if legacy_brands.restore_if_original():
+        print('  ✅ original business details restored into Settings')
 
 
 def _patch_pay_rate_40_to_50():

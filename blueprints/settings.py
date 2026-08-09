@@ -208,6 +208,11 @@ def business():
             if f in request.form:
                 BusinessSetting.set(f, request.form.get(f, ''))
         db.session.commit()
+        # Typing the original business name back in is enough to trigger the
+        # one-time restore of its commercial brand, palette and review link —
+        # no redeploy needed.
+        import legacy_brands
+        legacy_brands.restore_if_original()
         flash('Business settings updated!', 'success')
         return redirect(url_for('settings.business'))
 
