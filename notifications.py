@@ -4,6 +4,7 @@ import hashlib
 import base64
 import requests as http_requests
 import branding
+import integrations
 
 
 def _log_outbound(channel, to_address, to_name, subject, body, ok, detail):
@@ -129,7 +130,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     can see what happened. Existing callers that ignore the return value are
     unaffected. from_email/reply_to let a branded caller (e.g. a commercial
     quote) override the sender identity per brand."""
-    api_key = os.environ.get('RESEND_API_KEY')
+    api_key = integrations.resend_api_key()
     from_email = from_email or branding.from_email()
     if not from_name:
         from_name = branding.biz_name()
@@ -137,7 +138,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
         # Log it. Returning silently made a missing key look like nothing was
         # ever attempted — the Sent Log stayed empty and there was no way to
         # tell "we tried and failed" from "we never tried".
-        detail = 'RESEND_API_KEY is not set in Railway — no email service connected.'
+        detail = 'Email not connected — add your email service key in Settings → Connections.'
         _log_outbound('email', to_email, to_name, subject, html, False, detail)
         return False, detail
     if not to_email:
@@ -201,17 +202,16 @@ def add_to_mailerlite(email, name, group_id=None):
 def send_sms(to_phone, message):
     """Send an SMS via Twilio. Returns (ok: bool, detail: str) so diagnostics
     can surface the real reason a text failed. Existing callers ignore the return."""
-    account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
-    auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
-    from_phone = os.environ.get('TWILIO_PHONE')
+    account_sid = integrations.twilio_account_sid()
+    auth_token = integrations.twilio_auth_token()
+    from_phone = integrations.twilio_phone()
     if not all([account_sid, auth_token, from_phone]):
-        missing = [n for n, v in (('TWILIO_ACCOUNT_SID', account_sid),
-                                  ('TWILIO_AUTH_TOKEN', auth_token),
-                                  ('TWILIO_PHONE', from_phone)) if not v]
+        missing = integrations.missing_for('texting')
         # Log it rather than returning silently — an unconfigured Twilio used to
         # leave the Sent Log completely empty, which reads as "nothing happened"
         # when the truth is "nothing could happen, and here's why".
-        detail = 'Texting not connected — missing in Railway: ' + ', '.join(missing)
+        detail = ('Texting not connected — add it in Settings → Connections. '
+                  'Still needed: ' + ', '.join(missing))
         _log_outbound('sms', to_phone, None, None, message, False, detail)
         return False, detail
     if not to_phone:

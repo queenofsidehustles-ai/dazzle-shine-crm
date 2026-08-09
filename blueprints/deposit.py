@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, request, jsonify
 from models import Booking
 from extensions import db
 from pricing import DEPOSIT_AMOUNT
+import integrations
 
 deposit_bp = Blueprint('deposit', __name__)
 
@@ -11,7 +12,7 @@ deposit_bp = Blueprint('deposit', __name__)
 @deposit_bp.route('/pay-deposit/<token>')
 def pay_deposit_page(token):
     booking = Booking.query.filter_by(deposit_token=token).first_or_404()
-    pk = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+    pk = integrations.stripe_publishable_key()
     return render_template('public/pay_deposit.html',
         booking=booking,
         token=token,
@@ -27,7 +28,7 @@ def create_deposit_intent(token):
     if booking.deposit_paid:
         return jsonify({'ok': False, 'error': 'Deposit already paid'}), 400
 
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+    stripe.api_key = integrations.stripe_secret_key()
     if not stripe.api_key:
         return jsonify({'ok': False, 'error': 'Payments not configured'}), 500
 
@@ -68,7 +69,7 @@ def confirm_deposit(token):
     pi_id = (data.get('payment_intent_id') or '').strip()
 
     # Verify the payment actually succeeded before marking paid
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+    stripe.api_key = integrations.stripe_secret_key()
     if pi_id and stripe.api_key:
         try:
             pi = stripe.PaymentIntent.retrieve(pi_id)

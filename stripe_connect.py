@@ -6,16 +6,17 @@ admin "Pay" route. Works in whichever mode STRIPE_SECRET_KEY is (test or live).
 """
 import os
 import stripe
+import integrations
 
 
 def _init():
-    key = os.environ.get('STRIPE_SECRET_KEY', '')
+    key = integrations.stripe_secret_key()
     stripe.api_key = key
     return bool(key)
 
 
 def is_configured():
-    return bool(os.environ.get('STRIPE_SECRET_KEY', ''))
+    return bool(integrations.stripe_secret_key())
 
 
 def create_express_account(email, name=''):

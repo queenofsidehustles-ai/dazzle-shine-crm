@@ -10,6 +10,7 @@ from models import Booking, BusinessSetting
 from extensions import db
 from pricing import DEPOSIT_AMOUNT
 import branding
+import integrations
 
 payments_bp = Blueprint('payments', __name__)
 
@@ -147,7 +148,7 @@ def _alert_owner_paid(booking, method):
 @payments_bp.route('/pay/<token>')
 def pay_page(token):
     booking = Booking.query.filter_by(pay_token=token).first_or_404()
-    pk = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+    pk = integrations.stripe_publishable_key()
     # Name the cleaner on the tip prompt — people tip a person, not a company.
     import customer_terms
     cleaner = booking.crew_label or booking.assigned_cleaner or ''
@@ -177,7 +178,7 @@ def create_intent(token):
     if due <= 0:
         return jsonify({'ok': False, 'error': 'This booking is already paid.'}), 400
     tip = _read_tip(request.get_json(silent=True))
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+    stripe.api_key = integrations.stripe_secret_key()
     if not stripe.api_key:
         return jsonify({'ok': False, 'error': 'Payments not configured'}), 500
     try:
@@ -207,7 +208,7 @@ def confirm(token):
     booking = Booking.query.filter_by(pay_token=token).first_or_404()
     data = request.get_json(silent=True) or {}
     pi_id = (data.get('payment_intent_id') or '').strip()
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+    stripe.api_key = integrations.stripe_secret_key()
     if pi_id and stripe.api_key:
         try:
             pi = stripe.PaymentIntent.retrieve(pi_id)

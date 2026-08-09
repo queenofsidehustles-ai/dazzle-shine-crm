@@ -8,6 +8,7 @@ from extensions import db
 from pricing import calculate_price, SERVICES, EXTRAS, FREQUENCY_LABELS, DEPOSIT_AMOUNT
 from notifications import send_email, send_sms, add_to_mailerlite
 import branding
+import integrations
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -34,7 +35,7 @@ def get_config():
     origin = request.headers.get('Origin', '')
     if request.method == 'OPTIONS':
         return add_cors(jsonify({}), origin), 200
-    resp = jsonify({'stripe_pk': os.environ.get('STRIPE_PUBLISHABLE_KEY', '')})
+    resp = jsonify({'stripe_pk': integrations.stripe_publishable_key()})
     return add_cors(resp, origin), 200
 
 
@@ -555,7 +556,7 @@ def create_payment_intent():
     if request.method == 'OPTIONS':
         return add_cors(jsonify({}), origin), 200
 
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+    stripe.api_key = integrations.stripe_secret_key()
     if not stripe.api_key:
         resp = jsonify({'ok': False, 'error': 'Payments not configured'})
         return add_cors(resp, origin), 500
@@ -688,8 +689,8 @@ def create_booking():
 
 @api_bp.route('/stripe-webhook', methods=['POST'])
 def stripe_webhook():
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
-    webhook_secret = os.environ.get('STRIPE_WEBHOOK_SECRET')
+    stripe.api_key = integrations.stripe_secret_key()
+    webhook_secret = integrations.stripe_webhook_secret()
     payload = request.data
     sig_header = request.headers.get('Stripe-Signature')
 

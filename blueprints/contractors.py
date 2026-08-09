@@ -9,6 +9,7 @@ from extensions import db
 from notifications import send_email, send_sms
 import stripe_connect
 import branding
+import integrations
 
 contractors_bp = Blueprint('contractors', __name__, url_prefix='/contractors')
 
@@ -141,11 +142,14 @@ def default_training_guide():
 def sms_test():
     """Diagnostic: send a real test text and show exactly what Twilio says."""
     import os as _os
-    to = request.args.get('to') or _os.environ.get('OWNER_PHONE', '')
-    from_phone = _os.environ.get('TWILIO_PHONE', '')
+    from models import BusinessSetting
+    to = (request.args.get('to') or BusinessSetting.get('owner_alert_phone')
+          or _os.environ.get('OWNER_PHONE', ''))
+    from_phone = integrations.twilio_phone()
 
     if not to:
-        detail = 'No number to text. Add ?to=+14075551234 to the web address, or set OWNER_PHONE in Railway.'
+        detail = ('No number to text. Add ?to=+14075551234 to the web address, or set your '
+                  'alert phone number in Settings.')
         ok = False
     else:
         ok, detail = send_sms(to, f'{branding.biz_name()} test text ✅ — if you got this, your texting is working!')
@@ -155,8 +159,8 @@ def sms_test():
     fix_hint = '' if ok else (
         '<div style="margin-top:18px;padding:16px;background:#fff8e1;border:1px solid #f0d488;border-radius:8px;color:#7c4a04;font-size:0.9rem;line-height:1.6">'
         '<strong>Common fixes:</strong><br>'
-        '1. Make sure <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code>, and '
-        '<code>TWILIO_PHONE</code> are all set in Railway.<br>'
+        '1. Check your account SID, auth token and phone number in '
+        '<strong>Settings → Connections</strong>.<br>'
         '2. On a Twilio <strong>trial</strong> account you can only text numbers you\'ve '
         '<strong>verified</strong> in Twilio. Verify your own cell first, or upgrade the account.<br>'
         '3. To text real customers/cleaners at scale you\'ll need Twilio\'s A2P 10DLC '
@@ -183,7 +187,7 @@ def email_test():
     to = request.args.get('to') or BusinessSetting.get('email') or \
         branding.owner_email()
     from_email = branding.from_email()
-    has_key = bool(_os.environ.get('RESEND_API_KEY'))
+    has_key = bool(integrations.resend_api_key())
 
     ok, detail = send_email(
         to_email=to, to_name=branding.biz_name(),
@@ -198,7 +202,7 @@ def email_test():
     fix_hint = '' if ok else (
         '<div style="margin-top:18px;padding:16px;background:#fff8e1;border:1px solid #f0d488;border-radius:8px;color:#7c4a04;font-size:0.9rem;line-height:1.6">'
         '<strong>How to fix:</strong><br>'
-        '1. In Railway, make sure <code>RESEND_API_KEY</code> is set'
+        '1. Check your email service key in <strong>Settings → Connections</strong>'
         f' (currently {"SET" if has_key else "<strong>MISSING</strong>"}).<br>'
         f'2. In your Resend account, verify the sending domain for <code>{from_email}</code>'
         ' (Resend → Domains → Add/Verify). Until the domain is verified, Resend rejects sends.<br>'

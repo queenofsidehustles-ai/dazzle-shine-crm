@@ -7,6 +7,94 @@ from pricing import SERVICES, EXTRAS, DEPOSIT_AMOUNT
 settings_bp = Blueprint('settings', __name__, url_prefix='/settings')
 
 
+@settings_bp.route('/setup')
+@owner_required
+def setup():
+    """The 'what's left to do' list for a business that has just been handed
+    its CRM."""
+    import onboarding
+    return render_template('admin/setup.html', s=onboarding.summary())
+
+
+@settings_bp.route('/setup/confirm/<key>', methods=['POST'])
+@owner_required
+def setup_confirm(key):
+    """Mark one of the read-and-approve steps as done.
+
+    Pricing and terms can't be detected — a business might legitimately keep a
+    default price or a default clause. So the owner ticks these herself, which
+    also makes it an explicit act rather than something that quietly passed."""
+    labels = {'pricing_reviewed': 'Prices', 'terms_reviewed': 'Customer terms'}
+    if key not in labels:
+        flash('Unknown step.', 'error')
+        return redirect(url_for('settings.setup'))
+    BusinessSetting.set(key, '1')
+    db.session.commit()
+    flash(f'{labels[key]} marked as reviewed.', 'success')
+    return redirect(url_for('settings.setup'))
+
+
+@settings_bp.route('/connections', methods=['GET', 'POST'])
+@owner_required
+def connections():
+    """Where an owner connects her own Stripe, texting and email accounts.
+
+    The point of this page is that nobody else has to be involved. Before it
+    existed these keys could only be set by whoever had the hosting dashboard,
+    which made that person a permanent dependency for every business using the
+    CRM — and left them holding other people's payment credentials."""
+    import integrations
+    if request.method == 'POST':
+        saved = []
+        for name, (_env, label, is_secret) in integrations.FIELDS.items():
+            if name not in request.form:
+                continue
+            value = (request.form.get(name) or '').strip()
+            # A secret is shown back masked. If it comes back unchanged, the
+            # owner didn't retype it — leave the stored key alone rather than
+            # overwriting a working key with a row of dots.
+            if is_secret and value and '…' in value:
+                continue
+            if value or request.form.get(f'clear_{name}'):
+                integrations.set(name, value)
+                saved.append(label)
+        flash(f"Saved: {', '.join(saved)}." if saved else 'Nothing changed.', 'success')
+        return redirect(url_for('settings.connections'))
+
+    fields = {n: {'label': lbl, 'secret': sec, 'value': integrations.masked(n),
+                  'source': integrations.source(n)}
+              for n, (_e, lbl, sec) in integrations.FIELDS.items()}
+    return render_template('admin/settings_connections.html',
+                           fields=fields, status=integrations.status())
+
+
+@settings_bp.route('/connections/test-stripe', methods=['POST'])
+@owner_required
+def test_stripe():
+    """Ask Stripe who we are. Proves the key works and, more importantly, shows
+    WHICH account it reaches — the expensive mistake is a key that works fine but
+    belongs to somebody else's business."""
+    import integrations, stripe
+    key = integrations.stripe_secret_key()
+    if not key:
+        flash('No Stripe secret key saved yet.', 'warning')
+        return redirect(url_for('settings.connections'))
+    stripe.api_key = key
+    try:
+        acct = stripe.Account.retrieve()
+        name = (acct.get('business_profile') or {}).get('name') or acct.get('email') or acct.get('id')
+        mode = integrations.stripe_mode()
+        if mode == 'test':
+            flash(f'Connected to "{name}" in TEST mode. Real cards will not be '
+                  f'charged until you paste your live key.', 'warning')
+        else:
+            flash(f'Connected to "{name}" — live payments will reach this account. '
+                  f'Check that name is your business.', 'success')
+    except Exception as e:
+        flash(f'Stripe rejected that key: {e}', 'error')
+    return redirect(url_for('settings.connections'))
+
+
 @settings_bp.route('/commercial', methods=['GET', 'POST'])
 @owner_required
 def commercial():

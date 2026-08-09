@@ -12,6 +12,7 @@ from models import (Message, Staff, ContractorApplication, BusinessSetting,
 from notifications import send_sms
 from translate import translate
 import branding
+import integrations
 
 messages_bp = Blueprint('messages', __name__, url_prefix='/messages')
 
@@ -44,12 +45,11 @@ def sent_log():
 
     # Whether the services are even connected. Without this the page can't tell
     # you the difference between "nothing to send" and "nothing can be sent".
-    sms_missing = [n for n in ('TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE')
-                   if not _os.environ.get(n)]
+    sms_missing = integrations.missing_for('texting')
     health = {
         'sms_ready': not sms_missing,
         'sms_missing': sms_missing,
-        'email_ready': bool(_os.environ.get('RESEND_API_KEY')),
+        'email_ready': bool(integrations.resend_api_key()),
         'failed_recently': OutboundLog.query.filter_by(status='failed').count(),
     }
     return render_template('admin/sent_log.html', logs=logs, health=health,

@@ -8,24 +8,27 @@ Work through this in order. Budget about two hours for the first one.
 
 ---
 
-## Before you start — what to collect from them
+## What you do, and what they do
 
-Ask for all of this up front. Chasing it halfway through is what makes setup drag.
+Keep this split. It's what stops you becoming the bottleneck as this grows.
 
-| What | Why you need it | Blocker? |
-|---|---|---|
-| Business name, phone, address | Goes on every email, invoice and page | **Yes** |
-| The email address they want customers to reply to | Where their replies land | **Yes** |
-| **Their own Stripe account** | Their customers' money must reach *them* | **Yes** |
-| A domain (or use a free `.up.railway.app` one to start) | Their cleaners' job links | No |
-| Their prices per service and per bedroom count | The quoting engine | **Yes** |
-| Their cleaner pay rate ($/hour) | Payroll and the floor-price guard | **Yes** |
-| Logo and brand colours | Email headers | No |
-| Google review link | The review button after a 5-star rating | No |
+| You | They |
+|---|---|
+| Create the Railway project and database | Everything else |
+| Set `CRM_BASE`, `SECRET_KEY`, `ADMIN_USER`, `ADMIN_PASS` | Their Stripe, Twilio and email keys |
+| Hand over a URL and a login | Their business details, prices, terms, branding |
 
-> **The Stripe one is non-negotiable.** If their instance ends up pointed at your
-> Stripe keys, their customers' payments land in *your* bank account. Check this
-> twice.
+**You never need their Stripe credentials.** They paste their own keys into
+Settings → Connections, encrypted, and can rotate them without telling you. If
+you find yourself logging into a customer's Stripe, something has gone wrong with
+the process.
+
+Send them **CUSTOMER_ONBOARDING.md**. It walks them through the rest, and the CRM
+shows them a Setup checklist tracking what's left.
+
+> **The one thing to verify yourself:** that their instance is not pointed at
+> *your* Stripe keys. Their Connections page names the business a key belongs to
+> — check it says theirs before they take a real booking.
 
 ---
 
@@ -44,13 +47,14 @@ In Railway → their project → **Variables**:
 | `CRM_BASE` | `https://their-app.up.railway.app` | **The important one.** Every link texted to their cleaners and customers is built from this. Wrong here and their cleaners land on someone else's CRM. No trailing slash. |
 | `SECRET_KEY` | a long random string | Generate a fresh one per company. Never reuse. |
 | `ADMIN_USER` / `ADMIN_PASS` | their login | Let them choose the password; you shouldn't know it. |
-| `STRIPE_SECRET_KEY` | **their** `sk_live_…` | From *their* Stripe account. |
-| `STRIPE_PUBLISHABLE_KEY` | **their** `pk_live_…` | Same account. |
-| `FROM_EMAIL` | e.g. `bookings@theirdomain.com` | Must be a domain verified with the email provider — see step 4. |
-| `TWILIO_ACCOUNT_SID` | theirs | Texting. Without it, texts are logged as "not connected" rather than sent. |
-| `TWILIO_AUTH_TOKEN` | theirs | |
-| `TWILIO_PHONE` | their sending number | |
-| `RESEND_API_KEY` | theirs | Email sending. |
+| `FROM_EMAIL` | e.g. `bookings@theirdomain.com` | Optional. They can set this themselves later once their domain verifies. |
+
+That's all you set. **Stripe, Twilio and email keys are theirs to enter** in
+Settings → Connections — they're stored encrypted in their own database and you
+never handle them.
+
+> `SECRET_KEY` also encrypts their saved keys. Changing it later means they have
+> to paste their keys in again, so generate it once and leave it alone.
 
 Redeploy after saving.
 
@@ -58,39 +62,27 @@ Redeploy after saving.
 `https://their-app.up.railway.app/login` and log in. If that works, the app and
 database are wired up correctly.
 
-## 3. Fill in Settings → Business
+## 3. Hand it over
 
-Log in as them and work down the page. This is where the CRM learns who it
-belongs to — the name entered here appears on every page and every email.
+Give them the URL, their login, and **CUSTOMER_ONBOARDING.md**.
 
-- **Business Info** — name, phone, email, address, city, state, website.
-- **Business Model** — contractor vs employee, and who answers the phone.
-- **Branding** — tagline, colours, Google review link.
-  Leave the review link blank if they haven't got one; the button hides itself
-  rather than sending their happy customer to review the wrong company.
-- **Commercial Brand** — *leave entirely blank* unless they sell commercial work
-  under a different trading name. Blank means all quotes go out under their one
-  name, which is what most businesses want.
-- **Customer Terms** — read these with them. The default terms include the
-  non-refundable and scope-change clauses. They are the ones on the hook for
-  what these say, so they should approve the wording.
+From here it's theirs. They log in, see a Setup checklist, and work down it:
+business details, prices, terms, branding, and their own Stripe/Twilio/email
+keys. You don't have to do any of it, and you shouldn't — a customer who can't
+change their own prices without messaging you is a customer you'll be supporting
+forever.
 
-Then **Settings → Pricing** for their price matrix, and their cleaner hourly rate.
+Stay available for questions. Don't take the keyboard.
 
-## 4. Get their email sending properly
+## 4. Watch for the one expensive mistake
 
-Until their domain is verified, email goes out from the deployment's default
-address with their name on it. That works, but it looks better once verified.
+Before they take a real booking, have them press **Settings → Connections → Test
+Stripe connection**. It names the business the money would reach.
 
-1. In Resend, add their domain and add the DNS records it gives you.
-2. Once it shows verified, set `FROM_EMAIL` to an address on that domain.
-3. In **Settings → Business → Branding**, switch **Send Email From Your Own
-   Domain** to *Yes*.
+If that name isn't theirs, stop and fix it. Everything else on this list is
+recoverable; money landing in the wrong bank account is the one that isn't.
 
-> Don't switch that on before the domain verifies — their emails will stop
-> arriving and it is not obvious why.
-
-## 5. Test it end to end before they touch it
+## 5. Test it end to end before they go live
 
 Do this on their instance, with their keys, using Stripe **test mode** first if
 they'll let you.
@@ -109,10 +101,10 @@ they'll let you.
 Anything that lands on your CRM instead of theirs means `CRM_BASE` is wrong or
 unset on their deployment.
 
-## 6. Hand over
+## 6. Keep your hands off
 
-Give them: the URL, their login, and a walk-through. Nothing else — they never
-need access to your Railway project, your database, or your Stripe.
+They never need access to your Railway project, your database, or your Stripe —
+and you never need access to theirs.
 
 ---
 

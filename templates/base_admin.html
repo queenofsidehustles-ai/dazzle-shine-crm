@@ -390,8 +390,11 @@
       <a href="{{ url_for('admin.reports') }}" class="{{ 'active' if request.endpoint == 'admin.reports' }}">
         <span class="icon">📊</span> Reports
       </a>
-      <a href="{{ url_for('settings.pricing') }}" class="{{ 'active' if request.blueprint == 'settings' }}">
+      <a href="{{ url_for('settings.pricing') }}" class="{{ 'active' if request.blueprint == 'settings' and request.endpoint != 'settings.connections' }}">
         <span class="icon">⚙️</span> Settings
+      </a>
+      <a href="{{ url_for('settings.connections') }}" class="{{ 'active' if request.endpoint == 'settings.connections' }}">
+        <span class="icon">🔌</span> Connections
       </a>
       <a href="{{ url_for('team_logins.index') }}" class="{{ 'active' if request.blueprint == 'team_logins' }}">
         <span class="icon">🔐</span> Team Logins
@@ -416,6 +419,12 @@
           <div class="flash flash-{{ category }}">{{ msg }}</div>
         {% endfor %}
       {% endwith %}
+      {% if SETUP_PENDING and request.endpoint != 'settings.setup' %}
+      <a href="{{ url_for('settings.setup') }}" style="display:block;text-decoration:none;background:#fff8e1;border:1px solid #f0d488;border-radius:10px;padding:13px 16px;margin-bottom:16px;color:#7c4a04">
+        <strong>Finish setting up your CRM</strong> — {{ SETUP_PENDING }} still to do before you can take real bookings.
+        <span style="text-decoration:underline">Show me →</span>
+      </a>
+      {% endif %}
       {% block content %}{% endblock %}
     </div>
   </div>

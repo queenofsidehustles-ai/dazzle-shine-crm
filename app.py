@@ -132,6 +132,29 @@ def create_app():
                     'BIZ_PHONE': '', 'BIZ_EMAIL': '', 'BIZ_WEBSITE': '',
                     'BIZ_CITY': '', 'BIZ_BOOKING_LINK': '', 'CRM_BASE': ''}
 
+    # A nudge for a business that hasn't finished setting itself up. Goes quiet
+    # for good once the essentials are connected, so an established business
+    # never sees it.
+    @app.context_processor
+    def inject_setup_state():
+        try:
+            from flask import session
+            from models import BusinessSetting
+            if not session.get('logged_in') or session.get('role') != 'owner':
+                return {'SETUP_PENDING': None}
+            if BusinessSetting.get('setup_complete') == '1':
+                return {'SETUP_PENDING': None}
+            import onboarding
+            s = onboarding.summary()
+            if s['complete']:
+                BusinessSetting.set('setup_complete', '1')
+                db.session.commit()
+                return {'SETUP_PENDING': None}
+            n = len(s['blocking'])
+            return {'SETUP_PENDING': f"{n} thing{'s' if n != 1 else ''}"}
+        except Exception:
+            return {'SETUP_PENDING': None}
+
     with app.app_context():
         db.create_all()
         _migrate_db()
@@ -145,8 +168,32 @@ def create_app():
         _seed_message_templates()
         _patch_pay_rate_40_to_50()
         _seed_existing_brand_settings()
+        _skip_setup_for_established_business()
 
     return app
+
+
+def _skip_setup_for_established_business():
+    """Don't show a 'finish setting up' checklist to a business that is plainly
+    already running.
+
+    The checklist asks the owner to confirm she has reviewed her prices and her
+    customer terms. There is no way to detect that — a business may quite
+    reasonably keep a default price. So for an instance with real booking
+    history behind it, those are taken as read rather than nagged about.
+
+    Deliberately generic: any deployment with a real history skips it, not just
+    the first one."""
+    from models import BusinessSetting, Booking
+    if BusinessSetting.get('setup_seen'):
+        return
+    BusinessSetting.set('setup_seen', '1')
+    if Booking.query.count() >= 5:
+        for key in ('pricing_reviewed', 'terms_reviewed', 'setup_complete'):
+            if not BusinessSetting.get(key):
+                BusinessSetting.set(key, '1')
+        print('  ✅ established business — setup checklist skipped')
+    db.session.commit()
 
 
 def _seed_existing_brand_settings():

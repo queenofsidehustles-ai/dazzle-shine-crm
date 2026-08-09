@@ -15,10 +15,11 @@ import stripe
 
 from extensions import db
 from models import ProcessingFee
+import integrations
 
 
 def is_configured():
-    return bool(os.environ.get('STRIPE_SECRET_KEY', ''))
+    return bool(integrations.stripe_secret_key())
 
 
 def _epoch(y, m, day, end=False):

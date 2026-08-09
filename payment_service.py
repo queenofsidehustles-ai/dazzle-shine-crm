@@ -2,6 +2,7 @@ import os
 import stripe
 from notifications import send_email, send_sms
 import branding
+import integrations
 
 
 def charge_balance(booking) -> tuple:
@@ -13,7 +14,7 @@ def charge_balance(booking) -> tuple:
     price is edited. So on a hand-made booking it sat at $0 and this refused to
     charge anything at all."""
     from blueprints.payments import amount_due
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+    stripe.api_key = integrations.stripe_secret_key()
     notify_email = branding.owner_email()
 
     if not stripe.api_key:
@@ -75,7 +76,7 @@ def autocharge(booking) -> tuple:
     (the booking's own, or its client's card on file). Used morning-of for
     recurring / customer-portal auto-pay clients. Returns (success, error)."""
     from blueprints.payments import amount_due, mark_paid
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+    stripe.api_key = integrations.stripe_secret_key()
     if not stripe.api_key:
         return False, 'Stripe not configured'
     if booking.paid_at:

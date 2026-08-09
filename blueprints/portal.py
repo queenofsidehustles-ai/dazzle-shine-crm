@@ -13,6 +13,7 @@ from models import Client, BusinessSetting
 from extensions import db
 from blueprints.payments import amount_due, ensure_pay_token
 import branding
+import integrations
 
 portal_bp = Blueprint('portal', __name__)
 
@@ -99,7 +100,7 @@ def home(token):
     invoices = sorted([b for b in active if b.invoice_number],
                       key=lambda b: b.invoice_issued_at or datetime.min, reverse=True)
 
-    pk = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+    pk = integrations.stripe_publishable_key()
     return render_template('public/portal.html', client=client, token=token,
                            upcoming=upcoming, history=history, invoices=invoices,
                            amount_due=amount_due, stripe_pk=pk, biz=_biz(), today=today)
@@ -111,7 +112,7 @@ def setup_intent(token):
     client = _client(token)
     if _needs_gate(client) and not _verified(client):
         return jsonify({'ok': False, 'error': 'Please verify your identity first'}), 403
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+    stripe.api_key = integrations.stripe_secret_key()
     if not stripe.api_key:
         return jsonify({'ok': False, 'error': 'Payments not configured'}), 500
     try:
@@ -136,7 +137,7 @@ def save_card(token):
         return jsonify({'ok': False, 'error': 'Please verify your identity first'}), 403
     data = request.get_json(silent=True) or {}
     pm_id = (data.get('payment_method_id') or '').strip()
-    stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+    stripe.api_key = integrations.stripe_secret_key()
     if not pm_id or not stripe.api_key:
         return jsonify({'ok': False, 'error': 'Missing card details'}), 400
     try:
