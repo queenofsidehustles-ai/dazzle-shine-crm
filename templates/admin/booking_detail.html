@@ -593,15 +593,21 @@
           The full details — service, date, time, address and price — by email and text.
           Add a payment request to the same send if you want one.
         </p>
+        <a href="{{ url_for('bookings.confirmation_preview', booking_id=booking.id) }}"
+           target="_blank" class="btn btn-outline"
+           style="width:100%;justify-content:center;margin-bottom:9px;background:#fff">👁 Preview the email &amp; text</a>
         <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
               style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
           <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid #bbf7d0;border-radius:8px;margin:0">
-            <option value="none">Confirmation only</option>
-            <option value="deposit" selected>+ ask for the deposit</option>
+            <option value="none" selected>Confirmation only</option>
+            <option value="deposit">+ ask for the deposit</option>
             <option value="full">+ ask for the full amount</option>
           </select>
           <button type="submit" class="btn btn-gold" style="flex-shrink:0">Send</button>
         </form>
+        <p style="font-size:0.76rem;color:#166534;margin:8px 0 0">
+          Set to <strong>Confirmation only</strong> — no money is requested unless you change it.
+        </p>
         {% if not booking.email and not booking.phone %}
         <p style="font-size:0.78rem;color:#991b1b;margin:8px 0 0">⚠️ This booking has no email or phone — nothing can be sent.</p>
         {% endif %}

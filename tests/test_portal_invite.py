@@ -176,3 +176,35 @@ with app.app_context():
     check(days == {9}, f'and the new future visits are all on the 9th (got {sorted(days)})')
 
 print('\n🎉 Monthly plans repeat by date or by weekday, whichever the customer asked for.')
+
+
+# ── The booking confirmation: safe by default, and visible before it sends. ──
+with app.app_context():
+    print('\n14. The confirmation can be previewed without sending')
+    SENT.clear()
+    page = c.get(f'/bookings/{seed.id}/confirmation/preview').get_data(as_text=True)
+    check(SENT == [], 'previewing sends nothing at all')
+    check("You're all set, Renee!" in page, 'it shows the real greeting')
+    check('$185' in page, 'her real price')
+    check('2026-09-09' in page, 'her real date')
+    check('renee@example.com' in page, 'who the email would go to')
+    check('4075550188' in page, 'and who the text would go to')
+    check('Reply STOP to opt out' in page, 'including the text message itself, which never had a preview')
+
+    print('\n15. The preview matches what actually sends')
+    from blueprints.bookings import confirmation_content
+    subject, html, sms = confirmation_content(seed)
+    check(html in page, 'the previewed email is the very same HTML that would be sent')
+    check(sms in page, 'and the previewed text is the same text')
+
+    print('\n16. Sending asks for no money unless told to')
+    SENT.clear()
+    c.post(f'/bookings/{seed.id}/send-confirmation', data={'pay_kind': 'none'},
+           follow_redirects=True)
+    subjects = ' | '.join(s.get('subject') or '' for s in SENT)
+    check(len(SENT) >= 1, f'the confirmation went ({len(SENT)} email(s))')
+    check("You're booked" in subjects, 'it is the booking confirmation')
+    check('invoice' not in subjects.lower() and 'pay' not in subjects.lower(),
+          f'and no payment request rode along with it — sent: "{subjects}"')
+
+print('\n🎉 Nothing reaches a customer that has not been seen first.')

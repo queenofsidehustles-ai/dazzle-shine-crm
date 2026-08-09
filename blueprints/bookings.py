@@ -462,6 +462,25 @@ def send_confirmation(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+@bookings_bp.route('/<int:booking_id>/confirmation/preview')
+@login_required
+def confirmation_preview(booking_id):
+    """Exactly what the customer would get — the email and the text — without
+    sending anything."""
+    b = Booking.query.get_or_404(booking_id)
+    subject, html, sms = confirmation_content(b)
+    return f'''<div style="background:#f4f2fa;padding:22px;font-family:system-ui,sans-serif">
+  <div style="max-width:620px;margin:0 auto">
+    <p style="font-size:0.8rem;color:#5f5878;margin:0 0 4px"><strong>Email to:</strong> {b.email or "(no email on file)"}</p>
+    <p style="font-size:0.8rem;color:#5f5878;margin:0 0 14px"><strong>Subject:</strong> {subject}</p>
+    <div style="background:#fff;border-radius:12px;padding:26px">{html}</div>
+    <p style="font-size:0.8rem;color:#5f5878;margin:22px 0 6px"><strong>Text to:</strong> {b.phone or "(no phone on file)"}</p>
+    <div style="background:#e9f7ef;border:1px solid #b7e0c4;border-radius:12px;padding:16px 18px;font-size:0.92rem;color:#1f1333;white-space:pre-wrap">{sms}</div>
+    <p style="font-size:0.78rem;color:#9a95ad;margin:16px 0 0">Nothing has been sent. Close this tab and press Send when you're happy.</p>
+  </div>
+</div>'''
+
+
 @bookings_bp.route('/<int:booking_id>/send-payment-link', methods=['POST'])
 @login_required
 def send_payment_link_route(booking_id):
@@ -1388,24 +1407,22 @@ def _send_followup_email(booking):
     )
 
 
-def _send_booking_confirmation(booking):
-    """Confirm a hand-created booking to the customer via email + text.
-    No deposit language — a simple 'you're booked' note. Best-effort."""
-    from notifications import send_email, send_sms
-    from models import BusinessSetting
+def confirmation_content(booking):
+    """(subject, html, sms) for the booking confirmation.
+
+    Built here rather than inside the sender so the owner can look at the exact
+    words before they reach a customer. A preview built from a separate copy of
+    the wording would drift from the real thing and be worth less than nothing."""
     biz = branding.biz_name()
     first = (booking.name or 'there').split()[0]
     date_text = booking.preferred_date or 'the scheduled date'
     time_text = booking.preferred_time or ''
     when = f"{date_text}{(' at ' + time_text) if time_text else ''}"
     price_text = f"${booking.price:.2f}" if booking.price else ''
+    addr = ', '.join([p for p in [booking.address, booking.city, booking.zip_code] if p])
 
-    if booking.email:
-        addr = ', '.join([p for p in [booking.address, booking.city, booking.zip_code] if p])
-        send_email(
-            to_email=booking.email, to_name=booking.name,
-            subject=f"You're booked with {biz}! ✨",
-            html=f"""
+    subject = f"You're booked with {biz}! ✨"
+    html = f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <h2 style="color:#b98a33">You're all set, {first}! ✨</h2>
   <p>Thank you for booking with {biz}. Here are your details:</p>
@@ -1418,15 +1435,26 @@ def _send_booking_confirmation(booking):
   <p style="font-size:0.82rem;color:#9a95ad;background:#f6f5fb;border-radius:8px;padding:10px 12px">💡 Your price is based on an average-size home for this many bedrooms. Larger homes may have a small size adjustment — always confirmed with you first. No surprises!</p>
   <p>If anything changes or you have questions, just reply to this email or text us — we're happy to help.</p>
   <p style="margin-top:18px">See you soon!<br><strong>{biz}</strong></p>
-</div>""",
-        )
+</div>"""
+    sms = (f"Hi {first}! ✨ Your {biz} cleaning is booked for {when}."
+           + (f" Total {price_text}." if price_text else "")
+           + " Reply here with any questions. Reply STOP to opt out.")
+    return subject, html, sms
+
+
+def _send_booking_confirmation(booking):
+    """Confirm a hand-created booking to the customer via email + text.
+    No deposit language — a simple 'you're booked' note. Best-effort."""
+    from notifications import send_email, send_sms
+    subject, html, sms = confirmation_content(booking)
+
+    if booking.email:
+        send_email(to_email=booking.email, to_name=booking.name,
+                   subject=subject, html=html)
 
     if booking.phone:
-        msg = (f"Hi {first}! ✨ Your {biz} cleaning is booked for {when}."
-               + (f" Total {price_text}." if price_text else "")
-               + " Reply here with any questions. Reply STOP to opt out.")
         try:
-            send_sms(booking.phone, msg)
+            send_sms(booking.phone, sms)
         except Exception:
             pass
 
