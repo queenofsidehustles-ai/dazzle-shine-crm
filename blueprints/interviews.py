@@ -72,7 +72,7 @@ def interview_page(token):
 
     answered = [r.question_index for r in app_rec.responses]
     cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk')
-    upload_preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'dazzle_interviews')
+    upload_preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews')
 
     return render_template('interview/interview.html',
         app=app_rec,
@@ -139,7 +139,7 @@ def complete_interview(token):
 def bgcheck_upload_page(token):
     app_rec = ContractorApplication.query.filter_by(bgcheck_upload_token=token).first_or_404()
     cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk')
-    upload_preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'dazzle_interviews')
+    upload_preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews')
     already_done = bool(app_rec.bgcheck_uploaded_at)
     return render_template('interview/bgcheck_upload.html',
         app=app_rec,

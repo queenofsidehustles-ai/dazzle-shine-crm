@@ -224,7 +224,7 @@ def view_checklist(token):
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
     return render_template('public/checklist.html', checklist=checklist,
         cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk'),
-        upload_preset=os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'dazzle_interviews'),
+        upload_preset=os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews'),
     )
 
 

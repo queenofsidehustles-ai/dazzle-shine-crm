@@ -25,7 +25,7 @@ You didn't just get a gig — you joined a team that takes real pride in what we
 Read this before your first job, keep it handy, and never be afraid to ask questions. We shine brightest as a team. 💛
 
 ━━━━━━━━━━━━━━━━━━━━━━
-💛 THE DAZZLE DIFFERENCE — WHO WE ARE
+💛 WHAT MAKES US DIFFERENT — WHO WE ARE
 ━━━━━━━━━━━━━━━━━━━━━━
 Our promise to every client: they come home to a space that sparkles and feels brand new. We treat every home like it's our own.
 
@@ -80,7 +80,7 @@ Nice to have (the pros carry these):
 Tip: Affordable supplies are at Walmart, Dollar Tree, Costco, and Amazon. Buy in bulk to save — you'll go through microfiber cloths and gloves fastest.
 
 ━━━━━━━━━━━━━━━━━━━━━━
-🧹 THE DAZZLE METHOD — OUR CLEANING ROUTINE
+🧹 OUR METHOD — OUR CLEANING ROUTINE
 ━━━━━━━━━━━━━━━━━━━━━━
 Golden rule: always work TOP TO BOTTOM and LEFT TO RIGHT, so dust falls onto floors you clean last. Never clean the same room twice — do it right the first time.
 
@@ -106,14 +106,14 @@ BEDROOMS & LIVING AREAS
 - Vacuum carpets; sweep/mop hard floors
 - Straighten pillows and leave it picture-perfect
 
-WHOLE HOME — THE DAZZLE TOUCHES
+WHOLE HOME — THE FINISHING TOUCHES
 - Dust ceiling fans, light fixtures, and baseboards
 - Wipe light switches, door handles, and high-touch spots
 - Spot-clean walls and doors
 - Final walkthrough: stand in each doorway and ask, "Would I say WOW?"
 
 ━━━━━━━━━━━━━━━━━━━━━━
-⭐ THE DAZZLE STANDARD
+⭐ OUR STANDARD
 ━━━━━━━━━━━━━━━━━━━━━━
 - Arrive on time, neat, and professional — you represent {biz}
 - Treat every home and belonging with care

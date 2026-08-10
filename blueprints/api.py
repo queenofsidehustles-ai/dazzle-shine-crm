@@ -12,16 +12,30 @@ import integrations
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
-ALLOWED_ORIGINS = [
-    'https://www.dazzleandshinemaids.com',
-    'https://dazzleandshinemaids.com',
-    'http://localhost:3000',
-    'http://127.0.0.1:5500',
-]
+# Local addresses used while developing. The real ones come from whichever
+# website this business actually has — hardcoding one company's domain meant no
+# other company's site could ever reach its own CRM.
+DEV_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:5500']
+
+
+def allowed_origins():
+    import branding
+    out = list(DEV_ORIGINS)
+    extra = (os.environ.get('ALLOWED_ORIGINS') or '').split(',')
+    out += [o.strip().rstrip('/') for o in extra if o.strip()]
+    site = (branding.website() or '').strip().rstrip('/')
+    if site:
+        host = site.replace('https://', '').replace('http://', '')
+        bare = host[4:] if host.startswith('www.') else host
+        out += ['https://' + bare, 'https://www.' + bare]
+    base = branding.crm_base()
+    if base:
+        out.append(base.rstrip('/'))
+    return out
 
 
 def add_cors(response, origin):
-    if origin in ALLOWED_ORIGINS:
+    if origin in allowed_origins():
         response.headers['Access-Control-Allow-Origin'] = origin
     response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'

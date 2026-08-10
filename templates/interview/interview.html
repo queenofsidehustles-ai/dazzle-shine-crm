@@ -691,7 +691,7 @@
           const ext = this.videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
           formData.append('file', this.videoBlob, `answer_q${this.currentQ}.${ext}`);
           formData.append('upload_preset', UPLOAD_PRESET);
-          formData.append('folder', 'dazzle-interviews');
+          formData.append('folder', 'interviews');
 
           const res = await fetch(
             `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,

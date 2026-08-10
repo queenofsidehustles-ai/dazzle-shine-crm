@@ -32,12 +32,119 @@
       <div class="stars">{% for i in range(r.rating) %}⭐{% endfor %}</div>
       <p style="color:#5f5878">We appreciate you letting us know, {{ r.booking.name.split()[0] }}. We'll use your feedback to keep improving.</p>
       {% if r.rating <= 3 %}
-      <p style="color:#5f5878;margin-top:12px;font-size:0.9rem">Not satisfied? Please call us at <strong>(407) 743-1944</strong> — we'd love the chance to make it right.</p>
+      <p style="color:#5f5878;margin-top:12px;font-size:0.9rem">Not satisfied? Please call us at <strong>{{ BIZ_PHONE }}</strong> — we'd love the chance to make it right.</p>
       {% endif %}
       {% endif %}
     {% else %}
       <p style="color:#5f5878">You've already submitted your rating. Thank you!</p>
       <div class="stars">{% for i in range(r.rating or 0) %}⭐{% endfor %}</div>
+    {% endif %}
+
+      {% if tip %}
+    <div id="tip-box" style="border-top:1px solid #eae6f2;margin-top:26px;padding-top:22px">
+      <div style="font-size:1.6rem;margin-bottom:6px">💛</div>
+      <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:5px">
+        {% if tip.cleaner %}Add a tip for {{ tip.cleaner }}?{% else %}Add a tip for your cleaner?{% endif %}
+      </h2>
+      <p style="color:#5f5878;font-size:0.88rem;margin-bottom:16px">
+        {% if tip.cleaner %}{{ tip.cleaner }} keeps 100% of it.{% else %}Your cleaner keeps 100% of it.{% endif %}
+        Only if you'd like to — completely optional.
+      </p>
+
+      <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:14px">
+        <span style="font-size:1.5rem;font-weight:700;color:#5f5878">$</span>
+        <input id="tip-amount" type="number" inputmode="decimal" min="1" max="2000" step="1"
+               placeholder="0"
+               style="width:130px;padding:12px 14px;font-size:1.35rem;font-weight:700;text-align:center;
+                      border:2px solid #e4dfef;border-radius:12px;font-family:inherit;color:#1f1333" />
+      </div>
+
+      <div id="tip-card" style="display:none;margin-bottom:14px">
+        <div id="tip-card-element" style="border:1px solid #e4dfef;border-radius:10px;padding:12px;text-align:left"></div>
+      </div>
+
+      <button id="tip-send" type="button"
+              style="background:#d3a84f;color:#1a1225;border:none;padding:13px 30px;border-radius:999px;
+                     font-weight:700;font-size:0.98rem;cursor:pointer;font-family:inherit;width:100%">
+        Send tip
+      </button>
+      <p id="tip-msg" style="font-size:0.82rem;margin-top:12px;min-height:1.1em"></p>
+    </div>
+
+    <div id="tip-thanks" style="display:none;border-top:1px solid #eae6f2;margin-top:26px;padding-top:22px">
+      <div style="font-size:2rem;margin-bottom:8px">🎉</div>
+      <h2 style="font-size:1.05rem;font-weight:700">Thank you — that means a lot.</h2>
+      <p style="color:#5f5878;font-size:0.88rem;margin-top:5px">
+        {% if tip.cleaner %}We'll pass it straight on to {{ tip.cleaner }}.{% else %}We'll pass it straight on to your cleaner.{% endif %}
+      </p>
+    </div>
+
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+      (function () {
+        // Built by the server. Deriving these from the browser's path broke
+        // on any token ending in a digit.
+        var TIP_URL = '{{ url_for("ratings.tip", token=r.token) }}';
+        var CONFIRM_URL = '{{ url_for("ratings.tip_confirm", token=r.token) }}';
+        var amountEl = document.getElementById('tip-amount');
+        var btn = document.getElementById('tip-send');
+        var msg = document.getElementById('tip-msg');
+        var stripe = null, card = null, mounted = false;
+
+        function say(text, bad) {
+          msg.textContent = text;
+          msg.style.color = bad ? '#b3261e' : '#5f5878';
+        }
+        function busy(on, label) {
+          btn.disabled = on;
+          btn.style.opacity = on ? 0.6 : 1;
+          btn.textContent = on ? (label || 'Sending…') : 'Send tip';
+        }
+        function done() {
+          document.getElementById('tip-box').style.display = 'none';
+          document.getElementById('tip-thanks').style.display = 'block';
+        }
+
+        btn.addEventListener('click', async function () {
+          var amount = parseFloat(amountEl.value || '0');
+          if (!(amount > 0)) { say('Please enter an amount first.', true); amountEl.focus(); return; }
+          busy(true);
+          say('');
+          try {
+            var res = await fetch(TIP_URL, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ amount: amount })
+            });
+            var data = await res.json();
+            if (!data.ok) { busy(false); say(data.error || 'That did not go through.', true); return; }
+            if (data.done) { done(); return; }
+
+            // No card on file — collect one.
+            if (!mounted) {
+              stripe = Stripe('{{ tip.pk }}');
+              card = stripe.elements().create('card');
+              document.getElementById('tip-card').style.display = 'block';
+              card.mount('#tip-card-element');
+              mounted = true;
+              busy(false);
+              say('Enter your card, then press Send tip.');
+              return;
+            }
+            var result = await stripe.confirmCardPayment(data.client_secret, { payment_method: { card: card } });
+            if (result.error) { busy(false); say(result.error.message, true); return; }
+            var conf = await fetch(CONFIRM_URL, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ payment_intent_id: result.paymentIntent.id })
+            });
+            var cdata = await conf.json();
+            if (cdata.ok) { done(); } else { busy(false); say(cdata.error || 'Could not confirm.', true); }
+          } catch (e) {
+            busy(false);
+            say('Something went wrong. Please try again.', true);
+          }
+        });
+      })();
+    </script>
     {% endif %}
   </div>
 </body>

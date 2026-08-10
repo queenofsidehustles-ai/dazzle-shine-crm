@@ -122,3 +122,45 @@ with app.app_context():
     check(any('Sparkle Pros Cleaning' in q for q in qs), 'in both languages')
 
 print('\n🎉 A second company can run this CRM with nothing of the first showing through.')
+
+
+# ── A source-level sweep. ────────────────────────────────────────────────────
+# The page-rendering checks above pass while a hardcoded default sits in a code
+# path no test happens to render — which is exactly how a booking link, a CORS
+# allow-list and an export filename all survived the first sweep. This reads the
+# source instead, so a leak is caught wherever it hides.
+print('\n9. No other company\'s details are written into the source')
+import pathlib, re
+
+PATTERNS = [
+    (r'dazzleandshinemaids', 'a specific business domain or email'),
+    (r'dazzle-shine-crm-production', 'a specific deployment URL'),
+    (r'\(689\)\s*999-0194|\(407\)\s*743-1944', 'a specific phone number'),
+    (r'g\.page/r/CZ', 'a specific Google review link'),
+    (r'commercialcleanersorlando', 'a specific commercial domain'),
+    (r'dazzle[_-](?:interviews|unsub|shine)', 'a specific third-party account'),
+]
+# Files that may legitimately name the original business.
+EXEMPT = {'legacy_brands.py'}
+ROOT = pathlib.Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+offenders = []
+for path in sorted(list(ROOT.glob('*.py')) + list(ROOT.glob('blueprints/*.py'))
+                   + list(ROOT.rglob('templates/**/*.html'))):
+    if path.name in EXEMPT or 'node_modules' in str(path):
+        continue
+    text = path.read_text(errors='ignore')
+    for line_no, line in enumerate(text.split('\n'), 1):
+        stripped = line.strip()
+        if stripped.startswith('#') or stripped.startswith('"""') or stripped.startswith("'''"):
+            continue          # a comment explaining the history is fine
+        for pattern, what in PATTERNS:
+            if re.search(pattern, line, re.I):
+                offenders.append(f'{path.relative_to(ROOT)}:{line_no} — {what}')
+
+for o in offenders:
+    print(f'     ✗ {o}')
+check(not offenders,
+      f'no hardcoded business details anywhere in the source ({len(offenders)} found)')
+
+print('\n🎉 Nothing of one company is written into the code another company runs.')

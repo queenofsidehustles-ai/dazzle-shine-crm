@@ -18,6 +18,8 @@ from extensions import db
 from models import (AUTO_CATEGORIES, EXPENSE_CATEGORIES, IRS_MILEAGE_RATE,
                     BusinessSetting, Expense, RecurringExpense)
 
+import branding
+
 money_bp = Blueprint('money', __name__, url_prefix='/money')
 
 VALID_CATEGORIES = {k for k, _l, _g, _s in EXPENSE_CATEGORIES}
@@ -25,7 +27,7 @@ VALID_CATEGORIES = {k for k, _l, _g, _s in EXPENSE_CATEGORIES}
 
 def _cloudinary():
     return (os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk'),
-            os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'dazzle_interviews'))
+            os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews'))
 
 
 def _period_from_request():
@@ -325,6 +327,8 @@ def export_csv():
     w.writerow(['', '', '', '', '', 'TOTAL EXPENSES', f"-{p['total_out']:.2f}"])
     w.writerow(['', '', '', '', '', 'NET PROFIT', f"{p['net_profit']:.2f}"])
 
-    fname = f"dazzle-shine-pnl-{label.replace(' ', '-').lower()}.csv"
+    import re as _re
+    slug = _re.sub(r'[^a-z0-9]+', '-', branding.biz_name().lower()).strip('-') or 'business'
+    fname = f"{slug}-pnl-{label.replace(' ', '-').lower()}.csv"
     return Response(buf.getvalue(), mimetype='text/csv',
                     headers={'Content-Disposition': f'attachment; filename={fname}'})

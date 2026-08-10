@@ -1,5 +1,5 @@
 # ============================================================
-# DAZZLE & SHINE — PRICING ENGINE
+# PRICING ENGINE
 # Fixed price matrix by (beds, baths). Deep = 1.6x, Move-Out = 1.9x.
 # Update prices in the admin dashboard — no code changes needed.
 # ============================================================

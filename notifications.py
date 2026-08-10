@@ -34,7 +34,7 @@ def _log_outbound(channel, to_address, to_name, subject, body, ok, detail):
 
 def _unsub_secret():
     return (os.environ.get('SECRET_KEY') or os.environ.get('FLASK_SECRET_KEY')
-            or 'dazzle-unsub-fallback').encode()
+            or 'unsubscribe-fallback').encode()
 
 
 def unsubscribe_token(email):

@@ -54,7 +54,7 @@ def create_app():
     db_url = os.environ.get('DATABASE_URL', '')
     # Fall back to SQLite if URL is missing or unresolved template
     if not db_url or db_url.startswith('$') or '://' not in db_url:
-        db_url = 'sqlite:///dazzle.db'
+        db_url = 'sqlite:///crm.db'
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
     if db_url.startswith('postgresql://') and '+psycopg2' not in db_url:
@@ -314,6 +314,7 @@ def _migrate_db():
         # Booking columns added after initial deploy
         ('booking', 'frequency',                "VARCHAR(20) DEFAULT 'one_time'"),
         ('booking', 'monthly_mode',             'VARCHAR(10)'),
+        ('booking', 'tip_payment_intent',       'VARCHAR(100)'),
         ('booking', 'internal_notes',           'TEXT'),
         ('booking', 'assigned_cleaner',         'VARCHAR(100)'),
         ('booking', 'stripe_payment_intent',    'VARCHAR(100)'),

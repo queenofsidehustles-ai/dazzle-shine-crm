@@ -18,7 +18,7 @@ def _setting(key, fallback):
 
 
 def _booking_link():
-    return _setting('booking_link', 'https://www.dazzleandshinemaids.com/#book')
+    return branding.booking_link()
 
 
 def _winback_code():

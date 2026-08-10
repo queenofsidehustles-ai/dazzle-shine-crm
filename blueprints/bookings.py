@@ -1360,25 +1360,42 @@ def _send_rating_request(booking):
     r = BookingRating(booking_id=booking.id, token=token)
     db.session.add(r)
     db.session.flush()
-    from notifications import send_email
+    from notifications import send_email, send_sms
     base = branding.crm_base()
     stars_html = ''.join(
         f'<a href="{base}/rate/{token}/{i}" style="font-size:2.2rem;text-decoration:none;margin:0 4px">⭐</a>'
         for i in range(1, 6)
     )
-    send_email(
-        to_email=booking.email, to_name=booking.name,
-        subject=f'How was your cleaning? — {branding.biz_name()}',
-        html=f"""
+    if booking.email:
+        send_email(
+            to_email=booking.email, to_name=booking.name,
+            subject=f'How was your cleaning? — {branding.biz_name()}',
+            html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333;text-align:center">
   <h2 style="color:#b98a33;margin-bottom:6px">How did we do?</h2>
   <p style="color:#5f5878;margin-bottom:24px">Hi {booking.name.split()[0]}, your cleaning is complete! Tap a star to rate your experience:</p>
   <div style="margin:20px 0">{stars_html}</div>
   <p style="font-size:0.82rem;color:#9a95ad">Takes 5 seconds. Your feedback helps us improve.</p>
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
-  <p style="color:#9a95ad;font-size:13px">{branding.biz_name()} · Orlando, FL</p>
+  <p style="color:#9a95ad;font-size:13px">{branding.biz_name()}{" · " + branding.city_line() if branding.city_line() else ""}</p>
 </div>""",
-    )
+        )
+
+    # Text it too. A cleaning gets rated from a phone, minutes after the cleaner
+    # leaves; an email to the same person is read days later if at all. No
+    # rating read means no rating given — and no chance to offer a tip either.
+    if booking.phone:
+        first = (booking.name or 'there').split()[0]
+        msg = (f"Hi {first}! How did we do today? Tap to rate your cleaning: "
+               f"{base}/rate/{token} — {branding.biz_name()}. Reply STOP to opt out.")
+        try:
+            send_sms(booking.phone, msg)
+        except Exception as e:
+            # Never let a failed text stop a job being marked complete — but
+            # record it. A bare `pass` here hid a broken send completely.
+            from notifications import _log_outbound
+            _log_outbound('sms', booking.phone, booking.name,
+                          'Rating request', msg, False, str(e))
 
 
 def _send_followup_email(booking):
@@ -1399,12 +1416,13 @@ def _send_followup_email(booking):
   <p>It was a pleasure serving you. If there's anything at all we can make
      better, just reply to this email — we're always here to help.</p>
   <p>Ready to book your next cleaning?
-     <a href="https://www.dazzleandshinemaids.com/#book" style="color:#b98a33">Book again here →</a>
+     <a href="{branding.booking_link()}" style="color:#b98a33">Book again here →</a>
   </p>
   <hr style="border:none;border-top:1px solid #e4dfef;margin:22px 0"/>
-  <p style="color:#9a95ad;font-size:13px">{branding.biz_name()} · Orlando, FL</p>
+  <p style="color:#9a95ad;font-size:13px">{branding.biz_name()}{" · " + branding.city_line() if branding.city_line() else ""}</p>
 </div>""",
-    )
+        )
+
 
 
 def confirmation_content(booking):

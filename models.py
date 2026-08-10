@@ -70,6 +70,7 @@ class Booking(db.Model):
     deposit_paid = db.Column(db.Boolean, default=False)
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
     tip_amount = db.Column(db.Float, default=0)  # customer's tip — belongs to the cleaner, never revenue
+    tip_payment_intent = db.Column(db.String(100))  # the Stripe charge, when tipped after the job
     balance_due = db.Column(db.Float)
     balance_collected = db.Column(db.Boolean, default=False)
     pay_token = db.Column(db.String(64))       # unique link for paying the full amount (invoice / on-site)
