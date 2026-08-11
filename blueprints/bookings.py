@@ -15,10 +15,23 @@ bookings_bp = Blueprint('bookings', __name__, url_prefix='/bookings')
 @login_required
 def index():
     status_filter = request.args.get('status', '')
+    group = (request.args.get('series') or '').strip()
+    show_every_visit = group == 'all'
+
     query = Booking.query.order_by(Booking.created_at.desc())
     if status_filter:
         query = query.filter_by(status=status_filter)
+    if group and not show_every_visit:
+        query = query.filter_by(recurring_group=group)
     bookings = query.all()
+
+    # A recurring plan is one row unless asked otherwise. Twelve months of the
+    # same client, all created in the same second, otherwise sit on top of
+    # everything that actually happened this week.
+    if not group:
+        bookings = recurring.collapse(bookings)
+    if group and not show_every_visit:
+        bookings = sorted(bookings, key=lambda b: b.preferred_date or '')
     counts = {
         'all': Booking.query.count(),
         'pending': Booking.query.filter_by(status='pending').count(),
@@ -26,7 +39,9 @@ def index():
         'completed': Booking.query.filter_by(status='completed').count(),
         'cancelled': Booking.query.filter_by(status='cancelled').count(),
     }
-    return render_template('admin/bookings.html', bookings=bookings, counts=counts, status_filter=status_filter)
+    return render_template('admin/bookings.html', bookings=bookings, counts=counts,
+                           status_filter=status_filter, series=group,
+                           show_every_visit=show_every_visit)
 
 
 @bookings_bp.route('/price-preview')

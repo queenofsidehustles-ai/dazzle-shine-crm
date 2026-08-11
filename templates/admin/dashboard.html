@@ -93,7 +93,12 @@
             <a href="{{ url_for('bookings.detail', booking_id=b.id) }}">{{ b.name }}</a>
             <br><small style="color:#9a95ad">{{ b.email }}</small>
           </td>
-          <td>{{ b.service_label }}</td>
+          <td>
+            {{ b.service_label }}
+            {% if b.series_hidden %}
+            <br><small style="color:#9a95ad">🔁 next of {{ b.series_total }} visits</small>
+            {% endif %}
+          </td>
           <td style="color:#5f5878">{{ b.preferred_date or '—' }}</td>
           <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
           <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a></td>

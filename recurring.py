@@ -263,3 +263,49 @@ def topup_all(weeks_ahead=None, min_weeks=None):
     if total:
         db.session.commit()
     return total
+
+
+def series_counts():
+    """How many visits each recurring plan has, in one query."""
+    from models import Booking
+    from extensions import db
+    from sqlalchemy import func
+    rows = db.session.query(Booking.recurring_group, func.count(Booking.id)).filter(
+        Booking.recurring_group.isnot(None),
+        Booking.status != 'cancelled').group_by(Booking.recurring_group).all()
+    return {g: n for g, n in rows if g}
+
+
+def collapse(bookings, today=None):
+    """One row per recurring plan, plus every one-off booking.
+
+    Scheduling a year of a monthly client's visits creates a dozen bookings in
+    the same instant. Every list here is ordered by when a booking was created,
+    so that one client buried everything else that had happened — the plan is
+    correct, but a list is meant to show what is going on, not the same customer
+    twelve times.
+
+    The row kept is the plan's next upcoming visit, because that is the one the
+    owner might act on. Each kept row carries how many visits the plan has, so
+    nothing looks like it has gone missing."""
+    from datetime import date as _date
+    today = today or _date.today().isoformat()
+    counts = series_counts()
+
+    seen, out = set(), []
+    for b in bookings:
+        group = getattr(b, 'recurring_group', None)
+        if not group:
+            out.append(b)
+            continue
+        if group in seen:
+            continue
+        seen.add(group)
+        siblings = [x for x in bookings if getattr(x, 'recurring_group', None) == group]
+        upcoming = sorted([x for x in siblings if (x.preferred_date or '') >= today],
+                          key=lambda x: x.preferred_date or '')
+        rep = upcoming[0] if upcoming else max(siblings, key=lambda x: x.preferred_date or '')
+        rep.series_total = counts.get(group, len(siblings))
+        rep.series_hidden = max(0, rep.series_total - 1)
+        out.append(rep)
+    return out

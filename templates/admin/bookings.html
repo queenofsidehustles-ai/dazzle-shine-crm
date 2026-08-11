@@ -17,7 +17,13 @@
 <div class="card">
   {% if bookings %}
   <div class="table-wrap">
-    <table>
+    {% if series and series != 'all' %}
+<div style="background:#f0edf8;border-radius:10px;padding:12px 15px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+  <span style="font-size:0.9rem;color:#3b2460">🔁 Showing every visit in one recurring plan, earliest first.</span>
+  <a href="{{ url_for('bookings.index') }}" class="btn btn-outline" style="padding:5px 14px;font-size:0.82rem">← Back to all bookings</a>
+</div>
+{% endif %}
+<table>
       <thead>
         <tr>
           <th>#</th>
@@ -39,7 +45,13 @@
             <a href="{{ url_for('bookings.detail', booking_id=b.id) }}">{{ b.name }}</a>
             <br><small style="color:#9a95ad">{{ b.phone }}</small>
           </td>
-          <td>{{ b.service_label }}</td>
+          <td>
+            {{ b.service_label }}
+            {% if b.series_hidden %}
+            <br><a href="{{ url_for('bookings.index', series=b.recurring_group) }}"
+                   style="font-size:0.8rem;color:#b98a33;text-decoration:none">🔁 {{ b.series_total }} visits in this plan →</a>
+            {% endif %}
+          </td>
           <td style="color:#5f5878">{{ b.bedrooms or '—' }} bd / {{ b.bathrooms or '—' }} ba</td>
           <td style="color:#5f5878">{{ b.preferred_date or '—' }}</td>
           <td style="color:#5f5878">{{ b.preferred_time or '—' }}</td>

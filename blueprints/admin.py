@@ -21,7 +21,11 @@ def dashboard():
     completed = Booking.query.filter_by(status='completed').count()
     total_clients = Client.query.count()
     today_bookings = Booking.query.filter_by(preferred_date=today).all()
-    recent = Booking.query.order_by(Booking.created_at.desc()).limit(8).all()
+    import recurring
+    # Collapse recurring plans BEFORE trimming — otherwise all eight rows
+    # are the same client's next twelve months.
+    recent = recurring.collapse(
+        Booking.query.order_by(Booking.created_at.desc()).limit(300).all())[:8]
 
     # This month's money, cash basis — only the owner sees the money tiles.
     money = None
