@@ -340,6 +340,23 @@ def detail(booking_id):
     recurring_upcoming = recurring.upcoming_count(booking.recurring_group) if booking.recurring_group else 0
     # Spell out what each monthly pattern would mean for THIS booking's date,
     # so the choice reads as "the 9th" or "2nd Wednesday" rather than jargon.
+    # For a one-off job, work out what an ongoing plan after it would look like,
+    # so the form opens with real numbers rather than empty boxes.
+    plan_suggestion = None
+    if booking.frequency in ('one_time', None):
+        from pricing import calculate_price, SERVICE_LABELS
+        try:
+            suggested = calculate_price('standard', booking.bedrooms, booking.bathrooms,
+                                        extras='', frequency='biweekly', sqft=booking.sqft)
+        except Exception:
+            suggested = None
+        try:
+            first_day = date.fromisoformat(booking.preferred_date) + timedelta(days=14)
+        except (ValueError, TypeError):
+            first_day = date.today() + timedelta(days=14)
+        plan_suggestion = {'price': suggested, 'start': first_day.isoformat(),
+                           'services': SERVICE_LABELS}
+
     monthly_choices = None
     if booking.frequency == 'monthly' and booking.preferred_date:
         try:
@@ -353,6 +370,7 @@ def detail(booking_id):
                            pay_url=pay_url, due=amount_due(booking),
                            recurring_upcoming=recurring_upcoming,
                            monthly_choices=monthly_choices,
+                           plan_suggestion=plan_suggestion,
                            labor_rate=get_labor_rate(),
                            max_labor_pct=get_max_labor_percent(),
                            ad_expense=Expense.query.filter_by(booking_id=booking.id).first(),
@@ -1169,6 +1187,60 @@ def schedule_recurring(booking_id):
         flash('That plan is already filled in as far ahead as we schedule — '
               'no new visits needed.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/start-plan', methods=['POST'])
+@login_required
+def start_plan(booking_id):
+    """Begin ongoing cleanings that follow a one-off job.
+
+    The common way a cleaning relationship starts is a deep clean first, then
+    lighter visits on a schedule — different service, different price. Turning
+    the deep clean itself into a recurring job would have repeated the deep
+    clean, at the deep-clean price, forever. So the plan is a separate booking
+    that carries the customer over and starts on its own date."""
+    first = Booking.query.get_or_404(booking_id)
+
+    frequency = request.form.get('frequency', 'biweekly')
+    if frequency not in ('weekly', 'biweekly', 'monthly'):
+        flash('Pick how often the cleanings repeat.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    start = (request.form.get('start_date') or '').strip()
+    if not start:
+        flash('Pick the date of the first ongoing cleaning.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    price_raw = (request.form.get('plan_price') or '').strip().replace('$', '').replace(',', '')
+    try:
+        price = round(float(price_raw), 2) if price_raw else None
+    except ValueError:
+        flash('That price is not a number.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    seed = Booking(
+        client_id=first.client_id,
+        service_type=request.form.get('plan_service') or 'standard',
+        bedrooms=first.bedrooms, bathrooms=first.bathrooms, sqft=first.sqft,
+        frequency=frequency, monthly_mode=request.form.get('monthly_mode') or None,
+        preferred_date=start,
+        preferred_time=request.form.get('plan_time') or first.preferred_time,
+        name=first.name, email=first.email, phone=first.phone,
+        address=first.address, city=first.city, zip_code=first.zip_code,
+        access_notes=first.access_notes, price=price,
+        source=first.source, status='confirmed',
+        # Carry any card on file so the plan can bill itself from visit one.
+        stripe_customer_id=first.stripe_customer_id,
+        stripe_payment_method_id=first.stripe_payment_method_id,
+    )
+    db.session.add(seed)
+    db.session.commit()
+    _link_client(seed)
+
+    made = recurring.generate_series(seed)
+    flash(f'📅 Ongoing {frequency} cleanings set up for {seed.name} — '
+          f'{made + 1} visits on the calendar, starting {start}.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=seed.id))
 
 
 @bookings_bp.route('/<int:booking_id>/stop-recurring', methods=['POST'])

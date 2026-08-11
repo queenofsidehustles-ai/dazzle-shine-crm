@@ -415,6 +415,56 @@
       </form>
     </div>
 
+    {% if plan_suggestion %}
+    <!-- Ongoing cleanings after a one-off job -->
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">🔁 Ongoing Cleanings</h2>
+      <p style="font-size:0.85rem;color:#5f5878;margin:0 0 14px">
+        Is this the first clean before a regular schedule? Set the ongoing visits up here.
+        They get their own service and price — this job stays exactly as it is.
+      </p>
+      <form method="POST" action="{{ url_for('bookings.start_plan', booking_id=booking.id) }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">How often</label>
+            <select name="frequency" style="width:100%;padding:9px 10px;border:1px solid #e4dfef;border-radius:8px">
+              <option value="weekly">Every week</option>
+              <option value="biweekly" selected>Every 2 weeks</option>
+              <option value="monthly">Every month</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">Service</label>
+            <select name="plan_service" style="width:100%;padding:9px 10px;border:1px solid #e4dfef;border-radius:8px">
+              {% for key, label in plan_suggestion.services.items() %}
+              <option value="{{ key }}" {{ 'selected' if key == 'standard' }}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">First ongoing cleaning</label>
+            <input type="date" name="start_date" value="{{ plan_suggestion.start }}"
+                   style="width:100%;padding:9px 10px;border:1px solid #e4dfef;border-radius:8px" />
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">Price per visit</label>
+            <input type="text" name="plan_price"
+                   value="{{ '%.2f'|format(plan_suggestion.price) if plan_suggestion.price else '' }}"
+                   placeholder="e.g. 150"
+                   style="width:100%;padding:9px 10px;border:1px solid #e4dfef;border-radius:8px" />
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label style="font-size:0.82rem">Arrival time</label>
+          <input type="text" name="plan_time" value="{{ booking.preferred_time or '' }}" placeholder="10:00 AM"
+                 style="width:100%;padding:9px 10px;border:1px solid #e4dfef;border-radius:8px" />
+          <span style="font-size:0.75rem;color:#9a95ad">Cards are charged when this time comes round, so nobody pays before you arrive.</span>
+        </div>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Set up ongoing cleanings</button>
+      </form>
+    </div>
+    {% endif %}
+
     {% if booking.frequency not in ['one_time', None] %}
     <!-- Recurring plan -->
     <div class="card" style="margin-top:18px">
