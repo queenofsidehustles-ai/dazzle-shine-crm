@@ -29,13 +29,48 @@ def _unsub_url(email):
     return f"{branding.crm_base()}/api/unsubscribe/{unsubscribe_token(email)}"
 
 
-def _freq_prices(price):
-    p = price or 0
-    def disc(name):
-        return f"{round(p * (1 - FREQUENCY_DISCOUNTS.get(name, 0) / 100), 2):.2f}"
-    return {'monthly_price': disc('monthly'),
-            'biweekly_price': disc('biweekly'),
-            'weekly_price': disc('weekly')}
+def _freq_prices(booking):
+    """What ongoing maintenance cleans would cost this home, or None.
+
+    This used to take a discount off whatever the customer last paid. For a
+    customer whose last job was a deep clean that quoted a fortnightly price of
+    $355 when the real figure was $234 — the deep clean is a one-off big job, not
+    the basis for a maintenance rate.
+
+    Prices come from the pricing matrix for the home's own size instead. If the
+    home's size isn't recorded there is nothing to price from, and returning
+    None means the email is skipped rather than sent with a made-up figure."""
+    from pricing import calculate_price
+    if not (booking.bedrooms and booking.bathrooms):
+        return None
+    out = {}
+    for name in ('monthly', 'biweekly', 'weekly'):
+        try:
+            price = calculate_price('standard', booking.bedrooms, booking.bathrooms,
+                                    extras='', frequency=name, sqft=booking.sqft)
+        except Exception:
+            return None
+        if not price or price <= 0:
+            return None
+        out[f'{name}_price'] = f'{price:.2f}'
+    return out
+
+
+def _already_on_a_plan(email):
+    """True if this customer already has ongoing cleanings booked.
+
+    The old check only looked for bookings created AFTER the job completed, so
+    somebody whose plan was set up first — a deep clean followed by a schedule,
+    which is the normal way this starts — still got sold the plan they were
+    already on."""
+    from models import Booking
+    if not email:
+        return False
+    return Booking.query.filter(
+        db.func.lower(Booking.email) == email.lower(),
+        Booking.status != 'cancelled',
+        db.or_(Booking.recurring_group.isnot(None),
+               Booking.frequency.notin_(['one_time', None]))).count() > 0
 
 
 def _has_rebooked(email, after_dt):
@@ -209,9 +244,13 @@ def run_lifecycle_emails():
     one_time = db.or_(Booking.frequency == 'one_time', Booking.frequency.is_(None))
     for b in Booking.query.filter(Booking.status == 'completed', one_time,
                                   Booking.completed_at.isnot(None)).all():
-        if _has_rebooked(b.email, b.completed_at):
+        if _has_rebooked(b.email, b.completed_at) or _already_on_a_plan(b.email):
             continue
-        prices = _freq_prices(b.price)
+        prices = _freq_prices(b)
+        if not prices:
+            # Nothing to quote from. Better to say nothing than to quote a price
+            # that isn't real.
+            continue
         variables = {'booking_link': _booking_link(), **prices}
         if not b.upsell_sent_at and b.completed_at <= now - timedelta(days=2):
             if _send_marketing('recurring_upsell', b.email, b.name, variables):
