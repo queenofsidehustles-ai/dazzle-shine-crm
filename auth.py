@@ -29,6 +29,25 @@ def owner_required(f):
     return decorated
 
 
+# Passwords that are not passwords. A deployment left with any of these is
+# effectively open, so the built-in login refuses to work at all rather than
+# quietly accepting them.
+_WEAK = {'changeme', 'password', 'admin', 'admin123', '123456', 'letmein', ''}
+
+
+def env_login_configured():
+    """True only when this deployment has been given a real owner login.
+
+    The built-in login used to fall back to admin/changeme whenever the
+    environment variables were missing. On a single hand-configured server that
+    was merely untidy. Once the same code runs a second company's business it is
+    a guessable way into their customer list and their payment settings, so an
+    unconfigured deployment now has no built-in login at all."""
+    user = (os.environ.get('ADMIN_USER') or '').strip()
+    pw = (os.environ.get('ADMIN_PASS') or '').strip()
+    return bool(user) and pw.lower() not in _WEAK
+
+
 def authenticate(username, password):
     """Check a login attempt. Returns (ok, info) where info holds user_id, role
     and name. Tries real user accounts first, then the env owner login."""
@@ -40,16 +59,20 @@ def authenticate(username, password):
         user.last_login = datetime.utcnow()
         db.session.commit()
         return True, {'user_id': user.id, 'role': user.role, 'name': user.name}
-    # Fallback: Monica's original env-based login — always treated as owner.
-    if (username == os.environ.get('ADMIN_USER', 'admin') and
-            password == os.environ.get('ADMIN_PASS', 'changeme')):
-        return True, {'user_id': None, 'role': 'owner', 'name': 'Owner'}
+    # The deployment's own owner login, from the environment. Only honoured
+    # when it has actually been set to something — never a default.
+    if env_login_configured():
+        if (username == os.environ.get('ADMIN_USER', '').strip()
+                and password == (os.environ.get('ADMIN_PASS') or '')):
+            return True, {'user_id': None, 'role': 'owner', 'name': 'Owner'}
     return False, None
 
 
 def check_credentials(username, password):
     """Backward-compatible env-only check (kept for any legacy callers)."""
+    if not env_login_configured():
+        return False
     return (
-        username == os.environ.get('ADMIN_USER', 'admin') and
-        password == os.environ.get('ADMIN_PASS', 'changeme')
+        username == os.environ.get('ADMIN_USER', '').strip() and
+        password == (os.environ.get('ADMIN_PASS') or '')
     )

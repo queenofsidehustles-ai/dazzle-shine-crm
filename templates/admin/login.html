@@ -26,7 +26,14 @@
       <span class="script">{{ BIZ }}</span>
       <span class="sub">Back Office</span>
     </div>
-    {% if error %}
+    {% if not_set_up %}
+      <div style="background:#fff8e1;border:1px solid #f0d488;color:#7c4a04;border-radius:10px;padding:13px 15px;margin-bottom:14px;font-size:0.88rem;line-height:1.55;text-align:left">
+        <strong>This CRM has no owner login yet.</strong><br>
+        Set <code>ADMIN_USER</code> and <code>ADMIN_PASS</code> in the hosting settings,
+        then redeploy. Nobody can sign in until you do — including us.
+      </div>
+      {% endif %}
+      {% if error %}
       <div class="error">{{ error }}</div>
     {% endif %}
     <form method="POST">

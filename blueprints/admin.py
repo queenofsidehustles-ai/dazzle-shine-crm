@@ -145,7 +145,12 @@ def login():
             session['user_name'] = info['name']
             return redirect(url_for('admin.dashboard'))
         error = 'Wrong username or password.'
-    return render_template('admin/login.html', error=error)
+    # A freshly deployed instance with no owner login and no accounts can't be
+    # opened by anybody. Say so plainly rather than leaving someone guessing.
+    from auth import env_login_configured
+    from models import User
+    not_set_up = not env_login_configured() and User.query.count() == 0
+    return render_template('admin/login.html', error=error, not_set_up=not_set_up)
 
 
 @admin_bp.route('/logout')
