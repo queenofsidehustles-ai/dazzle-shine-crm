@@ -76,7 +76,12 @@ def send_reminders():
     return jsonify({'ok': True, 'reminders_sent': count})
 
 
-# ── Auto-charge balances (cron — runs every morning) ─────────────────────────
+# ── Auto-charge balances (cron — run hourly) ─────────────────────────────────
+#
+# Runs hourly rather than at one set time. Each booking is charged when its own
+# appointment starts, so nobody's card is touched before the day they were told
+# somebody would arrive. A single morning run only ever suited whoever happened
+# to be booked at that hour.
 
 @api_bp.route('/charge-balances', methods=['POST'])
 def charge_balances():
@@ -85,8 +90,12 @@ def charge_balances():
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
+    import scheduling
     from payment_service import charge_balance as do_charge
-    today = date.today().isoformat()
+    # The business's own date, not the server's — at 8pm in Orlando the server
+    # already believes it is tomorrow.
+    today = scheduling.local_today().isoformat()
+    now_local = scheduling.local_now()
     bookings = Booking.query.filter(
         Booking.preferred_date == today,
         Booking.status.in_(['confirmed', 'pending']),
@@ -96,7 +105,12 @@ def charge_balances():
     ).all()
 
     results = []
+    waiting = []
     for b in bookings:
+        if not scheduling.due_for_charge(b, now_local):
+            waiting.append({'booking_id': b.id, 'name': b.name,
+                            'due_at': scheduling.describe(b)})
+            continue
         ok, err = do_charge(b)
         results.append({'booking_id': b.id, 'name': b.name, 'ok': ok, 'error': err})
     db.session.commit()
@@ -119,11 +133,17 @@ def charge_balances():
                    (client.stripe_customer_id and client.stripe_payment_method_id)
         if not has_card:
             continue
+        if not scheduling.due_for_charge(b, now_local):
+            waiting.append({'booking_id': b.id, 'name': b.name,
+                            'due_at': scheduling.describe(b), 'autopay': True})
+            continue
         ok, err = autocharge(b)
         results.append({'booking_id': b.id, 'name': b.name, 'ok': ok, 'error': err, 'autopay': True})
     db.session.commit()
 
-    return jsonify({'ok': True, 'charged': len([r for r in results if r['ok']]), 'results': results})
+    return jsonify({'ok': True, 'charged': len([r for r in results if r['ok']]),
+                    'results': results,
+                    'waiting_for_their_appointment': waiting})
 
 
 # ── Lead quote capture (from website) ─────────────────────────────────────────

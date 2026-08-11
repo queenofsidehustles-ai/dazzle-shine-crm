@@ -43,6 +43,29 @@
         <label>Website</label>
         <input type="text" name="website" value="{{ current.website }}" placeholder="https://yourbusiness.com" />
       </div>
+      <div class="form-group">
+        <label>Time Zone</label>
+        <select name="timezone">
+          {% for tz, tzlabel in [
+              ('America/New_York', 'Eastern (New York, Orlando, Atlanta)'),
+              ('America/Chicago', 'Central (Chicago, Dallas, Houston)'),
+              ('America/Denver', 'Mountain (Denver, Salt Lake City)'),
+              ('America/Phoenix', 'Arizona (no daylight saving)'),
+              ('America/Los_Angeles', 'Pacific (Los Angeles, Seattle)')] %}
+          <option value="{{ tz }}" {{ 'selected' if (current.timezone or 'America/New_York') == tz }}>{{ tzlabel }}</option>
+          {% endfor %}
+        </select>
+        <span style="font-size:0.76rem;color:#9a95ad">Your CRM runs on a server set to UTC. This is how it knows what "today" and "9am" mean where you actually are.</span>
+      </div>
+      <div class="form-group">
+        <label>Charge Time For Jobs With No Arrival Time</label>
+        <select name="charge_hour">
+          {% for h in range(6, 19) %}
+          <option value="{{ h }}" {{ 'selected' if (current.charge_hour or '9')|int == h }}>{{ (h % 12) or 12 }}:00 {{ 'AM' if h < 12 else 'PM' }}</option>
+          {% endfor %}
+        </select>
+        <span style="font-size:0.76rem;color:#9a95ad">Cards are charged when each job's own arrival time comes round, so nobody pays before you turn up. This is only the fallback for a booking with no time filled in.</span>
+      </div>
     </div>
     <button type="submit" class="btn btn-gold" style="margin-top:8px">Save Business Info</button>
   </form>

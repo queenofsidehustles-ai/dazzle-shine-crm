@@ -8,3 +8,4 @@ gunicorn==22.0.0
 twilio==9.3.7
 cloudinary==1.40.0
 cryptography>=42.0.0
+tzdata

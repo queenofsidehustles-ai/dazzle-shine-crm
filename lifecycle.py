@@ -160,7 +160,11 @@ def run_lifecycle_emails():
                 break
 
     # ── B3 — morning-of note (job scheduled today) ──
-    today = now.date().isoformat()
+    # The business's own date. The server runs on UTC, so after early evening
+    # local time its idea of "today" is already tomorrow.
+    import scheduling
+    now_local = scheduling.local_now()
+    today = now_local.date().isoformat()
     for b in Booking.query.filter(Booking.status.in_(['pending', 'confirmed']),
                                   Booking.preferred_date == today,
                                   Booking.morning_note_at.is_(None)).all():
@@ -176,6 +180,11 @@ def run_lifecycle_emails():
                                   Booking.paid_at.is_(None),
                                   Booking.stripe_payment_method_id.is_(None),
                                   Booking.invoice_sent_at.is_(None)).all():
+        # Hold the invoice until their slot begins, for the same reason the
+        # card charge waits: an invoice hours before anyone arrives reads as
+        # being asked to pay for work that hasn't started.
+        if not scheduling.due_for_charge(b, now_local):
+            continue
         try:
             send_payment_link(b, kind='full')
             c['invoice'] += 1

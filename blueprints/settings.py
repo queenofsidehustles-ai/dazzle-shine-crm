@@ -193,6 +193,7 @@ def business():
               'customer_terms',
               # Branding — what customers see on emails, quotes and review prompts.
               'google_review_link', 'content_business_description',
+              'timezone', 'charge_hour',
               'brand_tagline', 'brand_dark', 'brand_accent', 'brand_accent_text',
               'brand_domain_verified',
               # An optional second trading name for commercial work.
