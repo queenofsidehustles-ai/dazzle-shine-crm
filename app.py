@@ -92,6 +92,8 @@ def create_app():
     app.register_blueprint(commissions_bp)
     app.register_blueprint(invoices_bp)
     app.register_blueprint(portal_bp)
+    from blueprints.confirm import confirm_bp
+    app.register_blueprint(confirm_bp)
     app.register_blueprint(money_bp)
     app.register_blueprint(team_bp)
     app.register_blueprint(availability_bp)
@@ -315,6 +317,10 @@ def _migrate_db():
         ('booking', 'frequency',                "VARCHAR(20) DEFAULT 'one_time'"),
         ('booking', 'monthly_mode',             'VARCHAR(10)'),
         ('booking', 'tip_payment_intent',       'VARCHAR(100)'),
+        ('booking', 'confirm_token',            'VARCHAR(64)'),
+        ('booking', 'confirm_sent_at',          'TIMESTAMP'),
+        ('booking', 'confirm_response',         'VARCHAR(10)'),
+        ('booking', 'confirm_responded_at',     'TIMESTAMP'),
         ('booking', 'internal_notes',           'TEXT'),
         ('booking', 'assigned_cleaner',         'VARCHAR(100)'),
         ('booking', 'stripe_payment_intent',    'VARCHAR(100)'),

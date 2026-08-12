@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your next cleaning — {{ biz }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, "Segoe UI", Inter, sans-serif; background: #f6f5fb;
+           color: #1f1333; min-height: 100vh; display: flex; align-items: center;
+           justify-content: center; padding: 20px; line-height: 1.6; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 34px 30px;
+            max-width: 440px; width: 100%; box-shadow: 0 8px 40px rgba(15,7,40,0.09); }
+    h1 { font-size: 1.35rem; margin-bottom: 6px; }
+    .muted { color: #5f5878; font-size: 0.93rem; }
+    .details { background: #faf9fd; border-radius: 12px; padding: 16px 18px; margin: 20px 0; }
+    .row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; }
+    .row .k { color: #5f5878; font-size: 0.9rem; }
+    .row .v { font-weight: 600; text-align: right; }
+    .price { font-size: 1.5rem; font-weight: 700; color: #b98a33; }
+    button { width: 100%; border: none; padding: 14px; border-radius: 999px; font-weight: 700;
+             font-size: 1rem; cursor: pointer; font-family: inherit; }
+    .yes { background: #d3a84f; color: #1a1225; margin-bottom: 10px; }
+    .no { background: #fff; color: #5f5878; border: 1px solid #e4dfef; }
+    .done { text-align: center; padding: 10px 0; }
+    .done .mark { font-size: 2.4rem; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% if answered == 'yes' %}
+      <div class="done">
+        <div class="mark">✅</div>
+        <h1>You're booked in</h1>
+        <p class="muted">Thank you, {{ b.name.split()[0] }} — we'll see you on
+           <strong>{{ b.preferred_date }}</strong>{% if b.preferred_time %} at {{ b.preferred_time }}{% endif %}.</p>
+        <p class="muted" style="margin-top:12px">We'll send a reminder nearer the time.</p>
+      </div>
+    {% elif answered == 'no' %}
+      <div class="done">
+        <div class="mark">👍</div>
+        <h1>No problem at all</h1>
+        <p class="muted">Thanks for letting us know, {{ b.name.split()[0] }} — we've taken it off the calendar.</p>
+        <p class="muted" style="margin-top:12px">If you change your mind, just get in touch{% if phone %} on {{ phone }}{% endif %}.</p>
+      </div>
+    {% else %}
+      <h1>Hi {{ b.name.split()[0] }} — shall we book this in?</h1>
+      <p class="muted">You mentioned you were after regular cleaning. Here's what we have
+         pencilled in for you — nothing is booked until you say so.</p>
+
+      <div class="details">
+        <div class="row"><span class="k">Service</span><span class="v">{{ b.service_label }}</span></div>
+        <div class="row"><span class="k">Date</span><span class="v">{{ b.preferred_date or '—' }}</span></div>
+        {% if b.preferred_time %}
+        <div class="row"><span class="k">Time</span><span class="v">{{ b.preferred_time }}</span></div>
+        {% endif %}
+        {% if b.frequency and b.frequency != 'one_time' %}
+        <div class="row"><span class="k">Repeats</span><span class="v">{{ b.frequency|replace('biweekly','every 2 weeks')|replace('_',' ') }}</span></div>
+        {% endif %}
+        <div class="row" style="border-top:1px solid #eae6f2;margin-top:6px;padding-top:10px">
+          <span class="k">Price per clean</span>
+          <span class="v price">{% if b.price %}${{ '%.2f'|format(b.price) }}{% else %}—{% endif %}</span>
+        </div>
+      </div>
+
+      <form method="POST" action="{{ url_for('confirm.respond', token=token) }}">
+        <input type="hidden" name="answer" value="yes" />
+        <button type="submit" class="yes">Yes — book it in</button>
+      </form>
+      <form method="POST" action="{{ url_for('confirm.respond', token=token) }}">
+        <input type="hidden" name="answer" value="no" />
+        <button type="submit" class="no">No thanks, not right now</button>
+      </form>
+
+      <p class="muted" style="font-size:0.82rem;margin-top:16px;text-align:center">
+        Either answer is genuinely fine — we'd just rather know than keep chasing you.
+        {% if phone %}<br>Questions? Call or text {{ phone }}.{% endif %}
+      </p>
+    {% endif %}
+  </div>
+</body>
+</html>

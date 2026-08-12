@@ -1189,6 +1189,102 @@ def schedule_recurring(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+def _proposal_content(booking):
+    """(subject, html, sms) asking a customer to confirm a date and price."""
+    from blueprints.confirm import proposal_url
+    biz = branding.biz_name()
+    first = (booking.name or 'there').split()[0]
+    url = proposal_url(booking)
+    when = booking.preferred_date or 'a date that suits you'
+    if booking.preferred_time:
+        when += f' at {booking.preferred_time}'
+    price = f'${booking.price:.2f}' if booking.price else 'the agreed price'
+    repeats = ''
+    if booking.frequency and booking.frequency != 'one_time':
+        word = {'weekly': 'every week', 'biweekly': 'every 2 weeks',
+                'monthly': 'every month'}.get(booking.frequency, booking.frequency)
+        repeats = f'<p style="margin:0 0 14px">After that we\'d come <strong>{word}</strong>.</p>'
+
+    subject = f'Your next cleaning — shall we book it in?'
+    html = f"""
+<div style="font-family:Inter,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#1f1333;line-height:1.6">
+  <h2 style="color:#b98a33;font-size:1.3rem;margin:0 0 14px">Hi {first} — shall we book this in?</h2>
+  <p style="margin:0 0 14px">You mentioned you were after regular cleaning, and I didn't want to
+     keep chasing you. Here's what I have pencilled in — <strong>nothing is booked until you say so</strong>.</p>
+  <div style="background:#faf9fd;border-radius:12px;padding:16px 18px;margin:18px 0">
+    <p style="margin:4px 0"><strong>Service:</strong> {booking.service_label}</p>
+    <p style="margin:4px 0"><strong>When:</strong> {when}</p>
+    <p style="margin:4px 0"><strong>Price:</strong> {price}</p>
+  </div>
+  {repeats}
+  <p style="margin:24px 0"><a href="{url}"
+     style="background:#d3a84f;color:#1a1225;padding:14px 30px;border-radius:999px;
+            text-decoration:none;font-weight:700;display:inline-block">Confirm or decline →</a></p>
+  <p style="color:#5f5878;font-size:0.9rem;margin:0 0 14px">
+    One tap either way. A no is completely fine — I'd just rather know than keep ringing.</p>
+  <p style="margin:14px 0 0">— {biz}</p>
+</div>"""
+    sms = (f"Hi {first}! It's {biz}. I have you pencilled in for {when} at {price}. "
+           f"Nothing's booked yet — tap to confirm or decline: {url} Reply STOP to opt out.")
+    return subject, html, sms
+
+
+@bookings_bp.route('/<int:booking_id>/proposal/preview')
+@login_required
+def proposal_preview(booking_id):
+    """See the email and the text before either reaches the customer."""
+    b = Booking.query.get_or_404(booking_id)
+    subject, html, sms = _proposal_content(b)
+    return f'''<div style="background:#f4f2fa;padding:22px;font-family:system-ui,sans-serif">
+  <div style="max-width:620px;margin:0 auto">
+    <p style="font-size:0.8rem;color:#5f5878;margin:0 0 4px"><strong>Email to:</strong> {b.email or "(no email on file)"}</p>
+    <p style="font-size:0.8rem;color:#5f5878;margin:0 0 14px"><strong>Subject:</strong> {subject}</p>
+    <div style="background:#fff;border-radius:12px;padding:26px">{html}</div>
+    <p style="font-size:0.8rem;color:#5f5878;margin:22px 0 6px"><strong>Text to:</strong> {b.phone or "(no phone on file)"}</p>
+    <div style="background:#e9f7ef;border:1px solid #b7e0c4;border-radius:12px;padding:16px 18px;font-size:0.92rem;white-space:pre-wrap">{sms}</div>
+    <p style="font-size:0.78rem;color:#9a95ad;margin:16px 0 0">Nothing has been sent.</p>
+  </div>
+</div>'''
+
+
+@bookings_bp.route('/<int:booking_id>/proposal/send', methods=['POST'])
+@login_required
+def proposal_send(booking_id):
+    """Send the ask — to the customer, or to yourself first."""
+    from notifications import send_email, send_sms
+    b = Booking.query.get_or_404(booking_id)
+    to_self = request.form.get('to') != 'customer'
+    subject, html, sms = _proposal_content(b)
+
+    if to_self:
+        ok, detail = send_email(to_email=branding.owner_email(), to_name=b.name or 'there',
+                                subject=f'[TEST] {subject}', html=html)
+        flash(f'Test sent to {branding.owner_email()}. The text would read: "{sms[:90]}…"'
+              if ok else f"Couldn't send: {detail}", 'success' if ok else 'error')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    sent = []
+    if b.email:
+        ok, _ = send_email(to_email=b.email, to_name=b.name, subject=subject, html=html)
+        if ok:
+            sent.append('email')
+    if b.phone:
+        try:
+            ok, _ = send_sms(b.phone, sms)
+            if ok:
+                sent.append('text')
+        except Exception:
+            pass
+    if sent:
+        b.confirm_sent_at = datetime.utcnow()
+        db.session.commit()
+        flash(f"Asked {b.name} to confirm — sent by {' and '.join(sent)}. "
+              f"You'll be told either way.", 'success')
+    else:
+        flash('Nothing could be sent — check the Sent Log for why.', 'warning')
+    return redirect(url_for('bookings.detail', booking_id=b.id))
+
+
 @bookings_bp.route('/<int:booking_id>/start-plan', methods=['POST'])
 @login_required
 def start_plan(booking_id):

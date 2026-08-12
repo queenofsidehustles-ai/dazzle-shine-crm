@@ -415,6 +415,38 @@
       </form>
     </div>
 
+    <!-- Ask the customer to confirm -->
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">🤝 Waiting On The Customer</h2>
+      {% if booking.confirm_response == 'yes' %}
+        <p style="color:#276749;font-size:0.9rem;margin:0">✅ They confirmed on {{ booking.confirm_responded_at.strftime('%d %B') }}.</p>
+      {% elif booking.confirm_response == 'no' %}
+        <p style="color:#c05621;font-size:0.9rem;margin:0">❌ They declined on {{ booking.confirm_responded_at.strftime('%d %B') }}. The job was cancelled.</p>
+      {% else %}
+        <p style="font-size:0.85rem;color:#5f5878;margin:0 0 12px">
+          Gone quiet on you? Send them this date and price with a Yes/No button.
+          Easier to answer than "are you still interested?" — and you hear back either way.
+          {% if booking.confirm_sent_at %}
+          <br><strong style="color:#b98a33">Sent {{ booking.confirm_sent_at.strftime('%d %B') }} — no answer yet.</strong>
+          {% endif %}
+        </p>
+        <a href="{{ url_for('bookings.proposal_preview', booking_id=booking.id) }}"
+           target="_blank" class="btn btn-outline" style="width:100%;justify-content:center;margin-bottom:8px">👁 Preview the email &amp; text</a>
+        <div style="display:flex;gap:7px">
+          <form method="POST" action="{{ url_for('bookings.proposal_send', booking_id=booking.id) }}" style="flex:1">
+            <input type="hidden" name="to" value="me" />
+            <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">✉️ Test to me</button>
+          </form>
+          <form method="POST" action="{{ url_for('bookings.proposal_send', booking_id=booking.id) }}" style="flex:1"
+                onsubmit="return confirm('Ask {{ booking.name }} to confirm this booking?');">
+            <input type="hidden" name="to" value="customer" />
+            <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center"
+                    {% if not booking.email and not booking.phone %}disabled{% endif %}>Send to {{ booking.name.split()[0] }}</button>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+
     {% if plan_suggestion %}
     <!-- Ongoing cleanings after a one-off job -->
     <div class="card" style="margin-top:18px">

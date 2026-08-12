@@ -111,4 +111,16 @@ with app.app_context():
           'the bigger home costs more — both paid $395 for their deep clean, so the '
           'old code quoted them the same')
 
+    print('\n6. Somebody who has moved out is never offered ongoing cleaning')
+    mover = Booking(service_type='moveout', name='Miriam Vance', email='miriam@example.com',
+                    address='8 Elm Ct', bedrooms='3', bathrooms='2', price=420,
+                    frequency='one_time', preferred_date=date.today().isoformat(),
+                    status='completed', created_at=LONG_AGO,
+                    completed_at=datetime.utcnow() - timedelta(days=3))
+    db.session.add(mover); db.session.commit()
+    SENT.clear()
+    lifecycle.run_lifecycle_emails()
+    check(upsells_to('miriam@example.com') == [],
+          'no "keep it sparkling every fortnight" to a house she has left')
+
 print('\n🎉 The upsell quotes a real maintenance price, and never to someone already on a plan.')

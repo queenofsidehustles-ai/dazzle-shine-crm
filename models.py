@@ -105,6 +105,11 @@ class Booking(db.Model):
     recurring_group = db.Column(db.String(32), index=True)  # links visits in one recurring series
     recurring_active = db.Column(db.Boolean, default=True)  # keep generating future visits
     monthly_mode = db.Column(db.String(10))   # 'date' (the 9th) or 'weekday' (2nd Wednesday)
+    # Asking a customer to confirm a proposed date and price
+    confirm_token = db.Column(db.String(64), index=True)
+    confirm_sent_at = db.Column(db.DateTime)
+    confirm_response = db.Column(db.String(10))     # 'yes' or 'no'
+    confirm_responded_at = db.Column(db.DateTime)
 
     # Admin fields
     notes = db.Column(db.Text)

@@ -243,6 +243,10 @@ def run_lifecycle_emails():
     # ── D1 / D2 — recurring upsell for one-time completed jobs ──
     one_time = db.or_(Booking.frequency == 'one_time', Booking.frequency.is_(None))
     for b in Booking.query.filter(Booking.status == 'completed', one_time,
+                                  # A move-out clean means they have left. Offering
+                                  # to keep that home sparkling every fortnight is
+                                  # at best absurd and at worst insulting.
+                                  Booking.service_type != 'moveout',
                                   Booking.completed_at.isnot(None)).all():
         if _has_rebooked(b.email, b.completed_at) or _already_on_a_plan(b.email):
             continue
