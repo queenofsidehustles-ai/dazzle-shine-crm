@@ -319,6 +319,7 @@ def _migrate_db():
         ('booking', 'tip_payment_intent',       'VARCHAR(100)'),
         ('booking', 'confirm_token',            'VARCHAR(64)'),
         ('booking', 'confirm_sent_at',          'TIMESTAMP'),
+        ('booking', 'confirm_note',             'TEXT'),
         ('booking', 'confirm_response',         'VARCHAR(10)'),
         ('booking', 'confirm_responded_at',     'TIMESTAMP'),
         ('booking', 'internal_notes',           'TEXT'),

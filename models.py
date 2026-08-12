@@ -108,6 +108,7 @@ class Booking(db.Model):
     # Asking a customer to confirm a proposed date and price
     confirm_token = db.Column(db.String(64), index=True)
     confirm_sent_at = db.Column(db.DateTime)
+    confirm_note = db.Column(db.Text)               # the owner's own words, added to the ask
     confirm_response = db.Column(db.String(10))     # 'yes' or 'no'
     confirm_responded_at = db.Column(db.DateTime)
 

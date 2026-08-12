@@ -1205,12 +1205,23 @@ def _proposal_content(booking):
                 'monthly': 'every month'}.get(booking.frequency, booking.frequency)
         repeats = f'<p style="margin:0 0 14px">After that we\'d come <strong>{word}</strong>.</p>'
 
+    # Anything the owner wrote herself replaces the stock opening line — her own
+    # words to someone she has spoken to will always beat a template.
+    note = (booking.confirm_note or '').strip()
+    if note:
+        opening = ''.join(
+            f'<p style="margin:0 0 14px">{line.strip()}</p>'
+            for line in note.split('\n') if line.strip())
+    else:
+        opening = ('<p style="margin:0 0 14px">You mentioned you were after regular cleaning, '
+                   "and I didn't want to keep chasing you. Here's what I have pencilled in — "
+                   '<strong>nothing is booked until you say so</strong>.</p>')
+
     subject = f'Your next cleaning — shall we book it in?'
     html = f"""
 <div style="font-family:Inter,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#1f1333;line-height:1.6">
   <h2 style="color:#b98a33;font-size:1.3rem;margin:0 0 14px">Hi {first} — shall we book this in?</h2>
-  <p style="margin:0 0 14px">You mentioned you were after regular cleaning, and I didn't want to
-     keep chasing you. Here's what I have pencilled in — <strong>nothing is booked until you say so</strong>.</p>
+  {opening}
   <div style="background:#faf9fd;border-radius:12px;padding:16px 18px;margin:18px 0">
     <p style="margin:4px 0"><strong>Service:</strong> {booking.service_label}</p>
     <p style="margin:4px 0"><strong>When:</strong> {when}</p>
@@ -1229,11 +1240,19 @@ def _proposal_content(booking):
     return subject, html, sms
 
 
-@bookings_bp.route('/<int:booking_id>/proposal/preview')
+def _save_note(booking):
+    """Keep whatever the owner typed, so preview and send always agree."""
+    if 'confirm_note' in request.form:
+        booking.confirm_note = (request.form.get('confirm_note') or '').strip() or None
+        db.session.commit()
+
+
+@bookings_bp.route('/<int:booking_id>/proposal/preview', methods=['GET', 'POST'])
 @login_required
 def proposal_preview(booking_id):
     """See the email and the text before either reaches the customer."""
     b = Booking.query.get_or_404(booking_id)
+    _save_note(b)
     subject, html, sms = _proposal_content(b)
     return f'''<div style="background:#f4f2fa;padding:22px;font-family:system-ui,sans-serif">
   <div style="max-width:620px;margin:0 auto">
@@ -1253,6 +1272,7 @@ def proposal_send(booking_id):
     """Send the ask — to the customer, or to yourself first."""
     from notifications import send_email, send_sms
     b = Booking.query.get_or_404(booking_id)
+    _save_note(b)
     to_self = request.form.get('to') != 'customer'
     subject, html, sms = _proposal_content(b)
 

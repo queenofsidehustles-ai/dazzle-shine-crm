@@ -121,3 +121,43 @@ with app.app_context():
           'and the owner is told — a silent no is just more silence')
 
 print('\n🎉 A date, a price, two buttons — and the owner hears back either way.')
+
+
+# ── Her own words. ───────────────────────────────────────────────────────────
+with app.app_context():
+    print('\n8. She can write the opening herself')
+    dara = pencilled_in('Dara Mensah', 'dara@example.com')
+    note = ("Hi Dara, lovely speaking last Tuesday!\n"
+            "I've held the Thursday slot for you as promised.")
+    page = c.post(f'/bookings/{dara.id}/proposal/preview',
+                  data={'confirm_note': note}).get_data(as_text=True)
+    check('lovely speaking last Tuesday' in page, 'her words are in the preview')
+    check("I've held the Thursday slot" in page, 'both lines of them')
+    check('$165.00' in page, 'the price is still there')
+    check('Confirm or decline' in page, 'and the buttons')
+    check("didn't want to keep chasing you" not in page,
+          'the stock opening is replaced, not stacked on top')
+
+    print('\n9. What she previewed is what sends')
+    db.session.expire_all()
+    check(Booking.query.get(dara.id).confirm_note == note.strip(), 'the note is kept')
+    SENT.clear()
+    c.post(f'/bookings/{dara.id}/proposal/send', data={'to': 'customer'}, follow_redirects=True)
+    check('lovely speaking last Tuesday' in SENT[0]['html'], 'the sent email carries her words')
+
+    print('\n10. The text message stays short')
+    db.session.expire_all(); dara = Booking.query.get(dara.id)
+    sent_text = [m for _, m in TEXTS if '/confirm/' in m][-1]
+    check('lovely speaking last Tuesday' not in sent_text,
+          'a long note does not turn into a long text message')
+    check(len(sent_text) < 320, f'the text stays to two segments ({len(sent_text)} chars)')
+
+    print('\n11. Leaving it blank falls back to sensible wording')
+    ola = pencilled_in('Ola Bright', 'ola@example.com')
+    page = c.post(f'/bookings/{ola.id}/proposal/preview',
+                  data={'confirm_note': '   '}).get_data(as_text=True)
+    check("didn't want to keep chasing you" in page, 'the default opening is used')
+    db.session.expire_all()
+    check(Booking.query.get(ola.id).confirm_note is None, 'and blank is stored as nothing')
+
+print('\n🎉 Her words, her price, her date — previewed before any of it leaves.')
