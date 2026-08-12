@@ -415,6 +415,9 @@
       </form>
     </div>
 
+    {# Only worth asking about a job that hasn't happened. Inviting someone to
+       confirm a cleaning already done — or one they cancelled — is nonsense. #}
+    {% if booking.status in ['pending', 'confirmed'] %}
     <!-- Ask the customer to confirm -->
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">🤝 Waiting On The Customer</h2>
@@ -482,6 +485,7 @@
         </form>
       {% endif %}
     </div>
+    {% endif %}
 
     {% if plan_suggestion %}
     <!-- Ongoing cleanings after a one-off job -->

@@ -223,3 +223,24 @@ with app.app_context():
     check(any('Fridays are best' in m for _, m in TEXTS), 'and a text with the same')
 
 print('\n🎉 Confirm, suggest another time, or decline — and none of it needs a second trip.')
+
+
+# ── It should not offer to ask about a job that already happened. ────────────
+with app.app_context():
+    print('\n16. No confirm card on a job that is done or cancelled')
+    done = pencilled_in('Past Customer', 'past@example.com')
+    done.status = 'completed'; db.session.commit()
+    page = c.get(f'/bookings/{done.id}').get_data(as_text=True)
+    check('Waiting On The Customer' not in page,
+          'a completed cleaning is not offered up for confirmation')
+
+    gone = pencilled_in('Cancelled Customer', 'gone@example.com')
+    gone.status = 'cancelled'; db.session.commit()
+    page = c.get(f'/bookings/{gone.id}').get_data(as_text=True)
+    check('Waiting On The Customer' not in page, 'nor a cancelled one')
+
+    live = pencilled_in('Still Deciding', 'live@example.com')
+    page = c.get(f'/bookings/{live.id}').get_data(as_text=True)
+    check('Waiting On The Customer' in page, 'but a pending job still offers it')
+
+print('\n🎉 Only jobs still ahead of you can be sent for confirmation.')
