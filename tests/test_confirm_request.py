@@ -177,7 +177,8 @@ with app.app_context():
     }).get_data(as_text=True)
     check('we spoke about monthly cleaning' in page, 'her words are in it')
     check('$185.00' in page, 'the price she just typed')
-    check('2026-08-28' in page and '9:00 AM' in page, 'the date and time she just chose')
+    check('Fri 28 Aug' in page and '9:00 AM' in page,
+          'the date and time she just chose, written the way a person reads it')
     check('every month' in page, 'and that it repeats monthly')
 
     db.session.expire_all(); susan2 = Booking.query.get(susan2.id)
@@ -244,3 +245,23 @@ with app.app_context():
     check('Waiting On The Customer' in page, 'but a pending job still offers it')
 
 print('\n🎉 Only jobs still ahead of you can be sent for confirmation.')
+
+
+# ── The text has to promise the same three answers as the page. ──────────────
+with app.app_context():
+    print('\n17. The text reads like a person wrote it')
+    nia = pencilled_in('Nia Cole', 'nia@example.com')
+    nia.preferred_date = '2026-08-28'; nia.preferred_time = '9:00 AM'
+    nia.price = 185.0; nia.frequency = 'monthly'
+    db.session.commit()
+    TEXTS.clear()
+    c.post(f'/bookings/{nia.id}/proposal/send', data={'to': 'customer'}, follow_redirects=True)
+    msg = [m for _, m in TEXTS if '/confirm/' in m][-1]
+    check('Fri 28 Aug' in msg, f'the date reads as a day, not 2026-08-28 — "{msg[:52]}…"')
+    check('2026-08-28' not in msg, 'the raw date is gone')
+    check('pick a better time' in msg,
+          'and the text offers the third option, not just confirm or decline')
+    check('decline' not in msg, 'so nobody is told their only alternative is no')
+    check('Reply STOP' in msg, 'with the opt-out still there')
+
+print('\n🎉 The text says the same as the page: yes, another time, or no.')

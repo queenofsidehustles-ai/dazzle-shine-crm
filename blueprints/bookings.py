@@ -1207,7 +1207,13 @@ def _proposal_content(booking):
     biz = branding.biz_name()
     first = (booking.name or 'there').split()[0]
     url = proposal_url(booking)
-    when = booking.preferred_date or 'a date that suits you'
+    # "Fri 28 Aug", not "2026-08-28". A customer reading a text should see the
+    # day of the week — that is what tells them whether it works.
+    try:
+        day = date.fromisoformat(booking.preferred_date)
+        when = day.strftime('%a %-d %b')
+    except (ValueError, TypeError):
+        when = booking.preferred_date or 'a date that suits you'
     if booking.preferred_time:
         when += f' at {booking.preferred_time}'
     price = f'${booking.price:.2f}' if booking.price else 'the agreed price'
@@ -1247,8 +1253,11 @@ def _proposal_content(booking):
     One tap either way. A no is completely fine — I'd just rather know than keep ringing.</p>
   <p style="margin:14px 0 0">— {biz}</p>
 </div>"""
-    sms = (f"Hi {first}! It's {biz}. I have you pencilled in for {when} at {price}. "
-           f"Nothing's booked yet — tap to confirm or decline: {url} Reply STOP to opt out.")
+    # The page offers three answers, so the text must not promise only two —
+    # somebody who wants the clean but not that day needs to know they can say so.
+    sms = (f"Hi {first}! It's {biz}. I've pencilled you in for {when}, {price}. "
+           f"Nothing's booked yet — confirm or pick a better time: {url} "
+           f"Reply STOP to opt out.")
     return subject, html, sms
 
 
