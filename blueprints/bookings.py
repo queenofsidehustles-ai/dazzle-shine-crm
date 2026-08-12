@@ -183,9 +183,21 @@ def new():
         return redirect(url_for('bookings.detail', booking_id=b.id))
 
     from pricing import FREQUENCY_LABELS as _FREQ
+    # Booking for someone already known: bring their details with them. Looking a
+    # customer up and retyping their address is how a booking ends up at the
+    # wrong house.
+    client = None
+    last = None
+    client_id = request.args.get('client', type=int)
+    if client_id:
+        client = Client.query.get(client_id)
+        if client and client.bookings:
+            # Their most recent job — same house, so the size is almost certainly
+            # the same, and the service usually is too.
+            last = max(client.bookings, key=lambda b: b.created_at or datetime.min)
     return render_template('admin/booking_new.html',
                            service_labels=SERVICE_LABELS, extras=EXTRAS, frequency_labels=_FREQ,
-                           default_lead_fee=get_lead_fee())
+                           default_lead_fee=get_lead_fee(), client=client, last=last)
 
 
 @bookings_bp.route('/calendar')
