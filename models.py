@@ -109,7 +109,8 @@ class Booking(db.Model):
     confirm_token = db.Column(db.String(64), index=True)
     confirm_sent_at = db.Column(db.DateTime)
     confirm_note = db.Column(db.Text)               # the owner's own words, added to the ask
-    confirm_response = db.Column(db.String(10))     # 'yes' or 'no'
+    confirm_response = db.Column(db.String(10))     # 'yes', 'no', or 'other' (wants a different time)
+    confirm_alt = db.Column(db.Text)                # the day/time they'd prefer instead
     confirm_responded_at = db.Column(db.DateTime)
 
     # Admin fields

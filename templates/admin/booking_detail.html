@@ -431,14 +431,42 @@
           {% endif %}
         </p>
         <form method="POST" action="{{ url_for('bookings.proposal_send', booking_id=booking.id) }}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+            <div class="form-group" style="margin-bottom:10px">
+              <label style="font-size:0.82rem">How often</label>
+              <select name="plan_frequency" style="width:100%;padding:9px 10px;border:1px solid #e4dfef;border-radius:8px">
+                <option value="one_time" {{ 'selected' if booking.frequency in ['one_time', None] }}>Just this once</option>
+                <option value="weekly" {{ 'selected' if booking.frequency == 'weekly' }}>Every week</option>
+                <option value="biweekly" {{ 'selected' if booking.frequency == 'biweekly' }}>Every 2 weeks (twice a month)</option>
+                <option value="monthly" {{ 'selected' if booking.frequency == 'monthly' }}>Once a month</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+              <label style="font-size:0.82rem">Price per clean</label>
+              <input type="text" name="plan_price" value="{{ '%.2f'|format(booking.price) if booking.price else '' }}"
+                     placeholder="e.g. 165"
+                     style="width:100%;padding:9px 10px;border:1px solid #e4dfef;border-radius:8px" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+              <label style="font-size:0.82rem">Date you're holding</label>
+              <input type="date" name="plan_date" value="{{ booking.preferred_date or '' }}"
+                     style="width:100%;padding:9px 10px;border:1px solid #e4dfef;border-radius:8px" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+              <label style="font-size:0.82rem">Time</label>
+              <input type="text" name="plan_time" value="{{ booking.preferred_time or '' }}" placeholder="9:00 AM"
+                     style="width:100%;padding:9px 10px;border:1px solid #e4dfef;border-radius:8px" />
+            </div>
+          </div>
           <div class="form-group" style="margin-bottom:10px">
             <label style="font-size:0.82rem">Say it in your own words <span style="font-weight:400;color:#9a95ad">— optional</span></label>
             <textarea name="confirm_note" rows="4"
                       placeholder="Hi Susan, lovely to speak the other week — I've held this slot for you…"
                       style="width:100%;padding:10px 12px;border:1px solid #e4dfef;border-radius:8px;font-family:inherit;font-size:0.88rem;line-height:1.5">{{ booking.confirm_note or '' }}</textarea>
             <span style="font-size:0.75rem;color:#9a95ad">
-              Replaces the opening line of the email. The date, price and buttons stay as they are.
-              Leave it blank and a sensible default is used. Goes in the email only — the text stays short.
+              Replaces the opening line of the email. Leave it blank and a sensible default is used.
+              Goes in the email only — the text stays short.
+              <br>They can confirm, <strong>suggest a different day or time</strong>, or decline. You hear back either way.
             </span>
           </div>
           <button type="submit" class="btn btn-outline"

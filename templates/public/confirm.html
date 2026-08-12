@@ -36,6 +36,16 @@
            <strong>{{ b.preferred_date }}</strong>{% if b.preferred_time %} at {{ b.preferred_time }}{% endif %}.</p>
         <p class="muted" style="margin-top:12px">We'll send a reminder nearer the time.</p>
       </div>
+    {% elif answered == 'other' %}
+      <div class="done">
+        <div class="mark">📅</div>
+        <h1>Thanks — we'll find a better time</h1>
+        <p class="muted">Got it, {{ b.name.split()[0] }}. We'll look at what you've suggested and
+           come back to you with a slot that works.</p>
+        {% if b.confirm_alt %}
+        <p class="muted" style="margin-top:12px">You told us: <strong>{{ b.confirm_alt }}</strong></p>
+        {% endif %}
+      </div>
     {% elif answered == 'no' %}
       <div class="done">
         <div class="mark">👍</div>
@@ -67,6 +77,35 @@
         <input type="hidden" name="answer" value="yes" />
         <button type="submit" class="yes">Yes — book it in</button>
       </form>
+      <button type="button" class="no" style="margin-bottom:10px"
+              onclick="document.getElementById('other').style.display='block';this.style.display='none'">
+        Another day or time would suit me better
+      </button>
+
+      <div id="other" style="display:none;background:#faf9fd;border-radius:12px;padding:16px;margin-bottom:10px;text-align:left">
+        <p class="muted" style="font-size:0.88rem;margin-bottom:12px">
+          No problem — when would work? Anything you can tell us helps.
+        </p>
+        <form method="POST" action="{{ url_for('confirm.respond', token=token) }}">
+          <input type="hidden" name="answer" value="other" />
+          <label class="muted" style="font-size:0.82rem;display:block;margin-bottom:4px">A date that suits</label>
+          <input type="date" name="alt_date"
+                 style="width:100%;padding:10px;border:1px solid #e4dfef;border-radius:8px;margin-bottom:10px;font-family:inherit" />
+          <label class="muted" style="font-size:0.82rem;display:block;margin-bottom:4px">Time of day</label>
+          <select name="alt_time"
+                  style="width:100%;padding:10px;border:1px solid #e4dfef;border-radius:8px;margin-bottom:10px;font-family:inherit">
+            <option value="">No preference</option>
+            <option>Morning</option>
+            <option>Afternoon</option>
+            <option>Evening</option>
+          </select>
+          <label class="muted" style="font-size:0.82rem;display:block;margin-bottom:4px">Anything else?</label>
+          <textarea name="alt_note" rows="2" placeholder="e.g. Fridays are best, or every other Tuesday"
+                    style="width:100%;padding:10px;border:1px solid #e4dfef;border-radius:8px;margin-bottom:12px;font-family:inherit;font-size:0.9rem"></textarea>
+          <button type="submit" class="yes" style="margin:0">Send this to {{ biz }}</button>
+        </form>
+      </div>
+
       <form method="POST" action="{{ url_for('confirm.respond', token=token) }}">
         <input type="hidden" name="answer" value="no" />
         <button type="submit" class="no">No thanks, not right now</button>

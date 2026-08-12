@@ -161,3 +161,65 @@ with app.app_context():
     check(Booking.query.get(ola.id).confirm_note is None, 'and blank is stored as nothing')
 
 print('\n🎉 Her words, her price, her date — previewed before any of it leaves.')
+
+
+# ── Susan wants monthly; Miriam wants twice a month. Neither answered a call. ──
+with app.app_context():
+    print('\n12. The offer is composed on the card, not somewhere else first')
+    susan2 = Booking(service_type='standard', name='Susan Doyle', email='susan2@example.com',
+                     phone='4075550188', address='3 Vine St', bedrooms='3', bathrooms='2',
+                     status='pending')
+    db.session.add(susan2); db.session.commit()
+    page = c.post(f'/bookings/{susan2.id}/proposal/preview', data={
+        'plan_frequency': 'monthly', 'plan_price': '185',
+        'plan_date': '2026-08-28', 'plan_time': '9:00 AM',
+        'confirm_note': 'Hi Susan, we spoke about monthly cleaning — I have kept this slot for you.'
+    }).get_data(as_text=True)
+    check('we spoke about monthly cleaning' in page, 'her words are in it')
+    check('$185.00' in page, 'the price she just typed')
+    check('2026-08-28' in page and '9:00 AM' in page, 'the date and time she just chose')
+    check('every month' in page, 'and that it repeats monthly')
+
+    db.session.expire_all(); susan2 = Booking.query.get(susan2.id)
+    check(susan2.frequency == 'monthly', 'the booking now says monthly')
+    check(susan2.price == 185.0 and susan2.preferred_date == '2026-08-28',
+          'with the price and date saved — no separate trip to edit it')
+
+    print('\n13. Miriam wants twice a month')
+    miriam2 = Booking(service_type='standard', name='Miriam Vance', email='miriam2@example.com',
+                      phone='4075550177', address='8 Elm Ct', status='pending')
+    db.session.add(miriam2); db.session.commit()
+    page = c.post(f'/bookings/{miriam2.id}/proposal/preview', data={
+        'plan_frequency': 'biweekly', 'plan_price': '150',
+        'plan_date': '2026-08-27', 'plan_time': 'Morning'}).get_data(as_text=True)
+    check('every 2 weeks' in page, 'the email says every 2 weeks')
+    db.session.expire_all()
+    check(Booking.query.get(miriam2.id).frequency == 'biweekly', 'and the booking agrees')
+
+    print('\n14. A customer can want the cleaning but not that day')
+    c.post(f'/bookings/{susan2.id}/proposal/send', data={'to': 'customer'}, follow_redirects=True)
+    db.session.expire_all(); susan2 = Booking.query.get(susan2.id)
+    body = pub.get(f'/confirm/{susan2.confirm_token}').get_data(as_text=True)
+    check('Another day or time would suit me better' in body, 'there is a third option')
+    check('No thanks' in body, 'as well as a plain no')
+
+    SENT.clear(); TEXTS.clear()
+    body = pub.post(f'/confirm/{susan2.confirm_token}/respond', data={
+        'answer': 'other', 'alt_date': '2026-09-04', 'alt_time': 'Morning',
+        'alt_note': 'Fridays are best for me'}, follow_redirects=True).get_data(as_text=True)
+    check("we'll find a better time" in body, 'she is thanked, not turned away')
+    db.session.expire_all(); susan2 = Booking.query.get(susan2.id)
+    check(susan2.confirm_response == 'other', 'the answer is recorded as a maybe-later')
+    check(susan2.status != 'cancelled',
+          'and the booking is NOT cancelled — she is trying to say yes')
+    check('2026-09-04' in (susan2.confirm_alt or ''), 'her date came through')
+    check('Fridays are best' in (susan2.confirm_alt or ''), 'and her note')
+
+    print('\n15. The owner is told what they asked for')
+    check(any('different time' in (s.get('subject') or '') for s in SENT),
+          'an email lands saying they want a different time')
+    body = [s for s in SENT if 'different time' in (s.get('subject') or '')][0]['html']
+    check('Fridays are best' in body, 'quoting exactly what they said')
+    check(any('Fridays are best' in m for _, m in TEXTS), 'and a text with the same')
+
+print('\n🎉 Confirm, suggest another time, or decline — and none of it needs a second trip.')

@@ -1240,11 +1240,34 @@ def _proposal_content(booking):
     return subject, html, sms
 
 
-def _save_note(booking):
-    """Keep whatever the owner typed, so preview and send always agree."""
+def _save_proposal(booking):
+    """Save what the owner is proposing, so preview and send always agree.
+
+    The date, time, price and frequency are edited here rather than somewhere
+    else first — this is the moment she is deciding what to offer, and making
+    her go and edit the booking, come back, and hope she remembered correctly is
+    how the wrong price gets sent."""
     if 'confirm_note' in request.form:
         booking.confirm_note = (request.form.get('confirm_note') or '').strip() or None
-        db.session.commit()
+
+    freq = request.form.get('plan_frequency')
+    if freq in ('one_time', 'weekly', 'biweekly', 'monthly'):
+        booking.frequency = freq
+
+    for field, attr in (('plan_date', 'preferred_date'), ('plan_time', 'preferred_time')):
+        if field in request.form:
+            value = (request.form.get(field) or '').strip()
+            if value:
+                setattr(booking, attr, value)
+
+    if 'plan_price' in request.form:
+        raw = (request.form.get('plan_price') or '').strip().replace('$', '').replace(',', '')
+        if raw:
+            try:
+                booking.price = round(float(raw), 2)
+            except ValueError:
+                flash('That price is not a number — leaving it as it was.', 'warning')
+    db.session.commit()
 
 
 @bookings_bp.route('/<int:booking_id>/proposal/preview', methods=['GET', 'POST'])
@@ -1252,7 +1275,7 @@ def _save_note(booking):
 def proposal_preview(booking_id):
     """See the email and the text before either reaches the customer."""
     b = Booking.query.get_or_404(booking_id)
-    _save_note(b)
+    _save_proposal(b)
     subject, html, sms = _proposal_content(b)
     return f'''<div style="background:#f4f2fa;padding:22px;font-family:system-ui,sans-serif">
   <div style="max-width:620px;margin:0 auto">
@@ -1272,7 +1295,7 @@ def proposal_send(booking_id):
     """Send the ask — to the customer, or to yourself first."""
     from notifications import send_email, send_sms
     b = Booking.query.get_or_404(booking_id)
-    _save_note(b)
+    _save_proposal(b)
     to_self = request.form.get('to') != 'customer'
     subject, html, sms = _proposal_content(b)
 

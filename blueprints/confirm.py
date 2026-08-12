@@ -55,7 +55,9 @@ def respond(token):
     """Record the customer's answer. POST only — a scanner following links can
     never reach this."""
     b = _booking(token)
-    answer = 'yes' if request.form.get('answer') == 'yes' else 'no'
+    answer = request.form.get('answer')
+    if answer not in ('yes', 'no', 'other'):
+        answer = 'no'
 
     if not b.confirm_response:
         b.confirm_response = answer
@@ -63,6 +65,13 @@ def respond(token):
         if answer == 'yes':
             if b.status in ('pending', None):
                 b.status = 'confirmed'
+        elif answer == 'other':
+            # They want the service, just not this slot. The booking stays alive
+            # — cancelling someone who is trying to say yes would be perverse.
+            b.confirm_alt = ' · '.join(part for part in (
+                (request.form.get('alt_date') or '').strip(),
+                (request.form.get('alt_time') or '').strip(),
+                (request.form.get('alt_note') or '').strip()) if part) or None
         else:
             b.status = 'cancelled'
         db.session.commit()
@@ -75,20 +84,28 @@ def _tell_the_owner(booking, answer):
     """However they answer, the owner hears about it — a silent 'no' is just the
     same silence they were already getting."""
     from notifications import send_sms, send_email
-    word = 'CONFIRMED' if answer == 'yes' else 'declined'
     when = booking.preferred_date or 'the proposed date'
-    line = (f"{booking.name} {word} their cleaning for {when}"
-            + (f" at ${booking.price:.2f}" if booking.price else ''))
+    if answer == 'yes':
+        word, mark = 'CONFIRMED', '✅'
+        line = (f"{booking.name} confirmed their cleaning for {when}"
+                + (f" at ${booking.price:.2f}" if booking.price else ''))
+    elif answer == 'other':
+        word, mark = 'wants a different time', '📅'
+        line = (f"{booking.name} wants the cleaning but not {when}. "
+                f"They suggested: {booking.confirm_alt or 'no preference given'}")
+    else:
+        word, mark = 'declined', '❌'
+        line = f"{booking.name} declined their cleaning for {when}"
     try:
         from models import BusinessSetting
         phone = BusinessSetting.get('owner_alert_phone') or branding.phone()
         if phone:
-            send_sms(phone, f"{'✅' if answer == 'yes' else '❌'} {line}.")
+            send_sms(phone, f"{mark} {line}.")
     except Exception:
         pass
     try:
         send_email(to_email=branding.owner_email(), to_name=branding.biz_name(),
-                   subject=f"{'✅' if answer == 'yes' else '❌'} {booking.name} {word}",
+                   subject=f"{mark} {booking.name} {word}",
                    html=f'<div style="font-family:Inter,sans-serif">'
                         f'<p>{line}.</p>'
                         f'<p style="color:#9a95ad;font-size:0.85rem">Booking #{booking.id}</p></div>')
