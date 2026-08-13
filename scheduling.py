@@ -156,3 +156,40 @@ def describe(booking):
     display = hour % 12 or 12
     when = f'{display}:{minute:02d} {suffix}'
     return when if parsed else f'{when} (no arrival time set)'
+
+
+def to_local(dt):
+    """A stored timestamp as local time.
+
+    Everything is written with utcnow(), so the values in the database are naive
+    UTC. Displaying them raw shows a 9am job as 13:00, which looks wrong to the
+    owner and to anyone reviewing a dispute."""
+    if dt is None:
+        return None
+    aware = dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return aware.astimezone(business_timezone())
+
+
+def stamp(dt, with_utc=True):
+    """'5 August 2026 at 9:42 AM EDT (13:42 UTC)'.
+
+    Local time first, because that is the time the work actually happened and
+    the time on the owner's own photographs and phone records. UTC alongside it
+    so a reviewer cross-checking against Stripe — which reports in UTC — can line
+    the two up without having to trust anyone's arithmetic."""
+    if dt is None:
+        return '—'
+    local = to_local(dt)
+    label = local.strftime('%Z') or 'local'
+    out = local.strftime(f'%-d %B %Y at %-I:%M %p {label}')
+    if with_utc:
+        utc = dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        out += utc.strftime(' (%H:%M UTC)')
+    return out
+
+
+def short_stamp(dt):
+    """'5 Aug 2026, 9:42 AM' — for table rows, where a full stamp is too much."""
+    if dt is None:
+        return '—'
+    return to_local(dt).strftime('%-d %b %Y, %-I:%M %p')

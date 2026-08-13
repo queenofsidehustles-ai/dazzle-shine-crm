@@ -47,7 +47,8 @@
     <div class="detail-row"><span class="dl">Customer</span><span class="dv">{{ b.name }}</span></div>
     <div class="detail-row"><span class="dl">Transaction</span><span class="dv" style="font-family:monospace;font-size:0.82rem">{{ b.stripe_payment_intent or '—' }}</span></div>
     <div class="detail-row"><span class="dl">Amount</span><span class="dv">{% if b.price %}${{ '%.2f'|format(b.price) }}{% else %}—{% endif %}</span></div>
-    <div class="detail-row"><span class="dl">Prepared</span><span class="dv">{{ prepared.strftime('%d %B %Y') }}</span></div>
+    <div class="detail-row"><span class="dl">Prepared</span><span class="dv">{{ prepared | stamp(with_utc=False) }}</span></div>
+    <div class="detail-row"><span class="dl">Times shown in</span><span class="dv">{{ business_tz_label() }} — the local time where the work was carried out. UTC is given alongside for cross-referencing.</span></div>
   </div>
 </div>
 {% endif %}
@@ -61,8 +62,8 @@
   <div class="detail-row"><span class="dl">Service address</span><span class="dv">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code or '' }}</span></div>
   <div class="detail-row"><span class="dl">Service</span><span class="dv">{{ b.service_label }}{% if b.bedrooms %} · {{ b.bedrooms }} bed / {{ b.bathrooms }} bath{% endif %}</span></div>
   <div class="detail-row"><span class="dl">Date of service</span><span class="dv">{{ b.preferred_date or '—' }}{% if b.preferred_time %} at {{ b.preferred_time }}{% endif %}</span></div>
-  <div class="detail-row"><span class="dl">Booking created</span><span class="dv">{{ b.created_at.strftime('%d %B %Y at %H:%M UTC') }}</span></div>
-  <div class="detail-row"><span class="dl">Status</span><span class="dv">{{ b.status }}{% if b.completed_at %} — completed {{ b.completed_at.strftime('%d %B %Y') }}{% endif %}</span></div>
+  <div class="detail-row"><span class="dl">Booking created</span><span class="dv">{{ b.created_at | stamp }}</span></div>
+  <div class="detail-row"><span class="dl">Status</span><span class="dv">{{ b.status }}{% if b.completed_at %} — completed {{ b.completed_at | stamp(with_utc=False) }}{% endif %}</span></div>
   {% if b.access_notes %}
   <div class="detail-row"><span class="dl">Access arrangements</span><span class="dv">{{ b.access_notes }}</span></div>
   {% endif %}
@@ -75,7 +76,7 @@
   {% if b.deposit_paid %}
   <div class="detail-row"><span class="dl">Deposit</span><span class="dv">Paid by the customer, who entered their own card details</span></div>
   {% endif %}
-  <div class="detail-row"><span class="dl">Paid</span><span class="dv">{{ b.paid_at.strftime('%d %B %Y at %H:%M UTC') if b.paid_at else 'Not recorded as paid' }}</span></div>
+  <div class="detail-row"><span class="dl">Paid</span><span class="dv">{{ (b.paid_at | stamp) if b.paid_at else 'Not recorded as paid' }}</span></div>
   <div class="detail-row"><span class="dl">Method</span><span class="dv">{{ b.paid_method or '—' }}</span></div>
   <div class="detail-row"><span class="dl">Stripe charge</span><span class="dv" style="font-family:monospace;font-size:0.82rem">{{ b.stripe_payment_intent or '—' }}</span></div>
   {% if client and client.card_last4 %}
@@ -121,7 +122,7 @@
   <div class="detail-row"><span class="dl">Hours worked</span><span class="dv">{{ b.hours_worked }}</span></div>
   {% endif %}
   {% if checklist and checklist.photos_submitted_at %}
-  <div class="detail-row"><span class="dl">Job closed out</span><span class="dv">{{ checklist.photos_submitted_at.strftime('%d %B %Y at %H:%M UTC') }}</span></div>
+  <div class="detail-row"><span class="dl">Job closed out</span><span class="dv">{{ checklist.photos_submitted_at | stamp }}</span></div>
   {% endif %}
 
   {% if photos.before or photos.after %}
@@ -153,7 +154,7 @@
   <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">4 · Correspondence with the customer</h2>
   {% if messages %}
   <p style="font-size:0.85rem;color:#5f5878;margin-bottom:12px">
-    {{ messages|length }} message{{ 's' if messages|length != 1 }} sent. Times shown in UTC.
+    {{ messages|length }} message{{ 's' if messages|length != 1 }} sent.
   </p>
   <div class="table-wrap">
     <table>
@@ -161,7 +162,7 @@
       <tbody>
         {% for m in messages %}
         <tr>
-          <td style="white-space:nowrap;color:#5f5878;font-size:0.85rem">{{ m.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td style="white-space:nowrap;color:#5f5878;font-size:0.85rem">{{ m.created_at | short_stamp }}</td>
           <td style="color:#5f5878">{{ 'Email' if m.channel == 'email' else 'Text' }}</td>
           <td style="font-size:0.85rem">
             {% if m.subject %}<strong>{{ m.subject }}</strong><br>{% endif %}
@@ -190,7 +191,7 @@
   {% if b.terms_accepted_at %}
   <p style="font-size:0.85rem;color:#1f1333;margin:0 0 12px">
     The customer accepted these terms on
-    <strong>{{ b.terms_accepted_at.strftime('%d %B %Y at %H:%M UTC') }}</strong>
+    <strong>{{ b.terms_accepted_at | stamp }}</strong>
     when making payment{% if b.terms_accepted_ip %} from IP address {{ b.terms_accepted_ip }}{% endif %}.
     The wording below is the wording shown to them at that moment.
   </p>
@@ -213,7 +214,7 @@
   <div style="background:#eefaf0;border:1px solid #a7d8b0;border-radius:8px;padding:12px 14px;margin-bottom:14px">
     <p style="font-size:0.85rem;color:#1c6b34;margin:0">
       <strong>✅ This customer accepted your terms on
-      {{ b.terms_accepted_at.strftime('%d %B %Y at %H:%M UTC') }}</strong>{% if b.terms_accepted_ip %},
+      {{ b.terms_accepted_at | stamp }}</strong>{% if b.terms_accepted_ip %},
       from {{ b.terms_accepted_ip }}{% endif %}. The exact wording they saw was saved at that moment,
       and it is that version — not today's — that the clean copy submits. This is the strongest
       single thing you can show a bank.
@@ -230,7 +231,7 @@
     </p>
     <p style="font-size:0.85rem;color:#7c4a04;margin:0">
       These are your terms <strong>as they stand today</strong>, and they appear in the clean copy.
-      If you edited them after {{ b.created_at.strftime('%d %B %Y') }}, paste the wording that was in
+      If you edited them after {{ b.created_at | stamp(with_utc=False) }}, paste the wording that was in
       force then into Settings → Business before you print, so what you submit matches what this
       customer actually agreed to.
     </p>

@@ -157,6 +157,14 @@ def create_app():
         except Exception:
             return {'SETUP_PENDING': None}
 
+    # Timestamps are stored as UTC and read by people in one particular place.
+    # These render them in the business's own timezone, labelled, so nobody has
+    # to do the arithmetic — least of all somebody reviewing a dispute.
+    import scheduling as _sched
+    app.jinja_env.filters['stamp'] = _sched.stamp
+    app.jinja_env.filters['short_stamp'] = _sched.short_stamp
+    app.jinja_env.globals['business_tz_label'] = lambda: _sched.local_now().strftime('%Z')
+
     with app.app_context():
         db.create_all()
         _migrate_db()

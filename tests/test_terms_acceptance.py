@@ -104,3 +104,36 @@ with app.app_context():
     check(Booking.query.get(b.id).terms_accepted_at == first, 'the original moment stands')
 
 print('\n🎉 What a customer agreed to is captured when they agree, and never rewritten.')
+
+
+# ── Timestamps are stored in UTC and read by people in one place. ────────────
+with app.app_context():
+    print('\n7. The document shows local time, not UTC arithmetic')
+    import scheduling
+    BusinessSetting.set('timezone', 'America/New_York'); db.session.commit()
+
+    job = Booking(service_type='deep', name='Timestamp Check', email='ts@example.com',
+                  address='4 St', price=800, status='completed',
+                  preferred_date='2026-08-05',
+                  created_at=datetime(2026, 8, 1, 12, 0),
+                  completed_at=datetime(2026, 8, 5, 22, 15),
+                  paid_at=datetime(2026, 8, 5, 13, 42))
+    db.session.add(job); db.session.commit()
+
+    clean = _html.unescape(
+        c.get(f'/bookings/{job.id}/dispute-evidence?clean=1').get_data(as_text=True))
+    check('9:42 AM EDT' in clean,
+          'a payment stored as 13:42 UTC reads as 9:42 AM EDT — the time it happened')
+    check('(13:42 UTC)' in clean,
+          'with UTC alongside, so a reviewer can cross-check against Stripe')
+    check('Times shown in' in clean and 'EDT' in clean,
+          'and the document says once, up front, which clock it is on')
+    check('local time where the work was carried out' in clean,
+          'in words a reviewer does not have to interpret')
+
+    print('\n8. A job finishing late evening does not slide into the next day')
+    check('5 August 2026' in clean,
+          '22:15 UTC on the 5th is 6:15 PM on the 5th locally, not the 6th')
+    check('6:15 PM' in clean, 'shown as an evening, which is when it happened')
+
+print('\n🎉 Every time on the document is the time it actually happened.')
