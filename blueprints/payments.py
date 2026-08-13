@@ -219,5 +219,7 @@ def confirm(token):
                 booking.stripe_payment_method_id = pi.payment_method
         except stripe.error.StripeError as e:
             return jsonify({'ok': False, 'error': str(e)}), 400
+    import customer_terms
+    customer_terms.record_acceptance(booking, request)
     mark_paid(booking, method='card')
     return jsonify({'ok': True})

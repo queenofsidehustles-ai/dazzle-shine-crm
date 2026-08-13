@@ -115,6 +115,12 @@ class Booking(db.Model):
     # deliberately NOT the crew, because the crew drives pay and rewriting that
     # after the fact would change what a past job paid out.
     onsite_people = db.Column(db.Text)
+    # Proof the customer agreed to the terms, captured at the moment they paid.
+    # The wording is snapshotted, not referenced — terms get edited, and a record
+    # pointing at whatever they say today proves nothing about what was agreed.
+    terms_accepted_at = db.Column(db.DateTime)
+    terms_accepted_text = db.Column(db.Text)
+    terms_accepted_ip = db.Column(db.String(64))
     confirm_responded_at = db.Column(db.DateTime)
 
     # Admin fields

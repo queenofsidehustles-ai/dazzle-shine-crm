@@ -13,10 +13,12 @@ deposit_bp = Blueprint('deposit', __name__)
 def pay_deposit_page(token):
     booking = Booking.query.filter_by(deposit_token=token).first_or_404()
     pk = integrations.stripe_publishable_key()
+    import customer_terms
     return render_template('public/pay_deposit.html',
         booking=booking,
         token=token,
         stripe_pk=pk,
+        terms=customer_terms.as_html(),
         deposit=DEPOSIT_AMOUNT,
         already_paid=bool(booking.deposit_paid),
     )
@@ -85,6 +87,9 @@ def confirm_deposit(token):
         booking.deposit_paid = True
         booking.status = 'confirmed'
         db.session.commit()
+        # They have just agreed to the terms by paying. Snapshot them.
+        import customer_terms
+        customer_terms.record_acceptance(booking, request)
         # Fire the full confirmation email/SMS (same as a paid-up-front booking)
         try:
             from blueprints.api import _send_confirmation

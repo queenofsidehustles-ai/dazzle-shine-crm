@@ -187,11 +187,21 @@
 {% if clean %}
 <div class="card" style="margin-top:16px">
   <h2 style="font-size:1rem;font-weight:700;margin-bottom:12px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">5 · Service terms</h2>
+  {% if b.terms_accepted_at %}
+  <p style="font-size:0.85rem;color:#1f1333;margin:0 0 12px">
+    The customer accepted these terms on
+    <strong>{{ b.terms_accepted_at.strftime('%d %B %Y at %H:%M UTC') }}</strong>
+    when making payment{% if b.terms_accepted_ip %} from IP address {{ b.terms_accepted_ip }}{% endif %}.
+    The wording below is the wording shown to them at that moment.
+  </p>
+  <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#1f1333;line-height:1.6;margin:0">{{ b.terms_accepted_text }}</pre>
+  {% else %}
   <p style="font-size:0.85rem;color:#5f5878;margin:0 0 12px">
     The terms under which {{ BIZ }} provides cleaning services, including payment,
     cancellation, and pricing where the work is larger than quoted.
   </p>
   <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#1f1333;line-height:1.6;margin:0">{{ terms }}</pre>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -199,14 +209,33 @@
 {% if not clean %}
 <div class="card internal" style="margin-top:16px">
   <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Your terms <span style="text-transform:none;letter-spacing:0;font-weight:500">— included in the clean copy</span></h2>
+  {% if b.terms_accepted_at %}
+  <div style="background:#eefaf0;border:1px solid #a7d8b0;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <p style="font-size:0.85rem;color:#1c6b34;margin:0">
+      <strong>✅ This customer accepted your terms on
+      {{ b.terms_accepted_at.strftime('%d %B %Y at %H:%M UTC') }}</strong>{% if b.terms_accepted_ip %},
+      from {{ b.terms_accepted_ip }}{% endif %}. The exact wording they saw was saved at that moment,
+      and it is that version — not today's — that the clean copy submits. This is the strongest
+      single thing you can show a bank.
+    </p>
+  </div>
+  {% else %}
   <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <p style="font-size:0.85rem;color:#7c4a04;margin:0 0 8px">
+      <strong>⚠️ There is no record that this customer accepted these terms.</strong>
+      Acceptance was only recorded from the point that feature was added, so older bookings
+      have nothing stored. <strong>Do not tell the bank they agreed to them.</strong> Submit the terms
+      as your standing policy, and make your case on the service delivered, the card the customer
+      saved themselves, and the messages you sent.
+    </p>
     <p style="font-size:0.85rem;color:#7c4a04;margin:0">
-      These are your terms <strong>as they stand today</strong>, and they now appear in the clean copy.
+      These are your terms <strong>as they stand today</strong>, and they appear in the clean copy.
       If you edited them after {{ b.created_at.strftime('%d %B %Y') }}, paste the wording that was in
       force then into Settings → Business before you print, so what you submit matches what this
       customer actually agreed to.
     </p>
   </div>
+  {% endif %}
   <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#5f5878;line-height:1.6;margin:0">{{ terms }}</pre>
 </div>
 {% endif %}

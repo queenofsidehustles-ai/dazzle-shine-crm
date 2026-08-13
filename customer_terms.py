@@ -80,3 +80,26 @@ def as_html():
         else:
             out.append(f'<p style="margin:0 0 8px;line-height:1.6">{safe}</p>')
     return '\n'.join(out)
+
+
+def record_acceptance(booking, request=None):
+    """Snapshot the terms a customer agreed to, at the moment they paid.
+
+    Storing a reference to "our terms" is worth nothing in a dispute months
+    later — terms get edited, and the bank has no way to know what they said on
+    the day. So the wording itself is kept, with the time and the IP address it
+    was accepted from.
+
+    Only the first acceptance is kept. A customer who pays a deposit and then a
+    balance agreed at the earlier moment, and that is the one that matters."""
+    from extensions import db
+    from datetime import datetime
+    if booking.terms_accepted_at:
+        return False
+    booking.terms_accepted_at = datetime.utcnow()
+    booking.terms_accepted_text = get_terms()
+    if request is not None:
+        forwarded = (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
+        booking.terms_accepted_ip = (forwarded or request.remote_addr or '')[:64]
+    db.session.commit()
+    return True

@@ -176,5 +176,17 @@
   });
 </script>
 {% endif %}
+
+  <div style="max-width:520px;margin:18px auto 0;padding:0 20px">
+    <details style="background:#faf9fd;border:1px solid #e4dfef;border-radius:10px;padding:12px 14px">
+      <summary style="cursor:pointer;font-size:0.85rem;font-weight:600;color:#5f5878">
+        Service &amp; payment terms
+      </summary>
+      <div style="font-size:0.78rem;color:#5f5878;margin-top:10px">{{ terms | safe }}</div>
+    </details>
+    <p style="font-size:0.78rem;color:#9a95ad;text-align:center;margin:10px 0 0">
+      By paying you agree to our service &amp; payment terms above.
+    </p>
+  </div>
 </body>
 </html>
