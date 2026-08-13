@@ -1349,6 +1349,52 @@ def proposal_send(booking_id):
     return redirect(url_for('bookings.detail', booking_id=b.id))
 
 
+@bookings_bp.route('/<int:booking_id>/dispute-evidence')
+@login_required
+def dispute_evidence(booking_id):
+    """Everything the CRM knows about one job, laid out for a chargeback.
+
+    A card network gives you days to prove a service was authorised and
+    delivered. That evidence is already here — the booking, the payment, every
+    message sent and when, the photos the cleaner took — but scattered across
+    pages, and nobody assembles it calmly under a deadline.
+
+    This states only what the records actually show. Where something is missing
+    it says so, because a gap you have spotted yourself is survivable and one the
+    bank spots for you is not."""
+    import json
+    from models import JobChecklist, OutboundLog
+    b = Booking.query.get_or_404(booking_id)
+
+    # Every message to this customer, on any channel, in order.
+    targets = [t for t in ((b.email or '').lower(), (b.phone or '')) if t]
+    messages = []
+    if targets:
+        rows = OutboundLog.query.order_by(OutboundLog.created_at).all()
+        for r in rows:
+            addr = (r.to_address or '').lower()
+            digits = ''.join(ch for ch in (r.to_address or '') if ch.isdigit())
+            phone_digits = ''.join(ch for ch in (b.phone or '') if ch.isdigit())
+            if (b.email and addr == (b.email or '').lower()) or \
+               (phone_digits and digits and digits[-10:] == phone_digits[-10:]):
+                messages.append(r)
+
+    checklist = JobChecklist.query.filter_by(booking_id=b.id).first()
+    photos = {'before': [], 'after': []}
+    if checklist:
+        for key, field in (('before', checklist.before_photos), ('after', checklist.after_photos)):
+            try:
+                photos[key] = json.loads(field or '[]')
+            except (ValueError, TypeError):
+                photos[key] = []
+
+    import customer_terms
+    return render_template('admin/dispute_evidence.html', b=b, messages=messages,
+                           checklist=checklist, photos=photos,
+                           terms=customer_terms.get_terms(),
+                           client=b.client)
+
+
 @bookings_bp.route('/<int:booking_id>/start-plan', methods=['POST'])
 @login_required
 def start_plan(booking_id):

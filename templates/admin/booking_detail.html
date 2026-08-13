@@ -681,7 +681,9 @@
           </form>
         </details>
       </div>
-      <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
+      <a href="{{ url_for('bookings.dispute_evidence', booking_id=booking.id) }}"
+         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">🛡️ Chargeback evidence pack</a>
+            <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
          class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">💸 Correct price &amp; notify customer</a>
       {% else %}
       <div class="detail-row"><span class="dl">Amount due</span><span class="dv" style="font-size:1.2rem">${{ '%.2f' % due }}</span></div>
@@ -756,7 +758,9 @@
       </form>
       {% endif %}
 
-      <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
+      <a href="{{ url_for('bookings.dispute_evidence', booking_id=booking.id) }}"
+         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">🛡️ Chargeback evidence pack</a>
+            <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
          class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">💸 Correct price &amp; notify customer</a>
 
       <a href="{{ url_for('bookings.email_customer', booking_id=booking.id) }}"
