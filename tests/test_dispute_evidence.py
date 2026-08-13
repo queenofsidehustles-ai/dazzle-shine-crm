@@ -93,9 +93,9 @@ with app.app_context():
 
     print('\n6. It warns rather than letting her overstate her case')
     check('as they stand today' in page, 'the terms are labelled as current')
-    check('not what this customer agreed to' in page,
-          'with a warning that they may not be what was agreed')
-    check('otherwise winnable' in page, 'and why that matters')
+    check('paste the wording that was in' in page,
+          'telling her to use the version in force at the time')
+    check('matches what this' in page, 'and why that matters')
 
     print('\n7. Gaps are named, not hidden')
     bare = Booking(service_type='standard', name='No Records', address='9 Nowhere',
@@ -131,11 +131,15 @@ with app.app_context():
                  'Payment received', '11.5']:
         check(fact in clean, f'kept: {fact}')
 
-    print('\n10. The terms are left out of the clean copy on purpose')
-    check('Payment terms' not in clean,
-          'so today\'s wording is never handed over as though it applied back then')
+    print('\n10. The terms are in the clean copy, stated plainly')
+    check('Service terms' in clean, 'a terms section is included')
+    check('Payment terms' in clean, 'with the actual wording')
+    check('Test Cleaning Co provides cleaning services' in clean,
+          'introduced as the terms this business trades under')
+    check('winnable' not in clean and 'as they stand today' not in clean,
+          'and without any of the internal commentary about them')
     working = _html.unescape(c.get(f'/bookings/{b.id}/dispute-evidence').get_data(as_text=True))
-    check('Payment terms' in working, 'while the working copy still shows them to check')
-    check('left out of the clean copy on purpose' in working, 'and explains why')
+    check('as they stand today' in working,
+          'while the working copy still reminds her to check the version')
 
 print('\n🎉 A working copy that advises her, and a clean document that does not.')

@@ -158,17 +158,28 @@
   {% endif %}
 </div>
 
-<!-- 5 · Terms — working copy only -->
+<!-- 5 · Terms -->
+{% if clean %}
+<div class="card" style="margin-top:16px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:12px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">5 · Service terms</h2>
+  <p style="font-size:0.85rem;color:#5f5878;margin:0 0 12px">
+    The terms under which {{ BIZ }} provides cleaning services, including payment,
+    cancellation, and pricing where the work is larger than quoted.
+  </p>
+  <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#1f1333;line-height:1.6;margin:0">{{ terms }}</pre>
+</div>
+{% endif %}
+
+<!-- Working-copy guidance about those terms -->
 {% if not clean %}
 <div class="card internal" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Your terms <span style="text-transform:none;letter-spacing:0;font-weight:500">— read this before including them</span></h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Your terms <span style="text-transform:none;letter-spacing:0;font-weight:500">— included in the clean copy</span></h2>
   <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:8px;padding:12px 14px;margin-bottom:14px">
     <p style="font-size:0.85rem;color:#7c4a04;margin:0">
-      <strong>These are your terms as they stand today, and they are left out of the clean copy on purpose.</strong>
-      If you changed them after {{ b.created_at.strftime('%d %B %Y') }}, this is not what this customer agreed to.
-      Attach the wording that was actually in force when they booked, or leave terms out and rely on the
-      record above. Presenting today's terms as though they applied then is how an otherwise winnable
-      case is lost.
+      These are your terms <strong>as they stand today</strong>, and they now appear in the clean copy.
+      If you edited them after {{ b.created_at.strftime('%d %B %Y') }}, paste the wording that was in
+      force then into Settings → Business before you print, so what you submit matches what this
+      customer actually agreed to.
     </p>
   </div>
   <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#5f5878;line-height:1.6;margin:0">{{ terms }}</pre>
