@@ -1389,10 +1389,16 @@ def dispute_evidence(booking_id):
                 photos[key] = []
 
     import customer_terms
+    from datetime import datetime as _dt
+    # The working view carries guidance on what to submit and what to check.
+    # The clean view is the document itself — a bank should receive a record of
+    # what happened, not a running commentary on how to argue about it.
+    clean = request.args.get('clean') == '1'
     return render_template('admin/dispute_evidence.html', b=b, messages=messages,
                            checklist=checklist, photos=photos,
                            terms=customer_terms.get_terms(),
-                           client=b.client)
+                           client=b.client, clean=clean,
+                           prepared=_dt.utcnow())
 
 
 @bookings_bp.route('/<int:booking_id>/start-plan', methods=['POST'])

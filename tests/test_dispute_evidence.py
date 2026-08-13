@@ -75,8 +75,8 @@ with app.app_context():
     check('$1420.00' in page, 'the amount')
     check('pi_test_evidence' in page, 'the charge id the bank will match against')
     check('Visa ending 8313' in page, 'the card')
-    check('customer entered their card themselves' in page,
-          'and that the deposit proves they set that card up')
+    check('entered their own card details' in page,
+          'and that the deposit was paid by the customer on their own card')
 
     print('\n4. Proof the work happened')
     check('before1.jpg' in page, 'the before photo')
@@ -95,7 +95,7 @@ with app.app_context():
     check('as they stand today' in page, 'the terms are labelled as current')
     check('not what this customer agreed to' in page,
           'with a warning that they may not be what was agreed')
-    check('loses an otherwise winnable case' in page, 'and why that matters')
+    check('otherwise winnable' in page, 'and why that matters')
 
     print('\n7. Gaps are named, not hidden')
     bare = Booking(service_type='standard', name='No Records', address='9 Nowhere',
@@ -106,4 +106,36 @@ with app.app_context():
     check('No messages to this customer are on record' in page, 'and no messages')
     check('a call log with dates still counts' in page, 'while suggesting what to use instead')
 
-print('\n🎉 One page, only what the records actually show.')
+    print('\n8. The clean copy carries no advice, only the record')
+    clean = _html.unescape(
+        c.get(f'/bookings/{b.id}/dispute-evidence?clean=1').get_data(as_text=True))
+
+    # Every phrase below is guidance for the owner. None belongs in front of a bank.
+    for phrase in ['strongest evidence', 'gap you', 'winnable case',
+                   'Submit only what', 'attach those instead', 'call log with dates',
+                   'not what this customer agreed to', 'as they stand today',
+                   'This is your working copy']:
+        check(phrase not in clean, f'no coaching: "{phrase}" is gone')
+    # The only remaining mention is a navigation link, and printing drops the
+    # navigation along with the rest of the app.
+    check('@media print' in clean and 'aside { display: none' in clean.replace(', ', ', '),
+          'the sidebar, top bar and banners are all excluded from the PDF')
+
+    check('Record of service and payment' in clean, 'it reads as a document')
+    check('Test Cleaning Co' in clean, 'headed with the business name')
+    check('Prepared' in clean, 'and dated')
+
+    print('\n9. But every fact survives')
+    for fact in ['280 Ballow Dr', '2026-08-05', 'Lauren Diaz', '$1420.00',
+                 'pi_test_evidence', 'Visa ending 8313', 'before1.jpg', 'after2.jpg',
+                 'Payment received', '11.5']:
+        check(fact in clean, f'kept: {fact}')
+
+    print('\n10. The terms are left out of the clean copy on purpose')
+    check('Payment terms' not in clean,
+          'so today\'s wording is never handed over as though it applied back then')
+    working = _html.unescape(c.get(f'/bookings/{b.id}/dispute-evidence').get_data(as_text=True))
+    check('Payment terms' in working, 'while the working copy still shows them to check')
+    check('left out of the clean copy on purpose' in working, 'and explains why')
+
+print('\n🎉 A working copy that advises her, and a clean document that does not.')

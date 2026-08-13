@@ -1,20 +1,58 @@
 {% extends "base_admin.html" %}
 {% block title %}Evidence — Booking #{{ b.id }} — {{ BIZ }} CRM{% endblock %}
-{% block page_title %}Chargeback evidence — Booking #{{ b.id }}{% endblock %}
+{% block page_title %}{% if clean %}Record of service — Booking #{{ b.id }}{% else %}Chargeback evidence — Booking #{{ b.id }}{% endif %}{% endblock %}
 {% block topbar_right %}
+  {% if clean %}
+  <a href="{{ url_for('bookings.dispute_evidence', booking_id=b.id) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Working copy</a>
+  {% else %}
   <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Back to booking</a>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
-<div class="card" style="background:#fff8e1;border:1px solid #f0d488">
-  <p style="color:#7c4a04;font-size:0.9rem;margin:0">
-    This is what your CRM actually recorded. <strong>Submit only what's here.</strong>
-    A gap you've spotted yourself is survivable; one the bank spots for you is not.
-    Print this page (⌘P) to attach it as a PDF.
+<style>
+  /* Nothing meant for the owner should ever reach the printed document —
+     not the guidance, not the navigation, not the app around it. */
+  @media print {
+    .internal, .sidebar, #sidebar, .topbar, nav, aside { display: none !important; }
+    .content { margin: 0 !important; padding: 0 !important; }
+    .card { border: none; box-shadow: none; padding: 0 0 18px; page-break-inside: avoid; }
+    body { background: #fff; }
+    a { color: inherit; text-decoration: none; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+
+{% if not clean %}
+<div class="card internal" style="background:#fff8e1;border:1px solid #f0d488">
+  <p style="color:#7c4a04;font-size:0.9rem;margin:0 0 10px">
+    <strong>This is your working copy.</strong> The notes below are for you — they should not go to a bank.
+    Check the gaps flagged here, then open the clean copy to print.
+  </p>
+  <a href="{{ url_for('bookings.dispute_evidence', booking_id=b.id, clean=1) }}"
+     class="btn btn-gold" style="padding:7px 16px;font-size:0.85rem">📄 Clean copy for submission</a>
+</div>
+{% else %}
+<div class="card internal" style="background:#eefaf0;border:1px solid #a7d8b0">
+  <p style="color:#1c6b34;font-size:0.88rem;margin:0">
+    Press <strong>⌘P</strong> and save as PDF. This banner won't print.
   </p>
 </div>
 
-<!-- The job -->
+<div class="card" style="margin-top:16px">
+  <h1 style="font-size:1.25rem;font-weight:700;margin-bottom:4px">{{ BIZ }}</h1>
+  <p style="color:#5f5878;font-size:0.92rem;margin:0">Record of service and payment</p>
+  <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e4dfef">
+    <div class="detail-row"><span class="dl">Customer</span><span class="dv">{{ b.name }}</span></div>
+    <div class="detail-row"><span class="dl">Transaction</span><span class="dv" style="font-family:monospace;font-size:0.82rem">{{ b.stripe_payment_intent or '—' }}</span></div>
+    <div class="detail-row"><span class="dl">Amount</span><span class="dv">{% if b.price %}${{ '%.2f'|format(b.price) }}{% else %}—{% endif %}</span></div>
+    <div class="detail-row"><span class="dl">Prepared</span><span class="dv">{{ prepared.strftime('%d %B %Y') }}</span></div>
+  </div>
+</div>
+{% endif %}
+
+<!-- 1 · The service -->
 <div class="card" style="margin-top:16px">
   <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">1 · The service</h2>
   <div class="detail-row"><span class="dl">Customer</span><span class="dv">{{ b.name }}</span></div>
@@ -30,64 +68,67 @@
   {% endif %}
 </div>
 
-<!-- The money -->
+<!-- 2 · The payment -->
 <div class="card" style="margin-top:16px">
   <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">2 · The payment</h2>
   <div class="detail-row"><span class="dl">Total price</span><span class="dv">{% if b.price %}${{ '%.2f'|format(b.price) }}{% else %}—{% endif %}</span></div>
   {% if b.deposit_paid %}
-  <div class="detail-row"><span class="dl">Deposit</span><span class="dv">Paid — the customer entered their card themselves</span></div>
+  <div class="detail-row"><span class="dl">Deposit</span><span class="dv">Paid by the customer, who entered their own card details</span></div>
   {% endif %}
   <div class="detail-row"><span class="dl">Paid</span><span class="dv">{{ b.paid_at.strftime('%d %B %Y at %H:%M UTC') if b.paid_at else 'Not recorded as paid' }}</span></div>
   <div class="detail-row"><span class="dl">Method</span><span class="dv">{{ b.paid_method or '—' }}</span></div>
   <div class="detail-row"><span class="dl">Stripe charge</span><span class="dv" style="font-family:monospace;font-size:0.82rem">{{ b.stripe_payment_intent or '—' }}</span></div>
-  <div class="detail-row"><span class="dl">Card on file</span><span class="dv" style="font-family:monospace;font-size:0.82rem">{{ b.stripe_payment_method_id or '—' }}</span></div>
   {% if client and client.card_last4 %}
-  <div class="detail-row"><span class="dl">Saved card</span><span class="dv">{{ client.card_brand }} ending {{ client.card_last4 }}</span></div>
+  <div class="detail-row"><span class="dl">Card used</span><span class="dv">{{ client.card_brand }} ending {{ client.card_last4 }}, saved by the customer</span></div>
   {% endif %}
   {% if b.tip_amount %}
-  <div class="detail-row"><span class="dl">Tip added by customer</span><span class="dv">${{ '%.2f'|format(b.tip_amount) }} — a tip is a strong sign of a satisfied customer</span></div>
+  <div class="detail-row"><span class="dl">Tip added by customer</span><span class="dv">${{ '%.2f'|format(b.tip_amount) }}</span></div>
   {% endif %}
 </div>
 
-<!-- Proof of delivery -->
+<!-- 3 · Proof of delivery -->
 <div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">3 · Proof the work was done</h2>
-  {% if checklist and (photos.before or photos.after) %}
-    <p style="font-size:0.87rem;color:#276749;margin-bottom:12px">
-      ✅ The cleaner photographed the job{% if checklist.photos_submitted_at %} and closed it out on
-      {{ checklist.photos_submitted_at.strftime('%d %B %Y at %H:%M UTC') }}{% endif %}.
-      <strong>Download these and attach them — dated photographs of the address are the strongest evidence you have.</strong>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">3 · Work carried out</h2>
+  {% if b.assigned_cleaner or b.crew_label %}
+  <div class="detail-row"><span class="dl">Cleaner on site</span><span class="dv">{{ b.crew_label or b.assigned_cleaner }}</span></div>
+  {% endif %}
+  {% if b.hours_worked %}
+  <div class="detail-row"><span class="dl">Hours worked</span><span class="dv">{{ b.hours_worked }}</span></div>
+  {% endif %}
+  {% if checklist and checklist.photos_submitted_at %}
+  <div class="detail-row"><span class="dl">Job closed out</span><span class="dv">{{ checklist.photos_submitted_at.strftime('%d %B %Y at %H:%M UTC') }}</span></div>
+  {% endif %}
+
+  {% if photos.before or photos.after %}
+    {% if not clean %}
+    <p class="internal" style="font-size:0.87rem;color:#276749;margin:12px 0">
+      ✅ Download these and attach them — dated photographs of the address are the strongest evidence you have.
     </p>
+    {% endif %}
     {% for kind in ['before', 'after'] %}
       {% if photos[kind] %}
-      <p style="font-size:0.85rem;font-weight:700;margin:10px 0 6px">{{ kind|capitalize }} ({{ photos[kind]|length }})</p>
+      <p style="font-size:0.85rem;font-weight:700;margin:12px 0 6px">{{ kind|capitalize }} ({{ photos[kind]|length }})</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         {% for url in photos[kind] %}
-        <a href="{{ url }}" target="_blank"><img src="{{ url }}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid #e4dfef" /></a>
+        <a href="{{ url }}" target="_blank"><img src="{{ url }}" style="width:150px;height:150px;object-fit:cover;border-radius:8px;border:1px solid #e4dfef" /></a>
         {% endfor %}
       </div>
       {% endif %}
     {% endfor %}
-  {% else %}
-    <p style="font-size:0.87rem;color:#991b1b;margin:0">
+  {% elif not clean %}
+    <p class="internal" style="font-size:0.87rem;color:#991b1b;margin:12px 0 0">
       ⚠️ No photographs were recorded for this job. If the cleaner took any on their own phone,
       attach those instead — with the date they were taken.
     </p>
   {% endif %}
-  {% if b.hours_worked %}
-  <div class="detail-row" style="margin-top:12px"><span class="dl">Hours worked</span><span class="dv">{{ b.hours_worked }}</span></div>
-  {% endif %}
-  {% if b.assigned_cleaner or b.crew_label %}
-  <div class="detail-row"><span class="dl">Cleaner on site</span><span class="dv">{{ b.crew_label or b.assigned_cleaner }}</span></div>
-  {% endif %}
 </div>
 
-<!-- Communications -->
+<!-- 4 · Communications -->
 <div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">4 · Every message sent to this customer</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">4 · Correspondence with the customer</h2>
   {% if messages %}
   <p style="font-size:0.85rem;color:#5f5878;margin-bottom:12px">
-    {{ messages|length }} message{{ 's' if messages|length != 1 }} on record. Times are UTC.
+    {{ messages|length }} message{{ 's' if messages|length != 1 }} sent. Times shown in UTC.
   </p>
   <div class="table-wrap">
     <table>
@@ -101,31 +142,36 @@
             {% if m.subject %}<strong>{{ m.subject }}</strong><br>{% endif %}
             <span style="color:#5f5878">{{ (m.body or '') | striptags | truncate(220) }}</span>
           </td>
-          <td>{% if m.status == 'sent' %}<span style="color:#276749">✓</span>{% else %}<span style="color:#991b1b" title="{{ m.detail }}">failed</span>{% endif %}</td>
+          <td>{% if m.status == 'sent' %}<span style="color:#276749">✓</span>{% else %}<span style="color:#991b1b">failed</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  {% else %}
-  <p style="font-size:0.87rem;color:#991b1b;margin:0">
+  {% elif not clean %}
+  <p class="internal" style="font-size:0.87rem;color:#991b1b;margin:0">
     ⚠️ No messages to this customer are on record. If you contacted them by personal phone,
     text or WhatsApp, export those separately — a call log with dates still counts.
   </p>
+  {% else %}
+  <p style="font-size:0.87rem;color:#5f5878;margin:0">No messages were sent through this system for this booking.</p>
   {% endif %}
 </div>
 
-<!-- Terms -->
-<div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">5 · Your terms</h2>
+<!-- 5 · Terms — working copy only -->
+{% if not clean %}
+<div class="card internal" style="margin-top:16px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Your terms <span style="text-transform:none;letter-spacing:0;font-weight:500">— read this before including them</span></h2>
   <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:8px;padding:12px 14px;margin-bottom:14px">
     <p style="font-size:0.85rem;color:#7c4a04;margin:0">
-      <strong>These are your terms as they stand today.</strong> If you changed them after
-      {{ b.created_at.strftime('%d %B %Y') }}, this is not what this customer agreed to —
-      submit the wording that was in force when they booked, and say so. Presenting current
-      terms as though they applied then is the kind of thing that loses an otherwise winnable case.
+      <strong>These are your terms as they stand today, and they are left out of the clean copy on purpose.</strong>
+      If you changed them after {{ b.created_at.strftime('%d %B %Y') }}, this is not what this customer agreed to.
+      Attach the wording that was actually in force when they booked, or leave terms out and rely on the
+      record above. Presenting today's terms as though they applied then is how an otherwise winnable
+      case is lost.
     </p>
   </div>
   <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#5f5878;line-height:1.6;margin:0">{{ terms }}</pre>
 </div>
+{% endif %}
 {% endblock %}
