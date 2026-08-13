@@ -89,8 +89,33 @@
 <!-- 3 · Proof of delivery -->
 <div class="card" style="margin-top:16px">
   <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">3 · Work carried out</h2>
-  {% if b.assigned_cleaner or b.crew_label %}
-  <div class="detail-row"><span class="dl">Cleaner on site</span><span class="dv">{{ b.crew_label or b.assigned_cleaner }}</span></div>
+  {% set onsite = b.onsite_people or b.crew_label or b.assigned_cleaner %}
+  {% if onsite %}
+  <div class="detail-row">
+    <span class="dl">{{ 'Cleaners on site' if (b.onsite_people and ',' in b.onsite_people) else 'Cleaner on site' }}</span>
+    <span class="dv">{{ onsite }}</span>
+  </div>
+  {% if b.onsite_people and ',' in b.onsite_people %}
+  <div class="detail-row"><span class="dl">Team size</span><span class="dv">{{ b.onsite_people.split(',')|length }} cleaners</span></div>
+  {% endif %}
+  {% endif %}
+
+  {% if not clean %}
+  <form method="POST" action="{{ url_for('bookings.set_onsite', booking_id=b.id) }}"
+        class="internal" style="background:#faf9fd;border-radius:10px;padding:12px 14px;margin:12px 0">
+    <label style="font-size:0.82rem;color:#5f5878;display:block;margin-bottom:5px">
+      Who was actually on site? <span style="color:#9a95ad">Separate names with commas</span>
+    </label>
+    <div style="display:flex;gap:7px;flex-wrap:wrap">
+      <input type="text" name="onsite_people" value="{{ b.onsite_people or '' }}"
+             placeholder="{{ b.crew_label or b.assigned_cleaner or 'e.g. Jane Doe, John Smith' }}"
+             style="flex:1;min-width:240px;padding:9px 11px;border:1px solid #e4dfef;border-radius:8px" />
+      <button type="submit" class="btn btn-outline" style="padding:7px 16px;font-size:0.85rem">Save</button>
+    </div>
+    <span style="font-size:0.75rem;color:#9a95ad;display:block;margin-top:6px">
+      For the record only — this doesn't change anyone's pay or the crew on this job.
+    </span>
+  </form>
   {% endif %}
   {% if b.hours_worked %}
   <div class="detail-row"><span class="dl">Hours worked</span><span class="dv">{{ b.hours_worked }}</span></div>

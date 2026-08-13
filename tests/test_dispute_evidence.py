@@ -142,4 +142,25 @@ with app.app_context():
     check('as they stand today' in working,
           'while the working copy still reminds her to check the version')
 
+    print('\n11. Recording who was actually on site')
+    c.post(f'/bookings/{b.id}/onsite', data={
+        'onsite_people': 'Monica Lewis, Mikayla Lewis, Nana Yaw Lewis, Laura Becky Akosah'},
+        follow_redirects=True)
+    clean = _html.unescape(
+        c.get(f'/bookings/{b.id}/dispute-evidence?clean=1').get_data(as_text=True))
+    for person in ['Monica Lewis', 'Mikayla Lewis', 'Nana Yaw Lewis', 'Laura Becky Akosah']:
+        check(person in clean, f'{person} is named in the document')
+    check('Cleaners on site' in clean, 'headed as more than one person')
+    check('4 cleaners' in clean,
+          'with the team size stated — four people is itself evidence of the scope')
+
+    print('\n12. It records a fact without touching anyone\'s pay')
+    db.session.expire_all(); b = Booking.query.get(b.id)
+    check(b.onsite_people.startswith('Monica Lewis'), 'the note is saved on the booking')
+    check(b.assigned_cleaner == 'Lauren Diaz',
+          'the assigned cleaner is unchanged, so payroll is untouched')
+    check(b.crew == [] or not b.crew, 'and nobody was added to the paid crew')
+    working = _html.unescape(c.get(f'/bookings/{b.id}/dispute-evidence').get_data(as_text=True))
+    check("doesn't change anyone's pay" in working, 'and the form says so plainly')
+
 print('\n🎉 A working copy that advises her, and a clean document that does not.')

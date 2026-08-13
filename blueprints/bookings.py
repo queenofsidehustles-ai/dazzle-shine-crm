@@ -1349,6 +1349,21 @@ def proposal_send(booking_id):
     return redirect(url_for('bookings.detail', booking_id=b.id))
 
 
+@bookings_bp.route('/<int:booking_id>/onsite', methods=['POST'])
+@login_required
+def set_onsite(booking_id):
+    """Record who was actually on site.
+
+    Kept apart from the crew on purpose. The crew decides what each cleaner is
+    paid, so naming people there weeks later would rewrite a past job's payout.
+    This is a statement of fact for an invoice or a dispute and touches no money."""
+    b = Booking.query.get_or_404(booking_id)
+    b.onsite_people = (request.form.get('onsite_people') or '').strip() or None
+    db.session.commit()
+    flash('Saved who was on site.', 'success')
+    return redirect(url_for('bookings.dispute_evidence', booking_id=b.id))
+
+
 @bookings_bp.route('/<int:booking_id>/dispute-evidence')
 @login_required
 def dispute_evidence(booking_id):

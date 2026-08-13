@@ -322,6 +322,7 @@ def _migrate_db():
         ('booking', 'confirm_note',             'TEXT'),
         ('booking', 'confirm_response',         'VARCHAR(10)'),
         ('booking', 'confirm_alt',              'TEXT'),
+        ('booking', 'onsite_people',            'TEXT'),
         ('booking', 'confirm_responded_at',     'TIMESTAMP'),
         ('booking', 'internal_notes',           'TEXT'),
         ('booking', 'assigned_cleaner',         'VARCHAR(100)'),

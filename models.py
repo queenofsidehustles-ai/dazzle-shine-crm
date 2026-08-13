@@ -111,6 +111,10 @@ class Booking(db.Model):
     confirm_note = db.Column(db.Text)               # the owner's own words, added to the ask
     confirm_response = db.Column(db.String(10))     # 'yes', 'no', or 'other' (wants a different time)
     confirm_alt = db.Column(db.Text)                # the day/time they'd prefer instead
+    # Who was actually on site. A plain record for invoices and disputes — it is
+    # deliberately NOT the crew, because the crew drives pay and rewriting that
+    # after the fact would change what a past job paid out.
+    onsite_people = db.Column(db.Text)
     confirm_responded_at = db.Column(db.DateTime)
 
     # Admin fields
