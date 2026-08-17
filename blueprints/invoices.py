@@ -38,10 +38,19 @@ def index():
 
 @invoices_bp.route('/invoice/<token>')
 def view(token):
+    """The invoice while money is owed, the receipt once it's been paid.
+
+    Same document either way, on purpose: what the customer keeps is what she
+    already received, with proof of payment added to it."""
     b = Booking.query.filter_by(pay_token=token).first_or_404()
     from blueprints.payments import amount_due, payment_link_url
     import customer_terms
+    import scheduling
+    st = invoicing.status(b)
+    paid = st == 'paid'
     return render_template('public/invoice.html', b=b, biz=_biz(),
-                           items=invoicing.line_items(b), due=amount_due(b),
-                           terms=customer_terms.as_html(),
-                           status=invoicing.status(b), pay_url=payment_link_url(b, 'full'))
+                           items=invoicing.line_items(b),
+                           total=invoicing.total_paid(b) if paid else amount_due(b),
+                           paid_when=scheduling.short_stamp(b.paid_at) if paid else None,
+                           terms=customer_terms.as_html(), status_labels=invoicing.STATUS_LABELS,
+                           status=st, pay_url=payment_link_url(b, 'full'))

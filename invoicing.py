@@ -64,8 +64,23 @@ def status(booking):
 STATUS_LABELS = {'paid': 'Paid', 'overdue': 'Overdue', 'sent': 'Sent', 'draft': 'Draft'}
 
 
+def total_paid(booking):
+    """Everything the customer actually handed over — the job plus any tip.
+
+    amount_due() answers the opposite question, what is still owed, and is $0.00
+    the moment a job is paid. That is the right number on an invoice and a
+    useless one on a receipt: nobody can hand a landlord a document that says
+    they paid $0.00."""
+    return round((booking.price or 0) + (booking.tip_amount or 0), 2)
+
+
 def line_items(booking):
-    """Build itemized rows for the invoice from the booking's fields."""
+    """Build itemized rows for the invoice from the booking's fields.
+
+    The rows have to add up to the figure printed at the bottom, or the document
+    argues against itself in front of whoever the customer shows it to. `price`
+    is already net of any discount, so the discount is shown against the
+    pre-discount price rather than taken off a second time."""
     from pricing import DEPOSIT_AMOUNT
     rows = []
     svc = getattr(booking, 'service_label', None) or (booking.service_type or 'Cleaning service')
@@ -75,12 +90,17 @@ def line_items(booking):
     if booking.bathrooms:
         size.append(f'{booking.bathrooms} ba')
     desc = svc + (f' ({", ".join(size)})' if size else '')
-    rows.append((desc, booking.price or 0))
+    discount = abs(booking.discount_amount or 0)
+    rows.append((desc, (booking.price or 0) + discount))
     if booking.extras:
         rows.append((f'Add-ons: {booking.extras}', None))
-    if booking.discount_amount:
+    if discount:
         rows.append((f'Discount{(" (" + booking.discount_code + ")") if booking.discount_code else ""}',
-                     -abs(booking.discount_amount)))
-    if booking.deposit_paid:
+                     -discount))
+    if booking.tip_amount:
+        rows.append(('Tip for the cleaner', round(booking.tip_amount, 2)))
+    # A paid job is receipted in full — the deposit was part of what they paid,
+    # not a deduction from it. It only comes off while money is still owed.
+    if booking.deposit_paid and not booking.paid_at:
         rows.append(('Deposit already paid', -abs(DEPOSIT_AMOUNT)))
     return rows

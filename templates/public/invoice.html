@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Invoice {{ b.invoice_number }} — {{ biz.name }}</title>
+  <title>{{ 'Receipt' if status == 'paid' else 'Invoice' }}{{ ' ' + b.invoice_number if b.invoice_number }} — {{ biz.name }}</title>
   <style>
     body{font-family:Inter,Arial,sans-serif;background:#f6f5fb;color:#1f1333;margin:0;padding:24px}
     .sheet{max-width:640px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(15,7,40,0.10)}
@@ -23,15 +23,28 @@
     .total{font-size:1.5rem;font-weight:800;color:#b98a33}
     .pay{display:block;text-align:center;background:#d3a84f;color:#1f1333;padding:15px;border-radius:999px;text-decoration:none;font-weight:800;font-size:1.05rem;margin-top:20px}
     .muted{color:#9a95ad;font-size:0.82rem}
+    .print{display:block;width:100%;margin-top:18px;padding:13px;border:1px solid #d8d2e6;border-radius:999px;
+           background:#fff;color:#5f5878;font-weight:700;font-size:0.95rem;cursor:pointer;font-family:inherit}
+    /* A receipt exists to be handed to somebody else — a landlord, an employer,
+       an insurer. It has to survive Print → Save as PDF without the button or
+       the page furniture coming with it. */
+    @media print{
+      body{background:#fff;padding:0}
+      .sheet{box-shadow:none;border-radius:0;max-width:none}
+      .print{display:none}
+      .head{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    }
   </style>
 </head>
 <body>
   <div class="sheet">
     <div class="head">
       <div class="brand">{{ biz.name }}<small>{{ biz.city }}{% if biz.phone %} · {{ biz.phone }}{% endif %}</small></div>
-      <div class="inv-no">INVOICE<br><b>{{ b.invoice_number or '—' }}</b>
+      <div class="inv-no">{{ 'RECEIPT' if status == 'paid' else 'INVOICE' }}
+        {% if b.invoice_number %}<br><b>{{ b.invoice_number }}</b>{% endif %}
         {% if b.invoice_issued_at %}<br>Issued {{ b.invoice_issued_at.strftime('%b %d, %Y') }}{% endif %}
-        {% if b.invoice_due_date %}<br>Due {{ b.invoice_due_date }}{% endif %}
+        {% if b.invoice_due_date and status != 'paid' %}<br>Due {{ b.invoice_due_date }}{% endif %}
+        {% if b.preferred_date %}<br>Service date {{ b.preferred_date }}{% endif %}
       </div>
     </div>
     <div class="body">
@@ -50,11 +63,15 @@
 
       <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid #1f1333;padding-top:14px">
         <span style="font-weight:700">{{ 'Amount paid' if status=='paid' else 'Total due' }}</span>
-        <span class="total">${{ '%.2f'|format(due) }}</span>
+        <span class="total">${{ '%.2f'|format(total) }}</span>
       </div>
 
       {% if status == 'paid' %}
-        <p style="text-align:center;color:#065f46;font-weight:800;font-size:1.2rem;margin-top:20px">✓ PAID — thank you!</p>
+        <p style="text-align:center;color:#065f46;font-weight:800;font-size:1.2rem;margin:20px 0 4px">✓ PAID IN FULL — thank you!</p>
+        {# The two facts anybody checking this receipt will look for. #}
+        <p style="text-align:center;margin:0" class="muted">
+          Paid {{ paid_when }}{% if b.paid_method %} by {{ b.paid_method }}{% endif %} · no balance outstanding</p>
+        <button type="button" class="print" onclick="window.print()">🖨️ Print / save as PDF</button>
       {% else %}
         <a href="{{ pay_url }}" class="pay">💳 Pay this invoice</a>
       {% endif %}

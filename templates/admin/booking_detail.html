@@ -681,6 +681,16 @@
           </form>
         </details>
       </div>
+      {# Everything invoice-shaped lives in the unpaid branch below, which is
+         correct for chasing money and wrong for proving it was paid. Customers
+         need that proof for landlords, employers and insurers, so the receipt
+         belongs here, on the paid job itself. Opening it emails nobody. #}
+      {% if booking.pay_token %}
+      <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank"
+         class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px">🧾 Paid receipt — print or save as PDF</a>
+      <p style="text-align:center;font-size:0.76rem;color:#9a95ad;margin:5px 0 0">
+        Opens her receipt. Nothing is sent to the customer.</p>
+      {% endif %}
       <a href="{{ url_for('bookings.dispute_evidence', booking_id=booking.id) }}"
          class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">🛡️ Chargeback evidence pack</a>
             <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
@@ -756,6 +766,11 @@
           🗓️ Re-date to today &amp; resend
         </button>
       </form>
+      {% elif booking.pay_token %}
+      <p style="text-align:center;font-size:0.78rem;color:#9a95ad;margin-top:6px">
+        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:#b98a33">
+          Preview invoice →</a> — nothing is sent to the customer
+      </p>
       {% endif %}
 
       <a href="{{ url_for('bookings.dispute_evidence', booking_id=booking.id) }}"
