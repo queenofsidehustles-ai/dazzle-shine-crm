@@ -997,11 +997,37 @@ class Script(db.Model):
     CATEGORIES = [
         ('inbound',   'Inbound Calls'),
         ('outbound',  'Outbound Calls'),
+        ('call_property_manager', 'Call: Property Managers'),
+        ('call_medical',          'Call: Medical & Dental'),
+        ('call_construction',     'Call: General Contractors'),
+        ('call_office',           'Call: Offices & Retail'),
+        ('voicemail', 'Voicemail'),
         ('followup',  'Follow-Up'),
         ('objection', 'Objection Handling'),
         ('closing',   'Closing Scripts'),
         ('general',   'General Outreach'),
     ]
+
+    # Which opening script the Find Leads call drawer shows for a given
+    # prospect. Anything unmapped falls back to the generic office opener.
+    PROSPECT_CATEGORY_MAP = {
+        'property_manager':   'call_property_manager',
+        'apartment':          'call_property_manager',
+        'realtor':            'call_property_manager',
+        'airbnb':             'call_property_manager',
+        'medical_office':     'call_medical',
+        'general_contractor': 'call_construction',
+        'office':             'call_office',
+        'daycare':            'call_office',
+        'other':              'call_office',
+    }
+
+    # Shown in the drawer under the opener regardless of who is being called.
+    ALWAYS_SHOW = ['outbound', 'closing', 'objection', 'voicemail', 'followup']
+
+    @staticmethod
+    def script_category_for(prospect_category):
+        return Script.PROSPECT_CATEGORY_MAP.get(prospect_category, 'call_office')
 
 
 class BusinessSetting(db.Model):
@@ -1101,6 +1127,7 @@ class Prospect(db.Model):
         'apartment': '🏘️ Apartment Complex',
         'daycare': '🧸 Daycare / Childcare',
         'medical_office': '🩺 Doctor / Medical Office',
+        'general_contractor': '🏗️ General Contractor',
         'office': '💼 Office Space',
         'other': '📇 Other',
     }

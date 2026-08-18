@@ -9,12 +9,39 @@ scripts_bp = Blueprint('scripts', __name__, url_prefix='/scripts')
 @scripts_bp.route('/')
 @login_required
 def index():
+    import call_scripts
     category = request.args.get('cat', 'inbound')
-    scripts = Script.query.filter_by(category=category).order_by(Script.sort_order, Script.id).all()
+    rows = Script.query.filter_by(category=category).order_by(Script.sort_order, Script.id).all()
     counts = {c: Script.query.filter_by(category=c).count() for c, _ in Script.CATEGORIES}
+
+    # Plain dicts, not model rows: the business name and phone are substituted
+    # for display only, and writing them onto the instances would risk the
+    # filled-in values being flushed back to the database.
+    vals = call_scripts.tokens()
+    scripts = [{'id': s.id, 'title': s.title, 'category': s.category,
+                'content': call_scripts.render(s.content, vals)} for s in rows]
+
     return render_template('admin/scripts.html',
                            scripts=scripts, active_cat=category,
-                           categories=Script.CATEGORIES, counts=counts)
+                           categories=Script.CATEGORIES, counts=counts,
+                           total_scripts=Script.query.count())
+
+
+@scripts_bp.route('/seed', methods=['POST'])
+@login_required
+def seed():
+    """Load the starter cold-call scripts.
+
+    Safe to press more than once — it only inserts scripts that aren't already
+    there, matched on category and title, so anything edited here stays edited.
+    """
+    import call_scripts
+    added = call_scripts.seed()
+    if added:
+        flash(f'Added {added} starter script{"s" if added != 1 else ""}.', 'success')
+    else:
+        flash('Starter scripts are already loaded — nothing to add.', 'success')
+    return redirect(url_for('scripts.index', cat=request.form.get('cat', 'outbound')))
 
 
 @scripts_bp.route('/new', methods=['GET', 'POST'])

@@ -109,6 +109,16 @@
             {% if p.phone %}
             <a href="tel:{{ p.phone }}" class="btn" style="padding:7px 14px;font-size:0.85rem;white-space:nowrap">📞 {{ p.phone }}</a>
             {% else %}<span style="color:#9a95ad">no phone</span>{% endif %}
+            <button type="button" class="btn btn-outline open-script"
+                    data-id="{{ p.id }}"
+                    data-name="{{ p.business_name }}"
+                    data-cat="{{ p.category }}"
+                    data-catlabel="{{ p.category_label }}"
+                    data-phone="{{ p.phone or '' }}"
+                    data-status="{{ p.status }}"
+                    style="padding:6px 12px;font-size:0.8rem;margin-top:5px;white-space:nowrap;display:block;width:100%">
+              📋 Script
+            </button>
           </td>
           <td colspan="2">
             <form method="POST" action="{{ url_for('places_finder.update_status', prospect_id=p.id, status=status_filter) }}"
@@ -146,4 +156,181 @@
   </p>
   {% endif %}
 </div>
+
+<!-- ── Call drawer — script on the left of your eye, log form under it ────── -->
+<style>
+  #callScrim{position:fixed;inset:0;background:rgba(15,7,40,.45);z-index:60;display:none}
+  #callScrim.open{display:block}
+  #callDrawer{
+    position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);z-index:61;
+    background:#fff;box-shadow:-18px 0 50px rgba(15,7,40,.25);
+    transform:translateX(100%);transition:transform .18s ease;
+    display:flex;flex-direction:column;
+  }
+  #callDrawer.open{transform:translateX(0)}
+  .cd-head{padding:16px 20px;border-bottom:1px solid #e4dfef;flex-shrink:0}
+  .cd-body{padding:16px 20px 28px;overflow-y:auto;flex:1}
+  .cd-script{background:#faf9fd;border:1px solid #e4dfef;border-radius:10px;padding:14px 16px;margin-bottom:12px}
+  .cd-script h4{margin:0 0 8px;font-size:.92rem;color:#1f1333}
+  .cd-line{white-space:pre-wrap;font-size:.9rem;line-height:1.65;color:#3b2460;margin:2px 0}
+  .cd-sp{height:8px}
+  .cd-why{margin:8px 0 2px;background:#fef9ec;border:1px solid #f0dca8;border-radius:8px;padding:2px 12px}
+  .cd-why summary{cursor:pointer;color:#7c4a04;font-size:.78rem;font-weight:700;list-style:none;padding:6px 0}
+  .cd-why summary::-webkit-details-marker{display:none}
+  .cd-why div{font-size:.8rem;color:#8a6d3b;padding:2px 0 8px;line-height:1.6}
+  .cd-warn{background:#fdecea;border:1px solid #f5c2bc;border-radius:8px;padding:8px 12px;margin:8px 0;
+           font-size:.84rem;color:#a2231a;line-height:1.55}
+  .cd-group{border:1px solid #e4dfef;border-radius:10px;margin-bottom:8px;background:#fff}
+  .cd-group summary{cursor:pointer;padding:11px 14px;font-weight:700;font-size:.86rem;color:#1f1333;list-style:none}
+  .cd-group summary::-webkit-details-marker{display:none}
+  .cd-group summary::before{content:'▸ ';color:#9a95ad}
+  .cd-group[open] summary::before{content:'▾ '}
+  .cd-group .cd-inner{padding:0 14px 12px}
+  .cd-field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+  .cd-field label{font-size:.78rem;font-weight:700;color:#5f5878}
+  .cd-field input,.cd-field select,.cd-field textarea{
+    padding:9px 11px;border:1px solid #e3e0ec;border-radius:8px;font-size:.9rem;font-family:inherit}
+  .cd-field textarea{min-height:76px;resize:vertical}
+  .cd-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:520px){.cd-row{grid-template-columns:1fr}}
+</style>
+
+<div id="callScrim"></div>
+<aside id="callDrawer" aria-hidden="true" aria-label="Call script">
+  <div class="cd-head">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div style="min-width:0">
+        <div id="cdName" style="font-weight:700;font-size:1.05rem;color:#1f1333;line-height:1.3"></div>
+        <div id="cdCat" style="font-size:.8rem;color:#9a95ad;margin-top:2px"></div>
+      </div>
+      <button type="button" id="cdClose" class="btn btn-outline"
+              style="padding:5px 11px;font-size:.85rem;flex-shrink:0">✕</button>
+    </div>
+    <a id="cdPhone" href="#" class="btn" style="padding:8px 16px;font-size:.9rem;margin-top:10px;display:none">📞 Call</a>
+  </div>
+
+  <div class="cd-body">
+    <div id="cdOpener"></div>
+    <div id="cdExtras"></div>
+
+    <h4 style="margin:18px 0 10px;font-size:.95rem;color:#1f1333">Log this call</h4>
+    <form id="cdForm" method="POST">
+      <input type="hidden" name="mode" value="log">
+      <div class="cd-field">
+        <label for="cdStatus">How did it go?</label>
+        <select name="status" id="cdStatus">
+          {% for sv, sl in status_labels.items() %}
+          <option value="{{ sv }}">{{ sl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="cd-row">
+        <div class="cd-field">
+          <label for="cdContact">Who did you speak to?</label>
+          <input type="text" name="contact" id="cdContact" placeholder="Name + title">
+        </div>
+        <div class="cd-field">
+          <label for="cdRenewal">Contract renewal</label>
+          <input type="text" name="renewal" id="cdRenewal" placeholder="e.g. March 2027">
+        </div>
+      </div>
+      <div class="cd-field">
+        <label for="cdSqft">Size / restrooms</label>
+        <input type="text" name="sqft" id="cdSqft" placeholder="e.g. 8,400 sqft · 4 restrooms">
+      </div>
+      <div class="cd-field">
+        <label for="cdNote">What did they say?</label>
+        <textarea name="log_note" id="cdNote"
+                  placeholder="Why they're looking, who decides, what to send…"></textarea>
+      </div>
+      <button type="submit" class="btn" style="width:100%;padding:12px">💾 Save call</button>
+      <p style="font-size:.76rem;color:#9a95ad;margin:8px 0 0;line-height:1.5">
+        Saves a dated entry above the existing notes — nothing is overwritten.
+        The renewal date is the thing worth capturing even on a no.
+      </p>
+    </form>
+  </div>
+</aside>
+
+<script>
+  const CD_SCRIPTS  = {{ scripts | tojson }};
+  const CD_MAP      = {{ script_map | tojson }};
+  const CD_ALWAYS   = {{ script_always | tojson }};
+  const CD_LABELS   = {{ script_labels | tojson }};
+  const CD_ACTION   = "{{ url_for('places_finder.update_status', prospect_id=0, status=status_filter) }}";
+
+  const esc = s => s.replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // Same conventions the Scripts library renders: 💡 collapses into a "why",
+  // ⚠️ is a warning that must stay visible, blank lines are spacers.
+  function renderScript(text) {
+    return text.split('\n').map(raw => {
+      const l = raw.trim();
+      if (!l) return '<div class="cd-sp"></div>';
+      if (l.startsWith('💡'))
+        return '<details class="cd-why"><summary>💡 Why this works</summary><div>'
+             + esc(l.slice(1).trim()) + '</div></details>';
+      if (l.startsWith('⚠️'))
+        return '<div class="cd-warn">' + esc(l) + '</div>';
+      return '<div class="cd-line">' + esc(raw) + '</div>';
+    }).join('');
+  }
+
+  function block(s) {
+    return '<div class="cd-script"><h4>' + esc(s.title) + '</h4>'
+         + renderScript(s.content) + '</div>';
+  }
+
+  function openDrawer(btn) {
+    const d = btn.dataset;
+    document.getElementById('cdName').textContent = d.name;
+    document.getElementById('cdCat').textContent  = d.catlabel;
+
+    const tel = document.getElementById('cdPhone');
+    if (d.phone) {
+      tel.href = 'tel:' + d.phone;
+      tel.textContent = '📞 ' + d.phone;
+      tel.style.display = 'inline-flex';
+    } else {
+      tel.style.display = 'none';
+    }
+
+    const openerCat = CD_MAP[d.cat] || 'call_office';
+    const opener = CD_SCRIPTS[openerCat] || [];
+    document.getElementById('cdOpener').innerHTML = opener.length
+      ? opener.map(block).join('')
+      : '<div class="cd-script"><h4>No script loaded yet</h4><div class="cd-line">'
+        + 'Open the Scripts page and press "Load starter call scripts".</div></div>';
+
+    document.getElementById('cdExtras').innerHTML = CD_ALWAYS
+      .filter(c => c !== openerCat && (CD_SCRIPTS[c] || []).length)
+      .map(c => '<details class="cd-group"><summary>' + esc(CD_LABELS[c] || c)
+              + ' (' + CD_SCRIPTS[c].length + ')</summary><div class="cd-inner">'
+              + CD_SCRIPTS[c].map(block).join('') + '</div></details>')
+      .join('');
+
+    const f = document.getElementById('cdForm');
+    f.action = CD_ACTION.replace('/0/', '/' + d.id + '/');
+    f.reset();
+    document.getElementById('cdStatus').value = d.status || 'new';
+
+    document.getElementById('callDrawer').classList.add('open');
+    document.getElementById('callScrim').classList.add('open');
+    document.getElementById('callDrawer').setAttribute('aria-hidden', 'false');
+    document.querySelector('.cd-body').scrollTop = 0;
+  }
+
+  function closeDrawer() {
+    document.getElementById('callDrawer').classList.remove('open');
+    document.getElementById('callScrim').classList.remove('open');
+    document.getElementById('callDrawer').setAttribute('aria-hidden', 'true');
+  }
+
+  document.querySelectorAll('.open-script').forEach(b =>
+    b.addEventListener('click', () => openDrawer(b)));
+  document.getElementById('cdClose').addEventListener('click', closeDrawer);
+  document.getElementById('callScrim').addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+</script>
 {% endblock %}

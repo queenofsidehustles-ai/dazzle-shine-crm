@@ -2,6 +2,13 @@
 {% block title %}VA Scripts — {{ BIZ }} CRM{% endblock %}
 {% block page_title %}VA Scripts Library{% endblock %}
 {% block topbar_right %}
+  <form method="POST" action="{{ url_for('scripts.seed') }}" style="display:inline">
+    <input type="hidden" name="cat" value="{{ active_cat }}">
+    <button type="submit" class="btn btn-outline" style="padding:6px 16px;font-size:0.85rem"
+            title="Loads the starter cold-call scripts. Safe to press twice — it never overwrites your edits.">
+      ⬇ Load starter call scripts
+    </button>
+  </form>
   <a href="{{ url_for('scripts.new', cat=active_cat) }}" class="btn btn-gold" style="padding:6px 16px;font-size:0.85rem">+ Add Script</a>
 {% endblock %}
 

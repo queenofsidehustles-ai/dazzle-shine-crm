@@ -278,6 +278,11 @@
       .stat-card .value { font-size: 1.7rem; }
     }
   </style>
+
+  <!-- The Scripts and SOPs pages were written against Alpine (x-data / x-show)
+       but it was only ever loaded on the interview page, so their expand and
+       collapse buttons did nothing and every card rendered fully expanded. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body>
   <div class="nav-overlay" id="navOverlay" onclick="closeNav()"></div>

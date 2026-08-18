@@ -12,7 +12,27 @@ import places_finder as finder
 places_finder_bp = Blueprint('places_finder', __name__, url_prefix='/find-leads')
 
 CATEGORIES = ['property_manager', 'realtor', 'airbnb', 'apartment',
-              'daycare', 'medical_office', 'office', 'other']
+              'daycare', 'medical_office', 'general_contractor', 'office', 'other']
+
+
+def _call_scripts():
+    """Scripts for the call drawer, keyed by category with tokens filled in.
+
+    Returned as plain dicts rather than model objects because the template
+    hands them to the browser as JSON — the drawer swaps scripts client-side so
+    a call doesn't wait on a page load.
+    """
+    from models import Script
+    import call_scripts
+
+    vals = call_scripts.tokens()
+    out = {}
+    for s in Script.query.order_by(Script.sort_order, Script.id).all():
+        out.setdefault(s.category, []).append({
+            'title': s.title,
+            'content': call_scripts.render(s.content, vals),
+        })
+    return out
 
 
 def _status_counts():
@@ -33,6 +53,7 @@ def dashboard():
     if status_filter:
         q = q.filter_by(status=status_filter)
     prospects = q.all()
+    from models import Script
     return render_template(
         'admin/find_leads.html',
         prospects=prospects,
@@ -45,6 +66,10 @@ def dashboard():
         demo=not finder.api_key_present(),
         search_category='property_manager',
         search_location='',
+        scripts=_call_scripts(),
+        script_map=Script.PROSPECT_CATEGORY_MAP,
+        script_always=Script.ALWAYS_SHOW,
+        script_labels=dict(Script.CATEGORIES),
     )
 
 
@@ -137,11 +162,45 @@ def update_status(prospect_id):
         p.status = new_status
         if new_status in ('called', 'no_answer', 'callback', 'interested', 'not_interested', 'won') and not p.called_at:
             p.called_at = datetime.utcnow()
-    if 'notes' in request.form:
+
+    if request.form.get('mode') == 'log':
+        # From the call drawer. Each save prepends a dated entry instead of
+        # overwriting, so the renewal date and what they actually said survive
+        # the next call. Prospect has no columns for these and the app runs
+        # db.create_all() with no migrations, so the history lives in notes.
+        p.notes = _prepend_log(p, request.form)
+    elif 'notes' in request.form:
+        # The quick inline edit in the table still replaces outright.
         p.notes = request.form.get('notes', '')
+
     db.session.commit()
-    flash('Call list updated.', 'success')
+    flash('Call logged.' if request.form.get('mode') == 'log' else 'Call list updated.', 'success')
     return redirect(url_for('places_finder.dashboard', status=request.args.get('status', '')))
+
+
+def _prepend_log(prospect, form):
+    """Build one dated call-log entry and put it above the existing notes."""
+    from scheduling import local_now
+
+    facts = []
+    if form.get('contact', '').strip():
+        facts.append('Contact: ' + form['contact'].strip())
+    if form.get('renewal', '').strip():
+        facts.append('Renewal: ' + form['renewal'].strip())
+    if form.get('sqft', '').strip():
+        facts.append('Size: ' + form['sqft'].strip())
+
+    header = local_now().strftime('[%b %d] ') + Prospect.STATUS_LABELS.get(
+        prospect.status, prospect.status or 'New')
+    if facts:
+        header += ' · ' + ' · '.join(facts)
+
+    entry = header
+    body = form.get('log_note', '').strip()
+    if body:
+        entry += '\n' + body
+
+    return (entry + '\n\n' + (prospect.notes or '')).strip()
 
 
 @places_finder_bp.route('/<int:prospect_id>/delete', methods=['POST'])

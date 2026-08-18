@@ -19,6 +19,7 @@ CATEGORY_QUERIES = {
     'apartment': 'apartment complexes',
     'daycare': 'daycares and childcare centers',
     'medical_office': 'doctor offices and medical clinics',
+    'general_contractor': 'general contractors and construction companies',
     'office': 'office buildings and business offices',
     'other': 'cleaning service clients',
 }
@@ -94,6 +95,8 @@ _DEMO_NAMES = {
                 'Palm Grove Preschool', 'Harbor Point Childcare'],
     'medical_office': ['Sunshine Family Medicine', 'Lakeside Dental', 'Metro Medical Clinic',
                        'Palm Grove Pediatrics', 'Harbor Point Health'],
+    'general_contractor': ['Sunshine Construction Group', 'Lakeside Builders', 'Metro General Contracting',
+                           'Palm Grove Development', 'Harbor Point Construction'],
     'office': ['Sunshine Business Center', 'Lakeside Office Park', 'Metro Corporate Plaza',
                'Palm Grove Offices', 'Harbor Point Suites'],
     'other': ['Sunshine Services', 'Lakeside Co.', 'Metro Group', 'Palm Grove LLC', 'Harbor Point Inc.'],
