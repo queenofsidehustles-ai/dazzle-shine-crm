@@ -804,6 +804,21 @@ def save_crew(booking_id):
         msgs.append(f'{b.estimated_hours:g} person-hours × ${b.rate_applied:.0f}/hr '
                     f'= ${b.labor_budget:.2f} to share')
 
+    # 0b) What each cleaner is paid, when she'd rather say it than derive it.
+    if 'crew_pay_each' in request.form:
+        raw = (request.form.get('crew_pay_each') or '').strip().replace('$', '').replace(',', '')
+        if raw == '':
+            if b.crew_pay_each is not None:
+                b.crew_pay_each = None
+                msgs.append('pay back on the hourly rate')
+        else:
+            try:
+                b.crew_pay_each = max(0.0, float(raw))
+                msgs.append(f'${b.crew_pay_each:.2f} each')
+            except ValueError:
+                flash('That pay figure is not a number.', 'error')
+                return redirect(url_for('bookings.detail', booking_id=booking_id))
+
     # 1) How many paid cleaners
     try:
         size = max(1, min(6, int(request.form.get('crew_size') or b.crew_size or 1)))

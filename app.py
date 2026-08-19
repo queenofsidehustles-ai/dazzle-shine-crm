@@ -531,6 +531,9 @@ def _migrate_db():
         # Crew jobs — 2+ cleaners on one big house (booking_crew table is created
         # by create_all; this is just the size flag on the booking itself)
         ('booking', 'crew_size',            'INTEGER DEFAULT 1'),
+        # Pay set by hand, per cleaner. NULL means "work it out from the hours",
+        # which is what every existing job keeps doing.
+        ('booking', 'crew_pay_each',        'FLOAT'),
         # Bookkeeping (expense, recurring_expense, commission_payment and
         # processing_fee tables are created by create_all)
         ('expense', 'miles',                'FLOAT'),

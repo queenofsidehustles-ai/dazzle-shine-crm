@@ -129,6 +129,11 @@ class Booking(db.Model):
     access_notes = db.Column(db.Text)   # entry info for the cleaner: gate code, key, parking, alarm, pets
     assigned_cleaner = db.Column(db.String(100))        # solo job: the cleaner. Crew job: the lead.
     crew_size = db.Column(db.Integer, default=1)        # 2+ = big house needing a crew (see BookingCrew)
+    # What each cleaner is paid for this job, set by hand. There is one company
+    # hourly rate, and it cannot be right for both a move-out and a discounted
+    # biweekly maintenance clean. Setting this makes the pay the fact and the
+    # hours a planning estimate, instead of the other way round.
+    crew_pay_each = db.Column(db.Float)
     cleaner_notified_at = db.Column(db.DateTime)        # when job notification was last sent
     cleaner_response = db.Column(db.String(20))         # accepted, declined, None
     open_for_claim = db.Column(db.Boolean, default=False)  # broadcast to team, first to claim wins
@@ -224,6 +229,11 @@ class Booking(db.Model):
         herself and paying out a fraction of it."""
         if self.crew:
             return self.crew_allocated
+        # A figure she set by hand is a commitment as real as an assigned crew,
+        # and it is what the offer promises. Measuring the hours instead made
+        # the floor warning shout about money she was never going to spend.
+        if self.crew_pay_each:
+            return round(self.crew_pay_each * max(1, self.crew_size or 1), 2)
         return self.labor_budget
 
     @property
@@ -302,12 +312,28 @@ class Booking(db.Model):
 
         Jobs with no estimated hours fall back to the old percentage split, so
         anything booked before this existed keeps paying what it always did."""
+        if self.crew_pay_each:
+            return round(self.crew_pay_each, 2)
         size = max(1, size or self.crew_size or 1)
         budget = self.labor_budget
         if budget is None:
             share = self.commissionable_price / size
             return staff.calc_pay(job_price=share, hours_worked=self.hours_worked or 0)
         return round(budget / size, 2)
+
+    def size_line(self):
+        """'3 bd / 3.5 ba · 2,100 sq ft' — what a cleaner needs to judge a job.
+
+        Sent instead of an hour count. It is a fact about the house rather than
+        a clock, and it lets someone decide for herself whether the pay is fair
+        for the work.
+        """
+        bits = []
+        if self.bedrooms or self.bathrooms:
+            bits.append(f"{self.bedrooms or '?'} bd / {self.bathrooms or '?'} ba")
+        if self.sqft:
+            bits.append(f"{self.sqft:,} sq ft")
+        return ' · '.join(bits)
 
     def hours_each(self, size=None):
         """Paid hours each cleaner works, for showing alongside their pay."""

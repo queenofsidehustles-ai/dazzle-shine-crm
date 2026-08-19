@@ -135,19 +135,22 @@ def broadcast_job(booking):
             s.agreement_token = secrets.token_urlsafe(32)
             db.session.commit()
         link = f"{branding.crm_base()}/claim/{booking.claim_token}/{s.agreement_token}"
-        # Show the hours and the rate, not just a total — they can check the
-        # maths themselves and see it's the same rate on every job.
-        hrs = booking.hours_each()
-        rate_note = f"{hrs:g} hrs × ${get_labor_rate():.0f}/hr = " if hrs else "You'd earn "
+        # The house, not the stopwatch. An hourly figure in a job offer invites
+        # clock-watching on work that is paid per job, and the hours are an
+        # estimate for planning rather than a promise about the shift.
+        size = booking.size_line()
         if booking.is_crew_job:
             pay = booking.default_crew_pay(s)
-            msg = (f"🧹 Team job — big house, {booking.crew_size} cleaners needed! {when} · "
-                   f"{booking.service_label} · {area} area · {rate_note}${pay:.2f} each. "
+            msg = (f"🧹 Team job — {booking.crew_size} cleaners needed! {when} · "
+                   f"{booking.service_label}"
+                   f"{(' · ' + size) if size else ''} · {area} area · "
+                   f"${pay:.2f} each, flat for the job. "
                    f"{spots} spot{'s' if spots != 1 else ''} left 👉 {link}")
         else:
             pay = booking.pay_for(s)
-            msg = (f"🧹 New job available! {when} · {booking.service_label} · {area} area · "
-                   f"{rate_note}${pay:.2f}. First to claim it gets it 👉 {link}")
+            msg = (f"🧹 New job available! {when} · {booking.service_label}"
+                   f"{(' · ' + size) if size else ''} · {area} area · "
+                   f"${pay:.2f} for the job. First to claim it gets it 👉 {link}")
         if (s.language or 'en') == 'es':
             msg = translate(msg, target='es')
         try:

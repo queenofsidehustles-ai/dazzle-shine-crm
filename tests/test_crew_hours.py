@@ -68,7 +68,9 @@ with app.app_context():
     msg = outbox[0]
     check('2 cleaners needed' in msg, 'it says two cleaners are needed')
     check(f'${each:.2f} each' in msg, f'and quotes ${each:.2f} each — the same number')
-    check('1.73 hrs' in msg, 'with the hours each')
+    # The hours drive the pay but are never quoted: this work is paid per job,
+    # and an hourly figure in the offer invites clock-watching.
+    check('hrs' not in msg and '/hr' not in msg, 'without putting a clock in front of them')
     check('2 spots left' in msg, 'and two spots to claim')
 
     print('\n5. Save Changes still saves them too — either button works')

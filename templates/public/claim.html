@@ -40,10 +40,10 @@
         {{ b.spots_left }} spot{{ 's' if b.spots_left != 1 }} left{% if b.crew_names %}, working with {{ b.crew_names | join(', ') }}{% endif %}.</div>
       {% endif %}
       <div class="row"><span class="k">When</span><span class="v">{{ b.preferred_date or 'TBD' }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
-      <div class="row"><span class="k">Service</span><span class="v">{{ b.service_label }} · {{ b.bedrooms or '?' }}bd/{{ b.bathrooms or '?' }}ba</span></div>
+      <div class="row"><span class="k">Service</span><span class="v">{{ b.service_label }}{% if b.size_line() %} · {{ b.size_line() }}{% endif %}</span></div>
       <div class="row"><span class="k">Area</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
       <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'd earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
-        {% if hours_each %}<div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">{{ '%g'|format(hours_each) }} hours × ${{ '%.0f'|format(labor_rate) }}/hr</div>{% endif %}
+        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">flat for the job</div>
       </div>
       {% if clash %}
         <div class="banner clash">⚠️ {{ clash }}</div>
@@ -67,7 +67,7 @@
       <div class="row"><span class="k">Client</span><span class="v">{{ b.name }}</span></div>
       <div class="row"><span class="k">Address</span><span class="v">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span></div>
       <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'll earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
-        {% if hours_each %}<div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">{{ '%g'|format(hours_each) }} hours × ${{ '%.0f'|format(labor_rate) }}/hr</div>{% endif %}
+        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">flat for the job</div>
       </div>
       <a class="btnlink" href="{{ myday }}">📅 See it in My Day</a>
       <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"
