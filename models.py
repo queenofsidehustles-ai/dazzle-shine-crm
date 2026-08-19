@@ -1001,6 +1001,7 @@ class Script(db.Model):
         ('call_medical',          'Call: Medical & Dental'),
         ('call_construction',     'Call: General Contractors'),
         ('call_office',           'Call: Offices & Retail'),
+        ('email_outreach', 'Email: Property Managers & Realtors'),
         ('voicemail', 'Voicemail'),
         ('followup',  'Follow-Up'),
         ('objection', 'Objection Handling'),

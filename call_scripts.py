@@ -238,6 +238,100 @@ Would [day] morning or afternoon work better?
 
 💡 "Is now a bad time?" outperforms "do you have a minute?" because it's easy to say no to and most people reflexively say "no, it's fine." Most commercial prospects don't pick up until the third or fourth attempt, so the callbacks aren't nagging — they're the actual job. Space them three or four days apart and stop after five.\
 """),
+
+    # ── Email outreach ────────────────────────────────────────────────────────
+    # Written to be pasted into an ordinary inbox, not sent as a campaign: no
+    # images, no attachment on the first touch, one ask. Anything in [brackets]
+    # is filled in per prospect; {biz}, {owner} and {phone} fill themselves.
+    ('email_outreach', 'Cold email #1 — property manager', 10, """\
+Subject: cleaning your [building name] property
+
+Hi [Name],
+
+I run {biz} here in [city]. We handle janitorial and turnover cleaning for properties like [building name].
+
+I'm not asking you to switch anything today. I'd just like to walk the property and put a flat monthly number in front of you, so you have a real comparison on file for whenever your current contract comes up.
+
+Takes about twenty minutes. Would [day] or [day] suit you better?
+
+{owner}
+{biz}
+{phone}
+
+💡 Send it Tuesday–Thursday morning. Subject line in lower case, naming their building — it reads like a colleague, not a campaign. No attachment and no brochure on a first email: the only thing you're selling is a twenty-minute walkthrough. Two named days beat "let me know when works."\
+"""),
+
+    ('email_outreach', 'Cold email #2 — the follow-up nobody sends', 20, """\
+Subject: re: cleaning your [building name] property
+
+Hi [Name],
+
+Following up on the note below. Still happy to walk [building name] and leave you a number — no obligation, and if you're under contract I'll hold the proposal until your renewal date.
+
+If you're not the right person for this, could you point me to whoever is?
+
+{owner}
+{phone}
+
+💡 Reply on the original thread so the subject keeps the "re:". Send it four days later. This one asks for a referral as well as a meeting, which gives a busy person an easy way to be helpful — that's how you get the facilities manager's name without a gatekeeper.\
+"""),
+
+    ('email_outreach', 'Cold email — realtors & listing agents', 30, """\
+Subject: move-out cleans for your listings
+
+Hi [Name],
+
+I'm {owner} with {biz}. We do move-out and make-ready cleans around [city] — the deep clean that gets a property photo-ready before it lists, or handed back after a tenant leaves.
+
+Turnaround is [X] days, we work to the standard your sellers expect, and we invoice you or the seller directly, whichever is easier at closing.
+
+If a listing comes up that needs one, would you like me to send my pricing so you have it on hand?
+
+{owner}
+{biz}
+{phone}
+
+💡 Agents don't buy cleaning, they buy a listing that shows well on a deadline. Lead with turnaround time and who gets the invoice — those are the two things that decide whether they call you. Ask to send pricing rather than asking for a meeting; it's a smaller yes, and it gets you into their contacts.\
+"""),
+
+    ('email_outreach', 'After the walkthrough — sending the proposal', 40, """\
+Subject: your cleaning proposal — [building name]
+
+Hi [Name],
+
+Good to meet you [today/yesterday]. Here's the proposal for [building name]:
+
+• [Scope — e.g. common areas, restrooms, lobby, [X] floors]
+• [Frequency — e.g. 3 nights a week, after 6pm]
+• [$X] per month, flat, all supplies included
+• Start date: as soon as [date]
+
+Everything in it comes straight from what we walked through. Anything you want changed, tell me and I'll re-issue it.
+
+Can I put you down for a [date] start?
+
+{owner}
+{biz}
+{phone}
+
+💡 Same day as the walkthrough, while they still remember you. Four bullets, not four pages. Close by asking for a specific start date — a proposal that ends with "let me know your thoughts" gets thought about forever.\
+"""),
+
+    ('email_outreach', 'The last email — closing the loop', 50, """\
+Subject: closing your file
+
+Hi [Name],
+
+I've not managed to catch you, so I'll assume the timing isn't right and stop emailing.
+
+If it changes — a contract ending, a vendor letting you down, a property changing hands — keep my number. We can usually start within a week.
+
+{owner}
+{biz}
+{phone}
+
+💡 Send this after four or five unanswered touches. It gets more replies than any other email on this page, because it removes the pressure and hands them a deadline of their own. Mean it: if there's no answer to this one, stop — and pick the file back up in six months.\
+"""),
 ]
 
 
