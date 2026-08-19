@@ -125,6 +125,32 @@
       font-weight: 700;
       color: var(--text);
     }
+    /* Section tabs — the pages that used to be separate sidebar entries.
+       Sits directly under the title so it reads as part of the page, and
+       scrolls sideways on a phone rather than wrapping into three rows. */
+    .section-tabs {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .section-tabs::-webkit-scrollbar { display: none; }
+    .section-tabs a {
+      padding: 11px 15px 9px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #7a7391;
+      text-decoration: none;
+      white-space: nowrap;
+      border-bottom: 2.5px solid transparent;
+    }
+    .section-tabs a:hover { color: var(--text); }
+    .section-tabs a.active { color: var(--gold-dark, #b98a33); border-bottom-color: var(--gold, #d3a84f); }
+    @media (max-width: 900px) { .section-tabs { padding: 0 14px; } }
     .topbar .badge-pending {
       background: var(--gold-soft);
       color: var(--gold-deep);
@@ -292,119 +318,17 @@
       <span class="sub">Back Office</span>
     </div>
     <nav>
-      {% set is_owner = session.get('role', 'owner') == 'owner' %}
-      <a href="{{ url_for('admin.dashboard') }}" class="{{ 'active' if request.endpoint == 'admin.dashboard' }}">
-        <span class="icon">🏠</span> Dashboard
+      {# Drawn from navigation.py — one line per page there, no active-state
+         expressions here. See that file before adding a menu entry. #}
+      {% for section in NAV %}
+      {% if section.heading != 'Dashboard' %}<div class="nav-sec">{{ section.heading }}</div>{% endif %}
+      {% for item in section['items'] %}
+      <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}">
+        <span class="icon">{{ item.icon }}</span> {{ item.label }}
+        {% if item.endpoint == 'messages.inbox' and nav_unread %}<span style="margin-left:auto;background:#e53e3e;color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
       </a>
-
-      <div class="nav-sec">Jobs &amp; Schedule</div>
-      <a href="{{ url_for('bookings.index') }}" class="{{ 'active' if request.blueprint == 'bookings' and request.endpoint != 'bookings.clients' and request.endpoint != 'bookings.client_detail' }}">
-        <span class="icon">📋</span> Bookings
-      </a>
-      <a href="{{ url_for('bookings.calendar') }}" class="{{ 'active' if request.endpoint == 'bookings.calendar' }}">
-        <span class="icon">📅</span> Calendar
-      </a>
-      <a href="{{ url_for('invoices.index') }}" class="{{ 'active' if request.blueprint == 'invoices' }}">
-        <span class="icon">🧾</span> Invoices
-      </a>
-      <a href="{{ url_for('messages.inbox') }}" class="{{ 'active' if request.blueprint == 'messages' and request.endpoint != 'messages.sent_log' }}">
-        <span class="icon">💬</span> Messages
-        {% if nav_unread %}<span style="margin-left:auto;background:#e53e3e;color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
-      </a>
-      <a href="{{ url_for('messages.sent_log') }}" class="{{ 'active' if request.endpoint == 'messages.sent_log' }}">
-        <span class="icon">📤</span> Sent Log
-      </a>
-      <a href="{{ url_for('bookings.clients') }}" class="{{ 'active' if request.endpoint in ['bookings.clients','bookings.client_detail'] }}">
-        <span class="icon">👥</span> Clients
-      </a>
-
-      <div class="nav-sec">Get Customers</div>
-      <a href="{{ url_for('leads.index') }}" class="{{ 'active' if request.blueprint == 'leads' }}">
-        <span class="icon">💡</span> Leads
-      </a>
-      <a href="{{ url_for('places_finder.dashboard') }}" class="{{ 'active' if request.blueprint == 'places_finder' }}">
-        <span class="icon">🎯</span> Find Leads
-      </a>
-      <a href="{{ url_for('commercial.index') }}" class="{{ 'active' if request.blueprint == 'commercial' }}">
-        <span class="icon">🏢</span> Commercial
-      </a>
-      <a href="{{ url_for('quotes.index') }}" class="{{ 'active' if request.blueprint == 'quotes' }}">
-        <span class="icon">📄</span> Quotes
-      </a>
-      <a href="{{ url_for('discounts.index') }}" class="{{ 'active' if request.blueprint == 'discounts' }}">
-        <span class="icon">🏷️</span> Discounts
-      </a>
-
-      <div class="nav-sec">My Team</div>
-      <a href="{{ url_for('contractors.team') }}" class="{{ 'active' if request.blueprint == 'contractors' and request.endpoint != 'contractors.applications' and request.endpoint != 'contractors.payroll' }}">
-        <span class="icon">🧹</span> Team
-      </a>
-      <a href="{{ url_for('contractors.applications') }}" class="{{ 'active' if request.endpoint in ('contractors.applications','contractors.application_detail') }}">
-        <span class="icon">📥</span> Applications
-      </a>
-      <a href="{{ url_for('interviews.admin_interviews') }}" class="{{ 'active' if request.blueprint == 'interviews' }}">
-        <span class="icon">🎥</span> Interviews
-      </a>
-      {% if is_owner %}
-      <a href="{{ url_for('team.availability') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('team.availability') or request.endpoint == 'team.ask_availability' }}">
-        <span class="icon">📅</span> Availability
-      </a>
-      <a href="{{ url_for('team.broadcast') }}" class="{{ 'active' if request.endpoint == 'team.broadcast' }}">
-        <span class="icon">📣</span> Message the Team
-      </a>
-      {% endif %}
-
-      {% if is_owner %}
-      <div class="nav-sec">Money</div>
-      <a href="{{ url_for('money.pnl') }}" class="{{ 'active' if request.endpoint.startswith('money.pnl') or request.endpoint == 'money.sync_fees' }}">
-        <span class="icon">📈</span> Profit &amp; Loss
-      </a>
-      <a href="{{ url_for('money.job_economics') }}" class="{{ 'active' if request.endpoint == 'money.job_economics' }}">
-        <span class="icon">⚖️</span> Job Economics
-      </a>
-      <a href="{{ url_for('money.expenses') }}" class="{{ 'active' if request.blueprint == 'money' and not request.endpoint.startswith('money.pnl') and request.endpoint not in ('money.sync_fees', 'money.job_economics') }}">
-        <span class="icon">🧾</span> Expenses
-      </a>
-      <a href="{{ url_for('contractors.payroll') }}" class="{{ 'active' if request.endpoint == 'contractors.payroll' }}">
-        <span class="icon">💰</span> Payroll
-      </a>
-      <a href="{{ url_for('commissions.index') }}" class="{{ 'active' if request.blueprint == 'commissions' }}">
-        <span class="icon">🤝</span> VA Commissions
-      </a>
-      {% endif %}
-
-      <div class="nav-sec">Toolkit</div>
-      <a href="{{ url_for('workorders.templates') }}" class="{{ 'active' if request.blueprint == 'workorders' }}">
-        <span class="icon">✅</span> Checklists
-      </a>
-      <a href="{{ url_for('sops.index') }}" class="{{ 'active' if request.blueprint == 'sops' }}">
-        <span class="icon">📖</span> SOP Library
-      </a>
-      <a href="{{ url_for('content.index') }}" class="{{ 'active' if request.blueprint == 'content' }}">
-        <span class="icon">✨</span> Content Studio
-      </a>
-      <a href="{{ url_for('email_templates.index') }}" class="{{ 'active' if request.blueprint == 'email_templates' }}">
-        <span class="icon">✉️</span> Email Templates
-      </a>
-      <a href="{{ url_for('scripts.index') }}" class="{{ 'active' if request.blueprint == 'scripts' }}">
-        <span class="icon">🗒️</span> VA Scripts
-      </a>
-
-      {% if is_owner %}
-      <div class="nav-sec">Analytics</div>
-      <a href="{{ url_for('admin.reports') }}" class="{{ 'active' if request.endpoint == 'admin.reports' }}">
-        <span class="icon">📊</span> Reports
-      </a>
-      <a href="{{ url_for('settings.pricing') }}" class="{{ 'active' if request.blueprint == 'settings' and request.endpoint != 'settings.connections' }}">
-        <span class="icon">⚙️</span> Settings
-      </a>
-      <a href="{{ url_for('settings.connections') }}" class="{{ 'active' if request.endpoint == 'settings.connections' }}">
-        <span class="icon">🔌</span> Connections
-      </a>
-      <a href="{{ url_for('team_logins.index') }}" class="{{ 'active' if request.blueprint == 'team_logins' }}">
-        <span class="icon">🔐</span> Team Logins
-      </a>
-      {% endif %}
+      {% endfor %}
+      {% endfor %}
     </nav>
     <div class="sidebar-footer">
       {% if session.get('user_name') %}<div style="font-size:0.75rem;color:#9a95ad;margin-bottom:6px">{{ session.get('user_name') }}{% if not is_owner %} · Team{% endif %}</div>{% endif %}
@@ -418,6 +342,15 @@
       <h1>{% block page_title %}Dashboard{% endblock %}</h1>
       <div>{% block topbar_right %}{% endblock %}</div>
     </div>
+    {# The pages that used to be their own sidebar entries. One section, one
+       menu item, its pages as tabs. #}
+    {% if NAV_TABS %}
+    <div class="section-tabs">
+      {% for t in NAV_TABS %}
+      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}">{{ t.label }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
     <div class="content">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, msg in messages %}
@@ -443,6 +376,34 @@
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('navOverlay').classList.remove('show');
     }
+
+    /* Every page is a fresh server render, so the sidebar came back scrolled to
+       the top each time and anything near the bottom of the menu had to be
+       scrolled to again on arrival. Remember where it was; fall back to putting
+       the current page on screen. */
+    (function () {
+      var nav = document.getElementById('sidebar');
+      if (!nav) return;
+      var KEY = 'sidebarScroll';
+      try {
+        var saved = sessionStorage.getItem(KEY);
+        if (saved !== null) {
+          nav.scrollTop = parseInt(saved, 10) || 0;
+        } else {
+          var active = nav.querySelector('nav a.active');
+          if (active && active.scrollIntoView) active.scrollIntoView({block: 'nearest'});
+        }
+      } catch (e) { /* private browsing — the menu just starts at the top */ }
+
+      var pending = null;
+      nav.addEventListener('scroll', function () {
+        if (pending) return;
+        pending = setTimeout(function () {
+          pending = null;
+          try { sessionStorage.setItem(KEY, nav.scrollTop); } catch (e) {}
+        }, 120);
+      });
+    })();
   </script>
 </body>
 </html>

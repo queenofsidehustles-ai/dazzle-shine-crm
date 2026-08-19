@@ -3,10 +3,6 @@
 {% block page_title %}Pricing Settings{% endblock %}
 
 {% block content %}
-<div style="display:flex;gap:8px;margin-bottom:20px">
-  <a href="{{ url_for('settings.pricing') }}" class="btn btn-dark" style="font-size:0.88rem;padding:7px 18px">💲 Pricing</a>
-  <a href="{{ url_for('settings.business') }}" class="btn btn-outline" style="font-size:0.88rem;padding:7px 18px">🏢 Business &amp; Hiring</a>
-</div>
 <form method="POST">
   <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Deposit</h2>

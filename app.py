@@ -98,6 +98,25 @@ def create_app():
     app.register_blueprint(team_bp)
     app.register_blueprint(availability_bp)
 
+    # The menu itself — see navigation.py. Built per request because what the
+    # sidebar shows depends on whether the owner or a team member is looking.
+    @app.context_processor
+    def inject_navigation():
+        try:
+            from flask import session, request
+            if not session.get('logged_in'):
+                return {}
+            import navigation
+            role = session.get('role', 'owner')
+            tabs, active_tab = navigation.tabs_for(request.endpoint, role)
+            return {'NAV': navigation.sidebar(role),
+                    'NAV_ACTIVE': navigation.active_item(request.endpoint),
+                    'NAV_TABS': tabs,
+                    'NAV_ACTIVE_TAB': active_tab}
+        except Exception:
+            # A broken menu must never take a working page down with it.
+            return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [], 'NAV_ACTIVE_TAB': None}
+
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor
     def inject_nav_unread():
