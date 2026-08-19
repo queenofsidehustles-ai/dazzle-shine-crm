@@ -378,7 +378,20 @@ def detail(booking_id):
                                'current': booking.monthly_mode or recurring.BY_DATE}
         except ValueError:
             monthly_choices = None
+    # How many visits would follow this one to a new address — shown on the
+    # move form so she can see what she is about to change.
+    future_visits = 0
+    if booking.recurring_group:
+        _today = date.today().isoformat()
+        future_visits = Booking.query.filter(
+            Booking.recurring_group == booking.recurring_group,
+            Booking.id != booking.id,
+            Booking.preferred_date > _today,
+            Booking.status.in_(('pending', 'confirmed')),
+        ).count()
+
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff,
+                           future_visits=future_visits,
                            pay_url=pay_url, due=amount_due(booking),
                            recurring_upcoming=recurring_upcoming,
                            monthly_choices=monthly_choices,
@@ -1168,6 +1181,65 @@ def send_invoice(booking_id):
         flash(f'🧾 Invoice {booking.invoice_number} sent to {booking.email}.', 'success')
     else:
         flash(f'Invoice {booking.invoice_number} created — share the link manually (no email on file, or send failed).', 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/address', methods=['POST'])
+@login_required
+def update_address(booking_id):
+    """Move a job to a different address — and the rest of the plan with it.
+
+    A customer who moves house does not get a new booking; she keeps the
+    cleaning plan she already had. But every visit in a recurring series holds
+    its own copy of the address (recurring.py copies it onto each one), and the
+    cleaner is texted the address of the visit she claimed. Changing one row
+    would send somebody to the old house for the next eleven months.
+
+    Visits that have already happened keep the old address on purpose. That is
+    where the work was actually done, and the chargeback evidence pack quotes
+    it — rewriting history to match today would make a true document false.
+    """
+    booking = Booking.query.get_or_404(booking_id)
+    address = (request.form.get('address') or '').strip()
+    city = (request.form.get('city') or '').strip()
+    zip_code = (request.form.get('zip_code') or '').strip()
+
+    if not address:
+        flash('An address is needed — leave the rest blank if you only have the street.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    old = booking.address
+    booking.address, booking.city, booking.zip_code = address, city, zip_code
+
+    moved = 0
+    if request.form.get('apply_series') and booking.recurring_group:
+        today = date.today().isoformat()
+        for visit in Booking.query.filter_by(recurring_group=booking.recurring_group).all():
+            if visit.id == booking.id:
+                continue
+            # Only what hasn't happened yet. A visit that is done, or is today
+            # and may already have a cleaner on the doorstep, is left alone.
+            if (visit.preferred_date or '') > today and visit.status in ('pending', 'confirmed'):
+                visit.address, visit.city, visit.zip_code = address, city, zip_code
+                moved += 1
+
+    client_updated = False
+    if request.form.get('apply_client') and booking.client_id:
+        client = Client.query.get(booking.client_id)
+        if client:
+            client.address, client.city, client.zip_code = address, city, zip_code
+            client_updated = True
+
+    note = f'[{date.today().isoformat()}] Address changed from "{old or "blank"}" to "{address}".'
+    booking.internal_notes = (note + '\n' + (booking.internal_notes or '')).strip()
+    db.session.commit()
+
+    msg = f'📍 Address updated to {address}.'
+    if moved:
+        msg += f' {moved} future visit{"s" if moved != 1 else ""} moved with it.'
+    if client_updated:
+        msg += ' Her client record was updated too.'
+    flash(msg, 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 

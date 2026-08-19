@@ -15,7 +15,61 @@
       <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ booking.name }}</span></div>
       <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ booking.email }}" style="color:#5d4f7d">{{ booking.email }}</a></span></div>
       <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ booking.phone }}" style="color:#5d4f7d">{{ booking.phone }}</a></span></div>
-      <div class="detail-row"><span class="dl">Address</span><span class="dv">{{ booking.address }}{% if booking.city %}, {{ booking.city }}{% endif %} {{ booking.zip_code }}</span></div>
+      <div class="detail-row">
+        <span class="dl">Address</span>
+        <span class="dv">
+          {{ booking.address }}{% if booking.city %}, {{ booking.city }}{% endif %} {{ booking.zip_code }}
+          <a href="#" onclick="document.getElementById('moveBox').open=true;this.blur();return false"
+             style="font-size:0.78rem;color:#b98a33;margin-left:6px">✎ change</a>
+        </span>
+      </div>
+
+      {# A customer who moves keeps her cleaning plan. Every visit carries its
+         own copy of the address and the cleaner is texted the one on the visit
+         she claimed, so moving the job has to move the rest of the plan too. #}
+      <details id="moveBox" style="margin-top:10px;border:1px solid #e4dfef;border-radius:10px;background:#faf9fd">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:#5f5878">
+          📍 She's moved — change the address
+        </summary>
+        <form method="POST" action="{{ url_for('bookings.update_address', booking_id=booking.id) }}"
+              style="padding:0 13px 14px">
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Street address</label>
+            <input type="text" name="address" value="{{ booking.address or '' }}" required
+                   style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:9px;margin-bottom:10px">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">City</label>
+              <input type="text" name="city" value="{{ booking.city or '' }}"
+                     style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">ZIP</label>
+              <input type="text" name="zip_code" value="{{ booking.zip_code or '' }}"
+                     style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+            </div>
+          </div>
+
+          {% if future_visits %}
+          <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:#5f5878;margin-bottom:8px">
+            <input type="checkbox" name="apply_series" value="1" checked style="margin-top:2px">
+            <span>Move the other <strong>{{ future_visits }}</strong> upcoming visit{{ '' if future_visits == 1 else 's' }} on this plan too.
+              <span style="color:#9a95ad">Visits already done keep the address they happened at.</span></span>
+          </label>
+          {% endif %}
+          {% if booking.client_id %}
+          <label style="display:flex;gap:8px;align-items:center;font-size:0.82rem;color:#5f5878;margin-bottom:12px">
+            <input type="checkbox" name="apply_client" value="1" checked>
+            <span>Update her client record as well</span>
+          </label>
+          {% endif %}
+
+          <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;padding:9px">
+            📍 Save the new address
+          </button>
+        </form>
+      </details>
       {% if booking.notes %}
       <div class="detail-row"><span class="dl">Customer Notes</span><span class="dv" style="color:#5f5878">{{ booking.notes }}</span></div>
       {% endif %}
