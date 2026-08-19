@@ -108,3 +108,23 @@ def city_line():
     city = _setting('city')
     state = _setting('state')
     return ', '.join(p for p in (city, state) if p)
+
+
+def version():
+    """Which build is actually running, so 'did my change deploy?' has an answer.
+
+    Railway sets RAILWAY_GIT_COMMIT_SHA on every GitHub-triggered deploy. Falls
+    back to the local checkout when running on a laptop, and to 'dev' when
+    neither is available — a missing version must never take a page down.
+    """
+    sha = (os.environ.get('RAILWAY_GIT_COMMIT_SHA')
+           or os.environ.get('SOURCE_COMMIT') or '').strip()
+    if not sha:
+        try:
+            import subprocess
+            sha = subprocess.run(['git', 'rev-parse', 'HEAD'],
+                                 capture_output=True, text=True, timeout=2,
+                                 cwd=os.path.dirname(os.path.abspath(__file__))).stdout.strip()
+        except Exception:
+            sha = ''
+    return sha[:7] if sha else 'dev'

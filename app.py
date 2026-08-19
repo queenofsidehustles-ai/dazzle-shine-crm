@@ -146,12 +146,14 @@ def create_app():
                 'BIZ_CITY': branding.city_line(),
                 'BIZ_BOOKING_LINK': branding.booking_link(),
                 'CRM_BASE': branding.crm_base(),
+                'APP_VERSION': branding.version(),
             }
         except Exception:
             # A template must never 500 because a setting is missing.
             return {'BIZ': 'Your Cleaning Company', 'BIZ_COMMERCIAL': 'Your Cleaning Company',
                     'BIZ_PHONE': '', 'BIZ_EMAIL': '', 'BIZ_WEBSITE': '',
-                    'BIZ_CITY': '', 'BIZ_BOOKING_LINK': '', 'CRM_BASE': ''}
+                    'BIZ_CITY': '', 'BIZ_BOOKING_LINK': '', 'CRM_BASE': '',
+                    'APP_VERSION': branding.version()}
 
     # A nudge for a business that hasn't finished setting itself up. Goes quiet
     # for good once the essentials are connected, so an established business

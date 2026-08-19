@@ -11,6 +11,16 @@ import finance
 admin_bp = Blueprint('admin', __name__)
 
 
+@admin_bp.route('/version')
+def version():
+    """Which build this instance is running. Deliberately public and deliberately
+    boring: a seven-character commit hash and nothing else, so 'did the deploy
+    land?' can be answered from a phone, from a browser that is not logged in,
+    or by whoever is standing up the next white-label instance."""
+    import branding
+    return {'build': branding.version()}
+
+
 @admin_bp.route('/')
 @login_required
 def dashboard():
