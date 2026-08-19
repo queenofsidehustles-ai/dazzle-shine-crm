@@ -548,6 +548,20 @@ def _migrate_db():
         ('contractor_payment', 'tip_amount', 'FLOAT DEFAULT 0'),
         ('booking', 'owner_hours',          'FLOAT DEFAULT 0'),
         ('expense', 'booking_id',           'INTEGER'),
+        # Prospecting funnel — where a prospect is, and what happens next.
+        # stage and attempts are deliberately left NULL rather than defaulted:
+        # a DEFAULT would stamp every business already on the call list as a
+        # never-touched New with zero attempts, wiping the work done so far.
+        # NULL means "predates the funnel", which prospecting.backfill() reads
+        # and fills in from the call history that is already there.
+        ('prospect', 'stage',               'VARCHAR(20)'),
+        ('prospect', 'next_action',         'VARCHAR(120)'),
+        ('prospect', 'next_action_date',    'VARCHAR(10)'),
+        ('prospect', 'attempts',            'INTEGER'),
+        ('prospect', 'contact_name',        'VARCHAR(120)'),
+        ('prospect', 'email',               'VARCHAR(200)'),
+        ('prospect', 'renewal_note',        'VARCHAR(120)'),
+        ('prospect', 'last_emailed_at',     'TIMESTAMP'),
     ]
     for table, col, col_type in new_cols:
         try:

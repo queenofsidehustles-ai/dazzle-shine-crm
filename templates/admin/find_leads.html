@@ -4,15 +4,248 @@
 
 {% block content %}
 
+{# Everything the call drawer needs about one prospect. Written once so the
+   three views can't drift apart on what they hand it. #}
+{% macro prospect_data(p) -%}
+data-id="{{ p.id }}"
+data-name="{{ p.business_name }}"
+data-cat="{{ p.category }}"
+data-catlabel="{{ p.category_label }}"
+data-phone="{{ p.phone or '' }}"
+data-status="{{ p.status }}"
+data-contact="{{ p.contact_name or '' }}"
+data-email="{{ p.email or '' }}"
+data-renewal="{{ p.renewal_note or '' }}"
+data-attempts="{{ p.attempts or 0 }}"
+{%- endmacro %}
+
 {% if demo %}
 <div class="card" style="border-left:4px solid #d3a84f;background:rgba(211,168,79,0.10);margin-bottom:18px">
   <strong>👀 Demo mode.</strong> You're seeing <em>sample</em> businesses so you can try the whole flow.
-  Add a <code>GOOGLE_PLACES_API_KEY</code> and real Orlando businesses will show up instead.
+  Add a <code>GOOGLE_PLACES_API_KEY</code> and real businesses will show up instead.
   <span style="color:#9a95ad">(The fake numbers below are 555 placeholders — don't call them 😊)</span>
 </div>
 {% endif %}
 
-<!-- ── Search box ───────────────────────────────────────────── -->
+<!-- ── Which view ───────────────────────────────────────────── -->
+<div class="filter-tabs">
+  {% set views = [('today', '📞 Today', due.overdue + due.today + due.unscheduled),
+                  ('pipeline', '📊 Pipeline', live_count),
+                  ('contacts', '📇 Contacts', counts.all),
+                  ('find', '🎯 Find new', None)] %}
+  {% for key, label, n in views %}
+  <a href="{{ url_for('places_finder.dashboard', view=key) }}"
+     class="filter-tab {{ 'active' if view == key }}">
+    {{ label }}{% if n is not none %} ({{ n }}){% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+{# ── TODAY ─────────────────────────────────────────────────────────────── #}
+{% if view == 'today' %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div>
+      <h3 style="margin:0 0 4px">📞 Today's calls</h3>
+      <p style="color:#9a95ad;font-size:0.85rem;margin:0">
+        {% if due.overdue %}<strong style="color:#c05621">{{ due.overdue }} overdue</strong> ·{% endif %}
+        {{ due.today }} due today{% if due.later %} · {{ due.later }} scheduled ahead{% endif %}.
+        Log every call — the next step gets set for you.
+      </p>
+    </div>
+    <a href="{{ url_for('places_finder.dashboard', view='find') }}" class="btn btn-outline"
+       style="padding:8px 15px;font-size:0.85rem">🎯 Find more</a>
+  </div>
+
+  {% if shown %}
+  <div class="table-wrap" style="margin-top:14px">
+    <table>
+      <thead><tr><th>Business</th><th>Next step</th><th>Call</th><th style="text-align:right">Move on</th></tr></thead>
+      <tbody>
+        {% for p in shown %}
+        {% set state = p.due_state(today) %}
+        <tr>
+          <td>
+            <strong>{{ p.business_name }}</strong>
+            {% if p.rating %}<span style="font-size:0.78rem;color:#9a95ad"> ⭐{{ '%.1f' % p.rating }}</span>{% endif %}
+            <div style="font-size:0.78rem;color:#9a95ad">
+              {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
+              {% if p.contact_name %} · {{ p.contact_name }}{% endif %}
+            </div>
+            {% if p.website %}<a href="{{ p.website }}" target="_blank" style="font-size:0.78rem;color:#b98a33">website ↗</a>{% endif %}
+          </td>
+          <td>
+            <div style="font-weight:600;font-size:0.88rem">{{ p.next_action or 'First call' }}</div>
+            <div style="font-size:0.78rem;margin-top:2px">
+              {% if state == 'overdue' %}<span style="color:#c05621;font-weight:700">overdue — was {{ p.next_action_date }}</span>
+              {% elif state == 'today' %}<span style="color:#059669;font-weight:700">due today</span>
+              {% else %}<span style="color:#9a95ad">not scheduled</span>{% endif %}
+            </div>
+          </td>
+          <td>
+            {% if p.phone %}
+            <a href="tel:{{ p.phone }}" class="btn" style="padding:7px 14px;font-size:0.85rem;white-space:nowrap">📞 {{ p.phone }}</a>
+            {% else %}<span style="color:#9a95ad;font-size:0.82rem">no phone</span>{% endif %}
+            <button type="button" class="btn btn-outline open-script"
+                    {{ prospect_data(p) }}
+                    style="padding:6px 12px;font-size:0.8rem;margin-top:5px;white-space:nowrap;display:block;width:100%">
+              📋 Script &amp; log
+            </button>
+          </td>
+          <td style="text-align:right;white-space:nowrap">
+            <form method="POST" style="display:inline"
+                  action="{{ url_for('places_finder.snooze', prospect_id=p.id, view=view) }}">
+              <input type="hidden" name="days" value="3">
+              <button type="submit" class="btn btn-outline" title="Not today — push it out 3 days"
+                      style="padding:5px 10px;font-size:0.78rem">↻ 3d</button>
+            </form>
+            <form method="POST" style="display:inline"
+                  action="{{ url_for('places_finder.snooze', prospect_id=p.id, view=view) }}">
+              <input type="hidden" name="days" value="30">
+              <button type="submit" class="btn btn-outline" title="Not for a while — push it out a month"
+                      style="padding:5px 10px;font-size:0.78rem">↻ 1m</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:36px 0">
+    {% if live_count %}
+      🎉 Nothing due today — every live prospect has a date in the future.<br>
+      <span style="font-size:0.85rem">{{ live_count }} still working their way through the funnel.</span>
+    {% else %}
+      Your call list is empty. <a href="{{ url_for('places_finder.dashboard', view='find') }}" style="color:#b98a33">Find some businesses →</a>
+    {% endif %}
+  </p>
+  {% endif %}
+</div>
+
+{# A list that empties itself needs topping up before it's empty, not after. #}
+{% if live_count < 15 and counts.all %}
+<div class="card" style="margin-top:16px;border-color:#f0d488;background:#fff8e1">
+  <p style="margin:0;color:#7c4a04;font-size:0.92rem">
+    ⚠️ Only <strong>{{ live_count }}</strong> live prospect{{ '' if live_count == 1 else 's' }} left in the funnel.
+    <a href="{{ url_for('places_finder.dashboard', view='find') }}" style="color:#7c4a04;font-weight:700">Pull in another batch →</a>
+  </p>
+</div>
+{% endif %}
+{% endif %}
+
+{# ── PIPELINE ──────────────────────────────────────────────────────────── #}
+{% if view == 'pipeline' %}
+<div class="card" style="margin-bottom:16px">
+  <h3 style="margin:0 0 12px">📊 Where everyone stands</h3>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    {% for key, label in stages %}
+    <div style="flex:1;min-width:104px;background:#faf9fd;border:1px solid #e4dfef;border-radius:10px;padding:12px 14px">
+      <div style="font-size:1.5rem;font-weight:800;color:{{ '#b98a33' if stage_counts[key] else '#d8d4e4' }}">{{ stage_counts[key] }}</div>
+      <div style="font-size:0.78rem;color:#5f5878;font-weight:600">{{ label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% for key, label in stages %}
+{% set group = shown | selectattr('stage', 'equalto', key) | list %}
+{% if group %}
+<div class="card" style="margin-bottom:14px">
+  <h3 style="margin:0 0 10px;font-size:0.95rem">{{ label }} <span style="color:#9a95ad;font-weight:400">({{ group|length }})</span></h3>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        {% for p in group %}
+        <tr>
+          <td>
+            <strong>{{ p.business_name }}</strong>
+            <div style="font-size:0.78rem;color:#9a95ad">
+              {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
+              {% if p.renewal_note %} · renewal {{ p.renewal_note }}{% endif %}
+            </div>
+          </td>
+          <td style="font-size:0.84rem">
+            {% if p.next_action %}{{ p.next_action }}<br>
+              <span style="color:{{ '#c05621' if p.due_state(today) == 'overdue' else '#9a95ad' }};font-size:0.78rem">{{ p.next_action_date }}</span>
+            {% else %}<span style="color:#9a95ad">—</span>{% endif %}
+          </td>
+          <td style="text-align:right;white-space:nowrap">
+            <button type="button" class="btn btn-outline open-script" {{ prospect_data(p) }}
+                    style="padding:5px 11px;font-size:0.78rem">📋 Log</button>
+            {% if p.stage in ('interested', 'proposal', 'won') %}
+            <a href="{{ url_for('commercial.convert', prospect_id=p.id) }}" class="btn"
+               style="padding:5px 11px;font-size:0.78rem" title="Won them? Turn into a commercial account">🎉 Convert</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{# ── CONTACTS ──────────────────────────────────────────────────────────── #}
+{% if view == 'contacts' %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div>
+      <h3 style="margin:0 0 4px">📇 Every contact</h3>
+      <p style="color:#9a95ad;font-size:0.85rem;margin:0">
+        Everything you've collected — phone, email, address, and where each one stands.
+      </p>
+    </div>
+    <a href="{{ url_for('places_finder.export_csv') }}" class="btn btn-gold" style="padding:9px 17px">⬇️ Download CSV</a>
+  </div>
+
+  {% if shown %}
+  <input type="text" id="contactSearch" placeholder="Filter by name, contact, city or phone…"
+         style="width:100%;margin-top:14px;padding:10px 12px;border:1px solid #e3e0ec;border-radius:9px;font-size:0.92rem">
+  <div class="table-wrap" style="margin-top:12px">
+    <table id="contactTable">
+      <thead><tr><th>Business</th><th>Contact</th><th>Phone</th><th>Email</th><th>Where</th><th>Stage</th><th></th></tr></thead>
+      <tbody>
+        {% for p in shown %}
+        <tr>
+          <td>
+            <strong>{{ p.business_name }}</strong>
+            {% if p.website %}<br><a href="{{ p.website }}" target="_blank" style="font-size:0.76rem;color:#b98a33">website ↗</a>{% endif %}
+          </td>
+          <td style="font-size:0.84rem">{{ p.contact_name or '—' }}</td>
+          <td style="font-size:0.84rem;white-space:nowrap">
+            {% if p.phone %}<a href="tel:{{ p.phone }}" style="color:#b98a33">{{ p.phone }}</a>{% else %}—{% endif %}
+          </td>
+          <td style="font-size:0.84rem">
+            {% if p.email %}<a href="mailto:{{ p.email }}" style="color:#b98a33">{{ p.email }}</a>
+            {% else %}<span style="color:#c05621">not asked yet</span>{% endif %}
+          </td>
+          <td style="font-size:0.8rem;color:#9a95ad">{{ p.city or p.address or '—' }}</td>
+          <td><span style="font-size:0.78rem;font-weight:700;color:#5f5878">{{ p.stage_label }}</span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <button type="button" class="btn btn-outline open-script" {{ prospect_data(p) }}
+                    style="padding:5px 10px;font-size:0.78rem">📋 Open</button>
+            <form method="POST" style="display:inline"
+                  action="{{ url_for('places_finder.delete', prospect_id=p.id) }}"
+                  onsubmit="return confirm('Remove {{ p.business_name }} from the call list?')">
+              <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:#e53e3e">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:36px 0">No businesses yet.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── FIND NEW ──────────────────────────────────────────────────────────── #}
+{% if view == 'find' %}
 <div class="card" style="margin-bottom:18px">
   <form method="POST" action="{{ url_for('places_finder.search') }}"
         style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
@@ -30,11 +263,10 @@
              style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.95rem">
     </div>
     <button type="submit" class="btn" style="padding:11px 22px">🎯 Find Businesses</button>
-    <a href="{{ url_for('places_finder.dashboard') }}" class="btn btn-outline" style="padding:11px 18px" title="Clear these results and start a fresh search">✕ Clear</a>
+    <a href="{{ url_for('places_finder.dashboard', view='find') }}" class="btn btn-outline" style="padding:11px 18px">✕ Clear</a>
   </form>
 </div>
 
-<!-- ── Search results (only after a search) ─────────────────── -->
 {% if results is not none %}
 <div class="card" style="margin-bottom:18px">
   <h3 style="margin:0 0 12px">{{ results|length }} found — tick the ones to add to your call list</h3>
@@ -68,6 +300,7 @@
     </div>
     <div style="margin-top:14px">
       <button type="submit" class="btn" style="padding:11px 22px">➕ Add selected to call list</button>
+      <span style="font-size:0.82rem;color:#9a95ad;margin-left:10px">They land in Today as "First call".</span>
     </div>
   </form>
   {% else %}
@@ -75,89 +308,9 @@
   {% endif %}
 </div>
 {% endif %}
+{% endif %}
 
-<!-- ── The call list (VA cockpit) ───────────────────────────── -->
-<div class="filter-tabs">
-  {% for s, label in [('','All'),('new','New'),('called','Called'),('interested','Interested'),('won','Won')] %}
-  <a href="{{ url_for('places_finder.dashboard', status=s) }}"
-     class="filter-tab {{ 'active' if status_filter == s }}">
-    {{ label }} ({{ counts['all' if not s else s] }})
-  </a>
-  {% endfor %}
-</div>
-
-<div class="card">
-  <h3 style="margin:0 0 4px">📞 Call List</h3>
-  <p style="color:#9a95ad;font-size:0.85rem;margin:0 0 14px">
-    Tap a phone number to call. Set the status after each call — "Won 🎉" means they said yes.
-  </p>
-  {% if prospects %}
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Business</th><th>Category</th><th>Call</th><th>Status</th><th>Notes</th><th></th></tr></thead>
-      <tbody>
-        {% for p in prospects %}
-        {% set colors = {'new':'status-pending','called':'status-confirmed','no_answer':'status-cancelled','callback':'status-pending','interested':'status-confirmed','not_interested':'status-cancelled','won':'status-completed'} %}
-        <tr>
-          <td>
-            <strong>{{ p.business_name }}</strong>
-            {% if p.rating %}<span style="font-size:0.78rem;color:#9a95ad"> ⭐{{ '%.1f' % p.rating }}</span>{% endif %}
-            {% if p.website %}<br><a href="{{ p.website }}" target="_blank" style="font-size:0.78rem;color:#b98a33">website ↗</a>{% endif %}
-          </td>
-          <td style="font-size:0.82rem">{{ p.category_label }}</td>
-          <td>
-            {% if p.phone %}
-            <a href="tel:{{ p.phone }}" class="btn" style="padding:7px 14px;font-size:0.85rem;white-space:nowrap">📞 {{ p.phone }}</a>
-            {% else %}<span style="color:#9a95ad">no phone</span>{% endif %}
-            <button type="button" class="btn btn-outline open-script"
-                    data-id="{{ p.id }}"
-                    data-name="{{ p.business_name }}"
-                    data-cat="{{ p.category }}"
-                    data-catlabel="{{ p.category_label }}"
-                    data-phone="{{ p.phone or '' }}"
-                    data-status="{{ p.status }}"
-                    style="padding:6px 12px;font-size:0.8rem;margin-top:5px;white-space:nowrap;display:block;width:100%">
-              📋 Script
-            </button>
-          </td>
-          <td colspan="2">
-            <form method="POST" action="{{ url_for('places_finder.update_status', prospect_id=p.id, status=status_filter) }}"
-                  style="display:flex;gap:6px;align-items:center">
-              <select name="status" onchange="this.form.submit()"
-                      style="padding:6px;border:1px solid #e3e0ec;border-radius:6px;font-size:0.82rem">
-                {% for sv, sl in status_labels.items() %}
-                <option value="{{ sv }}" {{ 'selected' if p.status == sv }}>{{ sl }}</option>
-                {% endfor %}
-              </select>
-              <input type="text" name="notes" value="{{ p.notes or '' }}" placeholder="notes…"
-                     style="flex:1;min-width:90px;padding:6px;border:1px solid #e3e0ec;border-radius:6px;font-size:0.82rem">
-              <button type="submit" class="btn btn-outline" style="padding:6px 10px;font-size:0.82rem">💾</button>
-            </form>
-          </td>
-          <td>
-            <div style="display:flex;gap:4px;align-items:center">
-              <a href="{{ url_for('commercial.convert', prospect_id=p.id) }}" class="btn"
-                 title="Won them? Turn into a commercial account"
-                 style="padding:5px 9px;font-size:0.78rem">🎉</a>
-              <form method="POST" action="{{ url_for('places_finder.delete', prospect_id=p.id) }}"
-                    onsubmit="return confirm('Remove {{ p.business_name }} from the call list?')">
-                <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:#e53e3e">✕</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:36px 0">
-    Your call list is empty. Search above to find businesses, then add them here. 🎣
-  </p>
-  {% endif %}
-</div>
-
-<!-- ── Call drawer — script on the left of your eye, log form under it ────── -->
+<!-- ── Call drawer — script to read, log form under it ─────────────────── -->
 <style>
   #callScrim{position:fixed;inset:0;background:rgba(15,7,40,.45);z-index:60;display:none}
   #callScrim.open{display:block}
@@ -192,6 +345,11 @@
     padding:9px 11px;border:1px solid #e3e0ec;border-radius:8px;font-size:.9rem;font-family:inherit}
   .cd-field textarea{min-height:76px;resize:vertical}
   .cd-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .cd-next{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin:14px 0}
+  .cd-next .hint{font-size:.76rem;color:#166534;margin:0 0 8px;line-height:1.5}
+  .cd-quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .cd-quick button{background:#fff;border:1px solid #bbf7d0;border-radius:999px;padding:5px 11px;
+                   font-size:.76rem;color:#166534;cursor:pointer;font-family:inherit;font-weight:600}
   @media (max-width:520px){.cd-row{grid-template-columns:1fr}}
 </style>
 
@@ -230,25 +388,95 @@
           <input type="text" name="contact" id="cdContact" placeholder="Name + title">
         </div>
         <div class="cd-field">
+          <label for="cdEmail">Their email</label>
+          <input type="email" name="email" id="cdEmail" placeholder="name@company.com">
+        </div>
+      </div>
+      <div class="cd-row">
+        <div class="cd-field">
           <label for="cdRenewal">Contract renewal</label>
           <input type="text" name="renewal" id="cdRenewal" placeholder="e.g. March 2027">
         </div>
-      </div>
-      <div class="cd-field">
-        <label for="cdSqft">Size / restrooms</label>
-        <input type="text" name="sqft" id="cdSqft" placeholder="e.g. 8,400 sqft · 4 restrooms">
+        <div class="cd-field">
+          <label for="cdSqft">Size / restrooms</label>
+          <input type="text" name="sqft" id="cdSqft" placeholder="8,400 sqft · 4 restrooms">
+        </div>
       </div>
       <div class="cd-field">
         <label for="cdNote">What did they say?</label>
         <textarea name="log_note" id="cdNote"
                   placeholder="Why they're looking, who decides, what to send…"></textarea>
       </div>
-      <button type="submit" class="btn" style="width:100%;padding:12px">💾 Save call</button>
+
+      {# The whole point of the rebuild: you cannot leave a call without
+         deciding what happens next. It is filled in for you. #}
+      <div class="cd-next">
+        <p class="hint" id="cdNextHint">Pick an outcome above and the next step fills itself in.</p>
+        <div class="cd-row">
+          <div class="cd-field" style="margin:0">
+            <label for="cdNextAction">Next step</label>
+            <input type="text" name="next_action" id="cdNextAction" placeholder="Call back">
+          </div>
+          <div class="cd-field" style="margin:0">
+            <label for="cdNextDate">When</label>
+            <input type="date" name="next_action_date" id="cdNextDate">
+          </div>
+        </div>
+        <div class="cd-quick">
+          {% for label, days in quick_actions %}
+          <button type="button" data-days="{{ days }}">{{ label }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <button type="submit" class="btn" style="width:100%;padding:12px">💾 Save call &amp; set next step</button>
       <p style="font-size:.76rem;color:#9a95ad;margin:8px 0 0;line-height:1.5">
         Saves a dated entry above the existing notes — nothing is overwritten.
-        The renewal date is the thing worth capturing even on a no.
+        After {{ max_attempts }} unanswered attempts it moves to Nurture on its own.
       </p>
     </form>
+
+    {# ── Send one of the outreach emails ── #}
+    <details class="cd-group" id="cdEmailBox" style="margin-top:16px">
+      <summary>✉️ Send an outreach email</summary>
+      <div class="cd-inner">
+        {% if email_templates %}
+        <form id="cdEmailForm" method="POST">
+          <div class="cd-field">
+            <label for="cdTmpl">Which one</label>
+            <select id="cdTmpl">
+              <option value="">— pick a template —</option>
+              {% for t in email_templates %}
+              <option value="{{ loop.index0 }}">{{ t.title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="cd-field">
+            <label for="cdSendTo">To</label>
+            <input type="email" name="email" id="cdSendTo" placeholder="name@company.com" required>
+          </div>
+          <div class="cd-field">
+            <label for="cdSubject">Subject</label>
+            <input type="text" name="subject" id="cdSubject" required>
+          </div>
+          <div class="cd-field">
+            <label for="cdBody">Message</label>
+            <textarea name="body" id="cdBody" style="min-height:220px" required></textarea>
+          </div>
+          <button type="submit" class="btn" style="width:100%;padding:11px">✉️ Send it</button>
+          <p style="font-size:.76rem;color:#9a95ad;margin:8px 0 0;line-height:1.5">
+            Fill in anything still in [brackets] before you send. Sending logs the
+            touch and sets a follow-up for four days out.
+          </p>
+        </form>
+        {% else %}
+        <p style="font-size:.84rem;color:#9a95ad;margin:0">
+          No outreach emails loaded yet — open <strong>Templates → Call scripts &amp; outreach</strong>
+          and press "Load starter scripts".
+        </p>
+        {% endif %}
+      </div>
+    </details>
   </div>
 </aside>
 
@@ -257,10 +485,19 @@
   const CD_MAP      = {{ script_map | tojson }};
   const CD_ALWAYS   = {{ script_always | tojson }};
   const CD_LABELS   = {{ script_labels | tojson }};
-  const CD_ACTION   = "{{ url_for('places_finder.update_status', prospect_id=0, status=status_filter) }}";
+  const CD_RULES    = {{ next_rules | tojson }};
+  const CD_EMAILS   = {{ email_templates | tojson }};
+  const CD_ACTION   = "{{ url_for('places_finder.update_status', prospect_id=0, view=view) }}";
+  const CD_EMAIL_ACTION = "{{ url_for('places_finder.send_outreach', prospect_id=0, view=view) }}";
 
-  const esc = s => s.replace(/[&<>"']/g, c =>
+  const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  const isoIn = days => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
 
   // Same conventions the Scripts library renders: 💡 collapses into a "why",
   // ⚠️ is a warning that must stay visible, blank lines are spacers.
@@ -282,10 +519,37 @@
          + renderScript(s.content) + '</div>';
   }
 
+  // The outcome decides the next step. Typed-over values are left alone — the
+  // caller knows what was actually agreed.
+  function suggestNext(touched) {
+    const outcome = document.getElementById('cdStatus').value;
+    const rule = CD_RULES[outcome];
+    const hint = document.getElementById('cdNextHint');
+    if (!rule) return;
+    if (rule.days === null || rule.action === null) {
+      if (!touched) {
+        document.getElementById('cdNextAction').value = '';
+        document.getElementById('cdNextDate').value = '';
+      }
+      hint.textContent = 'Closed for now — nothing will be scheduled.';
+      return;
+    }
+    if (!touched) {
+      document.getElementById('cdNextAction').value = rule.action;
+      document.getElementById('cdNextDate').value = isoIn(rule.days);
+    }
+    hint.textContent = 'Suggested: ' + rule.action
+      + (rule.days ? ' in ' + rule.days + ' day' + (rule.days === 1 ? '' : 's') : ' today')
+      + '. Change it if you agreed something else.';
+  }
+
+  let nextTouched = false;
+
   function openDrawer(btn) {
     const d = btn.dataset;
     document.getElementById('cdName').textContent = d.name;
-    document.getElementById('cdCat').textContent  = d.catlabel;
+    document.getElementById('cdCat').textContent  = d.catlabel
+      + (d.attempts && d.attempts !== '0' ? ' · ' + d.attempts + ' attempt(s)' : '');
 
     const tel = document.getElementById('cdPhone');
     if (d.phone) {
@@ -301,7 +565,7 @@
     document.getElementById('cdOpener').innerHTML = opener.length
       ? opener.map(block).join('')
       : '<div class="cd-script"><h4>No script loaded yet</h4><div class="cd-line">'
-        + 'Open the Scripts page and press "Load starter call scripts".</div></div>';
+        + 'Open Templates → Call scripts &amp; outreach and press "Load starter scripts".</div></div>';
 
     document.getElementById('cdExtras').innerHTML = CD_ALWAYS
       .filter(c => c !== openerCat && (CD_SCRIPTS[c] || []).length)
@@ -314,6 +578,21 @@
     f.action = CD_ACTION.replace('/0/', '/' + d.id + '/');
     f.reset();
     document.getElementById('cdStatus').value = d.status || 'new';
+    document.getElementById('cdContact').value = d.contact || '';
+    document.getElementById('cdEmail').value = d.email || '';
+    document.getElementById('cdRenewal').value = d.renewal || '';
+    nextTouched = false;
+    suggestNext(false);
+
+    const ef = document.getElementById('cdEmailForm');
+    if (ef) {
+      ef.action = CD_EMAIL_ACTION.replace('/0/', '/' + d.id + '/');
+      document.getElementById('cdSendTo').value = d.email || '';
+      document.getElementById('cdTmpl').value = '';
+      document.getElementById('cdSubject').value = '';
+      document.getElementById('cdBody').value = '';
+      document.getElementById('cdEmailBox').open = false;
+    }
 
     document.getElementById('callDrawer').classList.add('open');
     document.getElementById('callScrim').classList.add('open');
@@ -332,5 +611,37 @@
   document.getElementById('cdClose').addEventListener('click', closeDrawer);
   document.getElementById('callScrim').addEventListener('click', closeDrawer);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+  document.getElementById('cdStatus').addEventListener('change', () => suggestNext(nextTouched));
+  ['cdNextAction', 'cdNextDate'].forEach(id =>
+    document.getElementById(id).addEventListener('input', () => { nextTouched = true; }));
+  document.querySelectorAll('.cd-quick button').forEach(b =>
+    b.addEventListener('click', () => {
+      document.getElementById('cdNextDate').value = isoIn(parseInt(b.dataset.days, 10));
+      if (!document.getElementById('cdNextAction').value)
+        document.getElementById('cdNextAction').value = 'Call back';
+      nextTouched = true;
+    }));
+
+  const tmplPicker = document.getElementById('cdTmpl');
+  if (tmplPicker) {
+    tmplPicker.addEventListener('change', () => {
+      const t = CD_EMAILS[tmplPicker.value];
+      if (!t) return;
+      document.getElementById('cdSubject').value = t.subject;
+      document.getElementById('cdBody').value = t.body;
+    });
+  }
+
+  // Filter on the contacts table — a list you scroll is a list you don't use.
+  const search = document.getElementById('contactSearch');
+  if (search) {
+    search.addEventListener('input', () => {
+      const q = search.value.toLowerCase();
+      document.querySelectorAll('#contactTable tbody tr').forEach(tr => {
+        tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  }
 </script>
 {% endblock %}

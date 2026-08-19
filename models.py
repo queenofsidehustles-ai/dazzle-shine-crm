@@ -1114,12 +1114,29 @@ class Prospect(db.Model):
     city = db.Column(db.String(100))
     rating = db.Column(db.Float)                 # Google star rating (helps prioritise calls)
     place_id = db.Column(db.String(220), index=True)  # Google Place id — used to de-duplicate imports
-    status = db.Column(db.String(30), default='new')  # new / called / no_answer / callback / interested / not_interested / won
+    status = db.Column(db.String(30), default='new')  # last OUTCOME: new / called / no_answer / callback / interested / not_interested / won
     notes = db.Column(db.Text)
     source = db.Column(db.String(50), default='google_places')
     agent = db.Column(db.String(100))                 # team member (VA) credited for commission
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     called_at = db.Column(db.DateTime)
+
+    # Where they are in the funnel, as opposed to what happened on the last
+    # call. "No answer" is one call; "Working" is a position. Keeping them in
+    # one column meant a list of outcomes that could not be counted.
+    stage = db.Column(db.String(20), default='new', index=True)
+
+    # The two fields that stop things being dropped: what happens next and the
+    # day it is due. A status of "Call Back" without a date is a note to
+    # nobody — the list had no way to surface anything at the right time.
+    next_action = db.Column(db.String(120))
+    next_action_date = db.Column(db.String(10), index=True)   # YYYY-MM-DD
+
+    attempts = db.Column(db.Integer, default=0)        # calls placed, not conversations had
+    contact_name = db.Column(db.String(120))           # the human, not the business
+    email = db.Column(db.String(200))                  # asked for on the call; Places never has it
+    renewal_note = db.Column(db.String(120))           # "March 2027" — why a no is worth keeping
+    last_emailed_at = db.Column(db.DateTime)
 
     CATEGORY_LABELS = {
         'property_manager': '🏢 Property Manager',
@@ -1132,6 +1149,7 @@ class Prospect(db.Model):
         'office': '💼 Office Space',
         'other': '📇 Other',
     }
+
     STATUS_LABELS = {
         'new': 'New',
         'called': 'Called',
@@ -1142,6 +1160,18 @@ class Prospect(db.Model):
         'won': 'Won 🎉',
     }
 
+    # Ordered — this is the funnel, drawn left to right on the pipeline board.
+    STAGE_LABELS = [
+        ('new',        'New'),
+        ('working',    'Working'),
+        ('interested', 'Interested'),
+        ('proposal',   'Proposal'),
+        ('won',        'Won 🎉'),
+        ('nurture',    'Nurture'),
+        ('lost',       'Lost'),
+    ]
+    LIVE_STAGES = ('new', 'working', 'interested', 'proposal')
+
     @property
     def category_label(self):
         return self.CATEGORY_LABELS.get(self.category, self.category or 'Other')
@@ -1149,6 +1179,26 @@ class Prospect(db.Model):
     @property
     def status_label(self):
         return self.STATUS_LABELS.get(self.status, self.status or 'New')
+
+    @property
+    def stage_label(self):
+        return dict(self.STAGE_LABELS).get(self.stage or 'new', 'New')
+
+    @property
+    def is_open(self):
+        return (self.stage or 'new') in self.LIVE_STAGES
+
+    def due_state(self, today=None):
+        """'overdue' / 'today' / 'later' / None — what the Today list sorts on."""
+        if not self.next_action_date:
+            return None
+        from datetime import date as _date
+        today = today or _date.today().isoformat()
+        if self.next_action_date < today:
+            return 'overdue'
+        if self.next_action_date == today:
+            return 'today'
+        return 'later'
 
 
 class User(db.Model):
