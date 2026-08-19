@@ -277,30 +277,13 @@ def detail(booking_id):
         hours_raw = request.form.get('hours_worked', '').strip()
         booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
         # Person-hours of work — the basis for cleaner pay on this job.
-        est_raw = request.form.get('estimated_hours', '').strip()
-        if est_raw != '':
-            try:
-                booking.estimated_hours = float(est_raw)
-                # First time a job gets hours, lock in today's rate. Never
-                # re-stamp after — that's what "Re-rate" below is for.
-                if booking.estimated_hours and not booking.labor_rate_applied:
-                    from pricing import get_labor_rate as _rate
-                    booking.labor_rate_applied = _rate()
-            except ValueError:
-                pass
+        _apply_hours(booking, request.form)
         booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
         # Keep the balance in step with the price. It used to be written only by
         # the price-correction route, so editing the price here left the
         # Balance Collection card — and its charge button — showing a stale $0.
         from blueprints.payments import amount_due as _due
         booking.balance_due = _due(booking)
-        own_raw = request.form.get('owner_hours', '').strip()
-        if own_raw != '':
-            try:
-                booking.owner_hours = max(0.0, float(own_raw))
-            except ValueError:
-                pass
-
         newly_completed = (booking.status == 'completed' and old_status != 'completed')
         if newly_completed:
             from datetime import datetime as _dt
@@ -763,6 +746,44 @@ def broadcast(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+def _apply_hours(booking, form):
+    """Read the person-hours fields off whichever form was submitted.
+
+    The hours box sits in the crew card but used to belong to the job-edit form
+    above it, so pressing the Save button directly beneath it submitted a form
+    that did not contain the hours -- they were dropped without a word and the
+    box came back empty. Both buttons now save them.
+
+    A field that is absent is left alone; a field that is present and blank is a
+    deliberate clear.
+    """
+    changed = False
+    if 'estimated_hours' in form:
+        raw = (form.get('estimated_hours') or '').strip()
+        if raw == '':
+            booking.estimated_hours = None
+            changed = True
+        else:
+            try:
+                booking.estimated_hours = float(raw)
+                # First time a job gets hours, lock in today's rate. Never
+                # re-stamp after — that's what "Re-rate" is for.
+                if booking.estimated_hours and not booking.labor_rate_applied:
+                    from pricing import get_labor_rate as _rate
+                    booking.labor_rate_applied = _rate()
+                changed = True
+            except ValueError:
+                pass
+    if 'owner_hours' in form:
+        raw = (form.get('owner_hours') or '').strip()
+        try:
+            booking.owner_hours = max(0.0, float(raw)) if raw else 0
+            changed = True
+        except ValueError:
+            pass
+    return changed
+
+
 # ── Crew & pay: who is being paid for this job, and how much ────────────────
 @bookings_bp.route('/<int:booking_id>/crew', methods=['POST'])
 @login_required
@@ -775,6 +796,13 @@ def save_crew(booking_id):
     amount she decides, which the automatic percentage can't express."""
     b = Booking.query.get_or_404(booking_id)
     msgs = []
+
+    # 0) The hours, which live in this card and are what the pay is worked out
+    #    from. Saved by the button underneath them, not only by the one two
+    #    cards up the page.
+    if _apply_hours(b, request.form) and b.labor_budget is not None:
+        msgs.append(f'{b.estimated_hours:g} person-hours × ${b.rate_applied:.0f}/hr '
+                    f'= ${b.labor_budget:.2f} to share')
 
     # 1) How many paid cleaners
     try:
