@@ -11,7 +11,7 @@ asked."""
 import csv
 import io
 import json
-from datetime import datetime, date
+from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response)
 from markupsafe import escape
@@ -20,6 +20,7 @@ from extensions import db
 from models import Prospect
 import places_finder as finder
 import prospecting
+from scheduling import local_today
 
 places_finder_bp = Blueprint('places_finder', __name__, url_prefix='/find-leads')
 
@@ -92,7 +93,7 @@ def _view_args(view, prospects, **extra):
         next_rules={k: {'action': v[1], 'days': v[2]}
                     for k, v in prospecting.RULES.items()},
         max_attempts=prospecting.MAX_ATTEMPTS,
-        today=date.today().isoformat(),
+        today=local_today().isoformat(),
         demo=not finder.api_key_present(),
         search_category='property_manager',
         search_location='',
@@ -145,7 +146,7 @@ def dashboard():
     rows = _backfilled()
 
     if view == 'today':
-        today = date.today().isoformat()
+        today = local_today().isoformat()
         shown = sorted([p for p in rows
                         if p.is_open and (not p.next_action_date
                                           or p.next_action_date <= today)],
@@ -276,7 +277,7 @@ def update_status(prospect_id):
     db.session.commit()
     if logged:
         if p.next_action and p.next_action_date:
-            when = 'today' if p.next_action_date == date.today().isoformat() \
+            when = 'today' if p.next_action_date == local_today().isoformat() \
                 else f'on {p.next_action_date}'
             flash(f'Logged. Next: {p.next_action} — {when}.', 'success')
         else:
@@ -299,9 +300,8 @@ def snooze(prospect_id):
         days = max(1, min(365, int(request.form.get('days', 3))))
     except (TypeError, ValueError):
         days = 3
-    from datetime import timedelta
     p.next_action = p.next_action or 'Follow-up call'
-    p.next_action_date = (date.today() + timedelta(days=days)).isoformat()
+    p.next_action_date = (local_today() + timedelta(days=days)).isoformat()
     db.session.commit()
     flash(f'{p.business_name} moved to {p.next_action_date}.', 'success')
     return redirect(url_for('places_finder.dashboard', view=request.args.get('view', 'today')))
@@ -343,8 +343,7 @@ def send_outreach(prospect_id):
         # An email is a touch like any other: it earns a follow-up date, or it
         # is just another thing sent into a void.
         p.next_action = 'Follow up on the email'
-        from datetime import timedelta
-        p.next_action_date = (date.today() + timedelta(days=4)).isoformat()
+        p.next_action_date = (local_today() + timedelta(days=4)).isoformat()
         db.session.commit()
         flash(f'Sent to {to}. Follow up {p.next_action_date}.', 'success')
     else:
@@ -377,7 +376,7 @@ def export_csv():
             p.created_at.strftime('%Y-%m-%d') if p.created_at else '',
             (p.notes or '').replace('\r', ' '),
         ])
-    stamp = date.today().isoformat()
+    stamp = local_today().isoformat()
     return Response(buf.getvalue(), mimetype='text/csv', headers={
         'Content-Disposition': f'attachment; filename=call-list-{stamp}.csv'})
 

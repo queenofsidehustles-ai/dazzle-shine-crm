@@ -203,7 +203,16 @@ def new():
 @bookings_bp.route('/calendar')
 @login_required
 def calendar():
-    today = date.today()
+    """The month grid.
+
+    Two things it used to get wrong. The column headings read Sun..Sat while
+    Python's calendar starts its weeks on Monday, so every date sat one column
+    to the left of its real weekday — a Saturday job appeared under Friday.
+    And "today" was the server's day: the server runs on UTC, so from 8pm in
+    Florida it had already rolled over and the wrong square was highlighted.
+    """
+    import scheduling
+    today = scheduling.local_today()
     year = int(request.args.get('year', today.year))
     month = int(request.args.get('month', today.month))
 
@@ -233,7 +242,10 @@ def calendar():
     next_year = year if month < 12 else year + 1
 
     return render_template('admin/calendar.html',
-        cal=cal_module.monthcalendar(year, month),
+        # firstweekday=6 is Sunday, matching the headings in the template.
+        # A Calendar instance rather than setfirstweekday(), which is global to
+        # the process and would reach into anything else using the module.
+        cal=cal_module.Calendar(firstweekday=6).monthdayscalendar(year, month),
         year=year, month=month,
         month_name=cal_module.month_name[month],
         bookings_by_day=bookings_by_day,

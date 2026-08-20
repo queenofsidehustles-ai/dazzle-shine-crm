@@ -10,7 +10,9 @@ and the next action with a date. Both are suggestions the caller can overrule
 in the drawer; the point is that hanging up never leaves a prospect with
 nothing scheduled.
 """
-from datetime import date, timedelta
+from datetime import timedelta
+
+from scheduling import local_today
 
 # Commercial prospects rarely pick up before the third or fourth try, so a
 # no-answer is a normal step rather than a rejection. After this many attempts
@@ -39,7 +41,7 @@ QUICK_ACTIONS = [
 
 
 def _plus(days):
-    return (date.today() + timedelta(days=days)).isoformat()
+    return (local_today() + timedelta(days=days)).isoformat()
 
 
 def apply_outcome(prospect, outcome, next_action=None, next_action_date=None):
@@ -99,13 +101,13 @@ def backfill(prospect):
     if prospect.is_open and not prospect.next_action:
         prospect.next_action = ('First call' if prospect.stage == 'new'
                                 else 'Follow-up call')
-        prospect.next_action_date = date.today().isoformat()
+        prospect.next_action_date = local_today().isoformat()
         changed = True
     return changed
 
 
 def due_counts(prospects):
-    today = date.today().isoformat()
+    today = local_today().isoformat()
     out = {'overdue': 0, 'today': 0, 'later': 0, 'unscheduled': 0}
     for p in prospects:
         if not p.is_open:
