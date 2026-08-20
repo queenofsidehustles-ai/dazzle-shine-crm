@@ -123,7 +123,7 @@ WHOLE HOME — THE FINISHING TOUCHES
 - Lock up and leave the home secure
 
 ━━━━━━━━━━━━━━━━━━━━━━
-Welcome aboard. Let's make Orlando sparkle, one home at a time. 💛
+Welcome aboard. Let's make {city} sparkle, one home at a time. 💛
 — The {biz} Family"""
 
 
@@ -133,7 +133,9 @@ def default_training_guide():
     Kept as a plain template with a {biz} token rather than an f-string: the
     guide is long prose that an owner can rewrite from the Settings page, and a
     stray brace in her wording must never crash the page that renders it."""
-    return _DEFAULT_TRAINING_GUIDE.replace('{biz}', branding.biz_name())
+    return (_DEFAULT_TRAINING_GUIDE
+            .replace('{biz}', branding.biz_name())
+            .replace('{city}', branding.city_line() or 'this town'))
 
 
 
@@ -863,7 +865,7 @@ def sample_day():
 
     today = date.today()
     job = _FakeJob(preferred_time='10:00 AM', name='The Johnson Family', bedrooms='3',
-                   bathrooms='2', address='123 Palm Ave', city='Orlando', zip_code='32801',
+                   bathrooms='2', address='123 Palm Ave', city=(branding.city_line() or 'Your City'), zip_code='',
                    price=180, hours_worked=0, estimated_hours=3.0,
                    access_notes='Gate code 1234 · key under the blue mat · friendly dog named Max 🐶')
     days = {today.isoformat(): [job]}

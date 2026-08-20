@@ -681,15 +681,15 @@ def _seed_sales_scripts():
     from models import Script, BusinessSetting
 
     scripts = [
-        ('outbound', '🏢 Cold Call Opening + Discovery — L & M Commercial (offices · daycares · medical)', 0, """[When they answer]
-"Hi, this is [Your Name] with L & M Commercial Cleaners here in Orlando — did I catch you at an okay time?"
+        ('outbound', '🏢 Cold Call Opening + Discovery — Commercial (offices · daycares · medical)', 0, """[When they answer]
+"Hi, this is {owner} with {biz} here in {city} — did I catch you at an okay time?"
 💡 Asking "is now okay?" hands them control and lowers their guard. People relax the moment they feel free to say no.
 
 [If they say go ahead]
 "Thanks — I'll be quick and real with you. You weren't expecting my call, so I'll get right to the point."
 💡 Naming the awkwardness ("you weren't expecting my call") disarms suspicion. Radical honesty builds instant trust.
 
-"We handle commercial cleaning for a handful of offices and daycares around Orlando, and I'm reaching out to a few local spots to see if we're a fit. Quick question — who handles your cleaning right now, in-house or an outside company?"
+"We handle commercial cleaning for a handful of offices and daycares around {city}, and I'm reaching out to a few local spots to see if we're a fit. Quick question — who handles your cleaning right now, in-house or an outside company?"
 💡 "A handful of local spots" is social proof + quiet scarcity (we're selective). The open question gets THEM talking instead of you pitching.
 
 [Listen. Then diagnose — don't sell yet.]
@@ -707,7 +707,7 @@ def _seed_sales_scripts():
 "Hi, this is [Your Name] with [Your Company] — did I catch you at a bad time?"
 💡 "Bad time?" invites a safe "no" and disarms. It beats "How are you today?", which instantly signals a sales pitch.
 
-"Thanks for a sec. I'll be straight with you — I'm reaching out to property managers around Orlando because turnovers and move-outs are usually where cleaning falls apart. Who's handling your unit turnover cleans right now?"
+"Thanks for a sec. I'll be straight with you — I'm reaching out to property managers around {city} because turnovers and move-outs are usually where cleaning falls apart. Who's handling your unit turnover cleans right now?"
 💡 Leading with THEIR known pain (turnovers) proves you understand their world. Specific beats generic every time.
 
 [Listen]
@@ -721,7 +721,7 @@ def _seed_sales_scripts():
 "Hi, is this [Name]? This is [Your Name] with [Your Company] — did I catch you between showings?"
 💡 "Between showings?" shows you get a realtor's crazy schedule and gives a respectful out. Rapport in one line.
 
-"I'll be quick — I work with a few Orlando agents on move-in and move-out cleans, the kind that make a listing photograph beautifully and close smoothly. Do you have a go-to cleaner for your listings right now?"
+"I'll be quick — I work with a few {city} agents on move-in and move-out cleans, the kind that make a listing photograph beautifully and close smoothly. Do you have a go-to cleaner for your listings right now?"
 💡 Tie cleaning to what a realtor actually cares about: photos, showings, on-time closings. Sell their outcome, not your service.
 
 [Listen]
@@ -735,7 +735,7 @@ def _seed_sales_scripts():
 "Hi [Name], this is [Your Name] with [Your Company] — did I catch you at an okay time?"
 💡 A permission opener — hands control over and lowers the guard.
 
-"I'll keep it short. I help short-term rental hosts around Orlando with guest turnovers — the fast, spotless resets between check-out and check-in. How are you handling your turnovers right now?"
+"I'll keep it short. I help short-term rental hosts around {city} with guest turnovers — the fast, spotless resets between check-out and check-in. How are you handling your turnovers right now?"
 💡 Speak their language: "turnovers," "check-out/check-in," "5-star clean." Insider words prove you truly get their business.
 
 [Listen]
@@ -762,7 +762,7 @@ def _seed_sales_scripts():
 💡 A name turns your next call from cold into warm. Tiny ask, huge payoff."""),
 
         ('general', '📵 Voicemail Scripts That Actually Get Callbacks', 1, """[Keep it under 20 seconds. Curiosity + an easy reason to call back.]
-"Hi [Name], it's [Your Name] with [Brand] here in Orlando. I had a quick question about how you're handling the cleaning at [Business/Property] — I think we might save you a headache. Call me back at [number]; again that's [number]. Thanks!"
+"Hi [Name], it's {owner} with {biz} here in {city}. I had a quick question about how you're handling the cleaning at [Business/Property] — I think we might save you a headache. Call me back at [number]; again that's [number]. Thanks!"
 💡 "A quick question" + "save you a headache" opens a curiosity loop their brain wants to close. Saying the number twice makes calling back effortless.
 
 [Second voicemail, a few days later — reference the first, stay light]

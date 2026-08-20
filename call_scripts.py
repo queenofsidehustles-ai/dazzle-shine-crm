@@ -33,7 +33,7 @@ If they won't put you through:
 
     # ── Property managers ─────────────────────────────────────────────────────
     ('call_property_manager', 'Opening — property & facility managers', 10, """\
-"Hi [Name], {owner} with {biz}. I'll be quick — I'm not calling to sell you anything today. We clean commercial buildings around Orlando, and I'm reaching out to a handful of properties in the area to see if it'd be worth walking your building and putting a number in front of you. Most people already have somebody. Do you?"
+"Hi [Name], {owner} with {biz}. I'll be quick — I'm not calling to sell you anything today. We clean commercial buildings around {city}, and I'm reaching out to a handful of properties in the area to see if it'd be worth walking your building and putting a number in front of you. Most people already have somebody. Do you?"
 
 Then, the moment they say yes:
 
@@ -48,7 +48,7 @@ WRITE THE DATE DOWN. Then:
 
     # ── Medical ───────────────────────────────────────────────────────────────
     ('call_medical', 'Opening — medical & dental practices', 10, """\
-"Hi [Name], {owner} with {biz}. I'll be brief — we do commercial cleaning around Orlando and we work with medical and dental practices specifically, because clinical space has a documentation side that most cleaning companies aren't set up for. Who handles your cleaning vendor?"
+"Hi [Name], {owner} with {biz}. I'll be brief — we do commercial cleaning around {city} and we work with medical and dental practices specifically, because clinical space has a documentation side that most cleaning companies aren't set up for. Who handles your cleaning vendor?"
 
 Once you have the right person:
 
@@ -81,7 +81,7 @@ Ask these on the first call, before you quote anything:
 
     # ── General contractors ───────────────────────────────────────────────────
     ('call_construction', 'Opening — general contractors (post-construction)', 10, """\
-"Hi [Name], {owner} with {biz}. We do post-construction final cleans around Orlando. Who's handling your cleaning subs — is that you or the super?"
+"Hi [Name], {owner} with {biz}. We do post-construction final cleans around {city}. Who's handling your cleaning subs — is that you or the super?"
 
 Once you've got them:
 
@@ -114,7 +114,7 @@ Say this when they ask:
 
     # ── Offices & retail ──────────────────────────────────────────────────────
     ('call_office', 'Opening — offices, retail & general commercial', 10, """\
-"Hi [Name], {owner} with {biz}. I'll keep it short — we clean offices around Orlando and I'm calling a few businesses in the area to see if it's worth walking your space and getting you a number. You've probably already got somebody. Do you?"
+"Hi [Name], {owner} with {biz}. I'll keep it short — we clean offices around {city} and I'm calling a few businesses in the area to see if it's worth walking your space and getting you a number. You've probably already got somebody. Do you?"
 
 If yes:
 
@@ -155,7 +155,7 @@ Once they pick:
 
     # ── Voicemail ─────────────────────────────────────────────────────────────
     ('voicemail', 'Voicemail — leave one every time', 10, """\
-"Hi [Name], {owner} with {biz} in Orlando, {phone}. I'm reaching out about your janitorial service — not asking you to switch anything, just to walk the building and get you a number to compare against at renewal. {phone}. Thanks."
+"Hi [Name], {owner} with {biz} in {city}, {phone}. I'm reaching out about your janitorial service — not asking you to switch anything, just to walk the building and get you a number to compare against at renewal. {phone}. Thanks."
 
 Keep it under 20 seconds.
 
@@ -213,7 +213,7 @@ Subject: {biz} — walkthrough for [Company]
 
 Hi [Name],
 
-Good speaking with you. As promised — we handle commercial cleaning for offices, medical suites, retail and post-construction across Orlando.
+Good speaking with you. As promised — we handle commercial cleaning for offices, medical suites, retail and post-construction across {city}.
 
 A few things that usually matter:
 
@@ -336,7 +336,8 @@ If it changes — a contract ending, a vendor letting you down, a property chang
 
 
 def tokens():
-    """Values substituted into scripts at display time.
+    """Values substituted into scripts at display time — business, owner,
+    phone and city.
 
     Kept out of the stored content so a business that renames itself, changes
     its number, or resells this CRM never has to re-edit sixteen scripts. The
@@ -350,6 +351,9 @@ def tokens():
         'biz': biz,
         'owner': (BusinessSetting.get('owner_name') or '').strip() or 'me',
         'phone': branding.phone() or '[your number]',
+        # The town the VA says out loud. A script naming somebody else's city is
+        # worse than one naming no city at all.
+        'city': (BusinessSetting.get('city') or '').strip() or 'your area',
     }
 
 

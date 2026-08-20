@@ -130,7 +130,7 @@ print('\n🎉 A second company can run this CRM with nothing of the first showin
 # allow-list and an export filename all survived the first sweep. This reads the
 # source instead, so a leak is caught wherever it hides.
 print('\n9. No other company\'s details are written into the source')
-import pathlib, re
+import pathlib, re, ast
 
 PATTERNS = [
     (r'dazzleandshinemaids', 'a specific business domain or email'),
@@ -139,26 +139,66 @@ PATTERNS = [
     (r'g\.page/r/CZ', 'a specific Google review link'),
     (r'commercialcleanersorlando', 'a specific commercial domain'),
     (r'dazzle[_-](?:interviews|unsub|shine)', 'a specific third-party account'),
+    # The first sweep looked only for domains, URLs and phone numbers, and every
+    # one of these walked straight past it: a seeded cold-call script naming
+    # "L & M Commercial Cleaners here in Orlando", the public job advert reading
+    # "Join Our Cleaning Team in Orlando", the training guide's "let's make
+    # Orlando sparkle", and two customer email footers. A town is as much a
+    # giveaway as a domain when somebody else's business is reading it out loud.
+    (r'\bOrlando\b', "the original company's city"),
+    (r'Dazzle\s*(?:&|and)\s*Shine', 'the original business name'),
+    (r'\bL\s*&\s*M\b', 'the original commercial brand'),
 ]
 # Files that may legitimately name the original business.
 EXEMPT = {'legacy_brands.py'}
 ROOT = pathlib.Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def shipped_strings(path):
+    """The text this file actually shows somebody, minus comments.
+
+    Reading raw lines meant a comment explaining the history counted as a leak,
+    so the old sweep skipped any line starting with # — which also skipped the
+    second line of every multi-line string. Python files are parsed and only
+    string constants are read; docstrings are excluded because nobody reading
+    the CRM ever sees one. Templates keep the line sweep with Jinja and HTML
+    comments stripped out.
+    """
+    text = path.read_text(errors='ignore')
+    if path.suffix != '.py':
+        text = re.sub(r'\{#.*?#\}', '', text, flags=re.S)
+        text = re.sub(r'<!--.*?-->', '', text, flags=re.S)
+        return [(i, line) for i, line in enumerate(text.split('\n'), 1)]
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return [(i, line) for i, line in enumerate(text.split('\n'), 1)]
+    docstrings = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, 'body', None)
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                    and isinstance(body[0].value.value, str):
+                docstrings.add(id(body[0].value))
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) \
+                and id(node) not in docstrings:
+            out.append((getattr(node, 'lineno', 0), node.value))
+    return out
+
 
 offenders = []
 for path in sorted(list(ROOT.glob('*.py')) + list(ROOT.glob('blueprints/*.py'))
                    + list(ROOT.rglob('templates/**/*.html'))):
     if path.name in EXEMPT or 'node_modules' in str(path):
         continue
-    text = path.read_text(errors='ignore')
-    for line_no, line in enumerate(text.split('\n'), 1):
-        stripped = line.strip()
-        if stripped.startswith('#') or stripped.startswith('"""') or stripped.startswith("'''"):
-            continue          # a comment explaining the history is fine
+    for line_no, chunk in shipped_strings(path):
         for pattern, what in PATTERNS:
-            if re.search(pattern, line, re.I):
+            if re.search(pattern, chunk, re.I):
                 offenders.append(f'{path.relative_to(ROOT)}:{line_no} — {what}')
 
-for o in offenders:
+for o in sorted(set(offenders)):
     print(f'     ✗ {o}')
 check(not offenders,
       f'no hardcoded business details anywhere in the source ({len(offenders)} found)')

@@ -657,7 +657,7 @@ def correct_price(booking_id):
     <p>Sorry for the mix-up! Your booking is confirmed at the corrected total above. Just reply to this email or text us with any questions.</p>
     <p style="margin-top:16px">Thank you,<br><strong>{branding.biz_name()}</strong></p>
     <hr style="border:none;border-top:1px solid #e4dfef;margin:22px 0">
-    <p style="font-size:0.78rem;color:#9a95ad;margin:0">{branding.biz_name()} · Orlando, FL · Reply to this email with any questions.</p>
+    <p style="font-size:0.78rem;color:#9a95ad;margin:0">{branding.biz_name()}{" · " + branding.city_line() if branding.city_line() else ""} · Reply to this email with any questions.</p>
   </div>
 </div>"""
             ok, detail = send_email(to_email=booking.email, to_name=booking.name,

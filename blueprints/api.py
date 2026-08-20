@@ -92,7 +92,7 @@ def charge_balances():
 
     import scheduling
     from payment_service import charge_balance as do_charge
-    # The business's own date, not the server's — at 8pm in Orlando the server
+    # The business's own date, not the server's — in the evening the server
     # already believes it is tomorrow.
     today = scheduling.local_today().isoformat()
     now_local = scheduling.local_now()

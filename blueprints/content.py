@@ -108,7 +108,7 @@ def mark_posted(post_id):
 @content_bp.route('/generate-ads', methods=['POST'])
 @login_required
 def generate_ads():
-    location = request.form.get('location', 'Orlando, FL').strip()
+    location = (request.form.get('location') or branding.city_line() or '').strip()
     service_focus = request.form.get('service_focus', 'house cleaning').strip()
     usp = request.form.get('usp', '').strip()
     api_key = os.environ.get('OPENROUTER_API_KEY')

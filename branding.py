@@ -104,7 +104,7 @@ def booking_link():
 
 
 def city_line():
-    """'Orlando, FL' for email footers — blank rather than wrong if unset."""
+    """'Springfield, IL' for email footers — blank rather than wrong if unset."""
     city = _setting('city')
     state = _setting('state')
     return ', '.join(p for p in (city, state) if p)

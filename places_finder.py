@@ -85,7 +85,7 @@ def search_businesses(category, location, api_key=None):
 _DEMO_NAMES = {
     'property_manager': ['Sunshine Property Management', 'Lakeside Rentals & Management',
                          'Metro Property Partners', 'Palm Grove Property Co.', 'Harbor Point Management'],
-    'realtor': ['Orlando Realty Group', 'Lakeside Real Estate', 'Metro Realty Partners',
+    'realtor': ['Sunshine Realty Group', 'Lakeside Real Estate', 'Metro Realty Partners',
                 'Palm Grove Homes', 'Harbor Point Realty'],
     'airbnb': ['Sunshine STR Co.', 'Lakeside Vacation Rentals', 'Metro Host Management',
                'Palm Grove Getaways', 'Harbor Point Stays'],

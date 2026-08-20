@@ -52,7 +52,7 @@ def send_payment_link(booking, kind='full'):
   <p style="margin:22px 0"><a href="{url}"
      style="background:#d3a84f;color:#1a1225;padding:13px 26px;border-radius:999px;text-decoration:none;font-weight:700">💳 Pay {amt_text} securely →</a></p>
   <p style="color:#9a95ad;font-size:0.85rem">Secure payment powered by Stripe. Questions? Just reply.</p>
-  <p style="color:#9a95ad;font-size:13px;margin-top:18px">{_biz()} · Orlando, FL</p>
+  <p style="color:#9a95ad;font-size:13px;margin-top:18px">{_biz()}{" · " + branding.city_line() if branding.city_line() else ""}</p>
 </div>""",
             )
             sent = True
@@ -127,7 +127,7 @@ def _send_receipt(booking, method):
   <h2 style="color:#b98a33">Thank you, {first}! ✅</h2>
   <p>We've received your payment of <strong>${booking.price:.2f}</strong> ({how}) for your
      {booking.service_label.lower()}. You're all set — thank you for choosing {_biz()}!</p>
-  <p style="color:#9a95ad;font-size:13px;margin-top:20px">{_biz()} · Orlando, FL</p>
+  <p style="color:#9a95ad;font-size:13px;margin-top:20px">{_biz()}{" · " + branding.city_line() if branding.city_line() else ""}</p>
 </div>""",
         )
     except Exception:

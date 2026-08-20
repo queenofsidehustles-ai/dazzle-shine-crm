@@ -9,7 +9,7 @@ So charging follows each booking's own appointment time instead.
 
 Two things make this less trivial than it sounds:
 
-The server runs on UTC and the business does not. In Orlando the server is four
+The server runs on UTC and the business does not. On US Eastern the server is four
 or five hours ahead depending on the season, so at 8pm local the server already
 believes it is tomorrow. Comparing a local appointment time against a UTC clock
 would charge people on the wrong day.

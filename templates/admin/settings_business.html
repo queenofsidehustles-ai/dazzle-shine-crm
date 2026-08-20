@@ -25,7 +25,7 @@
       </div>
       <div class="form-group">
         <label>City</label>
-        <input type="text" name="city" value="{{ current.city }}" placeholder="Orlando" />
+        <input type="text" name="city" value="{{ current.city }}" placeholder="Your city" />
       </div>
       <div class="form-group">
         <label>State</label>
@@ -43,7 +43,7 @@
         <label>Time Zone</label>
         <select name="timezone">
           {% for tz, tzlabel in [
-              ('America/New_York', 'Eastern (New York, Orlando, Atlanta)'),
+              ('America/New_York', 'Eastern (New York, Miami, Atlanta)'),
               ('America/Chicago', 'Central (Chicago, Dallas, Houston)'),
               ('America/Denver', 'Mountain (Denver, Salt Lake City)'),
               ('America/Phoenix', 'Arizona (no daylight saving)'),
@@ -256,7 +256,7 @@
       </div>
     </div>
     <div style="background:#f0edf8;border-radius:8px;padding:12px;font-size:0.82rem;color:#5f5878;margin-bottom:16px">
-      <strong style="color:#3b2460">Recommended for Orlando:</strong><br>
+      <strong style="color:#3b2460">A good starting point:</strong><br>
       • <strong>FDLE</strong> (Florida state check, ~$24, applicant pays) → <code>https://bg.fdle.state.fl.us</code><br>
       • <strong>Checkr for Individuals</strong> (~$30) → <code>https://checkr.com/applicants</code><br>
       • <strong>Free first step</strong>: Always check National Sex Offender Registry → <code>https://www.nsopw.gov</code>

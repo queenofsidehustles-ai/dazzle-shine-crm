@@ -170,7 +170,7 @@ def search():
     category = request.form.get('category', 'property_manager')
     location = request.form.get('location', '').strip()
     if not location:
-        flash('Enter a city or area to search (e.g. "Orlando, FL").', 'error')
+        flash('Enter a city or area to search — a town and state.', 'error')
         return redirect(url_for('places_finder.dashboard'))
 
     demo = not finder.api_key_present()
