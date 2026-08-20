@@ -1,0 +1,19 @@
+# Keep the image to what the app needs to run.
+.git
+.github
+node_modules
+tests
+test-results
+playwright.config.js
+instance
+*.db
+*.sqlite3
+__pycache__
+**/__pycache__
+*.pyc
+.env
+.DS_Store
+audit_report.txt
+release.py
+*.md
+!RELEASE

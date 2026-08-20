@@ -118,7 +118,11 @@ def version():
     neither is available — a missing version must never take a page down.
     """
     sha = (os.environ.get('RAILWAY_GIT_COMMIT_SHA')
-           or os.environ.get('SOURCE_COMMIT') or '').strip()
+           or os.environ.get('SOURCE_COMMIT')
+           # Stamped into the customer image at build time. A container has no
+           # .git and none of Railway's git variables, so without this every
+           # customer instance would report 'dev' and none could be told apart.
+           or os.environ.get('RELEASE_SHA') or '').strip()
     if not sha:
         sha = _git('rev-parse', 'HEAD')
     return sha[:7] if sha else 'dev'
@@ -144,6 +148,10 @@ def release_channel():
     """
     branch = (os.environ.get('RAILWAY_GIT_BRANCH') or '').strip()
     if not branch:
+        # An image has no branch. It was published from a release tag, so by
+        # definition it is on the stable channel.
+        if os.environ.get('RELEASE_TAG'):
+            return 'stable'
         branch = _git('rev-parse', '--abbrev-ref', 'HEAD')
     return branch or 'unknown'
 
@@ -157,6 +165,9 @@ def release_tag():
     deployed instance — which made the release invisible in exactly the place it
     needed to be visible.
     """
+    stamped = (os.environ.get('RELEASE_TAG') or '').strip()
+    if stamped:
+        return stamped
     try:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'RELEASE')
         with open(path) as f:
