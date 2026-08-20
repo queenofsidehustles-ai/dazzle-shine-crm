@@ -43,7 +43,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      # Build it and RUN it before anybody gets it. An image that builds fine
+      # and then dies on boot is the failure that matters, and the only way to
+      # know is to start it and ask it a question.
+      - name: Build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -51,6 +54,46 @@ jobs:
           # prefers a root Dockerfile over railway.toml's nixpacks builder, so
           # its presence silently changed how this business's own production
           # instance was built — and took the site down.
+          file: docker/Dockerfile
+          load: true
+          tags: crm:smoketest
+          build-args: |
+            RELEASE_TAG=${{ steps.meta.outputs.tag }}
+            RELEASE_SHA=${{ steps.meta.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test — does it actually boot and answer?
+        run: |
+          docker run -d --name crm-smoke -p 8080:8080 \
+            -e SECRET_KEY=smoketest \
+            -e DATABASE_URL=sqlite:////tmp/smoke.db \
+            crm:smoketest
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/version > /tmp/version.json 2>/dev/null; then
+              echo "Answered after ${i}s:"
+              cat /tmp/version.json
+              echo
+              grep -q '"release":"${{ steps.meta.outputs.tag }}"' /tmp/version.json \
+                || { echo "::error::image does not report the release it was built from"; exit 1; }
+              grep -q '"channel":"stable"' /tmp/version.json \
+                || { echo "::error::image does not report the stable channel"; exit 1; }
+              curl -fsS http://localhost:8080/login > /dev/null \
+                || { echo "::error::the login page does not render"; exit 1; }
+              echo "✅ boots, serves /version and /login"
+              docker rm -f crm-smoke > /dev/null
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::image never answered on :8080 — here is why:"
+          docker logs crm-smoke
+          exit 1
+
+      - name: Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
           file: docker/Dockerfile
           push: true
           tags: |
@@ -60,7 +103,6 @@ jobs:
             RELEASE_TAG=${{ steps.meta.outputs.tag }}
             RELEASE_SHA=${{ steps.meta.outputs.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Say what was published
         run: |
