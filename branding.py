@@ -149,5 +149,17 @@ def release_channel():
 
 
 def release_tag():
-    """The release this build belongs to, e.g. 'v2026.08.20'. Blank if untagged."""
-    return _git('describe', '--tags', '--abbrev=0') or ''
+    """The release this build belongs to, e.g. 'v2026.08.20'.
+
+    Read from the RELEASE file that release.py writes and commits, not from a
+    git tag: the build has no tags. Railway clones the branch to run the app,
+    not the repository's history, so `git describe` came back empty on every
+    deployed instance — which made the release invisible in exactly the place it
+    needed to be visible.
+    """
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'RELEASE')
+        with open(path) as f:
+            return f.readline().strip()
+    except OSError:
+        return _git('describe', '--tags', '--abbrev=0') or ''

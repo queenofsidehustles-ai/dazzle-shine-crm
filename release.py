@@ -88,7 +88,8 @@ def preflight():
 def show():
     commits = pending()
     current = git('rev-parse', '--short', f'{REMOTE}/{STABLE}')
-    latest = git('describe', '--tags', '--abbrev=0', check=False) or '(none yet)'
+    latest = git('show', f'{REMOTE}/{STABLE}:RELEASE', check=False).split('\n')[0] \
+        or '(none yet)'
     say(f'Customers are on:  {current}   release {latest}')
     say(f'Ready to release:  {len(commits)} commit(s)\n')
     for c in commits:
@@ -116,10 +117,18 @@ def go():
 
     tag = next_tag()
     say(f'\nAll green. Tagging {tag} and promoting {STABLE}…')
-    git('tag', '-a', tag, '-m', f'Release {tag} — {len(commits)} change(s)',
-        f'{REMOTE}/{MAIN}')
+
+    # The running app cannot read a git tag: Railway clones the branch to run
+    # the code, not the history. So the release writes its own name into a file
+    # that ships with it, and /version reads that.
+    (ROOT / 'RELEASE').write_text(f'{tag}\n{date.today().isoformat()}\n')
+    git('add', 'RELEASE')
+    git('commit', '-m', f'Release {tag}')
+    git('push', REMOTE, MAIN)
+
+    git('tag', '-a', tag, '-m', f'Release {tag} — {len(commits)} change(s)', MAIN)
     # Fast-forward only: stable can never contain anything main does not.
-    git('branch', '-f', STABLE, f'{REMOTE}/{MAIN}')
+    git('branch', '-f', STABLE, MAIN)
     git('push', REMOTE, f'{STABLE}:{STABLE}')
     git('push', REMOTE, tag)
     say(f'\n✅ Released {tag}. Customer instances will redeploy within a few minutes.')

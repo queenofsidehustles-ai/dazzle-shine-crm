@@ -68,7 +68,20 @@ setup = (ROOT / 'NEW_CUSTOMER_SETUP.md').read_text()
 check('stable' in setup and 'not `main`' in setup,
       'and the setup guide says which branch a customer instance follows')
 
-print('\n6. The tool will not promote past a failing test')
+print('\n6. The release name survives the trip onto a server')
+# Railway clones the branch to run the code, not the history, so `git describe`
+# is empty on every deployed instance. The release stamps its own name into a
+# file that ships with it.
+rel = ROOT / 'RELEASE'
+check(rel.exists(), 'the release leaves a RELEASE file behind')
+check(rel.read_text().strip().split('\n')[0].startswith('v'),
+      f'naming the release ({rel.read_text().strip().splitlines()[0]})')
+check('RELEASE' in (ROOT / 'release.py').read_text(),
+      'and the tool writes it on every release')
+check(branding.release_tag() == rel.read_text().split('\n')[0].strip(),
+      'which is exactly what /version reports')
+
+print('\n7. The tool will not promote past a failing test')
 src = (ROOT / 'release.py').read_text()
 check('run_tests()' in src and 'nothing was released' in src,
       'a failing suite stops the release')
