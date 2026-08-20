@@ -33,6 +33,15 @@ jobs:
           echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          # :stable is what customers follow, so ONLY a real release may move
+          # it. A hand-run build off a branch publishes itself for inspection
+          # and nothing else — a manual run once pointed :stable at an
+          # unreleased commit, which is a change no one had promoted.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "channel_tag=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel_tag=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: docker/setup-buildx-action@v3
 
@@ -98,7 +107,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
-            ${{ steps.meta.outputs.image }}:stable
+            ${{ steps.meta.outputs.channel_tag == 'true' && format('{0}:stable', steps.meta.outputs.image) || '' }}
           build-args: |
             RELEASE_TAG=${{ steps.meta.outputs.tag }}
             RELEASE_SHA=${{ steps.meta.outputs.sha }}
