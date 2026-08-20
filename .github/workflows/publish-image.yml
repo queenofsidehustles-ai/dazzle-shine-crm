@@ -47,6 +47,11 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          # The Dockerfile deliberately does NOT live at the repo root: Railway
+          # prefers a root Dockerfile over railway.toml's nixpacks builder, so
+          # its presence silently changed how this business's own production
+          # instance was built — and took the site down.
+          file: docker/Dockerfile
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
