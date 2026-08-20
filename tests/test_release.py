@@ -65,8 +65,12 @@ doc = (ROOT / 'RELEASING.md').read_text()
 for phrase in ('stable', 'main', 'release.py --go', '--rollback', '/version'):
     check(phrase in doc, f'RELEASING.md covers {phrase}')
 setup = (ROOT / 'NEW_CUSTOMER_SETUP.md').read_text()
-check('stable' in setup and 'not `main`' in setup,
-      'and the setup guide says which branch a customer instance follows')
+check('ghcr.io' in setup and ':stable' in setup,
+      'the setup guide gives the image a customer deploys')
+check('read:packages' in setup,
+      'and the read-only token scope it is pulled with')
+check('"channel":"stable"' in setup.replace(' ', ''),
+      'and says to check the instance reports the stable channel')
 
 print('\n6. The release name survives the trip onto a server')
 # Railway clones the branch to run the code, not the history, so `git describe`
@@ -81,7 +85,35 @@ check('RELEASE' in (ROOT / 'release.py').read_text(),
 check(branding.release_tag() == rel.read_text().split('\n')[0].strip(),
       'which is exactly what /version reports')
 
-print('\n7. The tool will not promote past a failing test')
+print("\n7. A customer's image is buildable and says what it is")
+dockerfile = (ROOT / 'Dockerfile').read_text()
+check('gunicorn' in dockerfile, 'the image runs the app with gunicorn')
+check("app:create_app()" in dockerfile,
+      'the same entrypoint railway.toml uses, so image and source run alike')
+check('tzdata' in dockerfile,
+      'with a timezone database — a slim image without one silently dates '
+      'everything in UTC, which is what put every calendar job on the wrong day')
+check('RELEASE_SHA' in dockerfile and 'RELEASE_TAG' in dockerfile,
+      'and the build stamps in which release it is')
+
+wf = (ROOT / '.github' / 'workflows' / 'publish-image.yml').read_text()
+check("tags: ['v*']" in wf, 'CI publishes on a release tag')
+check(':stable' in wf or 'stable' in wf, 'pushing the stable tag customers follow')
+check('packages: write' in wf, 'with permission to publish')
+
+import os as _os
+_os.environ['RELEASE_SHA'] = 'abc1234def'
+_os.environ['RELEASE_TAG'] = 'v9999.01.01'
+import importlib
+importlib.reload(branding)
+check(branding.version() == 'abc1234', 'a running container reports its build')
+check(branding.release_channel() == 'stable',
+      'and calls itself stable — an image only ever comes from a release')
+check(branding.release_tag() == 'v9999.01.01', 'and names the release')
+del _os.environ['RELEASE_SHA'], _os.environ['RELEASE_TAG']
+importlib.reload(branding)
+
+print('\n8. The tool will not promote past a failing test')
 src = (ROOT / 'release.py').read_text()
 check('run_tests()' in src and 'nothing was released' in src,
       'a failing suite stops the release')

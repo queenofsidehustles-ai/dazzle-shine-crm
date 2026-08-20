@@ -34,15 +34,38 @@ shows them a Setup checklist tracking what's left.
 
 ## 1. Create their app on Railway
 
-1. Railway → **New Project** → **Deploy from GitHub repo** → this repo.
-2. **Set the branch to `stable`**, not `main`. `main` is this business's own
-   channel and changes on every push; `stable` only moves when a release is
-   promoted deliberately. See **RELEASING.md**. This is the single easiest thing
-   to get wrong and the most expensive: an instance on `main` takes every change
-   the moment it is pushed, untested, into someone's live business.
-3. Add a **Postgres** database to the project. Railway sets `DATABASE_URL` itself.
-4. Deploy. It will boot with placeholder branding — that's expected. Check
-   `/version` reports `"channel": "stable"` before going any further.
+A customer deploys the **published image**, not this repository. They get every
+release; they never get the code, and you never hand out repository access.
+
+1. Railway → **New Project** → **Empty Project** → **+ New → Docker Image**.
+2. Image: `ghcr.io/queenofsidehustles-ai/dazzle-shine-crm:stable`
+   `:stable` is the release channel — it moves only when `release.py --go` runs.
+   Pin an exact release instead (e.g. `:v2026.08.19.3`) if a customer needs to
+   sit still for a while.
+3. **Registry credentials.** The image is private. In the service's
+   **Settings → Source → Registry Credentials**, paste a GitHub token with the
+   **`read:packages`** scope only — never the token CI publishes with. Railway
+   fills the username in itself.
+   > This needs Railway's **Pro** plan on their workspace. Private registry
+   > credentials are a Pro feature; public images work on any plan. Weigh that
+   > against giving somebody your source — it is the cheaper of the two.
+4. Add a **Postgres** database to the project. Railway sets `DATABASE_URL` itself.
+5. Deploy. It will boot with placeholder branding — that's expected. Check
+   `/version` before going any further:
+
+   ```json
+   {"build":"…","channel":"stable","release":"v2026.08.19.3"}
+   ```
+
+   `channel` must say **stable**. If it says `main`, this instance is following
+   the development branch and will take every change the moment it is pushed,
+   untested, into somebody's live business.
+
+### Updating them later
+
+Nothing to do. `release.py --go` tags a release, CI publishes the image, and
+their service pulls it on its next deploy. Railway can redeploy them
+automatically on a new image, or you can press Deploy on their service.
 
 ## 2. Set their environment variables
 

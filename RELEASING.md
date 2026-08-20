@@ -45,6 +45,23 @@ rolled back safely, because the old code ignores a column it doesn't know about.
 A release that *removed* or *renamed* one cannot. Adding is safe, removing is
 not — which is why `_migrate_db()` in `app.py` only ever adds.
 
+## What a release actually publishes
+
+Tagging a release pushes the tag, and CI builds the customer image from it:
+
+```
+ghcr.io/queenofsidehustles-ai/dazzle-shine-crm:v2026.08.19.3   # that release
+ghcr.io/queenofsidehustles-ai/dazzle-shine-crm:stable          # what customers follow
+```
+
+Customers deploy the **image**, not this repository — they get every release and
+never get the code. Nothing needs Docker on your laptop; the build runs in
+GitHub Actions. Watch it with `gh run list --workflow=publish-image.yml`.
+
+If a build fails, the tag exists but the image does not, and customers simply
+stay where they are. Fix it and run `release.py --go` again, or re-run the
+workflow by hand from the Actions tab.
+
 ## Checking what an instance is running
 
 Open `/version` on any instance. No login needed:
