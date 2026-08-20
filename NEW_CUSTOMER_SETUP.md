@@ -35,8 +35,14 @@ shows them a Setup checklist tracking what's left.
 ## 1. Create their app on Railway
 
 1. Railway → **New Project** → **Deploy from GitHub repo** → this repo.
-2. Add a **Postgres** database to the project. Railway sets `DATABASE_URL` itself.
-3. Deploy. It will boot with placeholder branding — that's expected.
+2. **Set the branch to `stable`**, not `main`. `main` is this business's own
+   channel and changes on every push; `stable` only moves when a release is
+   promoted deliberately. See **RELEASING.md**. This is the single easiest thing
+   to get wrong and the most expensive: an instance on `main` takes every change
+   the moment it is pushed, untested, into someone's live business.
+3. Add a **Postgres** database to the project. Railway sets `DATABASE_URL` itself.
+4. Deploy. It will boot with placeholder branding — that's expected. Check
+   `/version` reports `"channel": "stable"` before going any further.
 
 ## 2. Set their environment variables
 

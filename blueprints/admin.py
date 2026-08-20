@@ -13,12 +13,18 @@ admin_bp = Blueprint('admin', __name__)
 
 @admin_bp.route('/version')
 def version():
-    """Which build this instance is running. Deliberately public and deliberately
-    boring: a seven-character commit hash and nothing else, so 'did the deploy
+    """Which build this instance is running, and which release channel it
+    follows. Deliberately public and deliberately boring, so 'did the deploy
     land?' can be answered from a phone, from a browser that is not logged in,
-    or by whoever is standing up the next white-label instance."""
+    or by whoever is standing up the next white-label instance.
+
+    channel 'stable' is a customer instance, which only moves when a release is
+    promoted. 'main' is this business's own, which moves on every push.
+    """
     import branding
-    return {'build': branding.version()}
+    return {'build': branding.version(),
+            'channel': branding.release_channel(),
+            'release': branding.release_tag()}
 
 
 @admin_bp.route('/')

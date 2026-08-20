@@ -34,9 +34,14 @@ Still open, and worth doing before this grows past a couple of customers:
 
 - [ ] **Admin UI theming.** Emails and customer-facing pages are fully themeable;
       the admin CSS is still gold-and-purple. Only the owner sees it.
-- [ ] **A release you promote deliberately.** Right now a push to `main` deploys to
-      every instance at once.
-- [ ] **Staging.** There is still nowhere to try a change before customers see it.
+- [x] **A release you promote deliberately.** Done 2026-08-20. Customers deploy
+      from `stable`, which only moves when `release.py --go` runs — and it runs
+      every test suite before it will. `/version` reports the release each
+      instance is on, and `--rollback` puts them back. See **RELEASING.md**.
+- [x] **Staging.** Done 2026-08-20, by using this business's own instance as the
+      canary rather than standing up a second environment nobody would look at.
+      `main` is live here immediately; customers only see a change once it has
+      been promoted.
 
 ## Contractor pay
 - [ ] **Auto-flag 55% raise candidates.** When a contractor hits the top-performer

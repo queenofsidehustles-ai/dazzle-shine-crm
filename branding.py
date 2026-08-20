@@ -120,11 +120,34 @@ def version():
     sha = (os.environ.get('RAILWAY_GIT_COMMIT_SHA')
            or os.environ.get('SOURCE_COMMIT') or '').strip()
     if not sha:
-        try:
-            import subprocess
-            sha = subprocess.run(['git', 'rev-parse', 'HEAD'],
-                                 capture_output=True, text=True, timeout=2,
-                                 cwd=os.path.dirname(os.path.abspath(__file__))).stdout.strip()
-        except Exception:
-            sha = ''
+        sha = _git('rev-parse', 'HEAD')
     return sha[:7] if sha else 'dev'
+
+
+def _git(*args):
+    try:
+        import subprocess
+        return subprocess.run(('git',) + args, capture_output=True, text=True,
+                              timeout=2,
+                              cwd=os.path.dirname(os.path.abspath(__file__))).stdout.strip()
+    except Exception:
+        return ''
+
+
+def release_channel():
+    """Which branch this instance deploys from — the release channel.
+
+    'stable' is what a customer's instance follows: it only moves when a release
+    is promoted deliberately. 'main' is the channel this business runs itself,
+    where a change lands the moment it is pushed. Knowing which one an instance
+    is on is the first question when it behaves differently from another.
+    """
+    branch = (os.environ.get('RAILWAY_GIT_BRANCH') or '').strip()
+    if not branch:
+        branch = _git('rev-parse', '--abbrev-ref', 'HEAD')
+    return branch or 'unknown'
+
+
+def release_tag():
+    """The release this build belongs to, e.g. 'v2026.08.20'. Blank if untagged."""
+    return _git('describe', '--tags', '--abbrev=0') or ''

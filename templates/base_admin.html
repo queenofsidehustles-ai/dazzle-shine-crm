@@ -335,7 +335,9 @@
       <a href="{{ url_for('admin.logout') }}">Sign out</a>
       {# Which build is on screen. "Is my change live yet?" should not require
          logging into Railway to answer. #}
-      <div style="font-size:0.66rem;color:rgba(255,255,255,0.35);margin-top:8px;letter-spacing:0.04em">build {{ APP_VERSION }}</div>
+      <div style="font-size:0.66rem;color:rgba(255,255,255,0.35);margin-top:8px;letter-spacing:0.04em">
+        {{ APP_RELEASE or 'build' }} · {{ APP_VERSION }}{% if APP_CHANNEL and APP_CHANNEL != 'stable' %} · {{ APP_CHANNEL }}{% endif %}
+      </div>
     </div>
   </aside>
 
