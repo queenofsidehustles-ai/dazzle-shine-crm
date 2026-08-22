@@ -164,7 +164,7 @@
       <p style="font-size:0.8rem;color:#9a95ad;line-height:1.55;margin-bottom:14px">
         Encrypted and stored with your own records. Opening one needs your login — there's no public link.
       </p>
-      {% for kind, label in [('id', '🪪 Photo ID'), ('w9', '📄 Form W-9')] %}
+      {% for kind, label in [('id', '🪪 Photo ID'), ('w9', '📄 Form W-9'), ('bgcheck', '🔍 Background check')] %}
         {% set doc = s.document(kind) %}
         <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border:1px solid #e4dfef;
                     border-radius:8px;margin-bottom:8px">
@@ -187,7 +187,7 @@
                       style="background:none;border:1px solid #fed7d7;border-radius:7px;padding:6px 10px;
                              color:#c53030;cursor:pointer;font-family:inherit;font-size:0.8rem">✕</button>
             </form>
-          {% else %}
+          {% elif kind != 'bgcheck' %}
             <form method="POST" action="{{ url_for('contractors.request_document', staff_id=s.id, kind=kind) }}"
                   style="display:inline">
               <button type="submit"

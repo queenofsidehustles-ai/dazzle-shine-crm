@@ -97,8 +97,9 @@
 <div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:12px;padding:16px 20px;margin-bottom:24px">
   <p style="font-weight:700;color:#92400e;font-size:1rem;margin-bottom:6px">📎 Background Check Submitted — Review It</p>
   <p style="font-size:0.85rem;color:#7c4a04;margin-bottom:12px"><strong>Your next step:</strong> {{ a.name.split()[0] }} submitted their background check. Open it from the <strong>Background Check</strong> card below. If it's recent and clear, set the status to <em>Cleared</em> → save. Then you'll be ready to hire.</p>
-  {% if a.bgcheck_uploaded_url %}
-  <a href="{{ a.bgcheck_uploaded_url }}" target="_blank"
+  {% set bgdoc = a.document('bgcheck') %}
+  {% if bgdoc or a.bgcheck_uploaded_url %}
+  <a href="{{ url_for('contractors.view_document', doc_id=bgdoc.id) if bgdoc else a.bgcheck_uploaded_url }}" target="_blank"
      style="background:#d3a84f;color:#1f1333;font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem;display:inline-block">
     📄 View Their Background Check →
   </a>
@@ -311,8 +312,9 @@
       <div style="background:#d4edda;border:1px solid #a3cfbb;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:0.85rem">
         <strong style="color:#155724">📎 Candidate submitted their results {{ a.bgcheck_uploaded_at.strftime('%b %d, %Y') }}</strong>
         <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-          {% if a.bgcheck_uploaded_url %}
-          <a href="{{ a.bgcheck_uploaded_url }}" target="_blank"
+          {% set bgdoc2 = a.document('bgcheck') %}
+          {% if bgdoc2 or a.bgcheck_uploaded_url %}
+          <a href="{{ url_for('contractors.view_document', doc_id=bgdoc2.id) if bgdoc2 else a.bgcheck_uploaded_url }}" target="_blank"
              style="display:inline-block;background:#155724;color:#fff;padding:7px 14px;border-radius:6px;
                     text-decoration:none;font-weight:600;font-size:0.82rem;text-align:center">
             📄 View Uploaded File →

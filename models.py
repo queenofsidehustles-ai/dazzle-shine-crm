@@ -632,7 +632,8 @@ class ContractorApplication(db.Model):
     bgcheck_request_sent_at = db.Column(db.DateTime)
     bgcheck_results_received = db.Column(db.Boolean, default=False)
     bgcheck_upload_token = db.Column(db.String(64))      # unique link candidate uses to submit results
-    bgcheck_uploaded_url = db.Column(db.String(500))     # Cloudinary URL of uploaded PDF/image
+    bgcheck_uploaded_url = db.Column(db.String(500))     # legacy: public Cloudinary URL. New uploads
+                                                         # go to the encrypted store — see documents.
     bgcheck_uploaded_link = db.Column(db.String(500))    # OR a verification link they pasted
     bgcheck_uploaded_at = db.Column(db.DateTime)
     # Reference tracking
@@ -663,6 +664,15 @@ class ContractorApplication(db.Model):
 
     responses = db.relationship('InterviewResponse', backref='application', lazy=True,
                                 order_by='InterviewResponse.question_index')
+
+    def document(self, kind):
+        return next((d for d in self.documents if d.kind == kind), None)
+
+    @property
+    def has_bgcheck_document(self):
+        """A file we hold. A pasted verification link is a different thing — it
+        points at somebody else's site, which may or may not still be there."""
+        return bool(self.document('bgcheck') or self.bgcheck_uploaded_url)
 
 
 class InterviewResponse(db.Model):
@@ -698,7 +708,13 @@ class ContractorDocument(db.Model):
     ]
 
     id = db.Column(db.Integer, primary_key=True)
-    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False, index=True)
+    # Exactly one of these. A background check arrives while the person is still
+    # an applicant and there is no Staff row to hang it on; it is re-pointed at
+    # the Staff row when they are hired, so the document follows the person
+    # rather than being stranded on the application they came in through.
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=True, index=True)
+    application_id = db.Column(db.Integer, db.ForeignKey('contractor_application.id'),
+                               nullable=True, index=True)
     kind = db.Column(db.String(20), nullable=False)
     filename = db.Column(db.String(200))
     content_type = db.Column(db.String(80))
@@ -708,8 +724,19 @@ class ContractorDocument(db.Model):
 
     staff = db.relationship('Staff', backref=db.backref('documents', lazy=True,
                             cascade='all, delete-orphan'))
+    application = db.relationship('ContractorApplication',
+                                  backref=db.backref('documents', lazy=True,
+                                                     cascade='all, delete-orphan'))
 
-    __table_args__ = (db.UniqueConstraint('staff_id', 'kind', name='uq_doc_staff_kind'),)
+    __table_args__ = (
+        db.UniqueConstraint('staff_id', 'kind', name='uq_doc_staff_kind'),
+        db.UniqueConstraint('application_id', 'kind', name='uq_doc_app_kind'),
+    )
+
+    @property
+    def owner_name(self):
+        who = self.staff or self.application
+        return getattr(who, 'name', '') or ''
 
     @property
     def label(self):

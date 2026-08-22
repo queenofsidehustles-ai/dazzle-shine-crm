@@ -84,6 +84,11 @@
 
     <!-- FORM -->
     <div class="card" id="form-card">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="err" style="display:block;margin-bottom:14px">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
       <h1>Submit Your Background Check</h1>
       <p class="lead">
         Hi {{ app.name.split()[0] }}! Please upload your background check results below
@@ -96,19 +101,20 @@
 
       <!-- UPLOAD FILE -->
       <div class="opt-label"><span class="num">📎</span> Upload your results (PDF or photo)</div>
-      <label class="drop" id="drop-zone">
-        <div class="ico" id="drop-ico">📎</div>
-        <div class="big" id="drop-big">Tap to choose a file</div>
-        <div class="small" id="drop-small">PDF, JPG, or PNG — up to 20MB</div>
-        <input type="file" id="file-input" accept=".pdf,image/*" />
-      </label>
-
-      <div class="err" id="err-box"></div>
-
-      <button class="btn" id="submit-btn">Submit Background Check →</button>
+      <form method="POST" enctype="multipart/form-data" action="{{ url_for('interviews.bgcheck_submit', token=token) }}">
+        <label class="drop" id="drop-zone">
+          <div class="ico" id="drop-ico">📎</div>
+          <div class="big" id="drop-big">Tap to choose a file</div>
+          <div class="small" id="drop-small">PDF, JPG, or PNG — up to {{ max_mb }}MB</div>
+          <input type="file" name="document" accept="application/pdf,image/*" required
+                 style="display:block;width:100%;margin-top:12px" />
+        </label>
+        <button class="btn" type="submit">Submit Background Check →</button>
+      </form>
 
       <div class="note">
-        🔒 Your information is private and secure. This link is unique to you — please don't share it.
+        🔒 Stored encrypted with our own records — not on a public website, and never shown to
+        customers. This link is unique to you, so please don't share it.
         Questions? Just reply to the email we sent you.
       </div>
     </div>
@@ -128,80 +134,6 @@
     {% endif %}
   </div>
 
-{% if not already_done %}
-<script>
-  const CLOUD_NAME    = {{ cloud_name | tojson }};
-  const UPLOAD_PRESET = {{ upload_preset | tojson }};
-  const TOKEN         = {{ token | tojson }};
 
-  let selectedFile = null;
-
-  const fileInput = document.getElementById('file-input');
-  const dropZone  = document.getElementById('drop-zone');
-  const submitBtn = document.getElementById('submit-btn');
-  const errBox    = document.getElementById('err-box');
-
-  fileInput.addEventListener('change', () => {
-    if (fileInput.files.length) {
-      selectedFile = fileInput.files[0];
-      dropZone.classList.add('has-file');
-      document.getElementById('drop-ico').textContent = '✅';
-      document.getElementById('drop-big').textContent = selectedFile.name;
-      document.getElementById('drop-small').textContent = 'File ready — tap Submit below';
-    }
-  });
-
-  function showErr(msg) {
-    errBox.textContent = msg;
-    errBox.style.display = 'block';
-  }
-
-  submitBtn.addEventListener('click', async () => {
-    errBox.style.display = 'none';
-
-    if (!selectedFile) {
-      showErr('Please choose a PDF or photo of your background check first.');
-      return;
-    }
-
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Uploading file…';
-
-    let uploadedUrl = '';
-
-    try {
-      const fd = new FormData();
-      fd.append('file', selectedFile);
-      fd.append('upload_preset', UPLOAD_PRESET);
-      // 'auto' handles PDFs, images, etc.
-      const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`,
-        { method: 'POST', body: fd }
-      );
-      const cloud = await res.json();
-      if (!cloud.secure_url) throw new Error(cloud.error?.message || 'Upload failed');
-      uploadedUrl = cloud.secure_url;
-
-      submitBtn.textContent = 'Saving…';
-      const save = await fetch(`/background-check/${TOKEN}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uploaded_url: uploadedUrl }),
-      });
-      const result = await save.json();
-      if (!save.ok) throw new Error(result.error || 'Could not save');
-
-      document.getElementById('form-card').classList.add('hidden');
-      document.getElementById('success-card').classList.remove('hidden');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    } catch (e) {
-      showErr('Something went wrong: ' + e.message + '. Please try again or reply to our email.');
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Submit Background Check →';
-    }
-  });
-</script>
-{% endif %}
 </body>
 </html>

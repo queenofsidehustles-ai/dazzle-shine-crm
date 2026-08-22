@@ -488,6 +488,7 @@ def _migrate_db():
         ('booking', 'skip_review',         'BOOLEAN DEFAULT FALSE'),
         # Staff worker model
         ('staff', 'worker_model', "VARCHAR(20) DEFAULT 'contractor'"),
+        ('contractor_document', 'application_id', 'INTEGER'),
         ('staff', 'w9_url',          'VARCHAR(500)'),
         ('staff', 'w9_uploaded_at',  'TIMESTAMP'),
         ('staff', 'w9_requested_at', 'TIMESTAMP'),
@@ -638,6 +639,26 @@ def _migrate_db():
                 conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN {col} {col_type}'))
         except Exception:
             pass  # column already exists — safe to ignore
+
+    # Changes that aren't "add a column". Same idea, same tolerance for having
+    # already been applied — but these are statements rather than columns, so
+    # they can't be expressed in the list above.
+    #
+    # contractor_document.staff_id was NOT NULL when the table was first
+    # created, which was right until background checks needed storing: those
+    # arrive while the person is still an applicant and there is no Staff row
+    # to point at. Postgres can drop the constraint in place. SQLite cannot,
+    # and doesn't need to — a fresh dev database is built from the model, which
+    # already has it nullable.
+    alterations = [
+        'ALTER TABLE contractor_document ALTER COLUMN staff_id DROP NOT NULL',
+    ]
+    for stmt in alterations:
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception:
+            pass  # already applied, or a backend that can't and doesn't need to
 
 
 def _seed_checklists():

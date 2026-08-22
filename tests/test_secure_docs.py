@@ -149,7 +149,50 @@ check(f'/contractors/documents/{doc_id}/view' not in page or 'View' in page,
       'with a way to open the ones that arrived')
 check('Not on file' in page, 'and saying plainly which are missing')
 
-print('\n10. Encryption that is not really encryption says so')
+print('\n10. A background check arrives before there is anyone to attach it to')
+from models import ContractorApplication
+REPORT = b'%PDF-1.4 CRIMINAL-HISTORY' + b'\x00' * 200
+with app.app_context():
+    a = ContractorApplication(name='Bea Lopez', email='bea@example.com', phone='4075550202',
+                              interview_status='completed', status='reviewing',
+                              bgcheck_upload_token='bg-tok', offer_token='off-tok')
+    db.session.add(a)
+    db.session.commit()
+    app_id = a.id
+
+page = public.get('/background-check/bg-tok').get_data(as_text=True)
+check('cloudinary' not in page.lower(),
+      'the upload page no longer sends the file to a public host')
+r = public.post('/background-check/bg-tok/submit',
+                data={'document': (io.BytesIO(REPORT), 'check.pdf', 'application/pdf')},
+                content_type='multipart/form-data', follow_redirects=True)
+check(r.status_code == 200, 'an applicant can submit one')
+with app.app_context():
+    a = db.session.get(ContractorApplication, app_id)
+    d = a.document('bgcheck')
+    check(d is not None and d.application_id == app_id and d.staff_id is None,
+          'it is held against the application, because there is no Staff row yet')
+    check(REPORT not in bytes(d.data), 'and criminal history is not sitting in the database in the clear')
+    check(a.bgcheck_results_received is True, 'the application is flagged as received')
+    bg_id = d.id
+check(public.get(f'/contractors/documents/{bg_id}/view').status_code in (301, 302),
+      'a logged-out request for it is turned away')
+check(owner.get(f'/contractors/documents/{bg_id}/view').get_data() == REPORT,
+      'and the owner gets the real report')
+
+print('\n11. It follows them when they are hired')
+public.get('/contractors/offer/accept/off-tok', follow_redirects=True)
+with app.app_context():
+    hired = Staff.query.filter_by(email='bea@example.com').first()
+    check(hired is not None, 'accepting the offer creates their Staff row')
+    moved = hired.document('bgcheck')
+    check(moved is not None and moved.staff_id == hired.id,
+          'the background check is now on the profile the owner actually looks at')
+    check(db.session.get(ContractorApplication, app_id).document('bgcheck') is None,
+          'and is no longer stranded on the application')
+    check(secure_docs.decrypt(moved.data) == REPORT, 'still the same readable document')
+
+print('\n12. Encryption that is not really encryption says so')
 real = os.environ['SECRET_KEY']
 os.environ['SECRET_KEY'] = 'dev-secret-change-me'
 check(secure_docs.is_ready() is False,

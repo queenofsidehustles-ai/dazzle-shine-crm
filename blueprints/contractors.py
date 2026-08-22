@@ -635,6 +635,7 @@ def hire(app_id):
     db.session.flush()          # get s.id so we can link the application
     if hasattr(s, 'application_id'):
         s.application_id = a.id
+    _carry_documents_to_staff(a, s)
     a.status = 'hired'
     db.session.commit()
 
@@ -750,6 +751,8 @@ def accept_offer(token):
         a.status = 'reviewing'
     if hasattr(s, 'application_id') and not s.application_id:
         s.application_id = a.id
+    db.session.flush()                   # need s.id before documents can point at it
+    _carry_documents_to_staff(a, s)
     if not s.agreement_token:            # existing staff may not have one yet
         s.agreement_token = secrets.token_urlsafe(32)
     db.session.commit()
@@ -809,6 +812,20 @@ DOC_COPY = {
         ],
     },
 }
+
+
+def _carry_documents_to_staff(app_rec, staff):
+    """Move an applicant's documents onto their Staff row when they're hired.
+
+    A background check is uploaded before there is a Staff row to hang it on, so
+    it lands on the application. Leaving it there would mean the one place the
+    owner looks for a cleaner's paperwork — their profile — is missing the
+    document that mattered most before they were let into anyone's home."""
+    for doc in list(app_rec.documents):
+        if staff.document(doc.kind):
+            continue          # they already sent a newer one directly
+        doc.staff_id = staff.id
+        doc.application_id = None
 
 
 @contractors_bp.route('/documents/<token>/<kind>', methods=['GET', 'POST'])
@@ -872,6 +889,16 @@ def upload_document(token, kind):
                            max_mb=secure_docs.MAX_BYTES // (1024 * 1024))
 
 
+def _document_owner_url(doc):
+    """Back to whoever the document belongs to — a hired cleaner or an
+    applicant who hasn't been hired yet."""
+    if doc.staff_id:
+        return url_for('contractors.staff_detail', staff_id=doc.staff_id)
+    if doc.application_id:
+        return url_for('contractors.application_detail', app_id=doc.application_id)
+    return url_for('contractors.team')
+
+
 @contractors_bp.route('/documents/<int:doc_id>/view')
 @owner_required
 def view_document(doc_id):
@@ -883,9 +910,9 @@ def view_document(doc_id):
     if raw is None:
         flash('That document could not be decrypted — SECRET_KEY has changed since it was '
               'uploaded. Ask them to send it again.', 'error')
-        return redirect(url_for('contractors.staff_detail', staff_id=doc.staff_id))
+        return redirect(_document_owner_url(doc))
     ext = secure_docs.ALLOWED_TYPES.get(doc.content_type, 'bin')
-    safe_name = f"{doc.staff.name.replace(' ', '-').lower()}-{doc.kind}.{ext}"
+    safe_name = f"{(doc.owner_name or 'document').replace(' ', '-').lower()}-{doc.kind}.{ext}"
     resp = current_app.response_class(raw, mimetype=doc.content_type or 'application/octet-stream')
     resp.headers['Content-Disposition'] = f'inline; filename="{safe_name}"'
     # Not for caches or history — this is the whole point of the route.
@@ -898,11 +925,11 @@ def view_document(doc_id):
 @owner_required
 def delete_document(doc_id):
     doc = ContractorDocument.query.get_or_404(doc_id)
-    staff_id, label = doc.staff_id, doc.label
+    label, back = doc.label, _document_owner_url(doc)
     db.session.delete(doc)
     db.session.commit()
     flash(f'{label} deleted.', 'success')
-    return redirect(request.referrer or url_for('contractors.staff_detail', staff_id=staff_id))
+    return redirect(request.referrer or back)
 
 
 @contractors_bp.route('/documents/request/<int:staff_id>/<kind>', methods=['POST'])

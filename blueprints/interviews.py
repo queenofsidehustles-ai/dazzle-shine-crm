@@ -3,9 +3,10 @@ import secrets
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify, abort, url_for, flash, redirect
 from auth import login_required
-from models import ContractorApplication, InterviewResponse
+from models import ContractorApplication, InterviewResponse, ContractorDocument
 from extensions import db
 from notifications import send_email
+import secure_docs
 import branding
 
 interviews_bp = Blueprint('interviews', __name__)
@@ -175,50 +176,60 @@ def complete_interview(token):
 @interviews_bp.route('/background-check/<token>')
 def bgcheck_upload_page(token):
     app_rec = ContractorApplication.query.filter_by(bgcheck_upload_token=token).first_or_404()
-    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk')
-    upload_preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews')
-    already_done = bool(app_rec.bgcheck_uploaded_at)
     return render_template('interview/bgcheck_upload.html',
         app=app_rec,
         token=token,
-        cloud_name=cloud_name,
-        upload_preset=upload_preset,
-        already_done=already_done,
+        already_done=bool(app_rec.bgcheck_uploaded_at),
+        max_mb=secure_docs.MAX_BYTES // (1024 * 1024),
     )
 
 
 @interviews_bp.route('/background-check/<token>/submit', methods=['POST'])
 def bgcheck_submit(token):
+    """A background check is somebody's criminal history. It used to go to
+    Cloudinary through an unsigned preset, which meant it sat at a public URL
+    that worked forever for anyone who came by it. It goes to the encrypted
+    store now, and comes back out only through the owner's login.
+
+    Attached to the application rather than to a Staff row, because at this
+    point in hiring there isn't one. It follows them across when they accept."""
     app_rec = ContractorApplication.query.filter_by(bgcheck_upload_token=token).first_or_404()
-    data = request.get_json() or {}
 
-    uploaded_url = (data.get('uploaded_url') or '').strip()
-    verification_link = (data.get('verification_link') or '').strip()
+    ok, err, ctype, raw = secure_docs.check_upload(request.files.get('document'))
+    if not ok:
+        flash(err, 'error')
+        return redirect(url_for('interviews.bgcheck_upload_page', token=token))
 
-    if not uploaded_url and not verification_link:
-        return jsonify({'error': 'Please upload a file or paste a link.'}), 400
+    blob = secure_docs.encrypt(raw)
+    existing = app_rec.document('bgcheck')
+    if existing:
+        existing.data = blob
+        existing.filename = request.files['document'].filename[:200]
+        existing.content_type = ctype
+        existing.size_bytes = len(raw)
+        existing.uploaded_at = datetime.utcnow()
+    else:
+        db.session.add(ContractorDocument(
+            application_id=app_rec.id, kind='bgcheck',
+            filename=request.files['document'].filename[:200],
+            content_type=ctype, size_bytes=len(raw), data=blob,
+        ))
 
-    if uploaded_url:
-        app_rec.bgcheck_uploaded_url = uploaded_url
-    if verification_link:
-        app_rec.bgcheck_uploaded_link = verification_link
     app_rec.bgcheck_uploaded_at = datetime.utcnow()
     app_rec.bgcheck_results_received = True
     app_rec.background_check_status = 'received'
     db.session.commit()
 
-    # Notify the owner
     biz = branding.biz_name()
-    owner_email = branding.owner_email()
     try:
         send_email(
-            to_email=owner_email,
+            to_email=branding.owner_email(),
             to_name=biz,
             subject=f"Background check submitted — {app_rec.name}",
             html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;padding:24px">
   <h2 style="color:#1f1333">{app_rec.name} submitted their background check</h2>
-  <p style="color:#3b2b6b">Review it in the CRM and mark them Cleared or Failed.</p>
+  <p style="color:#3b2b6b">It's stored encrypted. Review it in the CRM and mark them Cleared or Failed.</p>
   <p style="color:#3b2b6b"><a href="{url_for('contractors.application_detail', app_id=app_rec.id, _external=True)}"
      style="color:#d3a84f;font-weight:700">Open {app_rec.name}'s application →</a></p>
 </div>""",
@@ -226,7 +237,7 @@ def bgcheck_submit(token):
     except Exception:
         pass
 
-    return jsonify({'ok': True})
+    return redirect(url_for('interviews.bgcheck_upload_page', token=token))
 
 
 # ── Admin (login required) ──────────────────────────────────────────────────────
