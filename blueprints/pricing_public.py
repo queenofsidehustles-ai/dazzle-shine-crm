@@ -1,5 +1,6 @@
 import json
 from flask import Blueprint, render_template, request, jsonify, make_response
+from auth import login_required
 from pricing import (
     PRICE_MATRIX_DEFAULTS, HOURS_MATRIX_DEFAULTS, SERVICE_LABELS,
     SERVICE_MULTIPLIERS_DEFAULTS, EXTRAS, FREQUENCY_DISCOUNTS,
@@ -85,15 +86,28 @@ def quote_calculator():
 # ── Contractor Pay Chart (View 2) ─────────────────────────────────────────────
 
 @pricing_public_bp.route('/pay-chart')
+@login_required
 def pay_chart():
-    from pricing import get_labor_rate
+    """The owner's costing reference: what a job of each size ought to pay.
+
+    This used to be sent to contractors, and it can't be any more. Pay is now set
+    per job, and the two numbers legitimately differ — a long clean on a
+    discounted recurring plan is worth far less than this table's arithmetic
+    says, which is the whole reason per-job pay exists. A cleaner holding this
+    chart would read the gap as being underpaid rather than as the table not
+    applying, so the chart stays on this side of the login and the offer is the
+    only figure anyone outside sees.
+
+    It shows nothing about what the customer is charged: printing pay and price
+    side by side only ever invited the comparison."""
+    from pricing import get_labor_rate, get_extra_hours
     rows = build_full_matrix()
-    extras = {name: get_extra_price(name) for name in EXTRAS}
-    split = int(get_contractor_split())
+    # Add-ons are shown as what they add to the cleaner's pay, not to the
+    # customer's price, for the same reason.
+    labor_rate = get_labor_rate()
+    extras = {name: round(get_extra_hours(name) * labor_rate, 2) for name in EXTRAS}
     return render_template('public/pay_chart.html',
         rows=rows,
         extras=extras,
-        split=split,
-        labor_rate=get_labor_rate(),
         service_labels=SERVICE_LABELS,
     )

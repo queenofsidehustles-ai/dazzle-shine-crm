@@ -46,6 +46,41 @@ We would much rather fix it than argue about it. If something was missed, contac
 us within 24 hours of the cleaning and we will return and re-clean the affected
 areas at no charge. This is your remedy for an unsatisfactory clean.
 
+**Damage, wear and fragile items**
+
+We treat every home with care. If we break something through our own
+carelessness, tell us within 24 hours of the cleaning and we will put it right.
+
+Cleaning does, however, put ordinary contact on things that are already failing,
+and we are not responsible for:
+
+- Items that were already broken, cracked, loose, worn, or poorly fitted and
+  that give way during normal cleaning. Blinds, towel rails, toilet seats,
+  shelving, curtain rods, cabinet handles and similar fittings are the usual
+  examples.
+- Damage caused by a defect, an earlier repair, or an installation we had no way
+  of knowing about.
+- Deterioration that cleaning reveals rather than causes — finishes lifting,
+  grout or caulk failing, or discolouration found under an appliance, rug or
+  ornament.
+
+Please put away or point out anything valuable, fragile or temperamental before
+we arrive — heirlooms, art, collectibles, electronics, and loose cash or
+jewellery especially. Tell us and we will work around it or leave it untouched.
+If you know something is already loose or on its last legs, say so and we will
+not touch it.
+
+**Our cleaners**
+
+The cleaners we send are part of our team, and you are introduced to them
+through us rather than on your own. For 24 months after your last cleaning with
+us, please do not hire or pay any of our cleaners directly, or through another
+company, for work of the kind we provide.
+
+If you and a cleaner would genuinely like to work together directly, we can
+usually arrange it. It requires our written approval and a $2,000 release fee,
+agreed in advance as a fair estimate of what losing that relationship costs us.
+
 **Cancellations and lockouts**
 
 Cancel at least 24 hours before your appointment at no charge. Cancellations

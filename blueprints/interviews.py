@@ -84,6 +84,36 @@ def interview_page(token):
     )
 
 
+def _english_of(text, lang):
+    """English for a Spanish answer, or None when there's nothing to do.
+
+    translate() already fails soft — no API key or a bad call returns the text
+    unchanged — so this returns None rather than storing a copy of the Spanish
+    and presenting it to the owner as a translation."""
+    if not text or (lang or 'en') != 'es':
+        return None
+    from translate import translate
+    out = (translate(text, target='en') or '').strip()
+    return out if out and out != text.strip() else None
+
+
+@interviews_bp.route('/admin/interviews/response/<int:resp_id>/translate', methods=['POST'])
+@login_required
+def translate_response(resp_id):
+    """Translate an answer recorded before translation-on-save existed."""
+    r = InterviewResponse.query.get_or_404(resp_id)
+    english = _english_of(r.transcript, r.transcript_lang)
+    if english:
+        r.transcript_en = english
+        db.session.commit()
+        flash('Translated to English.', 'success')
+    else:
+        flash("Couldn't translate that one — check that OPENROUTER_API_KEY is set "
+              "on the server.", 'error')
+    return redirect(request.referrer or
+                    url_for('interviews.review_interview', app_id=r.application_id))
+
+
 @interviews_bp.route('/interview/<token>/save', methods=['POST'])
 def save_response(token):
     app_rec = ContractorApplication.query.filter_by(interview_token=token).first_or_404()
@@ -103,11 +133,17 @@ def save_response(token):
         application_id=app_rec.id, question_index=q_index
     ).first()
 
+    # A Spanish answer is translated as it arrives, so the review page can show
+    # the English underneath instead of sending the owner off to Google Translate.
+    english = _english_of(transcript, transcript_lang)
+
     if existing:
         existing.cloudinary_public_id = public_id
         existing.cloudinary_url = url
         existing.question_en = question_en
-        existing.transcript = transcript or existing.transcript
+        if transcript:
+            existing.transcript = transcript
+            existing.transcript_en = english
         existing.transcript_lang = transcript_lang
     else:
         db.session.add(InterviewResponse(
@@ -118,6 +154,7 @@ def save_response(token):
             cloudinary_url=url,
             transcript=transcript,
             transcript_lang=transcript_lang,
+            transcript_en=english,
         ))
 
     db.session.commit()
@@ -256,12 +293,11 @@ def approve_interview(app_id):
                          token=app_rec.bgcheck_upload_token, _external=True)
     accept_url = url_for('contractors.accept_offer',
                          token=app_rec.offer_token, _external=True)
-    pay_chart_url = url_for('pricing_public.pay_chart', _external=True, _scheme='https')
     send_email(
         to_email=app_rec.email,
         to_name=app_rec.name,
         subject=f"Welcome to the Team (Pending Your Background Check) — {biz}",
-        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url, pay_chart_url),
+        html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url),
     )
 
     flash(f'Video approved! Conditional offer + background check link sent to {app_rec.name}.', 'success')
@@ -298,14 +334,13 @@ def resend_offer(app_id):
                          token=app_rec.bgcheck_upload_token, _external=True)
     accept_url = url_for('contractors.accept_offer',
                          token=app_rec.offer_token, _external=True)
-    pay_chart_url = url_for('pricing_public.pay_chart', _external=True, _scheme='https')
     subject = (f"One Step Left — Accept Your Offer — {biz}" if bg_done
                else f"Welcome to the Team (Pending Your Background Check) — {biz}")
     send_email(
         to_email=app_rec.email, to_name=app_rec.name,
         subject=subject,
         html=_build_bgcheck_email(app_rec.name, biz, upload_url, accept_url,
-                                  pay_chart_url, include_bgcheck=not bg_done),
+                                  include_bgcheck=not bg_done),
     )
     if bg_done:
         flash(f'Reminder sent to {app_rec.name} — background check already received, '
@@ -313,6 +348,39 @@ def resend_offer(app_id):
     else:
         flash(f'Conditional offer email sent to {app_rec.name}.', 'success')
     return redirect(request.referrer or url_for('contractors.application_detail', app_id=app_rec.id))
+
+
+@interviews_bp.route('/admin/interviews/<int:app_id>/offer/preview')
+@login_required
+def offer_preview(app_id):
+    """Exactly the conditional-offer email this candidate would receive, without
+    sending it and without marking an offer as sent.
+
+    Built by calling the real builder rather than a copy of the wording — a
+    preview that drifts from what actually goes out is worth less than nothing.
+    Tokens are not minted here: an unsent offer shouldn't leave a live accept
+    link behind it, so the preview shows placeholder links instead."""
+    app_rec = ContractorApplication.query.get_or_404(app_id)
+    bg_done = bool(app_rec.bgcheck_uploaded_at or app_rec.bgcheck_results_received)
+    upload_url = (url_for('interviews.bgcheck_upload_page',
+                          token=app_rec.bgcheck_upload_token, _external=True)
+                  if app_rec.bgcheck_upload_token else '#')
+    accept_url = (url_for('contractors.accept_offer',
+                          token=app_rec.offer_token, _external=True)
+                  if app_rec.offer_token else '#')
+    html = _build_bgcheck_email(app_rec.name, branding.biz_name(), upload_url,
+                                accept_url, include_bgcheck=not bg_done)
+    subject = (f"One Step Left — Accept Your Offer — {branding.biz_name()}" if bg_done
+               else f"Welcome to the Team (Pending Your Background Check) — {branding.biz_name()}")
+    return f'''<div style="background:#f4f2fa;padding:22px;font-family:system-ui,sans-serif">
+  <div style="max-width:660px;margin:0 auto">
+    <p style="font-size:0.8rem;color:#5f5878;margin:0 0 4px"><strong>Email to:</strong> {app_rec.email or "(no email on file)"}</p>
+    <p style="font-size:0.8rem;color:#5f5878;margin:0 0 14px"><strong>Subject:</strong> {subject}</p>
+    <div style="background:#fff;border-radius:12px;overflow:hidden">{html}</div>
+    <p style="font-size:0.78rem;color:#9a95ad;margin:16px 0 0">Nothing has been sent. Close this tab and press
+    Send Conditional Offer Email when you're happy with it.</p>
+  </div>
+</div>'''
 
 
 @interviews_bp.route('/admin/interviews/<int:app_id>/reject', methods=['POST'])
@@ -370,17 +438,16 @@ def send_invite(app_id):
     return redirect(request.referrer or url_for('interviews.admin_interviews'))
 
 
-def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_url=None,
+def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
                          include_bgcheck=True):
     first = (name or 'there').split()[0]
-    from pricing import get_labor_rate
-    labor_rate = get_labor_rate()   # quoted in both the English and Spanish blocks below
-    chart_line = ''
-    if pay_chart_url:
-        chart_line = (f'<div style="text-align:center;margin-top:14px">'
-                      f'<a href="{pay_chart_url}" style="color:#1e7e34;font-weight:700;'
-                      f'text-decoration:underline;font-size:0.9rem">'
-                      f'📊 See the full pay chart — your earnings for every home size →</a></div>')
+    # Worked examples are computed from the live price book rather than typed in,
+    # so a candidate is never quoted a figure the CRM wouldn't actually offer.
+    # These are examples of the model, not a promise about any specific job —
+    # the offer on a real job is the number that binds.
+    from pricing import calculate_job
+    ex_small = calculate_job('standard', 1, 1)   # quoted in the English and
+    ex_large = calculate_job('standard', 3, 2)   # Spanish pay blocks below
     accept_block = ''
     if accept_url:
         accept_block = f"""
@@ -468,16 +535,17 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
     <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
       <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 What You'll Earn</div>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        <strong>${labor_rate:.0f} for every hour of work</strong>, paid after each clean. The same rate on
-        every job type, for every cleaner — no tiers, no haggling. For example:
+        <strong>A flat amount for each job</strong>, paid after the clean. Every job offer tells you the
+        home and your exact dollar amount <em>before</em> you accept it, so you always know what you're
+        agreeing to. For example:
       </p>
       <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
-        <li>A 1-bed/1-bath standard clean is about 1.5 hours — <strong>you earn ${labor_rate * 1.5:.2f}</strong>.</li>
-        <li>A 3-bed/2-bath standard clean is about 3 hours — <strong>you earn ${labor_rate * 3:.2f}</strong>.</li>
+        <li>A 1-bed/1-bath standard clean pays <strong>${ex_small['contractor_earnings']:.2f}</strong> for the job.</li>
+        <li>A 3-bed/2-bath standard clean pays <strong>${ex_large['contractor_earnings']:.2f}</strong> for the job.</li>
       </ul>
-      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ Your pay never depends on what the customer is charged. If we discount a job, that comes out of our side — not yours.</p>
-      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">Every job offer shows you the hours and your exact dollar amount <em>before</em> you accept it. Working alongside someone? The hours are shared, so you both earn ${labor_rate:.0f}/hour and finish sooner.</p>
-      {chart_line}
+      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ You are not paid by the hour and you're not on a clock. The amount is for doing the job properly — it doesn't drop if you're fast, and bigger or harder homes are offered at more to begin with.</p>
+      <p style="color:#1e7e34;font-size:0.9rem;margin:6px 0 0;font-weight:600">✅ Your pay never depends on what the customer is charged. If we discount a job, that comes out of our side — not yours.</p>
+      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">Working alongside someone? You each get your own flat amount for your share, shown in your own offer — and you finish sooner.</p>
     </div>
     {accept_block}
     <!-- IC EXPECTATIONS -->
@@ -528,15 +596,17 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None, pay_chart_u
     <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
       <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 Lo que Ganarás</div>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        <strong>${labor_rate:.0f} por cada hora de trabajo</strong>, pagado después de cada limpieza. La misma
-        tarifa en todos los tipos de trabajo, para todos los limpiadores — sin niveles, sin negociar. Por ejemplo:
+        <strong>Un monto fijo por cada trabajo</strong>, pagado después de la limpieza. Cada oferta de trabajo
+        te muestra la casa y tu monto exacto <em>antes</em> de que la aceptes, así siempre sabes a qué estás
+        diciendo que sí. Por ejemplo:
       </p>
       <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
-        <li>Una limpieza estándar de 1 hab/1 baño toma aprox. 1.5 horas — <strong>ganas ${labor_rate * 1.5:.2f}</strong>.</li>
-        <li>Una limpieza estándar de 3 hab/2 baños toma aprox. 3 horas — <strong>ganas ${labor_rate * 3:.2f}</strong>.</li>
+        <li>Una limpieza estándar de 1 hab/1 baño paga <strong>${ex_small['contractor_earnings']:.2f}</strong> por el trabajo.</li>
+        <li>Una limpieza estándar de 3 hab/2 baños paga <strong>${ex_large['contractor_earnings']:.2f}</strong> por el trabajo.</li>
       </ul>
-      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ Tu pago nunca depende de lo que se le cobra al cliente. Si damos un descuento, sale de nuestra parte — no de la tuya.</p>
-      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">Cada oferta de trabajo te muestra las horas y tu monto exacto <em>antes</em> de aceptarla. ¿Trabajas junto a otra persona? Las horas se reparten, así que ambos ganan ${labor_rate:.0f}/hora y terminan más rápido.</p>
+      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ No se te paga por hora y no estás bajo reloj. El monto es por hacer bien el trabajo — no baja si terminas rápido, y las casas más grandes o más difíciles se ofrecen por más desde el principio.</p>
+      <p style="color:#1e7e34;font-size:0.9rem;margin:6px 0 0;font-weight:600">✅ Tu pago nunca depende de lo que se le cobra al cliente. Si damos un descuento, sale de nuestra parte — no de la tuya.</p>
+      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">¿Trabajas junto a otra persona? Cada quien recibe su propio monto fijo por su parte, indicado en su propia oferta — y terminan más rápido.</p>
     </div>
 
     <!-- EXPECTATIVAS IC -->

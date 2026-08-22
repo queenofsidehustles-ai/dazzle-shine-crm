@@ -242,6 +242,11 @@
               💌 {{ 'Re-send' if a.offer_sent_at else 'Send' }} Conditional Offer Email
             </button>
           </form>
+          <a href="{{ url_for('interviews.offer_preview', app_id=a.id) }}" target="_blank"
+             style="display:block;text-align:center;margin-top:8px;padding:9px;border:1px solid #e4dfef;
+                    border-radius:8px;color:#5f5878;font-size:0.8rem;font-weight:600;text-decoration:none">
+            👁 Preview it first
+          </a>
           <p style="font-size:0.74rem;color:#9a95ad;margin-top:6px;text-align:center">
             Sends the welcome offer with pay details + background check link. Use this for anyone approved before this email existed.
           </p>
@@ -473,26 +478,35 @@
             <option value="employee">Employee (W-2)</option>
           </select>
         </div>
+        <div style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:8px;padding:11px 14px;margin-bottom:14px">
+          <p style="font-size:0.78rem;color:#2b6cb0;line-height:1.55;margin:0">
+            <strong>Pay is set per job, not here.</strong> Each job carries its own flat amount, which is
+            what the offer promises and what payroll pays. The fields below are only a fallback for old
+            jobs booked before per-job pay existed — leave them alone unless you know you need them.
+          </p>
+        </div>
         <div class="form-group">
-          <label>Pay Tier</label>
-          <select name="experience_level" onchange="autoFillRate(this)">
-            <option value="standard" data-pct="50">Starting Rate — 50% (all new hires)</option>
-            <option value="top"      data-pct="55">Top Performer — 55% (earned)</option>
+          <label>Experience Level</label>
+          <select name="experience_level">
+            <option value="standard">New hire</option>
+            <option value="top">Top performer (15+ jobs, 4.5★+)</option>
           </select>
-          <span style="font-size:0.78rem;color:#9a95ad">New hires start at 50%. Bump to 55% later once they've earned it (15+ jobs, 4.5★+).</span>
         </div>
-        <div class="form-group">
-          <label>Pay Type</label>
-          <select name="pay_type" onchange="updateRateLabel()">
-            <option value="percent">% of job price</option>
-            <option value="hourly">Hourly rate ($/hr)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label id="rate-label">Rate (%)</label>
-          <input type="number" name="pay_rate" id="pay-rate" step="0.5" value="50" min="0" />
-          <span id="rate-hint" style="font-size:0.78rem;color:#9a95ad">e.g. 50 means cleaner earns 50% of each job</span>
-        </div>
+        <details style="margin-bottom:14px">
+          <summary style="cursor:pointer;font-size:0.8rem;color:#9a95ad;font-weight:600">Legacy fallback rate</summary>
+          <div class="form-group" style="margin-top:10px">
+            <label>Pay Type</label>
+            <select name="pay_type" onchange="updateRateLabel()">
+              <option value="percent">% of job price</option>
+              <option value="hourly">Hourly rate ($/hr)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label id="rate-label">Rate (%)</label>
+            <input type="number" name="pay_rate" id="pay-rate" step="0.5" value="50" min="0" />
+            <span id="rate-hint" style="font-size:0.78rem;color:#9a95ad">Only used on jobs that have no pay and no hours set.</span>
+          </div>
+        </details>
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;margin-top:4px">
           Hire directly &amp; send welcome →
         </button>
@@ -532,14 +546,13 @@
 </div>
 
 <script>
-function autoFillRate(sel) {
-  const pct = sel.options[sel.selectedIndex].dataset.pct;
-  if (pct) document.getElementById('pay-rate').value = pct;
-}
 function updateRateLabel() {
-  const t = document.getElementById('pay-type') ? document.querySelector('select[name="pay_type"]').value : 'percent';
+  // Read the select directly. This used to look up a "pay-type" id that has
+  // never existed, so the label was stuck on "Percentage" even when Hourly
+  // was chosen — the one field where being wrong costs somebody money.
+  const t = document.querySelector('select[name="pay_type"]').value;
   document.getElementById('rate-label').textContent = t === 'hourly' ? 'Hourly Rate ($/hr)' : 'Percentage (%)';
-  document.getElementById('rate-hint').textContent = t === 'hourly' ? 'e.g. 15 means cleaner earns $15/hr' : 'e.g. 40 means cleaner earns 40% of each job';
+  document.getElementById('rate-hint').textContent = 'Only used on jobs that have no pay and no hours set.';
 }
 </script>
 {% endblock %}

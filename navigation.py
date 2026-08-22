@@ -119,6 +119,7 @@ BELONGS_TO = {
     'contractors.application_detail': 'contractors.applications',
     'contractors.pay_statement': 'contractors.payroll',
     'interviews.review_interview': 'interviews.admin_interviews',
+    'interviews.offer_preview': 'interviews.admin_interviews',
     'staff.index': 'contractors.team',
     'staff.new': 'contractors.team',
     'staff.edit': 'contractors.team',

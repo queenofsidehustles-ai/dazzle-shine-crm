@@ -95,25 +95,24 @@
 
 <div class="header">
   <span class="script">{{ BIZ }}</span>
-  <span class="sub">Contractor Pay Chart</span>
-  <p>{{ split }}% of every job — see exactly what you earn before accepting</p>
+  <span class="sub">Job Pay Reference — Internal</span>
+  <p>What a job of each size ought to pay. Not for contractors.</p>
 </div>
 
 <div style="max-width:760px;margin:0 auto 8px;padding:0 16px">
   <div style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:12px;padding:16px 18px;color:#1f1333">
-    <div style="font-weight:700;color:#2b6cb0;margin-bottom:6px">💡 How your pay works</div>
+    <div style="font-weight:700;color:#b45309;margin-bottom:6px">🔒 Don't send this to a cleaner</div>
     <p style="font-size:0.9rem;line-height:1.5;margin:0">
-      You're paid <strong>${{ '%.0f'|format(labor_rate) }} for every hour of work in a job</strong> — the same rate
-      on every job type, for every cleaner. A job's pay is simply <strong>its hours × ${{ '%.0f'|format(labor_rate) }}</strong>.
+      This is your starting point for deciding what to offer, not a promise to anyone. Each figure is that
+      home's typical hours × the labor rate in <strong>Settings → Pricing</strong>.
     </p>
     <p style="font-size:0.9rem;line-height:1.5;margin:10px 0 0">
-      <strong>Your pay does not depend on what the customer is charged.</strong> If we discount a job to win
-      the work, that comes out of our side — your pay doesn't change. It's set by the work, not the price.
+      <strong>Real pay is set per job and will often differ from this.</strong> A long clean on a discounted
+      recurring plan is worth well under what this table computes — that gap is exactly why pay is set per
+      job. A cleaner holding this chart would read the difference as being shortchanged.
     </p>
     <p style="font-size:0.9rem;line-height:1.5;margin:10px 0 0">
-      <strong>Working with someone else?</strong> The job's hours are shared between you, so you each earn
-      ${{ '%.0f'|format(labor_rate) }} an hour and finish in about half the time — then you're free to take
-      another job.
+      What the cleaner sees is the offer: the home and one dollar amount, before they accept.
     </p>
   </div>
 </div>
@@ -171,20 +170,16 @@
       <thead>
         <tr>
           <th>Home Size</th>
-          <th>Client Pays</th>
-          <th>You Earn ({{ split }}%)</th>
-          <th>Est. Hours</th>
-          <th>Your Hourly Rate</th>
+          <th>Typical Pay</th>
+          <th>Typical Time</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows if r.service_type == 'standard' %}
         <tr>
           <td>{{ r.beds }} bed / {{ r.baths }} bath</td>
-          <td class="client-p">${{ "%.0f"|format(r.client_price) }}</td>
           <td class="earn">${{ "%.0f"|format(r.contractor_earnings) }}</td>
-          <td>{{ r.hours }}h</td>
-          <td class="hr">${{ "%.2f"|format(r.hourly_rate) }}/hr</td>
+          <td class="hr">about {{ r.hours }}h</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -200,20 +195,16 @@
       <thead>
         <tr>
           <th>Home Size</th>
-          <th>Client Pays</th>
-          <th>You Earn ({{ split }}%)</th>
-          <th>Est. Hours</th>
-          <th>Your Hourly Rate</th>
+          <th>Typical Pay</th>
+          <th>Typical Time</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows if r.service_type == 'deep' %}
         <tr>
           <td>{{ r.beds }} bed / {{ r.baths }} bath</td>
-          <td class="client-p">${{ "%.0f"|format(r.client_price) }}</td>
           <td class="earn">${{ "%.0f"|format(r.contractor_earnings) }}</td>
-          <td>{{ r.hours }}h</td>
-          <td class="hr">${{ "%.2f"|format(r.hourly_rate) }}/hr</td>
+          <td class="hr">about {{ r.hours }}h</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -229,20 +220,16 @@
       <thead>
         <tr>
           <th>Home Size</th>
-          <th>Client Pays</th>
-          <th>You Earn ({{ split }}%)</th>
-          <th>Est. Hours</th>
-          <th>Your Hourly Rate</th>
+          <th>Typical Pay</th>
+          <th>Typical Time</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows if r.service_type == 'moveout' %}
         <tr>
           <td>{{ r.beds }} bed / {{ r.baths }} bath</td>
-          <td class="client-p">${{ "%.0f"|format(r.client_price) }}</td>
           <td class="earn">${{ "%.0f"|format(r.contractor_earnings) }}</td>
-          <td>{{ r.hours }}h</td>
-          <td class="hr">${{ "%.2f"|format(r.hourly_rate) }}/hr</td>
+          <td class="hr">about {{ r.hours }}h</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -253,11 +240,14 @@
 <!-- ADD-ONS -->
 <div class="section" style="margin-top:20px">
   <div class="section-head"><h2>Add-On Services</h2><div class="section-line"></div></div>
+  <p style="font-size:0.82rem;color:#5f5878;margin:0 0 10px">
+    When a customer adds one of these, it's extra work — so the job is offered to you at a higher amount.
+  </p>
   <div class="extras-grid">
-    {% for name, price in extras.items() %}
+    {% for name, pay in extras.items() %}
     <div class="extra-card">
       <span class="en">{{ name }}</span>
-      <span class="ep">+${{ price|int }} to the customer</span>
+      <span class="ep">+${{ "%.0f"|format(pay) }} to your pay</span>
     </div>
     {% endfor %}
   </div>
@@ -266,11 +256,12 @@
 <!-- NOTE -->
 <div class="note" style="margin-top:20px;margin-bottom:40px">
   <div class="note-inner">
-    <p><strong>How you get paid:</strong> ${{ '%.0f'|format(labor_rate) }} per hour of work, paid after each completed job.
-    Every job offer tells you the hours and your exact dollar amount <em>before</em> you accept it —
-    so you always know what you're taking on. Hours shown here are estimates for a typical home; if a
-    job is bigger or harder than usual, the hours on that job are set higher, and your pay goes up with them.
-    You will be notified of each job assignment via text and email.</p>
+    <p><strong>Using this:</strong> it's a sanity check on what to offer, and on whether a price leaves
+    enough room. Set the actual pay on the booking itself — that figure is what the offer promises, what
+    the claim page shows, and what payroll pays.</p>
+    <p style="margin-top:10px"><strong>Where it goes wrong:</strong> the arithmetic here doesn't know
+    about discounts. A recurring plan priced well below one-off rates will compute a pay figure that eats
+    most of the price. <strong>Money → Job Economics</strong> flags those; this table won't.</p>
   </div>
 </div>
 

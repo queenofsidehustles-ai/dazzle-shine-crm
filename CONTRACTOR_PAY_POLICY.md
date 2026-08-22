@@ -14,6 +14,10 @@ A 3-bed/2-bath standard clean contains about 3 hours of work, so it pays **$129*
 
 The rate lives in **Settings → Pricing → Cleaner Pay**, not in the code.
 
+> ⚠️ This is the internal costing basis. **Don't quote the hourly rate to a
+> contractor** — they're told the flat amount for the job. See
+> [How this is described to contractors](#how-this-is-described-to-contractors).
+
 ## Why this replaced "50% of the job price"
 
 The old model paid half of whatever the customer was charged. Three things were
@@ -49,6 +53,12 @@ takes longer, that job's estimate should say so, and the pay follows automatical
 
 Every job's hours are editable on its own booking page.
 
+**Or set the pay outright.** Where the hourly maths gives a figure you'd never
+actually pay — a long clean on a discounted recurring plan is the usual case — each
+cleaner's pay can be typed in directly on the booking. Once set, that figure is what
+the offer promises, what the claim page shows, what payroll pays, and what the floor
+warning measures. The hours stay behind as the planning estimate.
+
 ## Add-ons and bigger homes
 
 Both add time as well as price, so the cleaner is paid for the extra work:
@@ -78,12 +88,47 @@ the price. Jobs below their floor are flagged red on the booking and listed on
 **Money → Job Economics**. Flagged, not blocked — sometimes it's still the right
 call, and there's a box to record why.
 
+## How this is described to contractors
+
+**Internally the rate is per person-hour. Outwardly every job is a flat amount.**
+Those are the same arithmetic said two ways, and the outward one is the one that
+holds up in practice:
+
+- **Hourly invites a stopwatch.** Nobody is being paid by the hour, and nobody is
+  supervising the shift. An hourly figure in an offer sets up an argument about
+  arrival times and how long the clean actually took — an argument that has no
+  right answer and that we'd lose either way.
+- **Directing hours is the classification risk.** Setting someone's hours is one of
+  the facts that bears on 1099 status in Florida. Buying a finished job doesn't.
+- **A fixed amount is the thing they can actually judge.** Given the home and the
+  dollar figure, a cleaner can decide for themselves whether it's worth their time.
+
+So: the person-hour rate is the **costing basis** — it's how the office works out
+what a job should pay and whether the price clears the labor floor. It is not the
+promise, and it is not quoted to contractors.
+
+The wording, used everywhere:
+
+> Every job pays a flat amount for the whole job. The offer tells you the home and
+> your exact dollar amount before you accept. It doesn't change based on how long
+> you take, and it doesn't depend on what the customer is charged.
+
 ## What a candidate is told
 
 The conditional-offer email (sent when a video interview is approved) states the
-hourly rate, gives two worked examples, and says plainly that pay never depends on
-what the customer is charged. The public pay chart says the same. Both are
-generated from the rate in settings, so they can't drift out of date.
+flat per-job model, gives two worked examples as whole-job dollar amounts, and says
+plainly that pay never depends on what the customer is charged. The public pay
+chart says the same and shows neither the customer's price nor an implied hourly
+rate. Both are generated from the price book in settings, so they can't drift out
+of date or contradict each other.
+
+Preview the exact email before sending it — **👁 Preview it first**, under the Send
+Conditional Offer Email button on the interview review and application pages.
+
+**The chart is typical; the offer is the promise.** The chart shows the usual amount
+for an average home of each size. The offer on a specific job is the real number,
+and a larger or harder home is offered at more. Whatever the offer said is what
+payroll pays.
 
 ## ⚖️ Before changing any of this
 

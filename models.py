@@ -674,6 +674,8 @@ class InterviewResponse(db.Model):
     cloudinary_url = db.Column(db.String(500))
     transcript = db.Column(db.Text)       # auto-captured via Web Speech API
     transcript_lang = db.Column(db.String(10))  # 'en' or 'es'
+    transcript_en = db.Column(db.Text)    # English of a Spanish answer, so the
+                                          # owner can read it without leaving the page
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 

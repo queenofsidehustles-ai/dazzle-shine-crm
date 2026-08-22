@@ -84,12 +84,38 @@
                 {{ r.transcript }}
               </p>
               {% if r.transcript_lang == 'es' %}
-              <p style="font-size:0.78rem;color:var(--softer);margin-top:10px;margin-bottom:0">
-                💡 Tip: Copy this text into
-                <a href="https://translate.google.com" target="_blank" style="color:var(--gold)">Google Translate</a>
-                for an instant English translation.
-              </p>
+                {% if r.transcript_en %}
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+                  <div style="font-size:0.72rem;font-weight:700;color:#2b6cb0;text-transform:uppercase;
+                              letter-spacing:0.12em;margin-bottom:6px">🇺🇸 In English</div>
+                  <p style="font-size:0.9rem;color:var(--purple-mid);line-height:1.7;margin:0">
+                    {{ r.transcript_en }}
+                  </p>
+                </div>
+                {% else %}
+                <form method="POST" action="{{ url_for('interviews.translate_response', resp_id=r.id) }}"
+                      style="margin-top:10px">
+                  <button type="submit"
+                          style="background:none;border:1px solid var(--border);border-radius:7px;
+                                 padding:7px 14px;font-family:inherit;font-size:0.8rem;font-weight:600;
+                                 color:var(--purple-mid);cursor:pointer">
+                    🌐 Translate to English
+                  </button>
+                </form>
+                {% endif %}
               {% endif %}
+            </div>
+          </div>
+          {% else %}
+          <div style="padding:12px 16px 16px">
+            <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px">
+              <div style="font-size:0.72rem;font-weight:700;color:#92400e;text-transform:uppercase;
+                          letter-spacing:0.12em;margin-bottom:6px">🎙 No transcript</div>
+              <p style="font-size:0.84rem;color:#7c4a04;line-height:1.6;margin:0">
+                Nothing was captured for this answer. Live transcription only works on desktop
+                Chrome and Edge — a candidate recording on a phone gets no transcript, and it
+                can't be added afterwards. Play the video above to hear the answer.
+              </p>
             </div>
           </div>
           {% endif %}
@@ -231,6 +257,11 @@
             💌 Send Conditional Offer Email
           </button>
         </form>
+        <a href="{{ url_for('interviews.offer_preview', app_id=app.id) }}" target="_blank"
+           style="display:block;text-align:center;margin-top:8px;padding:9px;border:1px solid var(--border);
+                  border-radius:8px;color:var(--muted);font-size:0.83rem;font-weight:600;text-decoration:none">
+          👁 Preview it first
+        </a>
       </div>
       {% endif %}
 

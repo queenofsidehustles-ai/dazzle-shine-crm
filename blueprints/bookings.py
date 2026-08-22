@@ -1981,14 +1981,10 @@ def _notify_cleaner(booking):
     # reimplement the formula inline, which meant it could drift out of step
     # with payroll and quote the cleaner a different number than she was paid.
     earnings = booking.pay_for(staff)
-    hrs = booking.hours_each()
-    if hrs:
-        from pricing import get_labor_rate
-        pay_label = f'{hrs:g} hrs × ${get_labor_rate():.0f}/hr'
-    elif staff.pay_type == 'percent':
-        pay_label = f'{staff.pay_rate:.0f}% of ${booking.commissionable_price:.2f}'
-    else:
-        pay_label = f'{booking.hours_worked or 0}h × ${staff.pay_rate:.2f}/hr'
+    # The house, not the stopwatch — the same rule the claim broadcast follows.
+    # An hourly figure in an offer invites clock-watching on work that is paid
+    # per job, so the cleaner gets the size of the home to judge it by instead.
+    size_line = booking.size_line()
 
     base = branding.crm_base()
     token = hashlib.sha256(f"{booking.id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
@@ -2029,7 +2025,9 @@ def _notify_cleaner(booking):
         try:
             ok, _ = send_sms(staff.phone,
                      f"New job {booking.preferred_date or 'TBD'} {booking.preferred_time or ''} — "
-                     f"{booking.name}. You earn ${earnings:.0f}.\n"
+                     f"{booking.name}"
+                     f"{(' · ' + size_line) if size_line else ''}. "
+                     f"${earnings:.2f} flat for the job.\n"
                      f"Accept: {accept_url}\nDecline: {decline_url}")
             sent_sms = bool(ok)
         except Exception:
@@ -2053,8 +2051,13 @@ def _notify_cleaner(booking):
     <tr><td style="padding:6px 0;color:#5f5878">Time</td><td style="font-weight:700">{booking.preferred_time or 'To be confirmed'}</td></tr>
     <tr><td style="padding:6px 0;color:#5f5878">Service</td><td style="font-weight:700">{svc_label}</td></tr>
     <tr><td style="padding:6px 0;color:#5f5878">Address</td><td style="font-weight:700">{booking.address or ''}{', ' + booking.city if booking.city else ''}</td></tr>
-    <tr><td style="padding:6px 0;color:#5f5878">Your Earnings</td><td style="font-weight:700;color:#065f46;font-size:1.1rem">${earnings:.2f} <span style="font-size:0.8rem;color:#9a95ad">({pay_label})</span></td></tr>
+    {f'<tr><td style="padding:6px 0;color:#5f5878">Home</td><td style="font-weight:700">{size_line}</td></tr>' if size_line else ''}
+    <tr><td style="padding:6px 0;color:#5f5878">Your Pay</td><td style="font-weight:700;color:#065f46;font-size:1.1rem">${earnings:.2f} <span style="font-size:0.8rem;color:#9a95ad">flat for the job</span></td></tr>
   </table>
+  <p style="font-size:0.82rem;color:#5f5878;background:#f6f5fb;border-radius:8px;padding:10px 12px;margin-top:14px">
+    This is the whole amount for this job, agreed before you accept. It doesn't change based on how long
+    you take or on what the customer is charged.
+  </p>
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <div style="display:flex;gap:12px;flex-wrap:wrap">
     <a href="{accept_url}" style="background:#065f46;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700;font-size:0.95rem">✅ Accept Job</a>

@@ -1792,7 +1792,13 @@ You are engaged as an independent contractor, not an employee. You are responsib
 You agree to provide residential and/or commercial cleaning services as assigned by {biz_name}, following all company quality standards, checklists, and client expectations.
 
 3. COMPENSATION
-Your pay rate (a percentage of each job or an hourly rate) was communicated during onboarding. Payment is issued after each job is marked complete — by default, the same day. If you prefer, you may choose weekly payment during onboarding to be paid once per week instead.
+You are paid a flat, fixed amount for each job, agreed before you accept it. Every job offer states the property and the exact dollar amount you will be paid for completing that job. You are not paid by the hour, and your pay is not a share or percentage of what the client is charged.
+
+The amount offered reflects the size, condition and service requested for that property. It does not change according to how long the job takes you, and it does not change if the client is given a discount. If a property turns out to be materially different from what the offer described, stop and contact the Company before continuing, and a revised amount will be agreed.
+
+You decide whether each amount is worth your time before you accept the job. Declining a job is not a breach of this agreement.
+
+Payment is issued after each job is marked complete — by default, the same day. If you prefer, you may choose weekly payment during onboarding to be paid once per week instead.
 
 4. INSURANCE
 As an independent contractor, you operate your own cleaning business and are responsible for carrying your own general liability insurance. The Company's insurance covers the Company and does not extend to independent contractors. Affordable coverage is widely available (often around $30–$50 per month), and the Company is glad to share provider options. While it is not required to begin working, we strongly recommend obtaining coverage to protect both you and the clients you serve.

@@ -341,6 +341,64 @@ def _apply_template_patches():
         BusinessSetting.set('tmpl_patch_sqft_disclaimer_v1', '1')
         db.session.commit()
 
+    # Patch 4: the job-assignment email called the cleaner's pay "estimated".
+    # Under flat per-job pay it is the agreed amount, not a guess, and calling it
+    # an estimate invites a conversation about topping it up afterwards.
+    if not BusinessSetting.get('tmpl_patch_flat_pay_v1'):
+        t = EmailTemplate.query.filter_by(trigger='cleaner_job_assigned').first()
+        if t and 'Your estimated earnings:' in (t.body or ''):
+            t.body = t.body.replace(
+                'Your estimated earnings: ${{earnings}}',
+                'Your pay for this job: ${{earnings}} (flat for the job)\n\n'
+                'This is the whole amount for this job, agreed before you accept. It does not '
+                'change based on how long you take or on what the customer is charged.')
+        BusinessSetting.set('tmpl_patch_flat_pay_v1', '1')
+        db.session.commit()
+
+    # Patch 5: damage / non-solicitation in the customer terms, and flat per-job
+    # pay in the contractor agreement.
+    #
+    # Both of these live in BusinessSetting once the owner has opened and saved
+    # the Business settings page, and the saved copy wins over the default in
+    # code. So editing the defaults alone would change nothing on an instance
+    # that has been set up — which is every real one. These append or replace in
+    # the stored copy instead, and never overwrite wording the owner has edited:
+    # if the text we expect isn't there, we leave it alone.
+    if not BusinessSetting.get('tmpl_patch_terms_damage_v1'):
+        import customer_terms as _ct
+        stored = (BusinessSetting.get('customer_terms') or '').strip()
+        if stored and 'Damage, wear and fragile items' not in stored:
+            # Pull the two new sections out of the default rather than keeping a
+            # second copy of the wording here, which would drift.
+            new_blocks = _ct.DEFAULT_TERMS.split('**Damage, wear and fragile items**', 1)[1]
+            new_blocks = ('**Damage, wear and fragile items**'
+                          + new_blocks.split('**Cancellations and lockouts**')[0].rstrip())
+            marker = '**Cancellations and lockouts**'
+            if marker in stored:
+                stored = stored.replace(marker, new_blocks + '\n\n' + marker, 1)
+            else:
+                stored = stored.rstrip() + '\n\n' + new_blocks
+            BusinessSetting.set('customer_terms', stored)
+
+        agreement = (BusinessSetting.get('agreement_template') or '').strip()
+        old_comp = 'Your pay rate (a percentage of each job or an hourly rate) was communicated during onboarding.'
+        if agreement and old_comp in agreement:
+            new_comp = ('You are paid a flat, fixed amount for each job, agreed before you accept it. '
+                        'Every job offer states the property and the exact dollar amount you will be '
+                        'paid for completing that job. You are not paid by the hour, and your pay is '
+                        'not a share or percentage of what the client is charged.\n\n'
+                        'The amount offered reflects the size, condition and service requested for that '
+                        'property. It does not change according to how long the job takes you, and it '
+                        'does not change if the client is given a discount. If a property turns out to '
+                        'be materially different from what the offer described, stop and contact the '
+                        'Company before continuing, and a revised amount will be agreed.\n\n'
+                        'You decide whether each amount is worth your time before you accept the job. '
+                        'Declining a job is not a breach of this agreement.')
+            BusinessSetting.set('agreement_template', agreement.replace(old_comp, new_comp, 1))
+
+        BusinessSetting.set('tmpl_patch_terms_damage_v1', '1')
+        db.session.commit()
+
 
 def _migrate_db():
     """Add any missing columns to existing tables safely (idempotent)."""
@@ -486,6 +544,7 @@ def _migrate_db():
         # Interview response transcripts
         ('interview_response', 'transcript',       'TEXT'),
         ('interview_response', 'transcript_lang',  'VARCHAR(10)'),
+        ('interview_response', 'transcript_en',    'TEXT'),
         # Tentative booking deposit link
         ('booking', 'deposit_token', 'VARCHAR(64)'),
         # Job completion before/after photos
@@ -1164,7 +1223,9 @@ You have a new job assignment! Here are the details:
 Date: {{job_date}}
 Service: {{service_type}}
 Address: {{job_address}}
-Your estimated earnings: ${{earnings}}
+Your pay for this job: ${{earnings}} (flat for the job)
+
+This is the whole amount for this job, agreed before you accept. It does not change based on how long you take or on what the customer is charged.
 
 See all your jobs, navigate, and open your checklists here:
 {{myday_link}}
