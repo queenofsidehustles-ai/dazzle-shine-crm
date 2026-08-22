@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ copy.title }} — {{ BIZ }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root{
+      --gold:#d3a84f; --gold-deep:#b98a33;
+      --purple:#1f1333; --purple-mid:#3b2b6b; --bg:#f6f5fb;
+      --white:#fff; --border:#e4dfef; --radius:14px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple);min-height:100vh}
+    .header{background:var(--purple);padding:24px;text-align:center}
+    .header .script{font-family:"Allura",cursive;font-size:2.4rem;color:var(--gold);display:block;line-height:1}
+    .header .sub{color:rgba(255,255,255,0.5);font-size:0.72rem;letter-spacing:0.2em;text-transform:uppercase;margin-top:6px;display:block}
+    .wrap{max-width:560px;margin:0 auto;padding:28px 16px 60px}
+    .card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
+          box-shadow:0 4px 24px rgba(15,7,40,0.1);padding:28px 26px;margin-bottom:18px}
+    h1{font-size:1.3rem;margin-bottom:10px}
+    .lead{color:var(--purple-mid);line-height:1.7;font-size:0.95rem}
+    .es{color:#5f5878;line-height:1.7;font-size:0.9rem;margin-top:10px;
+        border-top:1px dashed var(--border);padding-top:10px}
+    .step{display:flex;gap:12px;align-items:flex-start;margin-top:16px}
+    .num{background:var(--purple);color:var(--gold);width:24px;height:24px;border-radius:50%;flex:0 0 auto;
+         display:inline-flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700}
+    .step p{font-size:0.9rem;line-height:1.6;color:var(--purple-mid)}
+    .step .sp{color:#9a95ad;display:block;margin-top:2px}
+    a.gold{color:var(--gold-deep);font-weight:600}
+    input[type=file]{width:100%;padding:16px;border:2px dashed var(--border);border-radius:10px;
+                     background:#faf9fd;font-family:inherit;font-size:0.9rem;margin-top:20px}
+    button{width:100%;background:var(--gold);color:var(--purple);border:none;padding:15px;border-radius:9px;
+           font-weight:700;font-size:1rem;cursor:pointer;font-family:inherit;margin-top:14px}
+    .flash{margin-bottom:16px;padding:13px 16px;border-radius:9px;font-size:0.9rem;line-height:1.55;font-weight:500}
+    .flash.error{background:#fff5f5;border:1px solid #fed7d7;color:#c53030}
+    .flash.success{background:#f0fff4;border:1px solid #c6f6d5;color:#276749}
+    .privacy{background:#f0f7ff;border:1px solid #bcd7f5;border-radius:10px;padding:14px 16px;
+             margin-top:18px;font-size:0.84rem;line-height:1.6;color:#1e3a5f}
+    .done{background:#f0fff4;border:1px solid #c6f6d5;border-radius:10px;padding:22px;text-align:center}
+    .replace{font-size:0.84rem;color:#9a95ad;margin-top:14px;text-align:center}
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <span class="script">{{ BIZ }}</span>
+  <span class="sub">{{ copy.title }}</span>
+</div>
+
+<div class="wrap">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash {{ 'error' if cat in ('error','danger') else 'success' }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  {% if just_sent %}
+    <div class="card done">
+      <div style="font-size:2.2rem">✅</div>
+      <h1 style="margin-top:10px">Got it — thank you!</h1>
+      <p class="lead">We've received it and it's stored securely. Nothing else is needed.</p>
+      <p class="es">Lo recibimos y está guardado de forma segura. No necesitas hacer nada más.</p>
+    </div>
+  {% else %}
+    <div class="card">
+      <h1>Hi {{ s.name.split()[0] }} — {{ copy.title|lower }}</h1>
+      <p class="lead">{{ copy.lead }}</p>
+      <p class="es">{{ copy.lead_es }}</p>
+
+      {% for en, es in copy.steps %}
+      <div class="step">
+        <span class="num">{{ loop.index }}</span>
+        <p>{{ en|safe }}<span class="sp">{{ es }}</span></p>
+      </div>
+      {% endfor %}
+
+      <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="document" accept="application/pdf,image/*" required />
+        <button type="submit">Send it</button>
+      </form>
+
+      {% if existing %}
+      <p class="replace">
+        You sent one on {{ existing.uploaded_at.strftime('%b %d, %Y') }}. Uploading again replaces it.
+        <br>Ya enviaste uno el {{ existing.uploaded_at.strftime('%d/%m/%Y') }}. Si subes otro, reemplaza el anterior.
+      </p>
+      {% endif %}
+
+      <div class="privacy">
+        <strong>🔒 Where this goes.</strong> It's encrypted and stored with our own records — not on a
+        public website, and not anywhere a customer can see it. Only the owner can open it. PDF or photo,
+        up to {{ max_mb }}MB.
+        <br><br>
+        <strong>🔒 A dónde va esto.</strong> Se guarda cifrado con nuestros registros — no en un sitio
+        público, y en ningún lugar donde un cliente pueda verlo. Solo la dueña puede abrirlo. PDF o foto,
+        hasta {{ max_mb }}MB.
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+</body>
+</html>

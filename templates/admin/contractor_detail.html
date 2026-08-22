@@ -158,6 +158,56 @@
     </div>
     {% endif %}
 
+    <!-- Documents on file -->
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Documents on File</h2>
+      <p style="font-size:0.8rem;color:#9a95ad;line-height:1.55;margin-bottom:14px">
+        Encrypted and stored with your own records. Opening one needs your login — there's no public link.
+      </p>
+      {% for kind, label in [('id', '🪪 Photo ID'), ('w9', '📄 Form W-9')] %}
+        {% set doc = s.document(kind) %}
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border:1px solid #e4dfef;
+                    border-radius:8px;margin-bottom:8px">
+          <div style="flex:1">
+            <p style="font-weight:600;font-size:0.9rem">{{ label }}</p>
+            {% if doc %}
+              <p style="font-size:0.78rem;color:#1e7e34">Received {{ doc.uploaded_at.strftime('%b %d, %Y') }}</p>
+            {% else %}
+              <p style="font-size:0.78rem;color:#c53030">Not on file</p>
+            {% endif %}
+          </div>
+          {% if doc %}
+            <a href="{{ url_for('contractors.view_document', doc_id=doc.id) }}" target="_blank" rel="noopener"
+               style="font-size:0.8rem;font-weight:600;color:#3b2b6b;text-decoration:none;border:1px solid #e4dfef;
+                      border-radius:7px;padding:6px 12px">View</a>
+            <form method="POST" action="{{ url_for('contractors.delete_document', doc_id=doc.id) }}"
+                  onsubmit="return confirm('Delete {{ s.name }}\'s {{ label[2:] }}? This cannot be undone.')"
+                  style="display:inline">
+              <button type="submit" title="Delete"
+                      style="background:none;border:1px solid #fed7d7;border-radius:7px;padding:6px 10px;
+                             color:#c53030;cursor:pointer;font-family:inherit;font-size:0.8rem">✕</button>
+            </form>
+          {% else %}
+            <form method="POST" action="{{ url_for('contractors.request_document', staff_id=s.id, kind=kind) }}"
+                  style="display:inline">
+              <button type="submit"
+                      style="background:none;border:1px solid #e4dfef;border-radius:7px;padding:6px 12px;
+                             font-family:inherit;font-size:0.8rem;font-weight:600;color:#3b2b6b;cursor:pointer">
+                Ask for it
+              </button>
+            </form>
+          {% endif %}
+        </div>
+      {% endfor %}
+      {% if not secure_docs_ready %}
+        <div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:8px;padding:11px 14px;
+                    font-size:0.8rem;color:#c53030;line-height:1.55;margin-top:10px">
+          <strong>⚠️ SECRET_KEY is unset or still the default.</strong> Documents are stored, but the
+          encryption is not meaningful until a real SECRET_KEY is set on the server.
+        </div>
+      {% endif %}
+    </div>
+
     <!-- Agreement Status -->
     <div class="card">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Work Agreement</h2>

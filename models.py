@@ -679,6 +679,43 @@ class InterviewResponse(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class ContractorDocument(db.Model):
+    """One sensitive document belonging to one contractor, encrypted at rest.
+
+    Kept here rather than on Cloudinary with the job photos because the photos
+    are delivered from a public URL — fine for a clean kitchen, wrong for a
+    government ID. These bytes never leave the application: they arrive on a
+    token-gated upload, and go back out only through a route behind the owner's
+    login. See secure_docs.py.
+
+    One current document per kind per contractor. Re-uploading replaces the
+    previous one, because a stale licence is worse than none — it looks like a
+    check that was done."""
+    KINDS = [
+        ('id',      'Photo ID'),
+        ('w9',      'Form W-9'),
+        ('bgcheck', 'Background check'),
+    ]
+
+    id = db.Column(db.Integer, primary_key=True)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)
+    filename = db.Column(db.String(200))
+    content_type = db.Column(db.String(80))
+    size_bytes = db.Column(db.Integer)
+    data = db.Column(db.LargeBinary, nullable=False)     # encrypted, never plaintext
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    staff = db.relationship('Staff', backref=db.backref('documents', lazy=True,
+                            cascade='all, delete-orphan'))
+
+    __table_args__ = (db.UniqueConstraint('staff_id', 'kind', name='uq_doc_staff_kind'),)
+
+    @property
+    def label(self):
+        return dict(self.KINDS).get(self.kind, self.kind)
+
+
 class CommercialQuote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company = db.Column(db.String(150), nullable=False)
@@ -755,9 +792,19 @@ class Staff(db.Model):
     w9_requested_at = db.Column(db.DateTime)                  # last time we asked
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    def document(self, kind):
+        return next((d for d in self.documents if d.kind == kind), None)
+
     @property
     def has_w9(self):
-        return bool(self.w9_url)
+        # w9_url is the older Cloudinary-hosted route. Still honoured so nothing
+        # already collected stops counting, but new uploads go to the encrypted
+        # store and this reads either.
+        return bool(self.document('w9') or self.w9_url)
+
+    @property
+    def has_photo_id(self):
+        return bool(self.document('id'))
 
     def paid_in_year(self, year):
         """Labor paid to this person in a calendar year — what a 1099-NEC counts.

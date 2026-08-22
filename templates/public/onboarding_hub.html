@@ -86,13 +86,35 @@
       {% endif %}
     </div>
 
+    <!-- Photo ID -->
+    <div class="step">
+      {% if s.has_photo_id %}
+        <div class="badge done">✓</div>
+        <div>
+          <h3>Photo ID</h3>
+          <span class="done-txt">✓ Received {{ s.document('id').uploaded_at.strftime('%b %d, %Y') }}</span>
+        </div>
+      {% else %}
+        <div class="badge todo">🪪</div>
+        <div style="flex:1">
+          <h3>Send a photo of your ID</h3>
+          <p>You'll be going into people's homes, so we keep a photo ID on file for everyone on the team.
+          A driver's licence, state ID or passport is fine. It's encrypted, only the owner can open it,
+          and no customer ever sees it.
+          <br><span style="color:#9a95ad">Guardamos una identificación con foto de cada persona del
+          equipo. Se guarda cifrada y ningún cliente la ve.</span></p>
+          <a class="btn" href="{{ url_for('contractors.upload_document', token=s.agreement_token, kind='id') }}">🪪 Send my ID →</a>
+        </div>
+      {% endif %}
+    </div>
+
     <!-- W-9 -->
     <div class="step">
-      {% if s.w9_url %}
+      {% if s.has_w9 %}
         <div class="badge done">✓</div>
         <div>
           <h3>Tax form (W-9)</h3>
-          <span class="done-txt">✓ Received {{ s.w9_uploaded_at.strftime('%b %d, %Y') }}</span>
+          <span class="done-txt">✓ Received{% if s.w9_uploaded_at %} {{ s.w9_uploaded_at.strftime('%b %d, %Y') }}{% endif %}</span>
         </div>
       {% else %}
         <div class="badge todo">📄</div>
@@ -102,7 +124,7 @@
           at the end of the year. It's one page, it's free, and the link walks you through it.
           <br><span style="color:#9a95ad">Necesitamos tu Formulario W-9 para reportar tu pago al final
           del año. Es gratis y toma unos minutos.</span></p>
-          <a class="btn" href="{{ url_for('contractors.w9_upload', token=s.agreement_token) }}">📄 Send my W-9 →</a>
+          <a class="btn" href="{{ url_for('contractors.upload_document', token=s.agreement_token, kind='w9') }}">📄 Send my W-9 →</a>
         </div>
       {% endif %}
     </div>

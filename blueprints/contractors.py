@@ -3,13 +3,16 @@ import os
 import secrets
 import threading
 from datetime import datetime, date, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import (Blueprint, render_template, request, redirect, url_for, flash, jsonify,
+                   current_app, abort)
 from auth import login_required, owner_required
-from models import Staff, ContractorApplication, Booking, BookingCrew, BusinessSetting, ContractorPayment
+from models import (Staff, ContractorApplication, Booking, BookingCrew, BusinessSetting,
+                    ContractorPayment, ContractorDocument)
 from extensions import db
 from notifications import send_email, send_sms
 from translate import translate
 import stripe_connect
+import secure_docs
 import branding
 import integrations
 
@@ -771,68 +774,159 @@ def onboarding_hub(token):
                            stripe_configured=stripe_connect.is_configured())
 
 
-@contractors_bp.route('/w9/<token>')
-def w9_upload(token):
-    """Where a contractor sends their W-9.
+DOC_COPY = {
+    'id': {
+        'title': 'Send a photo of your ID',
+        'title_es': 'Envía una foto de tu identificación',
+        'lead': ("You'll be going into people's homes, so we keep a photo ID on file for every cleaner "
+                 "on the team. A driver's licence, state ID or passport is fine."),
+        'lead_es': ("Vas a entrar a las casas de nuestros clientes, así que guardamos una identificación "
+                    "con foto de cada limpiador del equipo. Una licencia de conducir, identificación "
+                    "estatal o pasaporte funciona."),
+        'steps': [
+            ("Lay it flat in good light and take a photo, or scan it to a PDF.",
+             "Ponla sobre una superficie plana con buena luz y tómale una foto, o escanéala a PDF."),
+            ("Check all four corners are in the picture and the text is readable.",
+             "Revisa que se vean las cuatro esquinas y que el texto se pueda leer."),
+            ("Upload it below.", "Súbela abajo."),
+        ],
+    },
+    'w9': {
+        'title': 'Send your W-9',
+        'title_es': 'Envía tu W-9',
+        'lead': ("You're paid without tax withheld, so we need a Form W-9 on file to report what we paid "
+                 "you at the end of the year. It's one page and it's free."),
+        'lead_es': ("Se te paga sin retención de impuestos, así que necesitamos un Formulario W-9 "
+                    "archivado para reportar tu pago al final del año. Es una página y es gratis."),
+        'steps': [
+            ('Download the blank form from the IRS: <a class="gold" href="https://www.irs.gov/pub/irs-pdf/fw9.pdf" '
+             'target="_blank" rel="noopener">irs.gov/pub/irs-pdf/fw9.pdf</a>',
+             'Descarga el formulario en blanco del IRS.'),
+            ("Fill in your name, address and your SSN or EIN, then sign and date it.",
+             "Llénalo con tu nombre, dirección y tu SSN o EIN, luego fírmalo y ponle la fecha."),
+            ("Upload it below — a PDF or a clear photo of the signed form is fine.",
+             "Súbelo abajo — un PDF o una foto clara del formulario firmado está bien."),
+        ],
+    },
+}
 
-    Stripe collects a tax ID during its own onboarding and keeps it — the CRM
-    never sees it. That is fine while everyone is paid through Stripe, and no
-    help at all for anyone paid by Venmo, Zelle, cash or check, who never went
-    through Stripe's checks. This is how those people get a form on file."""
+
+@contractors_bp.route('/documents/<token>/<kind>', methods=['GET', 'POST'])
+def upload_document(token, kind):
+    """Where a contractor sends a photo ID or a W-9.
+
+    The file is posted here rather than straight to Cloudinary like the job
+    photos are. Cloudinary hands back a public URL, which is the right trade for
+    a picture of a clean kitchen and the wrong one for a government ID — so
+    these go into the encrypted store instead and never get a public address at
+    all. Plain form POST, no JavaScript: this gets opened on a phone, from a
+    text message, sometimes on a bad connection."""
+    if kind not in DOC_COPY:
+        abort(404)
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
-    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk')
-    upload_preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews')
-    return render_template('public/w9_upload.html', s=s, token=token,
-                           cloud_name=cloud_name, upload_preset=upload_preset,
-                           already_done=bool(s.w9_url))
+    existing = s.document(kind)
 
+    if request.method == 'POST':
+        ok, err, ctype, raw = secure_docs.check_upload(request.files.get('document'))
+        if not ok:
+            flash(err, 'error')
+            return redirect(url_for('contractors.upload_document', token=token, kind=kind))
 
-@contractors_bp.route('/w9/<token>/submit', methods=['POST'])
-def w9_submit(token):
-    s = Staff.query.filter_by(agreement_token=token).first_or_404()
-    data = request.get_json() or {}
-    uploaded_url = (data.get('uploaded_url') or '').strip()
-    if not uploaded_url:
-        return jsonify({'error': 'Please choose a file first.'}), 400
+        blob = secure_docs.encrypt(raw)
+        if existing:
+            existing.data = blob
+            existing.filename = request.files['document'].filename[:200]
+            existing.content_type = ctype
+            existing.size_bytes = len(raw)
+            existing.uploaded_at = datetime.utcnow()
+        else:
+            db.session.add(ContractorDocument(
+                staff_id=s.id, kind=kind,
+                filename=request.files['document'].filename[:200],
+                content_type=ctype, size_bytes=len(raw), data=blob,
+            ))
+        if kind == 'w9':
+            s.w9_uploaded_at = datetime.utcnow()
+        db.session.commit()
 
-    s.w9_url = uploaded_url
-    s.w9_uploaded_at = datetime.utcnow()
-    db.session.commit()
-
-    try:
-        send_email(
-            to_email=branding.owner_email(),
-            to_name=branding.biz_name(),
-            subject=f"W-9 received — {s.name}",
-            html=f"""
+        label = dict(ContractorDocument.KINDS).get(kind, kind)
+        try:
+            send_email(
+                to_email=branding.owner_email(), to_name=branding.biz_name(),
+                subject=f"{label} received — {s.name}",
+                html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;padding:24px">
-  <h2 style="color:#1f1333">{s.name} sent their W-9</h2>
-  <p style="color:#3b2b6b">It's on file against their profile.</p>
-  <p style="color:#3b2b6b"><a href="{url_for('money.tax_forms', _external=True)}"
-     style="color:#d3a84f;font-weight:700">Open 1099 &amp; W-9 →</a></p>
+  <h2 style="color:#1f1333">{s.name} sent their {label.lower()}</h2>
+  <p style="color:#3b2b6b">It's stored encrypted against their profile.</p>
+  <p style="color:#3b2b6b"><a href="{url_for('contractors.staff_detail', staff_id=s.id, _external=True)}"
+     style="color:#d3a84f;font-weight:700">Open {s.name}'s profile →</a></p>
 </div>""",
-        )
-    except Exception:
-        pass
+            )
+        except Exception:
+            pass
+        return redirect(url_for('contractors.upload_document', token=token, kind=kind, sent=1))
 
-    return jsonify({'ok': True})
+    return render_template('public/document_upload.html', s=s, token=token, kind=kind,
+                           copy=DOC_COPY[kind], existing=existing,
+                           just_sent=request.args.get('sent') == '1',
+                           max_mb=secure_docs.MAX_BYTES // (1024 * 1024))
 
 
-@contractors_bp.route('/w9/request/<int:staff_id>', methods=['POST'])
+@contractors_bp.route('/documents/<int:doc_id>/view')
 @owner_required
-def request_w9(staff_id):
-    """Send one cleaner the link to their W-9 upload page, by text and email."""
+def view_document(doc_id):
+    """The only way a stored document comes back out, and it needs the owner's
+    login. Streamed from the database rather than redirected to a file host, so
+    there is no URL that works once this response is over."""
+    doc = ContractorDocument.query.get_or_404(doc_id)
+    raw = secure_docs.decrypt(doc.data)
+    if raw is None:
+        flash('That document could not be decrypted — SECRET_KEY has changed since it was '
+              'uploaded. Ask them to send it again.', 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=doc.staff_id))
+    ext = secure_docs.ALLOWED_TYPES.get(doc.content_type, 'bin')
+    safe_name = f"{doc.staff.name.replace(' ', '-').lower()}-{doc.kind}.{ext}"
+    resp = current_app.response_class(raw, mimetype=doc.content_type or 'application/octet-stream')
+    resp.headers['Content-Disposition'] = f'inline; filename="{safe_name}"'
+    # Not for caches or history — this is the whole point of the route.
+    resp.headers['Cache-Control'] = 'private, no-store, max-age=0'
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    return resp
+
+
+@contractors_bp.route('/documents/<int:doc_id>/delete', methods=['POST'])
+@owner_required
+def delete_document(doc_id):
+    doc = ContractorDocument.query.get_or_404(doc_id)
+    staff_id, label = doc.staff_id, doc.label
+    db.session.delete(doc)
+    db.session.commit()
+    flash(f'{label} deleted.', 'success')
+    return redirect(request.referrer or url_for('contractors.staff_detail', staff_id=staff_id))
+
+
+@contractors_bp.route('/documents/request/<int:staff_id>/<kind>', methods=['POST'])
+@owner_required
+def request_document(staff_id, kind):
+    """Text and email one cleaner the link to send a document."""
+    if kind not in DOC_COPY:
+        abort(404)
     s = Staff.query.get_or_404(staff_id)
     if not s.agreement_token:
         s.agreement_token = secrets.token_urlsafe(32)
         db.session.commit()
-    link = f"{branding.crm_base()}/contractors/w9/{s.agreement_token}"
+    link = f"{branding.crm_base()}/contractors/documents/{s.agreement_token}/{kind}"
     biz = branding.biz_name()
+    label = dict(ContractorDocument.KINDS).get(kind, kind)
     sent = []
 
     if s.phone:
-        msg = (f"Hi {s.name.split()[0]} — {biz} needs a Form W-9 on file so we can report your pay "
-               f"at year end. It takes a few minutes: {link}")
+        if kind == 'id':
+            msg = (f"Hi {s.name.split()[0]} — {biz} keeps a photo ID on file for everyone on the team. "
+                   f"Send yours here, it takes a minute: {link}")
+        else:
+            msg = (f"Hi {s.name.split()[0]} — {biz} needs a Form W-9 on file so we can report your pay "
+                   f"at year end. It takes a few minutes: {link}")
         if (s.language or 'en') == 'es':
             msg = translate(msg, target='es')
         try:
@@ -846,20 +940,18 @@ def request_w9(staff_id):
         try:
             send_email(
                 to_email=s.email, to_name=s.name,
-                subject=f"Please send us your W-9 — {biz}",
+                subject=f"Please send us your {label.lower()} — {biz}",
                 html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2 style="color:#b98a33">One quick form, {s.name.split()[0]}</h2>
-  <p style="line-height:1.7">As an independent contractor you're paid without tax withheld, so we need a
-  Form W-9 on file to report what we paid you at the end of the year. The page below walks you through it
-  — it's free and takes a few minutes.</p>
-  <p style="line-height:1.7;color:#5f5878;font-size:0.92rem">Como contratista independiente, necesitamos
-  un Formulario W-9 archivado para reportar tu pago al final del año. La página de abajo te explica cómo
-  — es gratis y toma unos minutos.</p>
+  <h2 style="color:#b98a33">One quick thing, {s.name.split()[0]}</h2>
+  <p style="line-height:1.7">{DOC_COPY[kind]['lead']}</p>
+  <p style="line-height:1.7;color:#5f5878;font-size:0.92rem">{DOC_COPY[kind]['lead_es']}</p>
   <p style="text-align:center;margin:24px 0">
     <a href="{link}" style="background:#1f1333;color:#d3a84f;padding:14px 30px;border-radius:8px;
-       text-decoration:none;font-weight:700">📄 Send my W-9 →</a>
+       text-decoration:none;font-weight:700">📄 Send it here →</a>
   </p>
+  <p style="color:#5f5878;font-size:0.84rem;line-height:1.6">It's stored securely and used only for our
+  records — we never share it with customers.</p>
   <p style="color:#9a95ad;font-size:12px">{biz}</p>
 </div>""",
             )
@@ -867,14 +959,22 @@ def request_w9(staff_id):
         except Exception:
             pass
 
-    s.w9_requested_at = datetime.utcnow()
-    db.session.commit()
+    if kind == 'w9':
+        s.w9_requested_at = datetime.utcnow()
+        db.session.commit()
 
     if sent:
-        flash(f"W-9 request sent to {s.name} by {' and '.join(sent)}.", 'success')
+        flash(f"{label} request sent to {s.name} by {' and '.join(sent)}.", 'success')
     else:
         flash(f"Couldn't reach {s.name} — no phone or email on file.", 'error')
-    return redirect(request.referrer or url_for('money.tax_forms'))
+    return redirect(request.referrer or url_for('contractors.staff_detail', staff_id=s.id))
+
+
+@contractors_bp.route('/w9/<token>')
+def w9_upload(token):
+    """Superseded by the encrypted document store. Kept so a link that has
+    already gone out by text doesn't dead-end."""
+    return redirect(url_for('contractors.upload_document', token=token, kind='w9'))
 
 
 @contractors_bp.route('/onboarding/<token>/payments')
@@ -1185,7 +1285,8 @@ def staff_detail(staff_id):
     if s.stripe_account_id:
         _sync_stripe_status(s)   # auto-refresh payment status on page load
     recent_jobs = Booking.query.filter_by(assigned_cleaner=s.name, status='completed').order_by(Booking.created_at.desc()).limit(10).all()
-    return render_template('admin/contractor_detail.html', s=s, recent_jobs=recent_jobs, exp_levels=EXP_LEVELS)
+    return render_template('admin/contractor_detail.html', s=s, recent_jobs=recent_jobs,
+                           exp_levels=EXP_LEVELS, secure_docs_ready=secure_docs.is_ready())
 
 
 @contractors_bp.route('/team/<int:staff_id>/toggle', methods=['POST'])
