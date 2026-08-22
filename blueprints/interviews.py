@@ -441,13 +441,11 @@ def send_invite(app_id):
 def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
                          include_bgcheck=True):
     first = (name or 'there').split()[0]
-    # Worked examples are computed from the live price book rather than typed in,
-    # so a candidate is never quoted a figure the CRM wouldn't actually offer.
-    # These are examples of the model, not a promise about any specific job —
-    # the offer on a real job is the number that binds.
-    from pricing import calculate_job
-    ex_small = calculate_job('standard', 1, 1)   # quoted in the English and
-    ex_large = calculate_job('standard', 3, 2)   # Spanish pay blocks below
+    # Deliberately no dollar figures in this email. Any example we print becomes
+    # the number a candidate remembers and measures their first real offer
+    # against — and a job taken with a partner pays each of them a share, so the
+    # remembered figure would be roughly double what they were then offered. The
+    # model is explained instead, and the offer on a real job carries the number.
     accept_block = ''
     if accept_url:
         accept_block = f"""
@@ -533,19 +531,24 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
 
     <!-- PAY -->
     <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
-      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 What You'll Earn</div>
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 How You'll Be Paid</div>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        <strong>A flat amount for each job</strong>, paid after the clean. Every job offer tells you the
-        home and your exact dollar amount <em>before</em> you accept it, so you always know what you're
-        agreeing to. For example:
+        You're paid a <strong>flat rate for each job</strong> — one fixed amount for the whole job, paid
+        after the clean. Every job offer shows you the home and your exact dollar amount <em>before</em>
+        you accept it, so you always know what you're taking on before you say yes to it.
       </p>
-      <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
-        <li>A 1-bed/1-bath standard clean pays <strong>${ex_small['contractor_earnings']:.2f}</strong> for the job.</li>
-        <li>A 3-bed/2-bath standard clean pays <strong>${ex_large['contractor_earnings']:.2f}</strong> for the job.</li>
-      </ul>
-      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ You are not paid by the hour and you're not on a clock. The amount is for doing the job properly — it doesn't drop if you're fast, and bigger or harder homes are offered at more to begin with.</p>
+      <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
+        That amount is set by <strong>the size of the home and the type of cleaning</strong>. A larger home
+        pays more than a smaller one, and a deep clean or a move-out pays more than a standard clean,
+        because there's more work in them.
+      </p>
+      <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
+        <strong>Working with a partner?</strong> When two cleaners take a job together, the job's pay is
+        <strong>split between you</strong> — you each get your own amount for your share, shown in your own
+        offer. You also finish the home in about half the time, which leaves you free to take another job.
+      </p>
+      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ You are not paid by the hour and you're not on a clock. The amount is for doing the job properly — it doesn't drop if you work quickly.</p>
       <p style="color:#1e7e34;font-size:0.9rem;margin:6px 0 0;font-weight:600">✅ Your pay never depends on what the customer is charged. If we discount a job, that comes out of our side — not yours.</p>
-      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">Working alongside someone? You each get your own flat amount for your share, shown in your own offer — and you finish sooner.</p>
     </div>
     {accept_block}
     <!-- IC EXPECTATIONS -->
@@ -594,19 +597,25 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
 
     <!-- PAGO -->
     <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:10px;padding:20px 22px;margin:0 0 20px">
-      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 Lo que Ganarás</div>
+      <div style="font-weight:700;color:#1f1333;font-size:1.05rem;margin-bottom:10px">💵 Cómo se te Pagará</div>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        <strong>Un monto fijo por cada trabajo</strong>, pagado después de la limpieza. Cada oferta de trabajo
-        te muestra la casa y tu monto exacto <em>antes</em> de que la aceptes, así siempre sabes a qué estás
-        diciendo que sí. Por ejemplo:
+        Se te paga una <strong>tarifa fija por cada trabajo</strong> — un solo monto por el trabajo completo,
+        pagado después de la limpieza. Cada oferta de trabajo te muestra la casa y tu monto exacto
+        <em>antes</em> de que la aceptes, así siempre sabes a qué le estás diciendo que sí.
       </p>
-      <ul style="color:#1e5638;line-height:1.9;margin:0 0 6px;padding-left:20px">
-        <li>Una limpieza estándar de 1 hab/1 baño paga <strong>${ex_small['contractor_earnings']:.2f}</strong> por el trabajo.</li>
-        <li>Una limpieza estándar de 3 hab/2 baños paga <strong>${ex_large['contractor_earnings']:.2f}</strong> por el trabajo.</li>
-      </ul>
-      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ No se te paga por hora y no estás bajo reloj. El monto es por hacer bien el trabajo — no baja si terminas rápido, y las casas más grandes o más difíciles se ofrecen por más desde el principio.</p>
+      <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
+        Ese monto lo determinan <strong>el tamaño de la casa y el tipo de limpieza</strong>. Una casa más
+        grande paga más que una pequeña, y una limpieza profunda o de mudanza paga más que una limpieza
+        estándar, porque llevan más trabajo.
+      </p>
+      <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
+        <strong>¿Trabajas con un compañero/a?</strong> Cuando dos personas toman un trabajo juntas, el pago
+        del trabajo <strong>se reparte entre ustedes</strong> — cada quien recibe su propio monto por su
+        parte, indicado en su propia oferta. Además terminan la casa en aproximadamente la mitad del tiempo,
+        lo que les deja libres para tomar otro trabajo.
+      </p>
+      <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ No se te paga por hora y no estás bajo reloj. El monto es por hacer bien el trabajo — no baja si terminas rápido.</p>
       <p style="color:#1e7e34;font-size:0.9rem;margin:6px 0 0;font-weight:600">✅ Tu pago nunca depende de lo que se le cobra al cliente. Si damos un descuento, sale de nuestra parte — no de la tuya.</p>
-      <p style="color:#1e7e34;font-size:0.85rem;margin:6px 0 0">¿Trabajas junto a otra persona? Cada quien recibe su propio monto fijo por su parte, indicado en su propia oferta — y terminan más rápido.</p>
     </div>
 
     <!-- EXPECTATIVAS IC -->
