@@ -747,7 +747,31 @@ class Staff(db.Model):
     onboarding_reminder_at = db.Column(db.DateTime)           # last "finish your onboarding" nudge
     onboarding_reminder_count = db.Column(db.Integer, default=0)
     schedule_reminder_date = db.Column(db.String(20))         # last date we sent a day-before schedule reminder
+    # W-9. Stripe collects a tax ID during its own onboarding, but it keeps it —
+    # the CRM never sees it, and anyone paid by Venmo/Zelle/cash never went
+    # through Stripe at all. Those are the people a W-9 is actually needed from.
+    w9_url = db.Column(db.String(500))                        # the uploaded form
+    w9_uploaded_at = db.Column(db.DateTime)
+    w9_requested_at = db.Column(db.DateTime)                  # last time we asked
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def has_w9(self):
+        return bool(self.w9_url)
+
+    def paid_in_year(self, year):
+        """Labor paid to this person in a calendar year — what a 1099-NEC counts.
+
+        Tips are excluded on purpose: they are the customer's money passed
+        through, not the business paying for services, and ContractorPayment
+        already tracks them in their own column for exactly this reason. Confirm
+        the treatment with an accountant before filing on it."""
+        total = 0.0
+        for p in self.payments:
+            when = p.created_at
+            if when and when.year == year and (p.status or 'paid') == 'paid':
+                total += (p.amount or 0)
+        return round(total, 2)
 
     @property
     def can_verify_on_stripe(self):

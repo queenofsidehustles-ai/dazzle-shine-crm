@@ -68,6 +68,7 @@ SECTIONS = [
             ('money.expenses', 'Expenses', True),
             ('money.job_economics', 'Job economics', True),
             ('contractors.payroll', 'Payroll', True),
+            ('money.tax_forms', '1099 & W-9', True),
             ('commissions.index', 'VA commissions', True),
         ]),
     ]),

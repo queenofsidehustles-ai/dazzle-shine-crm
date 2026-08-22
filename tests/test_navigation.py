@@ -90,7 +90,7 @@ with app.app_context():
     tabs, _ = navigation.tabs_for('bookings.calendar', 'owner')
     check(tabs == [], 'Calendar has no tabs — one tab is just the title twice')
     tabs, _ = navigation.tabs_for('money.pnl', 'owner')
-    check(len(tabs) == 6, f'Money has its six tabs (got {len(tabs)})')
+    check(len(tabs) == 7, f'Money has its seven tabs (got {len(tabs)})')
 
     print('\n9. Every admin page still renders')
     c = app.test_client()

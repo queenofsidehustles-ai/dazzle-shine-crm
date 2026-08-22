@@ -488,6 +488,9 @@ def _migrate_db():
         ('booking', 'skip_review',         'BOOLEAN DEFAULT FALSE'),
         # Staff worker model
         ('staff', 'worker_model', "VARCHAR(20) DEFAULT 'contractor'"),
+        ('staff', 'w9_url',          'VARCHAR(500)'),
+        ('staff', 'w9_uploaded_at',  'TIMESTAMP'),
+        ('staff', 'w9_requested_at', 'TIMESTAMP'),
         # Contractor application hiring pipeline
         ('contractor_application', 'source',                       "VARCHAR(50) DEFAULT 'Website'"),
         ('contractor_application', 'experience_years',             'VARCHAR(20)'),

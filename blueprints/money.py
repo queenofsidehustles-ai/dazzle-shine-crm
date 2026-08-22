@@ -24,6 +24,11 @@ money_bp = Blueprint('money', __name__, url_prefix='/money')
 
 VALID_CATEGORIES = {k for k, _l, _g, _s in EXPENSE_CATEGORIES}
 
+# Labor paid to one contractor in a calendar year, at or above which a 1099-NEC
+# is normally required. A figure set by the IRS, not by this business, so it sits
+# here as a constant rather than in Settings.
+TAX_FORM_THRESHOLD = 600.0
+
 
 def _cloudinary():
     return (os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk'),
@@ -282,6 +287,46 @@ def job_economics():
     return render_template('admin/job_economics.html',
         e=finance.job_economics(start, end), period_label=label,
         kind=kind, year=year, month=month)
+
+
+@money_bp.route('/tax-forms')
+@owner_required
+def tax_forms():
+    """Who was paid what this year, and whether we hold their W-9.
+
+    Two facts that only matter together. $600 of labor in a calendar year is the
+    threshold at which a 1099-NEC is normally required, and the form can't be
+    filed without the contractor's tax details. Sorted by amount paid, so the
+    people who need chasing first are at the top.
+
+    Deliberately does not file anything or compute a tax position — it shows the
+    two numbers and leaves the filing to the owner and her accountant."""
+    from models import Staff
+    year = request.args.get('year', type=int) or date.today().year
+
+    rows = []
+    for s in Staff.query.order_by(Staff.name).all():
+        paid = s.paid_in_year(year)
+        if paid <= 0 and not s.is_active:
+            continue          # long-gone and paid nothing this year
+        rows.append({
+            'staff': s,
+            'paid': paid,
+            'over_threshold': paid >= TAX_FORM_THRESHOLD,
+            'has_w9': s.has_w9,
+            'stripe': bool(s.stripe_payouts_enabled),
+        })
+    rows.sort(key=lambda r: -r['paid'])
+
+    needs_w9 = [r for r in rows if r['over_threshold'] and not r['has_w9']]
+    years = sorted({p.created_at.year for s in Staff.query.all()
+                    for p in s.payments if p.created_at}, reverse=True) or [year]
+
+    return render_template('admin/tax_forms.html',
+        rows=rows, year=year, years=years, needs_w9=needs_w9,
+        threshold=TAX_FORM_THRESHOLD,
+        total_paid=round(sum(r['paid'] for r in rows), 2),
+    )
 
 
 @money_bp.route('/pnl/export')

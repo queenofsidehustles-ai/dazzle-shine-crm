@@ -86,6 +86,27 @@
       {% endif %}
     </div>
 
+    <!-- W-9 -->
+    <div class="step">
+      {% if s.w9_url %}
+        <div class="badge done">✓</div>
+        <div>
+          <h3>Tax form (W-9)</h3>
+          <span class="done-txt">✓ Received {{ s.w9_uploaded_at.strftime('%b %d, %Y') }}</span>
+        </div>
+      {% else %}
+        <div class="badge todo">📄</div>
+        <div style="flex:1">
+          <h3>Send us your W-9</h3>
+          <p>You're paid without tax withheld, so we need a Form W-9 on file to report what we paid you
+          at the end of the year. It's one page, it's free, and the link walks you through it.
+          <br><span style="color:#9a95ad">Necesitamos tu Formulario W-9 para reportar tu pago al final
+          del año. Es gratis y toma unos minutos.</span></p>
+          <a class="btn" href="{{ url_for('contractors.w9_upload', token=s.agreement_token) }}">📄 Send my W-9 →</a>
+        </div>
+      {% endif %}
+    </div>
+
     <!-- Pay schedule choice -->
     <div class="step">
       <div class="badge {{ 'done' if s.pay_schedule else 'todo' }}">💵</div>
