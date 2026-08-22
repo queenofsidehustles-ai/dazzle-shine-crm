@@ -351,7 +351,7 @@ def _apply_template_patches():
                 'Your estimated earnings: ${{earnings}}',
                 'Your pay for this job: ${{earnings}} (flat for the job)\n\n'
                 'This is the whole amount for this job, agreed before you accept. It does not '
-                'change based on how long you take or on what the customer is charged.')
+                'change based on how long you take.')
         BusinessSetting.set('tmpl_patch_flat_pay_v1', '1')
         db.session.commit()
 
@@ -1225,7 +1225,7 @@ Service: {{service_type}}
 Address: {{job_address}}
 Your pay for this job: ${{earnings}} (flat for the job)
 
-This is the whole amount for this job, agreed before you accept. It does not change based on how long you take or on what the customer is charged.
+This is the whole amount for this job, agreed before you accept. It does not change based on how long you take.
 
 See all your jobs, navigate, and open your checklists here:
 {{myday_link}}

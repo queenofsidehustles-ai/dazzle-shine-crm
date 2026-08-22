@@ -2056,7 +2056,7 @@ def _notify_cleaner(booking):
   </table>
   <p style="font-size:0.82rem;color:#5f5878;background:#f6f5fb;border-radius:8px;padding:10px 12px;margin-top:14px">
     This is the whole amount for this job, agreed before you accept. It doesn't change based on how long
-    you take or on what the customer is charged.
+    you take.
   </p>
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <div style="display:flex;gap:12px;flex-wrap:wrap">

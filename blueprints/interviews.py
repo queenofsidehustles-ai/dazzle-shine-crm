@@ -543,12 +543,11 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
         because there's more work in them.
       </p>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        <strong>Working with a partner?</strong> When two cleaners take a job together, the job's pay is
-        <strong>split between you</strong> — you each get your own amount for your share, shown in your own
-        offer. You also finish the home in about half the time, which leaves you free to take another job.
+        <strong>Working with a partner?</strong> When two cleaners are assigned the job together, the pay
+        is <strong>split between you</strong> — you each get your own amount for your share, shown in your
+        own offer. You also finish the home in about half the time, which leaves you free to take another job.
       </p>
       <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ You are not paid by the hour and you're not on a clock. The amount is for doing the job properly — it doesn't drop if you work quickly.</p>
-      <p style="color:#1e7e34;font-size:0.9rem;margin:6px 0 0;font-weight:600">✅ Your pay never depends on what the customer is charged. If we discount a job, that comes out of our side — not yours.</p>
     </div>
     {accept_block}
     <!-- IC EXPECTATIONS -->
@@ -609,13 +608,12 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
         estándar, porque llevan más trabajo.
       </p>
       <p style="color:#1e5638;line-height:1.7;margin:0 0 12px">
-        <strong>¿Trabajas con un compañero/a?</strong> Cuando dos personas toman un trabajo juntas, el pago
-        del trabajo <strong>se reparte entre ustedes</strong> — cada quien recibe su propio monto por su
-        parte, indicado en su propia oferta. Además terminan la casa en aproximadamente la mitad del tiempo,
+        <strong>¿Trabajas con un compañero/a?</strong> Cuando dos limpiadores son asignados al trabajo
+        juntos, el pago <strong>se reparte entre ustedes</strong> — cada quien recibe su propio monto por
+        su parte, indicado en su propia oferta. Además terminan la casa en aproximadamente la mitad del tiempo,
         lo que les deja libres para tomar otro trabajo.
       </p>
       <p style="color:#1e7e34;font-size:0.9rem;margin:10px 0 0;font-weight:600">✅ No se te paga por hora y no estás bajo reloj. El monto es por hacer bien el trabajo — no baja si terminas rápido.</p>
-      <p style="color:#1e7e34;font-size:0.9rem;margin:6px 0 0;font-weight:600">✅ Tu pago nunca depende de lo que se le cobra al cliente. Si damos un descuento, sale de nuestra parte — no de la tuya.</p>
     </div>
 
     <!-- EXPECTATIVAS IC -->
