@@ -3,18 +3,45 @@
 {% block page_title %}Messages{% endblock %}
 
 {% block content %}
+
+<!-- Filter in place. Deliberately not tabs: one inbox, narrowed, so a
+     conversation is never sitting behind a tab nobody clicked. -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+  <a href="{{ url_for('messages.inbox') }}"
+     style="text-decoration:none;font-size:0.82rem;font-weight:600;padding:6px 14px;border-radius:999px;
+            border:1px solid {{ '#1f1333' if not show else '#e4dfef' }};
+            background:{{ '#1f1333' if not show else '#fff' }};
+            color:{{ '#fff' if not show else '#5f5878' }}">All</a>
+  {% for key, k in kinds.items() %}
+    {% if counts[key] %}
+    <a href="{{ url_for('messages.inbox', kind=key) }}"
+       style="text-decoration:none;font-size:0.82rem;font-weight:600;padding:6px 14px;border-radius:999px;
+              border:1px solid {{ k.colour if show == key else '#e4dfef' }};
+              background:{{ k.tint if show == key else '#fff' }};
+              color:{{ k.colour if show == key else '#5f5878' }}">
+      {{ k.icon }} {{ k.label }} <span style="opacity:0.65">{{ counts[key] }}</span>
+    </a>
+    {% endif %}
+  {% endfor %}
+</div>
+
 <div class="card">
   {% if threads %}
   <div style="display:flex;flex-direction:column">
     {% for t in threads %}
     <a href="{{ url_for('messages.thread', phone=t.phone) }}"
        style="display:flex;align-items:center;gap:14px;padding:14px 8px;border-bottom:1px solid #efecf6;text-decoration:none;color:inherit">
-      <div style="width:42px;height:42px;border-radius:50%;background:#f0ebff;color:#6b46c1;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">
+      <div style="width:42px;height:42px;border-radius:50%;background:{{ t.style.tint }};color:{{ t.style.colour }};display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">
         {{ (t.name or t.pretty)[:1]|upper }}
       </div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-          <strong style="font-size:0.95rem">{{ t.name or t.pretty }}</strong>
+          <span style="min-width:0;display:flex;align-items:center;gap:7px">
+            <strong style="font-size:0.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.name or t.pretty }}</strong>
+            <span style="flex-shrink:0;background:{{ t.style.tint }};color:{{ t.style.colour }};
+                         font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:999px;
+                         text-transform:uppercase;letter-spacing:0.06em">{{ t.style.label }}</span>
+          </span>
           <span style="color:#b3adc4;font-size:0.72rem;flex-shrink:0">{{ t.last.created_at.strftime('%b %-d, %-I:%M %p') }}</span>
         </div>
         <div style="color:#6f6885;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
@@ -31,7 +58,7 @@
   <div style="text-align:center;padding:48px 0;color:#9a95ad">
     <div style="font-size:2.4rem;margin-bottom:10px">💬</div>
     <p style="font-weight:600;color:#5f5878">No conversations yet.</p>
-    <p style="font-size:0.88rem">Open a team member or applicant and tap <strong>💬 Message</strong> to start one — or their replies to your texts will show up here.</p>
+    <p style="font-size:0.88rem">Open a team member, applicant or customer and tap <strong>💬 Message</strong> to start one — or their replies to your texts will show up here.</p>
   </div>
   {% endif %}
 </div>

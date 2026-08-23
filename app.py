@@ -264,9 +264,9 @@ def _patch_pay_rate_40_to_50():
 def _seed_message_templates():
     """Seed the reusable text-message templates once (idempotent by title)."""
     from models import MessageTemplate, BusinessSetting
-    if not BusinessSetting.get('owner_name'):
-        BusinessSetting.set('owner_name', 'Monica')
-        db.session.commit()
+    # No owner_name seed. It used to default to one particular owner's first
+    # name, which then signed the welcome texts a different company sent to its
+    # own cleaners. Unset, {owner} falls back to the business name.
     welcome_v1 = (
         "Welcome to the {business} family, {name}! 🎉 We are SO excited to have you on the "
         "team 💛 Your first day is set for {start_date} — just reply “yes” to confirm "

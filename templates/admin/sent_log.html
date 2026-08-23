@@ -80,7 +80,11 @@
             {% endif %}
           </td>
           <td style="font-size:0.86rem">
-            {% if m.to_name %}<strong>{{ m.to_name }}</strong><br>{% endif %}
+            {% if m.to_name %}<strong>{{ m.to_name }}</strong>{% endif %}
+            <span style="background:{{ m.kind.tint }};color:{{ m.kind.colour }};font-size:0.66rem;
+                         font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase;
+                         letter-spacing:0.06em;margin-left:6px;white-space:nowrap">{{ m.kind.label }}</span>
+            <br>
             <span style="color:#5f5878">
               {{ pretty_phone(m.to_address) if m.channel == 'sms' else m.to_address }}
             </span>

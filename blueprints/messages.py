@@ -1,7 +1,8 @@
 """Two-way text messaging — a single threaded inbox for talking with cleaners,
 applicants and customers. Outbound texts go through the business Twilio number;
 replies come back via the /messages/incoming webhook and land in the same
-thread. The owner is pinged on her personal cell for every inbound message.
+thread. The owner is pinged on her own phone for every inbound message, if she
+has set one in Settings — there is deliberately no default number.
 
 The thread is keyed on the phone number alone, so it has always worked for
 anyone. What it lacked was a name for customers and a way in from their pages:
@@ -21,7 +22,12 @@ import integrations
 
 messages_bp = Blueprint('messages', __name__, url_prefix='/messages')
 
-DEFAULT_OWNER_ALERT_PHONE = '9374773090'   # Monica's cell — editable via 'owner_alert_phone' setting
+# No default. This used to fall back to one particular owner's mobile, which on
+# a second company's deployment meant their customers' texts pinged a stranger's
+# phone — the same shape of leak as the review link that once defaulted to one
+# business's Google page. Unset now means the alert simply isn't sent, and the
+# message still lands in the inbox either way. Set 'owner_alert_phone' in
+# Settings → Business to turn alerts on.
 
 
 def norm_phone(p):
@@ -48,6 +54,12 @@ def sent_log():
         q = q.filter(OutboundLog.channel == channel)
     logs = q.order_by(OutboundLog.created_at.desc()).limit(300).all()
 
+    # Tag each row the same way the inbox tags a thread. An email has no phone
+    # to resolve, so fall back to matching the address — a cleaner and a
+    # customer look identical in a list of "sent" otherwise.
+    for m in logs:
+        m.kind = kind_style(_kind_for_log(m))
+
     # Whether the services are even connected. Without this the page can't tell
     # you the difference between "nothing to send" and "nothing can be sent".
     sms_missing = integrations.missing_for('texting')
@@ -61,8 +73,28 @@ def sent_log():
                            pretty_phone=pretty_phone, channel=channel)
 
 
+def _kind_for_log(log):
+    """Who a Sent-log row went to. Phone rows resolve exactly; email rows are
+    matched on address, which is the only handle an email gives us."""
+    if (log.channel or '') == 'sms':
+        return contact_kind(resolve_contact(norm_phone(log.to_address)))
+    addr = (log.to_address or '').strip().lower()
+    if not addr:
+        return 'unknown'
+    if Staff.query.filter(db.func.lower(Staff.email) == addr).first():
+        return 'team'
+    if ContractorApplication.query.filter(
+            db.func.lower(ContractorApplication.email) == addr).first():
+        return 'applicant'
+    if (Client.query.filter(db.func.lower(Client.email) == addr).first()
+            or Booking.query.filter(db.func.lower(Booking.email) == addr).first()):
+        return 'customer'
+    return 'unknown'
+
+
 def owner_alert_phone():
-    return BusinessSetting.get('owner_alert_phone') or DEFAULT_OWNER_ALERT_PHONE
+    """Where inbound-message alerts go, or None if the owner hasn't set one."""
+    return (BusinessSetting.get('owner_alert_phone') or '').strip() or None
 
 
 def resolve_contact(phone10):
@@ -91,6 +123,33 @@ def resolve_contact(phone10):
         if norm_phone(bk.phone) == phone10:
             return {**blank, 'name': bk.name}
     return blank
+
+
+# How a conversation is labelled and coloured. One definition, used by the inbox
+# and the Sent log, so the same person can't read as a cleaner on one screen and
+# a customer on the other.
+CONTACT_KINDS = {
+    'team':      {'label': 'Team',      'colour': '#6b46c1', 'tint': '#f0ebff', 'icon': '🧹'},
+    'applicant': {'label': 'Applicant', 'colour': '#b45309', 'tint': '#fef3c7', 'icon': '📥'},
+    'customer':  {'label': 'Customer',  'colour': '#1a7f5a', 'tint': '#e6f6ef', 'icon': '🏠'},
+    'unknown':   {'label': 'Unknown',   'colour': '#6f6885', 'tint': '#efecf6', 'icon': '❓'},
+}
+
+
+def contact_kind(contact):
+    """Which side of the business this conversation is with."""
+    if contact.get('staff_id'):
+        return 'team'
+    if contact.get('application_id'):
+        return 'applicant'
+    if contact.get('client_id') or contact.get('name'):
+        # A name with no staff/applicant id came from a Client or a Booking.
+        return 'customer'
+    return 'unknown'
+
+
+def kind_style(kind):
+    return CONTACT_KINDS.get(kind, CONTACT_KINDS['unknown'])
 
 
 def record_outbound(phone10, body, contact_name=None, twilio_sid=None,
@@ -130,7 +189,7 @@ def fill_placeholders(body, phone10, contact):
     """Swap {name}, {owner}, {business}, {myday_link}, {sample_link}, {start_date}
     with real values for this contact."""
     biz = branding.biz_name()
-    owner = BusinessSetting.get('owner_name', 'Monica')
+    owner = (BusinessSetting.get('owner_name') or '').strip() or biz
     full = contact.get('name') or ''
     first = full.split()[0] if full else 'there'
     sample = f"{branding.crm_base()}/contractors/sample-day"
@@ -230,10 +289,22 @@ def inbox():
             t['unread'] += 1
     thread_list = list(threads.values())   # already newest-first (dict insertion order)
     for t in thread_list:
+        contact = resolve_contact(t['phone'])
         if not t['name']:
-            t['name'] = resolve_contact(t['phone'])['name']
+            t['name'] = contact['name']
         t['pretty'] = pretty_phone(t['phone'])
-    return render_template('admin/messages_inbox.html', threads=thread_list)
+        t['kind'] = contact_kind(contact)
+        t['style'] = kind_style(t['kind'])
+
+    # A filter, not a second inbox: one list, narrowed in place, so a
+    # conversation is never hidden somewhere you forgot to look.
+    show = request.args.get('kind', '')
+    counts = {k: sum(1 for t in thread_list if t['kind'] == k) for k in CONTACT_KINDS}
+    if show in CONTACT_KINDS:
+        thread_list = [t for t in thread_list if t['kind'] == show]
+
+    return render_template('admin/messages_inbox.html', threads=thread_list,
+                           kinds=CONTACT_KINDS, counts=counts, show=show)
 
 
 # ── One conversation ────────────────────────────────────────────────────────
@@ -261,6 +332,7 @@ def thread(phone):
     return render_template('admin/messages_thread.html', msgs=msgs, phone=phone10,
                            pretty=pretty_phone(phone10), name=name,
                            contact=contact, app_rec=app_rec, lang=thread_lang(phone10),
+                           kind=kind_style(contact_kind(contact)),
                            templates=MessageTemplate.query.order_by(MessageTemplate.id).all())
 
 
@@ -326,8 +398,11 @@ def incoming():
     sid = request.form.get('MessageSid')
     phone10 = norm_phone(from_num)
 
-    # Ignore texts from the owner's own cell (e.g. replies to alert texts) and empties.
-    if not phone10 or not body or phone10 == norm_phone(owner_alert_phone()):
+    # Ignore texts from the owner's own cell (e.g. replies to alert texts) and
+    # empties. norm_phone(None) is '', which would match any unparseable number,
+    # so an unset alert phone must not be compared at all.
+    alert_to = owner_alert_phone()
+    if not phone10 or not body or (alert_to and phone10 == norm_phone(alert_to)):
         return Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
                         mimetype='text/xml')
 
@@ -347,10 +422,13 @@ def incoming():
     alert_body = translated or body
     snippet = alert_body if len(alert_body) <= 90 else alert_body[:90] + '…'
     link = f"{branding.crm_base()}{url_for('messages.thread', phone=phone10)}"
-    try:
-        send_sms(owner_alert_phone(), f"📩 {who}: {snippet}\nReply: {link}")
-    except Exception:
-        pass
+    # No alert phone set: the message is already saved and will be waiting in the
+    # inbox. Better silent than texted to whoever used to be the default.
+    if alert_to:
+        try:
+            send_sms(alert_to, f"📩 {who}: {snippet}\nReply: {link}")
+        except Exception:
+            pass
 
     return Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
                     mimetype='text/xml')

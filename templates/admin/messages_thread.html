@@ -6,6 +6,9 @@
 <div style="margin-bottom:12px">
   <a href="{{ url_for('messages.inbox') }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem">← All messages</a>
   <span style="color:#b3adc4;font-size:0.85rem;margin-left:8px">{{ pretty }}</span>
+  <span style="background:{{ kind.tint }};color:{{ kind.colour }};font-size:0.68rem;font-weight:700;
+               padding:2px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:0.06em;
+               margin-left:8px">{{ kind.icon }} {{ kind.label }}</span>
   {% if contact.staff_id %}
   <a href="{{ url_for('contractors.staff_detail', staff_id=contact.staff_id) }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem;margin-left:10px">View team profile →</a>
   {% elif contact.application_id %}

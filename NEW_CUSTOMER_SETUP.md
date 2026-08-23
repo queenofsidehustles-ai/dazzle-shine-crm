@@ -103,6 +103,14 @@ forever.
 
 Stay available for questions. Don't take the keyboard.
 
+**Point out one setting they'd otherwise never find:** *Settings → Business →
+owner alert phone*. When a cleaner or customer texts in, that number gets a
+copy so nobody has to sit watching the inbox. There is deliberately no default
+— it used to fall back to a hardcoded mobile, which on someone else's
+deployment meant their customers' texts pinged a stranger's phone. Unset, the
+message still arrives in the CRM; only the nudge is silent. Same for *owner
+name*, which signs the welcome texts and falls back to the business name.
+
 ## 4. Watch for the one expensive mistake
 
 Before they take a real booking, have them press **Settings → Connections → Test
