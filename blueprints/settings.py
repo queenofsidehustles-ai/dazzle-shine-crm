@@ -3,6 +3,7 @@ from auth import login_required, owner_required
 from models import PricingSetting, BusinessSetting, Prospect
 from extensions import db
 from pricing import SERVICES, EXTRAS, DEPOSIT_AMOUNT
+import branding
 
 settings_bp = Blueprint('settings', __name__, url_prefix='/settings')
 
@@ -48,6 +49,23 @@ def setup_confirm(key):
     db.session.commit()
     flash(f'{labels[key]} marked as reviewed.', 'success')
     return redirect(url_for('settings.setup'))
+
+
+@settings_bp.route('/automations')
+@owner_required
+def automations_page():
+    """Whether the scheduled jobs are alive.
+
+    They run outside the app, so their silence is indistinguishable from there
+    being nothing to do. This is the page that tells the difference."""
+    import automations as _auto
+    from models import CronRun
+    first = CronRun.query.order_by(CronRun.ran_at.asc()).first()
+    return render_template('admin/automations.html',
+                           data=_auto.summary(),
+                           base=branding.crm_base(),
+                           tracking_since=(first.ran_at.strftime('%b %-d, %Y')
+                                           if first else 'when this page shipped'))
 
 
 @settings_bp.route('/connections', methods=['GET', 'POST'])

@@ -1230,6 +1230,27 @@ class OutboundLog(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
+class CronRun(db.Model):
+    """One execution of a scheduled job.
+
+    None of the automations in this CRM schedule themselves — an outside cron
+    calls them over HTTP. That works right up until the cron stops, and then
+    nothing happens and nothing says so: no error, no alert, just customers
+    quietly not being reminded and cards quietly not being charged. Working out
+    whether the reminders were alive meant reading the Sent log and reasoning
+    about which entries could only have come from a schedule.
+
+    So every call writes a row here, and the Automations page reads the most
+    recent one per job. A job that has never run has no rows at all, which is
+    itself the answer."""
+    id = db.Column(db.Integer, primary_key=True)
+    job = db.Column(db.String(40), nullable=False, index=True)   # 'reminders', …
+    ran_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    ok = db.Column(db.Boolean, default=True)
+    items = db.Column(db.Integer, default=0)      # how much work it found to do
+    detail = db.Column(db.String(300))            # error text when ok is False
+
+
 class Prospect(db.Model):
     """A cold-outreach business to CALL — the 'Big Fish Finder' call list.
     Kept separate from Lead (inbound quote requests) on purpose: prospects are

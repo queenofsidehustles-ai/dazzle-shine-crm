@@ -1,0 +1,110 @@
+{% extends "base_admin.html" %}
+{% block title %}Automations — {{ BIZ }}{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>Automations</h1>
+    <div style="font-size:0.85rem;color:var(--softer);margin-top:2px">
+      The jobs that are supposed to run on their own — and whether they are
+    </div>
+  </div>
+</div>
+
+<div class="content">
+
+  {% if data.all_ok %}
+  <div style="background:#f0fff4;border:1px solid #c6f6d5;border-radius:10px;padding:16px 18px;margin-bottom:18px">
+    <div style="font-weight:700;color:#276749">✅ Everything is running</div>
+    <p style="font-size:0.88rem;color:#1e7e34;line-height:1.6;margin:6px 0 0">
+      Every scheduled job has reported in recently.
+    </p>
+  </div>
+  {% else %}
+  <div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:10px;padding:16px 18px;margin-bottom:18px">
+    <div style="font-weight:700;color:#c53030;margin-bottom:6px">
+      ⚠️ {{ data.broken|length }} of {{ data.rows|length }} automations {{ 'is' if data.broken|length == 1 else 'are' }} not running
+    </div>
+    <p style="font-size:0.88rem;color:#9b2c2c;line-height:1.6;margin:0">
+      Nothing in this CRM schedules itself — an outside cron service calls each job on a timetable.
+      When that stops, the app keeps looking healthy and simply goes quiet. Check your cron service
+      and make sure each address below is being called.
+    </p>
+  </div>
+  {% endif %}
+
+  {% for r in data.rows %}
+  {% set tone = {'ok':      ('#f0fff4', '#c6f6d5', '#276749', '✅', 'Running'),
+                 'stale':   ('#fffbeb', '#fde68a', '#92400e', '⚠️', 'Hasn’t run recently'),
+                 'failing': ('#fff5f5', '#fed7d7', '#c53030', '❌', 'Last run failed'),
+                 'never':   ('#fff5f5', '#fed7d7', '#c53030', '🚫', 'Never run')}[r.state] %}
+  <div class="card" style="margin-bottom:12px;border-left:4px solid {{ tone[2] }}">
+    <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <strong style="font-size:1.02rem">{{ r.label }}</strong>
+          <span style="background:{{ tone[0] }};border:1px solid {{ tone[1] }};color:{{ tone[2] }};
+                       font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap">
+            {{ tone[3] }} {{ tone[4] }}
+          </span>
+          <span style="font-size:0.72rem;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">
+            should run {{ r.cadence }}
+          </span>
+        </div>
+        <p style="font-size:0.87rem;color:var(--muted);line-height:1.6;margin:6px 0 0">{{ r.blurb|safe }}</p>
+
+        {% if r.last %}
+          <p style="font-size:0.82rem;color:var(--softer);margin:8px 0 0">
+            Last ran {{ r.last.ran_at.strftime('%b %-d, %Y at %-I:%M %p') }} UTC
+            {%- if r.hours is not none %} — {{ '%.0f'|format(r.hours) }} hour{{ 's' if r.hours|round|int != 1 }} ago{% endif %}
+            {%- if r.last.items %} · did {{ r.last.items }} thing{{ 's' if r.last.items != 1 }}{% endif %}
+          </p>
+          {% if r.last.detail %}
+            <p style="font-size:0.82rem;color:#c53030;margin:4px 0 0">{{ r.last.detail }}</p>
+          {% endif %}
+        {% else %}
+          <p style="font-size:0.82rem;color:#c53030;margin:8px 0 0">
+            No run has ever been recorded.
+            <span style="color:var(--softer)">(Recording started {{ tracking_since }} — a job that last ran
+            before then shows here until its next run.)</span>
+          </p>
+        {% endif %}
+
+        {% if r.evidence %}
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:9px 12px;margin-top:10px">
+          <span style="font-size:0.82rem;color:#7c4a04;line-height:1.55">🔎 {{ r.evidence }}</span>
+        </div>
+        {% endif %}
+      </div>
+
+      <div style="flex-shrink:0;text-align:right">
+        <div style="font-size:0.7rem;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Address to call</div>
+        <code style="font-size:0.78rem;background:#faf9fd;border:1px solid var(--border);border-radius:6px;
+                     padding:5px 9px;display:inline-block;color:var(--purple-mid)">POST /api/{{ r.key }}</code>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:10px;padding:16px 18px;margin-top:18px">
+    <div style="font-weight:700;color:#2b6cb0;margin-bottom:6px">How to set these up</div>
+    <p style="font-size:0.87rem;line-height:1.65;color:#1e3a5f;margin:0 0 8px">
+      Each job is an address on this server that something outside has to call on a schedule — a free
+      service like cron-job.org does it. Every call needs your reminder key sent as an
+      <code>X-Api-Key</code> header, so nobody but you can trigger them.
+    </p>
+    <p style="font-size:0.87rem;line-height:1.65;color:#1e3a5f;margin:0 0 8px">
+      Full address: <code>{{ base }}/api/&lt;job&gt;</code> · method <strong>POST</strong>.
+      Run the hourly one every hour; the daily ones once each morning, after
+      people are awake and before the day starts.
+    </p>
+    <p style="font-size:0.87rem;line-height:1.65;color:#1e3a5f;margin:0">
+      <strong>Two independent signals on this page.</strong> The green and red badges come from runs the
+      CRM has recorded since this page shipped. The 🔎 notes are worked out from your actual bookings —
+      jobs that came and went with no reminder, balances still sitting uncollected — so they can tell you
+      about weeks before any of this existed.
+    </p>
+  </div>
+
+</div>
+{% endblock %}

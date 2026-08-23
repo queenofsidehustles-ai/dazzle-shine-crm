@@ -9,6 +9,7 @@ from pricing import calculate_price, SERVICES, EXTRAS, FREQUENCY_LABELS, DEPOSIT
 from notifications import send_email, send_sms, add_to_mailerlite
 import branding
 import integrations
+import automations
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -83,6 +84,7 @@ def send_reminders():
         count += 1
     db.session.commit()
 
+    automations.record('reminders', items=count)
     return jsonify({'ok': True, 'reminders_sent': count})
 
 
@@ -151,7 +153,11 @@ def charge_balances():
         results.append({'booking_id': b.id, 'name': b.name, 'ok': ok, 'error': err, 'autopay': True})
     db.session.commit()
 
-    return jsonify({'ok': True, 'charged': len([r for r in results if r['ok']]),
+    charged = len([r for r in results if r['ok']])
+    failed = [r for r in results if not r['ok']]
+    automations.record('charge-balances', items=charged, ok=not failed,
+                       detail='; '.join(str(r.get('error')) for r in failed) or None)
+    return jsonify({'ok': True, 'charged': charged,
                     'results': results,
                     'waiting_for_their_appointment': waiting})
 
@@ -357,6 +363,7 @@ def send_drips():
         lead.last_drip_at = datetime.utcnow()
         count += 1
     db.session.commit()
+    automations.record('send-drips', items=count)
     return jsonify({'ok': True, 'drips_sent': count})
 
 
@@ -439,6 +446,7 @@ def applicant_followups():
             no_response += 1
             db.session.commit()
 
+    automations.record('applicant-followups', items=nudged + first_sent)
     return jsonify({'ok': True, 'nudged': nudged,
                     'first_invites_sent': first_sent,
                     'moved_to_no_response': no_response})
@@ -455,6 +463,8 @@ def lifecycle_emails():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     import lifecycle
     counts = lifecycle.run_lifecycle_emails()
+    automations.record('lifecycle-emails', items=sum(v for v in counts.values()
+                                                     if isinstance(v, int)))
     return jsonify({'ok': True, **counts})
 
 

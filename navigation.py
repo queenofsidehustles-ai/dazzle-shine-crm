@@ -90,6 +90,7 @@ SECTIONS = [
             ('settings.business', 'Business', True),
             ('settings.commercial', 'Commercial brand', True),
             ('settings.connections', 'Connections', True),
+            ('settings.automations_page', 'Automations', True),
             ('team_logins.index', 'Team logins', True),
         ]),
     ]),
