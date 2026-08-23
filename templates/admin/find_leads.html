@@ -17,6 +17,7 @@ data-contact="{{ p.contact_name or '' }}"
 data-email="{{ p.email or '' }}"
 data-renewal="{{ p.renewal_note or '' }}"
 data-attempts="{{ p.attempts or 0 }}"
+data-brand="{{ p.brand or default_brand }}"
 {%- endmacro %}
 
 {% if demo %}
@@ -257,6 +258,16 @@ data-attempts="{{ p.attempts or 0 }}"
         {% endfor %}
       </select>
     </div>
+    <div style="flex:1;min-width:170px">
+      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Calling for which brand?</label>
+      <select name="brand" style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.95rem">
+        {% for key, label in brand_choices %}
+        {% if key != 'all' %}
+        <option value="{{ key }}" {{ 'selected' if key == (brand_lens if brand_lens != 'all' else default_brand) }}>{{ label }}</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+    </div>
     <div style="flex:1;min-width:180px">
       <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Where?</label>
       <input type="text" name="location" value="{{ search_location }}" placeholder="City, State"
@@ -272,6 +283,8 @@ data-attempts="{{ p.attempts or 0 }}"
   <h3 style="margin:0 0 12px">{{ results|length }} found — tick the ones to add to your call list</h3>
   {% if results %}
   <form method="POST" action="{{ url_for('places_finder.import_selected') }}">
+    {# Carried from the search so the brand is recorded, not re-guessed. #}
+    <input type="hidden" name="brand" value="{{ search_brand }}">
     <div class="table-wrap">
       <table>
         <thead><tr><th></th><th>Business</th><th>Phone</th><th>Rating</th><th></th></tr></thead>
@@ -440,14 +453,14 @@ data-attempts="{{ p.attempts or 0 }}"
     <details class="cd-group" id="cdEmailBox" style="margin-top:16px">
       <summary>✉️ Send an outreach email</summary>
       <div class="cd-inner">
-        {% if email_templates %}
+        {% if email_template_titles %}
         <form id="cdEmailForm" method="POST">
           <div class="cd-field">
             <label for="cdTmpl">Which one</label>
             <select id="cdTmpl">
               <option value="">— pick a template —</option>
-              {% for t in email_templates %}
-              <option value="{{ loop.index0 }}">{{ t.title }}</option>
+              {% for title in email_template_titles %}
+              <option value="{{ loop.index0 }}">{{ title }}</option>
               {% endfor %}
             </select>
           </div>
@@ -481,12 +494,18 @@ data-attempts="{{ p.attempts or 0 }}"
 </aside>
 
 <script>
-  const CD_SCRIPTS  = {{ scripts | tojson }};
+  // Scripts and emails are held per brand, because the same script says a
+  // different company name and number depending on who is being called.
+  const CD_SCRIPTS_BY_BRAND = {{ scripts | tojson }};
+  const CD_EMAILS_BY_BRAND  = {{ email_templates | tojson }};
+  const CD_DEFAULT_BRAND    = {{ default_brand | tojson }};
+  let   CD_SCRIPTS = CD_SCRIPTS_BY_BRAND[CD_DEFAULT_BRAND] || {};
+  let   CD_EMAILS  = CD_EMAILS_BY_BRAND[CD_DEFAULT_BRAND] || [];
+
   const CD_MAP      = {{ script_map | tojson }};
   const CD_ALWAYS   = {{ script_always | tojson }};
   const CD_LABELS   = {{ script_labels | tojson }};
   const CD_RULES    = {{ next_rules | tojson }};
-  const CD_EMAILS   = {{ email_templates | tojson }};
   const CD_ACTION   = "{{ url_for('places_finder.update_status', prospect_id=0, view=view) }}";
   const CD_EMAIL_ACTION = "{{ url_for('places_finder.send_outreach', prospect_id=0, view=view) }}";
 
@@ -547,6 +566,12 @@ data-attempts="{{ p.attempts or 0 }}"
 
   function openDrawer(btn) {
     const d = btn.dataset;
+
+    // Point the drawer at this prospect's side of the business before anything
+    // is rendered, so the script reads out the right company and number.
+    CD_SCRIPTS = CD_SCRIPTS_BY_BRAND[d.brand] || CD_SCRIPTS_BY_BRAND[CD_DEFAULT_BRAND] || {};
+    CD_EMAILS  = CD_EMAILS_BY_BRAND[d.brand]  || CD_EMAILS_BY_BRAND[CD_DEFAULT_BRAND]  || [];
+
     document.getElementById('cdName').textContent = d.name;
     document.getElementById('cdCat').textContent  = d.catlabel
       + (d.attempts && d.attempts !== '0' ? ' · ' + d.attempts + ' attempt(s)' : '');

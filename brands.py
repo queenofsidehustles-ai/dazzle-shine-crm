@@ -100,6 +100,115 @@ def brand_choices():
             (COMMERCIAL, get_brand(COMMERCIAL)['name'])]
 
 
+# ── Which side of the business a record belongs to ────────────────────────────
+#
+# Split on the TYPE OF WORK, not the type of customer. A property management
+# company is a business, but the work it buys is cleaning a home between
+# tenants — that is residential, and it stays with the primary brand. The
+# commercial brand is offices, medical, retail, post-construction, janitorial.
+#
+# Turnover and make-ready are deliberately primary. They were the case that
+# decided the rule: sold to a business, but residential work.
+
+_COMMERCIAL_SERVICES = ('commercial',)
+_COMMERCIAL_CATEGORIES = ('medical_office', 'general_contractor', 'office', 'daycare')
+
+
+def _field(record, name):
+    """Read a field off a model row or off a plain dict of search results."""
+    if isinstance(record, dict):
+        return (record.get(name) or '').lower()
+    return (getattr(record, name, '') or '').lower()
+
+
+def brand_for_lead(lead):
+    """Which brand an inbound lead belongs to.
+
+    Anything not positively commercial is primary. Misfiling a commercial lead
+    as residential costs one wrong script; the reverse mails a house cleaning
+    quote to a facility manager.
+    """
+    return COMMERCIAL if _field(lead, 'service_type') in _COMMERCIAL_SERVICES else PRIMARY
+
+
+def brand_for_prospect(prospect):
+    """Which brand a cold-call prospect belongs to.
+
+    Property managers, realtors and short-term-rental hosts look commercial and
+    are not: what they buy is turnover cleaning. That mistake has already been
+    made once by hand, which is why it is written down here.
+    """
+    return COMMERCIAL if _field(prospect, 'category') in _COMMERCIAL_CATEGORIES else PRIMARY
+
+
+def backfill(record, derive):
+    """Give a record a brand if it predates the split. True if one was set.
+
+    Written once, on the first read after deploy, rather than guessed forever:
+    the derived answer becomes a real stored value that can then be corrected
+    by hand. Callers commit.
+    """
+    if getattr(record, 'brand', None):
+        return False
+    record.brand = derive(record)
+    return True
+
+
+# ── The brand lens: which side of the business is on screen ───────────────────
+#
+# Held in the session rather than a column, because it is a view preference and
+# not a fact about anything. Defaults to ALL so a first load after deploy shows
+# the whole CRM — a switcher that starts filtered looks like data loss.
+
+ALL = 'all'
+
+
+def active():
+    """The brand currently being viewed, or ALL."""
+    try:
+        from flask import session
+        key = (session.get('crm_brand') or ALL).strip().lower()
+    except Exception:
+        return ALL   # outside a request (cron, shell) nothing is filtered
+    return key if key in (PRIMARY, COMMERCIAL, ALL) else ALL
+
+
+def set_active(key):
+    from flask import session
+    key = normalize_lens(key)
+    session['crm_brand'] = key
+    return key
+
+
+def normalize_lens(key):
+    key = (key or ALL).strip().lower()
+    key = _ALIASES.get(key, key)
+    return key if key in (PRIMARY, COMMERCIAL, ALL) else ALL
+
+
+def lens_choices():
+    """(key, label) for the switcher, All first."""
+    return [(ALL, 'All brands'),
+            (PRIMARY, get_brand(PRIMARY)['name']),
+            (COMMERCIAL, get_brand(COMMERCIAL)['name'])]
+
+
+def in_lens(record, derive, key=None):
+    """Does one record belong on screen right now?"""
+    key = key or active()
+    if key == ALL:
+        return True
+    return (getattr(record, 'brand', None) or derive(record)) == key
+
+
+def filter_rows(rows, derive, key=None):
+    """Keep the rows belonging to the active brand. ALL keeps everything."""
+    key = key or active()
+    if key == ALL:
+        return list(rows)
+    return [r for r in rows if in_lens(r, derive, key)]
+
+
 def send_identity(key):
     """(from_name, from_email, reply_to) for send_email.
 

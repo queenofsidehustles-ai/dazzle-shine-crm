@@ -10,18 +10,27 @@ leads_bp = Blueprint('leads', __name__, url_prefix='/leads')
 @leads_bp.route('/')
 @login_required
 def index():
+    import brands
     status_filter = request.args.get('status', '')
-    query = Lead.query.order_by(Lead.created_at.desc())
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-    leads = query.all()
+
+    # Give anything predating the brand split a brand once, from its service
+    # type, so the answer is stored and correctable rather than re-guessed on
+    # every page load.
+    everything = Lead.query.order_by(Lead.created_at.desc()).all()
+    if any(brands.backfill(l, brands.brand_for_lead) for l in everything):
+        db.session.commit()
+
+    # Counts describe the brand you are looking at, not the whole database —
+    # a tab reading "New (14)" that shows four rows is worse than no count.
+    in_brand = brands.filter_rows(everything, brands.brand_for_lead)
     counts = {
-        'all': Lead.query.count(),
-        'new': Lead.query.filter_by(status='new').count(),
-        'contacted': Lead.query.filter_by(status='contacted').count(),
-        'converted': Lead.query.filter_by(status='converted').count(),
-        'lost': Lead.query.filter_by(status='lost').count(),
+        'all': len(in_brand),
+        'new': sum(1 for l in in_brand if l.status == 'new'),
+        'contacted': sum(1 for l in in_brand if l.status == 'contacted'),
+        'converted': sum(1 for l in in_brand if l.status == 'converted'),
+        'lost': sum(1 for l in in_brand if l.status == 'lost'),
     }
+    leads = [l for l in in_brand if not status_filter or l.status == status_filter]
     return render_template('admin/leads.html', leads=leads, counts=counts, status_filter=status_filter)
 
 

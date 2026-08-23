@@ -335,22 +335,29 @@ If it changes — a contract ending, a vendor letting you down, a property chang
 ]
 
 
-def tokens():
+def tokens(brand=None):
     """Values substituted into scripts at display time — business, owner,
     phone and city.
 
     Kept out of the stored content so a business that renames itself, changes
-    its number, or resells this CRM never has to re-edit sixteen scripts. The
-    commercial division name is preferred where one is set, since these are
-    commercial outreach scripts.
+    its number, or resells this CRM never has to re-edit sixteen scripts.
+
+    The name and number follow the brand being called. Reading a commercial
+    company's name down the phone to a residential property manager is the
+    exact confusion two brands are meant to prevent, so the caller is never
+    asked to remember which one they are in.
     """
     import branding
+    import brands as _brands
     from models import BusinessSetting
-    biz = (BusinessSetting.get('commercial_name') or '').strip() or branding.biz_name()
+
+    key = _brands.normalize(brand) if brand else _brands.COMMERCIAL
+    identity = _brands.get_brand(key)
+
     return {
-        'biz': biz,
+        'biz': identity.get('name') or branding.biz_name(),
         'owner': (BusinessSetting.get('owner_name') or '').strip() or 'me',
-        'phone': branding.phone() or '[your number]',
+        'phone': identity.get('phone') or branding.phone() or '[your number]',
         # The town the VA says out loud. A script naming somebody else's city is
         # worse than one naming no city at all.
         'city': (BusinessSetting.get('city') or '').strip() or 'your area',

@@ -1,14 +1,19 @@
-"""Two-way text messaging — a single threaded inbox for talking with cleaners
-and applicants. Outbound texts go through the business Twilio number; replies
-come back via the /messages/incoming webhook and land in the same thread.
-The owner is pinged on her personal cell for every inbound message."""
+"""Two-way text messaging — a single threaded inbox for talking with cleaners,
+applicants and customers. Outbound texts go through the business Twilio number;
+replies come back via the /messages/incoming webhook and land in the same
+thread. The owner is pinged on her personal cell for every inbound message.
+
+The thread is keyed on the phone number alone, so it has always worked for
+anyone. What it lacked was a name for customers and a way in from their pages:
+a client's reply arrived looking like a wrong number, and the only route to this
+screen was from a cleaner's profile or the inbox list."""
 from datetime import datetime
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response, jsonify)
 from auth import login_required
 from extensions import db
 from models import (Message, Staff, ContractorApplication, BusinessSetting,
-                    MessageTemplate, OutboundLog)
+                    MessageTemplate, OutboundLog, Client, Booking)
 from notifications import send_sms
 from translate import translate
 import branding
@@ -61,15 +66,31 @@ def owner_alert_phone():
 
 
 def resolve_contact(phone10):
-    """Match a 10-digit phone to a Staff member or applicant for display.
-    Returns dict(name, staff_id, application_id)."""
+    """Who a 10-digit phone belongs to. Returns
+    dict(name, staff_id, application_id, client_id).
+
+    Customers used to fall through this and show in the inbox as a bare phone
+    number, which made a reply from a client indistinguishable from a wrong
+    number. They are checked last, after the team and applicants, because a
+    cleaner who is also a customer should read as a cleaner here."""
+    blank = {'name': None, 'staff_id': None, 'application_id': None, 'client_id': None}
+
     for s in Staff.query.filter(Staff.phone.isnot(None)).all():
         if norm_phone(s.phone) == phone10:
-            return {'name': s.name, 'staff_id': s.id, 'application_id': None}
+            return {**blank, 'name': s.name, 'staff_id': s.id}
     for a in ContractorApplication.query.filter(ContractorApplication.phone.isnot(None)).all():
         if norm_phone(a.phone) == phone10:
-            return {'name': a.name, 'staff_id': None, 'application_id': a.id}
-    return {'name': None, 'staff_id': None, 'application_id': None}
+            return {**blank, 'name': a.name, 'application_id': a.id}
+    for c in Client.query.filter(Client.phone.isnot(None)).all():
+        if norm_phone(c.phone) == phone10:
+            return {**blank, 'name': c.name, 'client_id': c.id}
+    # Not a client yet — but a booking carries a phone before one exists.
+    b = (Booking.query.filter(Booking.phone.isnot(None))
+         .order_by(Booking.created_at.desc()).all())
+    for bk in b:
+        if norm_phone(bk.phone) == phone10:
+            return {**blank, 'name': bk.name}
+    return blank
 
 
 def record_outbound(phone10, body, contact_name=None, twilio_sid=None,

@@ -149,6 +149,10 @@ def create_app():
                 'APP_VERSION': branding.version(),
                 'APP_CHANNEL': branding.release_channel(),
                 'APP_RELEASE': branding.release_tag(),
+                # Which side of the business is on screen, for the switcher.
+                'BRAND_LENS': brands.active(),
+                'BRAND_LENS_CHOICES': brands.lens_choices(),
+                'BRAND_LENS_NAME': dict(brands.lens_choices()).get(brands.active(), 'All brands'),
             }
         except Exception:
             # A template must never 500 because a setting is missing.
@@ -157,7 +161,9 @@ def create_app():
                     'BIZ_CITY': '', 'BIZ_BOOKING_LINK': '', 'CRM_BASE': '',
                     'APP_VERSION': branding.version(),
                     'APP_CHANNEL': branding.release_channel(),
-                    'APP_RELEASE': branding.release_tag()}
+                    'APP_RELEASE': branding.release_tag(),
+                    'BRAND_LENS': 'all', 'BRAND_LENS_CHOICES': [],
+                    'BRAND_LENS_NAME': 'All brands'}
 
     # A nudge for a business that hasn't finished setting itself up. Goes quiet
     # for good once the essentials are connected, so an established business
@@ -632,6 +638,14 @@ def _migrate_db():
         ('prospect', 'email',               'VARCHAR(200)'),
         ('prospect', 'renewal_note',        'VARCHAR(120)'),
         ('prospect', 'last_emailed_at',     'TIMESTAMP'),
+        # Which side of the business a record belongs to. Left NULL rather than
+        # defaulted for the same reason as stage above: a DEFAULT would stamp
+        # every existing lead and prospect with one brand, and there would be no
+        # way to tell a real answer from a filled-in one. NULL means "predates
+        # the split", which brands.brand_for_* reads and works out from the
+        # service type or category already on the row.
+        ('lead',     'brand',               'VARCHAR(20)'),
+        ('prospect', 'brand',               'VARCHAR(20)'),
     ]
     for table, col, col_type in new_cols:
         try:

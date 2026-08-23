@@ -14,7 +14,13 @@
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Client Info</h2>
       <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ booking.name }}</span></div>
       <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ booking.email }}" style="color:#5d4f7d">{{ booking.email }}</a></span></div>
-      <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ booking.phone }}" style="color:#5d4f7d">{{ booking.phone }}</a></span></div>
+      <div class="detail-row"><span class="dl">Phone</span><span class="dv">
+        <a href="tel:{{ booking.phone }}" style="color:#5d4f7d">{{ booking.phone }}</a>
+        {% if booking.phone %}
+        <a href="{{ url_for('messages.thread', phone=booking.phone, name=booking.name) }}"
+           style="color:#6b46c1;text-decoration:none;font-size:0.82rem;margin-left:8px;font-weight:600">💬 Message</a>
+        {% endif %}
+      </span></div>
       <div class="detail-row">
         <span class="dl">Address</span>
         <span class="dv">

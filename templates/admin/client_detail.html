@@ -86,6 +86,10 @@
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
         <h2 style="font-size:1rem;font-weight:700;margin:0;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Booking History ({{ client.total_bookings }})</h2>
         <a href="{{ url_for('bookings.new', client=client.id) }}" class="btn btn-gold" style="padding:7px 16px;font-size:0.85rem">📋 Book {{ client.name.split()[0] }} again</a>
+        {% if client.phone %}
+        <a href="{{ url_for('messages.thread', phone=client.phone, name=client.name) }}"
+           class="btn btn-outline" style="padding:7px 16px;font-size:0.85rem">💬 Message {{ client.name.split()[0] }}</a>
+        {% endif %}
       </div>
       {% if client.bookings %}
       <div class="table-wrap">

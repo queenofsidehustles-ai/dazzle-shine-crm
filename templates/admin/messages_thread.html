@@ -10,6 +10,8 @@
   <a href="{{ url_for('contractors.staff_detail', staff_id=contact.staff_id) }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem;margin-left:10px">View team profile →</a>
   {% elif contact.application_id %}
   <a href="{{ url_for('interviews.review_interview', app_id=contact.application_id) }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem;margin-left:10px">View application →</a>
+  {% elif contact.client_id %}
+  <a href="{{ url_for('bookings.client_detail', client_id=contact.client_id) }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem;margin-left:10px">View client →</a>
   {% endif %}
 </div>
 

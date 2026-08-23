@@ -151,6 +151,30 @@
     .section-tabs a:hover { color: var(--text); }
     .section-tabs a.active { color: var(--gold-dark, #b98a33); border-bottom-color: var(--gold, #d3a84f); }
     @media (max-width: 900px) { .section-tabs { padding: 0 14px; } }
+    /* Brand lens — the switcher between the residential and commercial sides. */
+    .brand-lens {
+      display: flex; align-items: center; gap: 7px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 999px; padding: 4px 12px 4px 11px; margin-left: auto;
+    }
+    .brand-lens.is-filtered { background: var(--gold-soft); border-color: var(--gold); }
+    .brand-lens-dot {
+      width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0;
+      background: var(--softer);
+    }
+    .brand-lens.is-filtered .brand-lens-dot { background: var(--gold-deep); }
+    .brand-lens select {
+      border: none; background: none; font-family: inherit;
+      font-size: 0.86rem; font-weight: 600; color: var(--muted);
+      cursor: pointer; padding: 2px 0; max-width: 190px;
+    }
+    .brand-lens.is-filtered select { color: var(--gold-deep); }
+    .brand-lens select:focus { outline: none; }
+    @media (max-width: 700px) {
+      .brand-lens { padding: 3px 9px; }
+      .brand-lens select { max-width: 116px; font-size: 0.8rem; }
+    }
+
     .topbar .badge-pending {
       background: var(--gold-soft);
       color: var(--gold-deep);
@@ -345,6 +369,23 @@
     <div class="topbar">
       <button class="hamburger" onclick="toggleNav()" aria-label="Open menu">☰</button>
       <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+
+      {% if BRAND_LENS_CHOICES %}
+      {# Which side of the business is on screen. Deliberately loud when it is
+         filtered and quiet when it is not, so you cannot log a commercial call
+         against the residential brand without having seen that you were in it. #}
+      <form method="POST" action="{{ url_for('settings.switch_brand', key='PLACEHOLDER') }}"
+            id="brandLensForm" class="brand-lens {{ 'is-filtered' if BRAND_LENS != 'all' }}">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <span class="brand-lens-dot"></span>
+        <select onchange="brandLensGo(this.value)" aria-label="Which brand you are working in">
+          {% for key, label in BRAND_LENS_CHOICES %}
+          <option value="{{ key }}" {{ 'selected' if BRAND_LENS == key }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      {% endif %}
+
       <div>{% block topbar_right %}{% endblock %}</div>
     </div>
     {# The pages that used to be their own sidebar entries. One section, one
@@ -373,6 +414,14 @@
   </div>
 
   <script>
+    // Switching brand posts rather than links, so it can't be pre-fetched or
+    // landed on by a stray back button and silently change what you're seeing.
+    function brandLensGo(key) {
+      const f = document.getElementById('brandLensForm');
+      f.action = f.action.replace('PLACEHOLDER', encodeURIComponent(key));
+      f.submit();
+    }
+
     function toggleNav() {
       document.getElementById('sidebar').classList.toggle('open');
       document.getElementById('navOverlay').classList.toggle('show');

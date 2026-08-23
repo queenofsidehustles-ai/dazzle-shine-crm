@@ -451,6 +451,9 @@ class Lead(db.Model):
     source = db.Column(db.String(50), default='website')
     agent = db.Column(db.String(100))                 # team member (VA) credited for commission
     notes = db.Column(db.Text)
+    # Residential or commercial side of the business. NULL on anything that
+    # predates the split; brands.brand_for_lead works it out from service_type.
+    brand = db.Column(db.String(20), index=True)
     drip_step = db.Column(db.Integer, default=1)
     last_drip_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1263,6 +1266,11 @@ class Prospect(db.Model):
     email = db.Column(db.String(200))                  # asked for on the call; Places never has it
     renewal_note = db.Column(db.String(120))           # "March 2027" — why a no is worth keeping
     last_emailed_at = db.Column(db.DateTime)
+
+    # Residential or commercial side of the business. Set from the search that
+    # imported them, so it is recorded rather than guessed. NULL on anything
+    # that predates the split; brands.brand_for_prospect fills it from category.
+    brand = db.Column(db.String(20), index=True)
 
     CATEGORY_LABELS = {
         'property_manager': '🏢 Property Manager',

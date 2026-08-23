@@ -29,22 +29,28 @@ CATEGORIES = ['property_manager', 'realtor', 'airbnb', 'apartment',
 
 
 def _call_scripts():
-    """Scripts for the call drawer, keyed by category with tokens filled in.
+    """Scripts for the call drawer, as {brand: {category: [scripts]}}.
 
-    Returned as plain dicts rather than model objects because the template
-    hands them to the browser as JSON — the drawer swaps scripts client-side so
-    a call doesn't wait on a page load.
+    Rendered once per brand rather than once per prospect: the same script says
+    a different company name and phone number depending on which side of the
+    business is being called, and the drawer swaps them client-side so a call
+    doesn't wait on a page load.
     """
     from models import Script
+    import brands
     import call_scripts
 
-    vals = call_scripts.tokens()
+    rows = Script.query.order_by(Script.sort_order, Script.id).all()
     out = {}
-    for s in Script.query.order_by(Script.sort_order, Script.id).all():
-        out.setdefault(s.category, []).append({
-            'title': s.title,
-            'content': call_scripts.render(s.content, vals),
-        })
+    for key in (brands.PRIMARY, brands.COMMERCIAL):
+        vals = call_scripts.tokens(key)
+        per_cat = {}
+        for s in rows:
+            per_cat.setdefault(s.category, []).append({
+                'title': s.title,
+                'content': call_scripts.render(s.content, vals),
+            })
+        out[key] = per_cat
     return out
 
 
@@ -65,16 +71,23 @@ def _backfilled():
     step that can run Python — and a prospect with no stage would otherwise sit
     invisible in a list that only shows what's due.
     """
+    import brands
     rows = Prospect.query.all()
-    if any(prospecting.backfill(p) for p in list(rows)):
+    touched = [prospecting.backfill(p) for p in list(rows)]
+    touched += [brands.backfill(p, brands.brand_for_prospect) for p in list(rows)]
+    if any(touched):
         db.session.commit()
-    return rows
+    # Only the side of the business currently on screen. Done here rather than
+    # in each view so Today, Pipeline and Contacts can't disagree about it.
+    return brands.filter_rows(rows, brands.brand_for_prospect)
 
 
 def _view_args(view, prospects, **extra):
     """Everything find_leads.html needs, whichever view is on screen."""
     from models import Script
+    import brands
     live = [p for p in prospects if p.is_open]
+    emails = _email_templates()
     args = dict(
         view=view,
         prospects=prospects,
@@ -97,8 +110,15 @@ def _view_args(view, prospects, **extra):
         demo=not finder.api_key_present(),
         search_category='property_manager',
         search_location='',
+        search_brand=(brands.active() if brands.active() != brands.ALL else brands.PRIMARY),
         scripts=_call_scripts(),
-        email_templates=_email_templates(),
+        email_templates=emails,
+        # Titles are the same whichever brand renders them — only the name and
+        # number inside the body differ — so the picker is built from one list.
+        email_template_titles=[t['title'] for t in emails[brands.PRIMARY]],
+        brand_lens=brands.active(),
+        brand_choices=brands.lens_choices(),
+        default_brand=brands.PRIMARY,
         script_map=Script.PROSPECT_CATEGORY_MAP,
         script_always=Script.ALWAYS_SHOW,
         script_labels=dict(Script.CATEGORIES),
@@ -115,24 +135,29 @@ def _email_templates():
     a property manager.
     """
     from models import Script
+    import brands
     import call_scripts
 
-    vals = call_scripts.tokens()
-    out = []
-    for s in Script.query.filter_by(category='email_outreach') \
-                         .order_by(Script.sort_order, Script.id).all():
-        body = call_scripts.render(s.content, vals)
-        subject = ''
-        lines = []
-        for line in body.split('\n'):
-            if not subject and line.lower().startswith('subject:'):
-                subject = line.split(':', 1)[1].strip()
-                continue
-            if line.strip().startswith('💡'):
-                continue
-            lines.append(line)
-        out.append({'title': s.title, 'subject': subject,
-                    'body': '\n'.join(lines).strip()})
+    rows = Script.query.filter_by(category='email_outreach') \
+                       .order_by(Script.sort_order, Script.id).all()
+    out = {}
+    for key in (brands.PRIMARY, brands.COMMERCIAL):
+        vals = call_scripts.tokens(key)
+        items = []
+        for s in rows:
+            body = call_scripts.render(s.content, vals)
+            subject = ''
+            lines = []
+            for line in body.split('\n'):
+                if not subject and line.lower().startswith('subject:'):
+                    subject = line.split(':', 1)[1].strip()
+                    continue
+                if line.strip().startswith('💡'):
+                    continue
+                lines.append(line)
+            items.append({'title': s.title, 'subject': subject,
+                          'body': '\n'.join(lines).strip()})
+        out[key] = items
     return out
 
 
@@ -167,7 +192,14 @@ def dashboard():
 @places_finder_bp.route('/search', methods=['POST'])
 @login_required
 def search():
+    import brands
     category = request.form.get('category', 'property_manager')
+    # Which side of the business this batch is being hunted for. Carried
+    # through to the import so it is recorded from the search rather than
+    # reverse-engineered from the category afterwards.
+    picked_brand = brands.normalize_lens(request.form.get('brand'))
+    if picked_brand == brands.ALL:
+        picked_brand = brands.PRIMARY
     location = request.form.get('location', '').strip()
     if not location:
         flash('Enter a city or area to search — a town and state.', 'error')
@@ -194,13 +226,19 @@ def search():
                                         shown=sorted(rows, key=prospecting.due_sort_key),
                                         results=results, demo=demo,
                                         search_category=category,
+                                        search_brand=picked_brand,
                                         search_location=location))
 
 
 @places_finder_bp.route('/import', methods=['POST'])
 @login_required
 def import_selected():
+    import brands
     selected = request.form.getlist('selected')
+    # Recorded from the search that found them rather than worked out later.
+    # The category alone is not enough: "property management" turned out to be
+    # residential managers buying turnover cleaning, not commercial janitorial.
+    picked_brand = brands.normalize_lens(request.form.get('brand'))
     added = 0
     for pid in selected:
         raw = request.form.get(f'payload_{pid}')
@@ -231,6 +269,10 @@ def import_selected():
             place_id=data.get('place_id', ''),
             status='new',
             source='google_places',
+            # ALL means the search wasn't run under one brand, so fall back to
+            # working it out from the category rather than storing "all".
+            brand=(picked_brand if picked_brand != brands.ALL
+                   else brands.brand_for_prospect(data)),
         ))
         added += 1
     db.session.commit()

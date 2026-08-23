@@ -7,6 +7,22 @@ from pricing import SERVICES, EXTRAS, DEPOSIT_AMOUNT
 settings_bp = Blueprint('settings', __name__, url_prefix='/settings')
 
 
+@settings_bp.route('/brand/<key>', methods=['POST'])
+@login_required
+def switch_brand(key):
+    """Point the CRM at one side of the business, or at all of it.
+
+    A view preference, so it lives in the session rather than the database —
+    two people can be looking at different brands at the same time without
+    fighting over a setting. Returns you to the page you were on.
+    """
+    import brands
+    brands.set_active(key)
+    nxt = request.form.get('next') or request.referrer or url_for('admin.dashboard')
+    # Only ever bounce back inside this app.
+    return redirect(nxt if nxt.startswith('/') else url_for('admin.dashboard'))
+
+
 @settings_bp.route('/setup')
 @owner_required
 def setup():
