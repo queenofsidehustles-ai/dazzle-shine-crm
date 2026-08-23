@@ -62,16 +62,26 @@ def send_reminders():
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
-    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    # The business's own date, not the server's. In the evening a UTC server
+    # already believes it is tomorrow, so "tomorrow" would land a day late —
+    # the same trap charge-balances was fixed for.
+    import scheduling
+    tomorrow = (scheduling.local_today() + timedelta(days=1)).isoformat()
     bookings = Booking.query.filter(
         Booking.preferred_date == tomorrow,
         Booking.status.in_(['pending', 'confirmed']),
+        # Once per booking, ever. This used to re-send to everyone booked
+        # tomorrow on every call, so an hourly cron would have texted the same
+        # customer twenty-four times in a day.
+        Booking.reminder_sent_at.is_(None),
     ).all()
 
     count = 0
     for b in bookings:
         _send_reminder(b)
+        b.reminder_sent_at = datetime.utcnow()
         count += 1
+    db.session.commit()
 
     return jsonify({'ok': True, 'reminders_sent': count})
 
@@ -917,10 +927,16 @@ def _send_reminder(booking: Booking):
         }
     )
 
+    # {phone} used to be written as {{phone}} inside an f-string, which is just
+    # a literal — customers were being told to "Call {phone}". The email goes
+    # through the template engine and substitutes properly; this text never did.
+    reschedule = branding.phone_line('Need to reschedule? Call ')
     send_sms(
         booking.phone,
         f"Hi {booking.name.split()[0]}! Reminder: your cleaning is tomorrow at {time_text}. "
-        f"Balance due: ${booking.balance_due:.2f}. Need to reschedule? Call {{phone}}. Reply STOP to opt out.",
+        f"Balance due: ${booking.balance_due:.2f}. "
+        + (f"{reschedule}. " if reschedule else "")
+        + "Reply STOP to opt out.",
     )
 
 

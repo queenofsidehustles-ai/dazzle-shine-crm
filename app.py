@@ -535,6 +535,7 @@ def _migrate_db():
         ('booking', 'access_notes',    'TEXT'),
         # Booking lifecycle email tracking
         ('booking', 'completed_at',    'TIMESTAMP'),
+        ('booking', 'reminder_sent_at', 'TIMESTAMP'),
         ('booking', 'morning_note_at', 'TIMESTAMP'),
         ('booking', 'review_nudge_at', 'TIMESTAMP'),
         ('booking', 'upsell_sent_at',  'TIMESTAMP'),

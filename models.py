@@ -144,6 +144,8 @@ class Booking(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)               # when marked completed (drives lifecycle emails)
     # Lifecycle email tracking (one send each, never repeats)
+    reminder_sent_at = db.Column(db.DateTime)           # 24h reminder — set once, so a
+                                                        # re-run of the cron can't re-text
     morning_note_at = db.Column(db.DateTime)            # morning-of note
     review_nudge_at = db.Column(db.DateTime)            # review reminder
     skip_review = db.Column(db.Boolean, default=False)  # owner opted this customer out of review/rating requests
