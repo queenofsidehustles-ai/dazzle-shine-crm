@@ -5,7 +5,7 @@ live in a paying customer's business three minutes later. Customers now follow
 `stable`, which moves only when release.py promotes it — and it refuses to
 promote anything that does not pass every suite first.
 """
-import os, sys, tempfile, subprocess, pathlib
+import os, re, sys, tempfile, subprocess, pathlib
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/rel.db'
 os.environ['SECRET_KEY'] = 'test'
@@ -86,7 +86,17 @@ check(branding.release_tag() == rel.read_text().split('\n')[0].strip(),
       'which is exactly what /version reports')
 
 print("\n7. A customer's image is buildable and says what it is")
-dockerfile = (ROOT / 'Dockerfile').read_text()
+wf = (ROOT / '.github' / 'workflows' / 'publish-image.yml').read_text()
+# Where the Dockerfile lives comes from the workflow, not from an assumption.
+# This test hardcoded the repo root and went on failing after the Dockerfile was
+# deliberately moved out of it, which left a red test nobody trusted — exactly
+# where a real failure goes unnoticed. Reading the path from the workflow means
+# the build and the test cannot disagree about it again.
+_m = re.search(r'^\s*file:\s*(\S+)\s*$', wf, re.M)
+check(_m is not None, 'the workflow names the Dockerfile it builds')
+_df = ROOT / _m.group(1)
+check(_df.exists(), f'and it is there ({_m.group(1)})')
+dockerfile = _df.read_text()
 check('gunicorn' in dockerfile, 'the image runs the app with gunicorn')
 check("app:create_app()" in dockerfile,
       'the same entrypoint railway.toml uses, so image and source run alike')
@@ -96,7 +106,6 @@ check('tzdata' in dockerfile,
 check('RELEASE_SHA' in dockerfile and 'RELEASE_TAG' in dockerfile,
       'and the build stamps in which release it is')
 
-wf = (ROOT / '.github' / 'workflows' / 'publish-image.yml').read_text()
 check("tags: ['v*']" in wf, 'CI publishes on a release tag')
 check(':stable' in wf or 'stable' in wf, 'pushing the stable tag customers follow')
 check('packages: write' in wf, 'with permission to publish')
