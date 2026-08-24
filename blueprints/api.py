@@ -78,14 +78,23 @@ def send_reminders():
     ).all()
 
     count = 0
+    failed = []
     for b in bookings:
-        _send_reminder(b)
-        b.reminder_sent_at = datetime.utcnow()
-        count += 1
+        # Per booking, so one bad record can't take the run down with it. That
+        # is exactly what happened before: a recurring visit with no balance
+        # set raised, the request 500'd, and nobody on the list got anything.
+        try:
+            _send_reminder(b)
+            b.reminder_sent_at = datetime.utcnow()
+            count += 1
+        except Exception as e:      # noqa: BLE001 — a bad row is not fatal
+            db.session.rollback()
+            failed.append(f'#{b.id} {b.name}: {e}')
     db.session.commit()
 
-    automations.record('reminders', items=count)
-    return jsonify({'ok': True, 'reminders_sent': count})
+    automations.record('reminders', items=count, ok=not failed,
+                       detail='; '.join(failed) or None)
+    return jsonify({'ok': True, 'reminders_sent': count, 'failed': failed})
 
 
 # ── Auto-charge balances (cron — run hourly) ─────────────────────────────────
@@ -922,6 +931,12 @@ def _send_deposit_request(booking: Booking):
 def _send_reminder(booking: Booking):
     date_text = booking.preferred_date or 'Tomorrow'
     time_text = booking.preferred_time or 'your scheduled time'
+    # balance_due is nullable and is None on every visit a recurring series
+    # generates. Formatting that with :.2f raises, which took down the whole
+    # run — one such booking on the calendar and nobody got a reminder.
+    balance = booking.balance_due or 0.0
+    first = (booking.name or 'there').split()[0] if (booking.name or '').strip() else 'there'
+    where = ', '.join(p for p in [booking.address, booking.city] if p)
 
     from notifications import send_triggered_email
     send_triggered_email(
@@ -932,19 +947,21 @@ def _send_reminder(booking: Booking):
             'service_type': booking.service_label,
             'booking_date': date_text,
             'booking_time': time_text,
-            'address': f'{booking.address}, {booking.city}',
-            'balance': f'{booking.balance_due:.2f}',
+            'address': where,
+            'balance': f'{balance:.2f}',
         }
     )
 
     # {phone} used to be written as {{phone}} inside an f-string, which is just
     # a literal — customers were being told to "Call {phone}". The email goes
     # through the template engine and substitutes properly; this text never did.
+    if not booking.phone:
+        return
     reschedule = branding.phone_line('Need to reschedule? Call ')
     send_sms(
         booking.phone,
-        f"Hi {booking.name.split()[0]}! Reminder: your cleaning is tomorrow at {time_text}. "
-        f"Balance due: ${booking.balance_due:.2f}. "
+        f"Hi {first}! Reminder: your cleaning is tomorrow at {time_text}. "
+        + (f"Balance due: ${balance:.2f}. " if balance > 0 else "")
         + (f"{reschedule}. " if reschedule else "")
         + "Reply STOP to opt out.",
     )
