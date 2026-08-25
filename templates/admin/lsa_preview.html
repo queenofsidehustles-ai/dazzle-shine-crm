@@ -1,0 +1,53 @@
+{% extends "base_admin.html" %}
+{% block title %}Follow-up Texts — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Follow-up Texts{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:18px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">The sequence</h2>
+  <p style="color:#5f5878;font-size:0.9rem;margin-bottom:16px">
+    Three texts over a week — the day you start it, then three days later, then
+    seven. It stops the moment someone replies, books, or texts STOP.
+  </p>
+  {% for body in steps %}
+  <div style="border-left:3px solid #b98a33;padding:10px 14px;margin-bottom:12px;background:#faf9fd;border-radius:0 9px 9px 0">
+    <div style="font-size:0.75rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:5px">
+      {{ ['Day 0','Day 3','Day 7'][loop.index0] }}
+    </div>
+    <div style="font-size:0.92rem;color:#1f1333;line-height:1.6">{{ body }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+    Due on the next run ({{ items|length }})
+  </h2>
+  {% if items %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Phone</th><th>Text</th><th>Exactly what they'll get</th></tr></thead>
+      <tbody>
+        {% for it in items %}
+        <tr>
+          <td style="white-space:nowrap"><strong>{{ it.lead.pretty_phone }}</strong></td>
+          <td style="white-space:nowrap;font-size:0.85rem;color:#9a95ad">{{ it.step }} of 3</td>
+          <td style="font-size:0.88rem;line-height:1.55">{{ it.body }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:0.83rem;color:#9a95ad;margin-top:14px">
+    These send when the <strong>lsa-followups</strong> automation next runs. Every
+    check happens again at that moment — anyone who books, replies or opts out
+    between now and then drops out on their own.
+  </p>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:30px 0">
+    Nothing is due. Start a follow-up from the
+    <a href="{{ url_for('lsa.index') }}">Google Ads Leads</a> screen.
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

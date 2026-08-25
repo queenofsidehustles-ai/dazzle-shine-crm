@@ -390,6 +390,24 @@ def request_bgcheck(phone):
     return redirect(url_for('messages.thread', phone=phone10))
 
 
+def _stop_lsa_sequence(phone10, reason):
+    """Take a number out of any running follow-up sequence.
+
+    Lives here rather than in the sequence code because the trigger is an
+    inbound text, and this is where those land. Never raises: an unexpected
+    failure must not lose the message that caused it."""
+    try:
+        from models import LsaLead
+        rows = LsaLead.query.filter_by(phone=phone10).filter(
+            LsaLead.seq_started_at.isnot(None), LsaLead.seq_stopped.is_(None)).all()
+        for r in rows:
+            r.seq_stopped = reason
+        if rows:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 # ── Twilio webhook: an inbound text landed on the business number ───────────
 @messages_bp.route('/incoming', methods=['POST'])
 def incoming():
@@ -406,7 +424,28 @@ def incoming():
         return Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
                         mimetype='text/xml')
 
+    # "STOP" is not a message to read and reply to — it is an instruction, and it
+    # has to be acted on before anything else happens. It still gets recorded and
+    # still pings the owner: she needs to know someone opted out, and the word
+    # itself belongs in the thread as evidence of when they asked.
+    from notifications import (sms_stop_word, sms_start_word,
+                               record_sms_opt_out, clear_sms_opt_out)
+    stop_word = sms_stop_word(body)
+    opt_note = ''
+    if stop_word:
+        record_sms_opt_out(phone10, reason=stop_word)
+        _stop_lsa_sequence(phone10, 'opted_out')
+        opt_note = '🚫 OPTED OUT — '
+    elif sms_start_word(body):
+        if clear_sms_opt_out(phone10):
+            opt_note = '✅ opted back in — '
+
     contact = resolve_contact(phone10)
+    # Any reply at all ends a follow-up sequence. Someone who answers should get
+    # a person, not the next scheduled text on top of what they just said.
+    if not stop_word:
+        _stop_lsa_sequence(phone10, 'replied')
+
     # If this conversation is bilingual, translate their reply to English.
     translated = None
     if thread_lang(phone10) != 'en':
@@ -418,7 +457,7 @@ def incoming():
     db.session.commit()
 
     # Ping the owner's cell so she never has to sit in the CRM (in English).
-    who = contact['name'] or pretty_phone(phone10)
+    who = opt_note + (contact['name'] or pretty_phone(phone10))
     alert_body = translated or body
     snippet = alert_body if len(alert_body) <= 90 else alert_body[:90] + '…'
     link = f"{branding.crm_base()}{url_for('messages.thread', phone=phone10)}"

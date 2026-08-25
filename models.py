@@ -1201,6 +1201,71 @@ class EmailOptOut(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class SmsOptOut(db.Model):
+    """Phone numbers that have asked us to stop texting (global, by number).
+
+    EmailOptOut above has no equivalent for texting, because until now nothing
+    sent marketing texts in bulk — every text was one-to-one, to someone with a
+    booking. A follow-up sequence to people who never booked is a different
+    thing, and it needs somewhere to write "they said stop".
+
+    Twilio blocks further messages to a number that replies STOP whether or not
+    this table exists, so this is not the only thing standing between us and a
+    complaint. What it adds is that the CRM knows: it can drop them from a
+    sequence rather than queueing texts that are silently thrown away, and
+    anyone looking at the record can see they asked and when."""
+    id = db.Column(db.Integer, primary_key=True)
+    phone = db.Column(db.String(20), unique=True, nullable=False, index=True)  # last-10 digits
+    reason = db.Column(db.String(40))       # the word they actually sent, or 'manual'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class LsaLead(db.Model):
+    """One lead from Google Local Services Ads, imported from the LSA export.
+
+    These arrive as a phone number and nothing else — no name, no email. That
+    is why they can't live in Lead, whose email column is required and whose
+    nurture drip is email-only. Everything here is keyed on the phone number,
+    which is also the only thing that can be matched against a booking.
+
+    charge_status is Google's word for whether *we* were billed for the lead.
+    It says nothing about whether the customer booked, and is kept only because
+    'Not charged' usually means the call never connected — which makes those
+    the most worth chasing, not the least."""
+    id = db.Column(db.Integer, primary_key=True)
+    # Google's own lead id where the export carries one. The CSV download
+    # doesn't — that column exists only in the web table — so for those it holds
+    # a synthetic "number@date" key instead, which is what keeps a re-import
+    # from adding everybody twice. See lsa.synthetic_id.
+    lead_id = db.Column(db.String(60), unique=True, index=True)
+    phone = db.Column(db.String(20), index=True)                  # last-10 digits
+    job_type = db.Column(db.String(80))
+    location = db.Column(db.String(80))
+    lead_type = db.Column(db.String(40))
+    charge_status = db.Column(db.String(40))
+    received_at = db.Column(db.DateTime, index=True)
+    # Filled in by the matcher. booked_checked_at records that we looked, so a
+    # lead that matched nothing is distinguishable from one never examined.
+    booked = db.Column(db.Boolean, default=False)
+    booking_id = db.Column(db.Integer)
+    booked_checked_at = db.Column(db.DateTime)
+    # Follow-up sequence state. seq_step is how many texts have gone out.
+    seq_step = db.Column(db.Integer, default=0)
+    seq_started_at = db.Column(db.DateTime)
+    last_seq_at = db.Column(db.DateTime)
+    seq_stopped = db.Column(db.String(40))   # 'replied', 'opted_out', 'booked', 'finished', 'manual'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def pretty_phone(self):
+        d = self.phone or ''
+        return f"({d[0:3]}) {d[3:6]}-{d[6:10]}" if len(d) == 10 else d
+
+    @property
+    def in_sequence(self):
+        return bool(self.seq_started_at) and not self.seq_stopped
+
+
 class MessageTemplate(db.Model):
     """Reusable text-message templates with {placeholders} for the inbox."""
     id = db.Column(db.Integer, primary_key=True)

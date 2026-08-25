@@ -376,6 +376,27 @@ def send_drips():
     return jsonify({'ok': True, 'drips_sent': count})
 
 
+# ── Google LSA follow-ups (cron — run once daily) ─────────────────────────────
+
+@api_bp.route('/lsa-followups', methods=['POST'])
+def lsa_followups():
+    """Advance the text sequence for people who called through Google Ads and
+    never booked. Sends only what is due, and re-checks every reason to stop at
+    the moment of sending rather than trusting the state it was queued in."""
+    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
+    expected = os.environ.get('REMINDER_API_KEY', '')
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    import lsa
+    # Re-match first: someone who booked since the last run must drop out before
+    # they're texted about not having booked.
+    lsa.match_bookings()
+    result = lsa.run_sequence()
+    automations.record('lsa-followups', items=result['sent'])
+    return jsonify({'ok': True, **result})
+
+
 # ── Applicant interview follow-ups (cron — run once daily) ────────────────────
 # Re-sends the bilingual video interview link every 2 days to applicants who
 # haven't responded (up to 2 extra nudges), then marks them "No Response".

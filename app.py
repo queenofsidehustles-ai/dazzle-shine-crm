@@ -14,6 +14,7 @@ from blueprints.api import api_bp
 from blueprints.settings import settings_bp
 from blueprints.staff import staff_bp
 from blueprints.leads import leads_bp
+from blueprints.lsa import lsa_bp
 from blueprints.workorders import workorders_bp
 from blueprints.content import content_bp
 from blueprints.quotes import quotes_bp
@@ -71,6 +72,7 @@ def create_app():
     app.register_blueprint(settings_bp)
     app.register_blueprint(staff_bp)
     app.register_blueprint(leads_bp)
+    app.register_blueprint(lsa_bp)
     app.register_blueprint(workorders_bp)
     app.register_blueprint(content_bp)
     app.register_blueprint(quotes_bp)

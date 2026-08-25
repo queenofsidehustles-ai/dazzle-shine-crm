@@ -1,0 +1,92 @@
+{% extends "base_admin.html" %}
+{% block title %}Google LSA Leads — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Google Ads Leads{% endblock %}
+
+{% block content %}
+<div class="filter-tabs">
+  {% for v, label, key in [('not_booked','Never booked','not_booked'),
+                           ('booked','Booked','booked'),
+                           ('in_sequence','Following up','in_sequence'),
+                           ('all','All','all')] %}
+  <a href="{{ url_for('lsa.index', view=v) }}"
+     class="filter-tab {{ 'active' if view == v }}">{{ label }} ({{ counts[key] }})</a>
+  {% endfor %}
+</div>
+
+<div class="card" style="margin-bottom:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  <a href="{{ url_for('lsa.import_csv') }}" class="btn btn-gold" style="padding:8px 16px">⬆️ Import LSA export</a>
+  <a href="{{ url_for('lsa.preview') }}" class="btn btn-outline" style="padding:8px 16px">👁 Preview the texts</a>
+  {% if counts['not_booked'] %}
+  <form method="POST" action="{{ url_for('lsa.start_all') }}" style="margin:0"
+        onsubmit="return confirm('Add every never-booked lead to the follow-up sequence?\n\nNothing sends until the next automation run, and you can stop any of them before then.')">
+    <button type="submit" class="btn btn-outline" style="padding:8px 16px">
+      ▶️ Follow up with all {{ counts['not_booked'] }}
+    </button>
+  </form>
+  {% endif %}
+  <span style="margin-left:auto;font-size:0.83rem;color:#9a95ad">
+    {% if due_count %}{{ due_count }} text{{ 's' if due_count != 1 }} due on the next run{% else %}Nothing due to send{% endif %}
+  </span>
+</div>
+
+<div class="card">
+  {% if rows %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Phone</th><th>Job type</th><th>Location</th><th>Called</th>
+        <th>Google charge</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><strong>{{ r.pretty_phone }}</strong></td>
+          <td>{{ r.job_type or '—' }}</td>
+          <td style="font-size:0.85rem;color:#9a95ad">{{ r.location or '—' }}</td>
+          <td style="font-size:0.82rem;color:#9a95ad">
+            {{ r.received_at.strftime('%b %d') if r.received_at else '—' }}</td>
+          {# Google's billing status, not a booking status — labelled so it can't be
+             read as "this lead was no good". A lead Google didn't charge for is
+             usually a call that never connected, which makes it worth more here. #}
+          <td style="font-size:0.82rem;color:#9a95ad">{{ r.charge_status or '—' }}</td>
+          <td>
+            {% if r.booked %}
+              <span class="status status-completed">Booked</span>
+            {% elif r.phone in opted_out %}
+              <span class="status status-cancelled">Opted out</span>
+            {% elif r.seq_stopped %}
+              <span class="status status-pending">Stopped · {{ r.seq_stopped.replace('_',' ') }}</span>
+            {% elif r.in_sequence %}
+              <span class="status status-confirmed">Text {{ r.seq_step or 0 }} of 3 sent</span>
+            {% else %}
+              <span class="status status-pending">Never booked</span>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap">
+            {% if r.booked %}
+              <span style="font-size:0.8rem;color:#9a95ad">—</span>
+            {% elif r.in_sequence %}
+              <form method="POST" action="{{ url_for('lsa.stop', lead_id=r.id) }}" style="margin:0">
+                <button type="submit" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Stop</button>
+              </form>
+            {% elif r.phone not in opted_out and not r.seq_stopped %}
+              <form method="POST" action="{{ url_for('lsa.start', lead_id=r.id) }}" style="margin:0">
+                <button type="submit" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Follow up</button>
+              </form>
+            {% else %}
+              <span style="font-size:0.8rem;color:#9a95ad">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+    Nothing here yet. Download the CSV from your Local Services Ads Leads page
+    and import it — this screen will then show you who called and never booked.
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

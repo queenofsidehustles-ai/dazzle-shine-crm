@@ -63,6 +63,86 @@ def is_opted_out(email):
     return EmailOptOut.query.filter_by(email=email.strip().lower()).first() is not None
 
 
+# ── Texting opt-out (STOP) ──────────────────────────────────────────────────────
+#
+# The carrier-standard keywords. Twilio acts on these itself and stops delivering
+# to the number regardless of what we do, so matching them here is not what keeps
+# us compliant — it is what lets the CRM know, so a sequence can drop someone
+# instead of queueing texts into a void for another week.
+
+SMS_STOP_WORDS = {'stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit',
+                  'stop all', 'optout', 'opt out', 'remove'}
+SMS_START_WORDS = {'start', 'unstop', 'yes'}
+
+
+def _phone10(p):
+    digits = ''.join(ch for ch in (p or '') if ch.isdigit())
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
+def sms_stop_word(body):
+    """The opt-out word in a message, or None.
+
+    Deliberately strict: only a message that is essentially *just* the keyword
+    counts. "stop by at 9 instead" is someone rescheduling, and treating that as
+    an opt-out would silently cut off a customer who was trying to talk to us."""
+    text = (body or '').strip().lower().strip('.!? ')
+    return text if text in SMS_STOP_WORDS else None
+
+
+def sms_start_word(body):
+    text = (body or '').strip().lower().strip('.!? ')
+    return text if text in SMS_START_WORDS else None
+
+
+def sms_opted_out(phone):
+    from models import SmsOptOut
+    p = _phone10(phone)
+    if not p:
+        return False
+    return SmsOptOut.query.filter_by(phone=p).first() is not None
+
+
+def record_sms_opt_out(phone, reason='stop'):
+    """Add a number to the do-not-text list. Idempotent."""
+    from models import SmsOptOut
+    from extensions import db
+    p = _phone10(phone)
+    if not p or sms_opted_out(p):
+        return False
+    db.session.add(SmsOptOut(phone=p, reason=(reason or '')[:40]))
+    db.session.commit()
+    return True
+
+
+def clear_sms_opt_out(phone):
+    """They asked to hear from us again (START), or the owner cleared it by hand."""
+    from models import SmsOptOut
+    from extensions import db
+    p = _phone10(phone)
+    row = SmsOptOut.query.filter_by(phone=p).first() if p else None
+    if not row:
+        return False
+    db.session.delete(row)
+    db.session.commit()
+    return True
+
+
+def send_marketing_sms(to_phone, message):
+    """A text that is marketing rather than service — a follow-up to someone who
+    never booked, not a "your cleaner is on the way". Returns (ok, detail).
+
+    Only these check the opt-out list. Transactional texts to a live booking
+    deliberately do not: someone who stopped marketing still needs to be told
+    their cleaner is outside, and Twilio makes the final call on a number that
+    has genuinely opted out of everything."""
+    if sms_opted_out(to_phone):
+        detail = 'Not sent — this number has asked us to stop texting.'
+        _log_outbound('sms', to_phone, None, None, message, False, detail)
+        return False, detail
+    return send_sms(to_phone, message)
+
+
 def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe_url=None):
     """Look up an EmailTemplate by trigger key, fill in variables, and send.
     If unsubscribe_url is given, an unsubscribe line is added to the footer

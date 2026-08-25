@@ -40,7 +40,10 @@ SECTIONS = [
     ]),
 
     ('Get Customers', [
-        ('leads.index', '💡', 'Leads', False, []),
+        ('leads.index', '💡', 'Leads', False, [
+            ('leads.index', 'Website leads', False),
+            ('lsa.index', 'Google Ads leads', False),
+        ]),
         ('places_finder.dashboard', '🏢', 'Commercial', False, [
             ('places_finder.dashboard', 'Find leads', False),
             ('commercial.index', 'Accounts', False),
@@ -110,6 +113,8 @@ BELONGS_TO = {
     'invoices.view': 'invoices.index',
     'messages.thread': 'messages.inbox',
     'leads.detail': 'leads.index',
+    'lsa.import_csv': 'lsa.index',
+    'lsa.preview': 'lsa.index',
     'commercial.detail': 'commercial.index',
     'commercial.convert': 'commercial.index',
     'commercial.calculator': 'commercial.index',

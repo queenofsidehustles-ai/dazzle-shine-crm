@@ -1,0 +1,146 @@
+"""Google Local Services Ads leads — import, match, and follow up.
+
+Routes only. The matching and the sequence itself live in lsa.py, so the cron
+job and these screens are provably doing the same thing.
+"""
+from flask import (Blueprint, render_template, request, redirect, url_for,
+                   flash, session)
+from auth import login_required
+from extensions import db
+from models import LsaLead
+import lsa
+
+lsa_bp = Blueprint('lsa', __name__, url_prefix='/leads/lsa')
+
+
+@lsa_bp.route('/')
+@login_required
+def index():
+    view = request.args.get('view', 'not_booked')
+
+    # Re-match on every load. It is a couple of in-memory dictionary lookups,
+    # and the alternative is a screen that confidently shows someone as never
+    # having booked twenty minutes after they booked.
+    everything = LsaLead.query.order_by(LsaLead.received_at.desc().nullslast()).all()
+    if everything:
+        lsa.match_bookings(everything)
+
+    from notifications import sms_opted_out
+    opted_out = {l.phone for l in everything if sms_opted_out(l.phone)}
+
+    counts = {
+        'all': len(everything),
+        'booked': sum(1 for l in everything if l.booked),
+        'not_booked': sum(1 for l in everything if not l.booked),
+        'in_sequence': sum(1 for l in everything if l.in_sequence),
+    }
+    if view == 'booked':
+        rows = [l for l in everything if l.booked]
+    elif view == 'in_sequence':
+        rows = [l for l in everything if l.in_sequence]
+    elif view == 'all':
+        rows = everything
+    else:
+        rows = [l for l in everything if not l.booked]
+
+    return render_template('admin/lsa_leads.html', rows=rows, counts=counts,
+                           view=view, opted_out=opted_out,
+                           due_count=len(lsa.due_now()))
+
+
+@lsa_bp.route('/import', methods=['GET', 'POST'])
+@login_required
+def import_csv():
+    """Upload the CSV straight off the LSA Leads page (the DOWNLOAD button)."""
+    if request.method == 'GET':
+        return render_template('admin/lsa_import.html')
+
+    f = request.files.get('file')
+    if not f or not f.filename:
+        flash('Choose the CSV you downloaded from Local Services Ads first.', 'warning')
+        return redirect(url_for('lsa.import_csv'))
+
+    rows, problems = lsa.parse_csv(f.read())
+    if not rows:
+        for p in problems[:5]:
+            flash(p, 'warning')
+        if not problems:
+            flash('No leads found in that file.', 'warning')
+        return redirect(url_for('lsa.import_csv'))
+
+    added, updated = lsa.import_rows(rows)
+    booked = lsa.match_bookings()
+    flash(f'Imported {added} new lead{"s" if added != 1 else ""}'
+          f'{f", refreshed {updated}" if updated else ""}. '
+          f'{booked} of them already booked with you.', 'success')
+    # Problems are shown but never block: a handful of unusable rows should not
+    # cost her the hundred that were fine.
+    for p in problems[:5]:
+        flash(p, 'warning')
+    if len(problems) > 5:
+        flash(f'…and {len(problems) - 5} more rows skipped.', 'warning')
+    return redirect(url_for('lsa.index'))
+
+
+@lsa_bp.route('/<int:lead_id>/start', methods=['POST'])
+@login_required
+def start(lead_id):
+    lead = LsaLead.query.get_or_404(lead_id)
+    from notifications import sms_opted_out
+    if lead.booked:
+        flash(f'{lead.pretty_phone} has booked with you — leaving them alone.', 'warning')
+    elif sms_opted_out(lead.phone):
+        flash(f'{lead.pretty_phone} has asked us to stop texting.', 'warning')
+    elif lsa.start_sequence(lead):
+        flash(f'{lead.pretty_phone} added — the first text goes out on the next run.',
+              'success')
+    else:
+        flash(f'{lead.pretty_phone} is already in the sequence.', 'warning')
+    return redirect(request.referrer or url_for('lsa.index'))
+
+
+@lsa_bp.route('/<int:lead_id>/stop', methods=['POST'])
+@login_required
+def stop(lead_id):
+    lead = LsaLead.query.get_or_404(lead_id)
+    lsa.stop_sequence(lead, 'manual')
+    flash(f'Stopped following up with {lead.pretty_phone}.', 'success')
+    return redirect(request.referrer or url_for('lsa.index'))
+
+
+@lsa_bp.route('/start-all', methods=['POST'])
+@login_required
+def start_all():
+    """Put every un-booked, un-opted-out lead into the sequence.
+
+    Confirmed on the page before it gets here, because this is the one action
+    on the screen that reaches a lot of real phones at once."""
+    from notifications import sms_opted_out
+    started = 0
+    for lead in LsaLead.query.filter_by(booked=False).all():
+        if sms_opted_out(lead.phone) or lead.seq_started_at:
+            continue
+        if lsa.start_sequence(lead):
+            started += 1
+    flash(f'{started} lead{"s" if started != 1 else ""} added to the follow-up '
+          f'sequence. Nothing sends until the next run — use Preview first if '
+          f'you want to see the wording.', 'success')
+    return redirect(url_for('lsa.index'))
+
+
+@lsa_bp.route('/preview')
+@login_required
+def preview():
+    """Exactly what the next run would send, to whom, word for word."""
+    due = lsa.due_now()
+    items = [{'lead': l, 'step': (l.seq_step or 0) + 1,
+              'body': lsa.message_for((l.seq_step or 0) + 1, l)} for l in due]
+    return render_template('admin/lsa_preview.html', items=items,
+                           steps=[lsa.message_for(n, _Sample()) for n in (1, 2, 3)])
+
+
+class _Sample:
+    """Stand-in lead so the three templates can be shown before anyone is in
+    the sequence at all."""
+    received_at = None
+    phone = '4070000000'
