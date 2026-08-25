@@ -12,6 +12,13 @@
   {% endfor %}
 </div>
 
+<div class="card" style="margin-bottom:18px">
+  <a href="{{ url_for('leads.new_quote') }}" class="btn btn-gold" style="padding:8px 16px">✉️ Quote a caller</a>
+  <span style="font-size:0.83rem;color:#9a95ad;margin-left:10px">
+    For someone who rang for a price — they don't need to be in a CSV first.
+  </span>
+</div>
+
 <div class="card">
   {% if leads %}
   <div class="table-wrap">

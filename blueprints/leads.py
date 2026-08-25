@@ -34,6 +34,49 @@ def index():
     return render_template('admin/leads.html', leads=leads, counts=counts, status_filter=status_filter)
 
 
+@leads_bp.route('/quote/new', methods=['GET', 'POST'])
+@login_required
+def new_quote():
+    """Quote someone who rang, without needing them to be in a CSV first.
+
+    Most callers can be quoted straight off the Google Ads screen, but not every
+    caller is on it — the export is downloaded now and then, and people ring the
+    number directly. Waiting for the next import to quote somebody who is on the
+    phone right now would make the import the point, when the quote is."""
+    import quoting
+    from flask import request
+    if request.method == 'POST':
+        lead, err = quoting.handle_quote_form(request.form)
+        if err:
+            flash(err, 'warning')
+            return redirect(url_for('leads.new_quote'))
+        # If they happen to be in the Google Ads list, tie the two together so
+        # she isn't looking at the same person in two places.
+        linked = quoting.link_lsa_caller(lead)
+        ok, detail = quoting.send_quote(lead)
+        if ok:
+            note = ' Matched to their Google Ads call.' if linked else ''
+            flash(f'Quote for ${lead.quoted_price:.2f} emailed to {lead.email} 📩'
+                  f'{note}', 'success')
+            return redirect(url_for('leads.index'))
+        flash(f'⚠️ Could not send the quote: {detail}', 'warning')
+        return redirect(url_for('leads.new_quote'))
+
+    return render_template('admin/lsa_quote.html', lead=None, existing=None,
+                           **quoting.form_context())
+
+
+@leads_bp.route('/checklist.json')
+@login_required
+def checklist_json():
+    """The standard checklist for a service, so the quote form can swap the
+    tick-list when the service changes without a page reload."""
+    from flask import jsonify, request
+    import quoting
+    return jsonify({'items': quoting.service_checklist(
+        request.args.get('service_type', ''))})
+
+
 @leads_bp.route('/<int:lead_id>', methods=['GET', 'POST'])
 @login_required
 def detail(lead_id):

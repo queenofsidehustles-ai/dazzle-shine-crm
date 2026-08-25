@@ -1,20 +1,26 @@
 {% extends "base_admin.html" %}
-{% block title %}Quote {{ lead.pretty_phone }} — {{ BIZ }} CRM{% endblock %}
+{% block title %}{{ 'Quote ' + lead.pretty_phone if lead else 'New Quote' }} — {{ BIZ }} CRM{% endblock %}
 {% block page_title %}Send a Quote{% endblock %}
 
 {% block content %}
 <form method="POST" class="card" style="max-width:680px">
   <p style="color:#5f5878;font-size:0.9rem;line-height:1.7;margin-bottom:20px">
-    For <strong>{{ lead.pretty_phone }}</strong>, who called
-    {{ lead.received_at.strftime('%b %d') if lead.received_at else 'through Google Ads' }}{% if lead.location %} from {{ lead.location }}{% endif %}.
+    {% if lead %}
+      For <strong>{{ lead.pretty_phone }}</strong>, who called
+      {{ lead.received_at.strftime('%b %d') if lead.received_at else 'through Google Ads' }}{% if lead.location %} from {{ lead.location }}{% endif %}.
+    {% else %}
+      For anyone who rang and asked for a price. If their number is already in
+      your Google Ads leads, the two get tied together automatically.
+    {% endif %}
     They'll get the price, everything that's included, and their own link that
     books at this exact figure.
   </p>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+  <div style="display:grid;grid-template-columns:{{ '1fr 1fr' if lead else '1fr 1fr 1fr' }};gap:14px">
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Their name</label>
       <input name="name" required value="{{ existing.name if existing else '' }}"
+             placeholder="First name is fine"
              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
     </div>
     <div>
@@ -22,6 +28,13 @@
       <input name="email" type="email" required value="{{ existing.email if existing else '' }}"
              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
     </div>
+    {% if not lead %}
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">Their phone</label>
+      <input name="phone" value="{{ existing.phone if existing else '' }}"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+    {% endif %}
   </div>
 
   <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:14px">
@@ -56,6 +69,36 @@
       </label>
       {% endfor %}
     </div>
+  </div>
+
+  {# What the quote actually promises. People ring asking for one specialised
+     thing, or say plainly they don't want the oven touched — so this is a
+     starting point to edit, not a fixed list. #}
+  <div style="margin-top:18px;padding:16px;background:#faf9fd;border-radius:10px">
+    <label class="dl" style="display:block;margin-bottom:4px">What you'll do for them</label>
+    <p style="font-size:0.82rem;color:#9a95ad;margin-bottom:10px">
+      Untick anything you agreed not to do. This is the list they'll see in the
+      email and on their booking page.
+      <a href="#" id="q-all" style="color:#b98a33">Tick all</a> ·
+      <a href="#" id="q-none" style="color:#b98a33">Untick all</a>
+    </p>
+    <div id="q-checklist" style="display:grid;gap:5px;max-height:280px;overflow-y:auto">
+      {% for item in checklist %}
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:#5f5878;line-height:1.45">
+        <input type="checkbox" name="checklist" value="{{ item }}" class="q-item"
+               style="width:auto;margin-top:3px" {{ 'checked' if item in chosen }}>
+        <span>{{ item }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <label class="dl" style="display:block;margin:14px 0 5px">Anything else you agreed on the call</label>
+    <textarea name="checklist_custom" rows="3"
+              placeholder="One per line — e.g. Inside the china cabinet&#10;Strip and remake the guest beds"
+              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:0.9rem">{{ custom_lines|join('\n') }}</textarea>
+    <p style="font-size:0.8rem;color:#9a95ad;margin-top:7px">
+      These are added to the list exactly as you type them. Untick everything and
+      leave this empty to fall back to the standard list for the service.
+    </p>
   </div>
 
   <div style="margin-top:18px;padding:14px;background:#faf9fd;border-radius:10px">
@@ -140,6 +183,47 @@
   document.querySelectorAll('#q-service,#q-beds,#q-baths,.q-extra')
     .forEach(el => el.addEventListener('input', recalc));
   recalc();
+})();
+
+// Swap the tick-list when the service changes. Anything typed into the
+// "anything else" box is left alone — that was agreed on the call and has
+// nothing to do with which service was picked.
+(function () {
+  const svc = document.getElementById('q-service');
+  const box = document.getElementById('q-checklist');
+  if (!svc || !box) return;
+  let loaded = svc.value;
+
+  svc.addEventListener('change', async () => {
+    if (svc.value === loaded) return;
+    try {
+      const r = await fetch('/leads/checklist.json?service_type=' + encodeURIComponent(svc.value));
+      const d = await r.json();
+      box.innerHTML = '';
+      (d.items || []).forEach(item => {
+        const l = document.createElement('label');
+        l.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:#5f5878;line-height:1.45';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.name = 'checklist'; cb.value = item;
+        cb.className = 'q-item'; cb.checked = true;
+        cb.style.cssText = 'width:auto;margin-top:3px';
+        const s = document.createElement('span');
+        s.textContent = item;              // textContent, so a quote mark in an
+        l.append(cb, s);                   // item can't break out into markup
+        box.appendChild(l);
+      });
+      loaded = svc.value;
+    } catch (e) { /* leave the current list rather than emptying it */ }
+  });
+
+  document.getElementById('q-all').addEventListener('click', e => {
+    e.preventDefault();
+    box.querySelectorAll('.q-item').forEach(i => i.checked = true);
+  });
+  document.getElementById('q-none').addEventListener('click', e => {
+    e.preventDefault();
+    box.querySelectorAll('.q-item').forEach(i => i.checked = false);
+  });
 })();
 </script>
 {% endblock %}

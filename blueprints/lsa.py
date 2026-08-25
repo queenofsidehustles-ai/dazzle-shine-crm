@@ -109,59 +109,27 @@ def quote(lead_id):
     nothing unless it was written out by hand."""
     lead = LsaLead.query.get_or_404(lead_id)
     import quoting
-    from pricing import calculate_price, SERVICES, EXTRAS
     from models import Lead
 
     existing = Lead.query.get(lead.crm_lead_id) if lead.crm_lead_id else None
 
     if request.method == 'POST':
-        f = request.form
-        service_type = f.get('service_type', '')
-        beds, baths = f.get('bedrooms', ''), f.get('bathrooms', '')
-        extras = ','.join(f.getlist('extras'))
-        # A typed price wins. She was on the call, and the figure she actually
-        # said is the one that has to go out — the calculator is a starting
-        # point, not a second opinion.
-        typed = (f.get('price') or '').strip()
-        try:
-            price = float(typed) if typed else calculate_price(
-                service_type=service_type, bedrooms=beds or 1, bathrooms=baths or 1,
-                extras=extras, frequency=f.get('frequency', 'one_time'))
-        except ValueError:
-            flash('That price doesn\'t look like a number.', 'warning')
+        crm_lead, err = quoting.handle_quote_form(request.form, lsa_lead=lead)
+        if err:
+            flash(err, 'warning')
             return redirect(url_for('lsa.quote', lead_id=lead_id))
-
-        if not f.get('email', '').strip():
-            flash('An email address is needed to send a quote.', 'warning')
-            return redirect(url_for('lsa.quote', lead_id=lead_id))
-
-        crm_lead = quoting.quote_lead(
-            name=f.get('name', ''), email=f.get('email', ''),
-            phone=lead.phone, service_type=service_type,
-            bedrooms=beds, bathrooms=baths, extras=extras,
-            frequency=f.get('frequency', 'one_time'), price=price,
-            notes=f.get('notes', ''), address=f.get('address', ''),
-            city=f.get('city', ''), zip_code=f.get('zip_code', ''))
-
-        lead.crm_lead_id = crm_lead.id
-        # She has spoken to them and quoted them, so the follow-up texts written
-        # for people we never reached no longer describe this person at all.
-        if lead.in_sequence:
-            lead.seq_stopped = 'quoted'
-        lead.track = lsa.QUOTED
-        db.session.commit()
-
+        quoting.link_lsa_caller(crm_lead, lead)
         ok, detail = quoting.send_quote(crm_lead)
         if ok:
-            flash(f'Quote for ${price:.2f} emailed to {crm_lead.email} 📩 '
-                  f'Follow-up emails will go out if they don\'t book.', 'success')
+            flash(f'Quote for ${crm_lead.quoted_price:.2f} emailed to '
+                  f'{crm_lead.email} 📩 Follow-up emails will go out if they '
+                  f'don\'t book.', 'success')
             return redirect(url_for('lsa.index'))
         flash(f'⚠️ Could not send the quote: {detail}', 'warning')
         return redirect(url_for('lsa.quote', lead_id=lead_id))
 
     return render_template('admin/lsa_quote.html', lead=lead, existing=existing,
-                           services=SERVICES, extras=EXTRAS,
-                           deposit=__import__('pricing').DEPOSIT_AMOUNT)
+                           **quoting.form_context(existing))
 
 
 @lsa_bp.route('/<int:lead_id>/track', methods=['POST'])

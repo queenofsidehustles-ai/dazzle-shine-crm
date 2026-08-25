@@ -476,6 +476,12 @@ class Lead(db.Model):
     # they were told.
     quote_token = db.Column(db.String(64), index=True)
     quote_sent_at = db.Column(db.DateTime)
+    # What this particular quote promised, as a JSON list. People ring up asking
+    # for one specialised thing, or explicitly not wanting something — so the
+    # service checklist is a starting point to edit rather than a fixed list.
+    # NULL means "whatever the service checklist says", which is right for leads
+    # quoted from the website where nobody chose anything.
+    quote_checklist = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     SERVICE_LABELS = {

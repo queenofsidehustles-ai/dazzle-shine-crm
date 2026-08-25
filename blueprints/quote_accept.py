@@ -22,7 +22,7 @@ def view(token):
     return render_template(
         'public/quote_accept.html',
         lead=lead,
-        checklist=quoting.checklist_for(lead.service_type),
+        checklist=quoting.checklist_for(lead),
         deposit=_deposit(),
         balance=max(0.0, (lead.quoted_price or 0) - _deposit()),
         already=lead.status == 'converted',

@@ -175,4 +175,81 @@ with app.app_context():
     check(Lead.query.filter_by(email='dana@example.com').first().quoted_price == 460,
           'the price is updated in place')
 
+    print('\n12. A caller who is in no CSV can still be quoted')
+    # The export is downloaded now and then; people ring the number in between.
+    # Waiting for the next import to quote someone who is on the phone right now
+    # would make the import the point, when the quote is.
+    SENT.clear()
+    r = c.post('/leads/quote/new', data={
+        'name': 'Renee', 'email': 'renee@example.com', 'phone': '(407) 222-8899',
+        'service_type': 'standard', 'bedrooms': '2', 'bathrooms': '1',
+        'price': '165'}, follow_redirects=True)
+    check(r.status_code == 200, 'the standalone quote form accepts them')
+    renee = Lead.query.filter_by(email='renee@example.com').first()
+    check(renee and renee.quoted_price == 165.0, 'the lead and price are saved')
+    check(renee.quote_token, 'with their own link')
+    check(SENT and 'renee@example.com' == SENT[-1]['to'], 'and the quote is emailed')
+    check(not renee.address, 'no address needed — the customer fills that in when booking')
+
+    print('\n13. A first name and an email is enough')
+    check('Renee' in c.get(f'/quote/{renee.quote_token}').get_data(as_text=True),
+          'the quote page greets them by the one name we have')
+
+    print('\n14. Quoting by phone finds their Google Ads call on its own')
+    stray = LsaLead(lead_id='g-3', phone='4075554321', charge_status='Charged',
+                    received_at=datetime(2026, 8, 22))
+    db.session.add(stray); db.session.commit()
+    lsa.start_sequence(stray)
+    c.post('/leads/quote/new', data={
+        'name': 'Tom', 'email': 'tom@example.com', 'phone': '407-555-4321',
+        'service_type': 'deep', 'bedrooms': '3', 'bathrooms': '2',
+        'price': '300'}, follow_redirects=True)
+    stray = LsaLead.query.get(stray.id)
+    tom = Lead.query.filter_by(email='tom@example.com').first()
+    check(stray.crm_lead_id == tom.id,
+          'matched on the number, in any format — one caller, not two records')
+    check(stray.seq_stopped == 'quoted', 'and their follow-up texts stop')
+
+    print('\n15. The checklist is hers to pick from, not a fixed list')
+    SENT.clear()
+    c.post('/leads/quote/new', data={
+        'name': 'Priya', 'email': 'priya@example.com', 'phone': '4076660000',
+        'service_type': 'standard', 'bedrooms': '3', 'bathrooms': '2',
+        'price': '200',
+        'checklist': ['Dust all surfaces (shelves, furniture, baseboards)',
+                      'Scrub toilets, tubs, and showers'],
+        'checklist_custom': 'Inside the china cabinet\nStrip and remake the guest beds',
+    }, follow_redirects=True)
+    priya = Lead.query.filter_by(email='priya@example.com').first()
+    items = quoting.checklist_for(priya)
+    check(len(items) == 4, 'exactly what she ticked plus what she typed')
+    check('Inside the china cabinet' in items, 'the specialised thing they asked for')
+    check('Vacuum all floors and rugs' not in items,
+          'and nothing she unticked — we do not promise work she ruled out')
+
+    body = SENT[-1]['html']
+    check('Inside the china cabinet' in body, 'the email lists her version')
+    check('Vacuum all floors and rugs' not in body, 'not the standard one')
+    page = c.get(f'/quote/{priya.quote_token}').get_data(as_text=True)
+    check('Strip and remake the guest beds' in page, 'and so does the booking page')
+    check('Empty trash cans and replace liners' not in page,
+          'the two agree — she is not promised one thing and shown another')
+
+    print('\n16. Reopening a quote shows what was promised, not the standard list')
+    ctx = quoting.form_context(priya)
+    check('Inside the china cabinet' in ctx['custom_lines'],
+          'her typed lines come back in the box she typed them in')
+    check('Vacuum all floors and rugs' not in ctx['chosen'],
+          'and what she took off stays off rather than quietly reappearing')
+
+    print('\n17. Leaving the checklist alone means the standard list')
+    c.post('/leads/quote/new', data={
+        'name': 'Default Dan', 'email': 'dan@example.com', 'phone': '4077770000',
+        'service_type': 'standard', 'bedrooms': '2', 'bathrooms': '1',
+        'price': '150'}, follow_redirects=True)
+    dan = Lead.query.filter_by(email='dan@example.com').first()
+    check(dan.quote_checklist is None, 'nothing stored on the quote')
+    check(quoting.checklist_for(dan) == quoting.service_checklist('standard'),
+          'so it follows the service checklist, including any later edits to it')
+
     print('\nAll quote-email checks passed.')

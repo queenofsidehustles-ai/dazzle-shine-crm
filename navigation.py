@@ -114,6 +114,8 @@ BELONGS_TO = {
     'invoices.view': 'invoices.index',
     'messages.thread': 'messages.inbox',
     'leads.detail': 'leads.index',
+    'leads.new_quote': 'leads.index',
+    'lsa.quote': 'lsa.index',
     'lsa.import_csv': 'lsa.index',
     'lsa.preview': 'lsa.index',
     'commercial.detail': 'commercial.index',

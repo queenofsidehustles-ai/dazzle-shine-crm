@@ -14,7 +14,8 @@
 </div>
 
 <div class="card" style="margin-bottom:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-  <a href="{{ url_for('lsa.import_csv') }}" class="btn btn-gold" style="padding:8px 16px">⬆️ Import LSA export</a>
+  <a href="{{ url_for('leads.new_quote') }}" class="btn btn-gold" style="padding:8px 16px">✉️ Quote a caller</a>
+  <a href="{{ url_for('lsa.import_csv') }}" class="btn btn-outline" style="padding:8px 16px">⬆️ Import LSA export</a>
   <a href="{{ url_for('lsa.preview') }}" class="btn btn-outline" style="padding:8px 16px">👁 Preview the texts</a>
   {% if counts['not_booked'] %}
   <form method="POST" action="{{ url_for('lsa.start_all') }}" style="margin:0"

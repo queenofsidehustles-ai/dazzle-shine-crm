@@ -669,6 +669,7 @@ def _migrate_db():
         # Google Ads list to the Lead created when her details were taken.
         ('lead',     'quote_token',         'VARCHAR(64)'),
         ('lead',     'quote_sent_at',       'TIMESTAMP'),
+        ('lead',     'quote_checklist',     'TEXT'),
         ('lsa_lead', 'crm_lead_id',         'INTEGER'),
     ]
     for table, col, col_type in new_cols:
