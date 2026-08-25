@@ -99,6 +99,26 @@ def start(lead_id):
     return redirect(request.referrer or url_for('lsa.index'))
 
 
+@lsa_bp.route('/<int:lead_id>/track', methods=['POST'])
+@login_required
+def set_track(lead_id):
+    """Correct which conversation a lead belongs in.
+
+    Google's billing status is a good guess and nothing more. She was on the
+    calls, so when the two disagree she wins — and import_rows leaves a track
+    alone once it has been set, so this survives the next import."""
+    lead = LsaLead.query.get_or_404(lead_id)
+    want = request.form.get('track', '')
+    if want not in (lsa.MISSED, lsa.QUOTED):
+        flash('Unknown follow-up track.', 'warning')
+        return redirect(request.referrer or url_for('lsa.index'))
+    lead.track = want
+    db.session.commit()
+    label = dict(lsa.TRACKS)[want]
+    flash(f'{lead.pretty_phone} moved to “{label}”.', 'success')
+    return redirect(request.referrer or url_for('lsa.index'))
+
+
 @lsa_bp.route('/<int:lead_id>/stop', methods=['POST'])
 @login_required
 def stop(lead_id):
@@ -134,13 +154,19 @@ def preview():
     """Exactly what the next run would send, to whom, word for word."""
     due = lsa.due_now()
     items = [{'lead': l, 'step': (l.seq_step or 0) + 1,
+              'track': dict(lsa.TRACKS)[l.track or lsa.QUOTED],
               'body': lsa.message_for((l.seq_step or 0) + 1, l)} for l in due]
-    return render_template('admin/lsa_preview.html', items=items,
-                           steps=[lsa.message_for(n, _Sample()) for n in (1, 2, 3)])
+    samples = [{'track': track, 'label': label,
+                'bodies': [lsa.message_for(n, _Sample(track)) for n in (1, 2, 3)]}
+               for track, label in lsa.TRACKS]
+    return render_template('admin/lsa_preview.html', items=items, samples=samples,
+                           days=[d for d, _n in lsa.SEQUENCE])
 
 
 class _Sample:
-    """Stand-in lead so the three templates can be shown before anyone is in
-    the sequence at all."""
+    """Stand-in lead so both sets can be read before anyone is in a sequence."""
     received_at = None
     phone = '4070000000'
+
+    def __init__(self, track):
+        self.track = track

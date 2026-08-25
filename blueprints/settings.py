@@ -152,6 +152,33 @@ def commercial():
                            cfg=cp.get_config(), category_labels=Prospect.CATEGORY_LABELS)
 
 
+@settings_bp.route('/followup-texts', methods=['GET', 'POST'])
+@owner_required
+def followup_texts():
+    """The wording of the Google Ads follow-up texts.
+
+    In settings rather than in the code because the right words here are not a
+    programming question — she is the one reading the replies, and waiting on a
+    deploy to change a sentence would mean the wording never actually improves."""
+    import lsa
+    if request.method == 'POST':
+        for track, _label in lsa.TRACKS:
+            for step in (1, 2, 3):
+                lsa.save_template(track, step,
+                                  request.form.get(f'msg_{track}_{step}', ''))
+        flash('Follow-up texts saved. Anyone mid-sequence gets the new wording '
+              'from their next message on.', 'success')
+        return redirect(url_for('settings.followup_texts'))
+
+    messages = {(t, s): lsa.template_for(t, s)
+                for t, _l in lsa.TRACKS for s in (1, 2, 3)}
+    edited = {(t, s): messages[(t, s)].strip() != lsa.DEFAULT_MESSAGES[(t, s)].strip()
+              for t, _l in lsa.TRACKS for s in (1, 2, 3)}
+    return render_template('admin/settings_followup_texts.html',
+                           tracks=lsa.TRACKS, messages=messages, edited=edited,
+                           days=[d for d, _n in lsa.SEQUENCE])
+
+
 @settings_bp.route('/pricing', methods=['GET', 'POST'])
 @owner_required
 def pricing():

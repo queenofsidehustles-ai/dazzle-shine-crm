@@ -657,6 +657,11 @@ def _migrate_db():
         # knows the date, so a receipt for one of those looks it up rather than
         # guessing from the booking.
         ('booking', 'deposit_paid_at',      'TIMESTAMP'),
+        # Which follow-up an LSA lead gets. The table shipped a release before
+        # the two tracks existed, so instances already running have it without
+        # this column. NULL means "never sorted", which lsa.default_track reads
+        # and works out from the charge status already on the row.
+        ('lsa_lead', 'track',               'VARCHAR(20)'),
     ]
     for table, col, col_type in new_cols:
         try:

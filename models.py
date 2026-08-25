@@ -1243,6 +1243,12 @@ class LsaLead(db.Model):
     location = db.Column(db.String(80))
     lead_type = db.Column(db.String(40))
     charge_status = db.Column(db.String(40))
+    # Which follow-up conversation this person should get: 'missed' if the call
+    # never connected, 'quoted' if they spoke to us and heard a price. Seeded
+    # from charge_status at import and then left alone, because the owner was on
+    # the calls and can correct it — and once she has, a re-import must not
+    # overwrite what she knows with what Google's billing implies.
+    track = db.Column(db.String(20))
     received_at = db.Column(db.DateTime, index=True)
     # Filled in by the matcher. booked_checked_at records that we looked, so a
     # lead that matched nothing is distinguishable from one never examined.

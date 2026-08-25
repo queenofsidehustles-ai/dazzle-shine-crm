@@ -35,7 +35,7 @@
     <table>
       <thead><tr>
         <th>Phone</th><th>Job type</th><th>Location</th><th>Called</th>
-        <th>Google charge</th><th>Status</th><th></th>
+        <th>Google charge</th><th>Follow-up</th><th>Status</th><th></th>
       </tr></thead>
       <tbody>
         {% for r in rows %}
@@ -49,6 +49,22 @@
              read as "this lead was no good". A lead Google didn't charge for is
              usually a call that never connected, which makes it worth more here. #}
           <td style="font-size:0.82rem;color:#9a95ad">{{ r.charge_status or '—' }}</td>
+          {# Which of the two conversations they get. Google's billing status only
+             seeds this — she was on the calls, so she can move anyone. #}
+          <td>
+            {% if r.booked %}
+              <span style="font-size:0.8rem;color:#9a95ad">—</span>
+            {% else %}
+              <form method="POST" action="{{ url_for('lsa.set_track', lead_id=r.id) }}" style="margin:0">
+                <select name="track" onchange="this.form.submit()"
+                        style="padding:4px 8px;font-size:0.8rem;border:1px solid #e4e0ee;border-radius:7px;background:#fff;color:#1f1333">
+                  {% for value, label in [('missed','Missed call'),('quoted','Spoke & quoted')] %}
+                  <option value="{{ value }}" {{ 'selected' if (r.track or 'quoted') == value }}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </form>
+            {% endif %}
+          </td>
           <td>
             {% if r.booked %}
               <span class="status status-completed">Booked</span>

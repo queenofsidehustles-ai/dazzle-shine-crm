@@ -163,9 +163,15 @@ def import_rows(rows):
             existing.lead_type = r['lead_type'] or existing.lead_type
             existing.charge_status = r['charge_status'] or existing.charge_status
             existing.received_at = r['received_at'] or existing.received_at
+            # Track is deliberately not refreshed. She may have corrected it by
+            # hand — she was on the call — and a re-import must not replace what
+            # she knows with what Google's billing implies. Only fill it in if
+            # it has never been set, which covers rows imported before tracks.
+            if not existing.track:
+                existing.track = default_track(existing.charge_status)
             updated += 1
         else:
-            db.session.add(LsaLead(**r))
+            db.session.add(LsaLead(track=default_track(r['charge_status']), **r))
             added += 1
     db.session.commit()
     return added, updated
@@ -216,30 +222,112 @@ def match_bookings(leads=None):
 
 SEQUENCE = [
     (0, 'first'),
-    (3, 'second'),
-    (7, 'final'),
+    (4, 'second'),
+    (8, 'final'),
 ]
+
+# Two different conversations, because these are two different people.
+#
+# A lead Google didn't charge for is one where the call never really connected —
+# those people have never spoken to us, and "sorry we missed you" is exactly
+# right. A charged lead is someone who got through, talked to the owner and was
+# quoted a price, and then chose somebody else. Sending that person an apology
+# for not connecting reads as though we don't remember them, which is worse than
+# not texting at all.
+MISSED, QUOTED = 'missed', 'quoted'
+TRACKS = [(MISSED, 'Missed call'), (QUOTED, 'Spoke & quoted')]
+
+# Google's billing status is the only signal in the export about which happened,
+# and it's a good one: it charges for calls that connected. It is only a
+# default, though — the owner was on the calls and can say otherwise.
+MISSED_STATUSES = ('not charged', 'credited')
+
+
+def default_track(charge_status):
+    return MISSED if (charge_status or '').strip().lower() in MISSED_STATUSES else QUOTED
+
+
+# The wording lives in settings so it can be changed without a deploy; these are
+# only what a fresh install starts with. Placeholders are filled by message_for.
+DEFAULT_MESSAGES = {
+    (MISSED, 1): ("Hi, this is {biz} — you called us about a cleaning on {called} and "
+                  "we're sorry we didn't get to connect. Are you still looking for "
+                  "help? Reply here and I'll get you a price today. "
+                  "Reply STOP to opt out."),
+    (MISSED, 2): ("Hi again from {biz}. If a cleaning is still on your list, we have "
+                  "openings this week — just reply with your bedrooms and bathrooms "
+                  "and I'll text you a quote. Reply STOP to opt out."),
+    (MISSED, 3): ("Last note from {biz} — I don't want to keep filling up your phone. "
+                  "If you'd still like a cleaning, you can book anytime at {link}. "
+                  "Otherwise, all the best! Reply STOP to opt out."),
+
+    # The quoted track leads with the guarantee. These people already heard a
+    # price and went elsewhere, so repeating the price achieves nothing — what
+    # they were weighing was whether to trust a stranger in their house, and
+    # taking the risk off them is the strongest thing we can say. The last one
+    # deliberately leaves a door open rather than closing: a cheap cleaner
+    # falling through is the single most likely reason they come back.
+    # The guarantee is worded to match what customer_terms actually promises —
+    # tell us within 24 hours and we re-clean at no charge. A text that promised
+    # more than the terms she'll later ask them to accept would be a problem
+    # exactly when it mattered, and the 24 hours makes it sound like a real
+    # policy rather than a slogan.
+    (QUOTED, 1): ("Hi, this is {biz} — I quoted you for a cleaning on {called}. If "
+                  "you're still deciding, one thing worth knowing: if something's "
+                  "not right, tell us within 24 hours and we come back and re-clean "
+                  "it free. We'd much rather fix it than argue about it. Want me to "
+                  "hold you a spot? Reply STOP to opt out."),
+    (QUOTED, 2): ("Hi again from {biz}. We're insured, every cleaner is "
+                  "background-checked, and you get the same person each visit rather "
+                  "than a stranger every time. Happy to re-quote if your dates or "
+                  "your place have changed."),
+    (QUOTED, 3): ("Last note from me. If whoever you went with didn't work out — it "
+                  "happens more than you'd think — we're here, and we can usually "
+                  "get you in the same week. {link} Reply STOP to opt out."),
+}
+
+
+def setting_key(track, step):
+    return f'lsa_msg_{track}_{step}'
+
+
+def template_for(track, step):
+    """The wording for one message — hers if she has edited it, ours if not."""
+    from models import BusinessSetting
+    default = DEFAULT_MESSAGES.get((track, step), '')
+    saved = BusinessSetting.get(setting_key(track, step), '')
+    return (saved or '').strip() or default
+
+
+def save_template(track, step, body):
+    """Store edited wording. Saving it back to the default, or blanking it,
+    clears the override rather than storing a copy that would then be frozen
+    if the default ever improves."""
+    from models import BusinessSetting
+    from extensions import db as _db
+    body = (body or '').strip()
+    BusinessSetting.set(setting_key(track, step),
+                        '' if body == DEFAULT_MESSAGES.get((track, step), '').strip() else body)
+    _db.session.commit()
+
+
+def render(body, lead):
+    """Fill the placeholders. Unknown ones are left alone rather than blowing up
+    a send — a stray brace in her wording must not cost the whole run."""
+    called = lead.received_at.strftime('%b %-d') if lead.received_at else 'recently'
+    values = {'biz': branding.biz_name(), 'link': branding.booking_link(),
+              'called': called, 'phone': branding.phone()}
+    out = body or ''
+    for k, v in values.items():
+        out = out.replace('{' + k + '}', str(v or ''))
+    return out.strip()
 
 
 def message_for(step, lead):
-    """The text for step N (1-based). Kept in one place so the preview on the
-    screen and the text that actually sends can never drift apart."""
-    biz = branding.biz_name()
-    link = branding.booking_link()
-    called = lead.received_at.strftime('%b %-d') if lead.received_at else 'recently'
-
-    if step == 1:
-        return (f"Hi, this is {biz} — you called us about cleaning on {called} and "
-                f"we're sorry we didn't get to connect. Are you still looking for "
-                f"help? Reply here and I'll get you a price today. "
-                f"Reply STOP to opt out.")
-    if step == 2:
-        return (f"Hi again from {biz}. If a cleaning is still on your list, we have "
-                f"openings this week — just reply with your bedrooms and bathrooms "
-                f"and I'll text you a quote. Reply STOP to opt out.")
-    return (f"Last note from {biz} — I don't want to keep filling up your phone. "
-            f"If you'd still like a cleaning, you can book anytime at {link}. "
-            f"Otherwise, all the best! Reply STOP to opt out.")
+    """The text for step N (1-based) on this lead's track. One place, so the
+    preview on the screen and the text that actually sends cannot drift."""
+    track = getattr(lead, 'track', None) or QUOTED
+    return render(template_for(track, step), lead)
 
 
 def start_sequence(lead):

@@ -105,18 +105,23 @@ with app.app_context():
     r = lsa.run_sequence()
     check(r['sent'] == 0, 'running again the same day sends nothing more')
 
-    print('\n6. Texts two and three arrive on day 3 and day 7, then it ends')
+    print('\n6. Texts two and three arrive on day 4 and day 8, then it ends')
     lead = LsaLead.query.filter_by(phone='7726348141').first()
     lead.last_seq_at = datetime.utcnow() - timedelta(days=3)
     db.session.commit()
     lsa.run_sequence()
-    check(len(texts_to('7726348141')) == 2, 'the second text goes out on day 3')
+    check(len(texts_to('7726348141')) == 1, 'nothing on day 3 — the gap is four days')
+
+    lead.last_seq_at = datetime.utcnow() - timedelta(days=4)
+    db.session.commit()
+    lsa.run_sequence()
+    check(len(texts_to('7726348141')) == 2, 'the second text goes out on day 4')
 
     lead = LsaLead.query.filter_by(phone='7726348141').first()
     lead.last_seq_at = datetime.utcnow() - timedelta(days=4)
     db.session.commit()
     lsa.run_sequence()
-    check(len(texts_to('7726348141')) == 3, 'the third goes out four days after that')
+    check(len(texts_to('7726348141')) == 3, 'the third four days after that, on day 8')
     lead = LsaLead.query.filter_by(phone='7726348141').first()
     check(lead.seq_stopped == 'finished', 'and the sequence closes itself')
 
@@ -214,5 +219,63 @@ with app.app_context():
     check(LsaLead.query.count() == 3, 'still three')
     check(LsaLead.query.filter_by(phone='3053387892').count() == 2,
           'the number that called twice on different days stays two leads')
+
+    print('\n13. Two tracks — a missed call and a lost quote are different people')
+    # Most of these leads are not missed calls at all. The owner spoke to them
+    # and quoted a price; "sorry we didn't get to connect" reads to someone she
+    # priced up three weeks ago as though she has no idea who they are.
+    LsaLead.query.delete()
+    db.session.commit()
+    TRACKS_CSV = (
+        'Customer,Job type,Search intent,Location,Lead type,Charge status,'
+        'Lead received,Last activity\n'
+        '(407) 111-2222,,Categorical,Orlando,Phone call,Not charged,Aug 20 2026,Aug 20 2026,\n'
+        '(407) 333-4444,,Categorical,Orlando,Phone call,Charged,Aug 20 2026,Aug 21 2026,\n'
+        '(407) 555-6666,,Categorical,Orlando,Phone call,Credited,Aug 20 2026,Aug 21 2026,\n'
+    )
+    lsa.import_rows(lsa.parse_csv(TRACKS_CSV)[0])
+    missed = LsaLead.query.filter_by(phone='4071112222').first()
+    quoted = LsaLead.query.filter_by(phone='4073334444').first()
+    credited = LsaLead.query.filter_by(phone='4075556666').first()
+    check(missed.track == lsa.MISSED, 'a lead Google did not charge for is a missed call')
+    check(quoted.track == lsa.QUOTED, 'a charged lead is someone who got through')
+    check(credited.track == lsa.MISSED, 'a credited lead is treated as missed too')
+
+    check('did not get to connect' in lsa.message_for(1, missed).replace("didn't", 'did not'),
+          'the missed-call text apologises for missing them')
+    q1 = lsa.message_for(1, quoted)
+    check('connect' not in q1, 'the quoted text does not apologise for a call that happened')
+    check('24 hours' in q1 and 're-clean' in q1,
+          'it leads with the guarantee, worded as the customer terms word it')
+
+    print('\n14. She was on the calls, so she can overrule Google')
+    quoted.track = lsa.MISSED
+    db.session.commit()
+    lsa.import_rows(lsa.parse_csv(TRACKS_CSV)[0])
+    check(LsaLead.query.filter_by(phone='4073334444').first().track == lsa.MISSED,
+          're-importing does not undo a correction she made by hand')
+
+    print('\n15. The wording is hers to change without a deploy')
+    check(lsa.template_for(lsa.QUOTED, 1) == lsa.DEFAULT_MESSAGES[(lsa.QUOTED, 1)],
+          'out of the box she gets our wording')
+    lsa.save_template(lsa.QUOTED, 1, 'Hi from {biz}! Still need that clean? — call {phone}')
+    check(lsa.message_for(1, credited) is not None, 'other tracks are unaffected')
+    credited.track = lsa.QUOTED
+    db.session.commit()
+    body = lsa.message_for(1, credited)
+    check(body.startswith('Hi from '), 'her wording is what sends')
+    check('{biz}' not in body and '{phone}' not in body, 'with the placeholders filled in')
+    check('Dazzle' in body or body != 'Hi from ! Still need that clean? — call ',
+          'from the real business name, not an empty string')
+
+    lsa.save_template(lsa.QUOTED, 1, '')
+    check(lsa.template_for(lsa.QUOTED, 1) == lsa.DEFAULT_MESSAGES[(lsa.QUOTED, 1)],
+          'clearing the box puts the original wording back')
+
+    print('\n16. A stray brace in her wording cannot break a send')
+    lsa.save_template(lsa.QUOTED, 1, 'Hi {biz}, about that {mystery} of yours')
+    out = lsa.message_for(1, credited)
+    check('{mystery}' in out, 'an unknown placeholder is left as typed rather than raising')
+    lsa.save_template(lsa.QUOTED, 1, '')
 
     print('\nAll Google Ads follow-up checks passed.')
