@@ -89,6 +89,16 @@ def _kind_for_log(log):
     if (Client.query.filter(db.func.lower(Client.email) == addr).first()
             or Booking.query.filter(db.func.lower(Booking.email) == addr).first()):
         return 'customer'
+    # Leads were never checked here, so every quote emailed to someone who
+    # hadn't booked yet showed up as Unknown — the one row on the page where
+    # knowing who it went to actually matters, because it is the one you are
+    # waiting on a reply to.
+    from models import Lead, LsaLead
+    lead = Lead.query.filter(db.func.lower(Lead.email) == addr).first()
+    if lead:
+        if lead.phone and LsaLead.query.filter_by(phone=norm_phone(lead.phone)).first():
+            return 'google'
+        return 'lead'
     return 'unknown'
 
 
@@ -105,7 +115,8 @@ def resolve_contact(phone10):
     number, which made a reply from a client indistinguishable from a wrong
     number. They are checked last, after the team and applicants, because a
     cleaner who is also a customer should read as a cleaner here."""
-    blank = {'name': None, 'staff_id': None, 'application_id': None, 'client_id': None}
+    blank = {'name': None, 'staff_id': None, 'application_id': None,
+             'client_id': None, 'lead_id': None, 'lsa': False}
 
     for s in Staff.query.filter(Staff.phone.isnot(None)).all():
         if norm_phone(s.phone) == phone10:
@@ -122,6 +133,24 @@ def resolve_contact(phone10):
     for bk in b:
         if norm_phone(bk.phone) == phone10:
             return {**blank, 'name': bk.name}
+
+    # Not a customer yet either — but someone we quoted is not a stranger, and
+    # showing them as Unknown next to actual wrong numbers loses the one piece
+    # of context that matters when they reply: we already know what they want
+    # and what we told them it would cost.
+    from models import Lead, LsaLead
+    # Whether they came through Google Ads is a fact we hold — there is either a
+    # call from that number in the LSA list or there isn't. The Lead's own
+    # `source` is a label typed at creation time and says nothing reliable.
+    from_google = LsaLead.query.filter_by(phone=phone10).first() is not None
+    for ld in Lead.query.filter(Lead.phone.isnot(None)).order_by(Lead.created_at.desc()).all():
+        if norm_phone(ld.phone) == phone10:
+            return {**blank, 'name': ld.name, 'lead_id': ld.id, 'lsa': from_google}
+
+    # A Google Ads caller whose details haven't been taken yet. No name to show,
+    # so the number stands in — but where they came from is worth knowing.
+    if from_google:
+        return {**blank, 'lsa': True}
     return blank
 
 
@@ -132,6 +161,8 @@ CONTACT_KINDS = {
     'team':      {'label': 'Team',      'colour': '#6b46c1', 'tint': '#f0ebff', 'icon': '🧹'},
     'applicant': {'label': 'Applicant', 'colour': '#b45309', 'tint': '#fef3c7', 'icon': '📥'},
     'customer':  {'label': 'Customer',  'colour': '#1a7f5a', 'tint': '#e6f6ef', 'icon': '🏠'},
+    'google':    {'label': 'Google Ads', 'colour': '#1a56c4', 'tint': '#e7effc', 'icon': '📣'},
+    'lead':      {'label': 'Lead',      'colour': '#8a5a00', 'tint': '#fdf3e0', 'icon': '💡'},
     'unknown':   {'label': 'Unknown',   'colour': '#6f6885', 'tint': '#efecf6', 'icon': '❓'},
 }
 
@@ -142,8 +173,15 @@ def contact_kind(contact):
         return 'team'
     if contact.get('application_id'):
         return 'applicant'
-    if contact.get('client_id') or contact.get('name'):
-        # A name with no staff/applicant id came from a Client or a Booking.
+    if contact.get('client_id'):
+        return 'customer'
+    # A lead is checked before the bare-name case so that someone quoted but not
+    # yet booked reads as a lead rather than a customer — the difference decides
+    # whether a reply is a job to service or a sale still to win.
+    if contact.get('lead_id') or contact.get('lsa'):
+        return 'google' if contact.get('lsa') else 'lead'
+    if contact.get('name'):
+        # A name with no id at all came from a Booking.
         return 'customer'
     return 'unknown'
 

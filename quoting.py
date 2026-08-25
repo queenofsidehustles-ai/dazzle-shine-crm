@@ -234,6 +234,60 @@ def send_quote(lead):
     return True, ''
 
 
+def text_quote(lead):
+    """Text the quote as well as emailing it. Returns (ok, detail).
+
+    Email is the right place for a price and a list of what's included, but it
+    is also the thing that quietly lands in spam — and the customer has no idea
+    anything was sent. A text is short, arrives, and carries the same link, so
+    the email being filtered stops meaning the quote never happened.
+
+    Goes through send_marketing_sms so anyone who has texted STOP is left
+    alone, even though they asked for this quote themselves."""
+    from notifications import send_marketing_sms
+    if not lead.phone:
+        return False, 'No phone number on this lead.'
+    biz = branding.biz_name()
+    body = (f"Hi {(lead.name or 'there').split()[0]}, it's {biz} — here's the "
+            f"quote you asked for: ${(lead.quoted_price or 0):.2f} for a "
+            f"{lead.service_label.lower()}. Everything included and booking "
+            f"here: {quote_url(lead)} Reply STOP to opt out.")
+    return send_marketing_sms(lead.phone, body)
+
+
+def deliver_quote(lead, also_text=False):
+    """Send the quote by whichever channels were asked for. Returns a list of
+    (message, level) for the screen to show.
+
+    Each channel reports separately and a failure keeps its reason. One vague
+    warning covering both would hide the case that actually matters — the email
+    silently not going while the text did, which looks like success from the
+    customer's end and like nothing from hers."""
+    out = []
+    ok, detail = send_quote(lead)
+    if ok:
+        out.append((f'Quote for ${(lead.quoted_price or 0):.2f} emailed to '
+                    f'{lead.email} 📩 Check the Sent Log if they say it never '
+                    f'arrived — it now records the provider\'s message id.',
+                    'success'))
+    else:
+        out.append((f'⚠️ The email did not send: {detail}', 'warning'))
+
+    if also_text:
+        t_ok, t_detail = text_quote(lead)
+        if t_ok:
+            out.append((f'Also texted to {lead.phone} 📱', 'success'))
+        else:
+            out.append((f'⚠️ The text did not send: {t_detail}', 'warning'))
+    return out
+
+
+def was_delivered(lead):
+    """Did the quote reach them by any channel? Decides whether she is sent back
+    to the list or kept on the form to try again."""
+    return bool(lead.quote_sent_at)
+
+
 def accept_quote(lead, preferred_date, preferred_time='', address='', city='',
                  zip_code='', notes=''):
     """Turn an accepted quote into a booking at the quoted price.

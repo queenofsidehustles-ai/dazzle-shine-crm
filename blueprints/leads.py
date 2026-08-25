@@ -53,14 +53,14 @@ def new_quote():
         # If they happen to be in the Google Ads list, tie the two together so
         # she isn't looking at the same person in two places.
         linked = quoting.link_lsa_caller(lead)
-        ok, detail = quoting.send_quote(lead)
-        if ok:
-            note = ' Matched to their Google Ads call.' if linked else ''
-            flash(f'Quote for ${lead.quoted_price:.2f} emailed to {lead.email} 📩'
-                  f'{note}', 'success')
-            return redirect(url_for('leads.index'))
-        flash(f'⚠️ Could not send the quote: {detail}', 'warning')
-        return redirect(url_for('leads.new_quote'))
+        for msg, level in quoting.deliver_quote(
+                lead, also_text=bool(request.form.get('also_text'))):
+            flash(msg, level)
+        if linked:
+            flash('Matched to their Google Ads call, so the follow-up texts '
+                  'for people we never reached have stopped.', 'success')
+        return redirect(url_for('leads.index') if quoting.was_delivered(lead)
+                        else url_for('leads.new_quote'))
 
     return render_template('admin/lsa_quote.html', lead=None, existing=None,
                            **quoting.form_context())

@@ -670,6 +670,7 @@ def _migrate_db():
         ('lead',     'quote_token',         'VARCHAR(64)'),
         ('lead',     'quote_sent_at',       'TIMESTAMP'),
         ('lead',     'quote_checklist',     'TEXT'),
+        ('outbound_log', 'provider_id',     'VARCHAR(100)'),
         ('lsa_lead', 'crm_lead_id',         'INTEGER'),
     ]
     for table, col, col_type in new_cols:

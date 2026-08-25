@@ -206,6 +206,28 @@ def email_test():
 
     color = '#155724' if ok else '#842029'
     bg = '#d4edda' if ok else '#f8d7da'
+    # A success here has always been the harder case to act on, not the easier
+    # one. "Sent" means Resend accepted the message — it can still be filed as
+    # spam or dropped, and this page used to stop at the green box, leaving
+    # "it says sent but nothing arrived" with nowhere to go next.
+    sent_hint = (
+        '<div style="margin-top:18px;padding:16px;background:#eef4ff;border:1px solid #c3d4f5;border-radius:8px;color:#1e3a5f;font-size:0.9rem;line-height:1.6">'
+        '<strong>Accepted &mdash; which is not the same as delivered.</strong><br>'
+        'Resend has taken the message. Whether it reaches an inbox is up to the '
+        'receiving mail server, and the CRM cannot see that from here.<br><br>'
+        '<strong>If it does not arrive in a minute or two:</strong><br>'
+        '1. Check <strong>spam</strong> and <strong>promotions</strong> &mdash; that '
+        'is where it lands most often, and it means the sending domain is not '
+        'fully trusted yet.<br>'
+        f'2. In Resend &rarr; Domains, confirm the domain of <code>{from_email}</code> '
+        'is verified, with its SPF and DKIM records showing green. An unverified '
+        'domain is the usual reason mail is accepted and then filtered.<br>'
+        '3. Look this exact message up in Resend &rarr; Emails using the id in the '
+        'result line above. It will say delivered, bounced or complained.<br>'
+        '4. Gmail hides mail it thinks you sent yourself. If you are testing to '
+        'the same address you send <em>from</em>, try a different inbox.'
+        '</div>'
+    ) if ok else ''
     fix_hint = '' if ok else (
         '<div style="margin-top:18px;padding:16px;background:#fff8e1;border:1px solid #f0d488;border-radius:8px;color:#7c4a04;font-size:0.9rem;line-height:1.6">'
         '<strong>How to fix:</strong><br>'
@@ -218,12 +240,12 @@ def email_test():
     return (
         f'<div style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 16px">'
         f'<div style="background:{bg};color:{color};padding:18px 22px;border-radius:10px;font-weight:700;font-size:1.05rem">'
-        f'{"✅ Test email sent!" if ok else "❌ Email did NOT send"}</div>'
+        f'{"✅ Accepted by the email provider" if ok else "❌ Email did NOT send"}</div>'
         f'<p style="margin-top:16px;color:#1f1333"><strong>To:</strong> {to}<br>'
         f'<strong>From:</strong> {from_email}<br>'
         f'<strong>API key set:</strong> {"yes" if has_key else "no"}<br>'
         f'<strong>Result:</strong> {detail}</p>'
-        f'{fix_hint}'
+        f'{sent_hint}{fix_hint}'
         f'<p style="margin-top:20px"><a href="{url_for("contractors.team")}" style="color:#7c3aed">← Back to Team</a></p>'
         f'</div>'
     )

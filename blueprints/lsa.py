@@ -119,14 +119,11 @@ def quote(lead_id):
             flash(err, 'warning')
             return redirect(url_for('lsa.quote', lead_id=lead_id))
         quoting.link_lsa_caller(crm_lead, lead)
-        ok, detail = quoting.send_quote(crm_lead)
-        if ok:
-            flash(f'Quote for ${crm_lead.quoted_price:.2f} emailed to '
-                  f'{crm_lead.email} 📩 Follow-up emails will go out if they '
-                  f'don\'t book.', 'success')
-            return redirect(url_for('lsa.index'))
-        flash(f'⚠️ Could not send the quote: {detail}', 'warning')
-        return redirect(url_for('lsa.quote', lead_id=lead_id))
+        for msg, level in quoting.deliver_quote(
+                crm_lead, also_text=bool(request.form.get('also_text'))):
+            flash(msg, level)
+        return redirect(url_for('lsa.index') if quoting.was_delivered(crm_lead)
+                        else url_for('lsa.quote', lead_id=lead_id))
 
     return render_template('admin/lsa_quote.html', lead=lead, existing=existing,
                            **quoting.form_context(existing))

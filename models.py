@@ -1326,6 +1326,11 @@ class OutboundLog(db.Model):
     body = db.Column(db.Text)                # message content (HTML for emails)
     status = db.Column(db.String(10))        # 'sent' or 'failed'
     detail = db.Column(db.String(400))       # provider detail or error reason
+    # The id Resend or Twilio gave this message. 'sent' only ever meant the
+    # provider accepted it — a mail can still bounce or be filed as spam, and
+    # without the provider's own id there is no way to tell a delivered message
+    # from one that vanished. This is what makes a row checkable.
+    provider_id = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 

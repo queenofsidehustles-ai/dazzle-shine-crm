@@ -7,10 +7,16 @@ import branding
 import integrations
 
 
-def _log_outbound(channel, to_address, to_name, subject, body, ok, detail):
+def _log_outbound(channel, to_address, to_name, subject, body, ok, detail,
+                  provider_id=None):
     """Record every outbound SMS/email in OutboundLog so the owner has a single
     'Sent' history. Uses its OWN short-lived DB session so it can never touch or
-    prematurely commit the caller's transaction. Never raises."""
+    prematurely commit the caller's transaction. Never raises.
+
+    provider_id is the id Resend or Twilio gave the message. Without it, a row
+    saying "sent" is unfalsifiable — the customer says nothing arrived, the log
+    says it went, and there is no way to find out which is true. With it the
+    message can be looked up at the provider and actually traced."""
     try:
         from extensions import db
         from models import OutboundLog
@@ -24,6 +30,7 @@ def _log_outbound(channel, to_address, to_name, subject, body, ok, detail):
                 body=(body or ''),
                 status='sent' if ok else 'failed',
                 detail=(detail or '')[:400],
+                provider_id=(provider_id or None),
             ))
             s.commit()
     except Exception:
@@ -257,12 +264,27 @@ def send_email(to_email, to_name, subject, html, from_name=None,
             timeout=10,
         )
         if 200 <= resp.status_code < 300:
-            ok, detail = True, f'Sent OK (from {from_email}).'
+            # "Accepted", not "delivered" — and the difference is the whole
+            # problem. A 2xx here means Resend took the message, nothing more.
+            # It can still bounce, or land in spam, and this log would happily
+            # say Sent while the customer sees nothing. Recording the provider's
+            # own id is what turns "it says sent" into something traceable: it
+            # can be pasted into the Resend dashboard to see what really
+            # happened to that specific email.
+            try:
+                msg_id = (resp.json() or {}).get('id') or ''
+            except ValueError:
+                msg_id = ''
+            detail = f'Accepted by Resend from {from_email}'
+            detail += f' (id {msg_id}).' if msg_id else '. No message id returned.'
+            ok = True
         else:
-            ok, detail = False, f'Resend error {resp.status_code}: {resp.text[:400]}'
+            ok, msg_id = False, ''
+            detail = f'Resend error {resp.status_code}: {resp.text[:400]}'
     except Exception as e:
-        ok, detail = False, f'Could not reach Resend: {e}'
-    _log_outbound('email', to_email, to_name, subject, html, ok, detail)
+        ok, msg_id, detail = False, '', f'Could not reach Resend: {e}'
+    _log_outbound('email', to_email, to_name, subject, html, ok, detail,
+                  provider_id=msg_id)
     return ok, detail
 
 
@@ -315,8 +337,9 @@ def send_sms(to_phone, message):
         formatted = ('+1' + digits) if not to_phone.startswith('+') else to_phone
         client = Client(account_sid, auth_token)
         msg = client.messages.create(body=message, from_=from_phone, to=formatted)
-        ok, detail = True, f'Sent OK to {formatted} (Twilio id {msg.sid}).'
+        ok, sid = True, msg.sid
+        detail = f'Accepted by Twilio for {formatted} (id {sid}).'
     except Exception as e:
-        ok, detail = False, f'Twilio error: {e}'
-    _log_outbound('sms', to_phone, None, None, message, ok, detail)
+        ok, sid, detail = False, '', f'Twilio error: {e}'
+    _log_outbound('sms', to_phone, None, None, message, ok, detail, provider_id=sid)
     return ok, detail

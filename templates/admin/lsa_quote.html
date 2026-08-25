@@ -138,8 +138,19 @@
               style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">{{ existing.notes if existing else '' }}</textarea>
   </div>
 
-  <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:20px">
-    Email this quote
+  {# Texting it as well is worth offering because email is the channel that
+     quietly fails — filed as spam, and neither of you knows. #}
+  <label style="display:flex;align-items:flex-start;gap:9px;margin-top:18px;padding:13px 15px;background:#faf9fd;border-radius:10px;cursor:pointer">
+    <input type="checkbox" name="also_text" value="1" checked style="width:auto;margin-top:3px">
+    <span style="font-size:0.89rem;color:#5f5878;line-height:1.5">
+      <strong>Text it to them as well</strong><br>
+      Same price, same link, in a message that actually gets seen. Skipped
+      automatically if they've ever replied STOP.
+    </span>
+  </label>
+
+  <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:16px">
+    Send this quote
   </button>
   <p style="font-size:0.82rem;color:#9a95ad;margin-top:10px;text-align:center">
     They pay a ${{ '%.0f'|format(deposit) }} deposit to book; the rest is charged

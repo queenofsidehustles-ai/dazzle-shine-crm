@@ -252,4 +252,71 @@ with app.app_context():
     check(quoting.checklist_for(dan) == quoting.service_checklist('standard'),
           'so it follows the service checklist, including any later edits to it')
 
+    print('\n18. The quote can go by text as well as email')
+    TEXTS = []
+    real_sms = notifications.send_sms
+    notifications.send_sms = lambda to_phone=None, message=None, *a, **k: (
+        TEXTS.append({'to': to_phone, 'body': message}), (True, 'stub'))[1]
+
+    SENT.clear()
+    c.post('/leads/quote/new', data={
+        'name': 'Bea', 'email': 'bea@example.com', 'phone': '4078881111',
+        'service_type': 'standard', 'bedrooms': '2', 'bathrooms': '1',
+        'price': '175', 'also_text': '1'}, follow_redirects=True)
+    bea = Lead.query.filter_by(email='bea@example.com').first()
+    check(SENT and SENT[-1]['to'] == 'bea@example.com', 'the email goes')
+    check(TEXTS and TEXTS[-1]['to'] == '4078881111', 'and so does the text')
+    body = TEXTS[-1]['body']
+    check('175.00' in body, 'the text carries the same price')
+    check(bea.quote_token in body, 'and the same link')
+    check('STOP' in body, 'with opt-out wording')
+
+    print('\n19. Someone who said STOP is not texted a quote anyway')
+    notifications.record_sms_opt_out('4079990000', 'stop')
+    TEXTS.clear(); SENT.clear()
+    c.post('/leads/quote/new', data={
+        'name': 'Quiet', 'email': 'quiet2@example.com', 'phone': '4079990000',
+        'service_type': 'standard', 'bedrooms': '1', 'bathrooms': '1',
+        'price': '130', 'also_text': '1'}, follow_redirects=True)
+    check(TEXTS == [], 'no text — they asked us to stop, even for a quote they wanted')
+    check(SENT and SENT[-1]['to'] == 'quiet2@example.com',
+          'but the email still goes, because that is a different channel')
+    notifications.send_sms = real_sms
+
+    print('\n20. A quoted lead is a Lead in the log, not "Unknown"')
+    # Every quote emailed to someone who had not booked showed as Unknown — the
+    # one row on that page where knowing who it went to actually matters.
+    import blueprints.messages as msgs
+    check(msgs._kind_for_log(type('L', (), {
+        'channel': 'email', 'to_address': 'bea@example.com'})()) == 'lead',
+        'a quoted lead reads as a Lead')
+    check(msgs._kind_for_log(type('L', (), {
+        'channel': 'email', 'to_address': 'tom@example.com'})()) == 'google',
+        'and one who came through Google Ads says so')
+    check(msgs._kind_for_log(type('L', (), {
+        'channel': 'email', 'to_address': 'nobody@example.com'})()) == 'unknown',
+        'a genuine stranger is still Unknown')
+    check(msgs._kind_for_log(type('L', (), {
+        'channel': 'email', 'to_address': 'dana@example.com'})()) == 'customer',
+        'and someone who booked reads as a Customer, not a lead')
+
+    print('\n21. Their texts are tagged too, so a reply has context')
+    check(msgs.contact_kind(msgs.resolve_contact('4078881111')) == 'lead',
+          'an inbound text from a quoted lead is tagged Lead')
+    check(msgs.contact_kind(msgs.resolve_contact('4075554321')) == 'google',
+          'and a Google Ads caller is tagged Google Ads')
+    check(msgs.contact_kind(msgs.resolve_contact('9999999999')) == 'unknown',
+          'a number we have never seen stays Unknown')
+
+    print('\n22. "Sent" now carries the provider id that makes it checkable')
+    from models import OutboundLog
+    import notifications as n
+    n._log_outbound('email', 'x@example.com', 'X', 'Subj', '<p>b</p>', True,
+                    'Accepted by Resend from a@b (id re_123).', provider_id='re_123')
+    row = OutboundLog.query.filter_by(to_address='x@example.com').first()
+    check(row.provider_id == 're_123',
+          'the id is stored, so "it says sent" can actually be looked up')
+    check('Accepted' in row.detail,
+          'and the wording says accepted, which is all a 2xx from Resend means')
+
     print('\nAll quote-email checks passed.')
