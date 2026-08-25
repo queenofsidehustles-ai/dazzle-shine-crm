@@ -164,9 +164,13 @@ def run_lifecycle_emails():
         last = lead.last_drip_at or lead.created_at
         if not last or last > now - timedelta(days=5):
             continue
+        # Their own quote link where they have one, so the last email lands them
+        # on the price they were given rather than on a calculator.
+        import quoting
+        link = quoting.quote_url(lead) if lead.quote_token else _booking_link()
         if _send_marketing('lead_drip_final', lead.email, lead.name, {
                 'quote_amount': f"{lead.quoted_price:.0f}" if lead.quoted_price else '',
-                'booking_link': _booking_link()}):
+                'booking_link': link}):
             c['lead_final'] += 1
         lead.drip_step = 4
         lead.last_drip_at = now

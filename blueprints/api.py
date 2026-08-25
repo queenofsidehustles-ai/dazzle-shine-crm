@@ -1074,6 +1074,18 @@ def _send_quote_email(lead, total):
     )
 
 
+# Both of these emails say "book here" and then print {{booking_link}}. They
+# used to pass that variable as an empty string, so every one of them went out
+# with the sentence intact and nothing after it — an invitation to book with no
+# way to do it. The link is the whole purpose of a follow-up, so it now comes
+# from the lead's own quote where there is one, and the general booking link
+# otherwise.
+
+def _drip_link(lead):
+    import quoting
+    return quoting.quote_url(lead) if lead.quote_token else branding.booking_link()
+
+
 def _send_drip_followup(lead):
     from notifications import send_triggered_email
     send_triggered_email(
@@ -1082,7 +1094,7 @@ def _send_drip_followup(lead):
         to_name=lead.name,
         variables={
             'quote_amount': f'{lead.quoted_price:.2f}',
-            'booking_link': '',
+            'booking_link': _drip_link(lead),
         }
     )
 
@@ -1098,6 +1110,6 @@ def _send_drip_lastchance(lead):
             'quote_amount': f'{lead.quoted_price:.2f}',
             'discount_code': 'WELCOME10',
             'discounted_price': f'{discounted:.2f}',
-            'booking_link': '',
+            'booking_link': _drip_link(lead),
         }
     )

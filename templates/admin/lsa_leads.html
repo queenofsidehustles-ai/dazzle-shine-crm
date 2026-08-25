@@ -79,18 +79,25 @@
             {% endif %}
           </td>
           <td style="white-space:nowrap">
+            {# Quoting and the text sequence are independent. Someone mid-sequence
+               may well ring back and ask for a price, and someone already quoted
+               may still be worth a nudge. #}
             {% if r.booked %}
               <span style="font-size:0.8rem;color:#9a95ad">—</span>
-            {% elif r.in_sequence %}
-              <form method="POST" action="{{ url_for('lsa.stop', lead_id=r.id) }}" style="margin:0">
-                <button type="submit" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Stop</button>
-              </form>
-            {% elif r.phone not in opted_out and not r.seq_stopped %}
-              <form method="POST" action="{{ url_for('lsa.start', lead_id=r.id) }}" style="margin:0">
-                <button type="submit" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Follow up</button>
-              </form>
             {% else %}
-              <span style="font-size:0.8rem;color:#9a95ad">—</span>
+            <div style="display:flex;gap:6px;justify-content:flex-end">
+              <a href="{{ url_for('lsa.quote', lead_id=r.id) }}" class="btn btn-gold"
+                 style="padding:5px 12px;font-size:0.82rem">{{ 'Re-quote' if r.crm_lead_id else 'Quote' }}</a>
+              {% if r.in_sequence %}
+                <form method="POST" action="{{ url_for('lsa.stop', lead_id=r.id) }}" style="margin:0">
+                  <button type="submit" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Stop</button>
+                </form>
+              {% elif r.phone not in opted_out and not r.seq_stopped %}
+                <form method="POST" action="{{ url_for('lsa.start', lead_id=r.id) }}" style="margin:0">
+                  <button type="submit" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Follow up</button>
+                </form>
+              {% endif %}
+            </div>
             {% endif %}
           </td>
         </tr>

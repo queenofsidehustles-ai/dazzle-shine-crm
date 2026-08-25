@@ -1,0 +1,145 @@
+{% extends "base_admin.html" %}
+{% block title %}Quote {{ lead.pretty_phone }} — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Send a Quote{% endblock %}
+
+{% block content %}
+<form method="POST" class="card" style="max-width:680px">
+  <p style="color:#5f5878;font-size:0.9rem;line-height:1.7;margin-bottom:20px">
+    For <strong>{{ lead.pretty_phone }}</strong>, who called
+    {{ lead.received_at.strftime('%b %d') if lead.received_at else 'through Google Ads' }}{% if lead.location %} from {{ lead.location }}{% endif %}.
+    They'll get the price, everything that's included, and their own link that
+    books at this exact figure.
+  </p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">Their name</label>
+      <input name="name" required value="{{ existing.name if existing else '' }}"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">Their email</label>
+      <input name="email" type="email" required value="{{ existing.email if existing else '' }}"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:14px">
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">Service</label>
+      <select name="service_type" id="q-service" required
+              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+        {% for key, s in services.items() %}
+        <option value="{{ key }}" {{ 'selected' if existing and existing.service_type == key }}>{{ s.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">Bedrooms</label>
+      <input name="bedrooms" id="q-beds" type="number" min="0" value="{{ existing.bedrooms if existing else 3 }}"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">Bathrooms</label>
+      <input name="bathrooms" id="q-baths" type="number" min="0" value="{{ existing.bathrooms if existing else 2 }}"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+  </div>
+
+  <div style="margin-top:14px">
+    <label class="dl" style="display:block;margin-bottom:6px">Add-ons</label>
+    <div style="display:flex;flex-wrap:wrap;gap:14px">
+      {% for name, cost in extras.items() %}
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.88rem;color:#5f5878">
+        <input type="checkbox" name="extras" value="{{ name }}" class="q-extra" data-cost="{{ cost }}" style="width:auto">
+        {{ name }} <span style="color:#9a95ad">+${{ cost }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div style="margin-top:18px;padding:14px;background:#faf9fd;border-radius:10px">
+    <label class="dl" style="display:block;margin-bottom:5px">Price you quoted them</label>
+    <input name="price" id="q-price" type="number" step="0.01" min="0"
+           value="{{ '%.2f'|format(existing.quoted_price) if existing and existing.quoted_price else '' }}"
+           placeholder="Leave blank to use the calculated price"
+           style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
+    <p style="font-size:0.82rem;color:#9a95ad;margin-top:7px">
+      Calculated from the above: <strong id="q-calc">—</strong>. Whatever you type
+      here is what gets emailed and what they'll pay — type the figure you
+      actually said on the phone.
+    </p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:14px">
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">Address <span style="color:#9a95ad;font-weight:400">(optional)</span></label>
+      <input name="address" value="{{ existing.address if existing else '' }}"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">City</label>
+      <input name="city" value="{{ existing.city if existing else lead.location or '' }}"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">ZIP</label>
+      <input name="zip_code" value="{{ existing.zip_code if existing else '' }}"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+  </div>
+
+  <div style="margin-top:14px">
+    <label class="dl" style="display:block;margin-bottom:5px">Notes from the call <span style="color:#9a95ad;font-weight:400">(not emailed)</span></label>
+    <textarea name="notes" rows="2"
+              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">{{ existing.notes if existing else '' }}</textarea>
+  </div>
+
+  <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:20px">
+    Email this quote
+  </button>
+  <p style="font-size:0.82rem;color:#9a95ad;margin-top:10px;text-align:center">
+    They pay a ${{ '%.0f'|format(deposit) }} deposit to book; the rest is charged
+    the morning of the clean. If they don't book, your Day 2 and Last Chance
+    emails follow automatically — and the Google Ads texts stop, since you've
+    now spoken to them.
+  </p>
+</form>
+
+<script>
+// The hint comes from the same endpoint the public calculator uses, rather than
+// a copy of the pricing rules in JavaScript. A second implementation would
+// drift the first time a rate changed, and quietly suggest a price the business
+// no longer charges.
+(function () {
+  const price = document.getElementById('q-price');
+  const calc = document.getElementById('q-calc');
+  let pending;
+  async function recalc() {
+    clearTimeout(pending);
+    pending = setTimeout(async () => {
+      const extras = [...document.querySelectorAll('.q-extra:checked')].map(e => e.value).join(',');
+      try {
+        const r = await fetch('/api/calculate', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            service_type: document.getElementById('q-service').value,
+            beds: Number(document.getElementById('q-beds').value) || 0,
+            baths: Number(document.getElementById('q-baths').value) || 0,
+            extras: extras, frequency: 'one_time',
+          }),
+        });
+        const d = await r.json();
+        const total = Number(d.price ?? d.total ?? 0);
+        if (!total) return;
+        calc.textContent = '$' + total.toFixed(2);
+        price.placeholder = 'Leave blank to use $' + total.toFixed(2);
+      } catch (e) { /* the hint is a convenience; the typed price still sends */ }
+    }, 250);
+  }
+  document.querySelectorAll('#q-service,#q-beds,#q-baths,.q-extra')
+    .forEach(el => el.addEventListener('input', recalc));
+  recalc();
+})();
+</script>
+{% endblock %}

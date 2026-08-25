@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Cleaning Quote — {{ BIZ }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root{
+      --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,0.12);
+      --purple:#1f1333; --bg:#f6f5fb;
+      --white:#fff; --border:#e4dfef; --radius:14px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple);min-height:100vh}
+    .header{background:var(--purple);padding:24px;text-align:center}
+    .header .script{font-family:"Allura",cursive;font-size:2.4rem;color:var(--gold);display:block;line-height:1}
+    .header .sub{color:rgba(255,255,255,0.5);font-size:0.72rem;letter-spacing:0.2em;text-transform:uppercase;margin-top:6px;display:block}
+    .wrap{max-width:520px;margin:0 auto;padding:28px 16px 60px}
+    .card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
+          box-shadow:0 4px 24px rgba(15,7,40,0.1);padding:28px 26px;margin-bottom:18px}
+    h1{font-size:1.3rem;margin-bottom:14px}
+    .price-banner{background:var(--purple);border-radius:10px;padding:18px 20px;text-align:center;margin-bottom:20px}
+    .price-banner .lbl{color:rgba(255,255,255,0.55);font-size:0.72rem;letter-spacing:0.14em;text-transform:uppercase}
+    .price-banner .amt{color:var(--gold);font-size:2.4rem;font-weight:700;line-height:1.1}
+    .price-banner .note{color:rgba(255,255,255,0.55);font-size:0.78rem;margin-top:4px}
+    .summary{background:#faf9fd;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px}
+    .summary .row{display:flex;justify-content:space-between;padding:5px 0;font-size:0.92rem}
+    .summary .row .k{color:#9a95ad}
+    .summary .row .v{font-weight:600;text-align:right}
+    ul.incl{list-style:none;margin:0}
+    ul.incl li{padding:7px 0 7px 26px;position:relative;font-size:0.92rem;line-height:1.5;border-bottom:1px solid #f2eff8}
+    ul.incl li:last-child{border-bottom:none}
+    ul.incl li:before{content:"✓";position:absolute;left:0;color:var(--gold-deep);font-weight:700}
+    label.fld{display:block;font-size:0.8rem;font-weight:600;color:#5f5878;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em}
+    input,textarea{width:100%;padding:13px 14px;border:1px solid var(--border);border-radius:10px;
+                   font-family:inherit;font-size:1rem;background:#fff;color:var(--purple)}
+    .fieldrow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .btn{display:block;width:100%;background:var(--gold);color:var(--purple);text-align:center;
+         padding:15px;border:none;border-radius:10px;font-weight:700;font-size:1.05rem;cursor:pointer;
+         font-family:inherit;margin-top:8px}
+    .btn:hover{background:var(--gold-deep)}
+    .flash{background:#fef3c7;color:#92400e;padding:12px 14px;border-radius:10px;font-size:0.9rem;margin-bottom:16px}
+    .foot{text-align:center;color:#9a95ad;font-size:0.8rem;margin-top:18px;line-height:1.6}
+    @media(max-width:420px){.fieldrow{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="script">{{ BIZ }}</span>
+    <span class="sub">Your Cleaning Quote</span>
+  </div>
+
+  <div class="wrap">
+    {% with msgs = get_flashed_messages() %}
+      {% if msgs %}{% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}{% endif %}
+    {% endwith %}
+
+    {% if already %}
+    <div class="card">
+      <h1>You're already booked, {{ lead.name.split()[0] }} ✨</h1>
+      <p style="color:#5f5878;line-height:1.7">
+        We've got your cleaning down and we'll be in touch with the details.
+        Any questions at all, just reply to the email we sent you.
+      </p>
+    </div>
+    {% else %}
+    <div class="card">
+      <h1>Here's your quote, {{ lead.name.split()[0] }}</h1>
+
+      <div class="price-banner">
+        <span class="lbl">Your price</span>
+        <div class="amt">${{ '%.2f'|format(lead.quoted_price or 0) }}</div>
+        <span class="note">${{ '%.0f'|format(deposit) }} deposit to book · ${{ '%.2f'|format(balance) }} on the day</span>
+      </div>
+
+      <div class="summary">
+        <div class="row"><span class="k">Service</span><span class="v">{{ lead.service_label }}</span></div>
+        {% if lead.bedrooms %}<div class="row"><span class="k">Bedrooms</span><span class="v">{{ lead.bedrooms }}</span></div>{% endif %}
+        {% if lead.bathrooms %}<div class="row"><span class="k">Bathrooms</span><span class="v">{{ lead.bathrooms }}</span></div>{% endif %}
+        {% if lead.extras %}<div class="row"><span class="k">Add-ons</span><span class="v">{{ lead.extras }}</span></div>{% endif %}
+      </div>
+
+      <p style="color:#5f5878;font-size:0.88rem;line-height:1.6">
+        This is the price we quoted you — it doesn't change when you book here.
+      </p>
+    </div>
+
+    {% if checklist %}
+    <div class="card">
+      <h1>What's included</h1>
+      <ul class="incl">
+        {% for item in checklist %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <h1>Pick your date</h1>
+      <form method="POST" action="{{ url_for('quote_accept.book', token=lead.quote_token) }}">
+        <div class="fieldrow">
+          <div>
+            <label class="fld" for="d">Date</label>
+            <input id="d" type="date" name="preferred_date" required>
+          </div>
+          <div>
+            <label class="fld" for="t">Preferred time</label>
+            <input id="t" type="time" name="preferred_time">
+          </div>
+        </div>
+
+        <div style="margin-top:14px">
+          <label class="fld" for="a">Address</label>
+          <input id="a" name="address" value="{{ lead.address or '' }}" required>
+        </div>
+
+        <div class="fieldrow" style="margin-top:14px">
+          <div>
+            <label class="fld" for="c">City</label>
+            <input id="c" name="city" value="{{ lead.city or '' }}" required>
+          </div>
+          <div>
+            <label class="fld" for="z">ZIP</label>
+            <input id="z" name="zip_code" value="{{ lead.zip_code or '' }}" required>
+          </div>
+        </div>
+
+        <div style="margin-top:14px">
+          <label class="fld" for="n">Anything we should know?</label>
+          <textarea id="n" name="notes" rows="2" placeholder="Pets, parking, where the key is…"></textarea>
+        </div>
+
+        <button type="submit" class="btn">Book this cleaning →</button>
+        <p class="foot">
+          Next step is a ${{ '%.0f'|format(deposit) }} deposit to hold your spot.
+          The remaining ${{ '%.2f'|format(balance) }} is charged the morning of your clean.
+        </p>
+      </form>
+    </div>
+    {% endif %}
+
+    <p class="foot">
+      {{ BIZ }}{% if BIZ_CITY %} · {{ BIZ_CITY }}{% endif %}<br>
+      Questions? Just reply to our email and we'll help.
+    </p>
+  </div>
+</body>
+</html>

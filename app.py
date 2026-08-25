@@ -15,6 +15,7 @@ from blueprints.settings import settings_bp
 from blueprints.staff import staff_bp
 from blueprints.leads import leads_bp
 from blueprints.lsa import lsa_bp
+from blueprints.quote_accept import quote_accept_bp
 from blueprints.workorders import workorders_bp
 from blueprints.content import content_bp
 from blueprints.quotes import quotes_bp
@@ -73,6 +74,7 @@ def create_app():
     app.register_blueprint(staff_bp)
     app.register_blueprint(leads_bp)
     app.register_blueprint(lsa_bp)
+    app.register_blueprint(quote_accept_bp)
     app.register_blueprint(workorders_bp)
     app.register_blueprint(content_bp)
     app.register_blueprint(quotes_bp)
@@ -662,6 +664,12 @@ def _migrate_db():
         # this column. NULL means "never sorted", which lsa.default_track reads
         # and works out from the charge status already on the row.
         ('lsa_lead', 'track',               'VARCHAR(20)'),
+        # Quoting a phone caller by email. The token is their personal link to
+        # the price they were actually given; crm_lead_id ties the caller in the
+        # Google Ads list to the Lead created when her details were taken.
+        ('lead',     'quote_token',         'VARCHAR(64)'),
+        ('lead',     'quote_sent_at',       'TIMESTAMP'),
+        ('lsa_lead', 'crm_lead_id',         'INTEGER'),
     ]
     for table, col, col_type in new_cols:
         try:

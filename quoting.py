@@ -1,0 +1,185 @@
+"""Quoting a caller by email, and letting them book at the price they were given.
+
+Someone rings, asks what a clean would cost, and gives an email address. Until
+now there was nowhere to put that: the quote email existed but only fired from
+the website form, so a phone caller got nothing unless the owner wrote it out by
+hand.
+
+The price is the point. A generic booking link drops them on a calculator, and a
+calculator can easily produce a different number from the one that was said on
+the phone — a custom price, a discount, a judgement call about a big house. So
+the quote gets its own link carrying its own price, and booking through it uses
+that figure rather than working one out again.
+"""
+import secrets
+from datetime import datetime
+
+import branding
+from extensions import db
+from models import Lead, Booking, Client, ChecklistTemplate
+from pricing import DEPOSIT_AMOUNT
+
+
+def checklist_for(service_type):
+    """What we actually do for this service, as a list of lines.
+
+    These are the same checklists the cleaners work from, which is the point:
+    the customer is told exactly what was going to happen anyway, and there is
+    only one place to edit it when the service changes."""
+    t = (ChecklistTemplate.query.filter_by(service_type=service_type).first()
+         if service_type else None)
+    return t.get_items() if t else []
+
+
+def quote_url(lead):
+    """Their personal link. Absolute, because it goes in an email."""
+    if not lead.quote_token:
+        return branding.booking_link()
+    return f"{branding.crm_base().rstrip('/')}/quote/{lead.quote_token}"
+
+
+def quote_lead(name, email, phone, service_type, bedrooms=None, bathrooms=None,
+               extras='', frequency='one_time', price=None, notes='',
+               address='', city='', zip_code=''):
+    """Create (or refresh) the Lead behind a quote. Returns the Lead.
+
+    Matched on email so quoting the same person twice updates their quote rather
+    than leaving two of them in the list with different prices — and whichever
+    one they happened to open would then be binding."""
+    email = (email or '').strip().lower()
+    lead = Lead.query.filter_by(email=email).first() if email else None
+    if lead is None:
+        lead = Lead(email=email, drip_step=1, status='new', source='phone')
+        db.session.add(lead)
+
+    lead.name = (name or '').strip() or lead.name
+    lead.phone = (phone or '').strip() or lead.phone
+    lead.service_type = service_type or lead.service_type
+    lead.bedrooms = bedrooms if bedrooms not in (None, '') else lead.bedrooms
+    lead.bathrooms = bathrooms if bathrooms not in (None, '') else lead.bathrooms
+    lead.extras = extras or lead.extras
+    lead.frequency = frequency or lead.frequency
+    lead.notes = notes or lead.notes
+    lead.address = address or lead.address
+    lead.city = city or lead.city
+    lead.zip_code = zip_code or lead.zip_code
+    if price is not None:
+        lead.quoted_price = round(float(price), 2)
+    if not lead.quote_token:
+        lead.quote_token = secrets.token_urlsafe(32)
+    # Re-quoting restarts the follow-up clock. The old drip was chasing a price
+    # that no longer applies.
+    lead.drip_step = 1
+    lead.last_drip_at = datetime.utcnow()
+    db.session.commit()
+    return lead
+
+
+def send_quote(lead):
+    """Email the quote. Returns (ok, detail).
+
+    Goes through the editable lead_quote template so the wording stays hers.
+    The checklist is appended rather than required to be in the template: the
+    template already exists on every running instance, and a variable added to
+    the default today would never appear in a copy she had already edited."""
+    from notifications import send_triggered_email
+    if not lead.email:
+        return False, 'No email address on this lead.'
+
+    items = checklist_for(lead.service_type)
+    checklist = ''
+    if items:
+        lines = '\n'.join(f'  •  {i}' for i in items)
+        checklist = f"What's included in your {lead.service_label.lower()}:\n\n{lines}"
+
+    ok = send_triggered_email(
+        trigger='lead_quote',
+        to_email=lead.email,
+        to_name=lead.name,
+        variables={
+            'service_type': lead.service_label,
+            'beds': lead.bedrooms or '—',
+            'baths': lead.bathrooms or '—',
+            'quote_amount': f'{(lead.quoted_price or 0):.2f}',
+            'deposit': f'{DEPOSIT_AMOUNT:.2f}',
+            'balance': f'{max(0.0, (lead.quoted_price or 0) - DEPOSIT_AMOUNT):.2f}',
+            'booking_link': quote_url(lead),
+            'checklist': checklist,
+        },
+        append_text=checklist,
+        append_unless='{{checklist}}',
+    )
+    if not ok:
+        return False, ('The "Instant Quote Email" template is missing or switched '
+                       'off — check Settings → Email templates.')
+    lead.quote_sent_at = datetime.utcnow()
+    db.session.commit()
+    return True, ''
+
+
+def accept_quote(lead, preferred_date, preferred_time='', address='', city='',
+                 zip_code='', notes=''):
+    """Turn an accepted quote into a booking at the quoted price.
+
+    The price is copied from the lead, not recalculated. That is the whole
+    reason this route exists rather than sending them to the public calculator:
+    what they were told is what they pay."""
+    price = round(float(lead.quoted_price or 0), 2)
+    email = (lead.email or '').strip().lower()
+
+    client = Client.query.filter_by(email=email).first() if email else None
+    if not client:
+        client = Client(name=lead.name, email=email, phone=lead.phone or '',
+                        address=address or lead.address or '',
+                        city=city or lead.city or '',
+                        zip_code=zip_code or lead.zip_code or '')
+        db.session.add(client)
+        db.session.flush()
+
+    booking = Booking(
+        client_id=client.id,
+        service_type=lead.service_type,
+        bedrooms=lead.bedrooms, bathrooms=lead.bathrooms,
+        extras=lead.extras or '', frequency=lead.frequency or 'one_time',
+        preferred_date=preferred_date or '', preferred_time=preferred_time or '',
+        name=lead.name, email=email, phone=lead.phone or '',
+        address=address or lead.address or '',
+        city=city or lead.city or '',
+        zip_code=zip_code or lead.zip_code or '',
+        notes=notes or lead.notes or '',
+        price=price,
+        balance_due=round(max(0.0, price - DEPOSIT_AMOUNT), 2),
+        deposit_token=secrets.token_urlsafe(32),
+        status='pending',
+        source='quote',
+    )
+    db.session.add(booking)
+
+    # They have booked, so stop chasing them — by email here, and by text
+    # through the Google Ads lead they may have come in on.
+    lead.status = 'converted'
+    lead.drip_step = 9
+    db.session.commit()
+    _stop_lsa_followup(lead)
+    return booking
+
+
+def _stop_lsa_followup(lead):
+    """A caller who books should not still be getting "you never booked" texts.
+
+    The nightly match would catch this anyway once the booking exists, but that
+    can be up to a day later — long enough for the next message to go out."""
+    try:
+        from models import LsaLead
+        import lsa
+        rows = LsaLead.query.filter_by(crm_lead_id=lead.id).all()
+        if not rows and lead.phone:
+            rows = LsaLead.query.filter_by(phone=lsa.phone10(lead.phone)).all()
+        for r in rows:
+            r.booked = True
+            if r.in_sequence:
+                r.seq_stopped = 'booked'
+        if rows:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()

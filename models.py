@@ -469,6 +469,13 @@ class Lead(db.Model):
     brand = db.Column(db.String(20), index=True)
     drip_step = db.Column(db.Integer, default=1)
     last_drip_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Their own link to the quote they were given. The price on it is the price
+    # that was actually said out loud on the phone — a generic booking link
+    # sends them to a calculator that may well produce a different number, and
+    # the first thing a customer does with a quote is check it still says what
+    # they were told.
+    quote_token = db.Column(db.String(64), index=True)
+    quote_sent_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     SERVICE_LABELS = {
@@ -1255,6 +1262,10 @@ class LsaLead(db.Model):
     booked = db.Column(db.Boolean, default=False)
     booking_id = db.Column(db.Integer)
     booked_checked_at = db.Column(db.DateTime)
+    # The Lead created when she took this caller's details and quoted them. An
+    # LSA lead is a phone number; a Lead is a person with an email who can be
+    # emailed a quote. Linking them keeps one caller's story on one screen.
+    crm_lead_id = db.Column(db.Integer)
     # Follow-up sequence state. seq_step is how many texts have gone out.
     seq_step = db.Column(db.Integer, default=0)
     seq_started_at = db.Column(db.DateTime)

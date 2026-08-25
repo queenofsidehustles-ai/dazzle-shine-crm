@@ -143,10 +143,18 @@ def send_marketing_sms(to_phone, message):
     return send_sms(to_phone, message)
 
 
-def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe_url=None):
+def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe_url=None,
+                         append_text=None, append_unless=None):
     """Look up an EmailTemplate by trigger key, fill in variables, and send.
     If unsubscribe_url is given, an unsubscribe line is added to the footer
-    (use for marketing emails). Returns True if sent, False otherwise."""
+    (use for marketing emails). Returns True if sent, False otherwise.
+
+    append_text adds a block to the end of the body, but only when the template
+    doesn't already place it itself via append_unless (a placeholder such as
+    '{{checklist}}'). Templates are editable and already exist on every running
+    instance, so a variable added to a default today would never show up in a
+    copy the owner had edited months ago — this way new content reaches both,
+    and moving the placeholder into the template takes it out of the footer."""
     from models import EmailTemplate, BusinessSetting
     tmpl = EmailTemplate.query.filter_by(trigger=trigger, is_active=True).first()
     if not tmpl:
@@ -162,7 +170,10 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
     if variables:
         v.update(variables)
     subject = _sub(tmpl.subject, v)
-    body_text = _sub(tmpl.body, v)
+    raw_body = tmpl.body or ''
+    if append_text and not (append_unless and append_unless in raw_body):
+        raw_body = raw_body.rstrip() + '\n\n' + append_text
+    body_text = _sub(raw_body, v)
     html = _wrap_html(body_text, biz, unsubscribe_url=unsubscribe_url)
     send_email(to_email=to_email, to_name=to_name, subject=subject,
                html=html, from_name=biz)
