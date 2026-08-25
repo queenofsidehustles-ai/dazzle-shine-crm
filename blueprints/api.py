@@ -736,8 +736,11 @@ def create_booking():
     db.session.commit()
 
     if booking.deposit_paid:
-        # Deposit was paid up front → fully confirmed
-        _send_confirmation(booking)
+        # Deposit was paid up front → fully confirmed, and receipt the money.
+        # Going through mark_deposit_paid also stamps the booking as notified,
+        # so the webhook for this same payment doesn't send it all a second time.
+        from blueprints.payments import mark_deposit_paid
+        mark_deposit_paid(booking)
     else:
         # Tentative booking → ask for the deposit to confirm
         _send_deposit_request(booking)
@@ -766,9 +769,12 @@ def stripe_webhook():
         pi = event['data']['object']
         booking = Booking.query.filter_by(stripe_payment_intent=pi['id']).first()
         if booking:
-            booking.deposit_paid = True
-            booking.status = 'confirmed'
-            db.session.commit()
+            # Confirming the booking and saying nothing to the customer is how
+            # someone ends up having paid with no receipt. This fires precisely
+            # when the browser never got to post its own confirm — tab closed,
+            # connection dropped — which is when they most need telling.
+            from blueprints.payments import mark_deposit_paid
+            mark_deposit_paid(booking, amount_cents=pi.get('amount_received'))
 
     return jsonify({'ok': True}), 200
 

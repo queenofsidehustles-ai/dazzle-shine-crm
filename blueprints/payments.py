@@ -108,8 +108,151 @@ def mark_paid(booking, method='card', when=None, notify=True):
         _alert_owner_paid(booking, method)
 
 
+def mark_deposit_paid(booking, req=None, amount_cents=None):
+    """Record a paid deposit and tell the customer — exactly once.
+
+    Three separate things can land here for the same $50: the browser posting to
+    /pay-deposit/<token>/confirm once Stripe has confirmed the card, Stripe's own
+    payment_intent.succeeded webhook, and the booking widget when the deposit is
+    taken up front. Whichever arrived first used to set deposit_paid, and the
+    others then saw the flag already set and did nothing — but only the browser
+    path ever sent the customer anything. So a webhook that won the race, or a
+    customer who closed the tab before the confirm POST landed, meant the money
+    was taken in complete silence.
+
+    That is why "have we told them" is its own column. deposit_paid tracks the
+    money; deposit_notified_at tracks the email. Returns True if this call is
+    the one that notified the customer.
+
+    amount_cents is what Stripe actually took, when the caller knows it. A
+    receipt should quote the charge, not what we meant to charge."""
+    booking.deposit_paid = True
+    if not booking.deposit_paid_at:
+        booking.deposit_paid_at = datetime.utcnow()
+    if booking.status in ('pending', None):
+        booking.status = 'confirmed'
+    db.session.commit()
+
+    # Paying is how a customer accepts the terms, so snapshot them — but only
+    # from the customer's own request. The webhook's request belongs to Stripe,
+    # and its IP address is not evidence of anything.
+    if req is not None:
+        import customer_terms
+        customer_terms.record_acceptance(booking, req)
+
+    if booking.deposit_notified_at:
+        return False
+    # A job already settled in full has had its receipt from mark_paid, which
+    # covers the deposit as part of the total. A second one would only confuse.
+    if booking.paid_at:
+        return False
+
+    # Stamp before sending rather than after: two of these can be in flight at
+    # once, and a duplicate receipt is worse than a late one.
+    booking.deposit_notified_at = datetime.utcnow()
+    db.session.commit()
+
+    try:
+        from blueprints.api import _send_confirmation
+        _send_confirmation(booking)
+    except Exception:
+        pass
+    _send_deposit_receipt(booking, round((amount_cents or 0) / 100, 2) or float(DEPOSIT_AMOUNT))
+    return True
+
+
 def _biz():
     return branding.biz_name()
+
+
+def send_deposit_receipt_now(booking):
+    """Send the deposit receipt on demand, from the back office. Returns
+    (ok, detail) so the button can say what actually happened.
+
+    Deposits taken before the receipt existed have no recorded payment date, and
+    dating the receipt "today" would misstate when the customer paid. Stripe
+    still holds the truth, so look it up and keep it — a receipt is a document
+    someone may have to rely on, and a wrong date makes it worthless."""
+    if not booking.deposit_paid_at and booking.stripe_payment_intent:
+        try:
+            stripe.api_key = integrations.stripe_secret_key()
+            if stripe.api_key:
+                pi = stripe.PaymentIntent.retrieve(booking.stripe_payment_intent)
+                created = getattr(pi, 'created', None)
+                if created:
+                    booking.deposit_paid_at = datetime.utcfromtimestamp(created)
+                    db.session.commit()
+        except Exception:
+            pass  # fall through — the receipt simply omits the date
+
+    amount = None
+    if booking.stripe_payment_intent:
+        try:
+            stripe.api_key = integrations.stripe_secret_key()
+            if stripe.api_key:
+                pi = stripe.PaymentIntent.retrieve(booking.stripe_payment_intent)
+                cents = getattr(pi, 'amount_received', None) or getattr(pi, 'amount', None)
+                # Only trust this if it looks like the deposit. Once a balance has
+                # been charged the booking's payment intent points at that instead,
+                # and quoting the balance as the deposit would be a lie.
+                if cents and round(cents / 100, 2) <= (booking.price or 0):
+                    amount = round(cents / 100, 2)
+        except Exception:
+            pass
+    if amount is None:
+        amount = float(DEPOSIT_AMOUNT)
+
+    ok, detail = _send_deposit_receipt(booking, amount)
+    if ok and not booking.deposit_notified_at:
+        booking.deposit_notified_at = datetime.utcnow()
+        db.session.commit()
+    return ok, detail
+
+
+def _send_deposit_receipt(booking, amount):
+    """The receipt for the deposit itself. Returns (ok, detail).
+
+    _send_receipt below covers a job settled in full and quotes the full price,
+    so a deposit had no receipt of its own anywhere. The confirmation email
+    mentions the $50 in passing, but it never says the money arrived and it is
+    dated to the booking, not the payment — nothing a customer could reasonably
+    treat as proof that they paid."""
+    if not booking.email:
+        return False, 'No email address on this booking.'
+    from notifications import send_email
+    first = (booking.name or 'there').split()[0]
+    remaining = round(max(0.0, (booking.price or 0) - amount), 2)
+    # No invented dates. If we genuinely don't know when the money arrived, the
+    # row comes off the receipt rather than carrying a guess.
+    date_row = ''
+    if booking.deposit_paid_at:
+        date_row = f"""
+    <tr><td style="padding:6px 0;color:#6b6580">Date paid</td>
+        <td style="padding:6px 0;text-align:right">{booking.deposit_paid_at.strftime('%d %b %Y')}</td></tr>"""
+    try:
+        return send_email(
+            to_email=booking.email, to_name=booking.name,
+            subject=f'Receipt for your ${amount:.2f} deposit — {_biz()}',
+            html=f"""
+<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">Thank you, {first}! ✅</h2>
+  <p>We've received your deposit. Your {booking.service_label.lower()} is confirmed.</p>
+  <table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px">
+    <tr><td style="padding:6px 0;color:#6b6580">Deposit paid</td>
+        <td style="padding:6px 0;text-align:right"><strong>${amount:.2f}</strong></td></tr>{date_row}
+    <tr><td style="padding:6px 0;color:#6b6580">Paid by</td>
+        <td style="padding:6px 0;text-align:right">Card</td></tr>
+    <tr><td style="padding:6px 0;color:#6b6580">Booking reference</td>
+        <td style="padding:6px 0;text-align:right">#{booking.id}</td></tr>
+    <tr><td style="padding:10px 0 0;border-top:1px solid #ece8f5;color:#6b6580">Balance due on the day</td>
+        <td style="padding:10px 0 0;border-top:1px solid #ece8f5;text-align:right"><strong>${remaining:.2f}</strong></td></tr>
+  </table>
+  <p>Keep this email as your receipt. Any questions, just reply to it.</p>
+  <p style="color:#9a95ad;font-size:13px;margin-top:20px">{_biz()}{" · " + branding.city_line() if branding.city_line() else ""}</p>
+</div>""",
+        )
+    except Exception as e:
+        return False, str(e)
 
 
 def _send_receipt(booking, method):

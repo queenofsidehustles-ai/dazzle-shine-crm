@@ -927,6 +927,25 @@
       <div class="detail-row"><span class="dl">Deposit Paid</span><span class="dv">$50.00 {% if booking.deposit_paid %}<span style="color:#065f46">✓</span>{% endif %}</span></div>
       <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:#1f1333">${{ '%.2f' % due }}</span></div>
 
+      {% if booking.deposit_paid and not booking.paid_at %}
+      {# For a customer asking for proof they paid the deposit. Deposits taken
+         before receipts existed were never receipted, so this is the only way
+         to give them one without writing the email by hand. #}
+      <form method="POST" action="{{ url_for('bookings.resend_deposit_receipt', booking_id=booking.id) }}"
+            style="margin-top:10px">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
+          🧾 {{ 'Resend' if booking.deposit_notified_at else 'Send' }} deposit receipt
+        </button>
+      </form>
+      <p style="font-size:0.78rem;color:#9a95ad;margin-top:6px">
+        {% if booking.deposit_notified_at %}
+          Receipted {{ booking.deposit_notified_at.strftime('%d %b %Y') }} — sends the same receipt again.
+        {% else %}
+          This deposit has never been receipted.
+        {% endif %}
+      </p>
+      {% endif %}
+
       {% if booking.balance_collected %}
       <div style="background:#d1fae5;color:#065f46;padding:11px 14px;border-radius:9px;font-weight:700;font-size:0.9rem;margin-top:10px">
         Balance collected ✓

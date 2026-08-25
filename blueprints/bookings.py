@@ -515,6 +515,37 @@ def send_confirmation(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+@bookings_bp.route('/<int:booking_id>/resend-deposit-receipt', methods=['POST'])
+@login_required
+def resend_deposit_receipt(booking_id):
+    """Send (or resend) the receipt for a deposit that has already been paid.
+
+    Deposits recorded before the receipt existed — and any taken while Stripe's
+    webhook was winning the race against the customer's own browser — were never
+    receipted at all. Without this the only remedy was writing the email by hand.
+
+    Sends the receipt on its own, deliberately: the customer is asking for proof
+    of a payment, not to be re-confirmed for a booking they already know about."""
+    b = Booking.query.get_or_404(booking_id)
+    if not b.deposit_paid:
+        flash('No deposit has been recorded on this booking yet, so there is '
+              'nothing to receipt.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if not b.email:
+        flash(f'⚠️ No email address on {b.name or "this booking"} — nowhere to '
+              f'send a receipt.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    from blueprints.payments import send_deposit_receipt_now
+    ok, detail = send_deposit_receipt_now(b)
+    if ok:
+        flash(f'Deposit receipt sent to {b.email} 📩', 'success')
+    else:
+        flash(f'⚠️ Could not send the receipt to {b.email}: {detail} '
+              f'Check the Sent Log for details.', 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
 @bookings_bp.route('/<int:booking_id>/confirmation/preview')
 @login_required
 def confirmation_preview(booking_id):

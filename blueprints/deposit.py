@@ -71,6 +71,7 @@ def confirm_deposit(token):
     pi_id = (data.get('payment_intent_id') or '').strip()
 
     # Verify the payment actually succeeded before marking paid
+    amount_cents = None
     stripe.api_key = integrations.stripe_secret_key()
     if pi_id and stripe.api_key:
         try:
@@ -80,21 +81,18 @@ def confirm_deposit(token):
             booking.stripe_payment_intent = pi_id
             if pi.payment_method:
                 booking.stripe_payment_method_id = pi.payment_method
+            # Read defensively. This figure only sharpens the wording of a
+            # receipt, and it must never be the reason the route that records
+            # the payment and the agreed terms falls over.
+            amount_cents = getattr(pi, 'amount_received', None) or getattr(pi, 'amount', None)
         except stripe.error.StripeError as e:
             return jsonify({'ok': False, 'error': str(e)}), 400
 
-    if not booking.deposit_paid:
-        booking.deposit_paid = True
-        booking.status = 'confirmed'
-        db.session.commit()
-        # They have just agreed to the terms by paying. Snapshot them.
-        import customer_terms
-        customer_terms.record_acceptance(booking, request)
-        # Fire the full confirmation email/SMS (same as a paid-up-front booking)
-        try:
-            from blueprints.api import _send_confirmation
-            _send_confirmation(booking)
-        except Exception:
-            pass
+    # Deliberately not guarded on deposit_paid: Stripe's webhook may well have
+    # set that flag before this request arrived, and skipping on that basis is
+    # what left customers with no receipt. mark_deposit_paid decides for itself
+    # whether the customer has already been told.
+    from blueprints.payments import mark_deposit_paid
+    mark_deposit_paid(booking, req=request, amount_cents=amount_cents)
 
     return jsonify({'ok': True})

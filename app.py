@@ -647,6 +647,14 @@ def _migrate_db():
         # service type or category already on the row.
         ('lead',     'brand',               'VARCHAR(20)'),
         ('prospect', 'brand',               'VARCHAR(20)'),
+        # When the customer was told their deposit arrived. Left NULL rather
+        # than defaulted: NULL means "predates the receipt", and back-filling it
+        # with a timestamp would claim we sent something we never sent.
+        ('booking', 'deposit_notified_at',  'TIMESTAMP'),
+        # Likewise NULL for deposits taken before it was recorded. Stripe still
+        # knows the date, so a receipt for one of those looks it up rather than
+        # guessing from the booking.
+        ('booking', 'deposit_paid_at',      'TIMESTAMP'),
     ]
     for table, col, col_type in new_cols:
         try:

@@ -68,6 +68,17 @@ class Booking(db.Model):
     stripe_customer_id = db.Column(db.String(100))
     stripe_payment_method_id = db.Column(db.String(100))
     deposit_paid = db.Column(db.Boolean, default=False)
+    # When the deposit money actually arrived. A receipt has to carry the date
+    # of the payment, and nowhere recorded it — resending one later would
+    # otherwise date it to the day it was resent, which is worse than no
+    # receipt at all if it is ever put in front of a bank.
+    deposit_paid_at = db.Column(db.DateTime)
+    # deposit_paid tracks the money; this tracks whether we told the customer.
+    # They need to be separate columns: the browser and Stripe's webhook race to
+    # record the same $50, and whichever lost used to see deposit_paid already
+    # set and stay silent — including when it was the only one that would have
+    # sent the receipt.
+    deposit_notified_at = db.Column(db.DateTime)
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
     tip_amount = db.Column(db.Float, default=0)  # customer's tip — belongs to the cleaner, never revenue
     tip_payment_intent = db.Column(db.String(100))  # the Stripe charge, when tipped after the job
