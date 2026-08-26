@@ -6,6 +6,16 @@ from extensions import db
 staff_bp = Blueprint('staff', __name__, url_prefix='/staff')
 
 
+def _rate(raw, default):
+    """A pay rate typed as '50', '50%' or '$22.50'. A bad value falls back to
+    the default rather than 500-ing on someone mid-hire."""
+    text = (raw or '').strip().replace('%', '').replace('$', '')
+    try:
+        return round(float(text), 2) if text else default
+    except ValueError:
+        return default
+
+
 @staff_bp.route('/')
 @login_required
 def index():
@@ -23,11 +33,14 @@ def new():
             email=request.form.get('email', '').strip(),
             color=request.form.get('color', '#7c3aed'),
             is_active='is_active' in request.form,
+            pay_type=request.form.get('pay_type', 'percent'),
+            pay_rate=_rate(request.form.get('pay_rate'), 50.0),
         )
         db.session.add(s)
         db.session.commit()
-        flash('Team member added!', 'success')
-        return redirect(url_for('staff.index'))
+        flash(f'{s.name} added to the team — they can be assigned jobs now.',
+              'success')
+        return redirect(url_for('contractors.team'))
     return render_template('admin/staff_form.html', staff=None)
 
 
@@ -41,9 +54,14 @@ def edit(staff_id):
         s.email = request.form.get('email', '').strip()
         s.color = request.form.get('color', s.color)
         s.is_active = 'is_active' in request.form
+        # The form posts these now, so the edit page has to save them — leaving
+        # them out would silently revert a rate whenever anything else here was
+        # changed.
+        s.pay_type = request.form.get('pay_type', s.pay_type)
+        s.pay_rate = _rate(request.form.get('pay_rate'), s.pay_rate)
         db.session.commit()
         flash('Team member updated!', 'success')
-        return redirect(url_for('staff.index'))
+        return redirect(url_for('contractors.team'))
     return render_template('admin/staff_form.html', staff=s)
 
 

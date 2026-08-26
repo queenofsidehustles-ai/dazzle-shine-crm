@@ -29,11 +29,39 @@
           <span style="font-size:0.85rem;color:#9a95ad">Shows on the calendar next to this person's bookings</span>
         </div>
       </div>
+      {# Pay was not asked for here, so anyone added this way silently became
+         50% of the job — the model default. That is a real amount of money to
+         decide by accident, and it only shows up when the job is paid out. #}
+      <div class="form-group">
+        <label>How they're paid</label>
+        <div style="display:flex;gap:10px">
+          <select name="pay_type" style="flex:1">
+            <option value="percent" {{ 'selected' if not staff or staff.pay_type == 'percent' }}>% of the job</option>
+            <option value="hourly" {{ 'selected' if staff and staff.pay_type == 'hourly' }}>Per hour</option>
+          </select>
+          <input type="number" name="pay_rate" step="0.01" min="0" style="flex:1"
+                 value="{{ staff.pay_rate if staff else 50 }}" />
+        </div>
+        <span style="font-size:0.82rem;color:#9a95ad">
+          Percent of the cleaning price, or dollars per hour. Change it later on
+          their profile if you agree something different.
+        </span>
+      </div>
       <div class="form-group" style="display:flex;align-items:center;gap:10px">
         <input type="checkbox" name="is_active" id="is_active" style="width:auto"
                {{ 'checked' if (not staff or staff.is_active) }} />
         <label for="is_active" style="margin:0;cursor:pointer">Active (available for job assignment)</label>
       </div>
+
+      {% if not staff %}
+      <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:9px;padding:12px 14px;font-size:0.85rem;color:#7c4a04;line-height:1.6">
+        Adding someone here puts them straight on the team and into the job
+        assignment list. It skips the application, the offer and the background
+        check — right for someone you already know, but they won't have signed
+        an agreement or given you a W-9. You can send those from their profile
+        afterwards.
+      </div>
+      {% endif %}
       <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px">
         {{ 'Save Changes' if staff else 'Add Team Member' }}
       </button>
