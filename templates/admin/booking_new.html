@@ -16,7 +16,10 @@
   <a href="{{ url_for('bookings.index') }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem">← All bookings</a>
 </div>
 
-<form method="POST" action="{{ url_for('bookings.new') }}">
+{# Named, because the running total below has to find *this* form. It used to
+   take the first form on the page, which is the brand switcher in the sidebar —
+   see the note in the script at the bottom. #}
+<form id="booking-form" method="POST" action="{{ url_for('bookings.new') }}">
   <div class="card" style="max-width:640px">
 
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">👤 Customer</h2>
@@ -179,21 +182,42 @@
 </form>
 
 <script>
+  // Selects can't take a value attribute, so the remembered choice is applied
+  // here. This used to sit after the closing endblock tag, which in a child
+  // template puts it outside every block — Jinja discarded it and the prefill
+  // never ran at all. It has to come before the running total below, or the
+  // first total is worked out from whatever the selects happened to default to.
+  // (Writing that tag literally in a comment is not safe either: Jinja reads
+  // template tags inside script comments and would close the block here.)
+  document.querySelectorAll('select[data-prefill]').forEach(function (el) {
+    var want = el.getAttribute('data-prefill');
+    if (want) { el.value = want; }
+  });
+
   (function () {
-    const form = document.querySelector('form');
-    const $ = n => form.querySelector('[name="' + n + '"]');
+    // Deliberately by id. This used to select the first form in the document,
+    // and once a brand switcher appeared in the sidebar — which renders above
+    // the content block — that was the one it got. Every lookup below returned null,
+    // reading .value off null threw before the fetch, and the whole running
+    // total died silently: the box stayed at $0.00 no matter what was typed,
+    // and typing a price did nothing because the listeners were bound to the
+    // wrong form too.
+    const form = document.getElementById('booking-form');
+    if (!form) return;
+    // Missing a field should cost that field, not the entire total.
+    const val = n => (form.querySelector('[name="' + n + '"]') || {}).value || '';
     const money = v => '$' + (Number(v) || 0).toFixed(2);
     let timer = null;
 
     async function updateTotal() {
       const params = new URLSearchParams({
-        service_type: $('service_type').value,
-        bedrooms: $('bedrooms').value,
-        bathrooms: $('bathrooms').value,
-        sqft: $('sqft').value,
-        frequency: $('frequency').value,
-        cleaning_price: $('cleaning_price').value,
-        lead_fee: $('lead_fee').value,
+        service_type: val('service_type'),
+        bedrooms: val('bedrooms'),
+        bathrooms: val('bathrooms'),
+        sqft: val('sqft'),
+        frequency: val('frequency'),
+        cleaning_price: val('cleaning_price'),
+        lead_fee: val('lead_fee'),
         extras: Array.from(form.querySelectorAll('[name="extras"]:checked')).map(e => e.value).join(','),
       });
       try {
@@ -208,15 +232,8 @@
 
     form.addEventListener('input', debounced);
     form.addEventListener('change', updateTotal);
-    updateTotal();   // initial
+    updateTotal();   // initial — after the prefill above, so the first total
+                     // reflects the remembered choices and not the defaults
   })();
 </script>
 {% endblock %}
-
-<script>
-  // Selects can't take a value attribute, so the remembered choice is applied here.
-  document.querySelectorAll('select[data-prefill]').forEach(function (el) {
-    var want = el.getAttribute('data-prefill');
-    if (want) { el.value = want; }
-  });
-</script>
