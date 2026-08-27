@@ -25,3 +25,7 @@ node_modules/
 package-lock.json
 test-results/
 playwright-report/
+
+# Database backups — customer data, never committed
+backups/
+*.json.gz

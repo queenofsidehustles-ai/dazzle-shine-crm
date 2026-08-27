@@ -1,0 +1,128 @@
+# Back the live database up every night, somewhere that is not Railway.
+#
+# The point of running this here rather than as a Railway cron job is that
+# GitHub is a different company. A backup that lives beside the thing it is
+# backing up covers a dropped table and nothing else; it does not cover the
+# account being suspended, the project being deleted, or the provider having a
+# bad day. This runs on someone else's computer and stores the result on a
+# third someone's.
+#
+# Every run also restores what it just made and counts the rows back. A backup
+# nobody has restored is a file, not a backup, and the difference always shows
+# up at the worst possible moment.
+#
+# ---------------------------------------------------------------------------
+# Two secrets are required. Settings → Secrets and variables → Actions:
+#
+#   BACKUP_DATABASE_URL   Railway → Postgres → Variables → DATABASE_PUBLIC_URL
+#                         It MUST be the public one. The internal
+#                         *.railway.internal address only resolves inside
+#                         Railway, so an internal URL here fails every night
+#                         with a DNS error.
+#
+#   BACKUP_PASSPHRASE     A long random string. The backup holds client home
+#                         addresses, access notes and pay records, so it is
+#                         encrypted before it leaves this job. Keep a copy of
+#                         this passphrase somewhere that is not this repo and
+#                         not your laptop — without it the backups are noise.
+# ---------------------------------------------------------------------------
+name: Nightly backup
+
+on:
+  schedule:
+    - cron: '0 8 * * *'      # 08:00 UTC — small hours in the US
+  workflow_dispatch:          # and on demand, from the Actions tab
+
+# One at a time. Two backups racing would compare against each other's
+# manifests and reach confusing conclusions.
+concurrency:
+  group: nightly-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read           # to read the previous run's manifest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # The size check compares tonight against last night. Without the
+      # previous manifest every run looks like the first one, and a database
+      # that emptied itself would back up cleanly and pass.
+      - name: Fetch last night's manifest
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p backups
+          run_id=$(gh run list --workflow=backup.yml --status=success \
+                     --limit 1 --json databaseId --jq '.[0].databaseId' || true)
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" --name backup-manifest --dir backups || true
+            echo "Comparing against run $run_id"
+          else
+            echo "No previous successful run — first backup, nothing to compare."
+          fi
+
+      - name: Back up, and prove it restores
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          SECRET_KEY: backup-job-does-not-serve-requests
+        run: python3 backup.py --dir backups --verify
+
+      # Encrypted before it goes anywhere. Decrypt with:
+      #   openssl enc -d -aes-256-cbc -pbkdf2 -in FILE.enc -out FILE.json.gz
+      - name: Encrypt
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$PASS" ]; then
+            echo "::error::BACKUP_PASSPHRASE is not set. Refusing to upload customer data unencrypted."
+            exit 1
+          fi
+          cd backups
+          for f in backup-*.json.gz; do
+            openssl enc -aes-256-cbc -pbkdf2 -salt -in "$f" -out "$f.enc" -pass env:PASS
+            rm "$f"
+          done
+          ls -la
+
+      - name: Upload the backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_number }}
+          path: backups/*.enc
+          retention-days: 30
+
+      # Row counts only — no customer data — so it can be kept far longer and
+      # read by the next run without decrypting anything.
+      - name: Upload the manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-manifest
+          path: backups/*.manifest.json
+          retention-days: 90
+          overwrite: true
+
+      - name: Say what happened
+        run: |
+          echo "### Backup complete" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          python3 -c "
+          import json, glob
+          m = json.load(open(sorted(glob.glob('backups/*.manifest.json'))[-1]))
+          print(f\"{m['total_rows']:,} rows, {m['bytes']/1024:.0f} KB\")
+          for t, n in sorted(m['counts'].items(), key=lambda kv: -kv[1]):
+              if n: print(f'  {t:<28} {n:>7,}')
+          " >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
