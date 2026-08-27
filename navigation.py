@@ -151,24 +151,85 @@ BELONGS_TO = {
 }
 
 
+# Which plan feature a page belongs to. Anything not listed here is on every
+# plan, including the free one — that is the default on purpose, so forgetting
+# to add a line here leaves a page open rather than locking paying customers
+# out of it.
+#
+# Note what is deliberately absent: bookings, calendar, clients, checklists and
+# the messages inbox. A free business has to be able to run a real job from
+# booking to completion, or it never finds out what this software does and
+# never has a reason to pay for it. What is gated below is what appears once
+# they start succeeding — a crew to pay, people to hire, margins to check.
+MIN_PLAN = {
+    'money.pnl': 'reports',
+    'admin.reports': 'reports',
+    'money.expenses': 'reports',
+    'money.job_economics': 'job_economics',
+    'contractors.payroll': 'payroll',
+    'money.tax_forms': 'tax_forms',
+    'commissions.index': 'va_commissions',
+    'contractors.applications': 'hiring',
+    'interviews.admin_interviews': 'interviews',
+    'sops.index': 'sops',
+    'discounts.index': 'discounts',
+    'email_templates.index': 'templates',
+    'scripts.index': 'templates',
+    'messages.templates': 'templates',
+    'invoices.index': 'invoices',
+    'settings.automations_page': 'automations',
+    'team_logins.index': 'team_logins',
+    'places_finder.dashboard': 'lead_finder',
+    'commercial.index': 'commercial',
+    'quotes.index': 'commercial',
+    'settings.commercial': 'multi_brand',
+    'content.index': 'content_studio',
+}
+
+
 def _is_owner(role):
     return (role or 'owner') == 'owner'
 
 
-def sidebar(role='owner'):
-    """The menu to draw, already filtered to what this person may see."""
+def feature_for(endpoint):
+    """The plan feature a page needs, or None if it is on every plan."""
+    return MIN_PLAN.get(_resolve(endpoint))
+
+
+def _always_allowed(_feature):
+    return True
+
+
+def sidebar(role='owner', can=None):
+    """The menu to draw, already filtered to what this person may see.
+
+    `can(feature)` decides plan access. A page their plan does not include is
+    marked `locked` and still drawn — see entitlements.py for why. Role is
+    different: an owner-only page is genuinely removed for a team member,
+    because that is a permission and not an upsell.
+    """
+    can = can or _always_allowed
     out = []
     for heading, items in SECTIONS:
-        visible = [
-            {'endpoint': ep, 'icon': icon, 'label': label,
-             'tabs': [{'endpoint': t[0], 'label': t[1]}
-                      for t in tabs if _is_owner(role) or not t[2]]}
-            for ep, icon, label, owner_only, tabs in items
-            if _is_owner(role) or not owner_only
-        ]
+        visible = []
+        for ep, icon, label, owner_only, tabs in items:
+            if not (_is_owner(role) or not owner_only):
+                continue
+            visible.append({
+                'endpoint': ep, 'icon': icon, 'label': label,
+                'locked': _locked(ep, can),
+                'tabs': [{'endpoint': t[0], 'label': t[1],
+                          'locked': _locked(t[0], can)}
+                         for t in tabs if _is_owner(role) or not t[2]],
+            })
         if visible:
             out.append({'heading': heading, 'items': visible})
     return out
+
+
+def _locked(endpoint, can):
+    feature = MIN_PLAN.get(endpoint)
+    return bool(feature) and not can(feature)
 
 
 def _resolve(endpoint):
@@ -186,19 +247,21 @@ def active_item(endpoint):
     return None
 
 
-def tabs_for(endpoint, role='owner'):
+def tabs_for(endpoint, role='owner', can=None):
     """(tabs, active_endpoint) for the page being viewed.
 
     Empty when the page's section has only one page in it — a lone tab is just
     the page title written twice.
     """
+    can = can or _always_allowed
     target = _resolve(endpoint)
     for _, items in SECTIONS:
         for ep, _icon, _label, _owner, tabs in items:
             if not tabs:
                 continue
             if target == ep or any(target == t[0] for t in tabs):
-                allowed = [{'endpoint': t[0], 'label': t[1]}
+                allowed = [{'endpoint': t[0], 'label': t[1],
+                            'locked': _locked(t[0], can)}
                            for t in tabs if _is_owner(role) or not t[2]]
                 return (allowed if len(allowed) > 1 else []), target
     return [], target

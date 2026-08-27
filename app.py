@@ -110,16 +110,30 @@ def create_app():
             from flask import session, request
             if not session.get('logged_in'):
                 return {}
-            import navigation
+            import navigation, entitlements
             role = session.get('role', 'owner')
-            tabs, active_tab = navigation.tabs_for(request.endpoint, role)
-            return {'NAV': navigation.sidebar(role),
+            can = entitlements.can
+            tabs, active_tab = navigation.tabs_for(request.endpoint, role, can)
+            return {'NAV': navigation.sidebar(role, can),
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
                     'NAV_TABS': tabs,
                     'NAV_ACTIVE_TAB': active_tab}
         except Exception:
             # A broken menu must never take a working page down with it.
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [], 'NAV_ACTIVE_TAB': None}
+
+    # What this business's plan allows — PLAN, plan_can(), plan_usage() and
+    # friends. See entitlements.py.
+    @app.context_processor
+    def inject_plan():
+        try:
+            from flask import session
+            if not session.get('logged_in'):
+                return {}
+            import entitlements
+            return entitlements.template_context()
+        except Exception:
+            return {}
 
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor
@@ -214,6 +228,7 @@ def create_app():
         _patch_pay_rate_40_to_50()
         _seed_existing_brand_settings()
         _skip_setup_for_established_business()
+        _grandfather_established_business()
 
     return app
 
@@ -2153,3 +2168,31 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8001)), debug=True)
 
 # Redeploy trigger: ensure clean boot runs _migrate_db (adds access_notes + recent columns to prod)
+
+
+def _grandfather_established_business():
+    """A business already running on this CRM does not get downgraded by the
+    arrival of plans.
+
+    Plans default to Solo, which is right for a brand-new signup and badly wrong
+    for a deployment that has been running somebody's operation for a year: the
+    morning after this ships, an owner with nine cleaners would find padlocks on
+    Payroll and Hiring — features she has used every week — because a table she
+    has never heard of has no row in it.
+
+    So an instance with real history behind it is put on the top plan and marked
+    grandfathered, which no future price change touches. Deliberately generic:
+    any deployment with a history qualifies, not just the first one."""
+    from models import BusinessSetting, Booking, Staff
+    if BusinessSetting.get('plan'):
+        return
+    established = Booking.query.count() >= 5 or Staff.query.count() >= 3
+    if established:
+        BusinessSetting.set('plan', 'scale')
+        BusinessSetting.set('plan_status', 'active')
+        BusinessSetting.set('grandfathered', '1')
+        print('  ✅ established business — grandfathered onto the full plan')
+    else:
+        BusinessSetting.set('plan', 'solo')
+        BusinessSetting.set('plan_status', 'active')
+    db.session.commit()
