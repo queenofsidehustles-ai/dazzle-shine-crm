@@ -1771,3 +1771,19 @@ class LoginToken(db.Model):
         for row in q.all():
             row.used_at = datetime.utcnow()
         db.session.commit()
+class EntitlementDenial(db.Model):
+    """Somebody wanted something their plan does not include.
+
+    One row per padlock hit. Cheap to write and impossible to reconstruct
+    later, which is the whole argument for writing it: the wall a business
+    kept hitting in the fortnight before they upgraded is the feature they
+    actually bought, and the wall they hit before they cancelled is the one
+    priced into the wrong tier. Neither shows up in revenue reporting.
+
+    Nothing reads this table yet. That is fine — it is being filled now so
+    there is a year of it to read when the pricing question comes up."""
+    id = db.Column(db.Integer, primary_key=True)
+    feature = db.Column(db.String(60), index=True)   # 'hiring', or 'limit:field_workers'
+    plan = db.Column(db.String(20))                  # the plan they were on when blocked
+    path = db.Column(db.String(200))                 # where they hit it
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)

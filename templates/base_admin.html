@@ -89,6 +89,10 @@
       border-left-color: var(--gold);
     }
     .sidebar nav a .icon { font-size: 1.1rem; width: 20px; text-align: center; }
+    /* Not on their plan. Dimmed enough to read as unavailable, bright enough
+       to still read — the point is that they see what they'd be buying. */
+    .sidebar nav a.locked { opacity: 0.42; }
+    .sidebar nav a.locked:hover { opacity: 0.7; }
     .sidebar nav .nav-sec { padding: 16px 18px 5px; font-size: 0.63rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: rgba(255,255,255,0.33); }
     .sidebar nav .nav-sec:first-of-type { padding-top: 8px; }
     .sidebar-footer {
@@ -347,8 +351,12 @@
       {% for section in NAV %}
       {% if section.heading != 'Dashboard' %}<div class="nav-sec">{{ section.heading }}</div>{% endif %}
       {% for item in section['items'] %}
-      <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}">
+      {# A page their plan doesn't include is drawn greyed with a padlock, not
+         removed. An owner who can see Hiring sitting there knows the product
+         does it; one who can't, doesn't. #}
+      <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}{{ ' locked' if item.locked }}"{% if item.locked %} title="Included in Pro"{% endif %}>
         <span class="icon">{{ item.icon }}</span> {{ item.label }}
+        {% if item.locked %}<span style="margin-left:auto;font-size:0.72rem;opacity:0.75">🔒</span>{% endif %}
         {% if item.endpoint == 'messages.inbox' and nav_unread %}<span style="margin-left:auto;background:#e53e3e;color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
       </a>
       {% endfor %}
@@ -393,7 +401,7 @@
     {% if NAV_TABS %}
     <div class="section-tabs">
       {% for t in NAV_TABS %}
-      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}">{{ t.label }}</a>
+      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}" {% if t.locked %}style="opacity:0.45" title="Included in Pro"{% endif %}>{{ t.label }}{% if t.locked %} 🔒{% endif %}</a>
       {% endfor %}
     </div>
     {% endif %}
