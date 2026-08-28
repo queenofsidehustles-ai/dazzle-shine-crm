@@ -215,6 +215,15 @@ def create_app():
     with app.app_context():
         db.create_all()
         _migrate_db()
+        # Transitional, for this release only. The two lines above still do
+        # exactly what they have always done, and this records the result so
+        # every database has a revision to reason from. Nothing about the
+        # schema changes on this deploy — adopting a migration tool and moving
+        # the schema in the same release would leave two suspects if anything
+        # went wrong. Once every instance carries a version row, the two lines
+        # above come out and this does the work. See migrate.py.
+        import migrate
+        migrate.run_at_boot(app)
         _seed_checklists()
         _seed_scripts()
         _seed_sales_scripts()

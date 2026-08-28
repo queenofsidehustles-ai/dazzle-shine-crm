@@ -52,6 +52,16 @@ DEFAULT_KEEP_DAYS = int(os.environ.get('BACKUP_KEEP_DAYS') or 30)
 # nobody looks, and the discovery happens during the restore.
 CRITICAL_TABLES = ('client', 'booking', 'staff')
 
+# Not business data, and actively wrong to carry across a restore.
+#
+# alembic_version records which schema revision a database is at. A backup's
+# schema comes from models.py at restore time, not from the file, so restored
+# data always lands on today's schema — copying last night's revision number in
+# would tell the migration tool the database is behind when it is exactly up to
+# date, and the next boot would try to "catch it up" over a schema that already
+# matches. The restore stamps at head instead.
+SKIP_TABLES = ('alembic_version',)
+
 
 class _Encoder(json.JSONEncoder):
     """Types SQLAlchemy hands back that JSON has no opinion about."""
@@ -182,7 +192,7 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
     # sorted_tables is already in foreign-key order — parents before the rows
     # that point at them. Restoring in this order needs no deferred constraints
     # and no disabling of anything.
-    tables = list(md.sorted_tables)
+    tables = [t for t in md.sorted_tables if t.name not in SKIP_TABLES]
     if not tables:
         raise BackupFailed(f'no tables found in {_safe_url(url)} — '
                            'is the connection string pointing at the right database?')
@@ -367,6 +377,7 @@ def restore(path, into_url, quiet=False):
                         batch = []
             flush()
         _fix_sequences(db, conn_url=str(db.engine.url))
+        _stamp_schema()
     if not quiet:
         print(f'  ✅ restored {sum(counts.values()):,} rows')
         # Said out loud rather than swallowed. Skipping these is the right
@@ -380,6 +391,23 @@ def restore(path, into_url, quiet=False):
             print(f'  ⚠️  {name}: dropped column(s) {", ".join(sorted(cols))} '
                   f'— not in this version of the app')
     return counts
+
+
+
+def _stamp_schema():
+    """Record the restored database as being on today's schema.
+
+    The tables were just built from models.py, so that is where this data now
+    lives regardless of which revision the backup was taken under. Without this
+    a restored database has no version row at all and the next boot would treat
+    it as a pre-migrations database — which is harmless, but leaves it looking
+    unadopted when it is not."""
+    try:
+        import migrate
+        migrate.stamp(migrate.ScriptDirectory.from_config(
+            migrate._config()).get_current_head())
+    except Exception:
+        pass          # a restore that worked must not fail over bookkeeping
 
 
 def _fix_sequences(db, conn_url=''):
