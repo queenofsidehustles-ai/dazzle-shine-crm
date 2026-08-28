@@ -2248,6 +2248,27 @@ def _grandfather_established_business():
     from models import BusinessSetting, Booking, Staff
     if BusinessSetting.get('plan'):
         return
+
+    # A deployment with no BASE_DOMAIN is not part of the subscription product.
+    # It is one company running its own CRM on its own server -- this business,
+    # or a private deployment -- and plan tiers mean nothing there. Limiting it
+    # to two cleaners and no texting would be crippling software somebody
+    # already owns in order to sell it back to them.
+    #
+    # Free and paid tiers exist to divide up a shared, hosted product. Where
+    # there is no shared product, everything is included.
+    single_business = not (os.environ.get('BASE_DOMAIN') or '').strip()
+    if single_business:
+        BusinessSetting.set('plan', 'scale')
+        BusinessSetting.set('plan_status', 'active')
+        BusinessSetting.set('grandfathered', '1')
+        db.session.commit()
+        return
+
+    # On the hosted product, a company that already has a history predates
+    # plans existing and keeps everything -- otherwise the morning this shipped
+    # an owner with nine cleaners would find padlocks on features she uses
+    # weekly, because a table she has never heard of had no row in it.
     established = Booking.query.count() >= 5 or Staff.query.count() >= 3
     if established:
         BusinessSetting.set('plan', 'scale')

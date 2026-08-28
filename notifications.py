@@ -315,6 +315,21 @@ def add_to_mailerlite(email, name, group_id=None):
 def send_sms(to_phone, message):
     """Send an SMS via Twilio. Returns (ok: bool, detail: str) so diagnostics
     can surface the real reason a text failed. Existing callers ignore the return."""
+    # The free plan sends no texts, and this is the only limit in the product
+    # that is about money rather than product design: every message costs real
+    # cash, every month, forever, to somebody who has never paid anything. It is
+    # enforced here rather than at each of the two dozen call sites, because one
+    # of those would eventually be missed and nobody would notice until the bill.
+    #
+    # Email is untouched, so a free business is never unable to reach its
+    # customers -- only unable to do it by text.
+    try:
+        import entitlements
+        if not entitlements.can('sms'):
+            entitlements.record_denial('sms', path='send_sms')
+            return False, 'Texting is part of the Pro plan. This was not sent.'
+    except Exception:
+        pass          # never let a plan check be the reason a text fails
     account_sid = integrations.twilio_account_sid()
     auth_token = integrations.twilio_auth_token()
     from_phone = integrations.twilio_phone()

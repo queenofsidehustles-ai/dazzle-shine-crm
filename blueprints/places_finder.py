@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response)
 from markupsafe import escape
+from entitlements import requires_plan
 from auth import login_required
 from extensions import db
 from models import Prospect
@@ -163,6 +164,7 @@ def _email_templates():
 
 @places_finder_bp.route('/')
 @login_required
+@requires_plan('lead_finder')
 def dashboard():
     """Today by default — what is due, not everything ever imported."""
     view = request.args.get('view', 'today')

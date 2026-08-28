@@ -2,6 +2,7 @@ import os
 import secrets
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from entitlements import requires_plan
 from auth import login_required
 from models import CommercialQuote, CommercialAccount
 from extensions import db
@@ -68,6 +69,7 @@ def _account_from_quote(q):
 
 @quotes_bp.route('/')
 @login_required
+@requires_plan('commercial')
 def index():
     status_filter = request.args.get('status', '')
     query = CommercialQuote.query.order_by(CommercialQuote.created_at.desc())

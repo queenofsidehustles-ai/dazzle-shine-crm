@@ -27,6 +27,14 @@ def index():
 @login_required
 def new():
     if request.method == 'POST':
+        # Checked here, not in the template. Hiding the button is decoration;
+        # the URL is still there and the person most likely to type it is the
+        # one who just hit the limit.
+        import entitlements
+        ok, why = entitlements.check_limit('field_workers')
+        if not ok:
+            flash(why, 'error')
+            return redirect(url_for('billing.upgrade', feature='field_workers'))
         s = Staff(
             name=request.form['name'].strip(),
             phone=request.form.get('phone', '').strip(),

@@ -3,6 +3,7 @@ property managers…). Separate from residential Bookings. Accounts are created 
 converting a 'Won' Prospect from Find Leads, or added by hand."""
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from entitlements import requires_plan
 from auth import login_required
 from extensions import db
 from models import CommercialAccount, Prospect, User
@@ -51,6 +52,7 @@ def _tmpl_args(**extra):
 
 @commercial_bp.route('/')
 @login_required
+@requires_plan('commercial')
 def index():
     status_filter = request.args.get('status', '')
     q = CommercialAccount.query.order_by(CommercialAccount.created_at.desc())

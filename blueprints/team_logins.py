@@ -2,6 +2,7 @@
 Create a login for a VA or future hire, set their role (Owner sees money,
 Team does not), reset passwords, disable, or remove."""
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from entitlements import requires_plan
 from auth import owner_required
 from extensions import db
 from models import User
@@ -11,6 +12,7 @@ team_logins_bp = Blueprint('team_logins', __name__, url_prefix='/logins')
 
 @team_logins_bp.route('/')
 @owner_required
+@requires_plan('team_logins')
 def index():
     users = User.query.order_by(User.active.desc(), User.name).all()
     return render_template('admin/team_logins.html', users=users)

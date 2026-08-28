@@ -13,6 +13,7 @@ from flask import (Blueprint, Response, flash, redirect, render_template,
 
 import finance
 import stripe_fees
+from entitlements import requires_plan
 from auth import owner_required
 from extensions import db
 from models import (AUTO_CATEGORIES, EXPENSE_CATEGORIES, IRS_MILEAGE_RATE,
@@ -75,6 +76,7 @@ def _amount_from_form(form):
 # ── Expense ledger ──────────────────────────────────────────────────────────
 @money_bp.route('/expenses')
 @owner_required
+@requires_plan('reports')
 def expenses():
     kind, year, month = _period_from_request()
     start, end, label = finance.period_bounds(kind, year, month)
@@ -251,6 +253,7 @@ def run_recurring():
 # ── Profit & Loss ───────────────────────────────────────────────────────────
 @money_bp.route('/pnl')
 @owner_required
+@requires_plan('reports')
 def pnl():
     kind, year, month = _period_from_request()
     start, end, label = finance.period_bounds(kind, year, month)
@@ -279,6 +282,7 @@ def sync_fees():
 
 @money_bp.route('/jobs')
 @owner_required
+@requires_plan('job_economics')
 def job_economics():
     """Which jobs make money, what discounting costs, and what each cleaner is
     really earning per hour."""
@@ -291,6 +295,7 @@ def job_economics():
 
 @money_bp.route('/tax-forms')
 @owner_required
+@requires_plan('tax_forms')
 def tax_forms():
     """Who was paid what this year, and whether we hold their W-9.
 

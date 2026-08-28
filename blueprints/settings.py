@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from entitlements import requires_plan
 from auth import login_required, owner_required
 from models import PricingSetting, BusinessSetting, Prospect
 from extensions import db
@@ -53,6 +54,7 @@ def setup_confirm(key):
 
 @settings_bp.route('/automations')
 @owner_required
+@requires_plan('automations')
 def automations_page():
     """Whether the scheduled jobs are alive.
 
@@ -131,6 +133,7 @@ def test_stripe():
 
 @settings_bp.route('/commercial', methods=['GET', 'POST'])
 @owner_required
+@requires_plan('multi_brand')
 def commercial():
     import commercial_pricing as cp
     if request.method == 'POST':

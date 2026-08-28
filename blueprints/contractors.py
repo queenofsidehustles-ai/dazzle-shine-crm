@@ -5,6 +5,7 @@ import threading
 from datetime import datetime, date, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for, flash, jsonify,
                    current_app, abort)
+from entitlements import requires_plan
 from auth import login_required, owner_required
 from models import (Staff, ContractorApplication, Booking, BookingCrew, BusinessSetting,
                     ContractorPayment, ContractorDocument)
@@ -279,6 +280,7 @@ def _reconcile_hired():
 
 @contractors_bp.route('/applications')
 @login_required
+@requires_plan('hiring')
 def applications():
     _reconcile_hired()
     status_filter = request.args.get('status', '')
@@ -1358,6 +1360,7 @@ def staff_toggle_active(staff_id):
 
 @contractors_bp.route('/payroll')
 @owner_required
+@requires_plan('payroll')
 def payroll():
     today = date.today()
     # Default: this week (Mon-Sun)

@@ -1,6 +1,7 @@
 """Invoices — owner list + public, branded, itemized invoice page. Payment reuses
 the booking's existing pay flow. See invoicing.py for the engine."""
 from flask import Blueprint, render_template, request
+from entitlements import requires_plan
 from auth import login_required
 from models import Booking, BusinessSetting
 import invoicing
@@ -21,6 +22,7 @@ def _biz():
 
 @invoices_bp.route('/invoices/')
 @login_required
+@requires_plan('invoices')
 def index():
     from blueprints.payments import amount_due
     invs = Booking.query.filter(Booking.invoice_number.isnot(None)) \

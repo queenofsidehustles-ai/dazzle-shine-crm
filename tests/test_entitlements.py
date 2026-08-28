@@ -181,35 +181,68 @@ with app.app_context():
 # Run separately: this needs a database that looks like a real business at the
 # moment create_app() boots, which is not the state the tests above leave.
 import subprocess, textwrap
-print('\n14. An existing business is grandfathered, a fresh one is not')
-script = textwrap.dedent('''
-    import os, sys, tempfile
-    TMP = tempfile.mkdtemp()
-    os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/gf.db'
-    os.environ['SECRET_KEY'] = 'test'
-    sys.path.insert(0, %r)
-    import notifications
-    notifications.send_sms = lambda *a, **k: (True, 'stub')
-    notifications.send_email = lambda *a, **k: (True, 'stub')
-    from app import create_app
-    from extensions import db
-    from models import Booking, BusinessSetting
-    app = create_app()
-    with app.app_context():
-        assert BusinessSetting.get('plan') == 'solo', 'fresh instance should be Solo'
-        # Now make it look like a business with history and re-boot.
-        for i in range(6):
-            db.session.add(Booking(service_type='standard', name=f'J{i}', status='completed'))
-        BusinessSetting.set('plan', '')
-        db.session.commit()
-    app2 = create_app()
-    with app2.app_context():
-        assert BusinessSetting.get('plan') == 'scale', 'established instance should be grandfathered'
-        assert BusinessSetting.get('grandfathered') == '1', 'and marked as such'
-    print('OK')
-''') % os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-r = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True)
+print('\n14. Who gets limited, and who does not')
+# A deployment with no BASE_DOMAIN is not part of the subscription product: it
+# is one company running its own CRM on its own server. Plan tiers mean nothing
+# there, and limiting it to two cleaners and no texting would be crippling
+# software somebody already owns in order to sell it back to them.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+SELF_HOSTED = f'''
+import os, sys, tempfile
+TMP = tempfile.mkdtemp()
+os.environ["DATABASE_URL"] = f"sqlite:///{{TMP}}/gf.db"
+os.environ["SECRET_KEY"] = "test"
+os.environ.pop("BASE_DOMAIN", None)
+sys.path.insert(0, {ROOT!r})
+import notifications
+notifications.send_sms = lambda *a, **k: (True, "stub")
+notifications.send_email = lambda *a, **k: (True, "stub")
+from app import create_app
+from models import BusinessSetting
+app = create_app()
+with app.app_context():
+    assert BusinessSetting.get("plan") == "scale", "a self-hosted instance is unrestricted"
+    assert BusinessSetting.get("grandfathered") == "1", "and marked as such"
+print("OK")
+'''
+
+r = subprocess.run([sys.executable, '-c', SELF_HOSTED], capture_output=True, text=True)
 assert 'OK' in r.stdout, f'FAILED:\n{r.stdout}\n{r.stderr}'
-print('  ✅ a fresh deployment starts on Solo')
-print('  ✅ a deployment with real history is grandfathered onto the full plan')
+print('  ✅ a self-hosted single-business instance gets everything')
+
+# On the hosted product there IS a shared thing to divide up, so a brand-new
+# company starts free, and one that predates plans keeps what it already had.
+HOSTED = f'''
+import os, sys, tempfile
+TMP = tempfile.mkdtemp()
+os.environ["DATABASE_URL"] = f"sqlite:///{{TMP}}/saas.db"
+os.environ["SECRET_KEY"] = "test"
+os.environ["BASE_DOMAIN"] = "rollcall.test"
+sys.path.insert(0, {ROOT!r})
+import notifications
+notifications.send_sms = lambda *a, **k: (True, "stub")
+notifications.send_email = lambda *a, **k: (True, "stub")
+from app import create_app
+from extensions import db
+from models import BusinessSetting, Booking
+app = create_app()
+with app.app_context():
+    assert BusinessSetting.get("plan") == "solo", "a new hosted company starts free"
+    for i in range(6):
+        db.session.add(Booking(service_type="standard", name=f"J{{i}}", status="completed"))
+    BusinessSetting.set("plan", "")
+    db.session.commit()
+
+app2 = create_app()
+with app2.app_context():
+    assert BusinessSetting.get("plan") == "scale", "history keeps everything"
+print("OK")
+'''
+
+r = subprocess.run([sys.executable, '-c', HOSTED], capture_output=True, text=True)
+assert 'OK' in r.stdout, f'FAILED:\n{r.stdout}\n{r.stderr}'
+print('  ✅ a brand-new company on the hosted product starts on the free plan')
+print('  ✅ and one that predates plans existing keeps what it already had')
+
 print('\n\n✅ All plan tests passed.\n')

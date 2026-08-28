@@ -1,5 +1,6 @@
 import json
 from flask import Blueprint, render_template, request, session, redirect, url_for
+from entitlements import requires_plan
 from auth import login_required, owner_required, authenticate
 from models import Booking, Client, Lead
 from extensions import db
@@ -66,6 +67,7 @@ def dashboard():
 
 @admin_bp.route('/reports')
 @owner_required
+@requires_plan('reports')
 def reports():
     today = date.today()
 

@@ -11,6 +11,7 @@ screen was from a cleaner's profile or the inbox list."""
 from datetime import datetime
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response, jsonify)
+from entitlements import requires_plan
 from auth import login_required
 from extensions import db
 from models import (Message, Staff, ContractorApplication, BusinessSetting,
@@ -264,6 +265,7 @@ def fill_template(phone):
 # ── Manage reusable templates ───────────────────────────────────────────────
 @messages_bp.route('/templates', methods=['GET', 'POST'])
 @login_required
+@requires_plan('templates')
 def templates():
     if request.method == 'POST':
         title = (request.form.get('title') or '').strip()

@@ -2,6 +2,7 @@ import os
 import secrets
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify, abort, url_for, flash, redirect
+from entitlements import requires_plan
 from auth import login_required
 from models import ContractorApplication, InterviewResponse, ContractorDocument
 from extensions import db
@@ -244,6 +245,7 @@ def bgcheck_submit(token):
 
 @interviews_bp.route('/admin/interviews')
 @login_required
+@requires_plan('interviews')
 def admin_interviews():
     status_filter = request.args.get('status', '')
     q = ContractorApplication.query.filter(

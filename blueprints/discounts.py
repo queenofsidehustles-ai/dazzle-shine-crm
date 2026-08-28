@@ -1,5 +1,6 @@
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from entitlements import requires_plan
 from auth import login_required
 from models import DiscountCode
 from extensions import db
@@ -9,6 +10,7 @@ discounts_bp = Blueprint('discounts', __name__, url_prefix='/discounts')
 
 @discounts_bp.route('/')
 @login_required
+@requires_plan('discounts')
 def index():
     codes = DiscountCode.query.order_by(DiscountCode.created_at.desc()).all()
     return render_template('admin/discounts.html', codes=codes)
