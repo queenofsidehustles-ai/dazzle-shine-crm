@@ -56,8 +56,10 @@
         <div class="access">🔑 <b>Getting in:</b> {{ b.access_notes }}</div>
         {% endif %}
         <div class="btns">
-          <a class="btn nav" target="_blank"
-             href="https://www.google.com/maps/dir/?api=1&destination={{ (b.address ~ ', ' ~ (b.city or '') ~ ' ' ~ (b.zip_code or '')) | urlencode }}">🧭 Navigate</a>
+          <a class="btn nav" target="_blank" rel="noopener"
+             href="https://www.google.com/maps/dir/?api=1&destination={{ ((b.address or '') ~ (', ' ~ b.city if b.city else '') ~ (' ' ~ b.zip_code if b.zip_code else '')) | urlencode }}">🧭 Navigate</a>
+          <a class="btn list" target="_blank" rel="noopener"
+             href="https://waze.com/ul?q={{ ((b.address or '') ~ (', ' ~ b.city if b.city else '') ~ (' ' ~ b.zip_code if b.zip_code else '')) | urlencode }}&navigate=yes">Waze</a>
           {% if jc %}
           <a class="btn list" href="{{ url_for('workorders.view_checklist', token=jc.token) }}">📋 Job Checklist</a>
           {% endif %}

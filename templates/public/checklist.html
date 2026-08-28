@@ -1,3 +1,4 @@
+{% import "public/_navigate.html" as nav %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -98,10 +99,8 @@
       </div>
       <div class="item" style="background:#f6f5fb;border-radius:9px;padding:10px 14px;margin-top:10px">
         <div class="label">Address</div>
-        <a href="https://maps.google.com/?q={{ checklist.booking.address }}, {{ checklist.booking.city }} {{ checklist.booking.zip_code }}"
-           target="_blank" style="text-decoration:none">
-          <div class="value" style="color:#b98a33">📍 {{ checklist.booking.address }}, {{ checklist.booking.city }} {{ checklist.booking.zip_code }} →</div>
-        </a>
+        <div class="value">📍 {{ checklist.booking.address }}{% if checklist.booking.city %}, {{ checklist.booking.city }}{% endif %} {{ checklist.booking.zip_code }}</div>
+        {{ nav.navigate(checklist.booking.address, checklist.booking.city, checklist.booking.zip_code) }}
       </div>
       <div class="item" style="background:#f6f5fb;border-radius:9px;padding:10px 14px;margin-top:8px">
         <div class="label">On-site issue?</div>

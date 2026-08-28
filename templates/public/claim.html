@@ -1,3 +1,4 @@
+{% import "public/_navigate.html" as nav %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -66,6 +67,7 @@
       <div class="row" style="margin-top:10px"><span class="k">When</span><span class="v">{{ b.preferred_date }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">Client</span><span class="v">{{ b.name }}</span></div>
       <div class="row"><span class="k">Address</span><span class="v">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span></div>
+      {{ nav.navigate(b.address, b.city, b.zip_code) }}
       <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'll earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
         <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">flat for the job</div>
       </div>
