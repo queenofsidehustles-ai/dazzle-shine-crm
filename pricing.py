@@ -114,14 +114,48 @@ def _db_get(key, default):
     return default
 
 
+def nearest_baths(beds, baths):
+    """The closest bathroom count this business actually prices for that many
+    bedrooms.
+
+    The matrix holds ten of the twenty possible combinations. VALID_BATHS says
+    which are real -- a 3-bed is priced at 2 or 3 baths -- and the public quote
+    page enforces it, but only in JavaScript. Nothing on the server did, and the
+    admin's New Booking form offers bedrooms and bathrooms as two independent
+    dropdowns, so 3 bed / 1 bath was one click away.
+
+    An unlisted combination used to fall through to a price of $0 while the
+    cleaner was still owed her hours. A 3-bed-1-bath is an ordinary house; the
+    quote emailed by /api/lead goes out without anyone reading it first. So a
+    missing combination now snaps to the nearest one that exists rather than
+    silently becoming free.
+    """
+    try:
+        beds, baths = int(beds), int(baths)
+    except (TypeError, ValueError):
+        return 1, 1
+    beds = max(1, min(beds, 5))
+    allowed = VALID_BATHS.get(beds)
+    if not allowed:
+        return beds, baths
+    if baths in allowed:
+        return beds, baths
+    # Nearest, and on a tie the higher one -- a house with fewer bathrooms than
+    # we price for is still a whole house to clean, and guessing low would
+    # underpay the job.
+    return beds, min(allowed, key=lambda b: (abs(b - baths), -b))
+
+
 def get_std_price(beds, baths):
+    beds, baths = nearest_baths(beds, baths)
     return _db_get(f'std_price_{beds}_{baths}',
-                   PRICE_MATRIX_DEFAULTS.get((int(beds), int(baths)), 0))
+                   PRICE_MATRIX_DEFAULTS.get((beds, baths), 0))
 
 
 def get_std_hours(beds, baths):
+    beds, baths = nearest_baths(beds, baths)
     return _db_get(f'std_hours_{beds}_{baths}',
-                   HOURS_MATRIX_DEFAULTS.get((int(beds), int(baths)), 2.0))
+                   HOURS_MATRIX_DEFAULTS.get((beds, baths), 2.0))
 
 
 def get_multiplier(service_type):

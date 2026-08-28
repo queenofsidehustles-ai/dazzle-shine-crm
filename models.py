@@ -380,16 +380,23 @@ class Booking(db.Model):
         screen should use, so the offer, My Day, payroll and the payout can
         never disagree with each other.
 
-        Order: a pay amount already agreed on their crew row wins; otherwise a
-        solo cleaner takes the whole labor budget; otherwise the old percentage."""
+        They did disagree. This used to skip `crew_pay_each` and hand back the
+        whole labor budget, while the job offer she was texted came from
+        `default_crew_pay`, which reads it. On a solo job with an amount typed
+        in by hand the offer promised $150 and the payout paid $258 — and the
+        payout is the one that writes a ContractorPayment, so the money moved.
+        It was wrong in the other direction just as easily: set a figure above
+        the budget and the cleaner was quietly paid less than her offer said.
+
+        The fix is not to repeat the precedence rules here correctly. It is to
+        stop having a second copy of them: once nobody is assigned, what she is
+        owed IS what she would be offered, so this calls the same function the
+        offer does and the two cannot drift apart again.
+        """
         if self.crew:
             row = self.crew_row_for(staff)
             return round(row.pay_amount or 0, 2) if row else 0.0
-        budget = self.labor_budget
-        if budget is not None:
-            return budget
-        return staff.calc_pay(job_price=self.commissionable_price,
-                              hours_worked=self.hours_worked or 0)
+        return self.default_crew_pay(staff)
 
     def crew_row_for(self, staff):
         sid = getattr(staff, 'id', staff)
