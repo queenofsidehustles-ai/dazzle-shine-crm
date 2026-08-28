@@ -718,13 +718,19 @@ def create_booking():
         db.session.add(client)
         db.session.flush()
 
-    total = calculate_price(
-        service_type=data.get('service_type', ''),
-        bedrooms=data.get('bedrooms', 1),
-        bathrooms=data.get('bathrooms', 1),
-        extras=data.get('extras', ''),
+    from pricing import calculate_job as _quote
+    quote = _quote(
+        data.get('service_type', ''), data.get('bedrooms', 1),
+        data.get('bathrooms', 1), extras=data.get('extras', ''),
         frequency=data.get('frequency', 'one_time'),
     )
+    total = quote['client_price']
+    # A promo code and a recurring discount are two different giveaways and
+    # both belong in the total. Only the code was ever recorded, so a weekly
+    # customer booking through the website reported none of the 15% they were
+    # actually given.
+    code_discount = float(data.get('discount_amount', 0) or 0)
+    given_away = round(code_discount + (quote.get('discount_amount') or 0), 2)
 
     booking = Booking(
         client_id=client.id,
@@ -746,7 +752,7 @@ def create_booking():
         stripe_customer_id=data.get('stripe_customer_id', ''),
         stripe_payment_method_id=data.get('stripe_payment_method_id', ''),
         discount_code=data.get('discount_code', ''),
-        discount_amount=float(data.get('discount_amount', 0) or 0),
+        discount_amount=given_away,
         deposit_paid=True if data.get('payment_intent_id') else False,
         deposit_token=secrets.token_urlsafe(32),
         price=total,

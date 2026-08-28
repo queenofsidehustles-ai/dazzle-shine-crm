@@ -101,6 +101,18 @@ def new():
         except ValueError:
             sqft = None
 
+        # Quote this configuration once, whether or not she types over the
+        # price. It supplies the fallback figure AND the recurring discount,
+        # which nothing used to record: the caller kept only the final price and
+        # left discount_amount at zero, so Job Economics reported $0 of
+        # discounting while every weekly customer was on 15% off.
+        quote = {}
+        try:
+            quote = calculate_job(service_type, bedrooms, bathrooms,
+                                  sqft=sqft, extras=extras, frequency=frequency)
+        except Exception:
+            quote = {}
+
         # Cleaning price: use the number she typed, else auto-calc from the matrix.
         cleaning_raw = request.form.get('cleaning_price', '').strip().replace('$', '')
         cleaning = None
@@ -110,11 +122,12 @@ def new():
             except ValueError:
                 cleaning = None
         if cleaning is None:
-            try:
-                cleaning = calculate_price(service_type=service_type, bedrooms=bedrooms,
-                                           bathrooms=bathrooms, extras=extras, frequency=frequency, sqft=sqft)
-            except Exception:
-                cleaning = 0.0
+            cleaning = quote.get('client_price', 0.0)
+
+        # What the frequency gave away. Recorded even when she typed the price
+        # herself -- a weekly customer is on 15% off whoever keyed in the total,
+        # and that is the number the discount report is asking about.
+        discount_amount = round(quote.get('discount_amount') or 0, 2)
 
         # Lead fee — optional ad cost. Blank means none (added to the customer
         # total when present, always excluded from contractor pay).
@@ -135,13 +148,10 @@ def new():
             except ValueError:
                 est_hours = None
         if est_hours is None:
-            try:
-                # Pass the add-ons — each one carries its own time, and leaving
-                # them out would pay the cleaner nothing for that extra work.
-                est_hours = calculate_job(service_type, bedrooms, bathrooms,
-                                          sqft=sqft, extras=extras).get('hours')
-            except Exception:
-                est_hours = None
+            # From the same quote taken above — the add-ons are in it, and each
+            # one carries its own time. Leaving them out would pay the cleaner
+            # nothing for that extra work.
+            est_hours = quote.get('hours')
 
         # Lock the rate this job was quoted at. Raising the company rate later
         # must never change what an old job was worth.
@@ -165,6 +175,7 @@ def new():
             status=request.form.get('status', 'confirmed'),
             price=price,
             lead_fee=lead_fee,
+            discount_amount=discount_amount,
         )
         db.session.add(b)
         db.session.commit()

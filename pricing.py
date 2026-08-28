@@ -260,6 +260,7 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
             extras_total += get_extra_price(e)
 
     subtotal = base_price + sqft_surcharge + extras_total
+    list_price = round(subtotal, 2)          # before any recurring discount
 
     # Frequency discount
     disc = FREQUENCY_DISCOUNTS.get(frequency, 0)
@@ -267,6 +268,13 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
         subtotal = round(subtotal * (1 - disc / 100), 2)
 
     client_price = round(subtotal, 2)
+    # What the recurring discount actually gave away. This used to be computed,
+    # applied, and then thrown away -- the caller stored only the final price and
+    # left Booking.discount_amount at its default of zero. So the Job Economics
+    # page, which exists to answer "what is discounting really costing me",
+    # answered $0 while every weekly and biweekly customer on the books was
+    # being given 10-15% off.
+    discount_amount = round(list_price - client_price, 2)
 
     # Hours — the base clean scaled by service type, plus the time each add-on
     # genuinely takes. Add-ons used to raise the price without raising the hours,
@@ -286,6 +294,9 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
 
     return {
         'client_price':         client_price,
+        'list_price':           list_price,
+        'discount_amount':      discount_amount,
+        'discount_pct':         disc,
         'contractor_earnings':  contractor_earnings,
         'hours':                hours,
         'extras_hours':         extras_hours,
