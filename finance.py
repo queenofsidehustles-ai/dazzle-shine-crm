@@ -17,6 +17,7 @@ payout that eventually gets counted twice.
 """
 from calendar import monthrange
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import func
 
@@ -232,13 +233,17 @@ def profit_and_loss(start, end):
             'label': CATEGORY_LABELS.get(e.category, (e.category or 'Other').title()),
             'group': CATEGORY_GROUP.get(e.category, 'Overhead'),
             'schedule_c': CATEGORY_SCHEDULE_C.get(e.category, 'Line 27a — Other'),
-            'amount': 0.0, 'count': 0, 'miles': 0.0,
+            'amount': Decimal('0'), 'count': 0, 'miles': 0.0,
         })
-        c['amount'] += e.amount or 0
+        # Decimal, not float. A quarter or a year of expenses accumulated as
+        # floats drifts by fractions of a cent, and this total is what the
+        # Schedule C export reports. Miles stay a float -- they are a distance,
+        # not an amount of money.
+        c['amount'] += Decimal(str(e.amount or 0))
         c['count'] += 1
         c['miles'] += e.miles or 0
     for c in by_cat.values():
-        c['amount'] = round(c['amount'], 2)
+        c['amount'] = float(c['amount'].quantize(Decimal('0.01')))
     categories = sorted(by_cat.values(), key=lambda c: c['amount'], reverse=True)
 
     typed_total = round(sum(c['amount'] for c in categories), 2)

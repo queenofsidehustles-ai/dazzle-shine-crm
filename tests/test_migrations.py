@@ -138,7 +138,12 @@ env = dict(os.environ, DATABASE_URL=f'sqlite:///{DB}', SECRET_KEY='test')
 r = subprocess.run([sys.executable, 'migrate.py', 'status'],
                    capture_output=True, text=True, cwd=ROOT, env=env)
 check('up to date' in r.stdout, 'an adopted database reports up to date')
-check('0001_baseline' in r.stdout, 'and names the revision it is on')
+# Not a hard-coded revision name -- that would need editing every time a
+# migration is added, and a test you have to edit to keep green is a test
+# people learn to edit rather than read.
+import migrate as _m
+head = _m.ScriptDirectory.from_config(_m._config()).get_current_head()
+check(head in r.stdout, f'and names the revision it is on ({head})')
 
 print('\n6. A database it cannot reach does not stop the CRM starting')
 # A migration that fails is serious. A CRM that will not boot is worse: the

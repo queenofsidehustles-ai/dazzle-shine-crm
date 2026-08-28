@@ -209,10 +209,54 @@ class _lock:
         return False
 
 
+
+def money_check():
+    """Total every money column, so a migration can be proved to have moved none.
+
+    Run it, migrate, run it again, compare. Any line that differs is a real
+    amount that changed, on a real business, and wants explaining before anyone
+    goes home.
+
+    This exists because the tests cannot do it. They run on SQLite, which has no
+    NUMERIC type and does not enforce the ones it has, so a change of column type
+    is a no-op there -- they prove the Python side is unchanged and say nothing
+    about the conversion itself. Production is Postgres, where it is real.
+    """
+    from sqlalchemy import text, inspect as sa_inspect
+    import importlib
+    models = importlib.import_module('models')
+    import extensions
+
+    engine = _engine()
+    money_cols = [(t.name, c.name)
+                  for t in extensions.db.metadata.sorted_tables
+                  for c in t.columns
+                  if isinstance(c.type, models.Money)]
+
+    print(f'{"table.column":<42} {"rows":>7} {"total":>16}')
+    print('-' * 68)
+    grand = 0.0
+    with engine.connect() as conn:
+        present = set(sa_inspect(conn).get_table_names())
+        for table, col in money_cols:
+            if table not in present:
+                print(f'{table + "." + col:<42} {"-":>7} {"(no table)":>16}')
+                continue
+            row = conn.execute(text(
+                f'SELECT COUNT({col}) AS n, COALESCE(SUM({col}), 0) AS s FROM "{table}"'
+            )).mappings().first()
+            total = float(row['s'] or 0)
+            grand += total
+            print(f'{table + "." + col:<42} {row["n"]:>7} {total:>16,.2f}')
+    print('-' * 68)
+    print(f'{"every amount in the business":<42} {"":>7} {grand:>16,.2f}')
+    return grand
+
+
 def main():
     p = argparse.ArgumentParser(description='Schema migrations for this CRM.')
     p.add_argument('action', nargs='?', default='status',
-                   choices=['status', 'sql', 'upgrade', 'stamp', 'history'])
+                   choices=['status', 'sql', 'upgrade', 'stamp', 'history', 'money-check'])
     p.add_argument('--revision', help='for stamp: which revision to record')
     args = p.parse_args()
 
@@ -220,7 +264,9 @@ def main():
     import backup
     print(f'\nDatabase: {backup._safe_url(backup.normalise(url))}\n')
 
-    if args.action == 'status':
+    if args.action == 'money-check':
+        money_check()
+    elif args.action == 'status':
         status()
     elif args.action == 'sql':
         show_sql()

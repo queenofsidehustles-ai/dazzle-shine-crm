@@ -1,5 +1,51 @@
 from extensions import db
 from datetime import datetime
+from decimal import Decimal
+import sqlalchemy as sa
+
+
+class Money(sa.types.TypeDecorator):
+    """A money column: exact in the database, an ordinary number in Python.
+
+    Every amount in this business was stored as a floating-point number, which
+    cannot represent most decimal values. $1.13 is held as 1.12999..., and ten
+    lots of $0.10 add up to $0.9999999999999999. One row, invisible; across a
+    P&L, a payroll run and a 1099 it compounds into totals that do not
+    reconcile, and the symptom is a cleaner saying her pay statement is a penny
+    out and nobody able to explain why. It is also what made autocharge()
+    undercharge, by truncating 1.12999 to 112 cents.
+
+    So the column becomes NUMERIC(10,2): stored to the cent, exactly, and every
+    SUM the database does is exact arithmetic rather than accumulated error.
+
+    **It deliberately hands Python a float, not a Decimal.** Returning Decimal
+    would be more correct still, and it would also mean auditing eighty-four
+    arithmetic sites across live financial code, because Python refuses to mix
+    Decimal and float and would raise on each one. Weighed against a business
+    whose largest job is a few hundred dollars, that is a great deal of risk for
+    a fraction of a cent. This change fixes what is stored and what the database
+    adds up; the remaining Python arithmetic already rounds at every step.
+
+    Nothing in the application needs to know it exists. `b.price` is still a
+    number that behaves like a number. Moving to full Decimal later is a
+    contained change, because the hard half -- the storage -- is already right.
+    """
+    impl = sa.Numeric(10, 2, asdecimal=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        """Python -> database. Round once, here, so what lands is the cent."""
+        if value is None:
+            return None
+        if isinstance(value, Decimal):
+            return value.quantize(Decimal('0.01'))
+        return Decimal(str(round(float(value), 2)))
+
+    def process_result_value(self, value, dialect):
+        """Database -> Python. A float, as every caller already expects."""
+        if value is None:
+            return None
+        return float(value)
 from werkzeug.security import generate_password_hash, check_password_hash
 import hashlib
 import json
@@ -81,9 +127,9 @@ class Booking(db.Model):
     # sent the receipt.
     deposit_notified_at = db.Column(db.DateTime)
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
-    tip_amount = db.Column(db.Float, default=0)  # customer's tip — belongs to the cleaner, never revenue
+    tip_amount = db.Column(Money, default=0)  # customer's tip — belongs to the cleaner, never revenue
     tip_payment_intent = db.Column(db.String(100))  # the Stripe charge, when tipped after the job
-    balance_due = db.Column(db.Float)
+    balance_due = db.Column(Money)
     balance_collected = db.Column(db.Boolean, default=False)
     pay_token = db.Column(db.String(64))       # unique link for paying the full amount (invoice / on-site)
     paid_at = db.Column(db.DateTime)           # when paid in full (card or manual)
@@ -95,15 +141,15 @@ class Booking(db.Model):
 
     # Lead fee — advertising cost baked into the customer price but EXCLUDED
     # from the contractor's commission (invisible to the customer).
-    lead_fee = db.Column(db.Float, default=0)
+    lead_fee = db.Column(Money, default=0)
 
     # Discount
     discount_code = db.Column(db.String(50))
-    discount_amount = db.Column(db.Float, default=0)
+    discount_amount = db.Column(Money, default=0)
     # Payroll
     estimated_hours = db.Column(db.Float)   # total person-hours of WORK in this job
     owner_hours = db.Column(db.Float, default=0)  # hours the owner works herself — unpaid, but shares the tip
-    labor_rate_applied = db.Column(db.Float)  # $/hr locked in when quoted, so raising the rate never restates old jobs
+    labor_rate_applied = db.Column(Money)  # $/hr locked in when quoted, so raising the rate never restates old jobs
     below_floor_reason = db.Column(db.String(200))  # why this was taken under the floor price
     hours_worked = db.Column(db.Float)
     cleaner_paid_at = db.Column(db.DateTime)             # when the cleaner was paid out for THIS job
@@ -145,14 +191,14 @@ class Booking(db.Model):
     # hourly rate, and it cannot be right for both a move-out and a discounted
     # biweekly maintenance clean. Setting this makes the pay the fact and the
     # hours a planning estimate, instead of the other way round.
-    crew_pay_each = db.Column(db.Float)
+    crew_pay_each = db.Column(Money)
     cleaner_notified_at = db.Column(db.DateTime)        # when job notification was last sent
     cleaner_response = db.Column(db.String(20))         # accepted, declined, None
     open_for_claim = db.Column(db.Boolean, default=False)  # broadcast to team, first to claim wins
     claim_token = db.Column(db.String(64))              # link token for the claim page
     broadcast_at = db.Column(db.DateTime)               # when it was last offered to the team
     status = db.Column(db.String(20), default='pending')  # pending, confirmed, in_progress, completed, cancelled
-    price = db.Column(db.Float)
+    price = db.Column(Money)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)               # when marked completed (drives lifecycle emails)
     # Lifecycle email tracking (one send each, never repeats)
@@ -413,7 +459,7 @@ class BookingCrew(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=False, index=True)
     staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
-    pay_amount = db.Column(db.Float)        # what THIS cleaner earns for the job
+    pay_amount = db.Column(Money)        # what THIS cleaner earns for the job
     claimed_at = db.Column(db.DateTime)     # set if they grabbed the spot off the board
     paid_at = db.Column(db.DateTime)        # when this person's share was paid out
     payment_id = db.Column(db.Integer)      # the ContractorPayment.id that paid it
@@ -467,7 +513,7 @@ class Lead(db.Model):
     address = db.Column(db.String(200))
     city = db.Column(db.String(50))
     zip_code = db.Column(db.String(10))
-    quoted_price = db.Column(db.Float)
+    quoted_price = db.Column(Money)
     status = db.Column(db.String(20), default='new')  # new, contacted, converted, lost
     source = db.Column(db.String(50), default='website')
     agent = db.Column(db.String(100))                 # team member (VA) credited for commission
@@ -613,7 +659,7 @@ class DiscountCode(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(50), unique=True, nullable=False)
     discount_type = db.Column(db.String(20), default='percent')  # percent, fixed
-    discount_value = db.Column(db.Float, nullable=False)
+    discount_value = db.Column(Money, nullable=False)
     max_uses = db.Column(db.Integer)  # None = unlimited
     times_used = db.Column(db.Integer, default=0)
     expires_at = db.Column(db.DateTime)
@@ -793,8 +839,8 @@ class CommercialQuote(db.Model):
     services = db.Column(db.Text)
     frequency = db.Column(db.String(50))
     contract_term = db.Column(db.String(50))
-    price_per_visit = db.Column(db.Float)
-    monthly_price = db.Column(db.Float)
+    price_per_visit = db.Column(Money)
+    monthly_price = db.Column(Money)
     scope_notes = db.Column(db.Text)
     status = db.Column(db.String(20), default='draft')  # draft, sent, accepted, declined
     token = db.Column(db.String(64), unique=True, nullable=False)
@@ -817,7 +863,7 @@ class Staff(db.Model):
     application_id = db.Column(db.Integer, db.ForeignKey('contractor_application.id'))  # back-link to the application they came from
     # Pay settings
     pay_type = db.Column(db.String(20), default='percent')  # percent, hourly
-    pay_rate = db.Column(db.Float, default=50.0)            # % of job or $/hr
+    pay_rate = db.Column(Money, default=50.0)            # % of job or $/hr
     experience_level = db.Column(db.String(20), default='new')  # new, experienced, senior
     # Profile
     emergency_contact_name = db.Column(db.String(100))
@@ -877,12 +923,17 @@ class Staff(db.Model):
         through, not the business paying for services, and ContractorPayment
         already tracks them in their own column for exactly this reason. Confirm
         the treatment with an accountant before filing on it."""
-        total = 0.0
+        # Accumulated as Decimal rather than float. This figure goes on a tax
+        # form and is compared against the $600 filing threshold, so a total
+        # that lands a hundredth of a cent below the line because of binary
+        # rounding would decide whether a real person gets a 1099. Everywhere
+        # else a fraction of a cent is noise; here it is the whole question.
+        total = Decimal('0')
         for p in self.payments:
             when = p.created_at
             if when and when.year == year and (p.status or 'paid') == 'paid':
-                total += (p.amount or 0)
-        return round(total, 2)
+                total += Decimal(str(p.amount or 0))
+        return float(total.quantize(Decimal('0.01')))
 
     @property
     def can_verify_on_stripe(self):
@@ -955,8 +1006,8 @@ class ContractorPayment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
     booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'))  # the job this pays for (per-job payout)
-    amount = db.Column(db.Float, nullable=False)          # labor only — what the P&L counts as a cost
-    tip_amount = db.Column(db.Float, default=0)           # customer's tip passed through, NOT a business cost
+    amount = db.Column(Money, nullable=False)          # labor only — what the P&L counts as a cost
+    tip_amount = db.Column(Money, default=0)           # customer's tip passed through, NOT a business cost
     method = db.Column(db.String(20), default='stripe')   # stripe, venmo, zelle, cash, check
     status = db.Column(db.String(20), default='paid')     # paid, pending, failed
     stripe_transfer_id = db.Column(db.String(64))         # tr_... when paid via Stripe
@@ -1018,7 +1069,7 @@ class Expense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.String(10), index=True)     # YYYY-MM-DD — when the money went out
     category = db.Column(db.String(40), index=True)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(Money, nullable=False)
     vendor = db.Column(db.String(120))
     note = db.Column(db.String(300))
     method = db.Column(db.String(20))               # card, cash, zelle, check, bank
@@ -1054,7 +1105,7 @@ class RecurringExpense(db.Model):
     so the deduction never gets forgotten."""
     id = db.Column(db.Integer, primary_key=True)
     category = db.Column(db.String(40), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(Money, nullable=False)
     vendor = db.Column(db.String(120))
     note = db.Column(db.String(300))
     method = db.Column(db.String(20))
@@ -1077,7 +1128,7 @@ class CommissionPayment(db.Model):
     agent = db.Column(db.String(100), nullable=False, index=True)
     year = db.Column(db.Integer, nullable=False)
     month = db.Column(db.Integer, nullable=False)
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(Money, nullable=False)
     method = db.Column(db.String(20), default='zelle')
     note = db.Column(db.String(200))
     paid_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
@@ -1092,7 +1143,7 @@ class ProcessingFee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     year = db.Column(db.Integer, nullable=False)
     month = db.Column(db.Integer, nullable=False)
-    amount = db.Column(db.Float, default=0)
+    amount = db.Column(Money, default=0)
     synced_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __table_args__ = (db.UniqueConstraint('year', 'month', name='uq_processing_fee_month'),)
@@ -1514,7 +1565,7 @@ class CommercialAccount(db.Model):
     category = db.Column(db.String(40), default='office')      # reuses Prospect categories
     frequency = db.Column(db.String(30), default='weekly')     # nightly/weekly/biweekly/monthly/custom
     billing_type = db.Column(db.String(20), default='monthly') # 'monthly' or 'per_visit'
-    billing_amount = db.Column(db.Float, default=0)
+    billing_amount = db.Column(Money, default=0)
     status = db.Column(db.String(20), default='active')        # active/paused/lead
     notes = db.Column(db.Text)
     source = db.Column(db.String(50), default='find_leads')
