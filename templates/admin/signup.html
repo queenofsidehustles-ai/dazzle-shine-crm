@@ -1,0 +1,76 @@
+{% extends "admin/login_shell.html" %}
+{% block title %}Start your cleaning business CRM{% endblock %}
+{% block panel %}
+  <h1>Set up your cleaning business</h1>
+  <p class="lead">A minute from now you'll have your own CRM at your own web
+     address, with nothing in it but your business name.</p>
+
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <form method="post" id="signup">
+    <label for="business">Business name</label>
+    <input id="business" name="business" required autofocus
+           value="{{ form.business or '' }}" placeholder="Sparkle Cleaning Services" />
+
+    <label for="slug">Your web address</label>
+    <div style="display:flex;align-items:center;gap:6px">
+      <input id="slug" name="slug" value="{{ slug or form.slug or '' }}"
+             placeholder="sparkle" pattern="[a-z0-9-]{3,40}" style="flex:1" />
+      <span style="color:var(--softer);font-size:0.9rem;white-space:nowrap">.{{ base }}</span>
+    </div>
+    <div id="slug-note" class="small" style="margin-top:6px">
+      Lower-case letters, numbers and hyphens. This is what your cleaners will
+      see on every job link, so it is worth getting right — it cannot be changed
+      later.
+    </div>
+
+    <label for="name">Your name</label>
+    <input id="name" name="name" required value="{{ form.name or '' }}" />
+
+    <label for="email">Your email</label>
+    <input id="email" name="email" type="email" required
+           value="{{ form.email or '' }}" autocomplete="username" />
+
+    <label for="password">Choose a password</label>
+    <input id="password" name="password" type="password" required minlength="8"
+           autocomplete="new-password" />
+    <p class="small">At least 8 characters. Three ordinary words beats one word
+       with symbols in it.</p>
+
+    <button type="submit">Create my CRM</button>
+  </form>
+
+  <a class="back" href="/login">Already have an account? Sign in</a>
+
+  <script>
+    // Suggest an address from the business name, until the person edits it
+    // themselves -- after which it is theirs and we stop interfering.
+    (function () {
+      var biz = document.getElementById('business');
+      var slug = document.getElementById('slug');
+      var note = document.getElementById('slug-note');
+      var touched = slug.value.length > 0;
+      slug.addEventListener('input', function () { touched = true; check(); });
+      biz.addEventListener('input', function () {
+        if (touched) return;
+        slug.value = biz.value.toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+        check();
+      });
+      var timer = null;
+      function check() {
+        clearTimeout(timer);
+        var v = slug.value.trim();
+        if (v.length < 3) { note.textContent = 'At least 3 characters.'; return; }
+        timer = setTimeout(function () {
+          fetch('/signup/check?slug=' + encodeURIComponent(v))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              note.textContent = d.ok ? '✓ ' + d.host + ' is available' : '✗ ' + d.reason;
+              note.style.color = d.ok ? '#276749' : '#c53030';
+            }).catch(function () {});
+        }, 350);
+      }
+    })();
+  </script>
+{% endblock %}

@@ -105,6 +105,8 @@ def create_app():
 
     from blueprints.account import account_bp
     app.register_blueprint(account_bp)
+    from blueprints.signup import signup_bp
+    app.register_blueprint(signup_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(bookings_bp)
     app.register_blueprint(api_bp)

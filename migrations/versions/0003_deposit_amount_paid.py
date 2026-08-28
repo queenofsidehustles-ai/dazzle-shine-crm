@@ -31,8 +31,17 @@ def _has_column(table, column):
     migration that assumes and is wrong stops a business from booting. Checking
     costs one query."""
     from sqlalchemy import inspect as sa_inspect
+    import sqlalchemy as _sa
     bind = op.get_bind()
-    return column in {c['name'] for c in sa_inspect(bind).get_columns(table)}
+    # Schema-explicit on Postgres: asking by bare name resolves through
+    # search_path into public, which would report the column present in every
+    # company's schema the moment it existed in one. None on SQLite, which has
+    # no schemas and no current_schema() -- asking it there is a syntax error.
+    schema = None
+    if bind.dialect.name == 'postgresql':
+        schema = bind.execute(_sa.text('SELECT current_schema()')).scalar()
+    return column in {c['name']
+                      for c in sa_inspect(bind).get_columns(table, schema=schema)}
 
 
 def upgrade():

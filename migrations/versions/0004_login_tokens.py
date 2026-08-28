@@ -12,9 +12,31 @@ branch_labels = None
 depends_on = None
 
 
+def _current_schema():
+    """The schema this migration is running inside, or None where that has no
+    meaning.
+
+    NOT the default schema, and not "is the name resolvable". With search_path
+    set to "tenant_acme, public", asking whether a table exists by bare name
+    finds it in public and answers yes -- so a guard written that way skips
+    creating it inside the company's schema, and every company silently ends up
+    missing tables that happen to exist in public.
+
+    None on SQLite, which has no schemas and no current_schema() function.
+    Asking it produces a syntax error, which is how a first attempt at this
+    broke every local install: the guard raised, the migration failed, and the
+    column was never added.
+    """
+    import sqlalchemy as _sa
+    bind = op.get_bind()
+    if bind.dialect.name != 'postgresql':
+        return None
+    return bind.execute(_sa.text('SELECT current_schema()')).scalar()
+
+
 def _has_table(name):
     from sqlalchemy import inspect as sa_inspect
-    return name in sa_inspect(op.get_bind()).get_table_names()
+    return name in sa_inspect(op.get_bind()).get_table_names(schema=_current_schema())
 
 
 def upgrade():
