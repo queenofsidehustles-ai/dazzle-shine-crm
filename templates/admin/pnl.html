@@ -136,21 +136,28 @@
       {% endif %}
 
       {% if p.tips.collected or p.tips.passed_on %}
-      {# Tips pass through, except whatever is left after the card fee and what
-         she handed out — that remainder is hers and counts toward profit. The
-         CRM never decides the split; she types each share when she pays. #}
+      {# Tips pass through, except whatever is left after what she handed out —
+         that remainder is hers and counts toward profit. The CRM never decides
+         the split; she types each share when she pays.
+
+         The card's cut on a tip is NOT subtracted here. The tip is charged on
+         the same card as the job, so Stripe's fee on it is already inside the
+         processing fees line above. It is shown as a note because the cleaner
+         is genuinely handed the tip less the fee — but taking it off twice is
+         what used to understate profit on every tipped card job. #}
       <tr><td colspan="2" style="padding-top:14px;font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase;color:#9a95ad;font-weight:700">Tips</td></tr>
       <tr><td style="padding:7px 0 7px 14px;color:#5f5878">Collected from customers</td>
           <td style="text-align:right;color:#9a95ad">${{ '%.2f' % p.tips.collected }}</td></tr>
-      {% if p.tips.card_fee %}
-      <tr><td style="padding:7px 0 7px 28px;color:#9a95ad;font-size:0.9rem">less card fee on tips</td>
-          <td style="text-align:right;color:#9a95ad">−${{ '%.2f' % p.tips.card_fee }}</td></tr>
-      {% endif %}
       <tr><td style="padding:7px 0 7px 28px;color:#9a95ad;font-size:0.9rem">less passed to cleaners</td>
           <td style="text-align:right;color:#9a95ad">−${{ '%.2f' % p.tips.passed_on }}</td></tr>
       {% if p.tips.owner_share %}
       <tr><td style="padding:7px 0 7px 14px;color:#276749;font-weight:600">Your share — what you kept</td>
           <td style="text-align:right;color:#276749;font-weight:700">+${{ '%.2f' % p.tips.owner_share }}</td></tr>
+      {% endif %}
+      {% if p.tips.card_fee %}
+      <tr><td colspan="2" style="padding:2px 0 7px 28px;color:#9a95ad;font-size:0.82rem">
+        The card took ${{ '%.2f' % p.tips.card_fee }} of those tips — already counted in processing fees above.
+      </td></tr>
       {% endif %}
       {% endif %}
 

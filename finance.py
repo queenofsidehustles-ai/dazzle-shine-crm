@@ -138,7 +138,28 @@ def tips_between(start, end):
     the cleaners.
 
     Only the owner's share is hers — that part is income. The rest passes
-    through and must never touch revenue, labor or margin."""
+    through and must never touch revenue, labor or margin.
+
+    Two things this used to get wrong, both of which put a customer's tip into
+    the owner's income.
+
+    **It compared two differently-dated streams.** What was collected is dated
+    by when the customer paid; what was passed on is dated by when the payout
+    was recorded — and payouts are deliberately backdated to the day of the job
+    (see contractors._paid_on). A job worked on the 31st and paid on the 2nd put
+    the pass-through in one month and the collection in the next, so one month
+    showed a loss of the whole tip and the next showed it as income. Not an edge
+    case: every invoiced job is paid days after it is worked. Both halves are now
+    tied to the same bookings, so the pass-through follows the tip it belongs to
+    whenever it happened to be recorded.
+
+    **It took the card fee off twice.** The tip is charged on the same card as
+    the job, so Stripe's fee on it is already inside the ProcessingFee total the
+    P&L subtracts as `fees`. Subtracting an estimated 2.9% again understated
+    profit by that amount on every tipped card job. card_fee is still returned,
+    because the P&L page shows it and the cleaner is genuinely handed the tip
+    less the fee — it is simply no longer taken off a second time.
+    """
     lo, hi = _dt_bounds(start, end)
     paid_jobs = Booking.query.filter(
         Booking.paid_at.isnot(None), Booking.paid_at >= lo, Booking.paid_at < hi,
@@ -146,18 +167,23 @@ def tips_between(start, end):
     ).all()
     collected = round(sum(b.tip_amount or 0 for b in paid_jobs), 2)
     card_fee = round(sum(b.tip_fee for b in paid_jobs), 2)
-    passed_on = db.session.query(func.sum(ContractorPayment.tip_amount)).filter(
-        ContractorPayment.created_at >= lo, ContractorPayment.created_at < hi,
-        ContractorPayment.status == 'paid',
-    ).scalar()
+
+    booking_ids = [b.id for b in paid_jobs]
+    passed_on = 0.0
+    if booking_ids:
+        passed_on = db.session.query(func.sum(ContractorPayment.tip_amount)).filter(
+            ContractorPayment.booking_id.in_(booking_ids),
+            ContractorPayment.status == 'paid',
+        ).scalar()
     passed_on = round(float(passed_on or 0), 2)
-    # Whatever's left after the card fee and what she handed out is hers —
-    # derived from what actually happened rather than from any split rule.
+
+    # What she kept is what came in less what she handed out. The card's cut is
+    # already counted once, in processing fees.
     return {
         'collected': collected,
         'card_fee': card_fee,
         'passed_on': passed_on,
-        'owner_share': round(collected - card_fee - passed_on, 2),
+        'owner_share': round(collected - passed_on, 2),
     }
 
 
@@ -313,7 +339,16 @@ def job_economics(start, end):
             people = [(c.staff.name, c.pay_amount or 0, b.hours_each() or 0)
                       for c in b.crew if c.staff]
         elif b.assigned_cleaner:
-            people = [(b.assigned_cleaner, labor, b.estimated_hours or 0)]
+            # hours_each(), not estimated_hours. A job's estimate includes the
+            # hours the owner works herself, which are not paid and not the
+            # cleaner's — charging them against her pay made her look a third
+            # cheaper than she is. On a 6-hour job the owner helps with for 2,
+            # a cleaner paid $172 was reported at $28.67/hr when she is on $43.
+            # This is the figure the docstring calls the early warning that
+            # somebody is about to quit, so reading it low is the wrong way to
+            # be wrong. Crew members already used the right number.
+            people = [(b.assigned_cleaner, labor,
+                       b.hours_each() or b.estimated_hours or 0)]
         else:
             people = []
         for name, paid, hrs in people:

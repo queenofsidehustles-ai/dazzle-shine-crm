@@ -66,11 +66,25 @@ with app.app_context():
     check('$141.00' in r.get_data(as_text=True), 'she handed over $141.00 in total')
 
     print('\n4. Whatever she kept is hers, worked out from what happened')
+    # CHANGED, deliberately: this used to expect $12.28, i.e. $25 collected
+    # less the $0.72 card fee less the $12 handed over.
+    #
+    # The tip is charged on the same card as the job, so Stripe's cut of it is
+    # already inside the ProcessingFee total that profit_and_loss subtracts as
+    # `fees`. Taking an estimated 2.9% off here as well counted it twice and
+    # understated profit on every tipped card job. This test never created a
+    # ProcessingFee row, so its month had no real fee to collide with and the
+    # double-count was invisible here.
+    #
+    # What she kept is what came in less what she handed out. The card's cut
+    # appears once, in processing fees.
     pnl = finance.profit_and_loss(*AUG)
     check(pnl['tips']['collected'] == 25.0, '$25 collected')
-    check(pnl['tips']['card_fee'] == 0.72, '$0.72 card fee')
+    check(pnl['tips']['card_fee'] == 0.72,
+          '$0.72 card fee — still reported, for the page to show')
     check(pnl['tips']['passed_on'] == 12.0, '$12 passed to Laura')
-    check(pnl['tips']['owner_share'] == 12.28, f"$12.28 left over is hers (got ${pnl['tips']['owner_share']})")
+    check(pnl['tips']['owner_share'] == 13.0,
+          f"$13.00 left over is hers (got ${pnl['tips']['owner_share']})")
     check(pnl['contractor_pay'] == 129.0, 'cleaner pay still excludes tips')
 
     print('\n5. Typing no tip pays no tip')
