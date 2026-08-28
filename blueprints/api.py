@@ -794,7 +794,12 @@ def stripe_webhook():
             # someone ends up having paid with no receipt. This fires precisely
             # when the browser never got to post its own confirm — tab closed,
             # connection dropped — which is when they most need telling.
-            from blueprints.payments import mark_deposit_paid
+            from blueprints.payments import mark_deposit_paid, record_tip_from_intent
+            # The tip too. This is the path that runs when the browser never
+            # posted its own confirm, which is exactly when nothing else would
+            # record it -- and a tip the cleaner never gets told about is worse
+            # than one recorded twice.
+            record_tip_from_intent(booking, pi)
             mark_deposit_paid(booking, amount_cents=pi.get('amount_received'))
 
     return jsonify({'ok': True}), 200

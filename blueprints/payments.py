@@ -338,12 +338,46 @@ def create_intent(token):
                       'kind': 'full_payment', 'customer_name': booking.name or '',
                       'tip': f'{tip:.2f}'},
         )
-        booking.tip_amount = tip
+        # The tip is deliberately NOT written here. This runs when the customer
+        # opens the payment form, before any card is charged -- and if they
+        # close the tab, or the card declines, or they pay cash instead, a tip
+        # that never arrived stays on the booking. Payroll then tells the owner
+        # the customer tipped, she hands the cleaner money out of her own
+        # pocket, and the P&L counts it as income. It is recorded in confirm(),
+        # from the intent Stripe says actually succeeded.
         booking.stripe_payment_intent = intent.id
         db.session.commit()
         return jsonify({'ok': True, 'client_secret': intent.client_secret})
     except stripe.error.StripeError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+def record_tip_from_intent(booking, pi):
+    """Write the tip a customer actually paid, from the intent Stripe confirmed.
+
+    Called from two places on purpose, and from nowhere else: the browser's own
+    confirm(), and the payment_intent.succeeded webhook for when the browser
+    never got to make that call -- tab closed, phone locked, signal dropped.
+    Whichever arrives first records it; the second finds the same figure and
+    changes nothing, so a replayed webhook cannot double a tip.
+
+    It is deliberately not written when the payment form is opened. A tip typed
+    into a form that is then abandoned used to stay on the booking, and payroll
+    would tell the owner the customer had tipped. She hands the cleaner money
+    that never arrived, out of her own pocket, and the P&L counts it as income.
+
+    `pi` may be a Stripe object or the plain dict from a webhook payload. Both
+    behave like dicts.
+    """
+    try:
+        meta = pi.get('metadata') or {}
+        tipped = round(float(meta.get('tip') or 0), 2)
+    except (AttributeError, TypeError, ValueError):
+        return 0.0
+    if tipped > 0 and (booking.tip_amount or 0) != tipped:
+        booking.tip_amount = tipped
+        db.session.commit()
+    return tipped
 
 
 @payments_bp.route('/pay/<token>/confirm', methods=['POST'])
@@ -360,6 +394,7 @@ def confirm(token):
             booking.stripe_payment_intent = pi_id
             if pi.payment_method:
                 booking.stripe_payment_method_id = pi.payment_method
+            record_tip_from_intent(booking, pi)
         except stripe.error.StripeError as e:
             return jsonify({'ok': False, 'error': str(e)}), 400
     import customer_terms

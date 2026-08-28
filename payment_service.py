@@ -89,7 +89,12 @@ def autocharge(booking) -> tuple:
         return False, 'No saved card on file'
 
     amount = amount_due(booking)
-    cents = int(amount * 100)
+    # round(), not int(). Binary floating point stores $1.13 as 1.12999...,
+    # so int(amount * 100) truncates it to 112 cents and the customer is
+    # undercharged a penny. It happens on about one amount in eighteen, in one
+    # direction only, on every automatic morning-of charge. charge_balance()
+    # above has always rounded; this was the one place that did not.
+    cents = int(round(amount * 100))
     if cents <= 0:
         return False, 'Nothing due'
 
