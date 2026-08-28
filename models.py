@@ -1,6 +1,7 @@
 from extensions import db
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+import hashlib
 import json
 
 
@@ -1542,3 +1543,87 @@ class CommercialAccount(db.Model):
         if self.billing_type == 'monthly':
             return round(amt, 2)
         return round(amt * self._PER_MONTH.get(self.frequency, 4.3), 2)
+
+
+class LoginAttempt(db.Model):
+    """One try at signing in, successful or not.
+
+    Kept so that repeated failures from one address can be slowed down, and so
+    that "was anyone trying?" is a question with an answer. Deliberately holds
+    no password, no hash, and nothing that is worth stealing on its own."""
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.String(45), index=True)
+    username = db.Column(db.String(80))       # what was typed, not who exists
+    ok = db.Column(db.Boolean, default=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class ErrorLog(db.Model):
+    """Something broke, and how often.
+
+    One row per distinct fault rather than per occurrence — see errors.py for
+    why. The traceback is kept because without it "TypeError on /bookings" is
+    a rumour rather than something anyone can fix.
+
+    Holds no form data, no session, no cookies and no credentials. A crash
+    report is exactly where sensitive data leaks in by accident."""
+    id = db.Column(db.Integer, primary_key=True)
+    fingerprint = db.Column(db.String(32), index=True)
+    kind = db.Column(db.String(80))            # exception class, or 'blocked'
+    message = db.Column(db.String(400))
+    path = db.Column(db.String(300))
+    method = db.Column(db.String(10))
+    endpoint = db.Column(db.String(120))
+    who = db.Column(db.String(60))             # display name, if signed in
+    traceback = db.Column(db.Text)
+    count = db.Column(db.Integer, default=1)
+    resolved = db.Column(db.Boolean, default=False, index=True)
+    alerted_at = db.Column(db.DateTime)        # last time this was emailed
+    first_seen = db.Column(db.DateTime, default=datetime.utcnow)
+    last_seen = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    @staticmethod
+    def record(kind, message, path='', method='', endpoint='', who='',
+               traceback='', fingerprint=None, return_new=False):
+        """Add an occurrence. Returns the row, or (row, is_new)."""
+        from extensions import db as _db
+        fp = fingerprint or hashlib.sha256(
+            f'{endpoint}|{kind}|{path}'.encode()).hexdigest()[:32]
+        try:
+            row = ErrorLog.query.filter_by(fingerprint=fp).first()
+            is_new = row is None
+            if row is None:
+                row = ErrorLog(fingerprint=fp, kind=kind, message=message,
+                               path=path, method=method, endpoint=endpoint,
+                               who=who, traceback=traceback, count=1)
+                _db.session.add(row)
+            else:
+                row.count = (row.count or 0) + 1
+                row.last_seen = datetime.utcnow()
+                row.message = message or row.message
+                row.who = who or row.who
+                if traceback:
+                    row.traceback = traceback
+                # A fault that comes back after being ticked off is not
+                # resolved, whatever anyone clicked.
+                row.resolved = False
+            _db.session.commit()
+            return (row, is_new) if return_new else row
+        except Exception:
+            try:
+                _db.session.rollback()
+            except Exception:
+                pass
+            return (None, False) if return_new else None
+
+    @property
+    def age(self):
+        if not self.last_seen:
+            return ''
+        delta = datetime.utcnow() - self.last_seen
+        if delta.days:
+            return f'{delta.days}d ago'
+        h = delta.seconds // 3600
+        if h:
+            return f'{h}h ago'
+        return f'{max(1, delta.seconds // 60)}m ago'

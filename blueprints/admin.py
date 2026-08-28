@@ -151,16 +151,29 @@ def reports():
 
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    import security
     error = None
     if request.method == 'POST':
-        ok, info = authenticate(request.form['username'], request.form['password'])
-        if ok:
-            session['logged_in'] = True
-            session['role'] = info['role']
-            session['user_id'] = info['user_id']
-            session['user_name'] = info['name']
-            return redirect(url_for('admin.dashboard'))
-        error = 'Wrong username or password.'
+        # Guessing at the password is now something that has to be done slowly.
+        # The wait is by address, not by account: locking the *account* would
+        # let a stranger shut the owner out of her own business by typing her
+        # username wrong ten times.
+        blocked, mins = security.login_blocked()
+        if blocked:
+            error = (f'Too many failed sign-ins. Please wait about {mins} '
+                     f'minute{"s" if mins != 1 else ""} and try again.')
+        else:
+            username = request.form.get('username', '')
+            ok, info = authenticate(username, request.form.get('password', ''))
+            security.record_login(username, ok)
+            if ok:
+                session.permanent = True
+                session['logged_in'] = True
+                session['role'] = info['role']
+                session['user_id'] = info['user_id']
+                session['user_name'] = info['name']
+                return redirect(url_for('admin.dashboard'))
+            error = 'Wrong username or password.'
     # A freshly deployed instance with no owner login and no accounts can't be
     # opened by anybody. Say so plainly rather than leaving someone guessing.
     from auth import env_login_configured

@@ -65,6 +65,18 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
 
+    # Cookie policy and the refusal of forms posted from other sites. Installed
+    # before any blueprint so it applies to every route, including ones added
+    # later by somebody who has never read this file.
+    import security
+    security.install(app)
+
+    # Unhandled errors get written down and emailed once, instead of going to a
+    # log nobody reads while a cleaner gives up on a checklist at 8pm.
+    import errors
+    errors.init_sentry()
+    errors.install(app)
+
     db.init_app(app)
 
     app.register_blueprint(admin_bp)

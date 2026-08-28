@@ -1,0 +1,38 @@
+{# Shown when something breaks. Deliberately standalone — it must render even
+   if the failure was in the thing that builds the normal page furniture.
+
+   No stack trace, no error class, no file paths. Whoever is looking at this is
+   a customer or a cleaner standing at a front door; none of that helps them,
+   and it describes the inside of the application to a stranger. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Something went wrong</title>
+  <style>
+    body { font-family: -apple-system, "Segoe UI", sans-serif; background: #f6f5fb;
+           color: #1f1333; margin: 0; display: flex; align-items: center;
+           justify-content: center; min-height: 100vh; padding: 24px; }
+    .box { background: #fff; border: 1px solid #e4dfef; border-radius: 14px;
+           box-shadow: 0 4px 24px rgba(15,7,40,0.08); padding: 34px 30px;
+           max-width: 460px; text-align: center; }
+    h1 { font-size: 1.35rem; margin: 0 0 12px; }
+    p { color: #5f5878; line-height: 1.6; margin: 0 0 14px; }
+    .small { font-size: 0.86rem; color: #9a95ad; margin-top: 20px; }
+    a { color: #b98a33; font-weight: 600; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div style="font-size:2.2rem;margin-bottom:10px">🧹</div>
+    <h1>Something went wrong on our end</h1>
+    <p>That page didn't load properly. This isn't anything you did.</p>
+    <p><strong>It has already been reported</strong> — nobody needs to be told.</p>
+    <p class="small">
+      Try going <a href="javascript:history.back()">back</a> and again in a
+      moment. If you were in the middle of something important, ring the office.
+    </p>
+  </div>
+</body>
+</html>

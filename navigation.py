@@ -96,6 +96,7 @@ SECTIONS = [
             ('settings.connections', 'Connections', True),
             ('settings.automations_page', 'Automations', True),
             ('team_logins.index', 'Team logins', True),
+            ('settings.errors_page', 'Errors', True),
         ]),
     ]),
 ]

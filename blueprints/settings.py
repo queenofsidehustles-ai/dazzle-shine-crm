@@ -287,3 +287,40 @@ def business():
     if not current['reception_model']:
         current['reception_model'] = 'va'
     return render_template('admin/settings_business.html', current=current)
+
+
+# ── What has broken lately ──────────────────────────────────────────────────
+
+@settings_bp.route('/errors')
+@owner_required
+def errors_page():
+    """Faults the CRM has reported about itself.
+
+    Owner-only: a traceback names files, functions and sometimes the shape of
+    the data, which is more of the inside of the business than a VA needs."""
+    from models import ErrorLog
+    show_resolved = request.args.get('show') == 'resolved'
+    q = ErrorLog.query.filter(ErrorLog.kind != 'blocked')
+    q = q.filter_by(resolved=True) if show_resolved else q.filter_by(resolved=False)
+    rows = q.order_by(ErrorLog.last_seen.desc()).limit(100).all()
+    blocked = (ErrorLog.query.filter_by(kind='blocked')
+               .order_by(ErrorLog.last_seen.desc()).limit(20).all())
+    open_count = ErrorLog.query.filter_by(resolved=False).filter(
+        ErrorLog.kind != 'blocked').count()
+    return render_template('admin/errors.html', rows=rows, blocked=blocked,
+                           show_resolved=show_resolved, open_count=open_count)
+
+
+@settings_bp.route('/errors/<int:error_id>/resolve', methods=['POST'])
+@owner_required
+def resolve_error(error_id):
+    """Tick one off. If it happens again it comes straight back — see
+    ErrorLog.record — so this is 'I have looked at this', not 'be quiet'."""
+    from models import ErrorLog
+    from extensions import db
+    row = ErrorLog.query.get_or_404(error_id)
+    row.resolved = not row.resolved
+    db.session.commit()
+    flash('Marked as sorted. It will reappear if it happens again.'
+          if row.resolved else 'Reopened.', 'success')
+    return redirect(url_for('settings.errors_page'))
