@@ -42,13 +42,19 @@ test.describe('CRM end-to-end — local', () => {
     await expect(page.locator('.sidebar')).toContainText('Bookings');
   });
 
+  // The money pages used to be five separate sidebar entries. They are one
+  // entry with tabs now (see navigation.py), so the sidebar carries "Money"
+  // and the pages themselves appear once you are inside the section. This
+  // test still checks all five are reachable — just in the place they now live.
   test('2. the Money section is in the nav', async ({ page }) => {
-    const sidebar = page.locator('.sidebar');
-    await expect(sidebar).toContainText('Money');
-    await expect(sidebar).toContainText('Profit & Loss');
-    await expect(sidebar).toContainText('Expenses');
-    await expect(sidebar).toContainText('Payroll');
-    await expect(sidebar).toContainText('VA Commissions');
+    await expect(page.locator('.sidebar')).toContainText('Money');
+
+    await page.goto(CRM + '/money/pnl');
+    const tabs = page.locator('.section-tabs');
+    await expect(tabs).toContainText('Profit & Loss');
+    await expect(tabs).toContainText('Expenses');
+    await expect(tabs).toContainText('Payroll');
+    await expect(tabs).toContainText('VA commissions');
   });
 
   test('3. adds a cleaner to the team', async ({ page }) => {
@@ -96,7 +102,10 @@ test.describe('CRM end-to-end — local', () => {
     await page.click('button[name="send_now"]');
     const body = page.locator('body');
     await expect(body).toContainText('Test Cleaner');
-    await expect(body).toContainText('250.00');
+    // The pay lands in an input, and toContainText only reads visible text —
+    // an input's value is an attribute and never appears in it. Test 7 checks
+    // the same figure the right way.
+    await expect(page.locator('input[name^="pay_"]')).toHaveValue('250.00');
     // Assigned directly means it must NOT be sitting open on the claim board.
     await expect(body).toContainText('Already assigned to Test Cleaner');
   });
