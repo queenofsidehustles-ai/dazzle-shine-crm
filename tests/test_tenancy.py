@@ -304,8 +304,13 @@ print("OK")
 ''', 'schema completeness')
 check('MISSING FROM ACME: []' in out, 'Acme has every table the models declare')
 check('MISSING FROM BAKER: []' in out, 'so does Baker')
-check('ACME VERSION: 0003_deposit_amount_paid' in out,
-      'and each company records its own migration position')
+# Read the head rather than naming it. A test that has to be edited every
+# time a migration is added is a test people learn to edit instead of read --
+# and this is the second time that has bitten in this repository.
+import migrate as _mig
+_head = _mig.ScriptDirectory.from_config(_mig._config()).get_current_head()
+check(f'ACME VERSION: {_head}' in out,
+      f'and each company records its own migration position ({_head})')
 
 print('\n12. Removing a company removes only that company')
 out = run('''

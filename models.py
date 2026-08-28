@@ -1697,3 +1697,77 @@ class ErrorLog(db.Model):
         if h:
             return f'{h}h ago'
         return f'{max(1, delta.seconds // 60)}m ago'
+
+
+class LoginToken(db.Model):
+    """A single-use link that proves someone controls an email address.
+
+    Three jobs, one mechanism: finishing a signup, resetting a forgotten
+    password, and confirming an address is real.
+
+    **Only a hash is stored.** The token itself is put in an email and then
+    forgotten. A leaked database backup therefore hands over no working links --
+    which matters here more than in most places, because these links are, for
+    the moment they are alive, a way into a business's entire customer list.
+    Exactly the reasoning behind never storing a password.
+
+    Single-use and short-lived. A reset link that still works a week later, in
+    an inbox somebody else can read, is a password that never changed."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    purpose = db.Column(db.String(20), nullable=False)   # signup, reset, verify
+    email = db.Column(db.String(200))       # what it was sent to, for the audit
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # How long each kind is good for. A reset is deliberately the shortest: it
+    # is the one an attacker wants, and an hour is long enough for somebody to
+    # find the email and long enough for nobody else to.
+    LIFETIMES = {'signup': 24 * 60, 'reset': 60, 'verify': 7 * 24 * 60}
+
+    @staticmethod
+    def _hash(raw):
+        return hashlib.sha256((raw or '').encode()).hexdigest()
+
+    @classmethod
+    def issue(cls, user, purpose, email=None):
+        """Create one. Returns (raw_token, row) -- the raw is never stored."""
+        import secrets as _secrets
+        from datetime import timedelta
+        raw = _secrets.token_urlsafe(32)
+        row = cls(user_id=getattr(user, 'id', user), purpose=purpose,
+                  token_hash=cls._hash(raw),
+                  email=email or getattr(user, 'username', None),
+                  expires_at=datetime.utcnow() + timedelta(
+                      minutes=cls.LIFETIMES.get(purpose, 60)))
+        db.session.add(row)
+        db.session.commit()
+        return raw, row
+
+    @classmethod
+    def consume(cls, raw, purpose):
+        """Spend a token. Returns the User, or None for anything wrong.
+
+        Deliberately one return value for every kind of failure -- unknown,
+        expired, already used, wrong purpose. Telling the caller which would let
+        somebody probe for which tokens exist."""
+        row = cls.query.filter_by(token_hash=cls._hash(raw),
+                                  purpose=purpose).first()
+        if not row or row.used_at or row.expires_at < datetime.utcnow():
+            return None
+        row.used_at = datetime.utcnow()
+        db.session.commit()
+        return User.query.get(row.user_id)
+
+    @classmethod
+    def revoke_all(cls, user, purpose=None):
+        """Invalidate outstanding tokens -- after a password changes, every
+        reset link that was in flight has to stop working."""
+        q = cls.query.filter_by(user_id=getattr(user, 'id', user), used_at=None)
+        if purpose:
+            q = q.filter_by(purpose=purpose)
+        for row in q.all():
+            row.used_at = datetime.utcnow()
+        db.session.commit()

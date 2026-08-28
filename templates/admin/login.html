@@ -43,6 +43,11 @@
       <input type="password" name="password" autocomplete="current-password" required />
       <button type="submit">Sign In</button>
     </form>
+    {# Until this existed, a forgotten password meant asking whoever runs the
+       server to edit an environment variable. #}
+    <a href="{{ url_for('account.forgot_password') }}"
+       style="display:block;margin-top:18px;color:rgba(255,255,255,0.6);
+              text-decoration:none;font-size:0.88rem">Forgotten your password?</a>
   </div>
 </body>
 </html>

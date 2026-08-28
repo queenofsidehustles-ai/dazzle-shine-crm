@@ -103,6 +103,8 @@ def create_app():
 
     db.init_app(app)
 
+    from blueprints.account import account_bp
+    app.register_blueprint(account_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(bookings_bp)
     app.register_blueprint(api_bp)
