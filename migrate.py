@@ -237,10 +237,18 @@ def money_check():
     print('-' * 68)
     grand = 0.0
     with engine.connect() as conn:
-        present = set(sa_inspect(conn).get_table_names())
+        inspector = sa_inspect(conn)
+        present = set(inspector.get_table_names())
         for table, col in money_cols:
             if table not in present:
                 print(f'{table + "." + col:<42} {"-":>7} {"(no table)":>16}')
+                continue
+            # The whole point of this command is to be run BEFORE a migration
+            # and again after, so a column the migration is about to add does
+            # not exist yet on the first run. Saying so is the answer; blowing
+            # up is not, and it took using it for its stated purpose to notice.
+            if col not in {c['name'] for c in inspector.get_columns(table)}:
+                print(f'{table + "." + col:<42} {"-":>7} {"(not yet added)":>16}')
                 continue
             row = conn.execute(text(
                 f'SELECT COUNT({col}) AS n, COALESCE(SUM({col}), 0) AS s FROM "{table}"'
