@@ -65,6 +65,30 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
 
+    # Which company a request is allowed to see. Installed before anything else
+    # touches the database, because a connection handed out before the guard is
+    # in place would carry whatever search_path it had last.
+    #
+    # Inert on this deployment and every one like it: with no companies
+    # provisioned, every request resolves to `public`, which is what every query
+    # in this application has done since the day it was written. See tenancy.py.
+    import tenancy
+    tenancy.install_pool_guard()
+
+    @app.before_request
+    def _resolve_tenant():
+        from flask import request, g
+        slug, schema = tenancy.resolve(
+            request.host, os.environ.get('BASE_DOMAIN'))
+        g.tenant_slug = slug
+        tenancy._current.set(schema)
+
+    @app.teardown_request
+    def _clear_tenant(exc=None):
+        # Back to public between requests. A worker thread that kept the last
+        # company's schema would hand it to whoever it served next.
+        tenancy._current.set(tenancy.PUBLIC)
+
     # Cookie policy and the refusal of forms posted from other sites. Installed
     # before any blueprint so it applies to every route, including ones added
     # later by somebody who has never read this file.
