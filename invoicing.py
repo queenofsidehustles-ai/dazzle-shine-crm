@@ -81,7 +81,7 @@ def line_items(booking):
     argues against itself in front of whoever the customer shows it to. `price`
     is already net of any discount, so the discount is shown against the
     pre-discount price rather than taken off a second time."""
-    from pricing import DEPOSIT_AMOUNT
+    from pricing import get_deposit
     rows = []
     svc = getattr(booking, 'service_label', None) or (booking.service_type or 'Cleaning service')
     size = []
@@ -102,5 +102,9 @@ def line_items(booking):
     # A paid job is receipted in full — the deposit was part of what they paid,
     # not a deduction from it. It only comes off while money is still owed.
     if booking.deposit_paid and not booking.paid_at:
-        rows.append(('Deposit already paid', -abs(DEPOSIT_AMOUNT)))
+        # What they actually paid, not what the deposit is today.
+        _paid = booking.deposit_amount_paid
+        if _paid is None:
+            _paid = get_deposit()
+        rows.append(('Deposit already paid', -abs(_paid)))
     return rows

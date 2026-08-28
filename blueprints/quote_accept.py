@@ -58,5 +58,5 @@ def book(token):
 
 
 def _deposit():
-    from pricing import DEPOSIT_AMOUNT
-    return float(DEPOSIT_AMOUNT)
+    from pricing import get_deposit
+    return float(get_deposit())

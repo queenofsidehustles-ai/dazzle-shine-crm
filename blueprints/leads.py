@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from auth import login_required
 from models import Lead, Booking, Client, User
 from extensions import db
-from pricing import DEPOSIT_AMOUNT
+from pricing import DEPOSIT_AMOUNT, get_deposit
 
 leads_bp = Blueprint('leads', __name__, url_prefix='/leads')
 
@@ -117,7 +117,7 @@ def convert(lead_id):
         phone=lead.phone or '', address=lead.address or '',
         city=lead.city or '', zip_code=lead.zip_code or '',
         price=lead.quoted_price,
-        balance_due=max(0, (lead.quoted_price or 0) - DEPOSIT_AMOUNT),
+        balance_due=max(0, (lead.quoted_price or 0) - get_deposit()),
         status='pending',
         source=lead.source,
         agent=lead.agent,

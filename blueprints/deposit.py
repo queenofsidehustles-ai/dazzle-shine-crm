@@ -3,7 +3,7 @@ import stripe
 from flask import Blueprint, render_template, request, jsonify
 from models import Booking
 from extensions import db
-from pricing import DEPOSIT_AMOUNT
+from pricing import DEPOSIT_AMOUNT, get_deposit
 import integrations
 
 deposit_bp = Blueprint('deposit', __name__)
@@ -19,7 +19,7 @@ def pay_deposit_page(token):
         token=token,
         stripe_pk=pk,
         terms=customer_terms.as_html(),
-        deposit=DEPOSIT_AMOUNT,
+        deposit=get_deposit(),
         already_paid=bool(booking.deposit_paid),
     )
 
@@ -46,7 +46,7 @@ def create_deposit_intent(token):
             booking.stripe_customer_id = customer_id
 
         intent = stripe.PaymentIntent.create(
-            amount=int(DEPOSIT_AMOUNT * 100),
+            amount=int(round(get_deposit() * 100)),
             currency='usd',
             customer=customer_id,
             setup_future_usage='off_session',  # save card for the balance charge later

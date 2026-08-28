@@ -8,7 +8,7 @@ import stripe
 from flask import Blueprint, render_template, request, jsonify, url_for
 from models import Booking, BusinessSetting
 from extensions import db
-from pricing import DEPOSIT_AMOUNT
+from pricing import DEPOSIT_AMOUNT, get_deposit
 import branding
 import integrations
 
@@ -33,7 +33,7 @@ def send_payment_link(booking, kind='full'):
     url = payment_link_url(booking, kind)
     first = (booking.name or 'there').split()[0]
     if kind == 'deposit':
-        amt_text = f"${DEPOSIT_AMOUNT:.0f} deposit"
+        amt_text = f"${get_deposit():.0f} deposit"
         sms_line = f"tap to pay your {amt_text} and confirm your booking"
     else:
         amt_text = f"${amount_due(booking):.2f}"
@@ -76,10 +76,26 @@ def ensure_pay_token(booking):
 
 
 def amount_due(booking):
-    """What the customer still owes: total minus a paid deposit."""
+    """What the customer still owes: total minus the deposit they actually paid.
+
+    Credits what was charged on the day, not what the deposit happens to be
+    now. Those were the same number while the deposit was a constant; they stop
+    being the same the moment the owner changes the setting, and then every
+    booking that paid $50 would be credited the new figure and collect the
+    difference too little.
+
+    Bookings taken before that was recorded have nothing to read, so they fall
+    back to the deposit in force -- which for those is the right answer, because
+    it has not changed since they were taken."""
     if booking.paid_at:
         return 0.0
-    paid = DEPOSIT_AMOUNT if booking.deposit_paid else 0
+    if booking.deposit_paid:
+        paid = booking.deposit_amount_paid
+        if paid is None:
+            from pricing import get_deposit
+            paid = get_deposit()
+    else:
+        paid = 0
     return round(max(0.0, (booking.price or 0) - paid), 2)
 
 
@@ -129,6 +145,15 @@ def mark_deposit_paid(booking, req=None, amount_cents=None):
     booking.deposit_paid = True
     if not booking.deposit_paid_at:
         booking.deposit_paid_at = datetime.utcnow()
+    # Pin what was actually charged. Stripe's own figure when the caller knows
+    # it, otherwise the deposit in force right now -- which is what was quoted,
+    # because this runs moments after the customer was shown it. Written once
+    # and never revised: a later change to the setting must not rewrite what
+    # somebody already paid.
+    if booking.deposit_amount_paid is None:
+        from pricing import get_deposit
+        booking.deposit_amount_paid = (round((amount_cents or 0) / 100, 2)
+                                       or float(get_deposit()))
     if booking.status in ('pending', None):
         booking.status = 'confirmed'
     db.session.commit()
@@ -157,7 +182,7 @@ def mark_deposit_paid(booking, req=None, amount_cents=None):
         _send_confirmation(booking)
     except Exception:
         pass
-    _send_deposit_receipt(booking, round((amount_cents or 0) / 100, 2) or float(DEPOSIT_AMOUNT))
+    _send_deposit_receipt(booking, round((amount_cents or 0) / 100, 2) or float(get_deposit()))
     return True
 
 
@@ -200,7 +225,7 @@ def send_deposit_receipt_now(booking):
         except Exception:
             pass
     if amount is None:
-        amount = float(DEPOSIT_AMOUNT)
+        amount = float(get_deposit())
 
     ok, detail = _send_deposit_receipt(booking, amount)
     if ok and not booking.deposit_notified_at:

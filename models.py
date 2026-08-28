@@ -120,6 +120,18 @@ class Booking(db.Model):
     # otherwise date it to the day it was resent, which is worse than no
     # receipt at all if it is ever put in front of a bank.
     deposit_paid_at = db.Column(db.DateTime)
+    # What the deposit actually was on the day it was taken.
+    #
+    # The deposit used to be a constant, so crediting it against the balance
+    # could just read the constant. Now that it is a setting the owner can
+    # change, that stops being true the moment she changes it: every booking
+    # that had paid $50 would start being credited the new figure, and a job
+    # with a $75 setting behind it would collect $25 too little. What was
+    # charged is a fact about that booking, not about today's settings.
+    #
+    # NULL on every booking taken before this column existed, which is the
+    # signal to fall back to the deposit in force -- see payments.amount_due().
+    deposit_amount_paid = db.Column(Money)
     # deposit_paid tracks the money; this tracks whether we told the customer.
     # They need to be separate columns: the browser and Stripe's webhook race to
     # record the same $50, and whichever lost used to see deposit_paid already

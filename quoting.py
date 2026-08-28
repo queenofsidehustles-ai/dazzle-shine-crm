@@ -18,7 +18,7 @@ from datetime import datetime
 import branding
 from extensions import db
 from models import Lead, Booking, Client, ChecklistTemplate
-from pricing import DEPOSIT_AMOUNT
+from pricing import DEPOSIT_AMOUNT, get_deposit
 
 
 def service_checklist(service_type):
@@ -111,12 +111,12 @@ def form_context(existing=None):
     The ticked/unticked state comes from the quote itself where there is one, so
     reopening a quote shows what was actually promised rather than resetting to
     the standard list and quietly re-adding what she took off."""
-    from pricing import SERVICES, EXTRAS, DEPOSIT_AMOUNT
+    from pricing import SERVICES, EXTRAS, get_deposit
     service = (existing.service_type if existing else '') or next(iter(SERVICES))
     standard = service_checklist(service)
     chosen = checklist_for(existing) if existing else standard
     return {
-        'services': SERVICES, 'extras': EXTRAS, 'deposit': DEPOSIT_AMOUNT,
+        'services': SERVICES, 'extras': EXTRAS, 'deposit': get_deposit(),
         'checklist': standard,
         'chosen': chosen,
         # Lines she added by hand last time — anything promised that isn't on
@@ -218,8 +218,8 @@ def send_quote(lead):
             'beds': lead.bedrooms or '—',
             'baths': lead.bathrooms or '—',
             'quote_amount': f'{(lead.quoted_price or 0):.2f}',
-            'deposit': f'{DEPOSIT_AMOUNT:.2f}',
-            'balance': f'{max(0.0, (lead.quoted_price or 0) - DEPOSIT_AMOUNT):.2f}',
+            'deposit': f'{get_deposit():.2f}',
+            'balance': f'{max(0.0, (lead.quoted_price or 0) - get_deposit()):.2f}',
             'booking_link': quote_url(lead),
             'checklist': checklist,
         },
@@ -319,7 +319,7 @@ def accept_quote(lead, preferred_date, preferred_time='', address='', city='',
         zip_code=zip_code or lead.zip_code or '',
         notes=notes or lead.notes or '',
         price=price,
-        balance_due=round(max(0.0, price - DEPOSIT_AMOUNT), 2),
+        balance_due=round(max(0.0, price - get_deposit()), 2),
         deposit_token=secrets.token_urlsafe(32),
         status='pending',
         source='quote',

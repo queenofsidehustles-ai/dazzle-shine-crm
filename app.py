@@ -213,17 +213,23 @@ def create_app():
     app.jinja_env.globals['business_tz_label'] = lambda: _sched.local_now().strftime('%Z')
 
     with app.app_context():
-        db.create_all()
-        _migrate_db()
-        # Transitional, for this release only. The two lines above still do
-        # exactly what they have always done, and this records the result so
-        # every database has a revision to reason from. Nothing about the
-        # schema changes on this deploy — adopting a migration tool and moving
-        # the schema in the same release would leave two suspects if anything
-        # went wrong. Once every instance carries a version row, the two lines
-        # above come out and this does the work. See migrate.py.
+        # Migrations run FIRST, and the order is not cosmetic.
+        #
+        # create_all() builds tables from today's models. Run before this on an
+        # empty database it produces a schema that already has every column the
+        # newest migration adds — and then that migration tries to add one that
+        # exists and fails. Every brand-new instance would break on its first
+        # boot, which is precisely the instance nobody is watching.
+        #
+        # Migrations first means one thing owns the schema. What follows is a
+        # safety net for the transition: create_all() finds nothing to do on a
+        # migrated database, and _migrate_db() supplies any column an older
+        # instance is still missing that predates migrations existing. Both come
+        # out once every instance carries a version row. See migrate.py.
         import migrate
         migrate.run_at_boot(app)
+        db.create_all()
+        _migrate_db()
         _seed_checklists()
         _seed_scripts()
         _seed_sales_scripts()

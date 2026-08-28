@@ -5,7 +5,7 @@ from datetime import date, timedelta, datetime
 from flask import Blueprint, request, jsonify
 from models import Booking, Client
 from extensions import db
-from pricing import calculate_price, SERVICES, EXTRAS, FREQUENCY_LABELS, DEPOSIT_AMOUNT
+from pricing import calculate_price, SERVICES, EXTRAS, FREQUENCY_LABELS, DEPOSIT_AMOUNT, get_deposit
 from notifications import send_email, send_sms, add_to_mailerlite
 import branding
 import integrations
@@ -213,8 +213,9 @@ def capture_quote():
     _send_quote_email(lead, total)
     _send_speed_to_lead(lead, total)   # instant text to lead + alert to owner
     add_to_mailerlite(lead.email, lead.name)
-    resp = jsonify({'ok': True, 'total': total, 'deposit': DEPOSIT_AMOUNT,
-                    'balance_due': round(total - DEPOSIT_AMOUNT, 2)})
+    _dep = get_deposit()
+    resp = jsonify({'ok': True, 'total': total, 'deposit': _dep,
+                    'balance_due': round(total - _dep, 2)})
     return add_cors(resp, origin), 201
 
 
@@ -626,8 +627,8 @@ def get_price():
     ) + get_lead_fee()   # bake in the (invisible) lead fee
     resp = jsonify({
         'total': total,
-        'deposit': DEPOSIT_AMOUNT,
-        'balance_due': round(total - DEPOSIT_AMOUNT, 2),
+        'deposit': get_deposit(),
+        'balance_due': round(total - get_deposit(), 2),
     })
     return add_cors(resp, origin), 200
 
@@ -662,14 +663,14 @@ def create_payment_intent():
             phone=data.get('phone', ''),
         )
         intent = stripe.PaymentIntent.create(
-            amount=int(DEPOSIT_AMOUNT * 100),
+            amount=int(round(get_deposit() * 100)),
             currency='usd',
             customer=customer.id,
             setup_future_usage='off_session',  # saves the card for future off-session charges
             metadata={
                 'service_type': data.get('service_type', ''),
                 'total_price': str(total),
-                'balance_due': str(round(total - DEPOSIT_AMOUNT, 2)),
+                'balance_due': str(round(total - get_deposit(), 2)),
                 'customer_name': data.get('name', ''),
                 'customer_email': data.get('email', ''),
             },
@@ -679,8 +680,8 @@ def create_payment_intent():
             'client_secret': intent.client_secret,
             'stripe_customer_id': customer.id,
             'total': total,
-            'deposit': DEPOSIT_AMOUNT,
-            'balance_due': round(total - DEPOSIT_AMOUNT, 2),
+            'deposit': get_deposit(),
+            'balance_due': round(total - get_deposit(), 2),
         })
         return add_cors(resp, origin), 200
     except stripe.error.StripeError as e:
@@ -756,7 +757,7 @@ def create_booking():
         deposit_paid=True if data.get('payment_intent_id') else False,
         deposit_token=secrets.token_urlsafe(32),
         price=total,
-        balance_due=round(total - DEPOSIT_AMOUNT, 2),
+        balance_due=round(total - get_deposit(), 2),
         status='confirmed' if data.get('payment_intent_id') else 'pending',
     )
     db.session.add(booking)
