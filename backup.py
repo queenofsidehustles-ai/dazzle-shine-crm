@@ -422,9 +422,16 @@ def _fix_sequences(db, conn_url=''):
             for col in table.primary_key.columns:
                 if not (col.autoincrement and str(col.type).upper().startswith('INT')):
                     continue
+                # Quote both identifiers. "user" is a reserved word in
+                # Postgres, so SELECT MAX(id) FROM user is a syntax error and
+                # the whole restore stops there -- on the one table holding the
+                # logins, and only ever on Postgres. The drill that proved this
+                # tool works restored into SQLite, where "user" is ordinary, so
+                # the disaster-recovery path had never actually been run
+                # against the kind of database it exists to recover.
                 conn.execute(text(
-                    "SELECT setval(pg_get_serial_sequence(:t, :c), "
-                    "COALESCE((SELECT MAX(%s) FROM %s), 1), true)"
+                    'SELECT setval(pg_get_serial_sequence(:t, :c), '
+                    'COALESCE((SELECT MAX("%s") FROM "%s"), 1), true)'
                     % (col.name, table.name)
                 ), {'t': table.name, 'c': col.name})
 
