@@ -104,3 +104,84 @@ def summary():
         'blocking': blocking,
         'complete': not blocking,
     }
+
+
+# ── The path to a first real job ────────────────────────────────────────────
+#
+# The checklist above is about configuration: is this business able to email a
+# customer, take a card, quote a price. It is the right list and it is the wrong
+# first screen. Somebody who has just signed up does not know what any of it is
+# for yet, and eight equally-weighted items with no order is a shape people
+# close the tab on.
+#
+# This is the other question: has the software done its job once? A business is
+# only really using a CRM when a real job is on the calendar with a real cleaner
+# assigned to it. Everything before that is setup; everything after is work.
+#
+# So this is a single line, in order, with one thing to do next. Not a list of
+# twelve equal calls to action -- one.
+
+def journey():
+    """The five steps between signing up and the software being useful."""
+    from models import BusinessSetting, Staff, Booking, BookingCrew
+
+    def setting(key):
+        return bool((BusinessSetting.get(key) or '').strip())
+
+    has_staff = Staff.query.filter_by(is_active=True).count() > 0
+    has_client = False
+    try:
+        from models import Client
+        has_client = Client.query.count() > 0
+    except Exception:
+        pass
+    bookings = Booking.query.count()
+    # Assigned means a named cleaner, by either route -- a crew row, or the
+    # single-cleaner field older jobs use.
+    assigned = (BookingCrew.query.count() > 0
+                or Booking.query.filter(Booking.assigned_cleaner.isnot(None)).count() > 0)
+
+    return [
+        {'key': 'business', 'done': setting('business_name'),
+         'title': 'Tell us about your business',
+         'why': 'Your name goes on every quote, invoice and text your customers get.',
+         'cta': 'Add your details', 'link': '/settings/business'},
+        {'key': 'pricing', 'done': setting('pricing_reviewed'),
+         'title': 'Check your prices',
+         'why': 'The CRM quotes from these. Until you have looked, it is quoting somebody else’s numbers.',
+         'cta': 'Review prices', 'link': '/settings/pricing'},
+        {'key': 'team', 'done': has_staff,
+         'title': 'Add a cleaner',
+         'why': 'You need somebody to send a job to. Add yourself if you are still cleaning.',
+         'cta': 'Add a cleaner', 'link': '/staff/new'},
+        {'key': 'client', 'done': has_client,
+         'title': 'Add a customer',
+         'why': 'One you already clean for. Real is better than made up — you will see how it works.',
+         'cta': 'Add a customer', 'link': '/bookings/clients'},
+        {'key': 'job', 'done': bookings > 0 and assigned,
+         'title': 'Schedule a job and assign it',
+         'why': 'This is the moment it starts being useful — the cleaner gets a text with the address, '
+                'the price and the checklist.',
+         'cta': 'Book a job', 'link': '/bookings/new'},
+    ]
+
+
+def progress():
+    """Where a business is on that path, and the single next thing to do.
+
+    `activated` is the number worth watching above all others. Not signups, not
+    logins -- a job on the calendar with a cleaner assigned to it. That is when
+    the product has been useful once, and it is the moment somebody stops
+    evaluating and starts depending on it.
+    """
+    steps = journey()
+    done = sum(1 for s in steps if s['done'])
+    nxt = next((s for s in steps if not s['done']), None)
+    return {
+        'steps': steps,
+        'done': done,
+        'total': len(steps),
+        'percent': int(round(done / len(steps) * 100)) if steps else 0,
+        'next': nxt,
+        'activated': nxt is None,
+    }

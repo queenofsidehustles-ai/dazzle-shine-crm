@@ -220,4 +220,4 @@ def welcome(token):
     session['role'] = user.role
     session['user_id'] = user.id
     session['user_name'] = user.name
-    return redirect(url_for('settings.setup'))
+    return redirect(url_for('settings.getting_started'))

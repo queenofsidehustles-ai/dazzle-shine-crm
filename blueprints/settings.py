@@ -34,6 +34,18 @@ def setup():
     return render_template('admin/setup.html', s=onboarding.summary())
 
 
+@settings_bp.route('/getting-started')
+@login_required
+def getting_started():
+    """The first screen a brand-new business sees.
+
+    Deliberately not the configuration checklist. Somebody who signed up two
+    minutes ago does not yet know what a Stripe key is for; what they need is
+    one thing to do next and a sense that it ends somewhere."""
+    import onboarding
+    return render_template('admin/getting_started.html', p=onboarding.progress())
+
+
 @settings_bp.route('/setup/confirm/<key>', methods=['POST'])
 @owner_required
 def setup_confirm(key):

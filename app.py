@@ -169,6 +169,21 @@ def create_app():
             # A broken menu must never take a working page down with it.
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [], 'NAV_ACTIVE_TAB': None}
 
+    # How far a brand-new business has got towards its first real job. None
+    # once they are up and running, so the banner disappears by itself rather
+    # than needing dismissing.
+    @app.context_processor
+    def inject_onboarding():
+        try:
+            from flask import session
+            if not session.get('logged_in'):
+                return {}
+            import onboarding
+            p = onboarding.progress()
+            return {'ONBOARDING': None if p['activated'] else p}
+        except Exception:
+            return {}
+
     # What this business's plan allows — PLAN, plan_can(), plan_usage() and
     # friends. See entitlements.py.
     @app.context_processor
