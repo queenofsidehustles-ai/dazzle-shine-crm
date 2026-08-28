@@ -1,0 +1,48 @@
+{% extends "base_admin.html" %}
+{% block title %}Upgrade · {{ BIZ }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:640px">
+  {% if feature_label %}
+    <h2 style="margin:0 0 8px">{{ feature_label }} is part of {{ plans[need].label }}</h2>
+    <p style="color:var(--muted);margin:0 0 18px">
+      You're on {{ plans[state.effective_plan].label }} at the moment.
+      {{ plans[need].blurb }}
+    </p>
+  {% else %}
+    <h2 style="margin:0 0 8px">Choose a plan</h2>
+  {% endif %}
+
+  {% for key in ['solo', 'pro', 'scale'] %}
+    {% set p = plans[key] %}
+    <div style="border:1px solid {{ 'var(--gold)' if key == need else 'var(--border)' }};
+                border-radius:12px;padding:16px;margin-bottom:12px">
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <strong style="font-size:1.05rem">{{ p.label }}</strong>
+        <span style="color:var(--muted)">{{ '£0 — free' if p.price == 0 else '$%d/month' % p.price }}</span>
+        {% if key == state.effective_plan %}
+          <span style="margin-left:auto;font-size:0.78rem;font-weight:700;
+                       background:var(--gold-soft);color:var(--gold-deep);
+                       border-radius:999px;padding:3px 11px">Your plan</span>
+        {% endif %}
+      </div>
+      <p style="color:var(--muted);margin:6px 0 0;font-size:0.92rem">{{ p.blurb }}</p>
+      {% if key != 'solo' and key != state.effective_plan %}
+        {% if can_pay %}
+          <form method="post" action="{{ url_for('billing.checkout', plan=key) }}"
+                style="margin-top:12px">
+            <button type="submit" class="btn-primary">Move to {{ p.label }}</button>
+          </form>
+        {% else %}
+          <p style="color:var(--softer);font-size:0.86rem;margin-top:10px">
+            Card payments aren't switched on for this deployment.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  <p style="color:var(--softer);font-size:0.86rem;margin-top:16px">
+    Nothing you've already entered is affected by a plan change. Moving down
+    means you can't add more of something — never that anything disappears.
+  </p>
+</div>
+{% endblock %}

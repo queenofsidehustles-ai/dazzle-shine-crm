@@ -107,6 +107,13 @@ def create_app():
     app.register_blueprint(account_bp)
     from blueprints.signup import signup_bp
     app.register_blueprint(signup_bp)
+    from blueprints.billing_routes import billing_bp
+    app.register_blueprint(billing_bp)
+    # Let entitlements read the plan from the control plane rather than
+    # from the company's own settings, so a business cannot change what
+    # it is paying for by editing its own records.
+    import billing
+    billing.install(app)
     app.register_blueprint(admin_bp)
     app.register_blueprint(bookings_bp)
     app.register_blueprint(api_bp)

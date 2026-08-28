@@ -38,6 +38,25 @@ organizations = Table(
     Column('created_at', DateTime, default=datetime.utcnow),
     Column('provisioned_at', DateTime),
     Column('suspended_at', DateTime),
+
+    # ── Billing ────────────────────────────────────────────────────────────
+    # Deliberately here and not in the company's own schema. A business must
+    # not be able to edit the record of what it is paying, and anything inside
+    # its schema is reachable by its own CRM. This is also the one thing that
+    # has to be readable before a tenant is resolved, to decide whether they
+    # get in at all.
+    Column('plan', String(20), default='solo', nullable=False),
+    # What Stripe last told us, verbatim: trialing, active, past_due, canceled,
+    # unpaid, incomplete. Never inferred from a browser redirect -- see
+    # billing.py for why that distinction is the whole thing.
+    Column('subscription_status', String(30), default='trialing'),
+    Column('stripe_customer_id', String(64), index=True),
+    Column('stripe_subscription_id', String(64), index=True),
+    Column('trial_ends_at', DateTime),
+    Column('current_period_end', DateTime),
+    # A founding customer's price is theirs for as long as they stay. This
+    # survives every future price change, which is the whole promise.
+    Column('grandfathered', Boolean, default=False),
 )
 
 
@@ -90,3 +109,27 @@ def set_status(engine, slug, status):
     with engine.begin() as conn:
         conn.execute(update(organizations)
                      .where(organizations.c.slug == slug).values(**values))
+
+
+def set_billing(engine, slug, **fields):
+    """Record what Stripe told us. Only ever called from a verified webhook."""
+    allowed = {'plan', 'subscription_status', 'stripe_customer_id',
+               'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
+               'grandfathered', 'status'}
+    bad = set(fields) - allowed
+    if bad:
+        raise ValueError(f'not billing fields: {sorted(bad)}')
+    with engine.begin() as conn:
+        conn.execute(update(organizations)
+                     .where(organizations.c.slug == slug).values(**fields))
+    return find(engine, slug)
+
+
+def find_by_customer(engine, stripe_customer_id):
+    """Which company a Stripe customer belongs to. The webhook's only handle."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(organizations).where(
+                organizations.c.stripe_customer_id == stripe_customer_id)
+        ).mappings().first()
+        return dict(row) if row else None

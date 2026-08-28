@@ -1,0 +1,45 @@
+{% extends "base_admin.html" %}
+{% block title %}Billing · {{ BIZ }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:640px;margin-bottom:16px">
+  <h2 style="margin:0 0 4px">{{ plans[state.effective_plan].label }}</h2>
+  <p style="color:var(--muted);margin:0 0 14px">
+    {% if state.on_trial %}
+      Free trial — {{ state.trial_days_left }} day{{ '' if state.trial_days_left == 1 else 's' }} left.
+    {% elif state.status == 'past_due' %}
+      We couldn't take payment. Your data is all here — update your card to carry on.
+    {% elif state.effective_plan == 'solo' %}
+      The free plan.
+    {% else %}
+      ${{ plans[state.effective_plan].price }}/month.
+      {% if state.grandfathered %}<strong>Your founding price, locked.</strong>{% endif %}
+    {% endif %}
+  </p>
+
+  <table style="width:100%;font-size:0.92rem">
+    {% for key, label in [('field_workers','Cleaners'),('jobs_per_month','Jobs this month'),('clients','Customers')] %}
+      {% set cap = plan_limit(key) %}
+      <tr>
+        <td style="padding:6px 0;color:var(--muted)">{{ label }}</td>
+        <td style="text-align:right;font-weight:600">
+          {{ usage[key] }}{% if cap %} of {{ cap }}{% else %} <span style="color:var(--softer);font-weight:400">— no limit</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+
+  <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+    <a href="{{ url_for('billing.upgrade') }}" class="btn-primary">See plans</a>
+    {% if portal_url %}
+      <a href="{{ portal_url }}" class="btn-secondary">Card, invoices &amp; cancelling</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if portal_url %}
+<p style="color:var(--softer);font-size:0.86rem;max-width:640px">
+  Card details, invoices and cancelling are handled by Stripe, so your card
+  number never touches this software.
+</p>
+{% endif %}
+{% endblock %}
