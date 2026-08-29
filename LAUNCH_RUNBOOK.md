@@ -83,15 +83,15 @@ Railway → the app service → **Variables**. These are the ones that matter:
 
 | Variable | Value | What it does |
 |---|---|---|
-| `BASE_DOMAIN` | `yourname.com` | **The switch.** Without it there is no multi-tenancy and no signup at all. |
+| `BASE_DOMAIN` | `akyehq.com` | **The switch.** Without it there is no multi-tenancy and no signup at all. |
 | `SIGNUPS_OPEN` | `0` | Door shut while you test. `1` opens it. |
 | `SECRET_KEY` | a long random string | Signs sessions and encrypts saved keys. Generate once, never change. |
-| `CRM_BASE` | `https://yourname.com` | Every link in every email and text is built from this. |
+| `CRM_BASE` | `https://akyehq.com` | Every link in every email and text is built from this. |
 | `STRIPE_PLATFORM_SECRET_KEY` | `sk_test_…` | Your subscription income. |
 | `STRIPE_PLATFORM_WEBHOOK_SECRET` | `whsec_…` | From step 6. Leave blank for now. |
 | `STRIPE_PRICE_PRO` | `price_…` | From step 2. |
 | `STRIPE_PRICE_SCALE` | `price_…` | From step 2. |
-| `FROM_EMAIL` | `hello@yourname.com` | Must be on a domain your email provider has verified. |
+| `FROM_EMAIL` | `support@akyehq.com` | Must be on a domain your email provider has verified. |
 | `SENTRY_DSN` | *(optional)* | Errors also go to Sentry if set. They are recorded either way. |
 
 Generate the secret key with:
@@ -109,11 +109,11 @@ python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 
 ## Step 5 — DNS, and the wildcard
 
-Every company gets its own address — `acme.yourname.com`. That needs a
+Every company gets its own address — `acme.akyehq.com`. That needs a
 **wildcard** record, so one entry covers every company you will ever have.
 
 1. Railway → your service → **Settings → Networking → Custom Domain**.
-2. Add `yourname.com`, then add `*.yourname.com`. Railway gives you a target
+2. Add `akyehq.com`, then add `*.akyehq.com`. Railway gives you a target
    for each.
 3. At your registrar's DNS page:
 
@@ -128,7 +128,7 @@ or **ANAME** record type for `@`, or Cloudflare, which handles it.
 
 4. Wait. DNS takes minutes usually, and occasionally hours.
 
-**Check:** `https://yourname.com` loads, and so does `https://anything.yourname.com`.
+**Check:** `https://akyehq.com` loads, and so does `https://anything.akyehq.com`.
 Both may show an error page at this stage — what matters is that they *resolve*
 and the padlock is there.
 
@@ -140,7 +140,7 @@ This is the part that actually changes what a customer is entitled to. A
 browser redirect never does.
 
 1. Stripe → **Developers → Webhooks → Add endpoint**.
-2. URL: `https://yourname.com/api/stripe/webhook`
+2. URL: `https://akyehq.com/api/stripe/webhook`
 3. Select these events:
    - `checkout.session.completed`
    - `customer.subscription.created`
@@ -160,9 +160,9 @@ returns `200`.
 
 Set `SIGNUPS_OPEN=1` **temporarily**, and make one company that is yours.
 
-1. Go to `https://yourname.com/signup`.
+1. Go to `https://akyehq.com/signup`.
 2. Sign up as **Test Cleaning Co**, address `testco`.
-3. You should land at `https://testco.yourname.com`, signed in, with your
+3. You should land at `https://testco.akyehq.com`, signed in, with your
    business name on the dashboard and a *Getting started* banner.
 
 Then walk the whole thing:
@@ -190,7 +190,7 @@ failure that would end the product.
 
 1. Sign up a **second** company, `testtwo`.
 2. Put a customer in it called `SECOND COMPANY ONLY`.
-3. Go back to `testco.yourname.com` and look at the customer list.
+3. Go back to `testco.akyehq.com` and look at the customer list.
 
 **Check:** `SECOND COMPANY ONLY` is nowhere. If you can see it, **stop
 everything** and tell me.

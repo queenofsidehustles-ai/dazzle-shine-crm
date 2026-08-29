@@ -47,9 +47,23 @@ def base_url():
     return f'{scheme}://{d}'
 
 
+DEFAULT_SUPPORT = 'support@akyehq.com'
+
+
 def support_email():
+    """Where a customer writes when something is wrong.
+
+    Falls back to the deployment's own domain rather than a hardcoded address,
+    so a private deployment does not point people at us -- but on the product
+    itself this is the address on the terms, the privacy policy and every
+    receipt, and it has to be one somebody is actually reading."""
+    explicit = (os.environ.get('PRODUCT_SUPPORT_EMAIL') or '').strip()
+    if explicit:
+        return explicit
     d = domain()
-    return os.environ.get('PRODUCT_SUPPORT_EMAIL') or (f'help@{d}' if d else '')
+    if not d:
+        return ''
+    return DEFAULT_SUPPORT if d == 'akyehq.com' else f'support@{d}'
 
 
 def is_product_site():
