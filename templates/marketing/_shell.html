@@ -6,6 +6,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#16213a" />
   <title>{% block title %}{{ PRODUCT }} — software for cleaning companies{% endblock %}</title>
   <meta name="description" content="{{ TAGLINE }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -13,48 +14,143 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     /* Aliases onto the product's palette, so the storefront and the software
-       a prospect signs into are visibly the same thing. Everything below this
-       line was written against the old names and does not need to change. */
-    :root { --gold:var(--amber); --gold-deep:var(--amber-deep);
-            --gold-soft:rgba(240,164,75,.12); --bg:var(--ground); }
+       a prospect signs into are visibly the same thing. */
+    :root {
+      --gold:var(--amber); --gold-deep:var(--amber-deep);
+      --gold-soft:rgba(240,164,75,.12); --bg:var(--ground);
+      /* Depth is built from three layers stacked, not one big blur. A single
+         shadow reads as a drop shadow; three at different distances read as
+         an object sitting above a surface. */
+      --lift-1: 0 1px 2px rgba(22,33,58,.04),
+                0 4px 12px rgba(22,33,58,.06);
+      --lift-2: 0 1px 2px rgba(22,33,58,.05),
+                0 8px 20px rgba(22,33,58,.07),
+                0 24px 48px rgba(22,33,58,.06);
+      --lift-3: 0 2px 4px rgba(22,33,58,.06),
+                0 16px 32px rgba(22,33,58,.10),
+                0 48px 88px rgba(22,33,58,.12);
+    }
     * { box-sizing:border-box; margin:0; padding:0; }
     body { font-family:Inter,-apple-system,sans-serif; color:var(--ink);
            background:#fff; line-height:1.6; }
-    .wrap { max-width:960px; margin:0 auto; padding:0 22px; }
-    header { border-bottom:1px solid var(--line); padding:18px 0; }
-    header .wrap { display:flex; align-items:center; gap:20px; }
-    .logo { font-weight:800; font-size:1.3rem; letter-spacing:-.02em; text-decoration:none; color:var(--ink); }
+    .wrap { max-width:1060px; margin:0 auto; padding:0 24px; }
+
+    /* Header sits above the page rather than on it -- translucent, blurred,
+       with a hairline that only appears once you have scrolled past the hero. */
+    header {
+      position:sticky; top:0; z-index:50;
+      background:rgba(255,255,255,.82);
+      backdrop-filter:saturate(180%) blur(14px);
+      -webkit-backdrop-filter:saturate(180%) blur(14px);
+      border-bottom:1px solid var(--line-soft);
+      padding:14px 0;
+    }
+    header .wrap { display:flex; align-items:center; gap:22px; }
+
+    /* The wordmark and how to say it, stacked. Reading downwards is how a
+       name and its pronunciation are set everywhere else -- a dictionary, a
+       passport, a menu -- and it keeps the header from running wide. */
+    .brand { display:flex; flex-direction:column; text-decoration:none; line-height:1.05; }
+    .logo { font-weight:800; font-size:1.35rem; letter-spacing:-.03em; color:var(--ink); }
     .logo span { color:var(--gold-deep); }
-    nav { margin-left:auto; display:flex; gap:20px; align-items:center; }
-    nav a { color:var(--muted); text-decoration:none; font-weight:500; font-size:.94rem; }
+    .say {
+      color:var(--softer); font-size:.7rem; font-weight:600;
+      letter-spacing:.06em; margin-top:3px;
+    }
+
+    nav { margin-left:auto; display:flex; gap:22px; align-items:center; }
+    nav a { color:var(--muted); text-decoration:none; font-weight:550; font-size:.94rem; }
     nav a:hover { color:var(--ink); }
-    .btn { display:inline-block; background:var(--gold); color:var(--info); padding:11px 22px;
-           border-radius:999px; text-decoration:none; font-weight:700; font-size:.95rem; }
-    .btn:hover { background:var(--gold-deep); }
-    .btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
-    h1 { font-size:2.6rem; line-height:1.15; letter-spacing:-.03em; font-weight:800; }
-    h2 { font-size:1.6rem; letter-spacing:-.02em; margin-bottom:10px; }
-    .lead { font-size:1.15rem; color:var(--muted); margin-top:16px; }
-    section { padding:64px 0; }
-    section.alt { background:var(--bg); border-top:1px solid var(--line);
-                  border-bottom:1px solid var(--line); }
-    .grid { display:grid; gap:22px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); margin-top:34px; }
-    .card { border:1px solid var(--line); border-radius:14px; padding:22px; background:#fff; }
-    .card h3 { font-size:1.05rem; margin-bottom:6px; }
+
+    .btn {
+      display:inline-block; background:var(--gold); color:#fff;
+      padding:11px 24px; border-radius:999px; text-decoration:none;
+      font-weight:650; font-size:.95rem; border:1px solid var(--gold);
+      box-shadow:0 1px 2px rgba(217,138,43,.24), 0 6px 16px rgba(240,164,75,.30);
+      transition:transform .14s cubic-bezier(.4,0,.2,1),
+                 box-shadow .14s cubic-bezier(.4,0,.2,1),
+                 background .14s;
+    }
+    .btn:hover {
+      background:var(--gold-deep); border-color:var(--gold-deep);
+      transform:translateY(-1px);
+      box-shadow:0 2px 4px rgba(217,138,43,.26), 0 10px 24px rgba(240,164,75,.38);
+    }
+    .btn:active { transform:translateY(0); }
+    .btn.ghost {
+      background:#fff; color:var(--ink); border:1px solid var(--line);
+      box-shadow:var(--lift-1);
+    }
+    .btn.ghost:hover { background:#fff; border-color:var(--softer); }
+
+    h1 { font-size:3.1rem; line-height:1.08; letter-spacing:-.035em; font-weight:800; }
+    h2 { font-size:1.85rem; letter-spacing:-.025em; margin-bottom:10px; font-weight:750; }
+    .lead { font-size:1.15rem; color:var(--muted); margin-top:18px; }
+
+    section { padding:84px 0; position:relative; }
+    /* An alternating band, but with a gradient and an inset edge rather than a
+       flat fill -- it reads as a recessed panel instead of a different colour. */
+    section.alt {
+      background:linear-gradient(180deg, #f4f6fa 0%, var(--ground) 46%, #f4f6fa 100%);
+      border-top:1px solid var(--line);
+      border-bottom:1px solid var(--line);
+      box-shadow:inset 0 12px 24px -18px rgba(22,33,58,.16),
+                 inset 0 -12px 24px -18px rgba(22,33,58,.16);
+    }
+
+    .grid { display:grid; gap:24px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); margin-top:38px; }
+
+    /* Cards are lit from above: a white top highlight, a graded face, and a
+       shadow that grows as the card lifts toward the cursor. */
+    .card {
+      position:relative; border:1px solid var(--line); border-radius:16px;
+      padding:26px 24px;
+      background:linear-gradient(180deg,#fff 0%,#fcfdff 100%);
+      box-shadow:var(--lift-1);
+      transition:transform .18s cubic-bezier(.4,0,.2,1),
+                 box-shadow .18s cubic-bezier(.4,0,.2,1),
+                 border-color .18s;
+    }
+    .card::before {
+      content:''; position:absolute; inset:0 0 auto; height:1px;
+      border-radius:16px 16px 0 0;
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.9),transparent);
+    }
+    .card:hover {
+      transform:translateY(-3px);
+      box-shadow:var(--lift-2);
+      border-color:#d9dfec;
+    }
+    .card h3 { font-size:1.08rem; margin-bottom:8px; font-weight:700; letter-spacing:-.01em; }
     .card p { color:var(--muted); font-size:.95rem; }
-    footer { border-top:1px solid var(--line); padding:34px 0; color:var(--softer); font-size:.88rem; }
+
+    footer { border-top:1px solid var(--line); padding:40px 0; color:var(--softer); font-size:.88rem;
+             background:linear-gradient(180deg,#fff,var(--ground)); }
     footer a { color:var(--muted); text-decoration:none; }
-    .say { color:var(--softer); font-size:.9rem; font-weight:500; }
-    @media (max-width:640px){ h1{font-size:2rem} nav a:not(.btn){display:none} }
+    footer a:hover { color:var(--ink); }
+
+    @media (max-width:760px){
+      h1 { font-size:2.15rem; }
+      h2 { font-size:1.5rem; }
+      section { padding:56px 0; }
+      nav a:not(.btn){ display:none; }
+    }
+    @media (prefers-reduced-motion:reduce){
+      .card, .btn { transition:none; }
+      .card:hover, .btn:hover { transform:none; }
+    }
   </style>
+  {% block head_extra %}{% endblock %}
 </head>
 <body>
   <header>
     <div class="wrap">
-      <a class="logo" href="/">{{ PRODUCT }}<span>.</span></a>
       {# The name is unfamiliar on purpose. Saying how it sounds once, here,
          beats leaving every visitor to guess -- and the meaning is the story. #}
-      <span class="say">ah-CHEH · “good morning”</span>
+      <a class="brand" href="/">
+        <span class="logo">{{ PRODUCT }}<span>.</span></span>
+        <span class="say">ah-CHEH · “good morning”</span>
+      </a>
       <nav>
         <a href="{{ url_for('marketing.pricing') }}">Pricing</a>
         <a href="/login">Sign in</a>

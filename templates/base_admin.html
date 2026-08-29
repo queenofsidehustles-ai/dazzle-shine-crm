@@ -116,7 +116,7 @@
         {% endfor %}
       {% endwith %}
       {% if SETUP_PENDING and request.endpoint != 'settings.setup' %}
-      <a href="{{ url_for('settings.setup') }}" style="display:block;text-decoration:none;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:10px;padding:13px 16px;margin-bottom:16px;color:var(--amber-deep)">
+      <a href="{{ url_for('settings.setup') }}" class="setup-banner">
         <strong>Finish setting up your CRM</strong> — {{ SETUP_PENDING }} still to do before you can take real bookings.
         <span style="text-decoration:underline">Show me →</span>
       </a>

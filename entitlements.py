@@ -62,7 +62,7 @@ PLANS = {
     },
     'pro': {
         'label': 'Pro',
-        'price': 99,
+        'price': 79,
         'blurb': 'For the owner who has stopped cleaning and started managing.',
         'limits': {
             'field_workers': 10,
@@ -81,7 +81,7 @@ PLANS = {
     },
     'scale': {
         'label': 'Scale',
-        'price': 199,
+        'price': 149,
         'blurb': 'For multi-crew operations and commercial contracts.',
         'limits': {
             'field_workers': None,

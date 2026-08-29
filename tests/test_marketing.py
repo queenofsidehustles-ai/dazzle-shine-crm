@@ -69,7 +69,12 @@ check(r.status_code == 200, 'the pricing page loads')
 for key in ('solo', 'pro', 'scale'):
     label = entitlements.PLANS[key]['label'].encode()
     check(label in r.data, f'{label.decode()} is listed')
-check(b'$99' in r.data and b'$199' in r.data,
+# Read the prices from the plan table rather than restating them. Written out
+# by hand, these assertions passed for months and then failed the moment the
+# price changed -- which is a test failing at the news, not at a bug.
+_pro   = ('$%d' % entitlements.PLANS['pro']['price']).encode()
+_scale = ('$%d' % entitlements.PLANS['scale']['price']).encode()
+check(_pro in r.data and _scale in r.data,
       'at the prices the billing code actually charges')
 # The numbers on the page come from the same table as the limits. A pricing
 # page kept separately drifts, and it always drifts the same way: it promises

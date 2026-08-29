@@ -70,8 +70,15 @@
   /* Two soft layered shadows rather than one heavy one. A single large blur
    * is what makes a card look stuck on top of the page instead of resting
    * on it. */
-  --shadow:    0 1px 2px rgba(22,33,58,.05), 0 4px 14px rgba(22,33,58,.06);
-  --shadow-lg: 0 2px 4px rgba(22,33,58,.06), 0 12px 32px rgba(22,33,58,.10);
+  --shadow:    0 1px 2px rgba(22,33,58,.045),
+               0 3px 8px  rgba(22,33,58,.05),
+               0 10px 22px rgba(22,33,58,.045);
+  --shadow-md: 0 1px 2px rgba(22,33,58,.05),
+               0 6px 16px rgba(22,33,58,.07),
+               0 18px 40px rgba(22,33,58,.06);
+  --shadow-lg: 0 2px 4px rgba(22,33,58,.06),
+               0 14px 30px rgba(22,33,58,.10),
+               0 40px 76px rgba(22,33,58,.10);
   --ring:      0 0 0 3px rgba(240,164,75,.28);
 
   /* Fast enough to feel responsive, slow enough to be seen. */
@@ -88,7 +95,11 @@ body {
   font-size: var(--t-md);
   line-height: var(--lh);
   color: var(--ink);
-  background: var(--ground);
+  background:
+    radial-gradient(1200px 600px at 78% -10%, rgba(59,111,181,.055), transparent 60%),
+    radial-gradient(900px 500px at 4% 0%,     rgba(240,164,75,.05),  transparent 58%),
+    var(--ground);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -182,16 +193,33 @@ a  { color: var(--amber-deep); }
 /* ── Cards ────────────────────────────────────────────────────────────── */
 
 .card {
-  background: var(--surface); border: 1px solid var(--line);
+  position: relative;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+  border: 1px solid var(--line);
   border-radius: var(--r); box-shadow: var(--shadow);
   padding: var(--s5);
+  transition: box-shadow var(--ease), border-color var(--ease);
 }
+/* The lit edge. One pixel, and it is the difference between a rectangle and
+   a surface. */
+.card::before {
+  content: ''; position: absolute; inset: 0 0 auto; height: 1px;
+  border-radius: var(--r) var(--r) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.95), transparent);
+  pointer-events: none;
+}
+.card:hover { box-shadow: var(--shadow-md); border-color: #dbe1ee; }
 
 .stat-grid { display: grid; gap: var(--s4); margin-bottom: var(--s6);
              grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .stat-card {
-  background: var(--surface); border: 1px solid var(--line);
+  background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+  border: 1px solid var(--line);
   border-radius: var(--r); padding: var(--s4) var(--s5); box-shadow: var(--shadow);
+  transition: transform var(--ease), box-shadow var(--ease), border-color var(--ease);
+}
+a.stat-card:hover {
+  transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: #dbe1ee;
 }
 .stat-card .label { font-size: var(--t-xs); text-transform: uppercase;
                     letter-spacing: .11em; color: var(--softer);
@@ -650,3 +678,75 @@ small.dim, small.muted { font-size:var(--t-xs); }
 }
 .empty.compact .icon { font-size:1.1rem; margin:0; opacity:.5; }
 .empty.compact p { margin:0; }
+
+/* The "you have not finished setting up" strip. It carries a class rather
+   than inline styles so it can be styled once -- and so a product screenshot
+   can hide it, because a half-configured account is not what a prospect
+   should be shown. */
+.setup-banner {
+  display:block; text-decoration:none;
+  background:var(--amber-soft); border:1px solid var(--amber-line);
+  border-radius:var(--r-sm); padding:var(--s3) var(--s4);
+  margin-bottom:var(--s4); color:var(--amber-deep); font-size:var(--t-sm);
+  transition:border-color var(--ease), box-shadow var(--ease);
+}
+.setup-banner:hover { border-color:var(--amber); box-shadow:var(--shadow); }
+.setup-banner strong { font-weight:700; }
+
+/* ── Depth, applied to the pieces that were flat ────────────────────────── */
+
+/* The sidebar is the back wall of the room: darker at the bottom, with a
+   hard edge where it meets the page. */
+.sidebar {
+  background:
+    linear-gradient(180deg, var(--ink-2) 0%, var(--ink) 58%, #121c31 100%);
+  box-shadow: inset -1px 0 0 rgba(255,255,255,.05),
+              4px 0 24px rgba(22,33,58,.10);
+}
+/* The active item is a raised pill, not a painted rectangle. */
+.sidebar nav a.active {
+  box-shadow: 0 1px 2px rgba(146,89,16,.28), 0 4px 12px rgba(240,164,75,.26);
+}
+
+/* The topbar floats over the content it scrolls above. */
+.topbar {
+  background: rgba(255,255,255,.86);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  box-shadow: 0 1px 0 var(--line), 0 6px 20px -14px rgba(22,33,58,.28);
+}
+
+/* Attention rows and day rows sit on the page rather than in it. */
+.attn-item { box-shadow: var(--shadow); }
+.attn-item:hover { box-shadow: var(--shadow-md); }
+.day, .money-strip, .cal-grid .daycell {
+  box-shadow: 0 1px 2px rgba(22,33,58,.04);
+}
+.money-strip { box-shadow: var(--shadow); }
+.daycell.today { box-shadow: 0 0 0 2px rgba(240,164,75,.20), var(--shadow); }
+
+/* Tables read better with a graded header than a flat fill. */
+thead th {
+  background: linear-gradient(180deg, #fbfcfe, #f4f6fa);
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+/* Buttons pick up a matched shadow so the primary action reads as the raised
+   one on the page. */
+.btn-primary, .btn-gold, button[type="submit"]:not([class]) {
+  box-shadow: 0 1px 2px rgba(217,138,43,.22), 0 5px 14px rgba(240,164,75,.26);
+}
+.btn-primary:hover, .btn-gold:hover, button[type="submit"]:not([class]):hover {
+  box-shadow: 0 2px 4px rgba(217,138,43,.24), 0 9px 22px rgba(240,164,75,.34);
+}
+.btn-outline { box-shadow: 0 1px 2px rgba(22,33,58,.04); }
+.btn-dark { box-shadow: 0 1px 2px rgba(22,33,58,.16), 0 6px 16px rgba(22,33,58,.18); }
+
+/* Somebody who has asked their operating system to stop moving things gets a
+   still page. The depth stays; only the motion goes. */
+@media (prefers-reduced-motion: reduce) {
+  .card, .stat-card, .attn-item, .btn, .btn-primary, .day-row, .jobchip {
+    transition: none !important;
+  }
+  .card:hover, a.stat-card:hover, .attn-item:hover { transform: none !important; }
+}

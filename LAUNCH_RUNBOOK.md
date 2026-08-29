@@ -52,9 +52,9 @@ customer's own processor.
 
 In the Stripe dashboard, in **test mode** first:
 
-1. **Products → Add product** → name it **Pro**, price **$99**, *Recurring,
+1. **Products → Add product** → name it **Pro**, price **$79**, *Recurring,
    monthly*. Save.
-2. Same again for **Scale** at **$199**.
+2. Same again for **Scale** at **$149**.
 3. On each product, copy the **price ID** — it starts `price_`. Not the product
    ID. Keep both somewhere.
 4. **Developers → API keys** → copy the **Secret key** (`sk_test_…`).
@@ -294,5 +294,5 @@ it is probably already recorded.
 | Sentry | free tier is plenty |
 | **Per extra customer** | **~$1–3/month** |
 
-At $99/month that is about 95% gross margin, which is the whole reason for one
+At $79/month that is about 95% gross margin, which is the whole reason for one
 database with a schema per company rather than a separate deployment each.

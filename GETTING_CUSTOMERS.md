@@ -101,8 +101,9 @@ Ask them in this order. **Shut up after each one.**
 
 Answer plainly, then move on. Never dodge it:
 
-> *"$99 a month. First ten companies get it at $79 locked for as long as they
-> stay. But honestly, look at it first — it might not be for you."*
+> *"$79 a month. First ten companies get everything in the top plan at that
+> price, locked for as long as they stay. But honestly, look at it first — it
+> might not be for you."*
 
 ---
 
@@ -180,7 +181,7 @@ and it is worth knowing which you have. **Do not promise to build anything.**
 > *"Of course. Can I ask what you'd be weighing up?"* Then be quiet.
 
 **"It's too expensive."**
-> *"What does one no-show cost you?"* Usually more than $99.
+> *"What does one no-show cost you?"* Usually more than $79.
 
 ---
 
@@ -238,13 +239,21 @@ Everything is instrumented, so this is a query away, not a guess.
 
 **Founding Operator — first ten companies only**
 
-Everything in Pro: scheduling, calendar, customers, recurring work, crew
-assignment, per-job pay, checklists, SOP library, hiring pipeline, messaging.
-Ten cleaners, unlimited office logins, hosting included.
+Everything in Scale: scheduling, calendar, customers, recurring work, crew
+assignment, per-job pay, checklists, SOP library, hiring pipeline, messaging,
+commercial accounts. Unlimited cleaners, unlimited office logins, hosting
+included.
 
-**$79/month, locked for as long as you stay a subscriber.** No setup fee, no
-contract, cancel any time. **Direct founder onboarding — we load your customers,
-cleaners, prices and upcoming jobs for you.**
+**$79/month — the Pro price, but with everything in Scale included, locked for
+as long as you stay a subscriber.** No setup fee, no contract, cancel any time.
+**Direct founder onboarding — we load your customers, cleaners, prices and
+upcoming jobs for you.**
+
+> The founding perk is the *tier*, not a discount off the list price. Pro is
+> $79 to everybody; founding customers get unlimited cleaners, the higher SMS
+> allowance and the commercial features at that price. That is worth more to a
+> growing company than $20 off, and it does not train the market to wait for a
+> sale.
 
 In return, ask for: honest feedback, permission to use anonymised numbers, a
 testimonial once they have got value, and bug reports with enough detail to

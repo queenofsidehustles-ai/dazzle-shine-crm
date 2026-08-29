@@ -209,7 +209,14 @@ def seed(quiet=False):
     db.session.commit()
 
     # This week and next: the mess a real week actually contains.
+    #
+    # Three of these are TODAY. A demo that opens on "nothing booked today" is
+    # a demo of an empty business, and today is the first thing both the
+    # dashboard and the cleaner's phone show.
     upcoming = [
+        (clients[5], 0, 'standard', 285.0, 3.5, 'confirmed', {}),
+        (clients[2], 0, 'deep',     430.0, 5.5, 'confirmed', {}),
+        (clients[8], 0, 'standard', 240.0, 3.0, 'confirmed', {}),
         (clients[0], 1, 'deep', 445.0, 6.0, 'confirmed', {}),
         (clients[1], 1, 'standard', 260.0, 3.0, 'confirmed', {}),
         (clients[6], 2, 'commercial', 600.0, 5.0, 'confirmed', {}),

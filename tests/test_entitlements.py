@@ -97,7 +97,8 @@ with app.app_context():
     check(ent.usage('field_workers') == 2, 'two active cleaners are counted')
     check(ent.at_limit('field_workers'), 'Solo is at its 2-cleaner limit')
     ok, msg = ent.check_limit('field_workers')
-    check(not ok and 'Pro' in msg and '99' in msg,
+    _price = str(ent.PLANS['pro']['price'])
+    check(not ok and 'Pro' in msg and _price in msg,
           f'the refusal names the plan and the price: {msg!r}')
 
     set_plan('pro')
