@@ -3,21 +3,86 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Login — {{ BIZ }} CRM</title>
-  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <meta name="theme-color" content="#16213a" />
+  <title>Sign in — {{ BIZ }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:"Inter",sans-serif;background:radial-gradient(circle at top left,#2a1a55,#1f1333 60%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-    .login-card{background:#fff;border-radius:20px;padding:40px 36px;width:100%;max-width:380px;box-shadow:0 40px 80px rgba(0,0,0,0.3)}
-    .brand{text-align:center;margin-bottom:28px}
-    .brand .script{font-family:"Allura",cursive;font-size:2.4rem;color:#b98a33;display:block;line-height:1}
-    .brand .sub{font-size:0.72rem;letter-spacing:0.22em;text-transform:uppercase;color:#9a95ad;margin-top:4px}
-    label{display:block;font-weight:600;font-size:0.85rem;color:#5f5878;margin-bottom:5px}
-    input{width:100%;padding:10px 13px;border:1px solid #e4dfef;border-radius:10px;font-size:0.97rem;font-family:inherit;color:#1f1333;outline:none;margin-bottom:14px}
-    input:focus{border-color:#d3a84f;box-shadow:0 0 0 3px rgba(211,168,79,0.15)}
-    .error{background:#fee2e2;color:#991b1b;border-radius:9px;padding:10px 13px;font-size:0.88rem;font-weight:600;margin-bottom:14px}
-    button{width:100%;padding:12px;border:none;border-radius:999px;background:linear-gradient(135deg,#f4d07a,#d3a84f);color:#1a1225;font-size:1rem;font-weight:700;cursor:pointer;box-shadow:0 12px 32px rgba(211,168,79,0.4)}
-    button:hover{filter:brightness(1.04)}
+    /* The first screen anybody sees, so it sets the expectation for the rest.
+       Deep navy ground, one white card, one amber action -- the same three
+       moves the whole product makes.
+
+       The business name is set in the product's own typeface rather than a
+       script face. This page carries a different company's name for every
+       customer, and a cursive logo we chose for them is branding we imposed,
+       not branding they have. */
+    body {
+      background:var(--ink); min-height:100vh; display:flex;
+      align-items:center; justify-content:center; padding:var(--s5);
+    }
+    .login-card {
+      background:var(--surface); border-radius:var(--r-lg);
+      padding:var(--s10) var(--s8); width:100%; max-width:390px;
+      box-shadow:0 24px 64px rgba(0,0,0,.34);
+    }
+    .brand { text-align:center; margin-bottom:var(--s8); }
+    .brand .script {
+      display:block; font-size:var(--t-2xl); font-weight:700;
+      letter-spacing:-.025em; color:var(--ink); line-height:1.15;
+    }
+    .brand .sub {
+      display:block; font-size:var(--t-xs); letter-spacing:.2em;
+      text-transform:uppercase; color:var(--softer);
+      font-weight:600; margin-top:var(--s2);
+    }
+
+    .login-card label {
+      display:block; font-weight:600; font-size:var(--t-sm);
+      color:var(--ink); margin-bottom:var(--s2);
+    }
+    .login-card input {
+      width:100%; padding:var(--s3) var(--s4);
+      border:1px solid var(--line); border-radius:var(--r-sm);
+      font-size:var(--t-md); font-family:inherit; color:var(--ink);
+      background:var(--surface); outline:none; margin-bottom:var(--s4);
+      transition:border-color var(--ease), box-shadow var(--ease);
+    }
+    .login-card input:focus { border-color:var(--amber); box-shadow:var(--ring); }
+
+    .login-card button {
+      width:100%; margin-top:var(--s2); padding:var(--s3);
+      border:1px solid var(--amber); border-radius:var(--r-pill);
+      background:var(--amber); color:#fff;
+      font-size:var(--t-md); font-weight:650; font-family:inherit; cursor:pointer;
+      transition:background var(--ease), transform var(--ease);
+    }
+    .login-card button:hover { background:var(--amber-deep); border-color:var(--amber-deep); }
+    .login-card button:active { transform:translateY(1px); }
+
+    .error {
+      background:var(--warn-soft); color:var(--warn);
+      border:1px solid #f6cfcf; border-radius:var(--r-sm);
+      padding:var(--s3) var(--s4); font-size:var(--t-sm);
+      font-weight:600; margin-bottom:var(--s4);
+    }
+    .setup {
+      background:var(--amber-soft); border:1px solid var(--amber-line);
+      color:var(--amber-deep); border-radius:var(--r-sm);
+      padding:var(--s4); margin-bottom:var(--s5);
+      font-size:var(--t-sm); line-height:1.55; text-align:left;
+    }
+    .setup code {
+      background:rgba(255,255,255,.65); padding:1px 5px; border-radius:4px;
+      font-size:.86em;
+    }
+    /* This was white text on a white card, so it was invisible on the one
+       screen where somebody who cannot get in needs to find it. */
+    .forgot {
+      display:block; margin-top:var(--s5); text-align:center;
+      color:var(--muted); text-decoration:none; font-size:var(--t-sm);
+    }
+    .forgot:hover { color:var(--ink); text-decoration:underline; }
   </style>
 </head>
 <body>
@@ -27,27 +92,25 @@
       <span class="sub">Back Office</span>
     </div>
     {% if not_set_up %}
-      <div style="background:#fff8e1;border:1px solid #f0d488;color:#7c4a04;border-radius:10px;padding:13px 15px;margin-bottom:14px;font-size:0.88rem;line-height:1.55;text-align:left">
-        <strong>This CRM has no owner login yet.</strong><br>
-        Set <code>ADMIN_USER</code> and <code>ADMIN_PASS</code> in the hosting settings,
-        then redeploy. Nobody can sign in until you do — including us.
-      </div>
-      {% endif %}
-      {% if error %}
-      <div class="error">{{ error }}</div>
+    <div class="setup">
+      <strong>This CRM has no owner login yet.</strong><br>
+      Set <code>ADMIN_USER</code> and <code>ADMIN_PASS</code> in the hosting settings,
+      then redeploy. Nobody can sign in until you do — including us.
+    </div>
+    {% endif %}
+    {% if error %}
+    <div class="error">{{ error }}</div>
     {% endif %}
     <form method="POST">
       <label>Username</label>
       <input type="text" name="username" autocomplete="username" autofocus required />
       <label>Password</label>
       <input type="password" name="password" autocomplete="current-password" required />
-      <button type="submit">Sign In</button>
+      <button type="submit">Sign in</button>
     </form>
     {# Until this existed, a forgotten password meant asking whoever runs the
        server to edit an environment variable. #}
-    <a href="{{ url_for('account.forgot_password') }}"
-       style="display:block;margin-top:18px;color:rgba(255,255,255,0.6);
-              text-decoration:none;font-size:0.88rem">Forgotten your password?</a>
+    <a href="{{ url_for('account.forgot_password') }}" class="forgot">Forgotten your password?</a>
   </div>
 </body>
 </html>

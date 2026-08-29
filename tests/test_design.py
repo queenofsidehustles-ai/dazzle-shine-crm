@@ -145,7 +145,31 @@ for name in ('my_day.html', 'checklist.html', 'claim.html'):
           f'public/{name} loads the design system')
 
 
-print('\n7. Tap targets on the phone pages are thumb-sized')
+print('\n7. Every full page is on the system at all')
+# Check 4 only catches a page that uses tokens without loading them. It said
+# nothing about the sign-in screen, which used no tokens whatsoever -- it was
+# still entirely the old gold and purple, and it is the first thing anybody
+# sees. A page with its own <html> renders to somebody; it has to be on the
+# palette or be listed here with a reason.
+OFF_SYSTEM = {
+    # nothing yet -- add a path here only with a reason it cannot use the
+    # stylesheet, e.g. an email body, which no mail client will fetch CSS for
+}
+stragglers = []
+for p in templates():
+    text = p.read_text(errors='replace')
+    if '<html' not in text.lower():
+        continue                           # a fragment, styled by its host
+    rel = str(p.relative_to(ROOT))
+    if rel in OFF_SYSTEM:
+        continue
+    if not loads_design_system(p):
+        stragglers.append(rel)
+check(not stragglers,
+      f'every page that renders to somebody loads the palette ({stragglers[:4]})')
+
+
+print('\n8. Tap targets on the phone pages are thumb-sized')
 # 48px is the accepted minimum for a finger. The cleaner is standing outside
 # holding a phone in one hand, which is the whole reason this page exists.
 day = (TEMPLATES / 'public' / 'my_day.html').read_text()

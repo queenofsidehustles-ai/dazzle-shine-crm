@@ -10,17 +10,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Something went wrong</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    body { font-family: -apple-system, "Segoe UI", sans-serif; background: #f6f5fb;
-           color: #1f1333; margin: 0; display: flex; align-items: center;
+    body { font-family: -apple-system, "Segoe UI", sans-serif; background: var(--ground);
+           color: var(--ink); margin: 0; display: flex; align-items: center;
            justify-content: center; min-height: 100vh; padding: 24px; }
-    .box { background: #fff; border: 1px solid #e4dfef; border-radius: 14px;
+    .box { background: #fff; border: 1px solid var(--line); border-radius: 14px;
            box-shadow: 0 4px 24px rgba(15,7,40,0.08); padding: 34px 30px;
            max-width: 460px; text-align: center; }
     h1 { font-size: 1.35rem; margin: 0 0 12px; }
-    p { color: #5f5878; line-height: 1.6; margin: 0 0 14px; }
-    .small { font-size: 0.86rem; color: #9a95ad; margin-top: 20px; }
-    a { color: #b98a33; font-weight: 600; text-decoration: none; }
+    p { color: var(--muted); line-height: 1.6; margin: 0 0 14px; }
+    .small { font-size: 0.86rem; color: var(--softer); margin-top: 20px; }
+    a { color: var(--amber-deep); font-weight: 600; text-decoration: none; }
   </style>
 </head>
 <body>
