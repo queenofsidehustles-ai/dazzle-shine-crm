@@ -7,8 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://js.stripe.com/v3/"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    :root{--gold:#d3a84f;--gold-deep:#b98a33;--purple:#1f1333;--bg:#f6f5fb;--white:#fff;--border:#e4dfef;--radius:14px}
+    :root{--gold:var(--amber);--gold-deep:var(--amber-deep);--purple:var(--ink);--bg:var(--ground);--white:#fff;--border:var(--line);--radius:14px}
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple);min-height:100vh}
     .header{background:var(--purple);padding:24px;text-align:center}
@@ -17,20 +18,20 @@
     .wrap{max-width:520px;margin:0 auto;padding:28px 16px 60px}
     .card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 24px rgba(15,7,40,0.1);padding:28px 26px;margin-bottom:18px}
     h1{font-size:1.3rem;color:var(--purple);margin-bottom:14px}
-    .summary{background:#faf9fd;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px}
+    .summary{background:var(--ground);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px}
     .summary .row{display:flex;justify-content:space-between;padding:5px 0;font-size:0.92rem}
-    .summary .row .k{color:#9a95ad}
+    .summary .row .k{color:var(--softer)}
     .summary .row .v{font-weight:600;text-align:right}
     .amt-banner{background:var(--purple);border-radius:10px;padding:18px 20px;text-align:center;margin-bottom:20px}
     .amt-banner .lbl{color:rgba(255,255,255,0.55);font-size:0.72rem;letter-spacing:0.14em;text-transform:uppercase}
     .amt-banner .amt{color:var(--gold);font-size:2.4rem;font-weight:700;line-height:1.1}
-    label.fld{display:block;font-size:0.8rem;font-weight:600;color:#5f5878;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em}
+    label.fld{display:block;font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em}
     #card-element{padding:13px 14px;border:1px solid var(--border);border-radius:10px;background:#fff}
     .btn{display:block;width:100%;background:var(--gold);color:var(--purple);text-align:center;padding:15px;border:none;border-radius:10px;font-weight:700;font-size:1.05rem;cursor:pointer;margin-top:18px;font-family:"Inter",sans-serif}
     .btn:hover{background:var(--gold-deep)}
     .btn:disabled{opacity:0.5;cursor:not-allowed}
-    .err{background:#fff5f5;border:1px solid #fed7d7;color:#c53030;border-radius:9px;padding:12px 14px;font-size:0.88rem;margin-top:14px;display:none}
-    .secure{text-align:center;color:#9a95ad;font-size:0.8rem;margin-top:14px}
+    .err{background:var(--warn-soft);border:1px solid var(--warn-soft);color:var(--warn);border-radius:9px;padding:12px 14px;font-size:0.88rem;margin-top:14px;display:none}
+    .secure{text-align:center;color:var(--softer);font-size:0.8rem;margin-top:14px}
     .success-box{text-align:center;padding:14px 0}
     .success-box .check{font-size:3rem;margin-bottom:12px}
     .hidden{display:none}
@@ -48,7 +49,7 @@
       <div class="success-box">
         <div class="check">✅</div>
         <h1>You're Paid Up!</h1>
-        <p style="color:#5f5878;line-height:1.7">Thanks, {{ booking.name.split()[0] }} — this cleaning is fully paid. Nothing more to do. See you soon!</p>
+        <p style="color:var(--muted);line-height:1.7">Thanks, {{ booking.name.split()[0] }} — this cleaning is fully paid. Nothing more to do. See you soon!</p>
       </div>
     </div>
     {% else %}
@@ -67,16 +68,16 @@
 
       {% if stripe_pk %}
       {# Tipping a named person gets a far better response than tipping a company. #}
-      <div style="background:#f0fff7;border:1px solid #a3cfbb;border-radius:12px;padding:14px 16px;margin:4px 0 14px">
-        <div style="font-weight:700;color:#1e5638;margin-bottom:3px">💚 Add a tip{% if cleaner_first %} for {{ cleaner_first }}{% endif %}?</div>
-        <div style="font-size:0.85rem;color:#1e7e34;margin-bottom:9px">Optional — <strong>goes straight to your cleaning team</strong>, less the card fee.</div>
+      <div style="background:var(--good-soft);border:1px solid var(--good);border-radius:12px;padding:14px 16px;margin:4px 0 14px">
+        <div style="font-weight:700;color:var(--good);margin-bottom:3px">💚 Add a tip{% if cleaner_first %} for {{ cleaner_first }}{% endif %}?</div>
+        <div style="font-size:0.85rem;color:var(--good);margin-bottom:9px">Optional — <strong>goes straight to your cleaning team</strong>, less the card fee.</div>
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:1.2rem;font-weight:700;color:#1e5638">$</span>
+          <span style="font-size:1.2rem;font-weight:700;color:var(--good)">$</span>
           <input type="number" id="tip-input" min="0" max="2000" step="1" placeholder="0"
                  inputmode="decimal"
-                 style="flex:1;padding:11px 13px;border:1px solid #a3cfbb;border-radius:9px;font-size:1.05rem;font-weight:600" />
+                 style="flex:1;padding:11px 13px;border:1px solid var(--good);border-radius:9px;font-size:1.05rem;font-weight:600" />
         </div>
-        <div id="tip-err" style="display:none;color:#b91c1c;font-size:0.82rem;margin-top:6px"></div>
+        <div id="tip-err" style="display:none;color:var(--warn);font-size:0.82rem;margin-top:6px"></div>
       </div>
       {% endif %}
 
@@ -98,12 +99,12 @@
       {# The terms travel with the money — a policy only on a website page is a
          policy the customer never saw. #}
       <details style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px">
-        <summary style="cursor:pointer;font-size:0.82rem;color:#5f5878;font-weight:600">
+        <summary style="cursor:pointer;font-size:0.82rem;color:var(--muted);font-weight:600">
           Service &amp; payment terms
         </summary>
-        <div style="font-size:0.78rem;color:#5f5878;margin-top:10px">{{ terms | safe }}</div>
+        <div style="font-size:0.78rem;color:var(--muted);margin-top:10px">{{ terms | safe }}</div>
       </details>
-      <p style="font-size:0.74rem;color:#9a95ad;margin-top:10px;text-align:center">
+      <p style="font-size:0.74rem;color:var(--softer);margin-top:10px;text-align:center">
         By paying you agree to our service &amp; payment terms above.
       </p>
       {% else %}
@@ -115,7 +116,7 @@
       <div class="success-box">
         <div class="check">🎉</div>
         <h1>Payment Received — Thank You!</h1>
-        <p style="color:#5f5878;line-height:1.7">Thank you, {{ booking.name.split()[0] }}! We just emailed your receipt. We can't wait to make your home sparkle ✨</p>
+        <p style="color:var(--muted);line-height:1.7">Thank you, {{ booking.name.split()[0] }}! We just emailed your receipt. We can't wait to make your home sparkle ✨</p>
       </div>
     </div>
     {% endif %}
@@ -127,7 +128,7 @@
   const TOKEN = {{ token | tojson }};
   const stripe = Stripe(STRIPE_PK);
   const elements = stripe.elements();
-  const card = elements.create('card', { style: { base: { fontFamily: 'Inter, sans-serif', fontSize: '16px', color: '#1f1333' } } });
+  const card = elements.create('card', { style: { base: { fontFamily: 'Inter, sans-serif', fontSize: '16px', color: 'var(--ink)' } } });
   card.mount('#card-element');
   const payBtn = document.getElementById('pay-btn');
 

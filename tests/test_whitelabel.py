@@ -150,7 +150,15 @@ PATTERNS = [
     (r'\bL\s*&\s*M\b', 'the original commercial brand'),
 ]
 # Files that may legitimately name the original business.
-EXEMPT = {'legacy_brands.py'}
+#
+# `product.py` is exempt for a different reason than `legacy_brands.py`, and
+# the difference matters. It does not name the original *cleaning* business at
+# all -- it holds OUR company, the one that sells the software, whose
+# registered address happens to be in the same city. That address has to exist
+# somewhere: a privacy policy with no legal entity on it is not a privacy
+# policy. It goes here rather than in a template so there is exactly one copy,
+# and section 12 below proves it never reaches a cleaning company's CRM.
+EXEMPT = {'legacy_brands.py', 'product.py'}
 ROOT = pathlib.Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -203,4 +211,37 @@ for o in sorted(set(offenders)):
 check(not offenders,
       f'no hardcoded business details anywhere in the source ({len(offenders)} found)')
 
-print('\n🎉 Nothing of one company is written into the code another company runs.')
+
+# ---------------------------------------------------------------------------
+print("\n12. Our own legal entity never appears on a customer's CRM")
+# `product.py` is exempt from the sweep above, so this is the assertion that
+# pays for the exemption. Akye's registered company and address belong on
+# Akye's own website and nowhere else -- a cleaning company's software must
+# never show its customers somebody else's LLC.
+#
+# This reuses the app and the seeded business from the sections above rather
+# than booting a fresh one: the first version of this check created a second
+# app, got the login page back for every URL, and passed while proving
+# nothing. Hence the "did a real page render" assertion below.
+import product as _product
+
+_entity = _product.DEFAULT_LEGAL_ENTITY
+_street = _product.DEFAULT_LEGAL_ADDRESS.split('\n')[0]
+
+_c = app.test_client()
+with _c.session_transaction() as _sess:
+    _sess['logged_in'] = True
+    _sess['role'] = 'owner'
+
+for _path in ('/', '/bookings/', '/contractors/team', '/money/pnl'):
+    _r = _c.get(_path, follow_redirects=True)
+    _body = _r.data.decode('utf8', 'replace')
+    check(_r.status_code == 200 and 'sidebar' in _body,
+          f'{_path} rendered an actual CRM page, not a login screen')
+    check(_entity not in _body, f'{_path} does not name {_entity}')
+    check(_street not in _body, f'{_path} does not carry our street address')
+
+check(_product.legal_entity.__doc__ is not None,
+      "legal_entity() is documented as being our company, not the customer's")
+
+print("\n🎉 Nothing of one company is written into the code another company runs.")

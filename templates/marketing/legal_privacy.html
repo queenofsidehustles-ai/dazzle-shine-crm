@@ -105,8 +105,8 @@ knowingly collect anything about them.</p>
 top always shows the current version.</p>
 
 <h2>Contact</h2>
-<p><span class="fill">[LEGAL ENTITY NAME]</span><br />
-<span class="fill">[POSTAL ADDRESS]</span><br />
+<p><strong>{{ LEGAL_ENTITY or PRODUCT }}</strong><br />
+{% for line in LEGAL_ADDRESS %}{{ line }}<br />{% endfor %}
 <a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a></p>
 
 {% endblock %}

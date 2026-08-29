@@ -6,7 +6,7 @@
   <title>{% block title %}{{ BIZ }} CRM{% endblock %}</title>
   <!-- Add-to-home-screen (installable app icon) -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}" />
-  <meta name="theme-color" content="#1f1333" />
+  <meta name="theme-color" content="#16213a" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -15,321 +15,25 @@
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon-192.png') }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    :root {
-      --gold: #d3a84f;
-      --gold-deep: #b98a33;
-      --gold-soft: rgba(211,168,79,0.12);
-      --purple: #1f1333;
-      --purple-mid: #3b2b6b;
-      --purple-light: #5d4f7d;
-      --bg: #f6f5fb;
-      --sidebar-w: 220px;
-      --text: #1f1333;
-      --muted: #5f5878;
-      --softer: #9a95ad;
-      --border: #e4dfef;
-      --white: #ffffff;
-      --radius: 14px;
-      --shadow: 0 4px 24px rgba(15,7,40,0.08);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.6; display: flex; min-height: 100vh; }
-
-    /* SIDEBAR */
-    .sidebar {
-      width: var(--sidebar-w);
-      background: var(--purple);
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      top: 0; left: 0; bottom: 0;
-      z-index: 10;
-      overflow-y: auto;
-      overflow-x: hidden;
-    }
-    .sidebar::-webkit-scrollbar { width: 4px; }
-    .sidebar::-webkit-scrollbar-track { background: transparent; }
-    .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-    .sidebar-brand {
-      padding: 20px 18px 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-    }
-    .sidebar-brand .script {
-      font-family: "Allura", cursive;
-      font-size: 1.7rem;
-      color: var(--gold);
-      line-height: 1;
-      display: block;
-    }
-    .sidebar-brand .sub {
-      font-size: 0.7rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.45);
-      margin-top: 3px;
-    }
-    .sidebar nav { padding: 12px 0; flex: 1; }
-    .sidebar nav a {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 18px;
-      color: rgba(255,255,255,0.7);
-      text-decoration: none;
-      font-weight: 500;
-      font-size: 0.95rem;
-      border-left: 3px solid transparent;
-      transition: all 0.15s;
-    }
-    .sidebar nav a:hover, .sidebar nav a.active {
-      color: #fff;
-      background: rgba(255,255,255,0.06);
-      border-left-color: var(--gold);
-    }
-    .sidebar nav a .icon { font-size: 1.1rem; width: 20px; text-align: center; }
-    /* Not on their plan. Dimmed enough to read as unavailable, bright enough
-       to still read — the point is that they see what they'd be buying. */
-    .sidebar nav a.locked { opacity: 0.42; }
-    .sidebar nav a.locked:hover { opacity: 0.7; }
-    .sidebar nav .nav-sec { padding: 16px 18px 5px; font-size: 0.63rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: rgba(255,255,255,0.33); }
-    .sidebar nav .nav-sec:first-of-type { padding-top: 8px; }
-    .sidebar-footer {
-      padding: 14px 18px;
-      border-top: 1px solid rgba(255,255,255,0.1);
-    }
-    .sidebar-footer a {
-      color: rgba(255,255,255,0.5);
-      text-decoration: none;
-      font-size: 0.88rem;
-      font-weight: 500;
-    }
-    .sidebar-footer a:hover { color: #fff; }
-
-    /* MAIN CONTENT */
-    .main-wrap {
-      margin-left: var(--sidebar-w);
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-    .topbar {
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 28px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .topbar h1 {
-      font-size: 1.2rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-    /* Section tabs — the pages that used to be separate sidebar entries.
-       Sits directly under the title so it reads as part of the page, and
-       scrolls sideways on a phone rather than wrapping into three rows. */
-    .section-tabs {
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
-      padding: 0 28px;
-      display: flex;
-      gap: 4px;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-    }
-    .section-tabs::-webkit-scrollbar { display: none; }
-    .section-tabs a {
-      padding: 11px 15px 9px;
-      font-size: 0.88rem;
-      font-weight: 600;
-      color: #7a7391;
-      text-decoration: none;
-      white-space: nowrap;
-      border-bottom: 2.5px solid transparent;
-    }
-    .section-tabs a:hover { color: var(--text); }
-    .section-tabs a.active { color: var(--gold-dark, #b98a33); border-bottom-color: var(--gold, #d3a84f); }
-    @media (max-width: 900px) { .section-tabs { padding: 0 14px; } }
-    /* Brand lens — the switcher between the residential and commercial sides. */
-    .brand-lens {
-      display: flex; align-items: center; gap: 7px;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: 999px; padding: 4px 12px 4px 11px; margin-left: auto;
-    }
-    .brand-lens.is-filtered { background: var(--gold-soft); border-color: var(--gold); }
-    .brand-lens-dot {
-      width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0;
-      background: var(--softer);
-    }
-    .brand-lens.is-filtered .brand-lens-dot { background: var(--gold-deep); }
-    .brand-lens select {
-      border: none; background: none; font-family: inherit;
-      font-size: 0.86rem; font-weight: 600; color: var(--muted);
-      cursor: pointer; padding: 2px 0; max-width: 190px;
-    }
-    .brand-lens.is-filtered select { color: var(--gold-deep); }
-    .brand-lens select:focus { outline: none; }
-    @media (max-width: 700px) {
-      .brand-lens { padding: 3px 9px; }
-      .brand-lens select { max-width: 116px; font-size: 0.8rem; }
-    }
-
-    .topbar .badge-pending {
-      background: var(--gold-soft);
-      color: var(--gold-deep);
-      border-radius: 999px;
-      padding: 3px 11px;
-      font-size: 0.8rem;
-      font-weight: 700;
-    }
-    .content { padding: 26px 28px; flex: 1; }
-
-    /* CARDS */
-    .card {
-      background: var(--white);
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow);
-      padding: 22px;
-    }
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 16px;
-      margin-bottom: 26px;
-    }
-    .stat-card {
-      background: var(--white);
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      padding: 18px 20px;
-      box-shadow: var(--shadow);
-    }
-    .stat-card .label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--softer); font-weight: 600; margin-bottom: 6px; }
-    .stat-card .value { font-size: 2rem; font-weight: 700; color: var(--text); line-height: 1; }
-    .stat-card .sub { font-size: 0.82rem; color: var(--muted); margin-top: 4px; }
-
-    /* TABLE */
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
-    th { text-align: left; padding: 10px 14px; color: var(--softer); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; border-bottom: 1px solid var(--border); }
-    td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #faf9ff; }
-    td a { color: var(--purple-light); text-decoration: none; font-weight: 600; }
-    td a:hover { text-decoration: underline; }
-
-    /* STATUS BADGES */
-    .status {
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 999px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-    .status-pending { background: #fef3c7; color: #92400e; }
-    .status-confirmed { background: #dbeafe; color: #1e40af; }
-    .status-completed { background: #d1fae5; color: #065f46; }
-    .status-cancelled { background: #fee2e2; color: #991b1b; }
-
-    /* BUTTONS */
-    .btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 9px 18px; border-radius: 999px; border: none;
-      font-size: 0.92rem; font-weight: 700; cursor: pointer; text-decoration: none;
-      transition: all 0.1s;
-    }
-    .btn-gold { background: linear-gradient(135deg,#f4d07a,#d3a84f); color: #1a1225; box-shadow: 0 8px 24px rgba(211,168,79,0.35); }
-    .btn-gold:hover { filter: brightness(1.05); }
-    .btn-dark { background: var(--purple); color: #fff; }
-    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
-    .btn-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
-
-    /* FORM INPUTS */
-    .form-group { margin-bottom: 16px; }
-    .form-group label { display: block; font-weight: 600; font-size: 0.88rem; color: var(--muted); margin-bottom: 5px; }
-    .form-group input, .form-group select, .form-group textarea {
-      width: 100%; padding: 9px 13px;
-      border: 1px solid var(--border); border-radius: 9px;
-      font-size: 0.95rem; font-family: inherit; color: var(--text);
-      background: var(--white); outline: none;
-    }
-    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-      border-color: var(--gold);
-      box-shadow: 0 0 0 3px rgba(211,168,79,0.15);
-    }
-    .form-group textarea { resize: vertical; min-height: 80px; }
-
-    /* FLASH MESSAGES */
-    .flash { padding: 11px 16px; border-radius: 10px; margin-bottom: 18px; font-weight: 600; font-size: 0.92rem; }
-    .flash-success { background: #d1fae5; color: #065f46; }
-    .flash-error { background: #fee2e2; color: #991b1b; }
-    .flash-warning { background: #fff3cd; color: #856404; }
-
-    /* FILTER TABS */
-    .filter-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
-    .filter-tab {
-      padding: 6px 16px; border-radius: 999px;
-      font-size: 0.85rem; font-weight: 600; text-decoration: none;
-      background: var(--white); border: 1px solid var(--border); color: var(--muted);
-    }
-    .filter-tab:hover { border-color: var(--gold); color: var(--text); }
-    .filter-tab.active { background: var(--purple); color: #fff; border-color: var(--purple); }
-
-    /* SECTION HEADER */
-    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; flex-wrap: wrap; }
-    .section-header h2 { font-size: 1.1rem; font-weight: 700; }
-
-    /* DETAIL GRID */
-    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
-    @media (max-width: 768px) { .detail-grid { grid-template-columns: 1fr; } }
-    .detail-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
-    .detail-row .dl { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--softer); font-weight: 600; }
-    .detail-row .dv { font-weight: 600; color: var(--text); }
-
-    /* HAMBURGER (mobile menu button) + off-canvas overlay */
-    .hamburger {
-      display: none; align-items: center; justify-content: center;
-      width: 40px; height: 40px; flex-shrink: 0;
-      border: 1px solid var(--border); background: #fff; border-radius: 10px;
-      font-size: 1.35rem; line-height: 1; cursor: pointer; color: var(--purple);
-    }
-    .nav-overlay { display: none; position: fixed; inset: 0; background: rgba(15,7,40,0.45); z-index: 9; }
-    .nav-overlay.show { display: block; }
-    img, canvas, video { max-width: 100%; }
-
-    /* ── MOBILE LAYOUT ─────────────────────────────────────────────── */
-    @media (max-width: 900px) {
-      .sidebar {
-        transform: translateX(-100%);
-        transition: transform 0.25s ease;
-        width: 260px;
-        box-shadow: 0 0 50px rgba(0,0,0,0.35);
-      }
-      .sidebar.open { transform: translateX(0); }
-      .sidebar nav a { padding: 13px 18px; font-size: 1rem; }   /* bigger touch targets */
-      .main-wrap { margin-left: 0; }
-      .topbar {
-        padding: 12px 14px;
-        justify-content: flex-start; gap: 12px;
-        position: sticky; top: 0; z-index: 8;
-      }
-      .topbar h1 { font-size: 1.05rem; }
-      .topbar > div:last-child { margin-left: auto; }
-      .hamburger { display: inline-flex; }
-      .content { padding: 16px 14px; }
-      .card { padding: 16px; }
-      /* Wide tables scroll sideways instead of crushing */
-      .table-wrap { -webkit-overflow-scrolling: touch; }
-      .table-wrap table { min-width: 560px; }
-      .stat-card .value { font-size: 1.7rem; }
+    /* Anything genuinely specific to this shell lives here. Everything shared
+       is in akye.css -- see that file for why the system exists at all. */
+    .brand-lens { display:flex; align-items:center; gap:7px; margin-left:auto;
+                  background:var(--ground); border:1px solid var(--line);
+                  border-radius:var(--r-pill); padding:4px 12px 4px 11px; }
+    .brand-lens.is-filtered { background:var(--amber-soft); border-color:var(--amber-line); }
+    .brand-lens-dot { width:7px; height:7px; border-radius:var(--r-pill);
+                      flex-shrink:0; background:var(--softer); }
+    .brand-lens.is-filtered .brand-lens-dot { background:var(--amber-deep); }
+    .brand-lens select { border:none; background:none; font-family:inherit;
+                         font-size:var(--t-sm); font-weight:600; color:var(--muted);
+                         cursor:pointer; padding:2px 0; max-width:190px; width:auto; }
+    .brand-lens.is-filtered select { color:var(--amber-deep); }
+    .brand-lens select:focus { outline:none; box-shadow:none; }
+    @media (max-width:700px){
+      .brand-lens { padding:3px 9px; }
+      .brand-lens select { max-width:116px; font-size:var(--t-xs); }
     }
   </style>
 
@@ -357,13 +61,13 @@
       <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}{{ ' locked' if item.locked }}"{% if item.locked %} title="Included in Pro"{% endif %}>
         <span class="icon">{{ item.icon }}</span> {{ item.label }}
         {% if item.locked %}<span style="margin-left:auto;font-size:0.72rem;opacity:0.75">🔒</span>{% endif %}
-        {% if item.endpoint == 'messages.inbox' and nav_unread %}<span style="margin-left:auto;background:#e53e3e;color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
+        {% if item.endpoint == 'messages.inbox' and nav_unread %}<span style="margin-left:auto;background:var(--warn);color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
       </a>
       {% endfor %}
       {% endfor %}
     </nav>
     <div class="sidebar-footer">
-      {% if session.get('user_name') %}<div style="font-size:0.75rem;color:#9a95ad;margin-bottom:6px">{{ session.get('user_name') }}{% if not is_owner %} · Team{% endif %}</div>{% endif %}
+      {% if session.get('user_name') %}<div style="font-size:0.75rem;color:var(--softer);margin-bottom:6px">{{ session.get('user_name') }}{% if not is_owner %} · Team{% endif %}</div>{% endif %}
       <a href="{{ url_for('admin.logout') }}">Sign out</a>
       {# Which build is on screen. "Is my change live yet?" should not require
          logging into Railway to answer. #}
@@ -412,7 +116,7 @@
         {% endfor %}
       {% endwith %}
       {% if SETUP_PENDING and request.endpoint != 'settings.setup' %}
-      <a href="{{ url_for('settings.setup') }}" style="display:block;text-decoration:none;background:#fff8e1;border:1px solid #f0d488;border-radius:10px;padding:13px 16px;margin-bottom:16px;color:#7c4a04">
+      <a href="{{ url_for('settings.setup') }}" style="display:block;text-decoration:none;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:10px;padding:13px 16px;margin-bottom:16px;color:var(--amber-deep)">
         <strong>Finish setting up your CRM</strong> — {{ SETUP_PENDING }} still to do before you can take real bookings.
         <span style="text-decoration:underline">Show me →</span>
       </a>

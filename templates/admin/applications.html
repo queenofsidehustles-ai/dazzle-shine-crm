@@ -13,9 +13,9 @@
 
 <!-- Quick Add Applicant Panel -->
 <div id="quick-add" style="display:none;margin-bottom:20px">
-  <div class="card" style="border-color:#d3a84f">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Add Applicant Manually</h2>
-    <p style="font-size:0.85rem;color:#5f5878;margin-bottom:16px">Use this for applicants from Indeed, Facebook, or any other source. After adding, send them the application link to complete their full profile.</p>
+  <div class="card" style="border-color:var(--amber)">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Add Applicant Manually</h2>
+    <p style="font-size:0.85rem;color:var(--muted);margin-bottom:16px">Use this for applicants from Indeed, Facebook, or any other source. After adding, send them the application link to complete their full profile.</p>
     <form method="POST" action="{{ url_for('contractors.add_applicant') }}">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px">
         <div class="form-group" style="margin:0">
@@ -61,7 +61,7 @@
         </div>
         <div class="form-group" style="margin:0;display:flex;align-items:center;gap:8px;padding-top:24px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-            <input type="checkbox" name="has_transportation" style="width:auto;accent-color:#d3a84f" checked />
+            <input type="checkbox" name="has_transportation" style="width:auto;accent-color:var(--amber)" checked />
             Has reliable car
           </label>
         </div>
@@ -80,14 +80,14 @@
 </div>
 
 <!-- Application Link Banner -->
-<div style="background:#f0edf8;border:1px solid #d3a84f;border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+<div style="background:var(--line-soft);border:1px solid var(--amber);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
   <div>
-    <p style="font-weight:700;font-size:0.88rem;color:#3b2460;margin-bottom:2px">Your public application link — post this everywhere</p>
-    <p style="font-size:0.82rem;color:#5f5878">Indeed (set as external apply URL), Facebook Jobs, Nextdoor, Craigslist, text it directly</p>
+    <p style="font-weight:700;font-size:0.88rem;color:var(--ink-2);margin-bottom:2px">Your public application link — post this everywhere</p>
+    <p style="font-size:0.82rem;color:var(--muted)">Indeed (set as external apply URL), Facebook Jobs, Nextdoor, Craigslist, text it directly</p>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
     <input type="text" readonly value="{{ apply_url }}"
-           style="font-size:0.78rem;padding:7px 10px;border:1px solid #e4dfef;border-radius:6px;color:#5f5878;background:#fff;width:340px;max-width:100%"
+           style="font-size:0.78rem;padding:7px 10px;border:1px solid var(--line);border-radius:6px;color:var(--muted);background:#fff;width:340px;max-width:100%"
            onclick="this.select()" />
     <button onclick="navigator.clipboard.writeText('{{ apply_url }}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)"
             class="btn btn-gold" style="padding:7px 14px;font-size:0.82rem;flex-shrink:0">Copy</button>
@@ -122,90 +122,90 @@
         <tr>
           <td>
             <strong>{{ a.name }}</strong><br>
-            <span style="font-size:0.8rem;color:#9a95ad">{{ a.email }}</span>
-            {% if a.phone %}<br><span style="font-size:0.78rem;color:#9a95ad">{{ a.phone }}</span>{% endif %}
+            <span style="font-size:0.8rem;color:var(--softer)">{{ a.email }}</span>
+            {% if a.phone %}<br><span style="font-size:0.78rem;color:var(--softer)">{{ a.phone }}</span>{% endif %}
           </td>
           <td>
             {% if a.source and a.source != 'Website' %}
-            <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:600">{{ a.source }}</span>
+            <span style="background:var(--amber-soft);color:var(--amber-deep);padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:600">{{ a.source }}</span>
             {% else %}
-            <span style="font-size:0.82rem;color:#9a95ad">{{ a.source or 'Website' }}</span>
+            <span style="font-size:0.82rem;color:var(--softer)">{{ a.source or 'Website' }}</span>
             {% endif %}
           </td>
           <td style="font-size:0.88rem">{{ a.years_experience or '—' }}</td>
-          <td style="font-size:0.82rem;color:#9a95ad">{{ a.availability or '—' }}</td>
+          <td style="font-size:0.82rem;color:var(--softer)">{{ a.availability or '—' }}</td>
           <td>{{ '✓' if a.has_transportation else '—' }}</td>
           <td>
             {% if a.status == 'rejected' %}
-              <span style="background:#fff5f5;color:#c53030;border:1px solid #fed7d7;
+              <span style="background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-soft);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
                 ✗ Rejected
               </span>
             {% elif (a.background_check_status == 'received' or a.bgcheck_uploaded_at) and a.background_check_status != 'cleared' %}
-              <span style="background:#fef9ec;color:#92400e;border:1px solid #d3a84f;
+              <span style="background:var(--amber-soft);color:var(--amber-deep);border:1px solid var(--amber);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:700;white-space:nowrap">
                 📎 Background Check In — Review
               </span>
             {% elif a.status in ('hired', 'onboarding') %}
-              <span style="background:#f0fff4;color:#276749;border:1px solid #c6f6d5;
+              <span style="background:var(--good-soft);color:var(--good);border:1px solid var(--good-soft);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
                 🎉 Onboarding
               </span>
             {% elif a.background_check_status == 'cleared' %}
-              <span style="background:#f0fff4;color:#276749;border:1px solid #9ae0b8;
+              <span style="background:var(--good-soft);color:var(--good);border:1px solid var(--good);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:700;white-space:nowrap">
                 ✅ BG Cleared — Ready to Hire
               </span>
             {% elif a.offer_accepted_at %}
-              <span style="background:#eefcf3;color:#1a7a44;border:1px solid #9ae0b8;
+              <span style="background:var(--good-soft);color:var(--good);border:1px solid var(--good);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:700;white-space:nowrap">
                 🎉 Offer Accepted — awaiting BG check
               </span>
             {% elif a.offer_sent_at %}
-              <span style="background:#fffaf0;color:#92600e;border:1px solid #f5d9a0;
+              <span style="background:var(--amber-soft);color:var(--amber-deep);border:1px solid var(--amber-line);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:700;white-space:nowrap">
                 💌 Offer Sent — awaiting BG check{% if (a.offer_sent_count or 0) > 1 %} · {{ a.offer_sent_count }}×{% endif %}
               </span>
             {% elif a.interview_status == 'completed' %}
-              <span style="background:#fef9ec;color:#92400e;border:1px solid #d3a84f;
+              <span style="background:var(--amber-soft);color:var(--amber-deep);border:1px solid var(--amber);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:700;white-space:nowrap">
                 ✅ Interview Done — Review
               </span>
             {% elif a.interview_status == 'in_progress' %}
-              <span style="background:#fffbeb;color:#92400e;border:1px solid #fde68a;
+              <span style="background:var(--amber-soft);color:var(--amber-deep);border:1px solid var(--amber-line);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
                 ⏳ Interview In Progress
               </span>
             {% elif a.status == 'no_response' %}
-              <span style="background:#f7fafc;color:#718096;border:1px solid #e2e8f0;
+              <span style="background:var(--info-soft);color:var(--info);border:1px solid var(--info-soft);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
                 🔕 No Response
               </span>
             {% elif a.interview_status in ('sent', 'pending') %}
-              <span style="background:#f6f5fb;color:#3b2b6b;border:1px solid #c4b5fd;
+              <span style="background:var(--ground);color:var(--ink-2);border:1px solid var(--info-soft);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
                 📬 Interview Link Sent{% if a.interview_status == 'sent' %} · {{ (a.interview_nudge_count or 0) + 1 }}×{% endif %}
               </span>
             {% elif a.status == 'reviewing' %}
-              <span style="background:#ebf8ff;color:#2b6cb0;border:1px solid #bee3f8;
+              <span style="background:var(--info-soft);color:var(--info);border:1px solid var(--info-soft);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
                 👁 Reviewing
               </span>
             {% else %}
-              <span style="background:#f6f5fb;color:#5f5878;border:1px solid #e4dfef;
+              <span style="background:var(--ground);color:var(--muted);border:1px solid var(--line);
                            padding:4px 10px;border-radius:999px;font-size:0.78rem;font-weight:600;white-space:nowrap">
                 🆕 New Application
               </span>
             {% endif %}
           </td>
-          <td style="font-size:0.82rem;color:#9a95ad">{{ a.created_at.strftime('%b %d') }}</td>
+          <td style="font-size:0.82rem;color:var(--softer)">{{ a.created_at.strftime('%b %d') }}</td>
           <td>
             <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
               <a href="{{ url_for('contractors.application_detail', app_id=a.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Review</a>
               <form method="POST" action="{{ url_for('contractors.delete_application', app_id=a.id) }}"
                     onsubmit="return confirm('Delete {{ a.name }}\'s application permanently? Use this for test entries.')">
                 <button type="submit" title="Delete application"
-                        style="background:#fff;border:1px solid #fed7d7;color:#c53030;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">🗑</button>
+                        style="background:#fff;border:1px solid var(--warn-soft);color:var(--warn);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">🗑</button>
               </form>
             </div>
           </td>
@@ -216,8 +216,8 @@
   </div>
   {% else %}
   <div style="text-align:center;padding:48px 0">
-    <p style="color:#9a95ad;font-size:0.95rem;margin-bottom:16px">No applications yet.</p>
-    <p style="font-size:0.85rem;color:#9a95ad">Post your application link on Indeed, Facebook, and Nextdoor to start receiving them.</p>
+    <p style="color:var(--softer);font-size:0.95rem;margin-bottom:16px">No applications yet.</p>
+    <p style="font-size:0.85rem;color:var(--softer)">Post your application link on Indeed, Facebook, and Nextdoor to start receiving them.</p>
   </div>
   {% endif %}
 </div>

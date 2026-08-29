@@ -46,105 +46,105 @@
 
 <!-- Pipeline Progress Bar -->
 <div style="margin-bottom:20px">
-  <div style="display:flex;gap:0;border-radius:12px;overflow:hidden;border:1px solid #e4dfef;background:#f8f9fa">
+  <div style="display:flex;gap:0;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--info-soft)">
     {% for key, label, icon in stages %}
       {% set idx = loop.index0 %}
       {% set is_done    = (idx < current_idx and pipe_stage != 'rejected') %}
       {% set is_current = (key == effective_stage) %}
       {% set is_reject  = (pipe_stage == 'rejected') %}
       <div style="flex:1;padding:10px 4px;text-align:center;font-size:0.72rem;font-weight:700;
-                  background:{{ '#d4edda' if is_done else ('#fef9ec' if is_current else '#f8f9fa') }};
-                  color:{{ '#155724' if is_done else ('#92400e' if is_current else '#c8c3d4') }};
-                  border-right:{{ '1px solid #e4dfef' if not loop.last else 'none' }};
+                  background:{{ 'var(--good-soft)' if is_done else ('var(--amber-soft)' if is_current else 'var(--info-soft)') }};
+                  color:{{ 'var(--good)' if is_done else ('var(--amber-deep)' if is_current else 'var(--info-soft)') }};
+                  border-right:{{ '1px solid var(--line)' if not loop.last else 'none' }};
                   position:relative">
         <div style="font-size:1rem;margin-bottom:2px">{{ '✅' if is_done else icon }}</div>
         {{ label }}
-        {% if is_current %}<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:#d3a84f;border-radius:0 0 2px 2px"></div>{% endif %}
+        {% if is_current %}<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--amber);border-radius:0 0 2px 2px"></div>{% endif %}
       </div>
     {% endfor %}
     <!-- Rejected endpoint -->
     <div style="flex:1;padding:10px 4px;text-align:center;font-size:0.72rem;font-weight:700;
-                background:{{ '#f8d7da' if pipe_stage=='rejected' else '#f8f9fa' }};
-                color:{{ '#842029' if pipe_stage=='rejected' else '#c8c3d4' }};
+                background:{{ 'var(--warn-soft)' if pipe_stage=='rejected' else 'var(--info-soft)' }};
+                color:{{ 'var(--warn)' if pipe_stage=='rejected' else 'var(--info-soft)' }};
                 position:relative">
       <div style="font-size:1rem;margin-bottom:2px">❌</div>
       Rejected
-      {% if pipe_stage == 'rejected' %}<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:#e53e3e;border-radius:0 0 2px 2px"></div>{% endif %}
+      {% if pipe_stage == 'rejected' %}<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--warn);border-radius:0 0 2px 2px"></div>{% endif %}
     </div>
   </div>
 </div>
 
 <!-- NEXT STEP CALLOUT -->
 {% if pipe_stage == 'rejected' %}
-<div style="background:#f8d7da;border:1px solid #f5c6cb;border-radius:12px;padding:16px 20px;margin-bottom:24px">
-  <p style="font-weight:700;color:#842029;margin-bottom:2px">❌ Application Closed</p>
-  <p style="font-size:0.85rem;color:#842029">Rejection {{ 'email sent ' + a.rejection_sent_at.strftime('%b %d') if a.rejection_sent_at else 'marked — no email sent' }}. No further action needed.</p>
+<div style="background:var(--warn-soft);border:1px solid var(--warn-soft);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:var(--warn);margin-bottom:2px">❌ Application Closed</p>
+  <p style="font-size:0.85rem;color:var(--warn)">Rejection {{ 'email sent ' + a.rejection_sent_at.strftime('%b %d') if a.rejection_sent_at else 'marked — no email sent' }}. No further action needed.</p>
 </div>
 
 {% elif pipe_stage == 'hired' %}
-<div style="background:#d4edda;border:1px solid #a3cfbb;border-radius:12px;padding:16px 20px;margin-bottom:24px">
-  <p style="font-weight:700;color:#155724;font-size:1rem;margin-bottom:4px">🎉 Hired — Welcome email & agreement sent</p>
-  <p style="font-size:0.85rem;color:#1e7e34"><strong>Next:</strong> Wait for {{ a.name.split()[0] }} to sign the work agreement → then confirm orientation is complete → they're ready for their first job.</p>
+<div style="background:var(--good-soft);border:1px solid var(--good);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:var(--good);font-size:1rem;margin-bottom:4px">🎉 Hired — Welcome email & agreement sent</p>
+  <p style="font-size:0.85rem;color:var(--good)"><strong>Next:</strong> Wait for {{ a.name.split()[0] }} to sign the work agreement → then confirm orientation is complete → they're ready for their first job.</p>
 </div>
 
 {% elif pipe_stage == 'bg_cleared' %}
-<div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:12px;padding:16px 20px;margin-bottom:24px">
-  <p style="font-weight:700;color:#92400e;font-size:1rem;margin-bottom:4px">✅ Background Check Cleared — Ready to Hire</p>
-  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> Click <strong>Send Conditional Offer Email</strong> (left) — it sends the pay details, pay chart, and lets {{ a.name.split()[0] }} accept and onboard.</p>
+<div style="background:var(--amber-soft);border:2px solid var(--amber);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:var(--amber-deep);font-size:1rem;margin-bottom:4px">✅ Background Check Cleared — Ready to Hire</p>
+  <p style="font-size:0.85rem;color:var(--amber-deep)"><strong>Your next step:</strong> Click <strong>Send Conditional Offer Email</strong> (left) — it sends the pay details, pay chart, and lets {{ a.name.split()[0] }} accept and onboard.</p>
 </div>
 
 {% elif pipe_stage == 'bg_received' %}
-<div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:12px;padding:16px 20px;margin-bottom:24px">
-  <p style="font-weight:700;color:#92400e;font-size:1rem;margin-bottom:6px">📎 Background Check Submitted — Review It</p>
-  <p style="font-size:0.85rem;color:#7c4a04;margin-bottom:12px"><strong>Your next step:</strong> {{ a.name.split()[0] }} submitted their background check. Open it from the <strong>Background Check</strong> card below. If it's recent and clear, set the status to <em>Cleared</em> → save. Then you'll be ready to hire.</p>
+<div style="background:var(--amber-soft);border:2px solid var(--amber);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:var(--amber-deep);font-size:1rem;margin-bottom:6px">📎 Background Check Submitted — Review It</p>
+  <p style="font-size:0.85rem;color:var(--amber-deep);margin-bottom:12px"><strong>Your next step:</strong> {{ a.name.split()[0] }} submitted their background check. Open it from the <strong>Background Check</strong> card below. If it's recent and clear, set the status to <em>Cleared</em> → save. Then you'll be ready to hire.</p>
   {% set bgdoc = a.document('bgcheck') %}
   {% if bgdoc or a.bgcheck_uploaded_url %}
   <a href="{{ url_for('contractors.view_document', doc_id=bgdoc.id) if bgdoc else a.bgcheck_uploaded_url }}" target="_blank"
-     style="background:#d3a84f;color:#1f1333;font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem;display:inline-block">
+     style="background:var(--amber);color:var(--ink);font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem;display:inline-block">
     📄 View Their Background Check →
   </a>
   {% elif a.bgcheck_uploaded_link %}
   <a href="{{ a.bgcheck_uploaded_link }}" target="_blank"
-     style="background:#d3a84f;color:#1f1333;font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem;display:inline-block">
+     style="background:var(--amber);color:var(--ink);font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem;display:inline-block">
     🔗 Open Their Verification Link →
   </a>
   {% endif %}
 </div>
 
 {% elif pipe_stage == 'bg_waiting' %}
-<div style="background:#fff8e1;border:1px solid #fde68a;border-radius:12px;padding:16px 20px;margin-bottom:24px">
-  <p style="font-weight:700;color:#856404;font-size:1rem;margin-bottom:4px">🔍 Waiting on Background Check Results</p>
-  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> {{ a.name.split()[0] }} has 7 days to complete their background check through Checkr or Care.com. They submit it through a secure upload link in their email. When it arrives, this box will turn gold and let you review it.</p>
+<div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:var(--amber-deep);font-size:1rem;margin-bottom:4px">🔍 Waiting on Background Check Results</p>
+  <p style="font-size:0.85rem;color:var(--amber-deep)"><strong>Your next step:</strong> {{ a.name.split()[0] }} has 7 days to complete their background check through Checkr or Care.com. They submit it through a secure upload link in their email. When it arrives, this box will turn gold and let you review it.</p>
 </div>
 
 {% elif pipe_stage == 'interview_done' %}
-<div style="background:#fef9ec;border:2px solid #d3a84f;border-radius:12px;padding:16px 20px;margin-bottom:24px">
-  <p style="font-weight:700;color:#92400e;font-size:1rem;margin-bottom:6px">👁 Video Interview Complete — Review Now</p>
-  <p style="font-size:0.85rem;color:#7c4a04;margin-bottom:12px"><strong>Your next step:</strong> Watch {{ a.name.split()[0] }}'s 5 video responses. Look for professionalism, communication, and reliability. Then approve or reject.</p>
+<div style="background:var(--amber-soft);border:2px solid var(--amber);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:var(--amber-deep);font-size:1rem;margin-bottom:6px">👁 Video Interview Complete — Review Now</p>
+  <p style="font-size:0.85rem;color:var(--amber-deep);margin-bottom:12px"><strong>Your next step:</strong> Watch {{ a.name.split()[0] }}'s 5 video responses. Look for professionalism, communication, and reliability. Then approve or reject.</p>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
     <a href="{{ url_for('interviews.review_interview', app_id=a.id) }}"
-       style="background:#d3a84f;color:#1f1333;font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem">
+       style="background:var(--amber);color:var(--ink);font-weight:700;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.9rem">
       ▶ Watch Video Responses →
     </a>
   </div>
 </div>
 
 {% elif pipe_stage == 'interview_progress' %}
-<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:16px 20px;margin-bottom:24px">
-  <p style="font-weight:700;color:#856404;font-size:1rem;margin-bottom:4px">⏳ {{ a.name.split()[0] }} Is Currently Recording</p>
-  <p style="font-size:0.85rem;color:#7c4a04"><strong>Your next step:</strong> Nothing yet — they're in the middle of recording their video answers. Check back shortly. You'll see the stage flip to "Review Videos" when all 5 are done.</p>
+<div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:var(--amber-deep);font-size:1rem;margin-bottom:4px">⏳ {{ a.name.split()[0] }} Is Currently Recording</p>
+  <p style="font-size:0.85rem;color:var(--amber-deep)"><strong>Your next step:</strong> Nothing yet — they're in the middle of recording their video answers. Check back shortly. You'll see the stage flip to "Review Videos" when all 5 are done.</p>
 </div>
 
 {% elif pipe_stage == 'interview_sent' %}
-<div style="background:#f6f5fb;border:1px solid #c4b5fd;border-radius:12px;padding:16px 20px;margin-bottom:24px">
-  <p style="font-weight:700;color:#3b2b6b;font-size:1rem;margin-bottom:4px">📬 Interview Link Sent — Waiting for {{ a.name.split()[0] }}</p>
-  <p style="font-size:0.85rem;color:#5f5878"><strong>Your next step:</strong> Nothing for now. They received an email with their video interview link. When they finish recording, this page will update to "Review Videos." If they haven't responded in 3 days, use the re-send button on the left.</p>
+<div style="background:var(--ground);border:1px solid var(--info-soft);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:var(--ink-2);font-size:1rem;margin-bottom:4px">📬 Interview Link Sent — Waiting for {{ a.name.split()[0] }}</p>
+  <p style="font-size:0.85rem;color:var(--muted)"><strong>Your next step:</strong> Nothing for now. They received an email with their video interview link. When they finish recording, this page will update to "Review Videos." If they haven't responded in 3 days, use the re-send button on the left.</p>
 </div>
 
 {% else %}
-<div style="background:#f6f5fb;border:1px solid #e4dfef;border-radius:12px;padding:16px 20px;margin-bottom:24px">
-  <p style="font-weight:700;color:#3b2460;font-size:1rem;margin-bottom:4px">📋 New Application — Interview Link Sends Automatically</p>
-  <p style="font-size:0.85rem;color:#5f5878"><strong>Your next step:</strong> The video interview link was sent automatically 10 minutes after this application passed the filter. If you added this person manually or need to send it now, use the <em>Send Video Interview Link</em> button on the left.</p>
+<div style="background:var(--ground);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:24px">
+  <p style="font-weight:700;color:var(--ink-2);font-size:1rem;margin-bottom:4px">📋 New Application — Interview Link Sends Automatically</p>
+  <p style="font-size:0.85rem;color:var(--muted)"><strong>Your next step:</strong> The video interview link was sent automatically 10 minutes after this application passed the filter. If you added this person manually or need to send it now, use the <em>Send Video Interview Link</em> button on the left.</p>
 </div>
 {% endif %}
 
@@ -153,16 +153,16 @@
   <div style="display:flex;flex-direction:column;gap:18px">
 
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contact</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Contact</h2>
       <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ a.name }}</span></div>
-      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ a.email }}" style="color:#5d4f7d">{{ a.email }}</a></span></div>
-      <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ a.phone }}" style="color:#5d4f7d">{{ a.phone }}</a></span></div>
+      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ a.email }}" style="color:var(--muted)">{{ a.email }}</a></span></div>
+      <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ a.phone }}" style="color:var(--muted)">{{ a.phone }}</a></span></div>
       <div class="detail-row"><span class="dl">Source</span><span class="dv">
         {% if a.source and a.source != 'Website' %}
-        <span style="background:#fef3c7;color:#92400e;padding:2px 10px;border-radius:999px;font-size:0.78rem;font-weight:600">{{ a.source }}</span>
+        <span style="background:var(--amber-soft);color:var(--amber-deep);padding:2px 10px;border-radius:999px;font-size:0.78rem;font-weight:600">{{ a.source }}</span>
         {% else %}{{ a.source or 'Website' }}{% endif %}
       </span></div>
-      <div class="detail-row"><span class="dl">Applied</span><span class="dv" style="color:#9a95ad">{{ a.created_at.strftime('%B %d, %Y') }}</span></div>
+      <div class="detail-row"><span class="dl">Applied</span><span class="dv" style="color:var(--softer)">{{ a.created_at.strftime('%B %d, %Y') }}</span></div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
         <form method="POST" action="{{ url_for('contractors.send_application_link', app_id=a.id) }}">
           <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.83rem">
@@ -175,32 +175,32 @@
             <div style="background:#1f133318;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:var(--purple-mid);text-align:center;margin-bottom:8px">
               🎥 Interview (English &amp; Spanish):
               {% if a.interview_status == 'completed' %}
-                <strong style="color:#276749">Completed ✅</strong>
+                <strong style="color:var(--good)">Completed ✅</strong>
                 &nbsp;—&nbsp;
                 <a href="{{ url_for('interviews.review_interview', app_id=a.id) }}"
                    style="color:var(--gold);font-weight:700">Watch Responses →</a>
               {% elif a.interview_status == 'in_progress' %}
-                <strong style="color:#92400e">In Progress ⏳</strong>
+                <strong style="color:var(--amber-deep)">In Progress ⏳</strong>
               {% else %}
                 <strong>Link Sent 📬 · {{ (a.interview_nudge_count or 0) + 1 }}×</strong>
-                {% if a.interview_last_sent_at %}<br><span style="color:#9a95ad">last sent {{ a.interview_last_sent_at.strftime('%b %d') }}</span>{% endif %}
+                {% if a.interview_last_sent_at %}<br><span style="color:var(--softer)">last sent {{ a.interview_last_sent_at.strftime('%b %d') }}</span>{% endif %}
                 {% if (a.interview_nudge_count or 0) >= 2 %}
-                  <br><span style="color:#b7791f">Last nudge sent — will move to “No Response” if still silent.</span>
+                  <br><span style="color:var(--amber-deep)">Last nudge sent — will move to “No Response” if still silent.</span>
                 {% else %}
-                  <br><span style="color:#9a95ad">Auto-nudges every 2 days ({{ 2 - (a.interview_nudge_count or 0) }} left).</span>
+                  <br><span style="color:var(--softer)">Auto-nudges every 2 days ({{ 2 - (a.interview_nudge_count or 0) }} left).</span>
                 {% endif %}
               {% endif %}
             </div>
           {% endif %}
           {% if a.status == 'no_response' %}
-            <div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#718096;text-align:center;margin-bottom:8px">
+            <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:8px;padding:10px 14px;font-size:0.82rem;color:var(--info);text-align:center;margin-bottom:8px">
               🔕 <strong>No Response</strong> — link sent 3× with no reply. Re-send below to give them another chance.
             </div>
           {% endif %}
           <form method="POST" action="{{ url_for('interviews.send_invite', app_id=a.id) }}"
                 onsubmit="return confirm('Send the bilingual interview link to {{ a.name }}? This restarts the follow-up nudges.')">
             <button type="submit"
-                    style="width:100%;background:#1f1333;color:#d3a84f;border:none;padding:10px 16px;
+                    style="width:100%;background:var(--ink);color:var(--amber);border:none;padding:10px 16px;
                            border-radius:8px;font-weight:700;font-size:0.83rem;cursor:pointer;
                            display:flex;align-items:center;justify-content:center;gap:6px">
               🎥 {{ 'Re-send' if (a.interview_status and a.interview_status != 'not_sent') else 'Send' }} Interview Link (English &amp; Spanish)
@@ -208,28 +208,28 @@
           </form>
 
           {% if a.status in ('hired', 'onboarding') %}
-            <div style="background:#eefcf3;border:1px solid #9ae0b8;border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#1a7a44;text-align:center;margin-top:8px">
+            <div style="background:var(--good-soft);border:1px solid var(--good);border-radius:8px;padding:12px 14px;font-size:0.82rem;color:var(--good);text-align:center;margin-top:8px">
               ✅ <strong>Hired — onboarding in progress</strong><br>
-              <span style="color:#2f8f57">Track their signature, payment setup &amp; start date on their <strong>Team</strong> profile.</span>
+              <span style="color:var(--good)">Track their signature, payment setup &amp; start date on their <strong>Team</strong> profile.</span>
             </div>
           {% elif a.status != 'rejected' %}
           {% if a.interview_status != 'completed' and not a.offer_sent_at and not a.offer_accepted_at %}
-            <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px 14px;font-size:0.8rem;color:#3730a3;margin-top:8px;line-height:1.5">
+            <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:8px;padding:10px 14px;font-size:0.8rem;color:var(--info);margin-top:8px;line-height:1.5">
               ⚡ <strong>No video interview yet.</strong> Normally you'd wait for it — but if this is a <strong>referral</strong> or someone you already trust, you can send the offer now to hire them directly.
             </div>
           {% endif %}
           {% if a.offer_accepted_at %}
-            <div style="background:#eefcf3;border:1px solid #9ae0b8;border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#1a7a44;text-align:center;margin-top:8px">
+            <div style="background:var(--good-soft);border:1px solid var(--good);border-radius:8px;padding:12px 14px;font-size:0.82rem;color:var(--good);text-align:center;margin-top:8px">
               🎉 <strong>Offer Accepted on {{ a.offer_accepted_at.strftime('%b %d, %Y') }}!</strong><br>
-              <span style="color:#2f8f57">They're now onboarding — find them in your <strong>Team</strong> page.</span>
+              <span style="color:var(--good)">They're now onboarding — find them in your <strong>Team</strong> page.</span>
             </div>
           {% elif a.offer_sent_at %}
-            <div style="background:#fffaf0;border:1px solid #f5d9a0;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#92600e;text-align:center;margin-top:8px">
+            <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:10px 14px;font-size:0.82rem;color:var(--amber-deep);text-align:center;margin-top:8px">
               💌 <strong>Offer Sent · {{ a.offer_sent_count or 1 }}× — waiting for them to accept</strong><br>
-              <span style="color:#a9750f">last sent {{ a.offer_sent_at.strftime('%b %d, %Y') }}</span>
+              <span style="color:var(--amber-deep)">last sent {{ a.offer_sent_at.strftime('%b %d, %Y') }}</span>
             </div>
           {% else %}
-            <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:0.82rem;color:#92400e;text-align:center;margin-top:8px">
+            <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:10px 14px;font-size:0.82rem;color:var(--amber-deep);text-align:center;margin-top:8px">
               ⚠️ Conditional offer <strong>not sent yet</strong>
             </div>
           {% endif %}
@@ -237,18 +237,18 @@
                 onsubmit="return confirm('Send the conditional offer email (pay details + background check link) to {{ a.name }}?')"
                 style="margin-top:8px">
             <button type="submit"
-                    style="width:100%;background:#d3a84f;color:#1f1333;border:none;padding:10px 16px;
+                    style="width:100%;background:var(--amber);color:var(--ink);border:none;padding:10px 16px;
                            border-radius:8px;font-weight:700;font-size:0.83rem;cursor:pointer;
                            display:flex;align-items:center;justify-content:center;gap:6px">
               💌 {{ 'Re-send' if a.offer_sent_at else 'Send' }} Conditional Offer Email
             </button>
           </form>
           <a href="{{ url_for('interviews.offer_preview', app_id=a.id) }}" target="_blank"
-             style="display:block;text-align:center;margin-top:8px;padding:9px;border:1px solid #e4dfef;
-                    border-radius:8px;color:#5f5878;font-size:0.8rem;font-weight:600;text-decoration:none">
+             style="display:block;text-align:center;margin-top:8px;padding:9px;border:1px solid var(--line);
+                    border-radius:8px;color:var(--muted);font-size:0.8rem;font-weight:600;text-decoration:none">
             👁 Preview it first
           </a>
-          <p style="font-size:0.74rem;color:#9a95ad;margin-top:6px;text-align:center">
+          <p style="font-size:0.74rem;color:var(--softer);margin-top:6px;text-align:center">
             Sends the welcome offer with pay details + background check link. Use this for anyone approved before this email existed.
           </p>
           {% endif %}
@@ -258,7 +258,7 @@
     </div>
 
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Qualifications</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Qualifications</h2>
       <div class="detail-row"><span class="dl">Experience</span><span class="dv">{{ a.years_experience or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Availability</span><span class="dv" style="font-size:0.88rem">{{ a.availability or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Has car</span><span class="dv">{{ '✓ Yes' if a.has_transportation else '✗ No' }}</span></div>
@@ -266,28 +266,28 @@
       <div class="detail-row"><span class="dl">Has references</span><span class="dv">{{ '✓ Yes' if a.has_references else '✗ No' }}</span></div>
       <div class="detail-row"><span class="dl">BG consent</span><span class="dv">{{ '✓ Yes' if a.background_check_consent else '✗ No' }}</span></div>
       {% if a.why_interested %}
-      <div style="margin-top:10px;background:#f6f5fb;border-radius:8px;padding:10px 12px;font-size:0.85rem;color:#5f5878">
-        <strong style="color:#3b2460">Why interested:</strong><br>{{ a.why_interested }}
+      <div style="margin-top:10px;background:var(--ground);border-radius:8px;padding:10px 12px;font-size:0.85rem;color:var(--muted)">
+        <strong style="color:var(--ink-2)">Why interested:</strong><br>{{ a.why_interested }}
       </div>
       {% endif %}
     </div>
 
     <!-- Phone Interview -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
         Phone Interview
-        {% if a.phone_interview_completed %}<span style="margin-left:8px;background:#d4edda;color:#155724;padding:2px 10px;border-radius:999px;font-size:0.72rem">Done</span>{% endif %}
+        {% if a.phone_interview_completed %}<span style="margin-left:8px;background:var(--good-soft);color:var(--good);padding:2px 10px;border-radius:999px;font-size:0.72rem">Done</span>{% endif %}
       </h2>
       <form method="POST">
         <input type="hidden" name="action" value="interview" />
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem">
-            <input type="checkbox" name="phone_interview_completed" style="width:auto;accent-color:#d3a84f"
+            <input type="checkbox" name="phone_interview_completed" style="width:auto;accent-color:var(--amber)"
                    {{ 'checked' if a.phone_interview_completed }} />
             Interview completed
           </label>
           {% if a.phone_interview_at %}
-          <span style="font-size:0.78rem;color:#9a95ad">{{ a.phone_interview_at.strftime('%b %d, %Y') }}</span>
+          <span style="font-size:0.78rem;color:var(--softer)">{{ a.phone_interview_at.strftime('%b %d, %Y') }}</span>
           {% endif %}
         </div>
         <div class="form-group">
@@ -300,43 +300,43 @@
 
     <!-- Background Check -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
         Background Check
-        {% if a.background_check_status == 'cleared' %}<span style="margin-left:8px;background:#d4edda;color:#155724;padding:2px 10px;border-radius:999px;font-size:0.72rem">Cleared ✅</span>
-        {% elif a.background_check_status == 'failed' %}<span style="margin-left:8px;background:#f8d7da;color:#842029;padding:2px 10px;border-radius:999px;font-size:0.72rem">Failed ❌</span>
-        {% elif a.background_check_status == 'requested' %}<span style="margin-left:8px;background:#fff3cd;color:#856404;padding:2px 10px;border-radius:999px;font-size:0.72rem">Requested ⏳</span>
+        {% if a.background_check_status == 'cleared' %}<span style="margin-left:8px;background:var(--good-soft);color:var(--good);padding:2px 10px;border-radius:999px;font-size:0.72rem">Cleared ✅</span>
+        {% elif a.background_check_status == 'failed' %}<span style="margin-left:8px;background:var(--warn-soft);color:var(--warn);padding:2px 10px;border-radius:999px;font-size:0.72rem">Failed ❌</span>
+        {% elif a.background_check_status == 'requested' %}<span style="margin-left:8px;background:var(--amber-soft);color:var(--amber-deep);padding:2px 10px;border-radius:999px;font-size:0.72rem">Requested ⏳</span>
         {% endif %}
       </h2>
 
       {% if a.bgcheck_uploaded_at %}
-      <div style="background:#d4edda;border:1px solid #a3cfbb;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:0.85rem">
-        <strong style="color:#155724">📎 Candidate submitted their results {{ a.bgcheck_uploaded_at.strftime('%b %d, %Y') }}</strong>
+      <div style="background:var(--good-soft);border:1px solid var(--good);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:0.85rem">
+        <strong style="color:var(--good)">📎 Candidate submitted their results {{ a.bgcheck_uploaded_at.strftime('%b %d, %Y') }}</strong>
         <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
           {% set bgdoc2 = a.document('bgcheck') %}
           {% if bgdoc2 or a.bgcheck_uploaded_url %}
           <a href="{{ url_for('contractors.view_document', doc_id=bgdoc2.id) if bgdoc2 else a.bgcheck_uploaded_url }}" target="_blank"
-             style="display:inline-block;background:#155724;color:#fff;padding:7px 14px;border-radius:6px;
+             style="display:inline-block;background:var(--good);color:#fff;padding:7px 14px;border-radius:6px;
                     text-decoration:none;font-weight:600;font-size:0.82rem;text-align:center">
             📄 View Uploaded File →
           </a>
           {% endif %}
           {% if a.bgcheck_uploaded_link %}
-          <a href="{{ a.bgcheck_uploaded_link }}" target="_blank" style="color:#155724;word-break:break-all;font-size:0.82rem">
+          <a href="{{ a.bgcheck_uploaded_link }}" target="_blank" style="color:var(--good);word-break:break-all;font-size:0.82rem">
             🔗 {{ a.bgcheck_uploaded_link }}
           </a>
           {% endif %}
         </div>
-        <p style="color:#1e7e34;font-size:0.78rem;margin-top:8px">Review it — if it's recent and clear, set the status below to <strong>Cleared</strong>.</p>
+        <p style="color:var(--good);font-size:0.78rem;margin-top:8px">Review it — if it's recent and clear, set the status below to <strong>Cleared</strong>.</p>
       </div>
       {% endif %}
 
       {% if a.bgcheck_existing_link %}
-      <div style="background:#d4edda;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem">
-        <strong style="color:#155724">✅ Applicant listed an existing background check on their application:</strong><br>
-        <a href="{{ a.bgcheck_existing_link }}" target="_blank" style="color:#155724;word-break:break-all">
+      <div style="background:var(--good-soft);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem">
+        <strong style="color:var(--good)">✅ Applicant listed an existing background check on their application:</strong><br>
+        <a href="{{ a.bgcheck_existing_link }}" target="_blank" style="color:var(--good);word-break:break-all">
           {{ a.bgcheck_existing_link }}
         </a>
-        <p style="color:#1e7e34;font-size:0.78rem;margin-top:4px">Review it — if it's recent and clear, you may not need to request a new one.</p>
+        <p style="color:var(--good);font-size:0.78rem;margin-top:4px">Review it — if it's recent and clear, you may not need to request a new one.</p>
       </div>
       {% endif %}
 
@@ -348,11 +348,11 @@
         </button>
       </form>
       {% if a.bgcheck_request_sent_at %}
-      <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:12px;text-align:center">
+      <p style="font-size:0.78rem;color:var(--softer);margin-bottom:12px;text-align:center">
         Sent {{ a.bgcheck_request_sent_at.strftime('%b %d, %Y') }} — they pay for it directly
       </p>
       {% else %}
-      <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:12px">Applicant receives a link, pays for their own check, and emails you the results. Set the provider in Settings → Business.</p>
+      <p style="font-size:0.78rem;color:var(--softer);margin-bottom:12px">Applicant receives a link, pays for their own check, and emails you the results. Set the provider in Settings → Business.</p>
       {% endif %}
       {% endif %}
 
@@ -371,7 +371,7 @@
         </div>
         <div style="margin-bottom:12px">
           <label class="check-item" style="font-size:0.88rem;cursor:pointer">
-            <input type="checkbox" name="bgcheck_results_received" style="width:auto;accent-color:#d3a84f"
+            <input type="checkbox" name="bgcheck_results_received" style="width:auto;accent-color:var(--amber)"
                    {{ 'checked' if a.bgcheck_results_received }} />
             📎 Results received (emailed back by applicant)
           </label>
@@ -386,16 +386,16 @@
 
     <!-- Reference Tracking -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Reference Checks</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Reference Checks</h2>
       <form method="POST">
         <input type="hidden" name="action" value="references" />
         {% for i in [1, 2] %}
         {% set ref_name = a['ref' ~ i ~ '_name'] if a['ref' ~ i ~ '_name'] is defined else '' %}
-        <div style="background:#f6f5fb;border-radius:10px;padding:14px;margin-bottom:12px">
+        <div style="background:var(--ground);border-radius:10px;padding:14px;margin-bottom:12px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <strong style="font-size:0.85rem;color:#3b2460">Reference {{ i }}</strong>
+            <strong style="font-size:0.85rem;color:var(--ink-2)">Reference {{ i }}</strong>
             <label class="check-item" style="font-size:0.82rem;cursor:pointer">
-              <input type="checkbox" name="ref{{ i }}_called" style="width:auto;accent-color:#10b981"
+              <input type="checkbox" name="ref{{ i }}_called" style="width:auto;accent-color:var(--good)"
                      {{ 'checked' if (a.ref1_called if i==1 else a.ref2_called) }} />
               ✅ Called
             </label>
@@ -431,7 +431,7 @@
 
     <!-- General Notes & Status -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Overall Decision</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Overall Decision</h2>
       <form method="POST">
         <input type="hidden" name="action" value="notes" />
         <div class="form-group">
@@ -452,9 +452,9 @@
 
     {% if a.status != 'rejected' %}
     <!-- Checklist before hiring -->
-    <div class="card" style="background:#fffbef;border-color:#ffc107">
-      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:10px;color:#856404;text-transform:uppercase;letter-spacing:0.1em">Pre-Hire Checklist</h2>
-      <div style="font-size:0.84rem;line-height:2;color:#856404">
+    <div class="card" style="background:var(--amber-soft);border-color:var(--amber)">
+      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:10px;color:var(--amber-deep);text-transform:uppercase;letter-spacing:0.1em">Pre-Hire Checklist</h2>
+      <div style="font-size:0.84rem;line-height:2;color:var(--amber-deep)">
         {{ '✅' if a.phone_interview_completed else '⬜' }} Phone interview completed<br>
         {{ '✅' if (a.ref1_called or a.ref2_called) else '⬜' }} At least one reference called<br>
         {{ '✅' if a.bgcheck_request_sent_at else '⬜' }} Background check requested<br>
@@ -465,10 +465,10 @@
     </div>
 
     <details class="card">
-      <summary style="cursor:pointer;font-size:0.9rem;font-weight:700;color:#9a95ad;list-style:none">
+      <summary style="cursor:pointer;font-size:0.9rem;font-weight:700;color:var(--softer);list-style:none">
         ⚙️ Advanced: hire directly (skip the offer email)
       </summary>
-      <p style="font-size:0.8rem;color:#9a95ad;margin:10px 0 14px;line-height:1.6">
+      <p style="font-size:0.8rem;color:var(--softer);margin:10px 0 14px;line-height:1.6">
         Most of the time, use <strong>Send Conditional Offer Email</strong> on the left — it includes the pay details, pay chart, and background-check step, and lets them accept.
         Only use this shortcut to add someone to the team <strong>immediately</strong> (e.g., a rehire) without the offer step.
       </p>
@@ -480,8 +480,8 @@
             <option value="employee">Employee (W-2)</option>
           </select>
         </div>
-        <div style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:8px;padding:11px 14px;margin-bottom:14px">
-          <p style="font-size:0.78rem;color:#2b6cb0;line-height:1.55;margin:0">
+        <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:8px;padding:11px 14px;margin-bottom:14px">
+          <p style="font-size:0.78rem;color:var(--info);line-height:1.55;margin:0">
             <strong>Pay is set per job, not here.</strong> Each job carries its own flat amount, which is
             what the offer promises and what payroll pays. The fields below are only a fallback for old
             jobs booked before per-job pay existed — leave them alone unless you know you need them.
@@ -495,7 +495,7 @@
           </select>
         </div>
         <details style="margin-bottom:14px">
-          <summary style="cursor:pointer;font-size:0.8rem;color:#9a95ad;font-weight:600">Legacy fallback rate</summary>
+          <summary style="cursor:pointer;font-size:0.8rem;color:var(--softer);font-weight:600">Legacy fallback rate</summary>
           <div class="form-group" style="margin-top:10px">
             <label>Pay Type</label>
             <select name="pay_type" onchange="updateRateLabel()">
@@ -506,7 +506,7 @@
           <div class="form-group">
             <label id="rate-label">Rate (%)</label>
             <input type="number" name="pay_rate" id="pay-rate" step="0.5" value="50" min="0" />
-            <span id="rate-hint" style="font-size:0.78rem;color:#9a95ad">Only used on jobs that have no pay and no hours set.</span>
+            <span id="rate-hint" style="font-size:0.78rem;color:var(--softer)">Only used on jobs that have no pay and no hours set.</span>
           </div>
         </details>
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;margin-top:4px">
@@ -517,28 +517,28 @@
     {% endif %}
 
     {% if a.status == 'hired' %}
-    <div class="card" style="background:#d4edda;border-color:#a3cfbb">
-      <p style="font-weight:700;color:#155724;font-size:0.95rem;margin-bottom:6px">✅ Hired!</p>
-      <p style="font-size:0.85rem;color:#1e7e34">{{ a.name }} is now in your team. Welcome email + agreement was sent automatically.</p>
-      <a href="{{ url_for('contractors.team') }}" style="display:inline-block;margin-top:10px;font-size:0.85rem;color:#155724;text-decoration:underline">View Team →</a>
+    <div class="card" style="background:var(--good-soft);border-color:var(--good)">
+      <p style="font-weight:700;color:var(--good);font-size:0.95rem;margin-bottom:6px">✅ Hired!</p>
+      <p style="font-size:0.85rem;color:var(--good)">{{ a.name }} is now in your team. Welcome email + agreement was sent automatically.</p>
+      <a href="{{ url_for('contractors.team') }}" style="display:inline-block;margin-top:10px;font-size:0.85rem;color:var(--good);text-decoration:underline">View Team →</a>
     </div>
     {% endif %}
 
     {% if a.status != 'hired' and a.status != 'rejected' %}
-    <div class="card" style="border-color:#f8d7da">
-      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:10px;color:#842029;text-transform:uppercase;letter-spacing:0.1em">Not the Right Fit?</h2>
-      <p style="font-size:0.83rem;color:#9a95ad;margin-bottom:12px">Send a polite rejection email and close out this application.</p>
+    <div class="card" style="border-color:var(--warn-soft)">
+      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:10px;color:var(--warn);text-transform:uppercase;letter-spacing:0.1em">Not the Right Fit?</h2>
+      <p style="font-size:0.83rem;color:var(--softer);margin-bottom:12px">Send a polite rejection email and close out this application.</p>
       <form method="POST" action="{{ url_for('contractors.send_rejection', app_id=a.id) }}"
             onsubmit="return confirm('Send a rejection email to {{ a.name.split()[0] }}?')">
-        <button type="submit" class="btn" style="width:100%;justify-content:center;font-size:0.85rem;background:#f8d7da;color:#842029;border:1px solid #f5c6cb">
+        <button type="submit" class="btn" style="width:100%;justify-content:center;font-size:0.85rem;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-soft)">
           Send Rejection Email
         </button>
       </form>
     </div>
     {% elif a.status == 'rejected' %}
-    <div class="card" style="background:#f8d7da;border-color:#f5c6cb">
-      <p style="font-weight:700;color:#842029;font-size:0.9rem;margin-bottom:4px">❌ Application Closed</p>
-      <p style="font-size:0.82rem;color:#842029">
+    <div class="card" style="background:var(--warn-soft);border-color:var(--warn-soft)">
+      <p style="font-weight:700;color:var(--warn);font-size:0.9rem;margin-bottom:4px">❌ Application Closed</p>
+      <p style="font-size:0.82rem;color:var(--warn)">
         Rejection {{ 'email sent ' + a.rejection_sent_at.strftime('%b %d') if a.rejection_sent_at else 'marked — no email sent' }}.
       </p>
     </div>

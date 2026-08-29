@@ -66,6 +66,34 @@ def support_email():
     return DEFAULT_SUPPORT if d == 'akyehq.com' else f'support@{d}'
 
 
+# Who is legally on the other side of the terms of service. This is OUR
+# company -- the one selling the software -- and it is deliberately not in
+# `branding.py`, which holds the details of the cleaning business that a given
+# CRM belongs to. Confusing the two would put our address on a customer's
+# invoice, or theirs on our privacy policy.
+#
+# It is overridable so that a private deployment states its own entity rather
+# than ours, and blank on a deployment that has not set one, because a legal
+# page that names the wrong company is worse than one that names none.
+DEFAULT_LEGAL_ENTITY  = 'Yaa Mansa LLC'
+DEFAULT_LEGAL_ADDRESS = '1317 Edgewater Drive\nOrlando, FL'
+
+
+def legal_entity():
+    """The company name on the terms, the privacy policy and the invoices."""
+    explicit = (os.environ.get('PRODUCT_LEGAL_ENTITY') or '').strip()
+    if explicit:
+        return explicit
+    return DEFAULT_LEGAL_ENTITY if domain() == 'akyehq.com' else ''
+
+
+def legal_address():
+    """The registered address that goes with it. Lines, for a template."""
+    explicit = (os.environ.get('PRODUCT_LEGAL_ADDRESS') or '').strip()
+    raw = explicit or (DEFAULT_LEGAL_ADDRESS if domain() == 'akyehq.com' else '')
+    return [ln.strip() for ln in raw.split('\n') if ln.strip()]
+
+
 def is_product_site():
     """True only on the product's own domain, signed out or not.
 

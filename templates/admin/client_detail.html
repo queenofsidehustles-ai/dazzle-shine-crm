@@ -6,7 +6,7 @@
     <a href="{{ url_for('bookings.clients') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← All Clients</a>
     <form method="POST" action="{{ url_for('bookings.delete_client', client_id=client.id) }}"
           onsubmit="return confirm('Delete {{ client.name }} and all their bookings? This cannot be undone.')">
-      <button type="submit" class="btn" style="padding:6px 14px;font-size:0.85rem;background:#fee2e2;color:#991b1b;border:1px solid #f5c6cb">Delete Client</button>
+      <button type="submit" class="btn" style="padding:6px 14px;font-size:0.85rem;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-soft)">Delete Client</button>
     </form>
   </div>
 {% endblock %}
@@ -15,31 +15,31 @@
 <div class="detail-grid">
   <div>
     <div class="card" style="margin-bottom:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
-      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ client.email }}" style="color:#5d4f7d">{{ client.email }}</a></span></div>
-      <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ client.phone }}" style="color:#5d4f7d">{{ client.phone or '—' }}</a></span></div>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
+      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ client.email }}" style="color:var(--muted)">{{ client.email }}</a></span></div>
+      <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ client.phone }}" style="color:var(--muted)">{{ client.phone or '—' }}</a></span></div>
       <div class="detail-row"><span class="dl">Address</span><span class="dv">{{ client.address or '—' }}</span></div>
       <div class="detail-row"><span class="dl">City</span><span class="dv">{{ client.city or '—' }}</span></div>
-      <div class="detail-row"><span class="dl">Client Since</span><span class="dv" style="color:#9a95ad">{{ client.created_at.strftime('%B %d, %Y') }}</span></div>
+      <div class="detail-row"><span class="dl">Client Since</span><span class="dv" style="color:var(--softer)">{{ client.created_at.strftime('%B %d, %Y') }}</span></div>
     </div>
 
     <div class="card" style="margin-bottom:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Customer Portal</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Customer Portal</h2>
       {% if client.card_last4 %}
       <div class="detail-row">
         <span class="dl">Auto-pay</span>
         <span class="dv">
-          {% if client.autopay %}<span style="color:#2e7d32;font-weight:700">On ✓</span>{% else %}<span style="color:#9a95ad">Off</span>{% endif %}
+          {% if client.autopay %}<span style="color:var(--good);font-weight:700">On ✓</span>{% else %}<span style="color:var(--softer)">Off</span>{% endif %}
           — {{ client.card_brand or 'Card' }} ending {{ client.card_last4 }}
         </span>
       </div>
       {% else %}
-      <div class="detail-row"><span class="dl">Auto-pay</span><span class="dv" style="color:#9a95ad">No card saved yet</span></div>
+      <div class="detail-row"><span class="dl">Auto-pay</span><span class="dv" style="color:var(--softer)">No card saved yet</span></div>
       {% endif %}
-      <p style="color:#5f5878;font-size:0.85rem;margin:10px 0 8px">Private self-serve link — share it so they can save a card, see upcoming cleanings &amp; invoices:</p>
+      <p style="color:var(--muted);font-size:0.85rem;margin:10px 0 8px">Private self-serve link — share it so they can save a card, see upcoming cleanings &amp; invoices:</p>
       <div style="display:flex;gap:8px">
         <input id="portal-link" value="{{ portal_url }}" readonly
-               style="flex:1;padding:9px 11px;border:1px solid #e4dfef;border-radius:8px;font-size:0.82rem;background:#faf9fd;color:#5f5878" />
+               style="flex:1;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:0.82rem;background:var(--ground);color:var(--muted)" />
         <button type="button" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem"
                 onclick="navigator.clipboard.writeText(document.getElementById('portal-link').value);this.textContent='Copied!'">Copy</button>
       </div>
@@ -47,19 +47,19 @@
 
     <!-- Portal emails -->
     <div class="card" style="margin-top:16px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Send them their page</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Send them their page</h2>
       {% if invite_sent %}
-        <p style="color:#2e7d32;font-size:0.85rem;margin:0 0 14px">✓ Welcome email sent {{ invite_sent }}</p>
+        <p style="color:var(--good);font-size:0.85rem;margin:0 0 14px">✓ Welcome email sent {{ invite_sent }}</p>
       {% else %}
-        <p style="color:#5f5878;font-size:0.85rem;margin:0 0 14px">Nothing sent yet. Preview it, send yourself a test, then send it on.</p>
+        <p style="color:var(--muted);font-size:0.85rem;margin:0 0 14px">Nothing sent yet. Preview it, send yourself a test, then send it on.</p>
       {% endif %}
 
       {% for kind, title, note in [
           ('welcome', '1 · Welcome email', 'Their schedule, their price and their link. Mentions saving a card, but doesn’t ask.'),
           ('nudge', '2 · Save-a-card email', 'Send after the first cleaning is done. This one asks them to set up auto-pay.')] %}
-      <div style="border:1px solid #e4dfef;border-radius:10px;padding:13px 15px;margin-bottom:10px">
+      <div style="border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:10px">
         <div style="font-weight:700;font-size:0.92rem;margin-bottom:2px">{{ title }}</div>
-        <div style="color:#5f5878;font-size:0.83rem;margin-bottom:11px">{{ note }}</div>
+        <div style="color:var(--muted);font-size:0.83rem;margin-bottom:11px">{{ note }}</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
           <a href="{{ url_for('bookings.portal_invite_preview', client_id=client.id, kind=kind) }}"
              target="_blank" class="btn btn-outline" style="padding:5px 13px;font-size:0.82rem">👁 Preview</a>
@@ -84,7 +84,7 @@
   <div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
-        <h2 style="font-size:1rem;font-weight:700;margin:0;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Booking History ({{ client.total_bookings }})</h2>
+        <h2 style="font-size:1rem;font-weight:700;margin:0;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Booking History ({{ client.total_bookings }})</h2>
         <a href="{{ url_for('bookings.new', client=client.id) }}" class="btn btn-gold" style="padding:7px 16px;font-size:0.85rem">📋 Book {{ client.name.split()[0] }} again</a>
         {% if client.phone %}
         <a href="{{ url_for('messages.thread', phone=client.phone, name=client.name) }}"
@@ -98,18 +98,18 @@
           <tbody>
             {% for b in client.bookings | sort(attribute='created_at', reverse=True) %}
             <tr>
-              <td style="color:#9a95ad;font-size:0.85rem">#{{ b.id }}</td>
+              <td style="color:var(--softer);font-size:0.85rem">#{{ b.id }}</td>
               <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}">{{ b.service_label }}</a></td>
-              <td style="color:#5f5878">{{ b.preferred_date or '—' }}</td>
+              <td style="color:var(--muted)">{{ b.preferred_date or '—' }}</td>
               <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
-              <td style="color:#5f5878">{{ ('$%.0f' % b.price) if b.price else '—' }}</td>
+              <td style="color:var(--muted)">{{ ('$%.0f' % b.price) if b.price else '—' }}</td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
       {% else %}
-      <p style="color:#9a95ad">No bookings yet.</p>
+      <p style="color:var(--softer)">No bookings yet.</p>
       {% endif %}
     </div>
   </div>

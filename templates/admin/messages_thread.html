@@ -4,17 +4,17 @@
 
 {% block content %}
 <div style="margin-bottom:12px">
-  <a href="{{ url_for('messages.inbox') }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem">← All messages</a>
-  <span style="color:#b3adc4;font-size:0.85rem;margin-left:8px">{{ pretty }}</span>
+  <a href="{{ url_for('messages.inbox') }}" style="color:var(--info);text-decoration:none;font-size:0.85rem">← All messages</a>
+  <span style="color:var(--softer);font-size:0.85rem;margin-left:8px">{{ pretty }}</span>
   <span style="background:{{ kind.tint }};color:{{ kind.colour }};font-size:0.68rem;font-weight:700;
                padding:2px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:0.06em;
                margin-left:8px">{{ kind.icon }} {{ kind.label }}</span>
   {% if contact.staff_id %}
-  <a href="{{ url_for('contractors.staff_detail', staff_id=contact.staff_id) }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem;margin-left:10px">View team profile →</a>
+  <a href="{{ url_for('contractors.staff_detail', staff_id=contact.staff_id) }}" style="color:var(--info);text-decoration:none;font-size:0.85rem;margin-left:10px">View team profile →</a>
   {% elif contact.application_id %}
-  <a href="{{ url_for('interviews.review_interview', app_id=contact.application_id) }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem;margin-left:10px">View application →</a>
+  <a href="{{ url_for('interviews.review_interview', app_id=contact.application_id) }}" style="color:var(--info);text-decoration:none;font-size:0.85rem;margin-left:10px">View application →</a>
   {% elif contact.client_id %}
-  <a href="{{ url_for('bookings.client_detail', client_id=contact.client_id) }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem;margin-left:10px">View client →</a>
+  <a href="{{ url_for('bookings.client_detail', client_id=contact.client_id) }}" style="color:var(--info);text-decoration:none;font-size:0.85rem;margin-left:10px">View client →</a>
   {% endif %}
 </div>
 
@@ -22,8 +22,8 @@
 <form method="POST" action="{{ url_for('messages.toggle_lang', phone=phone) }}" style="margin-bottom:12px">
   {% if lang == 'es' %}
   <input type="hidden" name="lang" value="en">
-  <div style="display:flex;align-items:center;gap:10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:9px 13px">
-    <span style="font-size:0.85rem;color:#3730a3;font-weight:600">🌐 Spanish translation is ON — you type English, they get Spanish.</span>
+  <div style="display:flex;align-items:center;gap:10px;background:var(--info-soft);border:1px solid var(--info-soft);border-radius:10px;padding:9px 13px">
+    <span style="font-size:0.85rem;color:var(--info);font-weight:600">🌐 Spanish translation is ON — you type English, they get Spanish.</span>
     <button type="submit" class="btn btn-outline" style="margin-left:auto;font-size:0.78rem;padding:5px 12px">Turn off</button>
   </div>
   {% else %}
@@ -40,14 +40,14 @@
       {% set main = (m.body if is_out else (m.body_translated or m.body)) %}
       {% set sub = (m.body_translated if is_out else (m.body if m.body_translated else None)) %}
       <div style="align-self:{{ 'flex-end' if is_out else 'flex-start' }};max-width:78%">
-        <div style="background:{{ '#6b46c1' if is_out else '#f0eef6' }};color:{{ '#fff' if is_out else '#1f1333' }};padding:9px 13px;border-radius:14px;font-size:0.92rem;line-height:1.35;white-space:pre-wrap;word-break:break-word">{{ main }}</div>
+        <div style="background:{{ 'var(--info)' if is_out else 'var(--info-soft)' }};color:{{ '#fff' if is_out else 'var(--ink)' }};padding:9px 13px;border-radius:14px;font-size:0.92rem;line-height:1.35;white-space:pre-wrap;word-break:break-word">{{ main }}</div>
         {% if sub %}
-        <div style="font-size:0.74rem;color:#8b84a3;margin-top:3px;padding:0 4px;font-style:italic;text-align:{{ 'right' if is_out else 'left' }}">🌐 {{ 'sent in Spanish' if is_out else 'original' }}: {{ sub }}</div>
+        <div style="font-size:0.74rem;color:var(--info);margin-top:3px;padding:0 4px;font-style:italic;text-align:{{ 'right' if is_out else 'left' }}">🌐 {{ 'sent in Spanish' if is_out else 'original' }}: {{ sub }}</div>
         {% endif %}
-        <div style="font-size:0.68rem;color:#b3adc4;margin-top:2px;text-align:{{ 'right' if is_out else 'left' }}">{{ m.created_at.strftime('%b %-d, %-I:%M %p') }}</div>
+        <div style="font-size:0.68rem;color:var(--softer);margin-top:2px;text-align:{{ 'right' if is_out else 'left' }}">{{ m.created_at.strftime('%b %-d, %-I:%M %p') }}</div>
       </div>
     {% else %}
-      <p style="color:#9a95ad;text-align:center;padding:20px 0;font-size:0.9rem">No messages yet — say hello 👋</p>
+      <p style="color:var(--softer);text-align:center;padding:20px 0;font-size:0.9rem">No messages yet — say hello 👋</p>
     {% endfor %}
   </div>
 
@@ -61,21 +61,21 @@
   <!-- Template picker -->
   {% if templates %}
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px;align-items:center">
-    <span style="font-size:0.75rem;color:#9a95ad;font-weight:600">Quick templates:</span>
+    <span style="font-size:0.75rem;color:var(--softer);font-weight:600">Quick templates:</span>
     {% for t in templates %}
     <button type="button" class="tpl-chip" data-id="{{ t.id }}"
-            style="background:#f0eef6;border:1px solid #d8d3e6;border-radius:999px;padding:5px 12px;font-size:0.78rem;cursor:pointer">{{ t.title }}</button>
+            style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:999px;padding:5px 12px;font-size:0.78rem;cursor:pointer">{{ t.title }}</button>
     {% endfor %}
-    <a href="{{ url_for('messages.templates') }}" style="font-size:0.75rem;color:#6b46c1;text-decoration:none;margin-left:auto">✏️ Manage</a>
+    <a href="{{ url_for('messages.templates') }}" style="font-size:0.75rem;color:var(--info);text-decoration:none;margin-left:auto">✏️ Manage</a>
   </div>
   {% endif %}
 
   <!-- Reply box -->
-  <form method="POST" action="{{ url_for('messages.send', phone=phone) }}" style="display:flex;gap:8px;align-items:flex-end;border-top:1px solid #efecf6;padding-top:12px">
+  <form method="POST" action="{{ url_for('messages.send', phone=phone) }}" style="display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--info-soft);padding-top:12px">
     <textarea id="reply-body" name="body" rows="2" required placeholder="Type or tap 🎤 to talk…"
-              style="flex:1;border:1px solid #d8d3e6;border-radius:12px;padding:10px 12px;font-family:inherit;font-size:0.92rem;resize:none"></textarea>
+              style="flex:1;border:1px solid var(--info-soft);border-radius:12px;padding:10px 12px;font-family:inherit;font-size:0.92rem;resize:none"></textarea>
     <button type="button" id="mic-btn" title="Speak your message"
-            style="background:#f0eef6;border:1px solid #d8d3e6;border-radius:12px;width:44px;height:44px;font-size:1.2rem;cursor:pointer;flex-shrink:0">🎤</button>
+            style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:12px;width:44px;height:44px;font-size:1.2rem;cursor:pointer;flex-shrink:0">🎤</button>
     <button type="submit" class="btn btn-primary" style="padding:10px 18px;white-space:nowrap">Send ➤</button>
   </form>
 </div>
@@ -102,8 +102,8 @@
       base = ta.value ? ta.value.replace(/\s+$/, '') + ' ' : '';
       try { rec.start(); } catch (e) {}
     });
-    rec.onstart = () => { listening = true; micBtn.textContent = '🔴'; micBtn.style.background = '#fee2e2'; micBtn.title = 'Listening… tap to stop'; };
-    const reset = () => { listening = false; micBtn.textContent = '🎤'; micBtn.style.background = '#f0eef6'; micBtn.title = 'Speak your message'; };
+    rec.onstart = () => { listening = true; micBtn.textContent = '🔴'; micBtn.style.background = 'var(--warn-soft)'; micBtn.title = 'Listening… tap to stop'; };
+    const reset = () => { listening = false; micBtn.textContent = '🎤'; micBtn.style.background = 'var(--info-soft)'; micBtn.title = 'Speak your message'; };
     rec.onend = reset;
     rec.onerror = reset;
     rec.onresult = (e) => {

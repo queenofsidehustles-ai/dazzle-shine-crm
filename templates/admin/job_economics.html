@@ -33,29 +33,29 @@
 <div class="stat-grid" style="margin-bottom:22px">
   <div class="stat-card">
     <div class="label">Labor % of revenue</div>
-    <div class="value" style="color:{{ '#b91c1c' if e.labor_pct > 60 else ('#c05621' if e.labor_pct > 50 else '#065f46') }}">{{ '%.1f' % e.labor_pct }}%</div>
+    <div class="value" style="color:{{ 'var(--warn)' if e.labor_pct > 60 else ('var(--amber-deep)' if e.labor_pct > 50 else 'var(--good)') }}">{{ '%.1f' % e.labor_pct }}%</div>
     <div class="sub">${{ '%.2f' % e.labor_total }} of ${{ '%.2f' % e.revenue }}</div>
   </div>
   <div class="stat-card">
     <div class="label">Margin after labor &amp; ads</div>
-    <div class="value" style="color:#b98a33">${{ '%.2f' % e.margin_total }}</div>
+    <div class="value" style="color:var(--amber-deep)">${{ '%.2f' % e.margin_total }}</div>
     <div class="sub">{{ '%.1f' % e.margin_pct }}% · {{ e.jobs }} job{{ 's' if e.jobs != 1 }}</div>
   </div>
   <div class="stat-card">
     <div class="label">Discount leakage</div>
-    <div class="value" style="color:{{ '#b91c1c' if e.discount_total else '#065f46' }}">${{ '%.2f' % e.discount_total }}</div>
+    <div class="value" style="color:{{ 'var(--warn)' if e.discount_total else 'var(--good)' }}">${{ '%.2f' % e.discount_total }}</div>
     <div class="sub">off ${{ '%.2f' % e.baseline }} of list price</div>
   </div>
-  <div class="stat-card" style="{{ 'border-color:#fecaca;background:#fff5f5' if e.below_floor else '' }}">
+  <div class="stat-card" style="{{ 'border-color:var(--warn-soft);background:var(--warn-soft)' if e.below_floor else '' }}">
     <div class="label">Below floor price</div>
-    <div class="value" style="color:{{ '#b91c1c' if e.below_floor else '#065f46' }}">{{ e.below_floor|length }}</div>
+    <div class="value" style="color:{{ 'var(--warn)' if e.below_floor else 'var(--good)' }}">{{ e.below_floor|length }}</div>
     <div class="sub">{{ 'jobs sold under cost' if e.below_floor else 'none — good' }}</div>
   </div>
 </div>
 
 {% if e.below_floor %}
-<div class="card" style="margin-bottom:18px;border-color:#fecaca">
-  <div class="section-header"><h2 style="color:#991b1b">🚩 Sold below the floor</h2></div>
+<div class="card" style="margin-bottom:18px;border-color:var(--warn-soft)">
+  <div class="section-header"><h2 style="color:var(--warn)">🚩 Sold below the floor</h2></div>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Date</th><th>Client</th><th>Charged</th><th>Floor</th><th>Short by</th><th>Why</th></tr></thead>
@@ -63,11 +63,11 @@
         {% for r in e.below_floor %}
         <tr>
           <td>{{ r.booking.preferred_date or '—' }}</td>
-          <td><a href="{{ url_for('bookings.detail', booking_id=r.booking.id) }}" style="color:#5d4f7d;font-weight:600">{{ r.booking.name }}</a></td>
+          <td><a href="{{ url_for('bookings.detail', booking_id=r.booking.id) }}" style="color:var(--muted);font-weight:600">{{ r.booking.name }}</a></td>
           <td>${{ '%.2f' % r.price }}</td>
           <td>${{ '%.2f' % r.floor }}</td>
-          <td style="font-weight:700;color:#b91c1c">−${{ '%.2f' % r.under_floor }}</td>
-          <td style="font-size:0.84rem;color:#9a95ad">{{ r.booking.below_floor_reason or '— no reason given —' }}</td>
+          <td style="font-weight:700;color:var(--warn)">−${{ '%.2f' % r.under_floor }}</td>
+          <td style="font-size:0.84rem;color:var(--softer)">{{ r.booking.below_floor_reason or '— no reason given —' }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -79,7 +79,7 @@
 <div class="card" style="margin-bottom:18px">
   <div class="section-header">
     <h2>⏱️ What each cleaner really earns per hour</h2>
-    <span style="font-size:0.8rem;color:#9a95ad">lowest first — this is your retention warning</span>
+    <span style="font-size:0.8rem;color:var(--softer)">lowest first — this is your retention warning</span>
   </div>
   {% if e.by_cleaner %}
   <div class="table-wrap">
@@ -92,7 +92,7 @@
           <td>{{ c.jobs }}</td>
           <td>{{ '%g' % c.hours }}</td>
           <td>${{ '%.2f' % c.paid }}</td>
-          <td style="text-align:right;font-weight:700;color:{{ '#b91c1c' if c.effective_hourly and c.effective_hourly < 35 else '#065f46' }}">
+          <td style="text-align:right;font-weight:700;color:{{ 'var(--warn)' if c.effective_hourly and c.effective_hourly < 35 else 'var(--good)' }}">
             {{ ('$%.2f' % c.effective_hourly) if c.effective_hourly else '—' }}
           </td>
         </tr>
@@ -100,11 +100,11 @@
       </tbody>
     </table>
   </div>
-  <p style="font-size:0.8rem;color:#9a95ad;margin-top:10px">
+  <p style="font-size:0.8rem;color:var(--softer);margin-top:10px">
     Anyone well below your rate is doing jobs that ran longer than estimated. Raise those jobs' hours — that's what the number is for.
   </p>
   {% else %}
-  <p style="color:#9a95ad;padding:20px 0;text-align:center">No assigned jobs in this period.</p>
+  <p style="color:var(--softer);padding:20px 0;text-align:center">No assigned jobs in this period.</p>
   {% endif %}
 </div>
 
@@ -120,17 +120,17 @@
           <td style="font-weight:600">{{ s.source|title }}</td>
           <td>{{ s.jobs }}</td>
           <td>${{ '%.0f' % s.revenue }}</td>
-          <td style="color:#9a95ad">${{ '%.0f' % s.labor }}</td>
-          <td style="color:#9a95ad">${{ '%.0f' % s.lead_fee }}</td>
-          <td style="color:{{ '#b91c1c' if s.discount else '#9a95ad' }}">${{ '%.0f' % s.discount }}</td>
+          <td style="color:var(--softer)">${{ '%.0f' % s.labor }}</td>
+          <td style="color:var(--softer)">${{ '%.0f' % s.lead_fee }}</td>
+          <td style="color:{{ 'var(--warn)' if s.discount else 'var(--softer)' }}">${{ '%.0f' % s.discount }}</td>
           <td style="font-weight:700">${{ '%.0f' % s.margin }}</td>
-          <td style="text-align:right;font-weight:700;color:{{ '#065f46' if s.margin_pct > 30 else ('#c05621' if s.margin_pct > 15 else '#b91c1c') }}">{{ '%.1f' % s.margin_pct }}%</td>
+          <td style="text-align:right;font-weight:700;color:{{ 'var(--good)' if s.margin_pct > 30 else ('var(--amber-deep)' if s.margin_pct > 15 else 'var(--warn)') }}">{{ '%.1f' % s.margin_pct }}%</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  <p style="font-size:0.8rem;color:#9a95ad;margin-top:10px">
+  <p style="font-size:0.8rem;color:var(--softer);margin-top:10px">
     Compare paid sources (Google, Thumbtack) against organic and referral. A source with good revenue but poor margin is buying you work that isn't worth having.
   </p>
   {% endif %}
@@ -139,7 +139,7 @@
 <div class="card">
   <div class="section-header">
     <h2>Every job — {{ period_label }}</h2>
-    <span style="font-size:0.85rem;color:#9a95ad">{{ e.jobs }} job{{ 's' if e.jobs != 1 }}</span>
+    <span style="font-size:0.85rem;color:var(--softer)">{{ e.jobs }} job{{ 's' if e.jobs != 1 }}</span>
   </div>
   {% if e.rows %}
   <div class="table-wrap">
@@ -147,30 +147,30 @@
       <thead><tr><th>Date</th><th>Client</th><th>Hrs</th><th>List</th><th>Discount</th><th>Charged</th><th>Labor</th><th>Labor %</th><th style="text-align:right">Margin</th></tr></thead>
       <tbody>
         {% for r in e.rows %}
-        <tr style="{{ 'background:#fff5f5' if r.under_floor }}">
+        <tr style="{{ 'background:var(--warn-soft)' if r.under_floor }}">
           <td style="white-space:nowrap">{{ r.booking.preferred_date or '—' }}</td>
-          <td><a href="{{ url_for('bookings.detail', booking_id=r.booking.id) }}" style="color:#5d4f7d;font-weight:600">{{ r.booking.name }}</a>
+          <td><a href="{{ url_for('bookings.detail', booking_id=r.booking.id) }}" style="color:var(--muted);font-weight:600">{{ r.booking.name }}</a>
             {% if r.under_floor %}<span title="below floor price">🚩</span>{% endif %}</td>
-          <td style="color:#9a95ad">{{ ('%g' % r.hours) if r.hours else '—' }}</td>
-          <td style="color:#9a95ad">${{ '%.0f' % r.baseline }}</td>
-          <td style="color:{{ '#b91c1c' if r.discount else '#d8d4e4' }}">{{ ('−$%.0f' % r.discount) if r.discount else '—' }}</td>
+          <td style="color:var(--softer)">{{ ('%g' % r.hours) if r.hours else '—' }}</td>
+          <td style="color:var(--softer)">${{ '%.0f' % r.baseline }}</td>
+          <td style="color:{{ 'var(--warn)' if r.discount else 'var(--info-soft)' }}">{{ ('−$%.0f' % r.discount) if r.discount else '—' }}</td>
           <td style="font-weight:600">${{ '%.0f' % r.price }}</td>
-          <td style="color:#9a95ad">${{ '%.0f' % r.labor }}</td>
-          <td style="font-weight:600;color:{{ '#b91c1c' if r.labor_pct > 60 else ('#c05621' if r.labor_pct > 50 else '#065f46') }}">{{ '%.0f' % r.labor_pct }}%</td>
-          <td style="text-align:right;font-weight:700;color:{{ '#b91c1c' if r.margin < 0 else '#1f1333' }}">${{ '%.2f' % r.margin }}</td>
+          <td style="color:var(--softer)">${{ '%.0f' % r.labor }}</td>
+          <td style="font-weight:600;color:{{ 'var(--warn)' if r.labor_pct > 60 else ('var(--amber-deep)' if r.labor_pct > 50 else 'var(--good)') }}">{{ '%.0f' % r.labor_pct }}%</td>
+          <td style="text-align:right;font-weight:700;color:{{ 'var(--warn)' if r.margin < 0 else 'var(--ink)' }}">${{ '%.2f' % r.margin }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <div style="text-align:center;padding:40px 20px;color:#9a95ad">
+  <div style="text-align:center;padding:40px 20px;color:var(--softer)">
     <p style="font-size:2rem;margin-bottom:10px">📋</p>
     <p style="font-weight:700">No jobs in {{ period_label }}</p>
   </div>
   {% endif %}
-  <p style="font-size:0.8rem;color:#9a95ad;margin-top:10px">
-    Margin here is what's left after cleaner pay and the lead fee — before supplies, mileage and overhead, which live on the <a href="{{ url_for('money.pnl', period=kind, year=year, month=month) }}" style="color:#b98a33;font-weight:600">Profit &amp; Loss</a>.
+  <p style="font-size:0.8rem;color:var(--softer);margin-top:10px">
+    Margin here is what's left after cleaner pay and the lead fee — before supplies, mileage and overhead, which live on the <a href="{{ url_for('money.pnl', period=kind, year=year, month=month) }}" style="color:var(--amber-deep);font-weight:600">Profit &amp; Loss</a>.
     Jobs are counted on the day they're worked, not the day they're paid.
   </p>
 </div>

@@ -1084,9 +1084,25 @@ def my_day(token):
     days = {}
     for b in jobs:
         days.setdefault(b.preferred_date, []).append(b)
+    # The keys stay ISO because the template compares them against today, but
+    # nobody reads "2026-08-30" off a phone screen at seven in the morning.
+    labels = {}
+    for iso in days:
+        try:
+            d = date.fromisoformat(iso)
+        except (TypeError, ValueError):
+            labels[iso] = iso or 'Date to be confirmed'
+            continue
+        delta = (d - today).days
+        if delta == 0:
+            labels[iso] = 'Today'
+        elif delta == 1:
+            labels[iso] = 'Tomorrow'
+        else:
+            labels[iso] = d.strftime('%A %-d %B')
     biz = branding.biz_name()
     return render_template('public/my_day.html', s=s, days=days,
-                           today=today.isoformat(), biz=biz)
+                           day_labels=labels, today=today.isoformat(), biz=biz)
 
 
 @contractors_bp.route('/sample-day')

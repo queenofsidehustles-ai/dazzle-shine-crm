@@ -21,10 +21,10 @@ data-brand="{{ p.brand or default_brand }}"
 {%- endmacro %}
 
 {% if demo %}
-<div class="card" style="border-left:4px solid #d3a84f;background:rgba(211,168,79,0.10);margin-bottom:18px">
+<div class="card" style="border-left:4px solid var(--amber);background:rgba(211,168,79,0.10);margin-bottom:18px">
   <strong>👀 Demo mode.</strong> You're seeing <em>sample</em> businesses so you can try the whole flow.
   Add a <code>GOOGLE_PLACES_API_KEY</code> and real businesses will show up instead.
-  <span style="color:#9a95ad">(The fake numbers below are 555 placeholders — don't call them 😊)</span>
+  <span style="color:var(--softer)">(The fake numbers below are 555 placeholders — don't call them 😊)</span>
 </div>
 {% endif %}
 
@@ -48,8 +48,8 @@ data-brand="{{ p.brand or default_brand }}"
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div>
       <h3 style="margin:0 0 4px">📞 Today's calls</h3>
-      <p style="color:#9a95ad;font-size:0.85rem;margin:0">
-        {% if due.overdue %}<strong style="color:#c05621">{{ due.overdue }} overdue</strong> ·{% endif %}
+      <p style="color:var(--softer);font-size:0.85rem;margin:0">
+        {% if due.overdue %}<strong style="color:var(--amber-deep)">{{ due.overdue }} overdue</strong> ·{% endif %}
         {{ due.today }} due today{% if due.later %} · {{ due.later }} scheduled ahead{% endif %}.
         Log every call — the next step gets set for you.
       </p>
@@ -68,25 +68,25 @@ data-brand="{{ p.brand or default_brand }}"
         <tr>
           <td>
             <strong>{{ p.business_name }}</strong>
-            {% if p.rating %}<span style="font-size:0.78rem;color:#9a95ad"> ⭐{{ '%.1f' % p.rating }}</span>{% endif %}
-            <div style="font-size:0.78rem;color:#9a95ad">
+            {% if p.rating %}<span style="font-size:0.78rem;color:var(--softer)"> ⭐{{ '%.1f' % p.rating }}</span>{% endif %}
+            <div style="font-size:0.78rem;color:var(--softer)">
               {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
               {% if p.contact_name %} · {{ p.contact_name }}{% endif %}
             </div>
-            {% if p.website %}<a href="{{ p.website }}" target="_blank" style="font-size:0.78rem;color:#b98a33">website ↗</a>{% endif %}
+            {% if p.website %}<a href="{{ p.website }}" target="_blank" style="font-size:0.78rem;color:var(--amber-deep)">website ↗</a>{% endif %}
           </td>
           <td>
             <div style="font-weight:600;font-size:0.88rem">{{ p.next_action or 'First call' }}</div>
             <div style="font-size:0.78rem;margin-top:2px">
-              {% if state == 'overdue' %}<span style="color:#c05621;font-weight:700">overdue — was {{ p.next_action_date }}</span>
-              {% elif state == 'today' %}<span style="color:#059669;font-weight:700">due today</span>
-              {% else %}<span style="color:#9a95ad">not scheduled</span>{% endif %}
+              {% if state == 'overdue' %}<span style="color:var(--amber-deep);font-weight:700">overdue — was {{ p.next_action_date }}</span>
+              {% elif state == 'today' %}<span style="color:var(--good);font-weight:700">due today</span>
+              {% else %}<span style="color:var(--softer)">not scheduled</span>{% endif %}
             </div>
           </td>
           <td>
             {% if p.phone %}
             <a href="tel:{{ p.phone }}" class="btn" style="padding:7px 14px;font-size:0.85rem;white-space:nowrap">📞 {{ p.phone }}</a>
-            {% else %}<span style="color:#9a95ad;font-size:0.82rem">no phone</span>{% endif %}
+            {% else %}<span style="color:var(--softer);font-size:0.82rem">no phone</span>{% endif %}
             <button type="button" class="btn btn-outline open-script"
                     {{ prospect_data(p) }}
                     style="padding:6px 12px;font-size:0.8rem;margin-top:5px;white-space:nowrap;display:block;width:100%">
@@ -113,12 +113,12 @@ data-brand="{{ p.brand or default_brand }}"
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:36px 0">
+  <p style="text-align:center;color:var(--softer);padding:36px 0">
     {% if live_count %}
       🎉 Nothing due today — every live prospect has a date in the future.<br>
       <span style="font-size:0.85rem">{{ live_count }} still working their way through the funnel.</span>
     {% else %}
-      Your call list is empty. <a href="{{ url_for('places_finder.dashboard', view='find') }}" style="color:#b98a33">Find some businesses →</a>
+      Your call list is empty. <a href="{{ url_for('places_finder.dashboard', view='find') }}" style="color:var(--amber-deep)">Find some businesses →</a>
     {% endif %}
   </p>
   {% endif %}
@@ -126,10 +126,10 @@ data-brand="{{ p.brand or default_brand }}"
 
 {# A list that empties itself needs topping up before it's empty, not after. #}
 {% if live_count < 15 and counts.all %}
-<div class="card" style="margin-top:16px;border-color:#f0d488;background:#fff8e1">
-  <p style="margin:0;color:#7c4a04;font-size:0.92rem">
+<div class="card" style="margin-top:16px;border-color:var(--amber-line);background:var(--amber-soft)">
+  <p style="margin:0;color:var(--amber-deep);font-size:0.92rem">
     ⚠️ Only <strong>{{ live_count }}</strong> live prospect{{ '' if live_count == 1 else 's' }} left in the funnel.
-    <a href="{{ url_for('places_finder.dashboard', view='find') }}" style="color:#7c4a04;font-weight:700">Pull in another batch →</a>
+    <a href="{{ url_for('places_finder.dashboard', view='find') }}" style="color:var(--amber-deep);font-weight:700">Pull in another batch →</a>
   </p>
 </div>
 {% endif %}
@@ -141,9 +141,9 @@ data-brand="{{ p.brand or default_brand }}"
   <h3 style="margin:0 0 12px">📊 Where everyone stands</h3>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
     {% for key, label in stages %}
-    <div style="flex:1;min-width:104px;background:#faf9fd;border:1px solid #e4dfef;border-radius:10px;padding:12px 14px">
-      <div style="font-size:1.5rem;font-weight:800;color:{{ '#b98a33' if stage_counts[key] else '#d8d4e4' }}">{{ stage_counts[key] }}</div>
-      <div style="font-size:0.78rem;color:#5f5878;font-weight:600">{{ label }}</div>
+    <div style="flex:1;min-width:104px;background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:12px 14px">
+      <div style="font-size:1.5rem;font-weight:800;color:{{ 'var(--amber-deep)' if stage_counts[key] else 'var(--info-soft)' }}">{{ stage_counts[key] }}</div>
+      <div style="font-size:0.78rem;color:var(--muted);font-weight:600">{{ label }}</div>
     </div>
     {% endfor %}
   </div>
@@ -153,7 +153,7 @@ data-brand="{{ p.brand or default_brand }}"
 {% set group = shown | selectattr('stage', 'equalto', key) | list %}
 {% if group %}
 <div class="card" style="margin-bottom:14px">
-  <h3 style="margin:0 0 10px;font-size:0.95rem">{{ label }} <span style="color:#9a95ad;font-weight:400">({{ group|length }})</span></h3>
+  <h3 style="margin:0 0 10px;font-size:0.95rem">{{ label }} <span style="color:var(--softer);font-weight:400">({{ group|length }})</span></h3>
   <div class="table-wrap">
     <table>
       <tbody>
@@ -161,15 +161,15 @@ data-brand="{{ p.brand or default_brand }}"
         <tr>
           <td>
             <strong>{{ p.business_name }}</strong>
-            <div style="font-size:0.78rem;color:#9a95ad">
+            <div style="font-size:0.78rem;color:var(--softer)">
               {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
               {% if p.renewal_note %} · renewal {{ p.renewal_note }}{% endif %}
             </div>
           </td>
           <td style="font-size:0.84rem">
             {% if p.next_action %}{{ p.next_action }}<br>
-              <span style="color:{{ '#c05621' if p.due_state(today) == 'overdue' else '#9a95ad' }};font-size:0.78rem">{{ p.next_action_date }}</span>
-            {% else %}<span style="color:#9a95ad">—</span>{% endif %}
+              <span style="color:{{ 'var(--amber-deep)' if p.due_state(today) == 'overdue' else 'var(--softer)' }};font-size:0.78rem">{{ p.next_action_date }}</span>
+            {% else %}<span style="color:var(--softer)">—</span>{% endif %}
           </td>
           <td style="text-align:right;white-space:nowrap">
             <button type="button" class="btn btn-outline open-script" {{ prospect_data(p) }}
@@ -195,7 +195,7 @@ data-brand="{{ p.brand or default_brand }}"
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div>
       <h3 style="margin:0 0 4px">📇 Every contact</h3>
-      <p style="color:#9a95ad;font-size:0.85rem;margin:0">
+      <p style="color:var(--softer);font-size:0.85rem;margin:0">
         Everything you've collected — phone, email, address, and where each one stands.
       </p>
     </div>
@@ -204,7 +204,7 @@ data-brand="{{ p.brand or default_brand }}"
 
   {% if shown %}
   <input type="text" id="contactSearch" placeholder="Filter by name, contact, city or phone…"
-         style="width:100%;margin-top:14px;padding:10px 12px;border:1px solid #e3e0ec;border-radius:9px;font-size:0.92rem">
+         style="width:100%;margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:0.92rem">
   <div class="table-wrap" style="margin-top:12px">
     <table id="contactTable">
       <thead><tr><th>Business</th><th>Contact</th><th>Phone</th><th>Email</th><th>Where</th><th>Stage</th><th></th></tr></thead>
@@ -213,25 +213,25 @@ data-brand="{{ p.brand or default_brand }}"
         <tr>
           <td>
             <strong>{{ p.business_name }}</strong>
-            {% if p.website %}<br><a href="{{ p.website }}" target="_blank" style="font-size:0.76rem;color:#b98a33">website ↗</a>{% endif %}
+            {% if p.website %}<br><a href="{{ p.website }}" target="_blank" style="font-size:0.76rem;color:var(--amber-deep)">website ↗</a>{% endif %}
           </td>
           <td style="font-size:0.84rem">{{ p.contact_name or '—' }}</td>
           <td style="font-size:0.84rem;white-space:nowrap">
-            {% if p.phone %}<a href="tel:{{ p.phone }}" style="color:#b98a33">{{ p.phone }}</a>{% else %}—{% endif %}
+            {% if p.phone %}<a href="tel:{{ p.phone }}" style="color:var(--amber-deep)">{{ p.phone }}</a>{% else %}—{% endif %}
           </td>
           <td style="font-size:0.84rem">
-            {% if p.email %}<a href="mailto:{{ p.email }}" style="color:#b98a33">{{ p.email }}</a>
-            {% else %}<span style="color:#c05621">not asked yet</span>{% endif %}
+            {% if p.email %}<a href="mailto:{{ p.email }}" style="color:var(--amber-deep)">{{ p.email }}</a>
+            {% else %}<span style="color:var(--amber-deep)">not asked yet</span>{% endif %}
           </td>
-          <td style="font-size:0.8rem;color:#9a95ad">{{ p.city or p.address or '—' }}</td>
-          <td><span style="font-size:0.78rem;font-weight:700;color:#5f5878">{{ p.stage_label }}</span></td>
+          <td style="font-size:0.8rem;color:var(--softer)">{{ p.city or p.address or '—' }}</td>
+          <td><span style="font-size:0.78rem;font-weight:700;color:var(--muted)">{{ p.stage_label }}</span></td>
           <td style="text-align:right;white-space:nowrap">
             <button type="button" class="btn btn-outline open-script" {{ prospect_data(p) }}
                     style="padding:5px 10px;font-size:0.78rem">📋 Open</button>
             <form method="POST" style="display:inline"
                   action="{{ url_for('places_finder.delete', prospect_id=p.id) }}"
                   onsubmit="return confirm('Remove {{ p.business_name }} from the call list?')">
-              <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:#e53e3e">✕</button>
+              <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:var(--warn)">✕</button>
             </form>
           </td>
         </tr>
@@ -240,7 +240,7 @@ data-brand="{{ p.brand or default_brand }}"
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:36px 0">No businesses yet.</p>
+  <p style="text-align:center;color:var(--softer);padding:36px 0">No businesses yet.</p>
   {% endif %}
 </div>
 {% endif %}
@@ -251,16 +251,16 @@ data-brand="{{ p.brand or default_brand }}"
   <form method="POST" action="{{ url_for('places_finder.search') }}"
         style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
     <div style="flex:1;min-width:180px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Who do you want to call?</label>
-      <select name="category" style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.95rem">
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Who do you want to call?</label>
+      <select name="category" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:0.95rem">
         {% for c in categories %}
         <option value="{{ c }}" {{ 'selected' if c == search_category }}>{{ category_labels[c] }}</option>
         {% endfor %}
       </select>
     </div>
     <div style="flex:1;min-width:170px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Calling for which brand?</label>
-      <select name="brand" style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.95rem">
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Calling for which brand?</label>
+      <select name="brand" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:0.95rem">
         {% for key, label in brand_choices %}
         {% if key != 'all' %}
         <option value="{{ key }}" {{ 'selected' if key == (brand_lens if brand_lens != 'all' else default_brand) }}>{{ label }}</option>
@@ -269,9 +269,9 @@ data-brand="{{ p.brand or default_brand }}"
       </select>
     </div>
     <div style="flex:1;min-width:180px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Where?</label>
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Where?</label>
       <input type="text" name="location" value="{{ search_location }}" placeholder="City, State"
-             style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.95rem">
+             style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:0.95rem">
     </div>
     <button type="submit" class="btn" style="padding:11px 22px">🎯 Find Businesses</button>
     <a href="{{ url_for('places_finder.dashboard', view='find') }}" class="btn btn-outline" style="padding:11px 18px">✕ Clear</a>
@@ -293,7 +293,7 @@ data-brand="{{ p.brand or default_brand }}"
           <tr>
             <td>
               {% if r.already %}
-                <span style="font-size:0.75rem;color:#9a95ad">✓ added</span>
+                <span style="font-size:0.75rem;color:var(--softer)">✓ added</span>
               {% else %}
                 <input type="checkbox" name="selected" value="{{ r.place_id }}" checked style="width:18px;height:18px">
                 <input type="hidden" name="payload_{{ r.place_id }}" value='{{ r|tojson }}'>
@@ -301,7 +301,7 @@ data-brand="{{ p.brand or default_brand }}"
             </td>
             <td>
               <strong>{{ r.business_name }}</strong><br>
-              <span style="font-size:0.8rem;color:#9a95ad">{{ r.address }}</span>
+              <span style="font-size:0.8rem;color:var(--softer)">{{ r.address }}</span>
             </td>
             <td>{{ r.phone or '—' }}</td>
             <td>{{ '⭐ %.1f' % r.rating if r.rating else '—' }}</td>
@@ -313,11 +313,11 @@ data-brand="{{ p.brand or default_brand }}"
     </div>
     <div style="margin-top:14px">
       <button type="submit" class="btn" style="padding:11px 22px">➕ Add selected to call list</button>
-      <span style="font-size:0.82rem;color:#9a95ad;margin-left:10px">They land in Today as "First call".</span>
+      <span style="font-size:0.82rem;color:var(--softer);margin-left:10px">They land in Today as "First call".</span>
     </div>
   </form>
   {% else %}
-  <p style="color:#9a95ad;text-align:center;padding:20px 0">No businesses found. Try a broader area or a different category.</p>
+  <p style="color:var(--softer);text-align:center;padding:20px 0">No businesses found. Try a broader area or a different category.</p>
   {% endif %}
 </div>
 {% endif %}
@@ -334,35 +334,35 @@ data-brand="{{ p.brand or default_brand }}"
     display:flex;flex-direction:column;
   }
   #callDrawer.open{transform:translateX(0)}
-  .cd-head{padding:16px 20px;border-bottom:1px solid #e4dfef;flex-shrink:0}
+  .cd-head{padding:16px 20px;border-bottom:1px solid var(--line);flex-shrink:0}
   .cd-body{padding:16px 20px 28px;overflow-y:auto;flex:1}
-  .cd-script{background:#faf9fd;border:1px solid #e4dfef;border-radius:10px;padding:14px 16px;margin-bottom:12px}
-  .cd-script h4{margin:0 0 8px;font-size:.92rem;color:#1f1333}
-  .cd-line{white-space:pre-wrap;font-size:.9rem;line-height:1.65;color:#3b2460;margin:2px 0}
+  .cd-script{background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+  .cd-script h4{margin:0 0 8px;font-size:.92rem;color:var(--ink)}
+  .cd-line{white-space:pre-wrap;font-size:.9rem;line-height:1.65;color:var(--ink-2);margin:2px 0}
   .cd-sp{height:8px}
-  .cd-why{margin:8px 0 2px;background:#fef9ec;border:1px solid #f0dca8;border-radius:8px;padding:2px 12px}
-  .cd-why summary{cursor:pointer;color:#7c4a04;font-size:.78rem;font-weight:700;list-style:none;padding:6px 0}
+  .cd-why{margin:8px 0 2px;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:2px 12px}
+  .cd-why summary{cursor:pointer;color:var(--amber-deep);font-size:.78rem;font-weight:700;list-style:none;padding:6px 0}
   .cd-why summary::-webkit-details-marker{display:none}
-  .cd-why div{font-size:.8rem;color:#8a6d3b;padding:2px 0 8px;line-height:1.6}
-  .cd-warn{background:#fdecea;border:1px solid #f5c2bc;border-radius:8px;padding:8px 12px;margin:8px 0;
-           font-size:.84rem;color:#a2231a;line-height:1.55}
-  .cd-group{border:1px solid #e4dfef;border-radius:10px;margin-bottom:8px;background:#fff}
-  .cd-group summary{cursor:pointer;padding:11px 14px;font-weight:700;font-size:.86rem;color:#1f1333;list-style:none}
+  .cd-why div{font-size:.8rem;color:var(--amber-deep);padding:2px 0 8px;line-height:1.6}
+  .cd-warn{background:var(--warn-soft);border:1px solid var(--warn-soft);border-radius:8px;padding:8px 12px;margin:8px 0;
+           font-size:.84rem;color:var(--warn);line-height:1.55}
+  .cd-group{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#fff}
+  .cd-group summary{cursor:pointer;padding:11px 14px;font-weight:700;font-size:.86rem;color:var(--ink);list-style:none}
   .cd-group summary::-webkit-details-marker{display:none}
-  .cd-group summary::before{content:'▸ ';color:#9a95ad}
+  .cd-group summary::before{content:'▸ ';color:var(--softer)}
   .cd-group[open] summary::before{content:'▾ '}
   .cd-group .cd-inner{padding:0 14px 12px}
   .cd-field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
-  .cd-field label{font-size:.78rem;font-weight:700;color:#5f5878}
+  .cd-field label{font-size:.78rem;font-weight:700;color:var(--muted)}
   .cd-field input,.cd-field select,.cd-field textarea{
-    padding:9px 11px;border:1px solid #e3e0ec;border-radius:8px;font-size:.9rem;font-family:inherit}
+    padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:.9rem;font-family:inherit}
   .cd-field textarea{min-height:76px;resize:vertical}
   .cd-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .cd-next{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin:14px 0}
-  .cd-next .hint{font-size:.76rem;color:#166534;margin:0 0 8px;line-height:1.5}
+  .cd-next{background:var(--good-soft);border:1px solid var(--good-soft);border-radius:10px;padding:12px 14px;margin:14px 0}
+  .cd-next .hint{font-size:.76rem;color:var(--good);margin:0 0 8px;line-height:1.5}
   .cd-quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-  .cd-quick button{background:#fff;border:1px solid #bbf7d0;border-radius:999px;padding:5px 11px;
-                   font-size:.76rem;color:#166534;cursor:pointer;font-family:inherit;font-weight:600}
+  .cd-quick button{background:#fff;border:1px solid var(--good-soft);border-radius:999px;padding:5px 11px;
+                   font-size:.76rem;color:var(--good);cursor:pointer;font-family:inherit;font-weight:600}
   @media (max-width:520px){.cd-row{grid-template-columns:1fr}}
 </style>
 
@@ -371,8 +371,8 @@ data-brand="{{ p.brand or default_brand }}"
   <div class="cd-head">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
       <div style="min-width:0">
-        <div id="cdName" style="font-weight:700;font-size:1.05rem;color:#1f1333;line-height:1.3"></div>
-        <div id="cdCat" style="font-size:.8rem;color:#9a95ad;margin-top:2px"></div>
+        <div id="cdName" style="font-weight:700;font-size:1.05rem;color:var(--ink);line-height:1.3"></div>
+        <div id="cdCat" style="font-size:.8rem;color:var(--softer);margin-top:2px"></div>
       </div>
       <button type="button" id="cdClose" class="btn btn-outline"
               style="padding:5px 11px;font-size:.85rem;flex-shrink:0">✕</button>
@@ -384,7 +384,7 @@ data-brand="{{ p.brand or default_brand }}"
     <div id="cdOpener"></div>
     <div id="cdExtras"></div>
 
-    <h4 style="margin:18px 0 10px;font-size:.95rem;color:#1f1333">Log this call</h4>
+    <h4 style="margin:18px 0 10px;font-size:.95rem;color:var(--ink)">Log this call</h4>
     <form id="cdForm" method="POST">
       <input type="hidden" name="mode" value="log">
       <div class="cd-field">
@@ -443,7 +443,7 @@ data-brand="{{ p.brand or default_brand }}"
       </div>
 
       <button type="submit" class="btn" style="width:100%;padding:12px">💾 Save call &amp; set next step</button>
-      <p style="font-size:.76rem;color:#9a95ad;margin:8px 0 0;line-height:1.5">
+      <p style="font-size:.76rem;color:var(--softer);margin:8px 0 0;line-height:1.5">
         Saves a dated entry above the existing notes — nothing is overwritten.
         After {{ max_attempts }} unanswered attempts it moves to Nurture on its own.
       </p>
@@ -477,13 +477,13 @@ data-brand="{{ p.brand or default_brand }}"
             <textarea name="body" id="cdBody" style="min-height:220px" required></textarea>
           </div>
           <button type="submit" class="btn" style="width:100%;padding:11px">✉️ Send it</button>
-          <p style="font-size:.76rem;color:#9a95ad;margin:8px 0 0;line-height:1.5">
+          <p style="font-size:.76rem;color:var(--softer);margin:8px 0 0;line-height:1.5">
             Fill in anything still in [brackets] before you send. Sending logs the
             touch and sets a follow-up for four days out.
           </p>
         </form>
         {% else %}
-        <p style="font-size:.84rem;color:#9a95ad;margin:0">
+        <p style="font-size:.84rem;color:var(--softer);margin:0">
           No outreach emails loaded yet — open <strong>Templates → Call scripts &amp; outreach</strong>
           and press "Load starter scripts".
         </p>

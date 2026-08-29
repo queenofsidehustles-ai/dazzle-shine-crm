@@ -6,11 +6,12 @@
   <title>Contractor Pay Chart — {{ BIZ }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     :root{
-      --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,0.10);
-      --purple:#1f1333; --purple-mid:#3b2b6b; --bg:#f6f5fb;
-      --white:#fff; --border:#e4dfef; --radius:14px;
+      --gold:var(--amber); --gold-deep:var(--amber-deep); --gold-soft:rgba(211,168,79,0.10);
+      --purple:var(--ink); --purple-mid:var(--ink-2); --bg:var(--ground);
+      --white:#fff; --border:var(--line); --radius:14px;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple)}
@@ -31,17 +32,17 @@
     .calc-bar{max-width:860px;margin:16px auto;padding:0 16px}
     .calc-inner{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
                 padding:18px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
-    .calc-inner label{font-size:0.8rem;font-weight:600;color:#5f5878;text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:4px}
+    .calc-inner label{font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;display:block;margin-bottom:4px}
     .calc-inner input,
     .calc-inner select{padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-family:"Inter",sans-serif;font-size:0.92rem;color:var(--purple);background:var(--white);width:130px}
     .calc-result{margin-left:auto;text-align:right}
-    .calc-result .cl{font-size:0.72rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px}
+    .calc-result .cl{font-size:0.72rem;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px}
     .calc-result .cv{font-size:1.5rem;font-weight:700;color:var(--gold)}
 
     /* SECTION HEAD */
     .section{max-width:860px;margin:16px auto 0;padding:0 16px}
     .section-head{display:flex;align-items:center;gap:12px;margin-bottom:8px}
-    .section-head h2{font-size:0.88rem;font-weight:700;color:#9a95ad;text-transform:uppercase;letter-spacing:0.15em}
+    .section-head h2{font-size:0.88rem;font-weight:700;color:var(--softer);text-transform:uppercase;letter-spacing:0.15em}
     .section-line{flex:1;height:1px;background:var(--border)}
 
     /* TABLE */
@@ -53,22 +54,22 @@
        font-weight:700;letter-spacing:0.12em;text-transform:uppercase;white-space:nowrap}
     td{padding:12px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
     tr:last-child td{border-bottom:none}
-    tr:nth-child(even){background:#faf9fd}
+    tr:nth-child(even){background:var(--ground)}
     tr:hover td{background:var(--gold-soft)}
 
     .badge{padding:3px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap}
-    .badge-std{background:#f0edf8;color:var(--purple-mid)}
-    .badge-deep{background:#fef9ec;color:#92400e;border:1px solid #d3a84f}
-    .badge-move{background:#fdf4e8;color:#7c4a04;border:1px solid #e4a82a}
+    .badge-std{background:var(--line-soft);color:var(--purple-mid)}
+    .badge-deep{background:var(--amber-soft);color:var(--amber-deep);border:1px solid var(--amber)}
+    .badge-move{background:var(--amber-soft);color:var(--amber-deep);border:1px solid var(--amber)}
 
-    .earn{font-weight:700;color:#1a9e5f;font-size:0.95rem}
-    .hr{font-size:0.85rem;color:#5f5878}
-    .client-p{color:#5f5878}
+    .earn{font-weight:700;color:var(--good);font-size:0.95rem}
+    .hr{font-size:0.85rem;color:var(--muted)}
+    .client-p{color:var(--muted)}
 
     /* NOTE BOX */
     .note{max-width:860px;margin:16px auto;padding:0 16px}
-    .note-inner{background:#fef9ec;border:1px solid #d3a84f;border-radius:10px;padding:14px 18px}
-    .note-inner p{font-size:0.82rem;color:#7c4a04;line-height:1.55}
+    .note-inner{background:var(--amber-soft);border:1px solid var(--amber);border-radius:10px;padding:14px 18px}
+    .note-inner p{font-size:0.82rem;color:var(--amber-deep);line-height:1.55}
 
     /* EXTRAS CARD */
     .extras-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:4px}
@@ -100,8 +101,8 @@
 </div>
 
 <div style="max-width:760px;margin:0 auto 8px;padding:0 16px">
-  <div style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:12px;padding:16px 18px;color:#1f1333">
-    <div style="font-weight:700;color:#b45309;margin-bottom:6px">🔒 Don't send this to a cleaner</div>
+  <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:12px;padding:16px 18px;color:var(--ink)">
+    <div style="font-weight:700;color:var(--amber-deep);margin-bottom:6px">🔒 Don't send this to a cleaner</div>
     <p style="font-size:0.9rem;line-height:1.5;margin:0">
       This is your starting point for deciding what to offer, not a promise to anyone. Each figure is that
       home's typical hours × the labor rate in <strong>Settings → Pricing</strong>.
@@ -240,7 +241,7 @@
 <!-- ADD-ONS -->
 <div class="section" style="margin-top:20px">
   <div class="section-head"><h2>Add-On Services</h2><div class="section-line"></div></div>
-  <p style="font-size:0.82rem;color:#5f5878;margin:0 0 10px">
+  <p style="font-size:0.82rem;color:var(--muted);margin:0 0 10px">
     When a customer adds one of these, it's extra work — so the job is offered to you at a higher amount.
   </p>
   <div class="extras-grid">

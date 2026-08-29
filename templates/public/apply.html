@@ -5,31 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Join Our Team / Únete al Equipo — {{ BIZ }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; }
-    .header { background: #1f1333; padding: 22px 20px; text-align: center; }
-    .header .script { font-family: "Allura", cursive; font-size: 2rem; color: #d3a84f; }
+    body { font-family: "Inter", sans-serif; background: var(--ground); color: var(--ink); }
+    .header { background: var(--ink); padding: 22px 20px; text-align: center; }
+    .header .script { font-family: "Allura", cursive; font-size: 2rem; color: var(--amber); }
     .header .sub { font-size: 0.75rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.2em; margin-top: 3px; }
-    .lang-toggle { display: flex; justify-content: center; gap: 0; margin: 16px auto 0; max-width: 200px; border-radius: 999px; overflow: hidden; border: 2px solid #d3a84f; }
-    .lang-btn { flex: 1; padding: 7px; background: transparent; color: #d3a84f; border: none; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: background 0.2s; }
-    .lang-btn.active { background: #d3a84f; color: #1f1333; }
+    .lang-toggle { display: flex; justify-content: center; gap: 0; margin: 16px auto 0; max-width: 200px; border-radius: 999px; overflow: hidden; border: 2px solid var(--amber); }
+    .lang-btn { flex: 1; padding: 7px; background: transparent; color: var(--amber); border: none; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: background 0.2s; }
+    .lang-btn.active { background: var(--amber); color: var(--ink); }
     .wrap { max-width: 600px; margin: 0 auto; padding: 24px 16px 60px; }
-    .card { background: #fff; border-radius: 14px; border: 1px solid #e4dfef; padding: 28px; margin-bottom: 18px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); }
-    h2 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #9a95ad; margin-bottom: 16px; }
+    .card { background: #fff; border-radius: 14px; border: 1px solid var(--line); padding: 28px; margin-bottom: 18px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); }
+    h2 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: var(--softer); margin-bottom: 16px; }
     .form-group { margin-bottom: 14px; }
-    label { display: block; font-weight: 600; font-size: 0.88rem; color: #5f5878; margin-bottom: 5px; }
+    label { display: block; font-weight: 600; font-size: 0.88rem; color: var(--muted); margin-bottom: 5px; }
     input[type=text], input[type=email], input[type=tel], select, textarea {
-      width: 100%; padding: 10px 13px; border: 1px solid #e4dfef; border-radius: 9px;
-      font-size: 0.95rem; font-family: inherit; color: #1f1333; background: #fff; outline: none;
+      width: 100%; padding: 10px 13px; border: 1px solid var(--line); border-radius: 9px;
+      font-size: 0.95rem; font-family: inherit; color: var(--ink); background: #fff; outline: none;
     }
-    input:focus, select:focus, textarea:focus { border-color: #d3a84f; box-shadow: 0 0 0 3px rgba(211,168,79,0.15); }
+    input:focus, select:focus, textarea:focus { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(211,168,79,0.15); }
     textarea { resize: vertical; min-height: 80px; }
     .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .check-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
-    .check-item input { width: auto; accent-color: #d3a84f; }
-    .terms-box { background: #f6f5fb; border-radius: 9px; padding: 14px; font-size: 0.82rem; color: #5f5878; line-height: 1.7; margin-bottom: 14px; }
-    .btn { width: 100%; padding: 14px; background: linear-gradient(135deg,#f4d07a,#d3a84f); color: #1a1225; border: none; border-radius: 999px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+    .check-item input { width: auto; accent-color: var(--amber); }
+    .terms-box { background: var(--ground); border-radius: 9px; padding: 14px; font-size: 0.82rem; color: var(--muted); line-height: 1.7; margin-bottom: 14px; }
+    .btn { width: 100%; padding: 14px; background: linear-gradient(135deg,var(--amber),var(--amber)); color: var(--info); border: none; border-radius: 999px; font-size: 1rem; font-weight: 700; cursor: pointer; }
     .btn:hover { opacity: 0.9; }
   </style>
 </head>
@@ -47,7 +48,7 @@
     <div class="card" style="text-align:center;padding:20px 28px">
       <p class="t" data-en="Join Our Cleaning Team{{ ' in ' + BIZ_CITY if BIZ_CITY }} 🌟" data-es="Únete a Nuestro Equipo de Limpieza{{ ' en ' + BIZ_CITY if BIZ_CITY }} 🌟"
          style="font-weight:700;font-size:1.1rem;margin-bottom:6px">Join Our Cleaning Team{{ ' in ' + BIZ_CITY if BIZ_CITY }} 🌟</p>
-      <p class="t" style="color:#5f5878;font-size:0.9rem"
+      <p class="t" style="color:var(--muted);font-size:0.9rem"
          data-en="Flexible schedule, competitive pay, and a great team. Fill out the application below and we'll be in touch within 2 business days."
          data-es="Horario flexible, buen pago y un excelente equipo. Llena la solicitud y te contactaremos en 2 días hábiles.">
          Flexible schedule, competitive pay, and a great team. Fill out the application below and we'll be in touch within 2 business days.</p>
@@ -152,10 +153,10 @@
       </div>
 
       <!-- Background Check Notice -->
-      <div class="card" style="border-color:#d3a84f">
+      <div class="card" style="border-color:var(--amber)">
         <h2 class="t" data-en="Background Check Requirement" data-es="Requisito de Verificación de Antecedentes">Background Check Requirement</h2>
 
-        <div class="terms-box" style="border-left:4px solid #d3a84f">
+        <div class="terms-box" style="border-left:4px solid var(--amber)">
           <span class="t"
             data-en="All applicants who advance past the phone interview will be required to complete a background check as a condition of working with us.&#10;&#10;You are responsible for obtaining and paying for this check directly (typically $20–$30). We will send you the link and instructions after your interview.&#10;&#10;We take the safety of our clients and their homes seriously. This step protects everyone — including you."
             data-es="Todos los solicitantes que avancen después de la entrevista telefónica deberán completar una verificación de antecedentes como requisito para trabajar con nosotros.&#10;&#10;Usted es responsable de obtener y pagar esta verificación directamente (generalmente $20–$30). Le enviaremos el enlace e instrucciones después de su entrevista.&#10;&#10;Nos tomamos muy en serio la seguridad de nuestros clientes y sus hogares. Este paso protege a todos, incluyéndole a usted.">
@@ -169,7 +170,7 @@
           <label class="t" data-en="Already have a background check? (optional)" data-es="¿Ya tiene una verificación de antecedentes? (opcional)">Already have a background check? (optional)</label>
           <input type="url" name="bgcheck_existing_link" id="bgcheck-placeholder"
                  placeholder="Paste a link — Care.com profile, Google Drive PDF, Checkr certificate, etc." />
-          <p class="t" id="bgcheck-hint" style="font-size:0.78rem;color:#9a95ad;margin-top:5px"
+          <p class="t" id="bgcheck-hint" style="font-size:0.78rem;color:var(--softer);margin-top:5px"
              data-en="If you have a background check from Care.com, Checkr, FDLE, or any other provider completed within the last 12 months, paste a shareable link here. We'll review it and may not need to request a new one."
              data-es="Si tiene una verificación de antecedentes de Care.com, Checkr, FDLE u otro proveedor completada en los últimos 12 meses, pegue un enlace aquí. Lo revisaremos y es posible que no necesitemos solicitar uno nuevo.">
             If you have a background check from Care.com, Checkr, FDLE, or any other provider completed within the last 12 months, paste a shareable link here. We'll review it and may not need to request a new one.

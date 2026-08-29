@@ -14,7 +14,7 @@ and produces 1099 totals, so "the software told me to" must never be available
 as a defence. And it holds background check results, which is a regulated area
 where the obligations sit with the employer whoever ran the check.
 """
-import os, sys, tempfile
+import os, sys, tempfile, pathlib
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/legal.db'
 os.environ['SECRET_KEY'] = 'test'
@@ -156,14 +156,56 @@ for path, what in [('/money/tax-forms', 'the 1099 page'),
     check('contractor or an employee' in body,
           f'{what} says the software takes no view on classification')
 
-print('\n12. Placeholders are visibly placeholders')
-# Everything a lawyer or the owner must fill in should be impossible to miss
-# and impossible to ship by accident.
+print('\n12. Nothing is left blank, and we are named as the company')
+# This started life as "every blank a lawyer must fill in is highlighted".
+# The blanks are now filled, so the useful invariant flipped: no unfilled
+# placeholder may ship, and the legal entity must actually appear -- a terms
+# of service that does not say who it is with is not a contract with anybody.
+import product
 import re
+whoever = product.legal_entity() or product.name()
 for path in ('/terms', '/privacy'):
     body = page(path)
-    fills = re.findall(r'\[([A-Z][A-Z0-9 ,./&-]+)\]', body)
-    check(len(fills) > 0, f'{path} has {len(fills)} marked blanks: {sorted(set(fills))[:3]}…')
-    check('class="fill"' in body, 'and they are highlighted on the page')
+    blanks = re.findall(r'\[([A-Z][A-Z0-9 ,./&-]{3,})\]', body)
+    check(not blanks, f'{path} has no unfilled placeholders left ({blanks[:3]})')
+    check(whoever in body, f'{path} names {whoever!r} as the company')
+
+# Who that is depends on where it is running, and the gate is the point: only
+# the real product domain may claim to be our LLC. A self-hosted copy states
+# its own name instead, because a stranger's deployment putting our company on
+# its terms of service would make us party to a contract we never signed.
+import importlib, os as _os
+_saved = _os.environ.get('BASE_DOMAIN')
+try:
+    _os.environ['BASE_DOMAIN'] = 'akyehq.com'
+    importlib.reload(product)
+    check(product.legal_entity() == 'Yaa Mansa LLC',
+          'on akyehq.com the entity is Yaa Mansa LLC')
+    check(product.legal_address()[0].startswith('1317'),
+          'and the registered address comes with it')
+
+    _os.environ['BASE_DOMAIN'] = 'crm.somebodyelse.com'
+    importlib.reload(product)
+    check(product.legal_entity() == '',
+          'on somebody else\'s deployment it is blank, not our company')
+    check(product.legal_address() == [],
+          'and so is the address')
+
+    _os.environ['PRODUCT_LEGAL_ENTITY'] = 'Their Company Ltd'
+    importlib.reload(product)
+    check(product.legal_entity() == 'Their Company Ltd',
+          'a self-hoster can state their own entity')
+finally:
+    _os.environ.pop('PRODUCT_LEGAL_ENTITY', None)
+    if _saved is None:
+        _os.environ.pop('BASE_DOMAIN', None)
+    else:
+        _os.environ['BASE_DOMAIN'] = _saved
+    importlib.reload(product)
+
+# And it comes from one place, so it cannot drift between the two documents.
+check('LEGAL_ENTITY' in pathlib.Path('templates/marketing/legal_terms.html').read_text()
+      and 'LEGAL_ENTITY' in pathlib.Path('templates/marketing/legal_privacy.html').read_text(),
+      'both documents read the entity from product.py rather than hardcoding it')
 
 print('\n\n✅ All legal-page tests passed.\n')

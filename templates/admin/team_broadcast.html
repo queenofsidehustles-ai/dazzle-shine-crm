@@ -13,8 +13,8 @@
       <label>Message</label>
       <textarea name="message" rows="5" required
                 placeholder="Happy birthday {name}! 🎂 Thank you for everything you do for this team."></textarea>
-      <p style="font-size:0.8rem;color:#9a95ad;margin-top:6px">
-        Type <code style="background:#f6f5fb;padding:1px 5px;border-radius:4px">{name}</code> anywhere
+      <p style="font-size:0.8rem;color:var(--softer);margin-top:6px">
+        Type <code style="background:var(--ground);padding:1px 5px;border-radius:4px">{name}</code> anywhere
         and it becomes each person's first name. Anyone set to Spanish gets it translated automatically.
       </p>
     </div>
@@ -29,7 +29,7 @@
         </select>
       </div>
       <div class="form-group" style="margin:0">
-        <label>Email subject <span style="font-weight:400;color:#9a95ad">(if emailing)</span></label>
+        <label>Email subject <span style="font-weight:400;color:var(--softer)">(if emailing)</span></label>
         <input type="text" name="subject" placeholder="A note from the team">
       </div>
     </div>
@@ -38,18 +38,18 @@
   <div class="card" style="margin-bottom:18px">
     <div class="section-header">
       <h2>Who gets it</h2>
-      <span style="font-size:0.82rem;color:#9a95ad">Leave all unticked to send to everyone</span>
+      <span style="font-size:0.82rem;color:var(--softer)">Leave all unticked to send to everyone</span>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:9px">
       {% for s in people %}
-      <label style="display:flex;align-items:center;gap:9px;background:#faf9fd;border:1px solid #e4dfef;
+      <label style="display:flex;align-items:center;gap:9px;background:var(--ground);border:1px solid var(--line);
                     border-radius:9px;padding:10px 12px;cursor:pointer">
         <input type="checkbox" name="staff_ids" value="{{ s.id }}" style="width:auto">
         <span style="flex:1;min-width:0">
           <span style="font-weight:600;font-size:0.9rem">{{ s.name }}</span>
-          <span style="display:block;font-size:0.74rem;color:#9a95ad">
+          <span style="display:block;font-size:0.74rem;color:var(--softer)">
             {% if s.phone %}📱{% endif %}{% if s.email %} ✉️{% endif %}
-            {% if not s.phone and not s.email %}<span style="color:#b91c1c">no phone or email</span>{% endif %}
+            {% if not s.phone and not s.email %}<span style="color:var(--warn)">no phone or email</span>{% endif %}
             {% if s.language == 'es' %} · 🇪🇸{% endif %}
           </span>
         </span>
@@ -63,15 +63,15 @@
   </button>
 </form>
 
-<p style="font-size:0.8rem;color:#9a95ad;margin-top:12px;text-align:center">
-  Every message is recorded in your <a href="{{ url_for('messages.sent_log') }}" style="color:#b98a33;font-weight:600">Sent Log</a>,
+<p style="font-size:0.8rem;color:var(--softer);margin-top:12px;text-align:center">
+  Every message is recorded in your <a href="{{ url_for('messages.sent_log') }}" style="color:var(--amber-deep);font-weight:600">Sent Log</a>,
   so you can see exactly who received it.
 </p>
 
 {% else %}
-<div class="card" style="text-align:center;padding:44px 20px;color:#9a95ad">
+<div class="card" style="text-align:center;padding:44px 20px;color:var(--softer)">
   <p style="font-size:2rem;margin-bottom:10px">👋</p>
-  <p style="font-weight:700;color:#5f5878">No active cleaners to message yet</p>
+  <p style="font-weight:700;color:var(--muted)">No active cleaners to message yet</p>
 </div>
 {% endif %}
 {% endblock %}

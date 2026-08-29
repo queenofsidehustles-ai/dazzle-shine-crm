@@ -10,10 +10,13 @@
   <meta name="description" content="{{ TAGLINE }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    :root { --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,.12);
-            --ink:#1f1333; --muted:#5f5878; --softer:#9a95ad; --line:#e4dfef;
-            --bg:#faf9fc; }
+    /* Aliases onto the product's palette, so the storefront and the software
+       a prospect signs into are visibly the same thing. Everything below this
+       line was written against the old names and does not need to change. */
+    :root { --gold:var(--amber); --gold-deep:var(--amber-deep);
+            --gold-soft:rgba(240,164,75,.12); --bg:var(--ground); }
     * { box-sizing:border-box; margin:0; padding:0; }
     body { font-family:Inter,-apple-system,sans-serif; color:var(--ink);
            background:#fff; line-height:1.6; }
@@ -25,7 +28,7 @@
     nav { margin-left:auto; display:flex; gap:20px; align-items:center; }
     nav a { color:var(--muted); text-decoration:none; font-weight:500; font-size:.94rem; }
     nav a:hover { color:var(--ink); }
-    .btn { display:inline-block; background:var(--gold); color:#1a1225; padding:11px 22px;
+    .btn { display:inline-block; background:var(--gold); color:var(--info); padding:11px 22px;
            border-radius:999px; text-decoration:none; font-weight:700; font-size:.95rem; }
     .btn:hover { background:var(--gold-deep); }
     .btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }

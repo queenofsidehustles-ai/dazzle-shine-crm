@@ -22,19 +22,19 @@
         style="position:absolute;top:12px;right:12px;z-index:3"
         onsubmit="return confirm('Remove {{ s.name }} from your team? This permanently deletes their card. Use this for test entries.')">
     <button type="submit" title="Delete team member"
-            style="background:#fff;border:1px solid #fed7d7;color:#c53030;border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:0.9rem;line-height:1">🗑</button>
+            style="background:#fff;border:1px solid var(--warn-soft);color:var(--warn);border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:0.9rem;line-height:1">🗑</button>
   </form>
   <a href="{{ url_for('contractors.staff_detail', staff_id=s.id) }}" style="text-decoration:none">
   <div class="card" style="cursor:pointer;transition:box-shadow 0.15s" onmouseover="this.style.boxShadow='0 8px 32px rgba(15,7,40,0.13)'" onmouseout="this.style.boxShadow=''">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-      <div style="width:44px;height:44px;border-radius:50%;background:{{ s.color or '#7c3aed' }};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:1.1rem;flex-shrink:0">
+      <div style="width:44px;height:44px;border-radius:50%;background:{{ s.color or 'var(--info)' }};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:1.1rem;flex-shrink:0">
         {{ s.name[0].upper() }}
       </div>
       <div>
-        <div style="font-weight:700;color:#1f1333">{{ s.name }}
+        <div style="font-weight:700;color:var(--ink)">{{ s.name }}
           {% if s.language == 'es' %}<span title="Spanish-speaking — texts auto-translate" style="font-size:0.85rem">🇪🇸</span>{% endif %}
         </div>
-        <div style="font-size:0.8rem;color:#9a95ad">{{ s.experience_level.title() if s.experience_level else 'Cleaner' }}{% if s.language == 'es' %} · Spanish{% endif %}</div>
+        <div style="font-size:0.8rem;color:var(--softer)">{{ s.experience_level.title() if s.experience_level else 'Cleaner' }}{% if s.language == 'es' %} · Spanish{% endif %}</div>
       </div>
       {% if not s.is_active %}
       <span class="status status-cancelled" style="margin-left:auto;font-size:0.72rem">Inactive</span>
@@ -42,24 +42,24 @@
     </div>
     {% if session.get('role', 'owner') == 'owner' %}
     <div style="display:flex;justify-content:space-between;font-size:0.85rem">
-      <span style="color:#9a95ad">Pay rate</span>
-      <span style="font-weight:700;color:#b98a33">{{ s.pay_label() }}</span>
+      <span style="color:var(--softer)">Pay rate</span>
+      <span style="font-weight:700;color:var(--amber-deep)">{{ s.pay_label() }}</span>
     </div>
     {% endif %}
     <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-top:4px">
-      <span style="color:#9a95ad">Starts</span>
-      <span style="font-weight:600;color:{{ '#276749' if s.roster_start_date else '#c05621' }}">
+      <span style="color:var(--softer)">Starts</span>
+      <span style="font-weight:600;color:{{ 'var(--good)' if s.roster_start_date else 'var(--amber-deep)' }}">
         {{ s.roster_start_date or 'not set' }}
       </span>
     </div>
     {% set steps_done = s.get_onboarding()|length %}
     {% set steps_total = s.ONBOARDING_STEPS|length %}
     <div style="margin-top:10px">
-      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#9a95ad;margin-bottom:4px">
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--softer);margin-bottom:4px">
         <span>Onboarding</span><span>{{ steps_done }}/{{ steps_total }}</span>
       </div>
-      <div style="background:#e4dfef;border-radius:999px;height:5px">
-        <div style="background:#d3a84f;border-radius:999px;height:5px;width:{{ (steps_done/steps_total*100)|int }}%"></div>
+      <div style="background:var(--line);border-radius:999px;height:5px">
+        <div style="background:var(--amber);border-radius:999px;height:5px;width:{{ (steps_done/steps_total*100)|int }}%"></div>
       </div>
     </div>
   </div>
@@ -68,10 +68,10 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="card" style="text-align:center;padding:50px 20px;color:#9a95ad">
+<div class="card" style="text-align:center;padding:50px 20px;color:var(--softer)">
   <p style="font-size:2rem;margin-bottom:12px">🧹</p>
   <p style="font-weight:700;margin-bottom:6px">No team members yet</p>
-  <p style="font-size:0.88rem">Share your <a href="{{ url_for('contractors.apply') }}" target="_blank" style="color:#d3a84f">application link</a> or hire directly from an application.</p>
+  <p style="font-size:0.88rem">Share your <a href="{{ url_for('contractors.apply') }}" target="_blank" style="color:var(--amber)">application link</a> or hire directly from an application.</p>
 </div>
 {% endif %}
 {% endblock %}

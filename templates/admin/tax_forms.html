@@ -8,7 +8,7 @@
    whether the people in this list are contractors or employees -- which is a
    legal question decided by the real working relationship, differs by state,
    and is expensive to get wrong. Saying so here is the only place it lands. #}
-<div style="background:#fff8e6;border:1px solid var(--gold);border-radius:10px;
+<div style="background:var(--amber-soft);border:1px solid var(--gold);border-radius:10px;
             padding:12px 16px;margin-bottom:18px;font-size:.9rem;color:var(--muted)">
   <strong style="color:var(--ink)">These are your records, not a tax filing.</strong>
   This totals what you recorded paying people. It does not withhold, remit or
@@ -38,19 +38,19 @@
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}
-      <div style="background:{{ '#f0fff4' if cat=='success' else '#fff5f5' }};
-                  border:1px solid {{ '#c6f6d5' if cat=='success' else '#fed7d7' }};
-                  color:{{ '#276749' if cat=='success' else '#c53030' }};
+      <div style="background:{{ 'var(--good-soft)' if cat=='success' else 'var(--warn-soft)' }};
+                  border:1px solid {{ 'var(--good-soft)' if cat=='success' else 'var(--warn-soft)' }};
+                  color:{{ 'var(--good)' if cat=='success' else 'var(--warn)' }};
                   padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9rem;font-weight:500">{{ msg }}</div>
     {% endfor %}
   {% endwith %}
 
   {% if needs_w9 %}
-  <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px 18px;margin-bottom:18px">
-    <div style="font-weight:700;color:#92400e;margin-bottom:6px">
+  <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:10px;padding:16px 18px;margin-bottom:18px">
+    <div style="font-weight:700;color:var(--amber-deep);margin-bottom:6px">
       ⚠️ {{ needs_w9|length }} {{ 'person needs' if needs_w9|length == 1 else 'people need' }} to send a W-9
     </div>
-    <p style="font-size:0.88rem;color:#7c4a04;line-height:1.6;margin:0">
+    <p style="font-size:0.88rem;color:var(--amber-deep);line-height:1.6;margin:0">
       {{ 'This contractor has' if needs_w9|length == 1 else 'These contractors have' }} been paid
       ${{ '%.0f'|format(threshold) }} or more in {{ year }}, which is normally the point a 1099-NEC is
       required — and we don't have a form on file. Use <strong>Ask for W-9</strong> below to send them
@@ -73,7 +73,7 @@
         </thead>
         <tbody>
           {% for r in rows %}
-          <tr style="border-bottom:1px solid var(--border);{{ 'background:#fffdf5' if r.over_threshold and not r.has_w9 }}">
+          <tr style="border-bottom:1px solid var(--border);{{ 'background:var(--amber-soft)' if r.over_threshold and not r.has_w9 }}">
             <td style="padding:12px 16px">
               <a href="{{ url_for('contractors.staff_detail', staff_id=r.staff.id) }}"
                  style="font-weight:600;color:var(--purple);text-decoration:none">{{ r.staff.name }}</a>
@@ -87,7 +87,7 @@
             <td style="padding:12px 16px;text-align:right;font-weight:700;white-space:nowrap">${{ '%.2f'|format(r.paid) }}</td>
             <td style="padding:12px 16px;white-space:nowrap">
               {% if r.over_threshold %}
-                <span style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;padding:3px 10px;border-radius:999px;font-size:0.75rem;font-weight:700">Yes</span>
+                <span style="background:var(--amber-soft);color:var(--amber-deep);border:1px solid var(--amber-line);padding:3px 10px;border-radius:999px;font-size:0.75rem;font-weight:700">Yes</span>
               {% else %}
                 <span style="color:var(--softer);font-size:0.82rem">Under ${{ '%.0f'|format(threshold) }}</span>
               {% endif %}
@@ -97,11 +97,11 @@
                 {% set doc = r.staff.document('w9') %}
                 <a href="{{ url_for('contractors.view_document', doc_id=doc.id) if doc else r.staff.w9_url }}"
                    target="_blank" rel="noopener"
-                   style="color:#276749;font-weight:600;text-decoration:none;font-size:0.85rem">
+                   style="color:var(--good);font-weight:600;text-decoration:none;font-size:0.85rem">
                   ✅ On file{% if r.staff.w9_uploaded_at %} · {{ r.staff.w9_uploaded_at.strftime('%b %d, %Y') }}{% endif %}
                 </a>
               {% else %}
-                <span style="color:#c53030;font-weight:600;font-size:0.85rem">✗ Not on file</span>
+                <span style="color:var(--warn);font-weight:600;font-size:0.85rem">✗ Not on file</span>
                 {% if r.staff.w9_requested_at %}
                   <div style="font-size:0.74rem;color:var(--softer)">asked {{ r.staff.w9_requested_at.strftime('%b %d') }}</div>
                 {% endif %}
@@ -127,7 +127,7 @@
         </tbody>
         {% if rows %}
         <tfoot>
-          <tr style="background:#faf9fd">
+          <tr style="background:var(--ground)">
             <td style="padding:12px 16px;font-weight:700">Total labor paid</td>
             <td style="padding:12px 16px;text-align:right;font-weight:700">${{ '%.2f'|format(total_paid) }}</td>
             <td colspan="3"></td>
@@ -138,20 +138,20 @@
     </div>
   </div>
 
-  <div style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:10px;padding:16px 18px;margin-top:18px">
-    <div style="font-weight:700;color:#2b6cb0;margin-bottom:6px">What this page is and isn't</div>
-    <p style="font-size:0.87rem;line-height:1.65;color:#1e3a5f;margin:0 0 8px">
+  <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:10px;padding:16px 18px;margin-top:18px">
+    <div style="font-weight:700;color:var(--info);margin-bottom:6px">What this page is and isn't</div>
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--info);margin:0 0 8px">
       These totals are <strong>labor paid</strong> — the amounts recorded against each completed job.
       Tips are excluded, because they're the customer's money passed through rather than the business
       paying for services. Both are tracked separately in payroll.
     </p>
-    <p style="font-size:0.87rem;line-height:1.65;color:#1e3a5f;margin:0 0 8px">
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--info);margin:0 0 8px">
       A 🔒 means Stripe verified that person and holds their tax details for its own reporting. That is
       not the same as you holding a W-9, and whether Stripe files 1099s for you is a setting in your
       <strong>Stripe Dashboard → Connect → Tax forms</strong>, not something this CRM controls. Anyone paid
       by Venmo, Zelle, cash or check never went through Stripe at all.
     </p>
-    <p style="font-size:0.87rem;line-height:1.65;color:#1e3a5f;margin:0">
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--info);margin:0">
       Nothing here is filed for you and none of it is tax advice. Take these numbers to your accountant.
     </p>
   </div>

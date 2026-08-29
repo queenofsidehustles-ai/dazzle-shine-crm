@@ -3,8 +3,8 @@
 {% block page_title %}Price a Commercial Job{% endblock %}
 
 {% block content %}
-<div style="margin-bottom:14px"><a href="{{ url_for('commercial.index') }}" style="color:#9a95ad;font-size:0.9rem">← Commercial accounts</a></div>
-<p style="color:#9a95ad;font-size:0.92rem;margin:0 0 18px;max-width:640px">
+<div style="margin-bottom:14px"><a href="{{ url_for('commercial.index') }}" style="color:var(--softer);font-size:0.9rem">← Commercial accounts</a></div>
+<p style="color:var(--softer);font-size:0.92rem;margin:0 0 18px;max-width:640px">
   Answer 3 quick questions and get a confident price you can quote on the spot — built from your real costs, so it's always profitable. 💪
 </p>
 
@@ -51,12 +51,12 @@
     </div>
   </div>
 
-  <div class="card" id="resultCard" style="border:2px solid #d3a84f;background:rgba(211,168,79,0.09)">
+  <div class="card" id="resultCard" style="border:2px solid var(--amber);background:rgba(211,168,79,0.09)">
     <div id="result"></div>
   </div>
 
   <div class="card">
-    <div class="steph"><span class="stepn" style="background:#276749">✓</span> Turn this into an account <span class="hint" style="font-weight:400">— optional</span></div>
+    <div class="steph"><span class="stepn" style="background:var(--good)">✓</span> Turn this into an account <span class="hint" style="font-weight:400">— optional</span></div>
     <div class="hint" style="margin-bottom:12px">Just needed a number for a quote? You're done. To keep it, add the business name and save.</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
       <div><label class="lbl">Business name</label><input class="inp" name="business_name" placeholder="Sunrise Daycare"></div>
@@ -72,17 +72,17 @@
 
 <style>
   .step{margin-bottom:16px}
-  .steph{font-weight:700;color:#1f1333;font-size:1.02rem;display:flex;align-items:center;gap:10px;margin-bottom:12px}
-  .stepn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#d3a84f;color:#fff;font-size:0.85rem;flex-shrink:0}
+  .steph{font-weight:700;color:var(--ink);font-size:1.02rem;display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .stepn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--amber);color:#fff;font-size:0.85rem;flex-shrink:0}
   .grid-pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-  .pick{text-align:left;background:#fff;border:1.5px solid #e3e0ec;border-radius:10px;padding:12px;cursor:pointer;font-size:0.92rem;color:#1f1333;transition:all .12s}
-  .pick:hover{border-color:#d3a84f}
-  .pick.on{border-color:#d3a84f;background:rgba(211,168,79,0.14);box-shadow:0 0 0 1px #d3a84f}
-  .hint{font-size:0.78rem;color:#9a95ad;margin-top:3px}
-  .chk{display:flex;align-items:center;gap:8px;background:#fff;border:1.5px solid #e3e0ec;border-radius:10px;padding:11px 12px;cursor:pointer;font-size:0.9rem}
+  .pick{text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;font-size:0.92rem;color:var(--ink);transition:all .12s}
+  .pick:hover{border-color:var(--amber)}
+  .pick.on{border-color:var(--amber);background:rgba(211,168,79,0.14);box-shadow:0 0 0 1px var(--amber)}
+  .hint{font-size:0.78rem;color:var(--softer);margin-top:3px}
+  .chk{display:flex;align-items:center;gap:8px;background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;cursor:pointer;font-size:0.9rem}
   .chk input{width:17px;height:17px}
-  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
-  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem}
+  .lbl{display:block;font-size:0.78rem;color:var(--softer);margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:0.92rem}
   .inp.big{font-size:1.3rem;padding:12px;max-width:220px;font-weight:700}
 </style>
 
@@ -103,7 +103,7 @@ function recalc(){
   const sqft = parseFloat(document.getElementById('f_sqft').value) || 0;
   const out = document.getElementById('result');
   if(!sqft){
-    out.innerHTML = '<div style="color:#9a95ad;text-align:center;padding:6px">👆 Enter the size above to see your price.</div>';
+    out.innerHTML = '<div style="color:var(--softer);text-align:center;padding:6px">👆 Enter the size above to see your price.</div>';
     document.getElementById('f_amount').value = '';
     return;
   }
@@ -123,12 +123,12 @@ function recalc(){
     (selectedExtras().length ? (' + ' + selectedExtras().join(', ')) : '');
   out.innerHTML =
     '<div style="text-align:center">' +
-      '<div style="font-size:0.82rem;color:#9a95ad">Your confident price</div>' +
-      '<div style="font-size:2rem;font-weight:800;color:#1f1333;line-height:1.1;margin-top:2px">$' + low + ' – $' + prem +
-        '<span style="font-size:1rem;color:#9a95ad"> / visit</span></div>' +
-      '<div style="color:#b98a33;font-weight:700;margin-top:2px">Most quote around $' + std + ' / visit</div>' +
+      '<div style="font-size:0.82rem;color:var(--softer)">Your confident price</div>' +
+      '<div style="font-size:2rem;font-weight:800;color:var(--ink);line-height:1.1;margin-top:2px">$' + low + ' – $' + prem +
+        '<span style="font-size:1rem;color:var(--softer)"> / visit</span></div>' +
+      '<div style="color:var(--amber-deep);font-weight:700;margin-top:2px">Most quote around $' + std + ' / visit</div>' +
       '<div style="margin-top:10px;font-size:1rem">≈ <b>$' + monthly + '/month</b> &middot; $' + annual + '/year</div>' +
-      '<div style="margin-top:10px;font-size:0.82rem;color:#9a95ad">~' + hours.toFixed(1) + ' hrs of work &middot; ' +
+      '<div style="margin-top:10px;font-size:0.82rem;color:var(--softer)">~' + hours.toFixed(1) + ' hrs of work &middot; ' +
         'pay your cleaner ~$' + Math.round(labor) + ' &middot; you keep ~$' + (std - Math.round(labor)) + '/visit</div>' +
     '</div>';
 }

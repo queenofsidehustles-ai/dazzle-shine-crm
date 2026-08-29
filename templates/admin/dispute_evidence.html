@@ -25,8 +25,8 @@
 </style>
 
 {% if not clean %}
-<div class="card internal" style="background:#fff8e1;border:1px solid #f0d488">
-  <p style="color:#7c4a04;font-size:0.9rem;margin:0 0 10px">
+<div class="card internal" style="background:var(--amber-soft);border:1px solid var(--amber-line)">
+  <p style="color:var(--amber-deep);font-size:0.9rem;margin:0 0 10px">
     <strong>This is your working copy.</strong> The notes below are for you — they should not go to a bank.
     Check the gaps flagged here, then open the clean copy to print.
   </p>
@@ -34,16 +34,16 @@
      class="btn btn-gold" style="padding:7px 16px;font-size:0.85rem">📄 Clean copy for submission</a>
 </div>
 {% else %}
-<div class="card internal" style="background:#eefaf0;border:1px solid #a7d8b0">
-  <p style="color:#1c6b34;font-size:0.88rem;margin:0">
+<div class="card internal" style="background:var(--good-soft);border:1px solid var(--good)">
+  <p style="color:var(--good);font-size:0.88rem;margin:0">
     Press <strong>⌘P</strong> and save as PDF. This banner won't print.
   </p>
 </div>
 
 <div class="card" style="margin-top:16px">
   <h1 style="font-size:1.25rem;font-weight:700;margin-bottom:4px">{{ BIZ }}</h1>
-  <p style="color:#5f5878;font-size:0.92rem;margin:0">Record of service and payment</p>
-  <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e4dfef">
+  <p style="color:var(--muted);font-size:0.92rem;margin:0">Record of service and payment</p>
+  <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
     <div class="detail-row"><span class="dl">Customer</span><span class="dv">{{ b.name }}</span></div>
     <div class="detail-row"><span class="dl">Transaction</span><span class="dv" style="font-family:monospace;font-size:0.82rem">{{ b.stripe_payment_intent or '—' }}</span></div>
     <div class="detail-row"><span class="dl">Amount</span><span class="dv">{% if b.price %}${{ '%.2f'|format(b.price) }}{% else %}—{% endif %}</span></div>
@@ -55,7 +55,7 @@
 
 <!-- 1 · The service -->
 <div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">1 · The service</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">1 · The service</h2>
   <div class="detail-row"><span class="dl">Customer</span><span class="dv">{{ b.name }}</span></div>
   <div class="detail-row"><span class="dl">Email</span><span class="dv">{{ b.email or '—' }}</span></div>
   <div class="detail-row"><span class="dl">Phone</span><span class="dv">{{ b.phone or '—' }}</span></div>
@@ -71,7 +71,7 @@
 
 <!-- 2 · The payment -->
 <div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">2 · The payment</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">2 · The payment</h2>
   <div class="detail-row"><span class="dl">Total price</span><span class="dv">{% if b.price %}${{ '%.2f'|format(b.price) }}{% else %}—{% endif %}</span></div>
   {% if b.deposit_paid %}
   <div class="detail-row"><span class="dl">Deposit</span><span class="dv">Paid by the customer, who entered their own card details</span></div>
@@ -89,7 +89,7 @@
 
 <!-- 3 · Proof of delivery -->
 <div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">3 · Work carried out</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">3 · Work carried out</h2>
   {% set onsite = b.onsite_people or b.crew_label or b.assigned_cleaner %}
   {% if onsite %}
   <div class="detail-row">
@@ -103,17 +103,17 @@
 
   {% if not clean %}
   <form method="POST" action="{{ url_for('bookings.set_onsite', booking_id=b.id) }}"
-        class="internal" style="background:#faf9fd;border-radius:10px;padding:12px 14px;margin:12px 0">
-    <label style="font-size:0.82rem;color:#5f5878;display:block;margin-bottom:5px">
-      Who was actually on site? <span style="color:#9a95ad">Separate names with commas</span>
+        class="internal" style="background:var(--ground);border-radius:10px;padding:12px 14px;margin:12px 0">
+    <label style="font-size:0.82rem;color:var(--muted);display:block;margin-bottom:5px">
+      Who was actually on site? <span style="color:var(--softer)">Separate names with commas</span>
     </label>
     <div style="display:flex;gap:7px;flex-wrap:wrap">
       <input type="text" name="onsite_people" value="{{ b.onsite_people or '' }}"
              placeholder="{{ b.crew_label or b.assigned_cleaner or 'e.g. Jane Doe, John Smith' }}"
-             style="flex:1;min-width:240px;padding:9px 11px;border:1px solid #e4dfef;border-radius:8px" />
+             style="flex:1;min-width:240px;padding:9px 11px;border:1px solid var(--line);border-radius:8px" />
       <button type="submit" class="btn btn-outline" style="padding:7px 16px;font-size:0.85rem">Save</button>
     </div>
-    <span style="font-size:0.75rem;color:#9a95ad;display:block;margin-top:6px">
+    <span style="font-size:0.75rem;color:var(--softer);display:block;margin-top:6px">
       For the record only — this doesn't change anyone's pay or the crew on this job.
     </span>
   </form>
@@ -127,7 +127,7 @@
 
   {% if photos.before or photos.after %}
     {% if not clean %}
-    <p class="internal" style="font-size:0.87rem;color:#276749;margin:12px 0">
+    <p class="internal" style="font-size:0.87rem;color:var(--good);margin:12px 0">
       ✅ Download these and attach them — dated photographs of the address are the strongest evidence you have.
     </p>
     {% endif %}
@@ -136,13 +136,13 @@
       <p style="font-size:0.85rem;font-weight:700;margin:12px 0 6px">{{ kind|capitalize }} ({{ photos[kind]|length }})</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         {% for url in photos[kind] %}
-        <a href="{{ url }}" target="_blank"><img src="{{ url }}" style="width:150px;height:150px;object-fit:cover;border-radius:8px;border:1px solid #e4dfef" /></a>
+        <a href="{{ url }}" target="_blank"><img src="{{ url }}" style="width:150px;height:150px;object-fit:cover;border-radius:8px;border:1px solid var(--line)" /></a>
         {% endfor %}
       </div>
       {% endif %}
     {% endfor %}
   {% elif not clean %}
-    <p class="internal" style="font-size:0.87rem;color:#991b1b;margin:12px 0 0">
+    <p class="internal" style="font-size:0.87rem;color:var(--warn);margin:12px 0 0">
       ⚠️ No photographs were recorded for this job. If the cleaner took any on their own phone,
       attach those instead — with the date they were taken.
     </p>
@@ -151,9 +151,9 @@
 
 <!-- 4 · Communications -->
 <div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">4 · Correspondence with the customer</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">4 · Correspondence with the customer</h2>
   {% if messages %}
-  <p style="font-size:0.85rem;color:#5f5878;margin-bottom:12px">
+  <p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px">
     {{ messages|length }} message{{ 's' if messages|length != 1 }} sent.
   </p>
   <div class="table-wrap">
@@ -162,46 +162,46 @@
       <tbody>
         {% for m in messages %}
         <tr>
-          <td style="white-space:nowrap;color:#5f5878;font-size:0.85rem">{{ m.created_at | short_stamp }}</td>
-          <td style="color:#5f5878">{{ 'Email' if m.channel == 'email' else 'Text' }}</td>
+          <td style="white-space:nowrap;color:var(--muted);font-size:0.85rem">{{ m.created_at | short_stamp }}</td>
+          <td style="color:var(--muted)">{{ 'Email' if m.channel == 'email' else 'Text' }}</td>
           <td style="font-size:0.85rem">
             {% if m.subject %}<strong>{{ m.subject }}</strong><br>{% endif %}
-            <span style="color:#5f5878">{{ (m.body or '') | striptags | truncate(220) }}</span>
+            <span style="color:var(--muted)">{{ (m.body or '') | striptags | truncate(220) }}</span>
           </td>
-          <td>{% if m.status == 'sent' %}<span style="color:#276749">✓</span>{% else %}<span style="color:#991b1b">failed</span>{% endif %}</td>
+          <td>{% if m.status == 'sent' %}<span style="color:var(--good)">✓</span>{% else %}<span style="color:var(--warn)">failed</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% elif not clean %}
-  <p class="internal" style="font-size:0.87rem;color:#991b1b;margin:0">
+  <p class="internal" style="font-size:0.87rem;color:var(--warn);margin:0">
     ⚠️ No messages to this customer are on record. If you contacted them by personal phone,
     text or WhatsApp, export those separately — a call log with dates still counts.
   </p>
   {% else %}
-  <p style="font-size:0.87rem;color:#5f5878;margin:0">No messages were sent through this system for this booking.</p>
+  <p style="font-size:0.87rem;color:var(--muted);margin:0">No messages were sent through this system for this booking.</p>
   {% endif %}
 </div>
 
 <!-- 5 · Terms -->
 {% if clean %}
 <div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:12px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">5 · Service terms</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">5 · Service terms</h2>
   {% if b.terms_accepted_at %}
-  <p style="font-size:0.85rem;color:#1f1333;margin:0 0 12px">
+  <p style="font-size:0.85rem;color:var(--ink);margin:0 0 12px">
     The customer accepted these terms on
     <strong>{{ b.terms_accepted_at | stamp }}</strong>
     when making payment{% if b.terms_accepted_ip %} from IP address {{ b.terms_accepted_ip }}{% endif %}.
     The wording below is the wording shown to them at that moment.
   </p>
-  <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#1f1333;line-height:1.6;margin:0">{{ b.terms_accepted_text }}</pre>
+  <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:var(--ink);line-height:1.6;margin:0">{{ b.terms_accepted_text }}</pre>
   {% else %}
-  <p style="font-size:0.85rem;color:#5f5878;margin:0 0 12px">
+  <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px">
     The terms under which {{ BIZ }} provides cleaning services, including payment,
     cancellation, and pricing where the work is larger than quoted.
   </p>
-  <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#1f1333;line-height:1.6;margin:0">{{ terms }}</pre>
+  <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:var(--ink);line-height:1.6;margin:0">{{ terms }}</pre>
   {% endif %}
 </div>
 {% endif %}
@@ -209,10 +209,10 @@
 <!-- Working-copy guidance about those terms -->
 {% if not clean %}
 <div class="card internal" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Your terms <span style="text-transform:none;letter-spacing:0;font-weight:500">— included in the clean copy</span></h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Your terms <span style="text-transform:none;letter-spacing:0;font-weight:500">— included in the clean copy</span></h2>
   {% if b.terms_accepted_at %}
-  <div style="background:#eefaf0;border:1px solid #a7d8b0;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-    <p style="font-size:0.85rem;color:#1c6b34;margin:0">
+  <div style="background:var(--good-soft);border:1px solid var(--good);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <p style="font-size:0.85rem;color:var(--good);margin:0">
       <strong>✅ This customer accepted your terms on
       {{ b.terms_accepted_at | stamp }}</strong>{% if b.terms_accepted_ip %},
       from {{ b.terms_accepted_ip }}{% endif %}. The exact wording they saw was saved at that moment,
@@ -221,15 +221,15 @@
     </p>
   </div>
   {% else %}
-  <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-    <p style="font-size:0.85rem;color:#7c4a04;margin:0 0 8px">
+  <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <p style="font-size:0.85rem;color:var(--amber-deep);margin:0 0 8px">
       <strong>⚠️ There is no record that this customer accepted these terms.</strong>
       Acceptance was only recorded from the point that feature was added, so older bookings
       have nothing stored. <strong>Do not tell the bank they agreed to them.</strong> Submit the terms
       as your standing policy, and make your case on the service delivered, the card the customer
       saved themselves, and the messages you sent.
     </p>
-    <p style="font-size:0.85rem;color:#7c4a04;margin:0">
+    <p style="font-size:0.85rem;color:var(--amber-deep);margin:0">
       These are your terms <strong>as they stand today</strong>, and they appear in the clean copy.
       If you edited them after {{ b.created_at | stamp(with_utc=False) }}, paste the wording that was in
       force then into Settings → Business before you print, so what you submit matches what this
@@ -237,7 +237,7 @@
     </p>
   </div>
   {% endif %}
-  <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#5f5878;line-height:1.6;margin:0">{{ terms }}</pre>
+  <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:var(--muted);line-height:1.6;margin:0">{{ terms }}</pre>
 </div>
 {% endif %}
 {% endblock %}

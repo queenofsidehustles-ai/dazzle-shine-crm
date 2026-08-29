@@ -5,27 +5,27 @@
 {% block content %}
 <form method="POST">
   <div class="card" style="margin-bottom:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Deposit</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Deposit</h2>
     <div class="form-group" style="max-width:200px">
       <label>Booking Deposit ($)</label>
       <input type="number" name="deposit_amount" step="1" value="{{ current.deposit_amount }}" />
     </div>
-    <p style="font-size:0.85rem;color:#9a95ad;margin-top:-8px">This amount is charged at booking and goes toward the total.</p>
+    <p style="font-size:0.85rem;color:var(--softer);margin-top:-8px">This amount is charged at booking and goes toward the total.</p>
   </div>
 
   <div class="card" style="margin-bottom:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Cleaner Pay</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Cleaner Pay</h2>
     <div class="form-group" style="max-width:220px">
       <label>Pay per person-hour ($)</label>
       <input type="number" name="labor_rate" step="0.50" min="0" value="{{ current.labor_rate }}" />
     </div>
-    <p style="font-size:0.85rem;color:#5f5878;margin-top:-8px">
+    <p style="font-size:0.85rem;color:var(--muted);margin-top:-8px">
       What a cleaner earns for one hour of work — the same rate for everyone, on every job type.
       A job's pay is <strong>its hours × this rate</strong>, split between whoever is assigned.
       One cleaner takes the whole amount; two split it and each finish in half the time, so the
       hourly rate is identical either way.
     </p>
-    <p style="font-size:0.82rem;color:#9a95ad;margin-top:8px">
+    <p style="font-size:0.82rem;color:var(--softer);margin-top:8px">
       Because pay comes from the hours and not the price, discounting a job no longer reduces
       what the cleaner earns — the discount comes out of your margin instead. Each job's page
       shows labor as a % of that job's price so you can see when it's getting thin.
@@ -34,7 +34,7 @@
       <label>Floor: labor may not exceed (%)</label>
       <input type="number" name="max_labor_pct" step="1" min="1" max="100" value="{{ current.max_labor_pct }}" />
     </div>
-    <p style="font-size:0.85rem;color:#5f5878;margin-top:-8px">
+    <p style="font-size:0.85rem;color:var(--muted);margin-top:-8px">
       Sets each job's <strong>floor price</strong> — the least it can be sold for and still be worth
       doing. A job needing ${{ '%.0f' % current.labor_rate }}×hours of labor can't drop below that
       figure ÷ {{ current.max_labor_pct }}%. Jobs under their floor are flagged red on the booking,
@@ -44,12 +44,12 @@
       <label>Card fee taken off tips (%)</label>
       <input type="number" name="tip_fee_pct" step="0.1" min="0" max="20" value="{{ current.tip_fee_pct }}" />
     </div>
-    <p style="font-size:0.85rem;color:#5f5878;margin-top:-8px">
+    <p style="font-size:0.85rem;color:var(--muted);margin-top:-8px">
       What the card processor charges on a tip, deducted before it's handed on — so a
       ${{ '%.0f' % 25 }} tip passes on ${{ '%.2f' % (25 - 25 * (current.tip_fee_pct | float) / 100) }}.
       Set to 0 to absorb it yourself. The payment page tells customers the card fee comes off.
     </p>
-    <p style="font-size:0.82rem;color:#9a95ad;margin-top:8px">
+    <p style="font-size:0.82rem;color:var(--softer);margin-top:8px">
       Each job locks in the rate it was quoted at, so changing the rate here never restates an
       existing job. Unpaid jobs offer a <strong>Re-rate</strong> button if you want them moved.
       Anything already paid is untouchable.
@@ -58,7 +58,7 @@
 
   {% for svc_key, svc in services.items() %}
   <div class="card" style="margin-bottom:16px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">{{ svc.label }}</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">{{ svc.label }}</h2>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
       <div class="form-group">
         <label>Base price (1 bed / 1 bath)</label>
@@ -77,8 +77,8 @@
   {% endfor %}
 
   <div class="card" style="margin-bottom:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Bigger Homes</h2>
-    <p style="font-size:0.85rem;color:#5f5878;margin:0 0 14px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Bigger Homes</h2>
+    <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
       For homes larger than usual for their bedroom count, charged per 200 sq ft over standard.
       Extra ground costs the customer more <em>and</em> takes longer, so both move together.
     </p>
@@ -94,20 +94,20 @@
         <input type="number" name="sqft_hours" step="0.05" min="0" value="{{ current.sqft_hours }}" style="width:130px" />
       </div>
       <div style="padding-bottom:10px;font-size:0.88rem">
-        <span style="color:#9a95ad">Labor ${{ '%.2f' % sq_labor }} ·</span>
-        <strong style="color:{{ '#b91c1c' if sq_pct > 100 else ('#c05621' if sq_pct > 65 else '#065f46') }}">{{ '%.0f' % sq_pct }}% labor</strong>
-        <span style="color:#9a95ad">· you keep ${{ '%.2f' % ((current.sqft_surcharge | float) - sq_labor) }}</span>
+        <span style="color:var(--softer)">Labor ${{ '%.2f' % sq_labor }} ·</span>
+        <strong style="color:{{ 'var(--warn)' if sq_pct > 100 else ('var(--amber-deep)' if sq_pct > 65 else 'var(--good)') }}">{{ '%.0f' % sq_pct }}% labor</strong>
+        <span style="color:var(--softer)">· you keep ${{ '%.2f' % ((current.sqft_surcharge | float) - sq_labor) }}</span>
       </div>
     </div>
-    <p style="font-size:0.8rem;color:#9a95ad;margin-top:10px">
+    <p style="font-size:0.8rem;color:var(--softer);margin-top:10px">
       Your price matrix works out to roughly 500 sq ft an hour, which is where 0.4 comes from.
       Standard sizes: 1bd 800 · 2bd 1,200 · 3bd 1,800 · 4bd 2,400 · 5bd 3,200 sq ft.
     </p>
   </div>
 
   <div class="card" style="margin-bottom:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Add-Ons</h2>
-    <p style="font-size:0.85rem;color:#5f5878;margin:0 0 16px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Add-Ons</h2>
+    <p style="font-size:0.85rem;color:var(--muted);margin:0 0 16px">
       Each add-on has a price <em>and</em> the time it takes. The hours are added to the job, so the
       cleaner is paid for the extra work — set them to 0 and they'd be doing it for free.
       Watch the labor % on the right: anything red costs you more in labor than you charge for it.
@@ -128,11 +128,11 @@
                        value="{{ current['extra_' + key] }}" style="width:90px;margin:0" /></td>
             <td><input type="number" name="extrahrs_{{ key }}" step="0.25" min="0"
                        value="{{ hrs }}" style="width:90px;margin:0" /></td>
-            <td style="color:#9a95ad">${{ '%.2f' % labor }}</td>
-            <td style="font-weight:700;color:{{ '#b91c1c' if pct > 100 else ('#c05621' if pct > 65 else '#065f46') }}">
+            <td style="color:var(--softer)">${{ '%.2f' % labor }}</td>
+            <td style="font-weight:700;color:{{ 'var(--warn)' if pct > 100 else ('var(--amber-deep)' if pct > 65 else 'var(--good)') }}">
               {{ '%.0f' % pct }}%{% if pct > 100 %} ⚠️{% endif %}
             </td>
-            <td style="text-align:right;font-weight:700;color:{{ '#b91c1c' if (p - labor) < 0 else '#1f1333' }}">
+            <td style="text-align:right;font-weight:700;color:{{ 'var(--warn)' if (p - labor) < 0 else 'var(--ink)' }}">
               ${{ '%.2f' % (p - labor) }}
             </td>
           </tr>

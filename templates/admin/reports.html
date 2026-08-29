@@ -9,11 +9,11 @@
 <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:22px">
   <div class="stat-card">
     <div class="label">This Month</div>
-    <div class="value" style="color:#b98a33">${{ '{:,.2f}'.format(revenue_this_month) }}</div>
+    <div class="value" style="color:var(--amber-deep)">${{ '{:,.2f}'.format(revenue_this_month) }}</div>
     <div class="sub">
       {% if revenue_last_month > 0 %}
         {% set diff = ((revenue_this_month - revenue_last_month) / revenue_last_month * 100)|round(1) %}
-        {% if diff >= 0 %}<span style="color:#065f46">▲ {{ diff }}%</span>{% else %}<span style="color:#991b1b">▼ {{ diff|abs }}%</span>{% endif %}
+        {% if diff >= 0 %}<span style="color:var(--good)">▲ {{ diff }}%</span>{% else %}<span style="color:var(--warn)">▼ {{ diff|abs }}%</span>{% endif %}
         vs last month
       {% else %}
         First month tracked
@@ -32,7 +32,7 @@
   </div>
   <div class="stat-card">
     <div class="label">Balance Outstanding</div>
-    <div class="value" style="color:#f59e0b">${{ '{:,.2f}'.format(balance_outstanding) }}</div>
+    <div class="value" style="color:var(--amber)">${{ '{:,.2f}'.format(balance_outstanding) }}</div>
     <div class="sub">Uncollected balances</div>
   </div>
   <div class="stat-card">
@@ -56,52 +56,52 @@
 
   <!-- Top Services -->
   <div class="card">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Top Services</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Top Services</h2>
     {% if service_data %}
     <table style="width:100%;font-size:0.88rem">
       <thead>
         <tr>
-          <th style="text-align:left;padding:6px 0;color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;border-bottom:1px solid #e4dfef">Service</th>
-          <th style="text-align:center;padding:6px 0;color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;border-bottom:1px solid #e4dfef">Jobs</th>
-          <th style="text-align:right;padding:6px 0;color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;border-bottom:1px solid #e4dfef">Revenue</th>
+          <th style="text-align:left;padding:6px 0;color:var(--softer);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;border-bottom:1px solid var(--line)">Service</th>
+          <th style="text-align:center;padding:6px 0;color:var(--softer);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;border-bottom:1px solid var(--line)">Jobs</th>
+          <th style="text-align:right;padding:6px 0;color:var(--softer);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;border-bottom:1px solid var(--line)">Revenue</th>
         </tr>
       </thead>
       <tbody>
         {% for svc in service_data %}
         <tr>
-          <td style="padding:9px 0;border-bottom:1px solid #f0edf8;font-weight:600">{{ svc.type }}</td>
-          <td style="padding:9px 0;border-bottom:1px solid #f0edf8;text-align:center;color:#9a95ad">{{ svc.jobs }}</td>
-          <td style="padding:9px 0;border-bottom:1px solid #f0edf8;text-align:right;font-weight:700;color:#b98a33">${{ '{:,.2f}'.format(svc.revenue) }}</td>
+          <td style="padding:9px 0;border-bottom:1px solid var(--line-soft);font-weight:600">{{ svc.type }}</td>
+          <td style="padding:9px 0;border-bottom:1px solid var(--line-soft);text-align:center;color:var(--softer)">{{ svc.jobs }}</td>
+          <td style="padding:9px 0;border-bottom:1px solid var(--line-soft);text-align:right;font-weight:700;color:var(--amber-deep)">${{ '{:,.2f}'.format(svc.revenue) }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <p style="color:#9a95ad;font-size:0.88rem;text-align:center;padding:20px 0">No completed bookings yet.</p>
+    <p style="color:var(--softer);font-size:0.88rem;text-align:center;padding:20px 0">No completed bookings yet.</p>
     {% endif %}
   </div>
 
   <!-- Leads Funnel -->
   <div class="card">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Leads Pipeline</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Leads Pipeline</h2>
     <div class="stat-grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
-      <div style="background:#f6f5fb;border-radius:10px;padding:14px;text-align:center">
-        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.12em;color:#9a95ad;font-weight:700;margin-bottom:4px">This Month</div>
+      <div style="background:var(--ground);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:700;margin-bottom:4px">This Month</div>
         <div style="font-size:1.8rem;font-weight:700">{{ leads_this_month }}</div>
-        <div style="font-size:0.78rem;color:#9a95ad">new leads</div>
+        <div style="font-size:0.78rem;color:var(--softer)">new leads</div>
       </div>
-      <div style="background:#f6f5fb;border-radius:10px;padding:14px;text-align:center">
-        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.12em;color:#9a95ad;font-weight:700;margin-bottom:4px">Conversion</div>
-        <div style="font-size:1.8rem;font-weight:700;color:#065f46">{{ conversion_rate }}%</div>
-        <div style="font-size:0.78rem;color:#9a95ad">{{ leads_converted }} of {{ leads_total }} total</div>
+      <div style="background:var(--ground);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:700;margin-bottom:4px">Conversion</div>
+        <div style="font-size:1.8rem;font-weight:700;color:var(--good)">{{ conversion_rate }}%</div>
+        <div style="font-size:0.78rem;color:var(--softer)">{{ leads_converted }} of {{ leads_total }} total</div>
       </div>
     </div>
-    <div style="background:#e4dfef;border-radius:999px;height:10px;margin-bottom:8px">
-      <div style="background:linear-gradient(90deg,#d3a84f,#b98a33);border-radius:999px;height:10px;width:{{ [conversion_rate, 100]|min }}%"></div>
+    <div style="background:var(--line);border-radius:999px;height:10px;margin-bottom:8px">
+      <div style="background:linear-gradient(90deg,var(--amber),var(--amber-deep));border-radius:999px;height:10px;width:{{ [conversion_rate, 100]|min }}%"></div>
     </div>
-    <p style="font-size:0.8rem;color:#9a95ad;text-align:center">{{ conversion_rate }}% of leads convert to bookings</p>
+    <p style="font-size:0.8rem;color:var(--softer);text-align:center">{{ conversion_rate }}% of leads convert to bookings</p>
 
-    <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e4dfef">
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
       <a href="{{ url_for('leads.index') }}" class="btn btn-outline" style="width:100%;justify-content:center;padding:8px">View All Leads →</a>
     </div>
   </div>
@@ -110,7 +110,7 @@
 
 <!-- Upcoming Bookings -->
 <div class="card">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Upcoming — Next 14 Days</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Upcoming — Next 14 Days</h2>
   {% if upcoming %}
   <div class="table-wrap">
     <table>
@@ -120,18 +120,18 @@
         <tr>
           <td style="font-weight:700">{{ b.preferred_date }}</td>
           <td>{{ b.name }}</td>
-          <td style="font-size:0.85rem;color:#5f5878">{{ b.service_label }}</td>
-          <td style="color:#9a95ad">{{ b.preferred_time or '—' }}</td>
-          <td style="color:#9a95ad;font-size:0.85rem">{{ b.assigned_cleaner or '—' }}</td>
+          <td style="font-size:0.85rem;color:var(--muted)">{{ b.service_label }}</td>
+          <td style="color:var(--softer)">{{ b.preferred_time or '—' }}</td>
+          <td style="color:var(--softer);font-size:0.85rem">{{ b.assigned_cleaner or '—' }}</td>
           <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
-          <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}" style="color:#5d4f7d;font-weight:600;font-size:0.85rem">View →</a></td>
+          <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}" style="color:var(--muted);font-weight:600;font-size:0.85rem">View →</a></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <p style="color:#9a95ad;text-align:center;padding:24px 0">No upcoming bookings in the next 14 days.</p>
+  <p style="color:var(--softer);text-align:center;padding:24px 0">No upcoming bookings in the next 14 days.</p>
   {% endif %}
 </div>
 
@@ -144,8 +144,9 @@ new Chart(ctx, {
     datasets: [{
       label: 'Revenue',
       data: {{ monthly_values|safe }},
-      backgroundColor: 'rgba(211,168,79,0.25)',
-      borderColor: '#d3a84f',
+      backgroundColor: 'rgba(240,164,75,0.25)',   /* --amber at 25% */
+      borderColor: getComputedStyle(document.documentElement)
+                     .getPropertyValue('--amber').trim(),
       borderWidth: 2,
       borderRadius: 8,
     }]

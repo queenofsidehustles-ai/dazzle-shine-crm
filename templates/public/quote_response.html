@@ -5,21 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ 'Proposal Accepted' if accepted else 'Proposal Declined' }} — {{ BIZ }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Inter", sans-serif; background: #f6f5fb; color: #1f1333; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
-    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 48px 36px; max-width: 460px; width: 100%; text-align: center; box-shadow: 0 8px 40px rgba(15,7,40,0.1); }
+    body { font-family: "Inter", sans-serif; background: var(--ground); color: var(--ink); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid var(--line); padding: 48px 36px; max-width: 460px; width: 100%; text-align: center; box-shadow: 0 8px 40px rgba(15,7,40,0.1); }
     .icon { font-size: 3rem; margin-bottom: 16px; }
     h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 10px; }
-    p { color: #5f5878; line-height: 1.7; margin-bottom: 8px; }
-    .script { font-family: "Allura", cursive; font-size: 1.6rem; color: #d3a84f; display: block; margin-top: 28px; }
+    p { color: var(--muted); line-height: 1.7; margin-bottom: 8px; }
+    .script { font-family: "Allura", cursive; font-size: 1.6rem; color: var(--amber); display: block; margin-top: 28px; }
   </style>
 </head>
 <body>
   <div class="card">
     {% if accepted %}
     <div class="icon">🎉</div>
-    <h1 style="color:#065f46">Proposal Accepted!</h1>
+    <h1 style="color:var(--good)">Proposal Accepted!</h1>
     <p>Thank you, {{ q.contact_name }}! We're thrilled to partner with <strong>{{ q.company }}</strong>.</p>
     <p>Our team will reach out within 1 business day to confirm your start date and schedule.</p>
     <p style="margin-top:16px">Questions? Call us at <strong>{{ BIZ_PHONE }}</strong></p>

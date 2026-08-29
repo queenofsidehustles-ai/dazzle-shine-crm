@@ -7,48 +7,47 @@
 
 {% block content %}
 <div class="card">
-  <!-- Month Navigation -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px">
+  <div class="cal-head">
     <a href="{{ url_for('bookings.calendar', year=prev_year, month=prev_month) }}"
-       class="btn btn-outline" style="padding:7px 16px">← Prev</a>
-    <h2 style="font-size:1.3rem;font-weight:700;color:#1f1333">{{ month_name }} {{ year }}</h2>
+       class="btn btn-outline btn-sm">← Prev</a>
+    <h2>{{ month_name }} {{ year }}</h2>
     <a href="{{ url_for('bookings.calendar', year=next_year, month=next_month) }}"
-       class="btn btn-outline" style="padding:7px 16px">Next →</a>
+       class="btn btn-outline btn-sm">Next →</a>
   </div>
 
-  <!-- Day headers -->
-  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">
+  <div class="cal-dows">
     {% for day_name in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] %}
-    <div style="text-align:center;font-size:0.72rem;font-weight:700;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;padding:6px 0">{{ day_name }}</div>
+    <div class="cal-dow">{{ day_name }}</div>
     {% endfor %}
   </div>
 
-  <!-- Calendar grid -->
-  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+  <div class="cal-grid">
     {% for week in cal %}
       {% for day in week %}
         {% if day == 0 %}
-        <div style="min-height:90px;background:#f6f5fb;border-radius:8px"></div>
+        <div class="daycell blank"></div>
         {% else %}
           {% set day_bookings = bookings_by_day.get(day, []) %}
           {% set is_today = (year == today.year and month == today.month and day == today.day) %}
-        <div class="daycell" data-date="{{ '%04d-%02d-%02d'|format(year, month, day) }}"
-             style="min-height:90px;background:white;border-radius:8px;padding:6px;border:1px solid {{ '#d3a84f' if is_today else '#e4dfef' }};{{ 'box-shadow:0 0 0 2px rgba(211,168,79,0.2)' if is_today }};transition:background 0.12s,border-color 0.12s">
-          <div style="font-size:0.8rem;font-weight:700;color:{{ '#d3a84f' if is_today else '#5f5878' }};margin-bottom:4px">{{ day }}</div>
+          {# A day with work on it that nobody is booked for is the one thing
+             worth spotting from a month away. Completed and cancelled jobs do
+             not count -- they are over. #}
+          {% set gaps = day_bookings | selectattr('status', 'in', ['pending','confirmed'])
+                                     | rejectattr('crew_label') | list %}
+        <div class="daycell{{ ' today' if is_today }}"
+             data-date="{{ '%04d-%02d-%02d'|format(year, month, day) }}">
+          <div class="daynum">
+            {{ day }}
+            {% if gaps %}<span class="gap" title="{{ gaps|length }} job{{ 's' if gaps|length != 1 }} with nobody assigned"></span>{% endif %}
+          </div>
           {% for b in day_bookings %}
           {# Completed and cancelled jobs stay put — dragging them would rewrite
              history that's already been worked and paid. #}
           {% set movable = b.status not in ('completed', 'cancelled') %}
           <a href="{{ url_for('bookings.detail', booking_id=b.id) }}"
-             {% if movable %}draggable="true" class="jobchip" data-id="{{ b.id }}"{% endif %}
-             title="{{ b.name }} — {{ b.service_label }}{% if movable %} · drag to move it{% endif %}"
-             style="display:block;font-size:0.7rem;padding:2px 5px;border-radius:4px;margin-bottom:2px;
-                    text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-                    {% if movable %}cursor:grab;{% endif %}
-                    {% if b.status == 'confirmed' %}background:#dbeafe;color:#1e40af;
-                    {% elif b.status == 'completed' %}background:#d1fae5;color:#065f46;
-                    {% elif b.status == 'cancelled' %}background:#fee2e2;color:#991b1b;
-                    {% else %}background:#fef3c7;color:#92400e;{% endif %}">
+             {% if movable %}draggable="true" data-id="{{ b.id }}"{% endif %}
+             class="jobchip s-{{ b.status }}{{ ' unassigned' if movable and not b.crew_label }}"
+             title="{{ b.name }} — {{ b.service_label }}{% if not b.crew_label %} · nobody assigned{% else %} · {{ b.crew_label }}{% endif %}{% if movable %} · drag to move it{% endif %}">
             {{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
           </a>
           {% endfor %}
@@ -58,29 +57,23 @@
     {% endfor %}
   </div>
 
-  <!-- Legend -->
-  <div style="display:flex;gap:18px;margin-top:16px;flex-wrap:wrap;padding-top:14px;border-top:1px solid #e4dfef">
-    {% for label, bg, border in [
-      ('Pending',   '#fef3c7', '#f59e0b'),
-      ('Confirmed', '#dbeafe', '#3b82f6'),
-      ('Completed', '#d1fae5', '#10b981'),
-    ] %}
-    <span style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:#5f5878">
-      <span style="width:12px;height:12px;border-radius:3px;background:{{ bg }};border:1px solid {{ border }}"></span>
-      {{ label }}
-    </span>
+  <div class="cal-legend">
+    {% for label, cls in [('Pending','s-pending'), ('Confirmed','s-confirmed'),
+                          ('Completed','s-completed')] %}
+    <span><span class="sw jobchip {{ cls }}"></span>{{ label }}</span>
     {% endfor %}
-    <span style="font-size:0.82rem;color:#9a95ad;margin-left:auto">✋ Drag a job to another day to move it</span>
+    <span><span class="sw" style="background:var(--surface);border-color:var(--warn)"></span>Nobody assigned</span>
+    <span style="margin-left:auto;color:var(--softer)">Drag a job to another day to move it</span>
   </div>
 </div>
 
 <!-- Result of a drag: says what moved and offers to tell the cleaner -->
 <div id="dropToast" style="display:none;position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
-     background:#1f1333;color:#fff;padding:13px 18px;border-radius:11px;box-shadow:0 8px 30px rgba(15,7,40,0.3);
+     background:var(--ink);color:#fff;padding:13px 18px;border-radius:11px;box-shadow:0 8px 30px rgba(15,7,40,0.3);
      z-index:900;font-size:0.9rem;max-width:min(560px,92vw);display:none">
   <span id="dropMsg"></span>
   <form method="POST" id="notifyForm" style="display:inline;margin-left:10px">
-    <button type="submit" style="background:#d3a84f;color:#1f1333;border:none;border-radius:999px;
+    <button type="submit" style="background:var(--amber);color:var(--ink);border:none;border-radius:999px;
             padding:6px 14px;font-weight:700;font-size:0.82rem;cursor:pointer">📲 Tell them</button>
   </form>
 </div>
@@ -106,8 +99,8 @@
     cell.addEventListener('dragover', e => {
       if (!dragId) return;
       e.preventDefault();                     // required to allow a drop
-      cell.style.background = '#fff8e1';
-      cell.style.borderColor = '#d3a84f';
+      cell.style.background = 'var(--amber-soft)';
+      cell.style.borderColor = 'var(--amber)';
     });
     cell.addEventListener('dragleave', () => { cell.style.background = ''; cell.style.borderColor = ''; });
     cell.addEventListener('drop', async e => {

@@ -6,39 +6,39 @@
 {# Connection status first. An empty log means one of two very different things
    and the page has to say which. #}
 {% if not health.sms_ready or not health.email_ready %}
-<div class="card" style="margin-bottom:18px;border-color:#fecaca;background:#fff5f5">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:8px;color:#991b1b">⚠️ Messages can't go out</h2>
+<div class="card" style="margin-bottom:18px;border-color:var(--warn-soft);background:var(--warn-soft)">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:8px;color:var(--warn)">⚠️ Messages can't go out</h2>
   {% if not health.sms_ready %}
-  <p style="color:#991b1b;margin:0 0 6px;font-size:0.92rem">
+  <p style="color:var(--warn);margin:0 0 6px;font-size:0.92rem">
     <strong>📱 Texting is not connected.</strong> No text has been sent to anyone —
     customers or cleaners. Missing in Railway:
     <code style="background:#fff;padding:1px 6px;border-radius:5px">{{ health.sms_missing | join('</code>, <code style="background:#fff;padding:1px 6px;border-radius:5px">') | safe }}</code>
   </p>
   {% endif %}
   {% if not health.email_ready %}
-  <p style="color:#991b1b;margin:0 0 6px;font-size:0.92rem">
+  <p style="color:var(--warn);margin:0 0 6px;font-size:0.92rem">
     <strong>✉️ Email is not connected.</strong> No email has been sent to anyone. Missing in Railway:
     <code style="background:#fff;padding:1px 6px;border-radius:5px">RESEND_API_KEY</code>
   </p>
   {% endif %}
-  <p style="color:#7c4a04;font-size:0.85rem;margin:8px 0 0">
+  <p style="color:var(--amber-deep);font-size:0.85rem;margin:8px 0 0">
     Add the missing values in your Railway project under <strong>Variables</strong>, then redeploy.
     Until then the CRM keeps working, but nothing reaches a customer or a cleaner.
   </p>
 </div>
 {% else %}
-<div class="card" style="margin-bottom:18px;border-color:#b7e0c4;background:#f4fbf6">
-  <p style="margin:0;color:#276749;font-weight:600;font-size:0.92rem">
+<div class="card" style="margin-bottom:18px;border-color:var(--good-soft);background:var(--good-soft)">
+  <p style="margin:0;color:var(--good);font-weight:600;font-size:0.92rem">
     ✅ Texting and email are both connected.
     {% if health.failed_recently %}
-    <span style="color:#c05621">{{ health.failed_recently }} message{{ 's' if health.failed_recently != 1 }} failed — look for the red rows below to see why.</span>
+    <span style="color:var(--amber-deep)">{{ health.failed_recently }} message{{ 's' if health.failed_recently != 1 }} failed — look for the red rows below to see why.</span>
     {% endif %}
   </p>
 </div>
 {% endif %}
 
 <div class="card">
-  <p style="color:#5f5878;margin:0 0 14px">
+  <p style="color:var(--muted);margin:0 0 14px">
     Every text and email the system has <strong>tried</strong> to send — from any page (pay updates, work
     orders, confirmations, reminders, payment links, and customer emails). Failures are recorded here too,
     with the reason. Newest first. Showing the latest 300.
@@ -68,15 +68,15 @@
       <tbody>
         {% for m in logs %}
         <tr>
-          <td style="white-space:nowrap;font-size:0.82rem;color:#5f5878">
+          <td style="white-space:nowrap;font-size:0.82rem;color:var(--muted)">
             {{ m.created_at.strftime('%b %-d, %Y') }}<br>
-            <span style="color:#9a95ad">{{ m.created_at.strftime('%-I:%M %p') }}</span>
+            <span style="color:var(--softer)">{{ m.created_at.strftime('%-I:%M %p') }}</span>
           </td>
           <td>
             {% if m.channel == 'sms' %}
-              <span class="status" style="background:#eef2ff;color:#4338ca">📱 Text</span>
+              <span class="status" style="background:var(--info-soft);color:var(--info)">📱 Text</span>
             {% else %}
-              <span class="status" style="background:#fdf4e7;color:#b98a33">✉️ Email</span>
+              <span class="status" style="background:var(--amber-soft);color:var(--amber-deep)">✉️ Email</span>
             {% endif %}
           </td>
           <td style="font-size:0.86rem">
@@ -85,13 +85,13 @@
                          font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase;
                          letter-spacing:0.06em;margin-left:6px;white-space:nowrap">{{ m.kind.label }}</span>
             <br>
-            <span style="color:#5f5878">
+            <span style="color:var(--muted)">
               {{ pretty_phone(m.to_address) if m.channel == 'sms' else m.to_address }}
             </span>
           </td>
-          <td style="max-width:420px;font-size:0.86rem;color:#3a3350">
+          <td style="max-width:420px;font-size:0.86rem;color:var(--info)">
             {% if m.subject %}<div style="font-weight:600;margin-bottom:2px">{{ m.subject }}</div>{% endif %}
-            <div style="color:#5f5878">{{ (m.body | striptags | trim)[:240] }}{% if (m.body | striptags | trim) | length > 240 %}…{% endif %}</div>
+            <div style="color:var(--muted)">{{ (m.body | striptags | trim)[:240] }}{% if (m.body | striptags | trim) | length > 240 %}…{% endif %}</div>
           </td>
           <td>
             {# "Sent" has only ever meant the provider accepted it. Showing the
@@ -100,13 +100,13 @@
             {% if m.status == 'sent' %}
               <span class="status status-confirmed" title="{{ m.detail }}">✅ Sent</span>
               {% if m.provider_id %}
-              <div style="font-size:0.7rem;color:#9a95ad;margin-top:4px;font-family:ui-monospace,monospace;word-break:break-all">
+              <div style="font-size:0.7rem;color:var(--softer);margin-top:4px;font-family:ui-monospace,monospace;word-break:break-all">
                 {{ m.provider_id }}
               </div>
               {% endif %}
             {% else %}
               <span class="status status-cancelled" title="{{ m.detail }}">⚠️ Failed</span>
-              <div style="font-size:0.72rem;color:#b45309;margin-top:4px;max-width:220px">
+              <div style="font-size:0.72rem;color:var(--amber-deep);margin-top:4px;max-width:220px">
                 {{ (m.detail or '')[:160] }}
               </div>
             {% endif %}
@@ -117,7 +117,7 @@
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+  <p style="text-align:center;color:var(--softer);padding:40px 0">
     No sent messages logged yet. Everything the system sends from here on will show up here.
   </p>
   {% endif %}

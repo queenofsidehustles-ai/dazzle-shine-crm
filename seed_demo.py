@@ -23,7 +23,7 @@ Checked before anything is written, because the one unforgivable outcome here
 is seeding demo data into somebody's actual CRM.
 """
 import argparse
-import os
+import os, secrets
 import random
 import sys
 from datetime import datetime, timedelta
@@ -125,13 +125,20 @@ def seed(quiet=False):
                   pay_rate=55.0 if i < 2 else 50.0,
                   experience_level='senior' if i < 2 else 'new',
                   language='es' if i in (2, 4) else 'en',
-                  worker_model='contractor')
+                  worker_model='contractor',
+                  # Without this the cleaner's phone view has no address to
+                  # open at, and that screen IS the demo -- holding up a real
+                  # phone with a real job on it is the moment the sale is made.
+                  # In the product this is minted when a job is first assigned;
+                  # a seeded company needs it up front.
+                  agreement_token=secrets.token_urlsafe(32))
         db.session.add(s)
         cleaners.append(s)
     db.session.commit()
     say(f'  {len(cleaners)} cleaners')
 
     clients = []
+    sizes = {}
     for name, addr, zc, beds, baths in CLIENTS:
         city = DEMO_CITY
         c = Client(name=name, email=f'{name.split()[0].lower()}@example.com',
@@ -139,6 +146,7 @@ def seed(quiet=False):
                    address=addr, city=city, zip_code=zc)
         db.session.add(c)
         clients.append(c)
+        sizes[name] = (beds, baths)
     db.session.commit()
     say(f'  {len(clients)} customers')
 
@@ -151,7 +159,16 @@ def seed(quiet=False):
                     zip_code=client.zip_code, service_type=service, price=price,
                     balance_due=price, estimated_hours=hours,
                     labor_rate_applied=43.0, status=status,
-                    preferred_date=day.isoformat(), preferred_time='10:00 AM',
+                    preferred_date=day.isoformat(),
+                    # A real week does not start every job at ten o'clock, and
+                    # a calendar where every chip reads the same time is the
+                    # first thing that makes a demo look staged.
+                    preferred_time=kw.pop('preferred_time', None)
+                                   or rng.choice(['8:00 AM', '8:30 AM', '9:00 AM',
+                                                  '10:00 AM', '11:00 AM', '1:00 PM',
+                                                  '2:00 PM', '3:30 PM']),
+                    bedrooms=sizes.get(client.name, (None, None))[0],
+                    bathrooms=sizes.get(client.name, (None, None))[1],
                     **kw)
         db.session.add(b)
         db.session.commit()
@@ -267,7 +284,24 @@ def main():
 
         print('\n  Seeding Sparkle Cleaning Services…')
         seed()
-        print('\n  Ready. Sign in and it looks like a working business.\n')
+        print('\n  Ready. Sign in and it looks like a working business.')
+        # Step 5 of the demo in GETTING_CUSTOMERS.md is "pick up your phone and
+        # open the link the cleaner just got". Print the links so nobody has to
+        # go digging in the database for them mid-call.
+        try:
+            import branding
+            from models import Staff
+            base = branding.crm_base().rstrip('/')
+            links = [(x.name, f'{base}/contractors/my-day/{x.agreement_token}')
+                     for x in Staff.query.filter(Staff.agreement_token.isnot(None))
+                                         .order_by(Staff.id).limit(3).all()]
+            if links:
+                print('\n  The cleaner\'s phone view — open one of these on a real phone:')
+                for name, link in links:
+                    print(f'    {name:22} {link}')
+        except Exception:
+            pass
+        print()
     return 0
 
 

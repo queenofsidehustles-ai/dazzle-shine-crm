@@ -1,0 +1,652 @@
+/* Akye — the design system.
+ *
+ * The interface felt clunky for a reason that had nothing to do with taste:
+ * there was no system under it. A year of adding pages one at a time left nine
+ * font sizes, shadows invented per card, spacing typed in by hand, and buttons
+ * that looked slightly different on every screen. Every page was fine and the
+ * whole was uneven, which is exactly what "clunky" describes.
+ *
+ * So this is tokens first and components second. Nothing below is decorative:
+ * each value exists because something in the product needed it, and screens
+ * pick from these rather than inventing their own.
+ *
+ * ── The palette ───────────────────────────────────────────────────────────
+ *
+ * Akye is "good morning", so the colour is dawn: warm amber over deep navy.
+ * That is also a commercial choice — every competitor in this category is
+ * corporate blue, and being the warm one is free differentiation.
+ *
+ * Amber is the only colour that means "do this". If everything is highlighted
+ * nothing is, so it is rationed: primary buttons, active navigation, the one
+ * next action. Green and red are reserved for money and state — paid, unpaid,
+ * complete, failed — and never used decoratively.
+ */
+
+:root {
+  /* ── Colour ────────────────────────────────────────────────────────── */
+  --amber:        #f0a44b;   /* the one "do this" colour */
+  --amber-deep:   #d98a2b;   /* hover, and text on light backgrounds */
+  --amber-soft:   #fdf3e6;   /* tinted panels */
+  --amber-line:   #f5d9b3;   /* borders on tinted panels */
+
+  --ink:          #16213a;   /* headings, sidebar, body text */
+  --ink-2:        #223052;   /* raised surfaces on the sidebar */
+  --muted:        #6b7590;   /* secondary text */
+  --softer:       #98a1b8;   /* tertiary — labels, timestamps */
+
+  --surface:      #ffffff;   /* cards */
+  --ground:       #f7f8fb;   /* page background, faintly cool */
+  --line:         #e3e7f0;   /* borders */
+  --line-soft:    #eef1f7;   /* internal dividers */
+
+  --good:         #2f9e6b;   /* paid, complete, confirmed */
+  --good-soft:    #e8f6ef;
+  --warn:         #d9534f;   /* unpaid, failed, overdue */
+  --warn-soft:    #fdecec;
+  --info:         #3b6fb5;
+  --info-soft:    #eaf1fa;
+
+  /* ── Spacing ───────────────────────────────────────────────────────────
+   * A 4px scale. Ad-hoc padding is most of what reads as unevenness, and a
+   * scale removes the decision rather than relying on anyone's judgement. */
+  --s1: 4px;   --s2: 8px;   --s3: 12px;  --s4: 16px;
+  --s5: 20px;  --s6: 24px;  --s8: 32px;  --s10: 40px;  --s12: 48px;
+
+  /* ── Type ──────────────────────────────────────────────────────────────
+   * Six sizes. There were nine, which is why nothing felt deliberate. */
+  --t-xs:  0.76rem;   /* labels, timestamps */
+  --t-sm:  0.875rem;  /* secondary text, table cells */
+  --t-md:  0.95rem;   /* body */
+  --t-lg:  1.1rem;    /* card titles */
+  --t-xl:  1.35rem;   /* page titles */
+  --t-2xl: 1.9rem;    /* the one number on a stat tile */
+
+  --lh-tight: 1.25;
+  --lh:       1.55;
+
+  /* ── Shape ─────────────────────────────────────────────────────────── */
+  --r-sm: 8px;   --r: 12px;   --r-lg: 16px;   --r-pill: 999px;
+
+  /* Two soft layered shadows rather than one heavy one. A single large blur
+   * is what makes a card look stuck on top of the page instead of resting
+   * on it. */
+  --shadow:    0 1px 2px rgba(22,33,58,.05), 0 4px 14px rgba(22,33,58,.06);
+  --shadow-lg: 0 2px 4px rgba(22,33,58,.06), 0 12px 32px rgba(22,33,58,.10);
+  --ring:      0 0 0 3px rgba(240,164,75,.28);
+
+  /* Fast enough to feel responsive, slow enough to be seen. */
+  --ease: 140ms cubic-bezier(.4,0,.2,1);
+
+  --sidebar-w: 232px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--t-md);
+  line-height: var(--lh);
+  color: var(--ink);
+  background: var(--ground);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { line-height: var(--lh-tight); letter-spacing: -.011em; margin: 0; }
+h1 { font-size: var(--t-xl);  font-weight: 700; }
+h2 { font-size: var(--t-lg);  font-weight: 700; }
+h3 { font-size: var(--t-md);  font-weight: 650; }
+p  { margin: 0 0 var(--s3); }
+a  { color: var(--amber-deep); }
+
+/* ── Sidebar ──────────────────────────────────────────────────────────── */
+
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--ink);
+  color: #fff;
+  position: fixed; inset: 0 auto 0 0;
+  display: flex; flex-direction: column;
+  z-index: 10; overflow-y: auto; overflow-x: hidden;
+}
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
+
+.sidebar-brand { padding: var(--s5) var(--s5) var(--s4); }
+.sidebar-brand .script { display: block; font-size: 1.15rem; font-weight: 700;
+                         letter-spacing: -.02em; color: #fff; }
+.sidebar-brand .sub { font-size: var(--t-xs); letter-spacing: .14em;
+                      text-transform: uppercase; color: rgba(255,255,255,.42);
+                      margin-top: 2px; }
+
+.sidebar nav { padding: var(--s2) 0 var(--s6); flex: 1; }
+.sidebar nav a {
+  display: flex; align-items: center; gap: 10px;
+  margin: 1px var(--s3); padding: 9px var(--s3);
+  border-radius: var(--r-sm);
+  color: rgba(255,255,255,.7); text-decoration: none;
+  font-weight: 500; font-size: var(--t-sm);
+  transition: background var(--ease), color var(--ease);
+}
+.sidebar nav a:hover { background: rgba(255,255,255,.07); color: #fff; }
+/* The active item is a filled pill rather than a left border. A border is
+ * easy to miss on a long menu; a filled shape is not. */
+.sidebar nav a.active { background: var(--amber); color: var(--ink); font-weight: 650; }
+.sidebar nav a.active .icon { filter: none; }
+.sidebar nav a.locked { opacity: .42; }
+.sidebar nav a.locked:hover { opacity: .68; }
+.sidebar nav a .icon { font-size: 1rem; width: 18px; text-align: center; flex: 0 0 18px; }
+
+.sidebar nav .nav-sec {
+  padding: var(--s5) var(--s5) var(--s2);
+  font-size: 0.66rem; font-weight: 700; letter-spacing: .13em;
+  text-transform: uppercase; color: rgba(255,255,255,.32);
+}
+.sidebar nav .nav-sec:first-of-type { padding-top: var(--s2); }
+
+.sidebar-footer { padding: var(--s4) var(--s5); border-top: 1px solid rgba(255,255,255,.08); }
+.sidebar-footer a { color: rgba(255,255,255,.5); text-decoration: none;
+                    font-size: var(--t-sm); font-weight: 500; }
+.sidebar-footer a:hover { color: #fff; }
+
+/* ── Page frame ───────────────────────────────────────────────────────── */
+
+.main-wrap { margin-left: var(--sidebar-w); min-height: 100vh;
+             display: flex; flex-direction: column; }
+
+.topbar {
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: var(--s4) var(--s8);
+  display: flex; align-items: center; gap: var(--s3);
+  position: sticky; top: 0; z-index: 5;
+}
+.topbar h1 { font-size: var(--t-xl); font-weight: 700; }
+
+.section-tabs {
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: 0 var(--s8); display: flex; gap: var(--s1);
+  overflow-x: auto; scrollbar-width: none;
+  position: sticky; top: 57px; z-index: 4;
+}
+.section-tabs::-webkit-scrollbar { display: none; }
+.section-tabs a {
+  padding: 11px var(--s4) 9px; font-size: var(--t-sm); font-weight: 600;
+  color: var(--muted); text-decoration: none; white-space: nowrap;
+  border-bottom: 2px solid transparent; transition: color var(--ease), border-color var(--ease);
+}
+.section-tabs a:hover { color: var(--ink); }
+.section-tabs a.active { color: var(--amber-deep); border-bottom-color: var(--amber); }
+
+.content { padding: var(--s6) var(--s8) var(--s12); flex: 1; }
+
+/* ── Cards ────────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); box-shadow: var(--shadow);
+  padding: var(--s5);
+}
+
+.stat-grid { display: grid; gap: var(--s4); margin-bottom: var(--s6);
+             grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); padding: var(--s4) var(--s5); box-shadow: var(--shadow);
+}
+.stat-card .label { font-size: var(--t-xs); text-transform: uppercase;
+                    letter-spacing: .11em; color: var(--softer);
+                    font-weight: 650; margin-bottom: var(--s1); }
+.stat-card .value { font-size: var(--t-2xl); font-weight: 750;
+                    letter-spacing: -.02em; line-height: 1.1; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+
+/* `button[type="submit"]` is an attribute selector, so it outranks every
+   class. Left unqualified it silently repainted 161 buttons that had already
+   said what they were -- a `btn-danger` delete rendered amber, and a plain
+   text link styled as a submit could not opt out at all. `:not([class])`
+   keeps the convenience for the 26 buttons that declare nothing, and gets out
+   of the way of every button that does. */
+.btn-primary, .btn-secondary, button[type="submit"]:not([class]), .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 10px var(--s5); border-radius: var(--r-pill);
+  font-family: inherit; font-size: var(--t-sm); font-weight: 650;
+  border: 1px solid transparent; cursor: pointer; text-decoration: none;
+  transition: background var(--ease), border-color var(--ease),
+              transform var(--ease), box-shadow var(--ease);
+}
+.btn-primary, button[type="submit"]:not([class]) { background: var(--amber); color: #fff; }
+.btn-primary:hover, button[type="submit"]:not([class]):hover { background: var(--amber-deep); color: #fff; }
+.btn-secondary, .btn.ghost {
+  background: var(--surface); color: var(--ink); border-color: var(--line);
+}
+.btn-secondary:hover, .btn.ghost:hover { border-color: var(--softer); background: var(--ground); }
+/* A press that moves is a press that registered. One pixel is enough. */
+.btn-primary:active, .btn-secondary:active, button[type="submit"]:not([class]):active { transform: translateY(1px); }
+.btn-danger { background: var(--warn); color: #fff; }
+.btn-danger:hover { background: #c0453c; }
+.btn-sm { padding: 6px var(--s3); font-size: var(--t-xs); }
+
+:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+
+/* ── Forms ────────────────────────────────────────────────────────────── */
+
+label { display: block; font-size: var(--t-sm); font-weight: 600;
+        margin-bottom: var(--s1); color: var(--ink); }
+input[type="text"], input[type="email"], input[type="tel"], input[type="number"],
+input[type="password"], input[type="date"], input[type="time"], input[type="search"],
+select, textarea {
+  width: 100%; padding: 10px var(--s3);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font-family: inherit; font-size: var(--t-md); color: var(--ink);
+  background: var(--surface);
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--amber); box-shadow: var(--ring);
+}
+input::placeholder, textarea::placeholder { color: var(--softer); }
+.form-group { margin-bottom: var(--s4); }
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+
+table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+th {
+  text-align: left; font-size: var(--t-xs); font-weight: 650;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--softer);
+  padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+td { padding: var(--s3); border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+tbody tr { transition: background var(--ease); }
+tbody tr:hover { background: var(--ground); }
+tbody tr:last-child td { border-bottom: none; }
+/* Money and counts line up on the decimal point. Ragged figures are hard to
+ * compare down a column, and comparing is the whole reason for a table. */
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── Badges ───────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: var(--r-pill);
+  font-size: var(--t-xs); font-weight: 650; white-space: nowrap;
+}
+.badge-good { background: var(--good-soft); color: var(--good); }
+.badge-warn { background: var(--warn-soft); color: var(--warn); }
+.badge-info { background: var(--info-soft); color: var(--info); }
+.badge-amber, .badge-pending { background: var(--amber-soft); color: var(--amber-deep); }
+.badge-muted { background: var(--ground); color: var(--muted); }
+
+/* ── Empty states ─────────────────────────────────────────────────────── */
+
+.empty { text-align: center; padding: var(--s10) var(--s5); color: var(--muted); }
+.empty .icon { font-size: 2rem; opacity: .55; margin-bottom: var(--s3); }
+.empty h3 { color: var(--ink); margin-bottom: var(--s2); }
+
+/* ── Flash messages ───────────────────────────────────────────────────── */
+
+.flash { padding: 11px var(--s4); border-radius: var(--r-sm);
+         margin-bottom: var(--s4); font-size: var(--t-sm); font-weight: 500; }
+.flash.success { background: var(--good-soft); color: var(--good); }
+.flash.error   { background: var(--warn-soft); color: var(--warn); }
+
+/* ── Phones ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .content { padding: var(--s4) var(--s4) var(--s10); }
+  .topbar, .section-tabs { padding-left: var(--s4); padding-right: var(--s4); }
+  /* Tables become a horizontal scroller rather than crushing every column
+   * into three characters. */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch;
+                margin: 0 calc(var(--s4) * -1); padding: 0 var(--s4); }
+  .sidebar nav a { padding: 12px var(--s3); font-size: var(--t-md); }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Dashboard
+   A dashboard is not a report. An owner opens it between two
+   other things, and the only question it has to answer is
+   "is anything about to go wrong today". Totals come after.
+   ───────────────────────────────────────────────────────────── */
+
+/* The attention strip. Only renders the rows that are actually
+   true, so a business with nothing outstanding sees one calm
+   line rather than four zeroes -- a zero styled like a warning
+   teaches people to ignore warnings. */
+.attn { display:grid; gap:var(--s2); margin-bottom:var(--s6); }
+.attn-item {
+  display:flex; align-items:center; gap:var(--s3);
+  padding:var(--s3) var(--s4);
+  background:var(--surface); border:1px solid var(--line);
+  border-left:3px solid var(--softer);
+  border-radius:var(--r-sm);
+  text-decoration:none; color:inherit;
+  transition:border-color var(--ease), transform var(--ease), box-shadow var(--ease);
+}
+.attn-item:hover { transform:translateX(2px); box-shadow:var(--shadow); }
+.attn-item .n {
+  font-size:var(--t-lg); font-weight:700; font-variant-numeric:tabular-nums;
+  min-width:1.6em; text-align:center;
+}
+.attn-item .what { flex:1; font-size:var(--t-sm); }
+.attn-item .what b { font-weight:650; display:block; color:var(--ink); }
+.attn-item .what span { color:var(--muted); }
+.attn-item .go { color:var(--softer); font-size:var(--t-lg); line-height:1; }
+.attn-item:hover .go { color:var(--amber-deep); }
+
+.attn-item.is-urgent { border-left-color:var(--warn); }
+.attn-item.is-urgent .n { color:var(--warn); }
+.attn-item.is-warn   { border-left-color:var(--amber); }
+.attn-item.is-warn .n { color:var(--amber-deep); }
+.attn-item.is-info   { border-left-color:var(--info); }
+.attn-item.is-info .n { color:var(--info); }
+
+.attn-clear {
+  display:flex; align-items:center; gap:var(--s3);
+  padding:var(--s4); margin-bottom:var(--s6);
+  background:var(--good-soft); border:1px solid #c9e9da;
+  border-radius:var(--r-sm); color:#1f6f4c; font-size:var(--t-sm);
+}
+.attn-clear b { font-weight:650; }
+
+/* Today's work, as a day sheet rather than a table. Rows are
+   read down the left edge -- time, then who, then where -- which
+   is the order an owner asks the questions in. */
+.day { display:grid; gap:1px; background:var(--line-soft);
+       border:1px solid var(--line); border-radius:var(--r-sm); overflow:hidden; }
+.day-row {
+  display:grid; grid-template-columns:74px 1fr auto;
+  gap:var(--s4); align-items:center;
+  padding:var(--s3) var(--s4); background:var(--surface);
+  text-decoration:none; color:inherit;
+  transition:background var(--ease);
+}
+.day-row:hover { background:var(--amber-soft); }
+.day-time {
+  font-size:var(--t-sm); font-weight:650; color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.day-time small { display:block; font-weight:400; color:var(--softer); font-size:var(--t-xs); }
+.day-who { min-width:0; }
+.day-who b { display:block; font-weight:600; font-size:var(--t-md); }
+.day-who span {
+  display:block; color:var(--muted); font-size:var(--t-xs);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.day-crew { font-size:var(--t-xs); color:var(--muted); text-align:right; white-space:nowrap; }
+.day-crew .none { color:var(--warn); font-weight:600; }
+
+/* Money, as one strip of four figures rather than four cards.
+   It is context, not the headline -- the headline is the work. */
+.money-strip {
+  display:grid; grid-template-columns:repeat(4,1fr);
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r); overflow:hidden; margin-bottom:var(--s6);
+}
+.money-cell {
+  padding:var(--s4) var(--s5); text-decoration:none; color:inherit;
+  border-right:1px solid var(--line-soft);
+  transition:background var(--ease);
+}
+.money-cell:last-child { border-right:0; }
+a.money-cell:hover { background:var(--ground); }
+.money-cell .label {
+  font-size:var(--t-xs); color:var(--muted); text-transform:uppercase;
+  letter-spacing:.07em; font-weight:600;
+}
+.money-cell .value {
+  font-size:var(--t-xl); font-weight:700; margin-top:var(--s1);
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em;
+}
+.money-cell .sub { font-size:var(--t-xs); color:var(--softer); margin-top:2px; }
+.money-cell.pos .value { color:var(--good); }
+.money-cell.neg .value { color:var(--warn); }
+.money-cell.hero { background:var(--amber-soft); }
+.money-cell.hero .value { color:var(--amber-deep); }
+.money-cell.hero .label { color:var(--amber-deep); }
+
+@media (max-width:900px) {
+  .money-strip { grid-template-columns:repeat(2,1fr); }
+  .money-cell:nth-child(2) { border-right:0; }
+  .money-cell:nth-child(-n+2) { border-bottom:1px solid var(--line-soft); }
+}
+@media (max-width:560px) {
+  .day-row { grid-template-columns:64px 1fr; }
+  .day-crew { grid-column:2; text-align:left; margin-top:2px; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   The rest of the shared vocabulary
+   These class names are used across dozens of templates and
+   predate this file. They are restyled here rather than renamed
+   -- renaming would mean editing 111 templates to change how
+   something looks, which is exactly the trap this file exists
+   to get out of.
+   ───────────────────────────────────────────────────────────── */
+
+/* Buttons. `btn-gold` is the old name for the primary action and
+   is kept as an alias so no template has to change. */
+.btn-gold, .btn-primary {
+  background:var(--amber); color:#fff; border:1px solid var(--amber);
+  font-weight:600;
+}
+.btn-gold:hover, .btn-primary:hover { background:var(--amber-deep); border-color:var(--amber-deep); }
+.btn-outline {
+  background:var(--surface); color:var(--ink); border:1px solid var(--line);
+  font-weight:550;
+}
+.btn-outline:hover { border-color:var(--softer); background:var(--ground); }
+.btn-dark { background:var(--ink); color:#fff; border:1px solid var(--ink); font-weight:600; }
+.btn-dark:hover { background:var(--ink-2); border-color:var(--ink-2); }
+.btn-danger { background:var(--warn); color:#fff; border:1px solid var(--warn); font-weight:600; }
+.btn-danger:hover { filter:brightness(.92); }
+
+/* Status chips. Same shape as a badge, coloured by meaning:
+   pending is waiting on someone, confirmed is agreed, completed
+   is done, cancelled is over. */
+.status {
+  display:inline-block; padding:3px 10px; border-radius:var(--r-pill);
+  font-size:var(--t-xs); font-weight:650; letter-spacing:.01em;
+  text-transform:capitalize; white-space:nowrap;
+  background:var(--ground); color:var(--muted); border:1px solid var(--line);
+}
+.status-pending    { background:var(--amber-soft); color:var(--amber-deep); border-color:var(--amber-line); }
+.status-confirmed  { background:var(--info-soft);  color:var(--info);       border-color:#cfe0f3; }
+.status-completed  { background:var(--good-soft);  color:var(--good);       border-color:#c9e9da; }
+.status-cancelled  { background:var(--ground);     color:var(--softer);     border-color:var(--line);
+                     text-decoration:line-through; }
+.status-in_progress{ background:var(--info-soft);  color:var(--info);       border-color:#cfe0f3; }
+
+/* The header line inside a card: a title on the left, an action
+   on the right, a rule underneath. */
+.section-header, .section-head {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:var(--s4); flex-wrap:wrap;
+  padding-bottom:var(--s3); margin-bottom:var(--s4);
+  border-bottom:1px solid var(--line-soft);
+}
+.section-header h2, .section-head h2 {
+  font-size:var(--t-lg); font-weight:650; letter-spacing:-.01em; margin:0;
+}
+
+/* Filter tabs -- the row of "All / Pending / Confirmed" links.
+   The selected one is filled, not underlined, so it reads at a
+   glance on a phone. */
+.filter-tabs {
+  display:flex; gap:var(--s2); flex-wrap:wrap; margin-bottom:var(--s5);
+}
+.filter-tab {
+  padding:var(--s2) var(--s4); border-radius:var(--r-pill);
+  border:1px solid var(--line); background:var(--surface);
+  color:var(--muted); font-size:var(--t-sm); font-weight:550;
+  text-decoration:none; white-space:nowrap;
+  transition:all var(--ease);
+}
+.filter-tab:hover { border-color:var(--softer); color:var(--ink); }
+.filter-tab.active {
+  background:var(--ink); border-color:var(--ink); color:#fff; font-weight:600;
+}
+
+/* Detail pages: a label/value grid. Used on every record page in
+   the product -- bookings, contractors, applications, clients. */
+.detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--s5); }
+.detail-row, .dl {
+  display:grid; grid-template-columns:minmax(120px,34%) 1fr;
+  gap:var(--s3) var(--s4); padding:var(--s3) 0;
+  border-bottom:1px solid var(--line-soft); font-size:var(--t-sm);
+}
+.detail-row:last-child, .dl:last-child { border-bottom:0; }
+.detail-row > :first-child, .dl > :first-child, .dl dt {
+  color:var(--muted); font-weight:550;
+}
+.dv, .dl dd { margin:0; color:var(--ink); font-weight:500; word-break:break-word; }
+.dv.num, .amt { font-variant-numeric:tabular-nums; }
+
+@media (max-width:560px) {
+  .detail-row, .dl { grid-template-columns:1fr; gap:2px; padding:var(--s3) 0; }
+}
+
+/* Muted text, everywhere. Replaces the hardcoded #9a95ad that was
+   pasted into thirty templates. */
+.dim, .muted { color:var(--muted); }
+small.dim, small.muted { font-size:var(--t-xs); }
+
+/* ─────────────────────────────────────────────────────────────
+   Mobile navigation
+   The sidebar is permanent on a laptop and slides in on a phone.
+   Owners check the day's work standing in a kitchen, so this is
+   not a nicety.
+   ───────────────────────────────────────────────────────────── */
+.hamburger {
+  display:none; background:none; border:0; cursor:pointer;
+  font-size:1.35rem; line-height:1; color:var(--ink);
+  padding:var(--s2) var(--s2) var(--s2) 0; margin-right:var(--s1);
+}
+.nav-overlay {
+  display:none; position:fixed; inset:0; z-index:60;
+  background:rgba(22,33,58,.42);
+  opacity:0; transition:opacity var(--ease);
+}
+.nav-overlay.open { display:block; opacity:1; }
+
+@media (max-width:900px) {
+  .hamburger { display:block; }
+  .sidebar {
+    position:fixed; top:0; left:0; bottom:0; z-index:70;
+    transform:translateX(-100%);
+    transition:transform 200ms cubic-bezier(.4,0,.2,1);
+    box-shadow:var(--shadow-lg);
+  }
+  .sidebar.open { transform:translateX(0); }
+  .main-wrap { margin-left:0; }
+}
+
+/* The getting-started card. It is the first thing on the dashboard
+   of a brand new account and the only place amber is used as a
+   background, because at that moment there is exactly one thing
+   to do. */
+.onboard-card {
+  display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap;
+  padding:var(--s5); margin-bottom:var(--s6);
+  background:var(--amber-soft); border:1px solid var(--amber-line);
+  border-radius:var(--r); text-decoration:none; color:inherit;
+  transition:box-shadow var(--ease), border-color var(--ease);
+}
+.onboard-card:hover { box-shadow:var(--shadow); border-color:var(--amber); }
+.onboard-card > div { flex:1; min-width:230px; }
+.onboard-card .eyebrow {
+  font-size:var(--t-xs); letter-spacing:.12em; text-transform:uppercase;
+  color:var(--amber-deep); font-weight:700;
+}
+.onboard-card .t { font-weight:650; font-size:var(--t-lg); margin-top:var(--s1); }
+.onboard-card .w { color:var(--muted); font-size:var(--t-sm); margin-top:2px; }
+
+/* ─────────────────────────────────────────────────────────────
+   Calendar
+   A month view is scanned, not read. The owner is looking for two
+   things: how busy a week is, and where the holes are. So the
+   chips carry status by colour and a day with an unassigned job
+   is marked on the cell itself -- otherwise you have to open
+   every day to find the one that will go wrong.
+   ───────────────────────────────────────────────────────────── */
+.cal-head {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:var(--s3); margin-bottom:var(--s5);
+}
+.cal-head h2 {
+  font-size:var(--t-xl); font-weight:650; letter-spacing:-.02em;
+  color:var(--ink); margin:0;
+}
+
+.cal-dows, .cal-grid {
+  display:grid; grid-template-columns:repeat(7,1fr); gap:var(--s1);
+}
+.cal-dows { margin-bottom:var(--s1); }
+.cal-dow {
+  text-align:center; font-size:var(--t-xs); font-weight:700;
+  color:var(--softer); text-transform:uppercase; letter-spacing:.1em;
+  padding:var(--s2) 0;
+}
+
+.daycell {
+  min-height:104px; background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r-sm); padding:var(--s2);
+  transition:background var(--ease), border-color var(--ease);
+}
+.daycell.blank { background:var(--ground); border-color:transparent; }
+.daycell.drop { background:var(--amber-soft); border-color:var(--amber); }
+
+.daynum {
+  font-size:var(--t-xs); font-weight:700; color:var(--muted);
+  margin-bottom:var(--s1); display:flex; align-items:center; gap:4px;
+}
+.daycell.today { border-color:var(--amber); box-shadow:0 0 0 2px rgba(240,164,75,.18); }
+.daycell.today .daynum { color:var(--amber-deep); }
+
+/* A dot, not a word. It has to survive being one of thirty-five cells. */
+.daynum .gap {
+  margin-left:auto; width:6px; height:6px; border-radius:50%;
+  background:var(--warn); flex:0 0 auto;
+}
+
+.jobchip {
+  display:block; font-size:var(--t-xs); padding:3px 6px;
+  border-radius:5px; margin-bottom:2px; text-decoration:none;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  font-weight:550; border:1px solid transparent;
+  transition:filter var(--ease);
+}
+.jobchip[draggable="true"] { cursor:grab; }
+.jobchip:hover { filter:brightness(.96); }
+.jobchip.s-pending   { background:var(--amber-soft); color:var(--amber-deep); }
+.jobchip.s-confirmed { background:var(--info-soft);  color:var(--info); }
+.jobchip.s-completed { background:var(--good-soft);  color:var(--good); }
+.jobchip.s-cancelled { background:var(--ground); color:var(--softer); text-decoration:line-through; }
+/* An unassigned job gets an outline, so it reads as an open slot. */
+.jobchip.unassigned { border-color:var(--warn); }
+
+.cal-legend {
+  display:flex; gap:var(--s5); margin-top:var(--s4); flex-wrap:wrap;
+  padding-top:var(--s4); border-top:1px solid var(--line-soft);
+}
+.cal-legend span { display:flex; align-items:center; gap:6px;
+                   font-size:var(--t-xs); color:var(--muted); }
+.cal-legend .sw { width:12px; height:12px; border-radius:3px; border:1px solid; }
+
+@media (max-width:720px) {
+  .daycell { min-height:74px; padding:3px; }
+  .jobchip { font-size:.68rem; padding:2px 4px; }
+  .cal-dow { font-size:.62rem; letter-spacing:.06em; }
+}
+
+/* A quiet day is not an error. The full empty state -- big icon, generous
+   padding -- is right for "you have no clients yet" and wrong for "nothing
+   is booked today", which is a normal Tuesday and should not be a 300px
+   hole in the middle of the page. */
+.empty.compact {
+  display:flex; align-items:center; justify-content:center; gap:var(--s3);
+  padding:var(--s5); text-align:left; font-size:var(--t-sm);
+}
+.empty.compact .icon { font-size:1.1rem; margin:0; opacity:.5; }
+.empty.compact p { margin:0; }

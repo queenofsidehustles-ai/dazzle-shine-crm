@@ -10,7 +10,7 @@
   <div class="card">
 
     {% if not booking.email %}
-    <p style="color:#b45309;background:#fef3c7;padding:12px 14px;border-radius:8px;margin:0 0 16px">
+    <p style="color:var(--amber-deep);background:var(--amber-soft);padding:12px 14px;border-radius:8px;margin:0 0 16px">
       ⚠️ No email was on file for this booking — just type one in the "To" box below.
     </p>
     {% endif %}
@@ -19,7 +19,7 @@
       <div class="form-group">
         <label>To — {{ booking.name or 'Customer' }}'s email</label>
         <input type="email" name="to_email" required value="{{ booking.email or '' }}" placeholder="customer@example.com" />
-        <span style="font-size:0.78rem;color:#9a95ad">You can edit this. Sends from your {{ BIZ }} address · any reply comes to your inbox.</span>
+        <span style="font-size:0.78rem;color:var(--softer)">You can edit this. Sends from your {{ BIZ }} address · any reply comes to your inbox.</span>
       </div>
       <div class="form-group">
         <label>Subject</label>
@@ -42,7 +42,7 @@ With gratitude,
 Monica
 {{ BIZ }}
 {{ BIZ_PHONE }}</textarea>
-        <span style="font-size:0.78rem;color:#9a95ad">Edit anything above before sending. Your {{ BIZ }} branding is added around the message automatically.</span>
+        <span style="font-size:0.78rem;color:var(--softer)">Edit anything above before sending. Your {{ BIZ }} branding is added around the message automatically.</span>
       </div>
       <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">
         ✉️ Send Email

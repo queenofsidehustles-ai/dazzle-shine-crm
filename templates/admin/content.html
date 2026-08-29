@@ -7,7 +7,7 @@
 
   <!-- Generator Form -->
   <div class="card">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Generate Content</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Generate Content</h2>
     <form method="POST" action="{{ url_for('content.generate') }}">
       <div class="form-group">
         <label>Post Type</label>
@@ -26,14 +26,14 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Context <span style="font-weight:400;color:#9a95ad">(optional)</span></label>
+        <label>Context <span style="font-weight:400;color:var(--softer)">(optional)</span></label>
         <textarea name="context" rows="3" placeholder="e.g. 3 bed 2 bath deep clean in Lake Nona, client was thrilled with the result..."></textarea>
       </div>
       <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">
         ✨ Generate with AI
       </button>
     </form>
-    <p style="font-size:0.78rem;color:#9a95ad;margin-top:10px;text-align:center">Requires OPENROUTER_API_KEY in Railway settings</p>
+    <p style="font-size:0.78rem;color:var(--softer);margin-top:10px;text-align:center">Requires OPENROUTER_API_KEY in Railway settings</p>
   </div>
 
   <!-- Saved Posts -->
@@ -44,19 +44,19 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
           <div style="display:flex;gap:8px;align-items:center">
             <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;padding:3px 10px;border-radius:999px;
-              {% if post.platform == 'instagram' %}background:#fce4ec;color:#880e4f
-              {% elif post.platform == 'facebook' %}background:#e3f2fd;color:#0d47a1
-              {% elif post.platform == 'tiktok' %}background:#f3e5f5;color:#4a148c
-              {% else %}background:#e8f5e9;color:#1b5e20{% endif %}">
+              {% if post.platform == 'instagram' %}background:var(--warn-soft);color:var(--info)
+              {% elif post.platform == 'facebook' %}background:var(--info-soft);color:var(--info)
+              {% elif post.platform == 'tiktok' %}background:var(--info-soft);color:var(--info)
+              {% else %}background:var(--good-soft);color:var(--good){% endif %}">
               {{ post.platform.title() }}
             </span>
-            <span style="font-size:0.75rem;color:#9a95ad">{{ post.post_type.replace('_',' ').title() }}</span>
+            <span style="font-size:0.75rem;color:var(--softer)">{{ post.post_type.replace('_',' ').title() }}</span>
             <span class="status {% if post.status == 'posted' %}status-completed{% elif post.status == 'scheduled' %}status-confirmed{% else %}status-pending{% endif %}" style="font-size:0.72rem">{{ post.status }}</span>
           </div>
-          <span style="font-size:0.78rem;color:#9a95ad">{{ post.created_at.strftime('%b %d') }}</span>
+          <span style="font-size:0.78rem;color:var(--softer)">{{ post.created_at.strftime('%b %d') }}</span>
         </div>
 
-        <div style="background:#f6f5fb;border-radius:9px;padding:14px;font-size:0.9rem;line-height:1.7;white-space:pre-wrap;max-height:200px;overflow-y:auto">{{ post.caption }}</div>
+        <div style="background:var(--ground);border-radius:9px;padding:14px;font-size:0.9rem;line-height:1.7;white-space:pre-wrap;max-height:200px;overflow-y:auto">{{ post.caption }}</div>
 
         <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
           <button onclick="copyText(this, `{{ post.caption | replace('`','\\`') | replace('\n','\\n') }}`)"
@@ -64,14 +64,14 @@
 
           {% if post.status == 'draft' %}
           <form method="POST" action="{{ url_for('content.schedule', post_id=post.id) }}" style="display:flex;gap:6px">
-            <input type="date" name="scheduled_date" style="padding:6px 10px;border:1px solid #e4dfef;border-radius:9px;font-size:0.82rem" />
+            <input type="date" name="scheduled_date" style="padding:6px 10px;border:1px solid var(--line);border-radius:9px;font-size:0.82rem" />
             <button type="submit" class="btn btn-dark" style="padding:6px 14px;font-size:0.82rem">Schedule</button>
           </form>
           {% endif %}
 
           {% if post.status != 'posted' %}
           <form method="POST" action="{{ url_for('content.mark_posted', post_id=post.id) }}">
-            <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.82rem;background:#d1fae5;color:#065f46;border-color:#d1fae5">Mark Posted</button>
+            <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.82rem;background:var(--good-soft);color:var(--good);border-color:var(--good-soft)">Mark Posted</button>
           </form>
           {% endif %}
 
@@ -83,7 +83,7 @@
       </div>
       {% endfor %}
     {% else %}
-    <div class="card" style="text-align:center;padding:50px 20px;color:#9a95ad">
+    <div class="card" style="text-align:center;padding:50px 20px;color:var(--softer)">
       <p style="font-size:2rem;margin-bottom:12px">✨</p>
       <p style="font-weight:700;margin-bottom:6px">No content yet</p>
       <p style="font-size:0.88rem">Use the generator on the left to create your first post.</p>
@@ -97,8 +97,8 @@ function copyText(btn, text) {
   navigator.clipboard.writeText(text.replace(/\\n/g, '\n'));
   const orig = btn.textContent;
   btn.textContent = 'Copied!';
-  btn.style.background = '#d1fae5';
-  btn.style.color = '#065f46';
+  btn.style.background = 'var(--good-soft)';
+  btn.style.color = 'var(--good)';
   setTimeout(() => { btn.textContent = orig; btn.style.background = ''; btn.style.color = ''; }, 2000);
 }
 </script>

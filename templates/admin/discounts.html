@@ -17,10 +17,10 @@
         {% for c in codes %}
         <tr>
           <td><strong style="font-family:monospace;font-size:1rem;letter-spacing:0.05em">{{ c.code }}</strong></td>
-          <td style="font-weight:700;color:#b98a33">{{ c.discount_label() }}</td>
+          <td style="font-weight:700;color:var(--amber-deep)">{{ c.discount_label() }}</td>
           <td>{{ c.times_used }}</td>
-          <td style="color:#9a95ad">{{ c.max_uses or '∞' }}</td>
-          <td style="color:#9a95ad;font-size:0.85rem">{{ c.expires_at.strftime('%b %d, %Y') if c.expires_at else 'Never' }}</td>
+          <td style="color:var(--softer)">{{ c.max_uses or '∞' }}</td>
+          <td style="color:var(--softer);font-size:0.85rem">{{ c.expires_at.strftime('%b %d, %Y') if c.expires_at else 'Never' }}</td>
           <td>
             {% if c.is_active %}
               <span class="status status-completed">Active</span>
@@ -34,7 +34,7 @@
               <form method="POST" action="{{ url_for('discounts.delete', code_id=c.id) }}"
                     onsubmit="return confirm('Delete code {{ c.code }} permanently?')">
                 <button type="submit" title="Delete code"
-                        style="background:#fff;border:1px solid #fed7d7;color:#c53030;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">🗑</button>
+                        style="background:#fff;border:1px solid var(--warn-soft);color:var(--warn);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">🗑</button>
               </form>
             </div>
           </td>
@@ -44,8 +44,8 @@
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:40px 0">
-    No discount codes yet. <a href="{{ url_for('discounts.new') }}" style="color:#d3a84f">Create your first one →</a>
+  <p style="text-align:center;color:var(--softer);padding:40px 0">
+    No discount codes yet. <a href="{{ url_for('discounts.new') }}" style="color:var(--amber)">Create your first one →</a>
   </p>
   {% endif %}
 </div>

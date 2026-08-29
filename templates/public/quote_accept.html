@@ -6,11 +6,12 @@
   <title>Your Cleaning Quote — {{ BIZ }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     :root{
-      --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,0.12);
-      --purple:#1f1333; --bg:#f6f5fb;
-      --white:#fff; --border:#e4dfef; --radius:14px;
+      --gold:var(--amber); --gold-deep:var(--amber-deep); --gold-soft:rgba(211,168,79,0.12);
+      --purple:var(--ink); --bg:var(--ground);
+      --white:#fff; --border:var(--line); --radius:14px;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple);min-height:100vh}
@@ -25,15 +26,15 @@
     .price-banner .lbl{color:rgba(255,255,255,0.55);font-size:0.72rem;letter-spacing:0.14em;text-transform:uppercase}
     .price-banner .amt{color:var(--gold);font-size:2.4rem;font-weight:700;line-height:1.1}
     .price-banner .note{color:rgba(255,255,255,0.55);font-size:0.78rem;margin-top:4px}
-    .summary{background:#faf9fd;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px}
+    .summary{background:var(--ground);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px}
     .summary .row{display:flex;justify-content:space-between;padding:5px 0;font-size:0.92rem}
-    .summary .row .k{color:#9a95ad}
+    .summary .row .k{color:var(--softer)}
     .summary .row .v{font-weight:600;text-align:right}
     ul.incl{list-style:none;margin:0}
-    ul.incl li{padding:7px 0 7px 26px;position:relative;font-size:0.92rem;line-height:1.5;border-bottom:1px solid #f2eff8}
+    ul.incl li{padding:7px 0 7px 26px;position:relative;font-size:0.92rem;line-height:1.5;border-bottom:1px solid var(--info-soft)}
     ul.incl li:last-child{border-bottom:none}
     ul.incl li:before{content:"✓";position:absolute;left:0;color:var(--gold-deep);font-weight:700}
-    label.fld{display:block;font-size:0.8rem;font-weight:600;color:#5f5878;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em}
+    label.fld{display:block;font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em}
     input,textarea{width:100%;padding:13px 14px;border:1px solid var(--border);border-radius:10px;
                    font-family:inherit;font-size:1rem;background:#fff;color:var(--purple)}
     .fieldrow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -41,8 +42,8 @@
          padding:15px;border:none;border-radius:10px;font-weight:700;font-size:1.05rem;cursor:pointer;
          font-family:inherit;margin-top:8px}
     .btn:hover{background:var(--gold-deep)}
-    .flash{background:#fef3c7;color:#92400e;padding:12px 14px;border-radius:10px;font-size:0.9rem;margin-bottom:16px}
-    .foot{text-align:center;color:#9a95ad;font-size:0.8rem;margin-top:18px;line-height:1.6}
+    .flash{background:var(--amber-soft);color:var(--amber-deep);padding:12px 14px;border-radius:10px;font-size:0.9rem;margin-bottom:16px}
+    .foot{text-align:center;color:var(--softer);font-size:0.8rem;margin-top:18px;line-height:1.6}
     @media(max-width:420px){.fieldrow{grid-template-columns:1fr}}
   </style>
 </head>
@@ -60,7 +61,7 @@
     {% if already %}
     <div class="card">
       <h1>You're already booked, {{ lead.name.split()[0] }} ✨</h1>
-      <p style="color:#5f5878;line-height:1.7">
+      <p style="color:var(--muted);line-height:1.7">
         We've got your cleaning down and we'll be in touch with the details.
         Any questions at all, just reply to the email we sent you.
       </p>
@@ -82,7 +83,7 @@
         {% if lead.extras %}<div class="row"><span class="k">Add-ons</span><span class="v">{{ lead.extras }}</span></div>{% endif %}
       </div>
 
-      <p style="color:#5f5878;font-size:0.88rem;line-height:1.6">
+      <p style="color:var(--muted);font-size:0.88rem;line-height:1.6">
         This is the price we quoted you — it doesn't change when you book here.
       </p>
     </div>

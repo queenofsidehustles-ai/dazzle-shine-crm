@@ -9,9 +9,9 @@
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}
-      <div style="background:{{ '#f0fff4' if cat=='success' else '#fff5f5' }};
-                  border:1px solid {{ '#c6f6d5' if cat=='success' else '#fed7d7' }};
-                  color:{{ '#276749' if cat=='success' else '#c53030' }};
+      <div style="background:{{ 'var(--good-soft)' if cat=='success' else 'var(--warn-soft)' }};
+                  border:1px solid {{ 'var(--good-soft)' if cat=='success' else 'var(--warn-soft)' }};
+                  color:{{ 'var(--good)' if cat=='success' else 'var(--warn)' }};
                   padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9rem;font-weight:500">
         {{ msg }}
       </div>
@@ -86,12 +86,12 @@
             <td>
               {% set s = a.interview_status %}
               {% if s == 'completed' %}
-                <span style="background:#f0fff4;color:#276749;border:1px solid #c6f6d5;
+                <span style="background:var(--good-soft);color:var(--good);border:1px solid var(--good-soft);
                              padding:3px 10px;border-radius:999px;font-size:0.8rem;font-weight:600">
                   ✅ Completed
                 </span>
               {% elif s == 'in_progress' %}
-                <span style="background:#fffbeb;color:#92400e;border:1px solid #fde68a;
+                <span style="background:var(--amber-soft);color:var(--amber-deep);border:1px solid var(--amber-line);
                              padding:3px 10px;border-radius:999px;font-size:0.8rem;font-weight:600">
                   ⏳ In Progress
                 </span>

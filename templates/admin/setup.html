@@ -5,38 +5,38 @@
 {% block content %}
 <div class="card">
   {% if s.complete %}
-    <div style="font-size:1.05rem;font-weight:700;color:#1c6b34;margin-bottom:4px">✅ You're ready to take real bookings</div>
-    <p style="color:#5f5878;font-size:0.9rem;margin:0">
+    <div style="font-size:1.05rem;font-weight:700;color:var(--good);margin-bottom:4px">✅ You're ready to take real bookings</div>
+    <p style="color:var(--muted);font-size:0.9rem;margin:0">
       Everything essential is connected. The remaining items below are optional.
     </p>
   {% else %}
     <div style="font-size:1.05rem;font-weight:700;margin-bottom:4px">{{ s.done }} of {{ s.total }} done</div>
-    <p style="color:#5f5878;font-size:0.9rem;margin:0 0 10px">
+    <p style="color:var(--muted);font-size:0.9rem;margin:0 0 10px">
       Work down this list and your CRM is ready. You can do all of it yourself —
       nothing here needs anyone else.
     </p>
-    <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:8px;padding:12px;font-size:0.87rem;color:#7c4a04">
+    <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:12px;font-size:0.87rem;color:var(--amber-deep)">
       <strong>Not ready for real customers yet.</strong>
       Still needed: {{ s.blocking | map(attribute='title') | join(' · ') }}
     </div>
   {% endif %}
-  <div style="margin-top:14px;height:8px;background:#efecf7;border-radius:999px;overflow:hidden">
-    <div style="height:100%;width:{{ (s.done / s.total * 100) | round }}%;background:{{ '#3fa45c' if s.complete else '#d3a84f' }}"></div>
+  <div style="margin-top:14px;height:8px;background:var(--info-soft);border-radius:999px;overflow:hidden">
+    <div style="height:100%;width:{{ (s.done / s.total * 100) | round }}%;background:{{ 'var(--good)' if s.complete else 'var(--amber)' }}"></div>
   </div>
 </div>
 
 {% for i in s['items'] %}
-<div class="card" style="margin-top:12px;border-left:4px solid {{ '#3fa45c' if i.done else ('#d3a84f' if i.get('partial') else ('#e0574a' if i.critical else '#cfc9de')) }}">
+<div class="card" style="margin-top:12px;border-left:4px solid {{ 'var(--good)' if i.done else ('var(--amber)' if i.get('partial') else ('var(--warn)' if i.critical else 'var(--info-soft)')) }}">
   <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap">
     <div style="flex:1;min-width:240px">
       <div style="font-weight:700;margin-bottom:3px">
         {% if i.done %}✅{% elif i.get('partial') %}⚠️{% else %}⬜{% endif %}
         {{ i.title }}
         {% if not i.critical and not i.done %}
-          <span style="font-weight:400;font-size:0.78rem;color:#9a95ad">— optional</span>
+          <span style="font-weight:400;font-size:0.78rem;color:var(--softer)">— optional</span>
         {% endif %}
       </div>
-      <div style="color:#5f5878;font-size:0.87rem;line-height:1.5">{{ i.why }}</div>
+      <div style="color:var(--muted);font-size:0.87rem;line-height:1.5">{{ i.why }}</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       {% if i.key in ('pricing', 'terms') and not i.done %}
@@ -52,9 +52,9 @@
 </div>
 {% endfor %}
 
-<div class="card" style="margin-top:20px;background:#f7f5fc">
+<div class="card" style="margin-top:20px;background:var(--info-soft)">
   <h2 style="font-size:0.95rem;font-weight:700;margin-bottom:8px">Before your first real customer</h2>
-  <p style="color:#5f5878;font-size:0.88rem;line-height:1.6;margin:0">
+  <p style="color:var(--muted);font-size:0.88rem;line-height:1.6;margin:0">
     Take a <strong>$1 test payment</strong> and check it lands in your own Stripe dashboard.
     It is the one mistake that costs real money, and it takes two minutes to rule out.
     Use <a href="{{ url_for('settings.connections') }}">Connections → Test Stripe connection</a> —

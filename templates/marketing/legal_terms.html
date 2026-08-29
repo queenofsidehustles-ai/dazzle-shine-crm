@@ -3,8 +3,7 @@
 {% block heading %}Terms of Service{% endblock %}
 {% block doc %}
 
-<p>These terms are between <span class="fill">[LEGAL ENTITY NAME, e.g. Dazzle &amp;
-Shine Holdings LLC]</span> (“we”, “us”) and the business that signs up
+<p>These terms are between <strong>{{ LEGAL_ENTITY or PRODUCT }}</strong> (“we”, “us”) and the business that signs up
 (“you”). Using {{ PRODUCT }} means agreeing to them.</p>
 
 <h2>1. What {{ PRODUCT }} is</h2>
@@ -141,9 +140,7 @@ Continuing to use {{ PRODUCT }} after that means accepting the new version. If
 you would rather not, cancel and we will refund the unused part of the month.</p>
 
 <h2>12. Law and disputes</h2>
-<p>These terms are governed by the law of <span class="fill">[STATE, e.g.
-Florida]</span>, and disputes go to the courts of <span class="fill">[COUNTY /
-STATE]</span>. Talk to us first — <a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>.
+<p>These terms are governed by the law of <strong>Florida</strong>, and disputes go to the courts of <strong>Orange County, Florida</strong>. Talk to us first — <a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>.
 Most things are a misunderstanding.</p>
 
 {% endblock %}

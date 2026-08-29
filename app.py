@@ -180,7 +180,9 @@ def create_app():
     def inject_product():
         import product
         return {'PRODUCT': product.name(), 'TAGLINE': product.tagline(),
-                'SUPPORT_EMAIL': product.support_email()}
+                'SUPPORT_EMAIL': product.support_email(),
+                'LEGAL_ENTITY': product.legal_entity(),
+                'LEGAL_ADDRESS': product.legal_address()}
 
     # How far a brand-new business has got towards its first real job. None
     # once they are up and running, so the banner disappears by itself rather

@@ -25,7 +25,7 @@
     </button>
   </form>
   {% endif %}
-  <span style="margin-left:auto;font-size:0.83rem;color:#9a95ad">
+  <span style="margin-left:auto;font-size:0.83rem;color:var(--softer)">
     {% if due_count %}{{ due_count }} text{{ 's' if due_count != 1 }} due on the next run{% else %}Nothing due to send{% endif %}
   </span>
 </div>
@@ -43,22 +43,22 @@
         <tr>
           <td><strong>{{ r.pretty_phone }}</strong></td>
           <td>{{ r.job_type or '—' }}</td>
-          <td style="font-size:0.85rem;color:#9a95ad">{{ r.location or '—' }}</td>
-          <td style="font-size:0.82rem;color:#9a95ad">
+          <td style="font-size:0.85rem;color:var(--softer)">{{ r.location or '—' }}</td>
+          <td style="font-size:0.82rem;color:var(--softer)">
             {{ r.received_at.strftime('%b %d') if r.received_at else '—' }}</td>
           {# Google's billing status, not a booking status — labelled so it can't be
              read as "this lead was no good". A lead Google didn't charge for is
              usually a call that never connected, which makes it worth more here. #}
-          <td style="font-size:0.82rem;color:#9a95ad">{{ r.charge_status or '—' }}</td>
+          <td style="font-size:0.82rem;color:var(--softer)">{{ r.charge_status or '—' }}</td>
           {# Which of the two conversations they get. Google's billing status only
              seeds this — she was on the calls, so she can move anyone. #}
           <td>
             {% if r.booked %}
-              <span style="font-size:0.8rem;color:#9a95ad">—</span>
+              <span style="font-size:0.8rem;color:var(--softer)">—</span>
             {% else %}
               <form method="POST" action="{{ url_for('lsa.set_track', lead_id=r.id) }}" style="margin:0">
                 <select name="track" onchange="this.form.submit()"
-                        style="padding:4px 8px;font-size:0.8rem;border:1px solid #e4e0ee;border-radius:7px;background:#fff;color:#1f1333">
+                        style="padding:4px 8px;font-size:0.8rem;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)">
                   {% for value, label in [('missed','Missed call'),('quoted','Spoke & quoted')] %}
                   <option value="{{ value }}" {{ 'selected' if (r.track or 'quoted') == value }}>{{ label }}</option>
                   {% endfor %}
@@ -84,7 +84,7 @@
                may well ring back and ask for a price, and someone already quoted
                may still be worth a nudge. #}
             {% if r.booked %}
-              <span style="font-size:0.8rem;color:#9a95ad">—</span>
+              <span style="font-size:0.8rem;color:var(--softer)">—</span>
             {% else %}
             <div style="display:flex;gap:6px;justify-content:flex-end">
               <a href="{{ url_for('lsa.quote', lead_id=r.id) }}" class="btn btn-gold"
@@ -107,7 +107,7 @@
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+  <p style="text-align:center;color:var(--softer);padding:40px 0">
     Nothing here yet. Download the CSV from your Local Services Ads Leads page
     and import it — this screen will then show you who called and never booked.
   </p>

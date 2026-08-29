@@ -4,7 +4,7 @@
 
 {% block content %}
 <form method="POST" class="card" style="max-width:680px">
-  <p style="color:#5f5878;font-size:0.9rem;line-height:1.7;margin-bottom:20px">
+  <p style="color:var(--muted);font-size:0.9rem;line-height:1.7;margin-bottom:20px">
     {% if lead %}
       For <strong>{{ lead.pretty_phone }}</strong>, who called
       {{ lead.received_at.strftime('%b %d') if lead.received_at else 'through Google Ads' }}{% if lead.location %} from {{ lead.location }}{% endif %}.
@@ -21,18 +21,18 @@
       <label class="dl" style="display:block;margin-bottom:5px">Their name</label>
       <input name="name" required value="{{ existing.name if existing else '' }}"
              placeholder="First name is fine"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Their email</label>
       <input name="email" type="email" required value="{{ existing.email if existing else '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     {% if not lead %}
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Their phone</label>
       <input name="phone" value="{{ existing.phone if existing else '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     {% endif %}
   </div>
@@ -41,7 +41,7 @@
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Service</label>
       <select name="service_type" id="q-service" required
-              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
         {% for key, s in services.items() %}
         <option value="{{ key }}" {{ 'selected' if existing and existing.service_type == key }}>{{ s.label }}</option>
         {% endfor %}
@@ -50,12 +50,12 @@
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Bedrooms</label>
       <input name="bedrooms" id="q-beds" type="number" min="0" value="{{ existing.bedrooms if existing else 3 }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Bathrooms</label>
       <input name="bathrooms" id="q-baths" type="number" min="0" value="{{ existing.bathrooms if existing else 2 }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
   </div>
 
@@ -63,9 +63,9 @@
     <label class="dl" style="display:block;margin-bottom:6px">Add-ons</label>
     <div style="display:flex;flex-wrap:wrap;gap:14px">
       {% for name, cost in extras.items() %}
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.88rem;color:#5f5878">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.88rem;color:var(--muted)">
         <input type="checkbox" name="extras" value="{{ name }}" class="q-extra" data-cost="{{ cost }}" style="width:auto">
-        {{ name }} <span style="color:#9a95ad">+${{ cost }}</span>
+        {{ name }} <span style="color:var(--softer)">+${{ cost }}</span>
       </label>
       {% endfor %}
     </div>
@@ -74,17 +74,17 @@
   {# What the quote actually promises. People ring asking for one specialised
      thing, or say plainly they don't want the oven touched — so this is a
      starting point to edit, not a fixed list. #}
-  <div style="margin-top:18px;padding:16px;background:#faf9fd;border-radius:10px">
+  <div style="margin-top:18px;padding:16px;background:var(--ground);border-radius:10px">
     <label class="dl" style="display:block;margin-bottom:4px">What you'll do for them</label>
-    <p style="font-size:0.82rem;color:#9a95ad;margin-bottom:10px">
+    <p style="font-size:0.82rem;color:var(--softer);margin-bottom:10px">
       Untick anything you agreed not to do. This is the list they'll see in the
       email and on their booking page.
-      <a href="#" id="q-all" style="color:#b98a33">Tick all</a> ·
-      <a href="#" id="q-none" style="color:#b98a33">Untick all</a>
+      <a href="#" id="q-all" style="color:var(--amber-deep)">Tick all</a> ·
+      <a href="#" id="q-none" style="color:var(--amber-deep)">Untick all</a>
     </p>
     <div id="q-checklist" style="display:grid;gap:5px;max-height:280px;overflow-y:auto">
       {% for item in checklist %}
-      <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:#5f5878;line-height:1.45">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:var(--muted);line-height:1.45">
         <input type="checkbox" name="checklist" value="{{ item }}" class="q-item"
                style="width:auto;margin-top:3px" {{ 'checked' if item in chosen }}>
         <span>{{ item }}</span>
@@ -94,20 +94,20 @@
     <label class="dl" style="display:block;margin:14px 0 5px">Anything else you agreed on the call</label>
     <textarea name="checklist_custom" rows="3"
               placeholder="One per line — e.g. Inside the china cabinet&#10;Strip and remake the guest beds"
-              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:0.9rem">{{ custom_lines|join('\n') }}</textarea>
-    <p style="font-size:0.8rem;color:#9a95ad;margin-top:7px">
+              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:0.9rem">{{ custom_lines|join('\n') }}</textarea>
+    <p style="font-size:0.8rem;color:var(--softer);margin-top:7px">
       These are added to the list exactly as you type them. Untick everything and
       leave this empty to fall back to the standard list for the service.
     </p>
   </div>
 
-  <div style="margin-top:18px;padding:14px;background:#faf9fd;border-radius:10px">
+  <div style="margin-top:18px;padding:14px;background:var(--ground);border-radius:10px">
     <label class="dl" style="display:block;margin-bottom:5px">Price you quoted them</label>
     <input name="price" id="q-price" type="number" step="0.01" min="0"
            value="{{ '%.2f'|format(existing.quoted_price) if existing and existing.quoted_price else '' }}"
            placeholder="Leave blank to use the calculated price"
-           style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
-    <p style="font-size:0.82rem;color:#9a95ad;margin-top:7px">
+           style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
+    <p style="font-size:0.82rem;color:var(--softer);margin-top:7px">
       Calculated from the above: <strong id="q-calc">—</strong>. Whatever you type
       here is what gets emailed and what they'll pay — type the figure you
       actually said on the phone.
@@ -116,33 +116,33 @@
 
   <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:14px">
     <div>
-      <label class="dl" style="display:block;margin-bottom:5px">Address <span style="color:#9a95ad;font-weight:400">(optional)</span></label>
+      <label class="dl" style="display:block;margin-bottom:5px">Address <span style="color:var(--softer);font-weight:400">(optional)</span></label>
       <input name="address" value="{{ existing.address if existing else '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">City</label>
       <input name="city" value="{{ existing.city if existing else lead.location or '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">ZIP</label>
       <input name="zip_code" value="{{ existing.zip_code if existing else '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
   </div>
 
   <div style="margin-top:14px">
-    <label class="dl" style="display:block;margin-bottom:5px">Notes from the call <span style="color:#9a95ad;font-weight:400">(not emailed)</span></label>
+    <label class="dl" style="display:block;margin-bottom:5px">Notes from the call <span style="color:var(--softer);font-weight:400">(not emailed)</span></label>
     <textarea name="notes" rows="2"
-              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">{{ existing.notes if existing else '' }}</textarea>
+              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">{{ existing.notes if existing else '' }}</textarea>
   </div>
 
   {# Texting it as well is worth offering because email is the channel that
      quietly fails — filed as spam, and neither of you knows. #}
-  <label style="display:flex;align-items:flex-start;gap:9px;margin-top:18px;padding:13px 15px;background:#faf9fd;border-radius:10px;cursor:pointer">
+  <label style="display:flex;align-items:flex-start;gap:9px;margin-top:18px;padding:13px 15px;background:var(--ground);border-radius:10px;cursor:pointer">
     <input type="checkbox" name="also_text" value="1" checked style="width:auto;margin-top:3px">
-    <span style="font-size:0.89rem;color:#5f5878;line-height:1.5">
+    <span style="font-size:0.89rem;color:var(--muted);line-height:1.5">
       <strong>Text it to them as well</strong><br>
       Same price, same link, in a message that actually gets seen. Skipped
       automatically if they've ever replied STOP.
@@ -152,7 +152,7 @@
   <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:16px">
     Send this quote
   </button>
-  <p style="font-size:0.82rem;color:#9a95ad;margin-top:10px;text-align:center">
+  <p style="font-size:0.82rem;color:var(--softer);margin-top:10px;text-align:center">
     They pay a ${{ '%.0f'|format(deposit) }} deposit to book; the rest is charged
     the morning of the clean. If they don't book, your Day 2 and Last Chance
     emails follow automatically — and the Google Ads texts stop, since you've
@@ -213,7 +213,7 @@
       box.innerHTML = '';
       (d.items || []).forEach(item => {
         const l = document.createElement('label');
-        l.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:#5f5878;line-height:1.45';
+        l.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:var(--muted);line-height:1.45';
         const cb = document.createElement('input');
         cb.type = 'checkbox'; cb.name = 'checklist'; cb.value = item;
         cb.className = 'q-item'; cb.checked = true;

@@ -5,12 +5,12 @@
 {% block content %}
 
 <div class="card">
-  <p style="color:#5f5878;font-size:0.92rem;margin:0 0 6px">
+  <p style="color:var(--muted);font-size:0.92rem;margin:0 0 6px">
     This connects your CRM to the services that take payments and send messages.
     <strong>These are your accounts.</strong> Your customers' money goes straight to your Stripe;
     it never passes through anyone else.
   </p>
-  <p style="color:#9a95ad;font-size:0.82rem;margin:0">
+  <p style="color:var(--softer);font-size:0.82rem;margin:0">
     Keys are encrypted before they're stored, and a saved key is never shown back to you in full —
     only its first and last few characters, so you can tell which one is in there.
   </p>
@@ -18,37 +18,37 @@
 
 <!-- Readiness at a glance -->
 <div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Where you stand</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Where you stand</h2>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
 
-    <div style="padding:14px;border-radius:10px;border:1px solid {{ '#a7d8b0' if status.stripe.ready else '#f0d488' }};background:{{ '#eefaf0' if status.stripe.ready else '#fff8e1' }}">
+    <div style="padding:14px;border-radius:10px;border:1px solid {{ 'var(--good)' if status.stripe.ready else 'var(--amber-line)' }};background:{{ 'var(--good-soft)' if status.stripe.ready else 'var(--amber-soft)' }}">
       <div style="font-weight:700;margin-bottom:4px">💳 Taking payments</div>
       {% if status.stripe.ready %}
         {% if status.stripe.mode == 'live' %}
-          <div style="color:#1c6b34;font-size:0.86rem">Connected — <strong>live</strong>. Real cards will be charged.</div>
+          <div style="color:var(--good);font-size:0.86rem">Connected — <strong>live</strong>. Real cards will be charged.</div>
         {% else %}
-          <div style="color:#7c4a04;font-size:0.86rem">Connected in <strong>test mode</strong>. Real cards will <em>not</em> be charged — paste your live key when you're ready to take real money.</div>
+          <div style="color:var(--amber-deep);font-size:0.86rem">Connected in <strong>test mode</strong>. Real cards will <em>not</em> be charged — paste your live key when you're ready to take real money.</div>
         {% endif %}
       {% else %}
-        <div style="color:#7c4a04;font-size:0.86rem">Not connected. Still needed: {{ status.stripe.missing|join(', ') }}.</div>
+        <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.stripe.missing|join(', ') }}.</div>
       {% endif %}
     </div>
 
-    <div style="padding:14px;border-radius:10px;border:1px solid {{ '#a7d8b0' if status.texting.ready else '#f0d488' }};background:{{ '#eefaf0' if status.texting.ready else '#fff8e1' }}">
+    <div style="padding:14px;border-radius:10px;border:1px solid {{ 'var(--good)' if status.texting.ready else 'var(--amber-line)' }};background:{{ 'var(--good-soft)' if status.texting.ready else 'var(--amber-soft)' }}">
       <div style="font-weight:700;margin-bottom:4px">💬 Texting</div>
       {% if status.texting.ready %}
-        <div style="color:#1c6b34;font-size:0.86rem">Connected. Your cleaners get job offers by text.</div>
+        <div style="color:var(--good);font-size:0.86rem">Connected. Your cleaners get job offers by text.</div>
       {% else %}
-        <div style="color:#7c4a04;font-size:0.86rem">Not connected. Still needed: {{ status.texting.missing|join(', ') }}.<br>Job offers will go by email instead.</div>
+        <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.texting.missing|join(', ') }}.<br>Job offers will go by email instead.</div>
       {% endif %}
     </div>
 
-    <div style="padding:14px;border-radius:10px;border:1px solid {{ '#a7d8b0' if status.email.ready else '#f0d488' }};background:{{ '#eefaf0' if status.email.ready else '#fff8e1' }}">
+    <div style="padding:14px;border-radius:10px;border:1px solid {{ 'var(--good)' if status.email.ready else 'var(--amber-line)' }};background:{{ 'var(--good-soft)' if status.email.ready else 'var(--amber-soft)' }}">
       <div style="font-weight:700;margin-bottom:4px">✉️ Email</div>
       {% if status.email.ready %}
-        <div style="color:#1c6b34;font-size:0.86rem">Connected. Confirmations and invoices are sending.</div>
+        <div style="color:var(--good);font-size:0.86rem">Connected. Confirmations and invoices are sending.</div>
       {% else %}
-        <div style="color:#7c4a04;font-size:0.86rem">Not connected. Customers won't receive confirmations, invoices or receipts.</div>
+        <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Customers won't receive confirmations, invoices or receipts.</div>
       {% endif %}
     </div>
 
@@ -58,8 +58,8 @@
 <form method="POST">
   <!-- Stripe -->
   <div class="card" style="margin-top:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Stripe — taking payments</h2>
-    <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:18px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Stripe — taking payments</h2>
+    <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
       From your Stripe dashboard → <strong>Developers → API keys</strong>.
       Start with the <strong>test</strong> keys if you'd like to try the CRM without charging anyone,
       then swap in the live keys when you're ready.
@@ -67,17 +67,17 @@
     {% for name in ['stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret'] %}
     {% set f = fields[name] %}
     <div class="form-group">
-      <label>{{ f.label }}{% if name == 'stripe_webhook_secret' %} <span style="font-weight:400;color:#9a95ad">(optional)</span>{% endif %}</label>
+      <label>{{ f.label }}{% if name == 'stripe_webhook_secret' %} <span style="font-weight:400;color:var(--softer)">(optional)</span>{% endif %}</label>
       <input type="text" name="{{ name }}" value="{{ f.value }}" autocomplete="off"
              placeholder="{% if name == 'stripe_publishable_key' %}pk_live_…{% elif name == 'stripe_secret_key' %}sk_live_…{% else %}whsec_…{% endif %}" />
       {% if f.source == 'environment' %}
-        <span style="font-size:0.76rem;color:#9a95ad">Currently coming from your hosting settings. Anything you type here takes over.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Currently coming from your hosting settings. Anything you type here takes over.</span>
       {% elif f.source == 'settings' %}
-        <span style="font-size:0.76rem;color:#9a95ad">Saved. Leave as-is to keep it, or paste a new key to replace it.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Saved. Leave as-is to keep it, or paste a new key to replace it.</span>
       {% endif %}
     </div>
     {% endfor %}
-    <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:8px;padding:12px;font-size:0.84rem;color:#7c4a04;margin-bottom:16px">
+    <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:12px;font-size:0.84rem;color:var(--amber-deep);margin-bottom:16px">
       <strong>Check this once:</strong> after saving, press <em>Test Stripe connection</em> below. It will tell you
       which business the key belongs to. If that isn't your business name, the money would go to the wrong account.
     </div>
@@ -86,8 +86,8 @@
 
   <!-- Texting -->
   <div class="card" style="margin-top:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Texting</h2>
-    <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:18px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Texting</h2>
+    <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
       From your Twilio console. The account SID and auth token are on the dashboard;
       the phone number is the one you bought, written as <code>+14075550142</code>.
     </p>
@@ -99,12 +99,12 @@
         <input type="text" name="{{ name }}" value="{{ f.value }}" autocomplete="off"
                placeholder="{% if name == 'twilio_account_sid' %}AC…{% elif name == 'twilio_auth_token' %}your auth token{% else %}+14075550142{% endif %}" />
         {% if f.source == 'environment' %}
-          <span style="font-size:0.76rem;color:#9a95ad">Currently from your hosting settings.</span>
+          <span style="font-size:0.76rem;color:var(--softer)">Currently from your hosting settings.</span>
         {% endif %}
       </div>
       {% endfor %}
     </div>
-    <div style="background:#f0edf8;border-radius:8px;padding:12px;font-size:0.82rem;color:#5f5878;margin-bottom:16px">
+    <div style="background:var(--line-soft);border-radius:8px;padding:12px;font-size:0.82rem;color:var(--muted);margin-bottom:16px">
       In the US you also need Twilio's <strong>A2P 10DLC</strong> business registration before texts will
       actually get delivered. It takes a few days. Until it clears, texts may be accepted by Twilio and
       still not arrive.
@@ -114,8 +114,8 @@
 
   <!-- Email -->
   <div class="card" style="margin-top:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Email</h2>
-    <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:18px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Email</h2>
+    <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
       From your Resend dashboard → <strong>API Keys</strong>. This sends booking confirmations,
       invoices and receipts.
     </p>
@@ -124,7 +124,7 @@
       <label>{{ f.label }}</label>
       <input type="text" name="resend_api_key" value="{{ f.value }}" autocomplete="off" placeholder="re_…" />
       {% if f.source == 'environment' %}
-        <span style="font-size:0.76rem;color:#9a95ad">Currently from your hosting settings.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Currently from your hosting settings.</span>
       {% endif %}
     </div>
     <button type="submit" class="btn btn-gold">Save Email</button>
@@ -133,7 +133,7 @@
 
 <!-- Tests -->
 <div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Check it works</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Check it works</h2>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
     <form method="POST" action="{{ url_for('settings.test_stripe') }}" style="margin:0">
       <button type="submit" class="btn btn-outline">💳 Test Stripe connection</button>
@@ -141,7 +141,7 @@
     <a href="{{ url_for('contractors.sms_test') }}" class="btn btn-outline">💬 Send a test text</a>
     <a href="{{ url_for('contractors.email_test') }}" class="btn btn-outline">✉️ Send a test email</a>
   </div>
-  <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0">
+  <p style="color:var(--softer);font-size:0.8rem;margin:12px 0 0">
     Do all three before you take a real booking. The Stripe test is the important one — it names the
     business the money would go to.
   </p>

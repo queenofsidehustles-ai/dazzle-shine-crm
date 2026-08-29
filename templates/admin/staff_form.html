@@ -24,9 +24,9 @@
       <div class="form-group">
         <label>Calendar Color</label>
         <div style="display:flex;align-items:center;gap:10px">
-          <input type="color" name="color" value="{{ staff.color if staff else '#7c3aed' }}"
-                 style="width:48px;height:40px;padding:4px;border:1px solid #e4dfef;border-radius:8px;cursor:pointer" />
-          <span style="font-size:0.85rem;color:#9a95ad">Shows on the calendar next to this person's bookings</span>
+          <input type="color" name="color" value="{{ staff.color if staff else 'var(--info)' }}"
+                 style="width:48px;height:40px;padding:4px;border:1px solid var(--line);border-radius:8px;cursor:pointer" />
+          <span style="font-size:0.85rem;color:var(--softer)">Shows on the calendar next to this person's bookings</span>
         </div>
       </div>
       {# Pay was not asked for here, so anyone added this way silently became
@@ -42,7 +42,7 @@
           <input type="number" name="pay_rate" step="0.01" min="0" style="flex:1"
                  value="{{ staff.pay_rate if staff else 50 }}" />
         </div>
-        <span style="font-size:0.82rem;color:#9a95ad">
+        <span style="font-size:0.82rem;color:var(--softer)">
           Percent of the cleaning price, or dollars per hour. Change it later on
           their profile if you agree something different.
         </span>
@@ -54,7 +54,7 @@
       </div>
 
       {% if not staff %}
-      <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:9px;padding:12px 14px;font-size:0.85rem;color:#7c4a04;line-height:1.6">
+      <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:9px;padding:12px 14px;font-size:0.85rem;color:var(--amber-deep);line-height:1.6">
         Adding someone here puts them straight on the team and into the job
         assignment list. It skips the application, the offer and the background
         check — right for someone you already know, but they won't have signed

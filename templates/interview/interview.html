@@ -7,15 +7,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     :root {
-      --gold: #d3a84f;
-      --gold-deep: #b98a33;
-      --purple: #1f1333;
-      --purple-mid: #3b2b6b;
-      --bg: #f6f5fb;
+      --gold: var(--amber);
+      --gold-deep: var(--amber-deep);
+      --purple: var(--ink);
+      --purple-mid: var(--ink-2);
+      --bg: var(--ground);
       --white: #ffffff;
-      --border: #e4dfef;
+      --border: var(--line);
       --radius: 14px;
       --shadow: 0 4px 24px rgba(15,7,40,0.1);
     }
@@ -86,7 +87,7 @@
     .progress-label {
       font-size: 0.8rem;
       font-weight: 600;
-      color: #5f5878;
+      color: var(--muted);
       margin-bottom: 8px;
       display: flex;
       justify-content: space-between;
@@ -129,7 +130,7 @@
       margin-bottom: 10px;
     }
     .start-card p {
-      color: #5f5878;
+      color: var(--muted);
       line-height: 1.7;
       margin-bottom: 14px;
     }
@@ -193,7 +194,7 @@
       line-height: 1.5;
     }
     .video-area {
-      background: #0a0612;
+      background: var(--info);
       position: relative;
       aspect-ratio: 16/9;
     }
@@ -207,7 +208,7 @@
       position: absolute;
       top: 12px;
       left: 12px;
-      background: #e53e3e;
+      background: var(--warn);
       color: #fff;
       font-size: 0.75rem;
       font-weight: 700;
@@ -229,7 +230,7 @@
     .video-placeholder {
       width: 100%;
       aspect-ratio: 16/9;
-      background: #0a0612;
+      background: var(--info);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -275,29 +276,29 @@
     }
     .btn-primary:hover:not(:disabled) { background: var(--gold-deep); }
     .btn-danger {
-      background: #e53e3e;
+      background: var(--warn);
       color: #fff;
       flex: 1;
     }
-    .btn-danger:hover:not(:disabled) { background: #c53030; }
+    .btn-danger:hover:not(:disabled) { background: var(--warn); }
     .btn-ghost {
       background: transparent;
-      color: #5f5878;
+      color: var(--muted);
       border: 1px solid var(--border);
       flex: 1;
     }
     .btn-ghost:hover:not(:disabled) { background: var(--bg); }
     .btn-success {
-      background: #38a169;
+      background: var(--good);
       color: #fff;
       flex: 1;
     }
-    .btn-success:hover:not(:disabled) { background: #276749; }
+    .btn-success:hover:not(:disabled) { background: var(--good); }
     .btn-lg { padding: 15px 28px; font-size: 1rem; width: 100%; }
 
     .hint {
       font-size: 0.82rem;
-      color: #9a95ad;
+      color: var(--softer);
       text-align: center;
       padding: 0 4px;
     }
@@ -321,22 +322,22 @@
     /* SUCCESS */
     .submitted-msg {
       padding: 20px 24px;
-      background: #f0fff4;
-      border-top: 1px solid #c6f6d5;
+      background: var(--good-soft);
+      border-top: 1px solid var(--good-soft);
       display: flex;
       align-items: center;
       gap: 12px;
     }
     .submitted-msg .check { font-size: 1.5rem; }
-    .submitted-msg p { color: #276749; font-weight: 600; }
+    .submitted-msg p { color: var(--good); font-weight: 600; }
 
     /* ERROR */
     .error-msg {
-      background: #fff5f5;
-      border: 1px solid #fed7d7;
+      background: var(--warn-soft);
+      border: 1px solid var(--warn-soft);
       border-radius: 8px;
       padding: 12px 16px;
-      color: #c53030;
+      color: var(--warn);
       font-size: 0.88rem;
     }
 
@@ -447,9 +448,9 @@
         <!-- Uploading overlay -->
         <div class="uploading-overlay" x-show="recState === 'uploading'">
           <div class="spinner"></div>
-          <p style="color:#5f5878;font-weight:600"
+          <p style="color:var(--muted);font-weight:600"
              x-text="lang==='en' ? 'Uploading your answer...' : 'Subiendo tu respuesta...'"></p>
-          <p style="color:#9a95ad;font-size:0.85rem;margin-top:6px"
+          <p style="color:var(--softer);font-size:0.85rem;margin-top:6px"
              x-text="lang==='en' ? 'Please don\'t close this page.' : 'Por favor no cierres esta página.'"></p>
         </div>
 
@@ -461,12 +462,12 @@
 
         <!-- Live transcript (shown while recording) -->
         <div x-show="recState === 'recording' || (recState === 'recorded' && liveTranscript)"
-             style="padding:12px 20px;background:#faf9ff;border-top:1px solid var(--border)">
+             style="padding:12px 20px;background:var(--info-soft);border-top:1px solid var(--border)">
           <div style="font-size:0.72rem;font-weight:700;color:var(--gold-deep);
                       text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px">
             🎙 <span x-text="lang==='en' ? 'Live transcript' : 'Transcripción en vivo'"></span>
             <span x-show="recState==='recording'"
-                  style="font-size:0.7rem;color:#9a95ad;font-weight:400;text-transform:none;letter-spacing:0">
+                  style="font-size:0.7rem;color:var(--softer);font-weight:400;text-transform:none;letter-spacing:0">
               — Chrome only
             </span>
           </div>
@@ -529,14 +530,14 @@
     <!-- ── COMPLETING ── -->
     <div x-show="phase === 'completing'" x-cloak style="text-align:center;padding:60px 20px">
       <div class="spinner" style="margin:0 auto 20px"></div>
-      <p style="color:#5f5878;font-weight:600;font-size:1.1rem"
+      <p style="color:var(--muted);font-weight:600;font-size:1.1rem"
          x-text="lang==='en' ? 'Submitting your interview...' : 'Enviando tu entrevista...'"></p>
     </div>
 
   </main>
 
   <!-- FOOTER -->
-  <footer style="text-align:center;padding:20px;color:#9a95ad;font-size:0.8rem;border-top:1px solid var(--border)">
+  <footer style="text-align:center;padding:20px;color:var(--softer);font-size:0.8rem;border-top:1px solid var(--border)">
     {{ BIZ }} &copy; 2024 &middot; This link is private and unique to you.
   </footer>
 

@@ -6,7 +6,7 @@
 
 <div class="card" style="margin-bottom:18px">
   <h3 style="margin:0 0 4px">➕ Create a login</h3>
-  <p style="color:#9a95ad;font-size:0.85rem;margin:0 0 14px">
+  <p style="color:var(--softer);font-size:0.85rem;margin:0 0 14px">
     Give a VA or new hire their own username and password.
     <strong>Team</strong> members see everything except money (payroll, contractor pay,
     reports, settings). <strong>Owner</strong> sees it all.
@@ -14,23 +14,23 @@
   <form method="POST" action="{{ url_for('team_logins.add') }}"
         style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
     <div style="flex:1;min-width:140px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Full name</label>
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Full name</label>
       <input type="text" name="name" placeholder="Jane Smith" required
-             style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px">
+             style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
     </div>
     <div style="flex:1;min-width:140px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Username</label>
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Username</label>
       <input type="text" name="username" placeholder="jane" required
-             style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px">
+             style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
     </div>
     <div style="flex:1;min-width:140px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Password</label>
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Password</label>
       <input type="text" name="password" placeholder="at least 6 characters" required
-             style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px">
+             style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
     </div>
     <div style="min-width:120px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Role</label>
-      <select name="role" style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px">
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Role</label>
+      <select name="role" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
         <option value="team" selected>👤 Team (no money)</option>
         <option value="owner">👑 Owner (full access)</option>
       </select>
@@ -55,7 +55,7 @@
             {% if u.active %}<span class="status status-completed">Active</span>
             {% else %}<span class="status status-cancelled">Disabled</span>{% endif %}
           </td>
-          <td style="font-size:0.82rem;color:#9a95ad">{{ u.last_login.strftime('%b %d, %Y') if u.last_login else 'never' }}</td>
+          <td style="font-size:0.82rem;color:var(--softer)">{{ u.last_login.strftime('%b %d, %Y') if u.last_login else 'never' }}</td>
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
               <form method="POST" action="{{ url_for('team_logins.toggle', user_id=u.id) }}">
@@ -66,12 +66,12 @@
               <form method="POST" action="{{ url_for('team_logins.reset', user_id=u.id) }}"
                     style="display:flex;gap:4px" onsubmit="return this.password.value.length>=6 || (alert('Password must be at least 6 characters'),false)">
                 <input type="text" name="password" placeholder="new password"
-                       style="padding:5px;border:1px solid #e3e0ec;border-radius:6px;font-size:0.78rem;width:110px">
+                       style="padding:5px;border:1px solid var(--line);border-radius:6px;font-size:0.78rem;width:110px">
                 <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.78rem">Reset</button>
               </form>
               <form method="POST" action="{{ url_for('team_logins.delete', user_id=u.id) }}"
                     onsubmit="return confirm('Remove {{ u.name }}\'s login for good?')">
-                <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:#e53e3e">✕</button>
+                <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:var(--warn)">✕</button>
               </form>
             </div>
           </td>
@@ -81,7 +81,7 @@
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:30px 0">
+  <p style="text-align:center;color:var(--softer);padding:30px 0">
     No team logins yet. Create one above — your own owner login always works too. 🔑
   </p>
   {% endif %}

@@ -11,7 +11,7 @@
   <!-- Left: Profile form -->
   <div style="display:flex;flex-direction:column;gap:18px">
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contractor Profile</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Contractor Profile</h2>
       <form method="POST">
         <input type="hidden" name="action" value="update" />
         <input type="hidden" name="section" value="profile" />
@@ -29,7 +29,7 @@
           <input type="tel" name="emergency_contact_phone" value="{{ s.emergency_contact_phone or '' }}" />
         </div>
         <div class="form-group">
-          <label>Roster Start Date <span style="color:#9a95ad;font-weight:400">(when they can start receiving jobs)</span></label>
+          <label>Roster Start Date <span style="color:var(--softer);font-weight:400">(when they can start receiving jobs)</span></label>
           <input type="date" name="roster_start_date" value="{{ s.roster_start_date or '' }}" />
         </div>
         <div class="form-group">
@@ -46,15 +46,15 @@
         </div>
         <div class="form-group">
           <label>Calendar Color</label>
-          <input type="color" name="color" value="{{ s.color or '#7c3aed' }}" style="width:48px;height:40px;padding:4px;border:1px solid #e4dfef;border-radius:8px" />
+          <input type="color" name="color" value="{{ s.color or 'var(--info)' }}" style="width:48px;height:40px;padding:4px;border:1px solid var(--line);border-radius:8px" />
         </div>
         <div class="form-group"><label>Notes</label><textarea name="notes" placeholder="Anything useful to know...">{{ s.notes or '' }}</textarea></div>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save Profile</button>
       </form>
 
-      <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e4dfef">
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
         {% if s.is_active %}
-        <div style="font-size:0.82rem;color:#9a95ad;margin-bottom:8px">
+        <div style="font-size:0.82rem;color:var(--softer);margin-bottom:8px">
           Status: <span class="status status-confirmed">Active</span> — receiving job assignments.
         </div>
         <form method="POST" action="{{ url_for('contractors.staff_toggle_active', staff_id=s.id) }}"
@@ -63,7 +63,7 @@
           <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">🚫 Deactivate — stop sending jobs</button>
         </form>
         {% else %}
-        <div style="font-size:0.82rem;color:#9a95ad;margin-bottom:8px">
+        <div style="font-size:0.82rem;color:var(--softer);margin-bottom:8px">
           Status: <span class="status status-cancelled">Inactive</span> — not receiving any jobs.
         </div>
         <form method="POST" action="{{ url_for('contractors.staff_toggle_active', staff_id=s.id) }}" style="margin:0">
@@ -75,7 +75,7 @@
 
     <!-- Pay Settings -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Pay Settings</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Pay Settings</h2>
       <form method="POST">
         <input type="hidden" name="action" value="update" />
         <input type="hidden" name="section" value="pay" />
@@ -97,7 +97,7 @@
         <div class="form-group">
           <label>Rate</label>
           <input type="number" name="pay_rate" step="0.5" value="{{ s.pay_rate or 50 }}" />
-          <span style="font-size:0.78rem;color:#9a95ad">Current: <strong>{{ s.pay_label() }}</strong></span>
+          <span style="font-size:0.78rem;color:var(--softer)">Current: <strong>{{ s.pay_label() }}</strong></span>
         </div>
         <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">Update Pay</button>
       </form>
@@ -115,9 +115,9 @@
 
     <!-- Preferred language (drives message auto-translation) -->
     <form method="POST" action="{{ url_for('contractors.set_staff_language', staff_id=s.id) }}"
-          style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #e4dfef;border-radius:10px;padding:11px 13px">
-      <span style="font-size:0.85rem;font-weight:600;color:#5f5878;white-space:nowrap">🗣️ Speaks:</span>
-      <select name="language" onchange="this.form.submit()" style="flex:1;padding:7px 9px;border:1px solid #e4dfef;border-radius:8px;font-family:inherit">
+          style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;padding:11px 13px">
+      <span style="font-size:0.85rem;font-weight:600;color:var(--muted);white-space:nowrap">🗣️ Speaks:</span>
+      <select name="language" onchange="this.form.submit()" style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit">
         <option value="en" {{ 'selected' if (s.language or 'en') == 'en' }}>🇺🇸 English</option>
         <option value="es" {{ 'selected' if s.language == 'es' }}>🇪🇸 Spanish — auto-translate texts</option>
       </select>
@@ -125,12 +125,12 @@
 
     <!-- My Day link (share with the cleaner) -->
     {% if s.agreement_token %}
-    <div class="card" style="background:#f0f7ff;border-color:#bcd7f5">
-      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;color:#2b6cb0;text-transform:uppercase;letter-spacing:0.1em">📅 {{ s.name.split()[0] }}'s "My Day" Link</h2>
-      <p style="font-size:0.8rem;color:#5f5878;margin-bottom:8px">Send this so they can see their jobs, navigate, and open checklists. They can bookmark it.</p>
+    <div class="card" style="background:var(--info-soft);border-color:var(--info-soft)">
+      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;color:var(--info);text-transform:uppercase;letter-spacing:0.1em">📅 {{ s.name.split()[0] }}'s "My Day" Link</h2>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Send this so they can see their jobs, navigate, and open checklists. They can bookmark it.</p>
       <div style="display:flex;gap:8px;align-items:center">
         <input type="text" readonly value="{{ url_for('contractors.my_day', token=s.agreement_token, _external=True) }}"
-               style="flex:1;font-size:0.72rem;padding:7px 10px;border:1px solid #bcd7f5;border-radius:6px;color:#2b6cb0;background:#fff" onclick="this.select()">
+               style="flex:1;font-size:0.72rem;padding:7px 10px;border:1px solid var(--info-soft);border-radius:6px;color:var(--info);background:#fff" onclick="this.select()">
         <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
                 class="btn btn-outline" style="padding:6px 12px;font-size:0.75rem;flex-shrink:0">Copy</button>
       </div>
@@ -139,18 +139,18 @@
 
     <!-- Onboarding Quick Links -->
     {% if s.agreement_token and (not s.welcome_forms_at or not s.orientation_completed_at) %}
-    <div class="card" style="background:#fffbef;border-color:#ffc107">
-      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:12px;color:#856404;text-transform:uppercase;letter-spacing:0.1em">Pending Steps — Send These Links</h2>
+    <div class="card" style="background:var(--amber-soft);border-color:var(--amber)">
+      <h2 style="font-size:0.85rem;font-weight:700;margin-bottom:12px;color:var(--amber-deep);text-transform:uppercase;letter-spacing:0.1em">Pending Steps — Send These Links</h2>
       {% if not s.welcome_forms_at %}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
-        <span style="font-size:0.85rem;color:#856404">📋 Onboarding Forms</span>
+        <span style="font-size:0.85rem;color:var(--amber-deep)">📋 Onboarding Forms</span>
         <button onclick="copyLink('{{ url_for('contractors.onboarding_forms', token=s.agreement_token, _external=True) }}')"
                 class="btn btn-outline" style="padding:5px 12px;font-size:0.75rem;flex-shrink:0">Copy Link</button>
       </div>
       {% endif %}
       {% if s.orientation_token and not s.orientation_completed_at %}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <span style="font-size:0.85rem;color:#856404">🎓 Orientation Complete</span>
+        <span style="font-size:0.85rem;color:var(--amber-deep)">🎓 Orientation Complete</span>
         <button onclick="copyLink('{{ url_for('contractors.orientation_complete', token=s.orientation_token, _external=True) }}')"
                 class="btn btn-outline" style="padding:5px 12px;font-size:0.75rem;flex-shrink:0">Copy Link</button>
       </div>
@@ -160,39 +160,39 @@
 
     <!-- Documents on file -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Documents on File</h2>
-      <p style="font-size:0.8rem;color:#9a95ad;line-height:1.55;margin-bottom:14px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Documents on File</h2>
+      <p style="font-size:0.8rem;color:var(--softer);line-height:1.55;margin-bottom:14px">
         Encrypted and stored with your own records. Opening one needs your login — there's no public link.
       </p>
       {% for kind, label in [('id', '🪪 Photo ID'), ('w9', '📄 Form W-9'), ('bgcheck', '🔍 Background check')] %}
         {% set doc = s.document(kind) %}
-        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border:1px solid #e4dfef;
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border:1px solid var(--line);
                     border-radius:8px;margin-bottom:8px">
           <div style="flex:1">
             <p style="font-weight:600;font-size:0.9rem">{{ label }}</p>
             {% if doc %}
-              <p style="font-size:0.78rem;color:#1e7e34">Received {{ doc.uploaded_at.strftime('%b %d, %Y') }}</p>
+              <p style="font-size:0.78rem;color:var(--good)">Received {{ doc.uploaded_at.strftime('%b %d, %Y') }}</p>
             {% else %}
-              <p style="font-size:0.78rem;color:#c53030">Not on file</p>
+              <p style="font-size:0.78rem;color:var(--warn)">Not on file</p>
             {% endif %}
           </div>
           {% if doc %}
             <a href="{{ url_for('contractors.view_document', doc_id=doc.id) }}" target="_blank" rel="noopener"
-               style="font-size:0.8rem;font-weight:600;color:#3b2b6b;text-decoration:none;border:1px solid #e4dfef;
+               style="font-size:0.8rem;font-weight:600;color:var(--ink-2);text-decoration:none;border:1px solid var(--line);
                       border-radius:7px;padding:6px 12px">View</a>
             <form method="POST" action="{{ url_for('contractors.delete_document', doc_id=doc.id) }}"
                   onsubmit="return confirm('Delete {{ s.name }}\'s {{ label[2:] }}? This cannot be undone.')"
                   style="display:inline">
               <button type="submit" title="Delete"
-                      style="background:none;border:1px solid #fed7d7;border-radius:7px;padding:6px 10px;
-                             color:#c53030;cursor:pointer;font-family:inherit;font-size:0.8rem">✕</button>
+                      style="background:none;border:1px solid var(--warn-soft);border-radius:7px;padding:6px 10px;
+                             color:var(--warn);cursor:pointer;font-family:inherit;font-size:0.8rem">✕</button>
             </form>
           {% elif kind != 'bgcheck' %}
             <form method="POST" action="{{ url_for('contractors.request_document', staff_id=s.id, kind=kind) }}"
                   style="display:inline">
               <button type="submit"
-                      style="background:none;border:1px solid #e4dfef;border-radius:7px;padding:6px 12px;
-                             font-family:inherit;font-size:0.8rem;font-weight:600;color:#3b2b6b;cursor:pointer">
+                      style="background:none;border:1px solid var(--line);border-radius:7px;padding:6px 12px;
+                             font-family:inherit;font-size:0.8rem;font-weight:600;color:var(--ink-2);cursor:pointer">
                 Ask for it
               </button>
             </form>
@@ -200,8 +200,8 @@
         </div>
       {% endfor %}
       {% if not secure_docs_ready %}
-        <div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:8px;padding:11px 14px;
-                    font-size:0.8rem;color:#c53030;line-height:1.55;margin-top:10px">
+        <div style="background:var(--warn-soft);border:1px solid var(--warn-soft);border-radius:8px;padding:11px 14px;
+                    font-size:0.8rem;color:var(--warn);line-height:1.55;margin-top:10px">
           <strong>⚠️ SECRET_KEY is unset or still the default.</strong> Documents are stored, but the
           encryption is not meaningful until a real SECRET_KEY is set on the server.
         </div>
@@ -210,32 +210,32 @@
 
     <!-- Agreement Status -->
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Work Agreement</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Work Agreement</h2>
       {% if s.agreement_signed_at %}
-        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#d4edda;border-radius:8px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--good-soft);border-radius:8px;margin-bottom:12px">
           <span style="font-size:1.2rem">✅</span>
           <div>
-            <p style="font-weight:700;color:#155724;font-size:0.9rem">Signed</p>
-            <p style="font-size:0.8rem;color:#1e7e34">
+            <p style="font-weight:700;color:var(--good);font-size:0.9rem">Signed</p>
+            <p style="font-size:0.8rem;color:var(--good)">
               "{{ s.agreement_signature }}" &nbsp;·&nbsp; {{ s.agreement_signed_at.strftime('%b %d, %Y %I:%M %p') }}
             </p>
           </div>
         </div>
       {% else %}
-        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fff3cd;border-radius:8px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--amber-soft);border-radius:8px;margin-bottom:12px">
           <span style="font-size:1.2rem">⏳</span>
           <div>
-            <p style="font-weight:700;color:#856404;font-size:0.9rem">Not Yet Signed</p>
-            <p style="font-size:0.8rem;color:#856404">Waiting for {{ s.name.split()[0] }} to sign</p>
+            <p style="font-weight:700;color:var(--amber-deep);font-size:0.9rem">Not Yet Signed</p>
+            <p style="font-size:0.8rem;color:var(--amber-deep)">Waiting for {{ s.name.split()[0] }} to sign</p>
           </div>
         </div>
         {% if s.agreement_token %}
           <div style="margin-bottom:10px">
-            <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:6px">Signing link:</p>
+            <p style="font-size:0.78rem;color:var(--softer);margin-bottom:6px">Signing link:</p>
             <div style="display:flex;gap:8px;align-items:center">
               <input type="text" readonly
                      value="{{ url_for('contractors.sign_agreement', token=s.agreement_token, _external=True) }}"
-                     style="flex:1;font-size:0.72rem;padding:7px 10px;border:1px solid #e4dfef;border-radius:6px;color:#5f5878;background:#faf9fd"
+                     style="flex:1;font-size:0.72rem;padding:7px 10px;border:1px solid var(--line);border-radius:6px;color:var(--muted);background:var(--ground)"
                      onclick="this.select()" />
               <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
                       class="btn btn-outline" style="padding:6px 12px;font-size:0.75rem;flex-shrink:0">Copy</button>
@@ -255,7 +255,7 @@
     <!-- Payments -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <h2 style="font-size:1rem;font-weight:700;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">💰 Payments</h2>
+        <h2 style="font-size:1rem;font-weight:700;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">💰 Payments</h2>
         {% if s.stripe_account_id %}
         <form method="POST" action="{{ url_for('contractors.refresh_stripe', staff_id=s.id) }}">
           <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.72rem">↻ Refresh</button>
@@ -264,73 +264,73 @@
       </div>
 
       <div style="margin-bottom:12px">
-        <span style="background:#f6f5fb;border:1px solid #e4dfef;color:#5f5878;padding:3px 10px;border-radius:999px;font-size:0.75rem;font-weight:600">
+        <span style="background:var(--ground);border:1px solid var(--line);color:var(--muted);padding:3px 10px;border-radius:999px;font-size:0.75rem;font-weight:600">
           {% if s.pay_schedule == 'weekly' %}🗓 Prefers WEEKLY pay{% else %}⚡ Prefers DAILY pay (per job){% endif %}
         </span>
       </div>
       {% if s.stripe_payouts_enabled %}
         <!-- Verified: show the Stripe Pay form -->
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#d4edda;border-radius:8px;margin-bottom:14px">
-          <span>✅</span><span style="font-weight:700;color:#155724;font-size:0.88rem">Verified on Stripe — ready to pay</span>
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--good-soft);border-radius:8px;margin-bottom:14px">
+          <span>✅</span><span style="font-weight:700;color:var(--good);font-size:0.88rem">Verified on Stripe — ready to pay</span>
         </div>
         <form method="POST" action="{{ url_for('contractors.pay_contractor', staff_id=s.id) }}"
               onsubmit="return confirm('Send $' + this.amount.value + ' to {{ s.name }} via Stripe? This sends real money.')">
           <div style="display:flex;gap:8px;margin-bottom:8px">
-            <span style="align-self:center;font-weight:700;color:#5f5878">$</span>
+            <span style="align-self:center;font-weight:700;color:var(--muted)">$</span>
             <input name="amount" type="number" step="0.01" min="0.01" placeholder="0.00" required
-                   style="flex:1;padding:9px 12px;border:1px solid #e4dfef;border-radius:6px">
+                   style="flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:6px">
           </div>
           <input name="note" type="text" placeholder="What's this for? (e.g. Jul 3 – 123 Main St)"
-                 style="width:100%;padding:9px 12px;border:1px solid #e4dfef;border-radius:6px;margin-bottom:10px;box-sizing:border-box">
+                 style="width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;box-sizing:border-box">
           <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;font-weight:700">💰 Pay via Stripe</button>
         </form>
 
       {% elif s.stripe_account_id and not s.can_verify_on_stripe %}
         <!-- Stripe blocked this account → reveal the manual Venmo/Zelle fallback -->
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fff5f5;border:1px solid #fed7d7;border-radius:8px;margin-bottom:14px">
-          <span>⚠️</span><span style="font-weight:600;color:#c53030;font-size:0.85rem">Stripe couldn't verify {{ s.name.split()[0] }}. Pay them manually below.</span>
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--warn-soft);border:1px solid var(--warn-soft);border-radius:8px;margin-bottom:14px">
+          <span>⚠️</span><span style="font-weight:600;color:var(--warn);font-size:0.85rem">Stripe couldn't verify {{ s.name.split()[0] }}. Pay them manually below.</span>
         </div>
         <form method="POST" action="{{ url_for('contractors.pay_manual', staff_id=s.id) }}">
           <div style="display:flex;gap:8px;margin-bottom:8px">
-            <select name="method" style="padding:9px;border:1px solid #e4dfef;border-radius:6px">
+            <select name="method" style="padding:9px;border:1px solid var(--line);border-radius:6px">
               <option value="venmo">Venmo</option>
               <option value="zelle">Zelle</option>
               <option value="cash">Cash</option>
               <option value="check">Check</option>
             </select>
             <input name="amount" type="number" step="0.01" min="0.01" placeholder="0.00" required
-                   style="flex:1;padding:9px 12px;border:1px solid #e4dfef;border-radius:6px">
+                   style="flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:6px">
           </div>
           <input name="note" type="text" placeholder="Note (optional)"
-                 style="width:100%;padding:9px 12px;border:1px solid #e4dfef;border-radius:6px;margin-bottom:10px;box-sizing:border-box">
+                 style="width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;box-sizing:border-box">
           <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;font-size:0.82rem">Record Manual Payment</button>
         </form>
 
       {% elif s.stripe_account_id %}
-        <div style="padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:0.85rem;color:#92400e">
+        <div style="padding:10px 14px;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;font-size:0.85rem;color:var(--amber-deep)">
           {% if s.stripe_details_submitted %}⏳ Stripe is reviewing {{ s.name.split()[0] }}'s info. Check back soon.
           {% else %}⏳ Waiting for {{ s.name.split()[0] }} to finish their Stripe payment setup.{% endif %}
         </div>
         <div style="margin-top:10px">
-          <p style="font-size:0.75rem;color:#9a95ad;margin-bottom:5px">Their setup link:</p>
+          <p style="font-size:0.75rem;color:var(--softer);margin-bottom:5px">Their setup link:</p>
           <input type="text" readonly value="{{ url_for('contractors.onboarding_hub', token=s.agreement_token, _external=True) }}"
-                 style="width:100%;font-size:0.7rem;padding:7px 10px;border:1px solid #e4dfef;border-radius:6px;color:#5f5878;background:#faf9fd;box-sizing:border-box" onclick="this.select()">
+                 style="width:100%;font-size:0.7rem;padding:7px 10px;border:1px solid var(--line);border-radius:6px;color:var(--muted);background:var(--ground);box-sizing:border-box" onclick="this.select()">
         </div>
 
       {% else %}
-        <div style="padding:10px 14px;background:#f6f5fb;border:1px solid #e4dfef;border-radius:8px;font-size:0.85rem;color:#5f5878">
+        <div style="padding:10px 14px;background:var(--ground);border:1px solid var(--line);border-radius:8px;font-size:0.85rem;color:var(--muted)">
           Payment setup starts automatically once {{ s.name.split()[0] }} accepts their offer.
         </div>
       {% endif %}
 
       {% if s.payments %}
       <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px">
-        <p style="font-size:0.75rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin-bottom:8px">Payment History</p>
+        <p style="font-size:0.75rem;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin-bottom:8px">Payment History</p>
         {% for p in s.payments %}
-        <div style="display:flex;justify-content:space-between;font-size:0.83rem;padding:5px 0;border-bottom:1px solid #f4f2f9">
-          <span style="color:#1f1333;font-weight:600">${{ '%.2f'|format(p.amount) }}</span>
-          <span style="color:#5f5878">{{ p.method|title }}{% if p.method == 'stripe' %} ✓{% endif %}</span>
-          <span style="color:#9a95ad">{{ p.created_at.strftime('%b %d, %Y') }}</span>
+        <div style="display:flex;justify-content:space-between;font-size:0.83rem;padding:5px 0;border-bottom:1px solid var(--info-soft)">
+          <span style="color:var(--ink);font-weight:600">${{ '%.2f'|format(p.amount) }}</span>
+          <span style="color:var(--muted)">{{ p.method|title }}{% if p.method == 'stripe' %} ✓{% endif %}</span>
+          <span style="color:var(--softer)">{{ p.created_at.strftime('%b %d, %Y') }}</span>
         </div>
         {% endfor %}
       </div>
@@ -340,11 +340,11 @@
     <!-- Forms & Orientation Status -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <h2 style="font-size:1rem;font-weight:700;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Onboarding Details</h2>
+        <h2 style="font-size:1rem;font-weight:700;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Onboarding Details</h2>
         {% if s.orientation_completed_at %}
         <form method="POST" action="{{ url_for('contractors.reset_orientation', staff_id=s.id) }}"
               onsubmit="return confirm('Reset orientation for {{ s.name.split()[0] }}? They will need to re-complete training.')">
-          <button type="submit" class="btn btn-outline" style="padding:4px 10px;font-size:0.72rem;color:#991b1b;border-color:#f5c2c7">
+          <button type="submit" class="btn btn-outline" style="padding:4px 10px;font-size:0.72rem;color:var(--warn);border-color:var(--warn-soft)">
             Reset Orientation
           </button>
         </form>
@@ -352,75 +352,75 @@
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:0.84rem;margin-bottom:14px">
         <div>
-          <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Forms</p>
-          <p style="font-weight:600;color:{{ '#155724' if s.welcome_forms_at else '#856404' }}">
+          <p style="color:var(--softer);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Forms</p>
+          <p style="font-weight:600;color:{{ 'var(--good)' if s.welcome_forms_at else 'var(--amber-deep)' }}">
             {{ '✅ Submitted' if s.welcome_forms_at else '⏳ Pending' }}
           </p>
         </div>
         <div>
-          <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Orientation</p>
-          <p style="font-weight:600;color:{{ '#155724' if s.orientation_completed_at else '#856404' }}">
+          <p style="color:var(--softer);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Orientation</p>
+          <p style="font-weight:600;color:{{ 'var(--good)' if s.orientation_completed_at else 'var(--amber-deep)' }}">
             {{ '✅ Complete' if s.orientation_completed_at else '⏳ Pending' }}
           </p>
         </div>
         {% if s.shirt_size %}
         <div>
-          <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Shirt Size</p>
+          <p style="color:var(--softer);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Shirt Size</p>
           <p style="font-weight:600">{{ s.shirt_size }}</p>
         </div>
         {% endif %}
         <div>
-          <p style="color:#9a95ad;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Paid Via</p>
+          <p style="color:var(--softer);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">Paid Via</p>
           <p style="font-weight:600">
-            {% if s.stripe_payouts_enabled %}<span style="color:#276749">Stripe ✓ ready</span>
-            {% elif s.stripe_account_id %}<span style="color:#92400e">Stripe (setting up)</span>
+            {% if s.stripe_payouts_enabled %}<span style="color:var(--good)">Stripe ✓ ready</span>
+            {% elif s.stripe_account_id %}<span style="color:var(--amber-deep)">Stripe (setting up)</span>
             {% elif s.payment_pref %}{{ s.payment_pref }}
             {% else %}—{% endif %}
           </p>
         </div>
       </div>
       {% if s.payment_notes and not s.stripe_account_id %}
-      <p style="font-size:0.8rem;color:#5f5878"><strong>Payment notes:</strong> {{ s.payment_notes }}</p>
+      <p style="font-size:0.8rem;color:var(--muted)"><strong>Payment notes:</strong> {{ s.payment_notes }}</p>
       {% endif %}
     </div>
 
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Onboarding Checklist</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Onboarding Checklist</h2>
       {% set completed = s.get_onboarding() %}
       {% set steps = s.get_applicable_steps() %}
       {% set total = steps|length %}
       {% set done = steps|selectattr('0','in',completed)|list|length %}
-      <div style="background:#e4dfef;border-radius:999px;height:8px;margin-bottom:12px">
-        <div style="background:linear-gradient(90deg,#d3a84f,#b98a33);border-radius:999px;height:8px;width:{{ (done/total*100)|int if total else 0 }}%"></div>
+      <div style="background:var(--line);border-radius:999px;height:8px;margin-bottom:12px">
+        <div style="background:linear-gradient(90deg,var(--amber),var(--amber-deep));border-radius:999px;height:8px;width:{{ (done/total*100)|int if total else 0 }}%"></div>
       </div>
-      <p style="font-size:0.8rem;color:#9a95ad;margin-bottom:14px">{{ done }} of {{ total }} steps complete</p>
+      <p style="font-size:0.8rem;color:var(--softer);margin-bottom:14px">{{ done }} of {{ total }} steps complete</p>
       {% for key, label in steps %}
       {% set is_done = key in completed %}
-      <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #f0edf8;cursor:pointer"
+      <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line-soft);cursor:pointer"
            onclick="toggleStep('{{ key }}', this)">
-        <div style="width:22px;height:22px;border-radius:6px;border:2px solid {{ '#d3a84f' if is_done else '#e4dfef' }};
-                    background:{{ '#d3a84f' if is_done else 'white' }};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <div style="width:22px;height:22px;border-radius:6px;border:2px solid {{ 'var(--amber)' if is_done else 'var(--line)' }};
+                    background:{{ 'var(--amber)' if is_done else 'white' }};display:flex;align-items:center;justify-content:center;flex-shrink:0">
           {% if is_done %}<span style="color:white;font-size:0.8rem">✓</span>{% endif %}
         </div>
-        <span style="font-weight:500;{{ 'color:#9a95ad;text-decoration:line-through' if is_done }}">{{ label }}</span>
+        <span style="font-weight:500;{{ 'color:var(--softer);text-decoration:line-through' if is_done }}">{{ label }}</span>
       </div>
       {% endfor %}
     </div>
 
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Recent Jobs</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Recent Jobs</h2>
       {% if recent_jobs %}
       {% for b in recent_jobs %}
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0edf8;font-size:0.88rem">
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:0.88rem">
         <div>
-          <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" style="color:#5d4f7d;font-weight:600">{{ b.name }}</a>
-          <span style="color:#9a95ad"> · {{ b.service_label }}</span>
+          <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" style="color:var(--muted);font-weight:600">{{ b.name }}</a>
+          <span style="color:var(--softer)"> · {{ b.service_label }}</span>
         </div>
-        <div style="color:#b98a33;font-weight:700">${{ '%.2f' % (b.price or 0) }}</div>
+        <div style="color:var(--amber-deep);font-weight:700">${{ '%.2f' % (b.price or 0) }}</div>
       </div>
       {% endfor %}
       {% else %}
-      <p style="color:#9a95ad;font-size:0.88rem;text-align:center;padding:16px 0">No completed jobs yet.</p>
+      <p style="color:var(--softer);font-size:0.88rem;text-align:center;padding:16px 0">No completed jobs yet.</p>
       {% endif %}
     </div>
   </div>
@@ -434,7 +434,7 @@ function autoFillRate(sel) {
 function copyLink(url) {
   navigator.clipboard.writeText(url).then(() => {
     event.target.textContent = 'Copied!';
-    event.target.style.color = '#155724';
+    event.target.style.color = 'var(--good)';
     setTimeout(() => { event.target.textContent = 'Copy Link'; event.target.style.color = ''; }, 2000);
   });
 }

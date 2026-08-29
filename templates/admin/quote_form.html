@@ -12,7 +12,7 @@
   <!-- Left column -->
   <div style="display:flex;flex-direction:column;gap:18px">
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
       <div class="form-group">
         <label>Company / Property Name *</label>
         <input type="text" name="company" required value="{{ quote.company if quote else '' }}" placeholder="Sunset Apartments LLC" />
@@ -32,7 +32,7 @@
     </div>
 
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Property Details</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Property Details</h2>
       <div class="form-group">
         <label>Property Type</label>
         <select name="property_type">
@@ -48,7 +48,7 @@
           <option value="commercial" {{ 'selected' if quote and quote.brand in ('lm', 'commercial') }}>{{ BIZ_COMMERCIAL }}</option>
           <option value="primary" {{ 'selected' if quote and quote.brand in ('dazzle', 'primary') }}>{{ BIZ }}</option>
         </select>
-        <div style="font-size:0.72rem;color:#9a95ad;margin-top:3px">Apartments &amp; property managers → {{ BIZ }}; everything else → {{ BIZ_COMMERCIAL }}.</div>
+        <div style="font-size:0.72rem;color:var(--softer);margin-top:3px">Apartments &amp; property managers → {{ BIZ }}; everything else → {{ BIZ_COMMERCIAL }}.</div>
       </div>
       <div class="form-group">
         <label>Property Address</label>
@@ -70,11 +70,11 @@
   <!-- Right column -->
   <div style="display:flex;flex-direction:column;gap:18px">
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Services Included</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Services Included</h2>
       <div style="display:flex;flex-direction:column;gap:8px">
         {% for svc in services %}
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:500">
-          <input type="checkbox" name="services" value="{{ svc }}" style="width:auto;accent-color:#d3a84f"
+          <input type="checkbox" name="services" value="{{ svc }}" style="width:auto;accent-color:var(--amber)"
                  {{ 'checked' if quote and svc in (selected_services or []) }} />
           {{ svc }}
         </label>
@@ -83,7 +83,7 @@
     </div>
 
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Pricing & Schedule</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Pricing & Schedule</h2>
       <div class="form-group">
         <label>Service Frequency</label>
         <select name="frequency">
@@ -101,9 +101,9 @@
         </select>
       </div>
       <!-- ESTIMATE HELPER -->
-      <div style="background:#fef9ec;border:1px solid #d3a84f;border-radius:10px;padding:16px 18px;margin-bottom:16px">
-        <div style="font-weight:700;color:#7c4a04;font-size:0.9rem;margin-bottom:4px">💡 Estimate Helper</div>
-        <p style="font-size:0.78rem;color:#9a7a3a;margin-bottom:12px;line-height:1.5">Enter the square footage above and pick an intensity — we'll suggest a starting price. Always adjust for the real property.</p>
+      <div style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:10px;padding:16px 18px;margin-bottom:16px">
+        <div style="font-weight:700;color:var(--amber-deep);font-size:0.9rem;margin-bottom:4px">💡 Estimate Helper</div>
+        <p style="font-size:0.78rem;color:var(--amber-deep);margin-bottom:12px;line-height:1.5">Enter the square footage above and pick an intensity — we'll suggest a starting price. Always adjust for the real property.</p>
         <div class="form-group" style="margin-bottom:10px">
           <label style="font-size:0.8rem">Cleaning Intensity</label>
           <select id="est-intensity" onchange="runEstimate()">
@@ -112,12 +112,12 @@
             <option value="0.18">Intensive — medical, post-construction ($0.18/sq ft)</option>
           </select>
         </div>
-        <div id="est-result" style="display:none;background:#fff;border-radius:8px;padding:12px 14px;font-size:0.85rem;color:#1f1333">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#9a95ad">Suggested per visit</span><strong id="est-visit">—</strong></div>
-          <div style="display:flex;justify-content:space-between"><span style="color:#9a95ad">Suggested monthly</span><strong id="est-monthly">—</strong></div>
-          <button type="button" onclick="applyEstimate()" style="width:100%;margin-top:10px;background:#d3a84f;color:#1f1333;border:none;padding:9px;border-radius:7px;font-weight:700;font-size:0.82rem;cursor:pointer">Use this estimate ↓</button>
+        <div id="est-result" style="display:none;background:#fff;border-radius:8px;padding:12px 14px;font-size:0.85rem;color:var(--ink)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--softer)">Suggested per visit</span><strong id="est-visit">—</strong></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--softer)">Suggested monthly</span><strong id="est-monthly">—</strong></div>
+          <button type="button" onclick="applyEstimate()" style="width:100%;margin-top:10px;background:var(--amber);color:var(--ink);border:none;padding:9px;border-radius:7px;font-weight:700;font-size:0.82rem;cursor:pointer">Use this estimate ↓</button>
         </div>
-        <div id="est-hint" style="font-size:0.78rem;color:#9a7a3a">Enter square footage &amp; frequency to see a suggestion.</div>
+        <div id="est-hint" style="font-size:0.78rem;color:var(--amber-deep)">Enter square footage &amp; frequency to see a suggestion.</div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -148,21 +148,21 @@
       </button>
     </form>
     {% elif quote.status == 'sent' %}
-    <div style="background:#dbeafe;color:#1e40af;padding:12px 16px;border-radius:10px;font-weight:600;font-size:0.9rem;text-align:center">
+    <div style="background:var(--info-soft);color:var(--info);padding:12px 16px;border-radius:10px;font-weight:600;font-size:0.9rem;text-align:center">
       {% if quote.viewed_at %}
         👁 Opened by {{ quote.contact_name.split()[0] }} on {{ quote.viewed_at.strftime('%b %d at %I:%M %p') }}
       {% else %}
         Sent — not opened yet
       {% endif %}
-      <br><a href="{{ url_for('quotes.view', token=quote.token, preview=1) }}" target="_blank" style="color:#1e40af;font-size:0.82rem">Preview what they see →</a>
+      <br><a href="{{ url_for('quotes.view', token=quote.token, preview=1) }}" target="_blank" style="color:var(--info);font-size:0.82rem">Preview what they see →</a>
     </div>
     {% elif quote.status == 'accepted' %}
-    <div style="background:#d1fae5;color:#065f46;padding:12px 16px;border-radius:10px;font-weight:700;text-align:center">
+    <div style="background:var(--good-soft);color:var(--good);padding:12px 16px;border-radius:10px;font-weight:700;text-align:center">
       Accepted ✓
       {% if quote.viewed_at %}<br><span style="font-size:0.78rem;font-weight:500">Opened {{ quote.viewed_at.strftime('%b %d') }}</span>{% endif %}
     </div>
     {% elif quote.status == 'declined' %}
-    <div style="background:#fee2e2;color:#991b1b;padding:12px 16px;border-radius:10px;font-weight:700;text-align:center">Declined</div>
+    <div style="background:var(--warn-soft);color:var(--warn);padding:12px 16px;border-radius:10px;font-weight:700;text-align:center">Declined</div>
     {% endif %}
 
     {% if quote.status != 'draft' %}

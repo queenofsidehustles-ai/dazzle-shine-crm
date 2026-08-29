@@ -9,7 +9,7 @@
    whether the people in this list are contractors or employees -- which is a
    legal question decided by the real working relationship, differs by state,
    and is expensive to get wrong. Saying so here is the only place it lands. #}
-<div style="background:#fff8e6;border:1px solid var(--gold);border-radius:10px;
+<div style="background:var(--amber-soft);border:1px solid var(--gold);border-radius:10px;
             padding:12px 16px;margin-bottom:18px;font-size:.9rem;color:var(--muted)">
   <strong style="color:var(--ink)">These are your records, not a tax filing.</strong>
   This totals what you recorded paying people. It does not withhold, remit or
@@ -39,13 +39,13 @@
   {% for name, data in payroll.items() %}
   <div class="stat-card">
     <div class="label">{{ name }}</div>
-    <div class="value" style="color:#b98a33">${{ '%.2f' % data.total }}</div>
+    <div class="value" style="color:var(--amber-deep)">${{ '%.2f' % data.total }}</div>
     <div class="sub">{{ data.jobs|length }} job{{ 's' if data.jobs|length != 1 }} · {{ data.staff.pay_label() }}</div>
   </div>
   {% endfor %}
-  <div class="stat-card" style="border-color:#d3a84f;background:linear-gradient(135deg,#fff9ec,#fff)">
+  <div class="stat-card" style="border-color:var(--amber);background:linear-gradient(135deg,var(--amber-soft),#fff)">
     <div class="label">Total Payout</div>
-    <div class="value" style="color:#b98a33">${{ '%.2f' % grand_total }}</div>
+    <div class="value" style="color:var(--amber-deep)">${{ '%.2f' % grand_total }}</div>
     <div class="sub">{{ week_start }} → {{ week_end }}</div>
   </div>
 </div>
@@ -55,15 +55,15 @@
 <div class="card" style="margin-bottom:18px">
   <div class="section-header">
     <h2>{{ name }} —
-      <span style="color:#b98a33">${{ '%.2f' % data.total }} owed</span>
-      {% if data.paid_total %}<span style="color:#9a95ad;font-size:0.85rem;font-weight:400"> · ${{ '%.2f' % data.paid_total }} paid</span>{% endif %}
+      <span style="color:var(--amber-deep)">${{ '%.2f' % data.total }} owed</span>
+      {% if data.paid_total %}<span style="color:var(--softer);font-size:0.85rem;font-weight:400"> · ${{ '%.2f' % data.paid_total }} paid</span>{% endif %}
     </h2>
     <div style="display:flex;align-items:center;gap:12px">
-      <span style="font-size:0.85rem;color:#9a95ad">{{ data.staff.pay_label() }}</span>
+      <span style="font-size:0.85rem;color:var(--softer)">{{ data.staff.pay_label() }}</span>
       {% if data.staff.stripe_payouts_enabled %}
-      <span style="font-size:0.75rem;color:#065f46;background:#d1fae5;padding:2px 9px;border-radius:999px;font-weight:700">💳 Stripe ready</span>
+      <span style="font-size:0.75rem;color:var(--good);background:var(--good-soft);padding:2px 9px;border-radius:999px;font-weight:700">💳 Stripe ready</span>
       {% else %}
-      <span style="font-size:0.75rem;color:#92400e;background:#fef3c7;padding:2px 9px;border-radius:999px;font-weight:700">Stripe not set up</span>
+      <span style="font-size:0.75rem;color:var(--amber-deep);background:var(--amber-soft);padding:2px 9px;border-radius:999px;font-weight:700">Stripe not set up</span>
       {% endif %}
       <a href="{{ url_for('contractors.pay_statement', staff_id=data.staff.id, start=week_start, end=week_end) }}"
          target="_blank" class="btn btn-outline" style="padding:5px 12px;font-size:0.8rem">📄 Statement</a>
@@ -79,31 +79,31 @@
         {% set paid_on = row.crew.paid_at if row.crew else row.booking.cleaner_paid_at %}
         <tr>
           <td>{{ row.booking.preferred_date or '—' }}</td>
-          <td><a href="{{ url_for('bookings.detail', booking_id=row.booking.id) }}" style="color:#5d4f7d;font-weight:600">{{ row.booking.name }}</a>
-            {% if row.crew %}<div style="font-size:0.72rem;color:#3730a3;font-weight:700">👥 crew of {{ row.booking.crew_size }} · your share</div>{% endif %}
+          <td><a href="{{ url_for('bookings.detail', booking_id=row.booking.id) }}" style="color:var(--muted);font-weight:600">{{ row.booking.name }}</a>
+            {% if row.crew %}<div style="font-size:0.72rem;color:var(--info);font-weight:700">👥 crew of {{ row.booking.crew_size }} · your share</div>{% endif %}
           </td>
-          <td style="font-size:0.85rem;color:#9a95ad">{{ row.booking.service_label }}</td>
+          <td style="font-size:0.85rem;color:var(--softer)">{{ row.booking.service_label }}</td>
           <td>${{ '%.2f' % (row.booking.price or 0) }}</td>
-          <td style="color:#9a95ad">{{ row.booking.hours_worked or '—' }}</td>
-          <td style="font-weight:700;color:#065f46">${{ '%.2f' % row.earned }}
+          <td style="color:var(--softer)">{{ row.booking.hours_worked or '—' }}</td>
+          <td style="font-weight:700;color:var(--good)">${{ '%.2f' % row.earned }}
             {% if row.booking.tip_amount %}
             {# What the customer gave. Monica divides it herself, so this is
                shown as information — the CRM allocates none of it. #}
-            <div style="font-size:0.7rem;font-weight:600;color:#1e7e34;margin-top:2px">
+            <div style="font-size:0.7rem;font-weight:600;color:var(--good);margin-top:2px">
               customer tipped ${{ '%.2f' % row.booking.tip_amount }}{% if row.booking.tip_fee %}<br>
-              <span style="color:#9a95ad;font-weight:400">${{ '%.2f' % row.booking.tip_net }} after card fee</span>{% endif %}
+              <span style="color:var(--softer);font-weight:400">${{ '%.2f' % row.booking.tip_net }} after card fee</span>{% endif %}
             </div>
             {% endif %}
           </td>
           <td style="text-align:right;white-space:nowrap">
             {% if row.paid %}
-              <span style="font-size:0.78rem;color:#065f46;font-weight:700">✅ Paid{% if paid_on %} {{ paid_on.strftime('%b %-d') }}{% endif %}
-                {% if row.method %}<span style="font-weight:400;color:#9a95ad">· {{ row.method.title() }}</span>{% endif %}</span>
+              <span style="font-size:0.78rem;color:var(--good);font-weight:700">✅ Paid{% if paid_on %} {{ paid_on.strftime('%b %-d') }}{% endif %}
+                {% if row.method %}<span style="font-weight:400;color:var(--softer)">· {{ row.method.title() }}</span>{% endif %}</span>
               {% if row.payment_id %}
               {# The P&L sorts by this date, so it has to be correctable — a payment
                  logged a few days late otherwise lands in the wrong month. #}
               <details style="display:inline-block;margin-left:6px;vertical-align:middle">
-                <summary style="cursor:pointer;font-size:0.72rem;color:#9a95ad;list-style:none">✎ date</summary>
+                <summary style="cursor:pointer;font-size:0.72rem;color:var(--softer);list-style:none">✎ date</summary>
                 <form method="POST" action="{{ url_for('contractors.fix_payment_date', payment_id=row.payment_id) }}"
                       style="display:inline-flex;gap:4px;align-items:center;margin-top:5px">
                   <input type="date" name="paid_on" required
@@ -115,7 +115,7 @@
               </details>
               {% endif %}
             {% elif row.earned <= 0 %}
-              <span style="font-size:0.78rem;color:#9a95ad">{{ 'Set their split' if row.crew else 'Add hours' }}</span>
+              <span style="font-size:0.78rem;color:var(--softer)">{{ 'Set their split' if row.crew else 'Add hours' }}</span>
             {% else %}
               {# Two separate actions, always both available. Sending money and
                  recording money you already handed over are different things —
@@ -125,7 +125,7 @@
                 <form method="POST" action="{{ pay_url }}" style="display:inline"
                       onsubmit="return confirm('Send {{ name }} her ${{ '%.2f' % row.earned }} pay plus whatever tip you typed, via Stripe now?\n\nThis moves real money. If you already paid her, use “Already paid” instead.')">
                   <input type="hidden" name="method" value="stripe">
-                  <span style="font-size:0.74rem;color:#1e7e34;white-space:nowrap">tip $</span>
+                  <span style="font-size:0.74rem;color:var(--good);white-space:nowrap">tip $</span>
                   <input type="number" step="0.01" min="0" name="tip" placeholder="0"
                          title="Their share of the tip — you decide the split"
                          style="width:72px;padding:5px 7px;font-size:0.78rem;margin:0" />
@@ -141,7 +141,7 @@
                     <option value="venmo">Venmo</option><option value="check">Check</option>
                     <option value="bank">Bank / ACH</option>
                   </select>
-                  <span style="font-size:0.74rem;color:#1e7e34;white-space:nowrap">tip $</span>
+                  <span style="font-size:0.74rem;color:var(--good);white-space:nowrap">tip $</span>
                   <input type="number" step="0.01" min="0" name="tip" placeholder="0"
                          title="Their share of the tip — you decide the split"
                          style="width:72px;padding:5px 7px;font-size:0.78rem;margin:0" />
@@ -160,9 +160,9 @@
           </td>
         </tr>
         {% endfor %}
-        <tr style="background:#f6f5fb">
+        <tr style="background:var(--ground)">
           <td colspan="5" style="font-weight:700;text-align:right">Total still owed to {{ name }}:</td>
-          <td style="font-weight:700;color:#b98a33;font-size:1.05rem">${{ '%.2f' % data.total }}</td>
+          <td style="font-weight:700;color:var(--amber-deep);font-size:1.05rem">${{ '%.2f' % data.total }}</td>
           <td></td>
         </tr>
       </tbody>
@@ -172,14 +172,14 @@
 {% endfor %}
 
 {% else %}
-<div class="card" style="text-align:center;padding:50px 20px;color:#9a95ad">
+<div class="card" style="text-align:center;padding:50px 20px;color:var(--softer)">
   <p style="font-size:2rem;margin-bottom:12px">📋</p>
   <p style="font-weight:700;margin-bottom:6px">No completed jobs in this period</p>
   <p style="font-size:0.88rem">Make sure jobs are marked "Completed" and have a cleaner assigned.</p>
 </div>
 {% endif %}
 
-<p style="font-size:0.8rem;color:#9a95ad;margin-top:8px">
+<p style="font-size:0.8rem;color:var(--softer);margin-top:8px">
   Tip: Add hours worked on each booking detail page for accurate hourly pay calculation.
 </p>
 {% endblock %}

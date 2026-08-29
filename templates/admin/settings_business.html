@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="card">
-  <p style="color:#9a95ad;font-size:0.9rem;margin-bottom:20px">This is your white-label config. Change the business name, phone, and contact info here — no code needed.</p>
+  <p style="color:var(--softer);font-size:0.9rem;margin-bottom:20px">This is your white-label config. Change the business name, phone, and contact info here — no code needed.</p>
   <form method="POST">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div class="form-group" style="grid-column:1/-1">
@@ -51,7 +51,7 @@
           <option value="{{ tz }}" {{ 'selected' if (current.timezone or 'America/New_York') == tz }}>{{ tzlabel }}</option>
           {% endfor %}
         </select>
-        <span style="font-size:0.76rem;color:#9a95ad">Your CRM runs on a server set to UTC. This is how it knows what "today" and "9am" mean where you actually are.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Your CRM runs on a server set to UTC. This is how it knows what "today" and "9am" mean where you actually are.</span>
       </div>
       <div class="form-group">
         <label>Charge Time For Jobs With No Arrival Time</label>
@@ -60,7 +60,7 @@
           <option value="{{ h }}" {{ 'selected' if (current.charge_hour or '9')|int == h }}>{{ (h % 12) or 12 }}:00 {{ 'AM' if h < 12 else 'PM' }}</option>
           {% endfor %}
         </select>
-        <span style="font-size:0.76rem;color:#9a95ad">Cards are charged when each job's own arrival time comes round, so nobody pays before you turn up. This is only the fallback for a booking with no time filled in.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Cards are charged when each job's own arrival time comes round, so nobody pays before you turn up. This is only the fallback for a booking with no time filled in.</span>
       </div>
     </div>
     <button type="submit" class="btn btn-gold" style="margin-top:8px">Save Business Info</button>
@@ -69,8 +69,8 @@
 
 <!-- White-Label Model Settings -->
 <div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Business Model Settings</h2>
-  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">These control terminology and agreement type throughout the CRM. Change these when white-labeling for a new client.</p>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Business Model Settings</h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:20px">These control terminology and agreement type throughout the CRM. Change these when white-labeling for a new client.</p>
   <form method="POST">
     <input type="hidden" name="business_name" value="{{ current.business_name }}" />
     <input type="hidden" name="phone" value="{{ current.phone }}" />
@@ -87,7 +87,7 @@
           <option value="contractor" {{ 'selected' if current.worker_model == 'contractor' }}>Independent Contractor (1099)</option>
           <option value="employee" {{ 'selected' if current.worker_model == 'employee' }}>Employee (W-2)</option>
         </select>
-        <span style="font-size:0.76rem;color:#9a95ad">Changes agreement type and onboarding language.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Changes agreement type and onboarding language.</span>
       </div>
       <div class="form-group">
         <label>Reception Model</label>
@@ -95,7 +95,7 @@
           <option value="va" {{ 'selected' if current.reception_model == 'va' }}>Virtual Assistant (VA)</option>
           <option value="receptionist" {{ 'selected' if current.reception_model == 'receptionist' }}>In-House Receptionist</option>
         </select>
-        <span style="font-size:0.76rem;color:#9a95ad">Affects scripts library labels and context.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Affects scripts library labels and context.</span>
       </div>
     </div>
     <div class="form-group" style="margin-top:4px">
@@ -103,14 +103,14 @@
       <textarea name="agreement_template" rows="16"
                 style="font-family:monospace;font-size:0.82rem;line-height:1.7"
                 placeholder="Leave blank to use the built-in default for your worker model. Paste your custom agreement text here to override it.">{{ current.agreement_template }}</textarea>
-      <span style="font-size:0.76rem;color:#9a95ad">Cleaners see this when they click their signing link. Leave blank to use the built-in IC or Employee agreement based on the worker model above.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">Cleaners see this when they click their signing link. Leave blank to use the built-in IC or Employee agreement based on the worker model above.</span>
     </div>
 
     <div class="form-group" style="margin-top:18px">
       <label>📜 Customer Service &amp; Payment Terms</label>
       <textarea name="customer_terms" rows="18"
                 style="font-family:monospace;font-size:0.82rem;line-height:1.7">{{ current.customer_terms }}</textarea>
-      <span style="font-size:0.76rem;color:#9a95ad">
+      <span style="font-size:0.76rem;color:var(--softer)">
         Shown on every payment page and printed on every invoice, so the terms travel with the bill.
         Wrap a line in <code>**stars**</code> to make it a heading.
         <strong>These apply from the moment a customer sees them — they don't reach back to bookings already made.</strong>
@@ -123,29 +123,29 @@
 
 <!-- Branding: what customers see -->
 <div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Branding &amp; Customer-Facing Details</h2>
-  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">These appear on quotes, invoices, receipts and the emails your customers receive.</p>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Branding &amp; Customer-Facing Details</h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:20px">These appear on quotes, invoices, receipts and the emails your customers receive.</p>
   <form method="POST">
     <div class="form-group">
       <label>Google Review Link</label>
       <input type="url" name="google_review_link" value="{{ current.google_review_link }}"
              placeholder="https://g.page/r/…/review" />
-      <span style="font-size:0.76rem;color:#9a95ad">Shown to customers who rate you 4 or 5 stars. Leave blank and the review button is hidden entirely — better no button than one pointing at the wrong business.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">Shown to customers who rate you 4 or 5 stars. Leave blank and the review button is hidden entirely — better no button than one pointing at the wrong business.</span>
     </div>
     <div class="form-group">
       <label>Email Tagline</label>
       <input type="text" name="brand_tagline" value="{{ current.brand_tagline }}"
              placeholder="Professional Cleaning Proposal" />
-      <span style="font-size:0.76rem;color:#9a95ad">The small line under your name at the top of quote emails.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">The small line under your name at the top of quote emails.</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
       <div class="form-group">
         <label>Header Colour</label>
-        <input type="text" name="brand_dark" value="{{ current.brand_dark }}" placeholder="#1f2937" />
+        <input type="text" name="brand_dark" value="{{ current.brand_dark }}" placeholder="var(--info)" />
       </div>
       <div class="form-group">
         <label>Accent Colour</label>
-        <input type="text" name="brand_accent" value="{{ current.brand_accent }}" placeholder="#2563eb" />
+        <input type="text" name="brand_accent" value="{{ current.brand_accent }}" placeholder="var(--info)" />
       </div>
       <div class="form-group">
         <label>Text On Accent</label>
@@ -158,13 +158,13 @@
         <option value="" {{ '' if current.brand_domain_verified == '1' else 'selected' }}>Not yet — send from the default address</option>
         <option value="1" {{ 'selected' if current.brand_domain_verified == '1' }}>Yes — my domain is verified</option>
       </select>
-      <span style="font-size:0.76rem;color:#9a95ad">Only switch this on once your domain is verified with your email provider. Turning it on too early means your emails stop arriving.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">Only switch this on once your domain is verified with your email provider. Turning it on too early means your emails stop arriving.</span>
     </div>
     <div class="form-group">
       <label>How You Describe The Business</label>
       <input type="text" name="content_business_description" value="{{ current.content_business_description }}"
              placeholder="{{ BIZ }} — professional home cleaning service in {{ BIZ_CITY or 'your city' }}." />
-      <span style="font-size:0.76rem;color:#9a95ad">Used when the CRM writes social posts for you. Leave blank to build it from your name and city.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">Used when the CRM writes social posts for you. Leave blank to build it from your name and city.</span>
     </div>
     <button type="submit" class="btn btn-gold">Save Branding</button>
   </form>
@@ -172,8 +172,8 @@
 
 <!-- Optional second trading name -->
 <div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Commercial Brand <span style="text-transform:none;letter-spacing:0;font-weight:500">(optional)</span></h2>
-  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Commercial Brand <span style="text-transform:none;letter-spacing:0;font-weight:500">(optional)</span></h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:20px">
     Some cleaning businesses sell commercial work under a separate name. If you do, fill this in and office, medical and retail quotes will go out branded that way.
     <strong>Leave it all blank if you trade under one name</strong> — those quotes will simply go out as {{ BIZ }}.
   </p>
@@ -207,11 +207,11 @@
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
       <div class="form-group">
         <label>Header Colour</label>
-        <input type="text" name="commercial_dark" value="{{ current.commercial_dark }}" placeholder="#12324a" />
+        <input type="text" name="commercial_dark" value="{{ current.commercial_dark }}" placeholder="var(--info)" />
       </div>
       <div class="form-group">
         <label>Accent Colour</label>
-        <input type="text" name="commercial_accent" value="{{ current.commercial_accent }}" placeholder="#2a89c4" />
+        <input type="text" name="commercial_accent" value="{{ current.commercial_accent }}" placeholder="var(--info)" />
       </div>
       <div class="form-group">
         <label>Text On Accent</label>
@@ -231,8 +231,8 @@
 
 <!-- Hiring Workflow Settings -->
 <div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Hiring Workflow</h2>
-  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">These power the one-click email buttons on each application. Set them once and the CRM does the rest.</p>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Hiring Workflow</h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:20px">These power the one-click email buttons on each application. Set them once and the CRM does the rest.</p>
   <form method="POST">
     {% for f in ['business_name','phone','email','address','city','state','zip_code','website','worker_model','reception_model','agreement_template','customer_terms'] %}
     <input type="hidden" name="{{ f }}" value="{{ current[f] }}" />
@@ -241,7 +241,7 @@
       <label>Interview Calendar Link</label>
       <input type="url" name="interview_calendar_link" value="{{ current.interview_calendar_link }}"
              placeholder="https://calendly.com/yourname/phone-interview" />
-      <span style="font-size:0.76rem;color:#9a95ad">Your Calendly, Google Calendar booking link, or any scheduling URL. Used by "Send Interview Invite" button.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">Your Calendly, Google Calendar booking link, or any scheduling URL. Used by "Send Interview Invite" button.</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px">
       <div class="form-group">
@@ -255,8 +255,8 @@
                placeholder="https://bg.fdle.state.fl.us or https://checkr.com/applicants" />
       </div>
     </div>
-    <div style="background:#f0edf8;border-radius:8px;padding:12px;font-size:0.82rem;color:#5f5878;margin-bottom:16px">
-      <strong style="color:#3b2460">A good starting point:</strong><br>
+    <div style="background:var(--line-soft);border-radius:8px;padding:12px;font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+      <strong style="color:var(--ink-2)">A good starting point:</strong><br>
       • <strong>FDLE</strong> (Florida state check, ~$24, applicant pays) → <code>https://bg.fdle.state.fl.us</code><br>
       • <strong>Checkr for Individuals</strong> (~$30) → <code>https://checkr.com/applicants</code><br>
       • <strong>Free first step</strong>: Always check National Sex Offender Registry → <code>https://www.nsopw.gov</code>

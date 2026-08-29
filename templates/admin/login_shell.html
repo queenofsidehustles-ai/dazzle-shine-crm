@@ -1,43 +1,77 @@
-{# The frame every signed-out page shares: forgotten password, reset, signup.
-   Deliberately standalone -- these render for somebody who is not logged in
-   and may not belong to any company yet, so nothing here may depend on the
-   back-office layout or on a business's settings being loaded. #}
+{# The frame every signed-out page shares: sign in, forgotten password, reset,
+   signup. Deliberately standalone -- these render for somebody who is not
+   logged in and may not belong to any company yet, so nothing here may depend
+   on the back-office layout or on a business's settings being loaded.
+
+   It does load akye.css, because this is the first screen anybody sees and it
+   should not be the one page in the product wearing a different palette. The
+   block below styles the panel itself; everything it references is a token. #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#16213a" />
   <title>{% block title %}{{ BIZ or 'Sign in' }}{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    :root { --gold:#d3a84f; --gold-deep:#b98a33; --purple:#1f1333;
-            --muted:#5f5878; --softer:#9a95ad; --border:#e4dfef; }
-    * { box-sizing:border-box; margin:0; padding:0; }
-    body { font-family:Inter,-apple-system,sans-serif; background:#f6f5fb;
-           color:var(--purple); min-height:100vh; display:flex;
-           align-items:center; justify-content:center; padding:24px; }
-    .panel { background:#fff; border:1px solid var(--border); border-radius:16px;
-             box-shadow:0 6px 30px rgba(15,7,40,0.09); padding:36px 32px;
-             width:100%; max-width:420px; }
-    h1 { font-size:1.35rem; margin-bottom:10px; }
-    .lead { color:var(--muted); line-height:1.6; margin-bottom:22px; }
-    .small { color:var(--softer); font-size:0.85rem; line-height:1.5; margin:10px 0 18px; }
-    label { display:block; font-weight:600; font-size:0.88rem; margin:16px 0 6px; }
-    input { width:100%; padding:12px 14px; border:1px solid var(--border);
-            border-radius:10px; font-size:1rem; font-family:inherit; }
-    input:focus { outline:none; border-color:var(--gold); box-shadow:0 0 0 3px rgba(211,168,79,0.18); }
-    button { width:100%; margin-top:22px; padding:13px; border:none;
-             border-radius:999px; background:var(--gold); color:#1a1225;
-             font-weight:700; font-size:1rem; font-family:inherit; cursor:pointer; }
-    button:hover { background:var(--gold-deep); }
-    .error { background:#fdecec; color:#c53030; border-radius:10px;
-             padding:11px 14px; font-size:0.9rem; margin-bottom:4px; }
-    .back { display:block; margin-top:22px; color:var(--muted);
-            text-decoration:none; font-size:0.9rem; }
-    .back:hover { color:var(--purple); }
-    .btn-link { display:inline-block; margin-top:14px; color:var(--gold-deep);
-                font-weight:700; text-decoration:none; }
+    body {
+      background:var(--ground); color:var(--ink); min-height:100vh;
+      display:flex; align-items:center; justify-content:center; padding:var(--s6);
+    }
+    .panel {
+      background:var(--surface); border:1px solid var(--line);
+      border-radius:var(--r-lg); box-shadow:var(--shadow-lg);
+      padding:var(--s10) var(--s8); width:100%; max-width:420px;
+    }
+    .panel h1 {
+      font-size:var(--t-xl); font-weight:650; letter-spacing:-.02em;
+      margin:0 0 var(--s3);
+    }
+    .lead { color:var(--muted); line-height:1.6; margin:0 0 var(--s6); font-size:var(--t-sm); }
+    .small { color:var(--softer); font-size:var(--t-xs); line-height:1.5; margin:var(--s3) 0 var(--s5); }
+
+    .panel label {
+      display:block; font-weight:600; font-size:var(--t-sm);
+      margin:var(--s4) 0 var(--s2); color:var(--ink);
+    }
+    .panel input {
+      width:100%; padding:var(--s3) var(--s4);
+      border:1px solid var(--line); border-radius:var(--r-sm);
+      font-size:var(--t-md); font-family:inherit; color:var(--ink);
+      background:var(--surface); transition:border-color var(--ease), box-shadow var(--ease);
+    }
+    .panel input:focus {
+      outline:none; border-color:var(--amber); box-shadow:var(--ring);
+    }
+
+    .panel button {
+      width:100%; margin-top:var(--s6); padding:var(--s3) var(--s4);
+      border:1px solid var(--amber); border-radius:var(--r-pill);
+      background:var(--amber); color:#fff;
+      font-weight:650; font-size:var(--t-md); font-family:inherit; cursor:pointer;
+      transition:background var(--ease), transform var(--ease);
+    }
+    .panel button:hover { background:var(--amber-deep); border-color:var(--amber-deep); }
+    .panel button:active { transform:translateY(1px); }
+
+    .error {
+      background:var(--warn-soft); color:var(--warn);
+      border:1px solid #f6cfcf; border-radius:var(--r-sm);
+      padding:var(--s3) var(--s4); font-size:var(--t-sm); margin-bottom:var(--s3);
+    }
+    .back {
+      display:block; margin-top:var(--s6); color:var(--muted);
+      text-decoration:none; font-size:var(--t-sm);
+    }
+    .back:hover { color:var(--ink); }
+    .btn-link {
+      display:inline-block; margin-top:var(--s4); color:var(--amber-deep);
+      font-weight:650; text-decoration:none;
+    }
+    .btn-link:hover { text-decoration:underline; }
   </style>
 </head>
 <body>

@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="card" style="max-width:640px">
-  <ol style="color:#5f5878;font-size:0.92rem;line-height:1.9;padding-left:20px;margin-bottom:20px">
+  <ol style="color:var(--muted);font-size:0.92rem;line-height:1.9;padding-left:20px;margin-bottom:20px">
     <li>Open your <strong>Local Services Ads → Leads</strong> page.</li>
     <li>Set the date filter to the range you want (All time is fine).</li>
     <li>Click <strong>DOWNLOAD</strong> and save the CSV.</li>
@@ -13,18 +13,18 @@
 
   <form method="POST" enctype="multipart/form-data">
     <input type="file" name="file" accept=".csv,text/csv" required
-           style="width:100%;padding:12px;border:1px dashed #d9d3e8;border-radius:9px;background:#faf9fd">
+           style="width:100%;padding:12px;border:1px dashed var(--info-soft);border-radius:9px;background:var(--ground)">
     <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:14px">
       Import
     </button>
   </form>
 
-  <p style="font-size:0.83rem;color:#9a95ad;margin-top:16px">
+  <p style="font-size:0.83rem;color:var(--softer);margin-top:16px">
     Importing the same range twice is safe — leads are matched on Google's own
     lead ID, so re-importing refreshes what's here instead of duplicating it,
     and never disturbs a follow-up already in progress.
   </p>
-  <p style="font-size:0.83rem;color:#9a95ad;margin-top:8px">
+  <p style="font-size:0.83rem;color:var(--softer);margin-top:8px">
     Nothing is texted by importing. Every number is checked against your bookings
     first, and following up is a separate step you start yourself.
   </p>

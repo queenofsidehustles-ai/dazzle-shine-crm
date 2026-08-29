@@ -51,8 +51,28 @@ def dashboard():
         start, end = finance.month_bounds(d.year, d.month)
         money = finance.profit_and_loss(start, end)
 
+    # The things a dashboard is actually for: what is happening today, and what
+    # will go wrong tomorrow if nobody touches it. A wall of totals tells an
+    # owner how the month went; it does not tell her that nobody is booked for
+    # the 9am.
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    tomorrow_jobs = Booking.query.filter(
+        Booking.preferred_date == tomorrow,
+        Booking.status.in_(['confirmed', 'pending'])).all()
+    unassigned_tomorrow = [b for b in tomorrow_jobs if not b.crew_label]
+    unpaid_done = Booking.query.filter(
+        Booking.status == 'completed',
+        Booking.balance_collected.is_(False)).count()
+    open_claims = Booking.query.filter(
+        Booking.open_for_claim.is_(True),
+        Booking.status.in_(['confirmed', 'pending'])).count()
+
     return render_template(
         'admin/dashboard.html',
+        tomorrow_jobs=tomorrow_jobs,
+        unassigned_tomorrow=unassigned_tomorrow,
+        unpaid_done=unpaid_done,
+        open_claims=open_claims,
         total_bookings=total_bookings,
         pending=pending,
         confirmed=confirmed,

@@ -15,8 +15,8 @@
         {% for t in templates %}
         <tr>
           <td><strong>{{ t.name }}</strong></td>
-          <td style="color:#9a95ad">{{ t.service_type.title() if t.service_type else 'All services' }}</td>
-          <td style="color:#9a95ad">{{ t.get_items()|length }} items</td>
+          <td style="color:var(--softer)">{{ t.service_type.title() if t.service_type else 'All services' }}</td>
+          <td style="color:var(--softer)">{{ t.get_items()|length }} items</td>
           <td><a href="{{ url_for('workorders.edit_template', template_id=t.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a></td>
         </tr>
         {% endfor %}
@@ -24,15 +24,15 @@
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+  <p style="text-align:center;color:var(--softer);padding:40px 0">
     No checklist templates yet.
-    <a href="{{ url_for('workorders.new_template') }}" style="color:#d3a84f">Create your first one →</a>
+    <a href="{{ url_for('workorders.new_template') }}" style="color:var(--amber)">Create your first one →</a>
   </p>
   {% endif %}
 </div>
 
 <div style="margin-top:16px">
-  <p style="font-size:0.85rem;color:#9a95ad">
+  <p style="font-size:0.85rem;color:var(--softer)">
     Quick-start: Create a template for each service type. When you send a work order from a booking, the right checklist is attached automatically.
   </p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">

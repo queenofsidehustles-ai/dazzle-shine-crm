@@ -8,18 +8,18 @@
 {% block content %}
 <div style="max-width:620px">
   <div class="card">
-    <p style="color:#5f5878;margin:0 0 18px">
+    <p style="color:var(--muted);margin:0 0 18px">
       Fix the price on <strong>{{ booking.name }}</strong>'s booking and send them a clear
       "we corrected your quote" notice showing the old price crossed out next to the new one.
     </p>
 
     <!-- Old → suggested new -->
-    <div style="background:#f6f5fb;border-radius:12px;padding:18px 20px;margin-bottom:18px;text-align:center">
-      <div style="font-size:0.78rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">What the customer was quoted</div>
-      <span style="color:#9a95ad;text-decoration:line-through;font-size:1.2rem">${{ '%.2f' % old_price }}</span>
-      <span style="color:#9a95ad;margin:0 10px">→</span>
-      <span style="color:#065f46;font-weight:800;font-size:1.9rem">${{ '%.2f' % suggested_total }}</span>
-      <div style="font-size:0.78rem;color:#9a95ad;margin-top:8px">
+    <div style="background:var(--ground);border-radius:12px;padding:18px 20px;margin-bottom:18px;text-align:center">
+      <div style="font-size:0.78rem;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">What the customer was quoted</div>
+      <span style="color:var(--softer);text-decoration:line-through;font-size:1.2rem">${{ '%.2f' % old_price }}</span>
+      <span style="color:var(--softer);margin:0 10px">→</span>
+      <span style="color:var(--good);font-weight:800;font-size:1.9rem">${{ '%.2f' % suggested_total }}</span>
+      <div style="font-size:0.78rem;color:var(--softer);margin-top:8px">
         Suggested from current pricing: {{ booking.service_label }},
         {{ booking.bedrooms or '?' }}bd/{{ booking.bathrooms or '?' }}ba
         (cleaning ${{ '%.2f' % cleaning }}{% if booking.lead_fee %} + ${{ '%.2f' % booking.lead_fee }} lead fee{% endif %})
@@ -28,13 +28,13 @@
 
     <form method="POST">
       <div class="form-group">
-        <label>Corrected total ($) <span style="font-weight:400;color:#9a95ad">— pre-filled from current pricing, edit if needed</span></label>
+        <label>Corrected total ($) <span style="font-weight:400;color:var(--softer)">— pre-filled from current pricing, edit if needed</span></label>
         <input type="number" name="new_price" step="0.01" required
                value="{{ '%.2f' % suggested_total }}" style="font-size:1.1rem;font-weight:700" />
       </div>
 
       <div class="form-group">
-        <label>Personal note <span style="font-weight:400;color:#9a95ad">— optional, added to the email & text</span></label>
+        <label>Personal note <span style="font-weight:400;color:var(--softer)">— optional, added to the email & text</span></label>
         <textarea name="personal_note" rows="3" placeholder="e.g. Thank you for your patience — we've applied a small credit to your next visit."></textarea>
       </div>
 
@@ -44,17 +44,17 @@
           <label style="display:flex;align-items:center;gap:7px;font-weight:400;cursor:pointer">
             <input type="checkbox" name="channel" value="email" checked style="width:auto"
                    {% if not booking.email %}disabled{% endif %}>
-            Email {% if booking.email %}<span style="color:#9a95ad;font-size:0.82rem">({{ booking.email }})</span>{% else %}<span style="color:#b45309;font-size:0.82rem">— none on file</span>{% endif %}
+            Email {% if booking.email %}<span style="color:var(--softer);font-size:0.82rem">({{ booking.email }})</span>{% else %}<span style="color:var(--amber-deep);font-size:0.82rem">— none on file</span>{% endif %}
           </label>
           <label style="display:flex;align-items:center;gap:7px;font-weight:400;cursor:pointer">
             <input type="checkbox" name="channel" value="sms" checked style="width:auto"
                    {% if not booking.phone %}disabled{% endif %}>
-            Text {% if booking.phone %}<span style="color:#9a95ad;font-size:0.82rem">({{ booking.phone }})</span>{% else %}<span style="color:#b45309;font-size:0.82rem">— none on file</span>{% endif %}
+            Text {% if booking.phone %}<span style="color:var(--softer);font-size:0.82rem">({{ booking.phone }})</span>{% else %}<span style="color:var(--amber-deep);font-size:0.82rem">— none on file</span>{% endif %}
           </label>
         </div>
       </div>
 
-      <p style="font-size:0.8rem;color:#9a95ad;background:#faf9fd;border-radius:8px;padding:11px 13px;margin:4px 0 16px">
+      <p style="font-size:0.8rem;color:var(--softer);background:var(--ground);border-radius:8px;padding:11px 13px;margin:4px 0 16px">
         On send, the booking total is updated to the corrected amount and the balance due recalculates automatically.
         A record is added to this booking's internal notes.
       </p>

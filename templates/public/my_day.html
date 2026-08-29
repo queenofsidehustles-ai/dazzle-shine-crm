@@ -3,82 +3,178 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#16213a">
   <title>My Day — {{ biz }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    body { font-family: Inter, -apple-system, sans-serif; background:#f6f5fb; margin:0; color:#1f1333; }
-    .wrap { max-width:560px; margin:0 auto; padding:18px 14px 60px; }
-    .hero { background:linear-gradient(135deg,#1f1333,#3b2460); border-radius:14px; padding:22px 20px; text-align:center; }
-    .hero h1 { color:#d3a84f; margin:0 0 4px; font-size:1.35rem; }
-    .hero p { color:#c9b8e8; margin:0; font-size:0.85rem; }
-    .daygroup { margin-top:22px; }
-    .dayhdr { font-size:0.8rem; text-transform:uppercase; letter-spacing:0.08em; color:#9a95ad; font-weight:700; margin:0 0 10px; }
-    .dayhdr.today { color:#b98a33; }
-    .job { background:#fff; border:1px solid #e4dfef; border-radius:12px; padding:16px 18px; margin-bottom:12px; }
-    .job .time { font-weight:800; color:#1f1333; font-size:1.05rem; }
-    .job .pay { float:right; font-weight:800; color:#1a7a44; }
-    .job .client { font-weight:700; margin:2px 0; }
-    .job .svc { color:#5f5878; font-size:0.9rem; }
-    .job .addr { color:#5f5878; font-size:0.9rem; margin:8px 0; }
-    .access { background:#fff8e1; border:1px solid #f0d488; border-radius:8px; padding:10px 12px; margin:10px 0; font-size:0.86rem; color:#7c4a04; line-height:1.5; }
-    .access b { color:#5c3a03; }
-    .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-    .btn { display:inline-block; padding:10px 16px; border-radius:8px; font-weight:700; text-decoration:none; font-size:0.86rem; }
-    .btn.nav { background:#1f1333; color:#fff; }
-    .btn.list { background:#d3a84f; color:#1f1333; }
-    .empty { background:#fff; border:1px solid #e4dfef; border-radius:12px; padding:30px 20px; text-align:center; color:#9a95ad; margin-top:18px; }
-    .foot { display:flex; gap:10px; justify-content:center; margin-top:24px; flex-wrap:wrap; }
-    .foot a { color:#7c3aed; font-size:0.86rem; text-decoration:none; font-weight:600; }
+    /* This page is opened one-handed, outdoors, from a text message, by
+       somebody who is about to drive somewhere. Every decision below follows
+       from that: no login, big tap targets, the address and the way in visible
+       without scrolling past anything, and the pay stated plainly so nobody
+       has to ask on Friday.
+
+       It loads akye.css for the palette and buttons, then styles the day sheet
+       itself -- a phone page has almost nothing in common with a desk layout. */
+    body { background:var(--ground); color:var(--ink); }
+    .wrap { max-width:560px; margin:0 auto; padding:var(--s4) var(--s4) var(--s12); }
+
+    .hero {
+      background:var(--ink); border-radius:var(--r-lg);
+      padding:var(--s6) var(--s5); color:#fff; margin-bottom:var(--s6);
+    }
+    .hero h1 { font-size:var(--t-xl); margin:0; font-weight:650; letter-spacing:-.02em; }
+    .hero p { color:rgba(255,255,255,.62); margin:var(--s1) 0 0; font-size:var(--t-sm); }
+    .hero .count {
+      display:inline-block; margin-top:var(--s3); padding:var(--s1) var(--s3);
+      background:var(--amber); color:var(--ink); border-radius:var(--r-pill);
+      font-size:var(--t-xs); font-weight:700;
+    }
+
+    /* Day heading. Today is amber; everything else is quiet, because the only
+       day that needs finding at a glance is this one. */
+    .dayhdr {
+      font-size:var(--t-xs); text-transform:uppercase; letter-spacing:.1em;
+      color:var(--softer); font-weight:700; margin:var(--s6) 0 var(--s3);
+    }
+    .dayhdr.today { color:var(--amber-deep); }
+
+    .job {
+      background:var(--surface); border:1px solid var(--line);
+      border-radius:var(--r); padding:var(--s5); margin-bottom:var(--s3);
+      box-shadow:var(--shadow);
+    }
+    .job.is-today { border-color:var(--amber-line); }
+
+    /* Time and pay on one line, pay right-aligned. These are the two numbers
+       that get looked at first and they should never wrap into each other. */
+    .job-top {
+      display:flex; align-items:baseline; justify-content:space-between;
+      gap:var(--s3); margin-bottom:var(--s2);
+    }
+    .job-time { font-size:var(--t-lg); font-weight:700; letter-spacing:-.02em; }
+    .job-pay {
+      font-size:var(--t-lg); font-weight:700; color:var(--good);
+      font-variant-numeric:tabular-nums; white-space:nowrap;
+    }
+    .job-pay small { display:block; font-size:var(--t-xs); font-weight:500;
+                     color:var(--softer); text-align:right; letter-spacing:.04em; }
+
+    .job-client { font-size:var(--t-md); font-weight:650; }
+    .job-svc { color:var(--muted); font-size:var(--t-sm); margin-top:2px; }
+    .job-mates { color:var(--info); font-size:var(--t-sm); margin-top:var(--s2); font-weight:550; }
+
+    .job-addr {
+      display:block; margin:var(--s4) 0 0; padding:var(--s3) var(--s4);
+      background:var(--ground); border-radius:var(--r-sm);
+      color:var(--ink); font-size:var(--t-sm); line-height:1.45;
+      text-decoration:none;
+    }
+    .job-addr .pin { color:var(--softer); }
+
+    /* The single most valuable field in the product. A cleaner standing at a
+       locked door at 8am needs this before anything else on the page. */
+    .access {
+      background:var(--amber-soft); border:1px solid var(--amber-line);
+      border-radius:var(--r-sm); padding:var(--s3) var(--s4); margin-top:var(--s3);
+      font-size:var(--t-sm); color:var(--amber-deep); line-height:1.5;
+    }
+    .access b { color:var(--amber-deep); }
+
+    /* Buttons are 48px tall because that is a thumb, not a mouse. Navigate is
+       the primary action on this screen -- it is what the page is for. */
+    .btns { display:flex; gap:var(--s2); flex-wrap:wrap; margin-top:var(--s4); }
+    .btns .btn {
+      flex:1 1 auto; min-height:48px; display:inline-flex;
+      align-items:center; justify-content:center; gap:6px;
+      border-radius:var(--r-sm); font-size:var(--t-sm); font-weight:650;
+      text-decoration:none; padding:0 var(--s4);
+    }
+    .btn-nav { background:var(--ink); color:#fff; border:1px solid var(--ink); flex-basis:100%; }
+    .btn-nav:active { transform:translateY(1px); }
+    .btn-alt {
+      background:var(--surface); color:var(--ink); border:1px solid var(--line);
+    }
+    .btn-list { background:var(--amber-soft); color:var(--amber-deep); border:1px solid var(--amber-line); }
+
+    .release {
+      background:none; border:0; color:var(--softer); font-size:var(--t-xs);
+      font-weight:550; cursor:pointer; padding:var(--s3) 0 0; text-decoration:underline;
+    }
+    .release:hover { color:var(--warn); }
+
+    .none {
+      background:var(--surface); border:1px solid var(--line);
+      border-radius:var(--r); padding:var(--s12) var(--s5); text-align:center;
+      color:var(--muted); font-size:var(--t-sm); line-height:1.6;
+    }
+    .none .big { font-size:2rem; display:block; margin-bottom:var(--s3); opacity:.6; }
+
+    .foot { display:flex; gap:var(--s4); justify-content:center; margin-top:var(--s8); flex-wrap:wrap; }
+    .foot a { color:var(--muted); font-size:var(--t-sm); text-decoration:none; font-weight:550; }
+    .foot a:hover { color:var(--ink); }
   </style>
 </head>
 <body>
   <div class="wrap">
+    {% set total = days.values() | map('length') | sum %}
     <div class="hero">
-      <h1>Hi {{ s.name.split()[0] }}! 👋</h1>
-      <p>Here's your schedule — {{ biz }}</p>
+      <h1>Hi {{ s.name.split()[0] }}</h1>
+      <p>Your schedule — {{ biz }}</p>
+      {% if total %}
+      <span class="count">{{ total }} job{{ 's' if total != 1 }} coming up</span>
+      {% endif %}
     </div>
 
     {% for day, jobs in days.items() %}
-    <div class="daygroup">
-      <p class="dayhdr {{ 'today' if day == today }}">{{ '📍 Today' if day == today else day }}</p>
-      {% for b in jobs %}
-      {% set jc = (b.job_checklists | sort(attribute='sent_at', reverse=True) | first) if b.job_checklists else none %}
-      <div class="job">
-        <span class="pay">You earn ${{ '%.0f'|format(b.pay_for(s)) }}</span>
-        <span class="time">{{ b.preferred_time or 'Time TBD' }}</span>
-        <div class="client">{{ b.name }}</div>
-        <div class="svc">{{ b.service_label }} · {{ b.bedrooms or '?' }} bd / {{ b.bathrooms or '?' }} ba</div>
-        {% if b.is_crew_job %}
-        {% set mates = b.crew_names | reject('equalto', s.name) | list %}
-        <div class="svc" style="color:#3730a3">👥 Team job with {{ mates | join(', ') if mates else 'a teammate (still being assigned)' }}</div>
-        {% endif %}
-        <div class="addr">📍 {{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</div>
-        {% if b.access_notes %}
-        <div class="access">🔑 <b>Getting in:</b> {{ b.access_notes }}</div>
-        {% endif %}
-        <div class="btns">
-          <a class="btn nav" target="_blank" rel="noopener"
-             href="https://www.google.com/maps/dir/?api=1&destination={{ ((b.address or '') ~ (', ' ~ b.city if b.city else '') ~ (' ' ~ b.zip_code if b.zip_code else '')) | urlencode }}">🧭 Navigate</a>
-          <a class="btn list" target="_blank" rel="noopener"
-             href="https://waze.com/ul?q={{ ((b.address or '') ~ (', ' ~ b.city if b.city else '') ~ (' ' ~ b.zip_code if b.zip_code else '')) | urlencode }}&navigate=yes">Waze</a>
-          {% if jc %}
-          <a class="btn list" href="{{ url_for('workorders.view_checklist', token=jc.token) }}">📋 Job Checklist</a>
-          {% endif %}
-        </div>
-        {% if s.agreement_token and b.id %}
-        <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"
-              onsubmit="return confirm('Release this job back to the team? Someone else will be able to grab it.')" style="margin-top:8px">
-          <button type="submit" style="background:none;border:none;color:#b91c1c;font-size:0.8rem;font-weight:600;cursor:pointer;padding:0">Can't make it? Release job ↩️</button>
-        </form>
+    <p class="dayhdr {{ 'today' if day == today }}">{{ (day_labels or {}).get(day, day) }}</p>
+    {% for b in jobs %}
+    {% set jc = (b.job_checklists | sort(attribute='sent_at', reverse=True) | first) if b.job_checklists else none %}
+    {% set dest = ((b.address or '') ~ (', ' ~ b.city if b.city else '') ~ (' ' ~ b.zip_code if b.zip_code else '')) %}
+    <div class="job {{ 'is-today' if day == today }}">
+      <div class="job-top">
+        <span class="job-time">{{ b.preferred_time or 'Time TBD' }}</span>
+        <span class="job-pay">${{ '%.0f'|format(b.pay_for(s)) }}<small>YOU EARN</small></span>
+      </div>
+      <div class="job-client">{{ b.name }}</div>
+      <div class="job-svc">{{ b.service_label }} · {{ b.bedrooms or '?' }} bd / {{ b.bathrooms or '?' }} ba</div>
+      {% if b.is_crew_job %}
+      {% set mates = b.crew_names | reject('equalto', s.name) | list %}
+      <div class="job-mates">👥 With {{ mates | join(', ') if mates else 'a teammate (still being assigned)' }}</div>
+      {% endif %}
+
+      <span class="job-addr"><span class="pin">📍</span> {{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span>
+
+      {% if b.access_notes %}
+      <div class="access">🔑 <b>Getting in:</b> {{ b.access_notes }}</div>
+      {% endif %}
+
+      <div class="btns">
+        <a class="btn btn-nav" target="_blank" rel="noopener"
+           href="https://www.google.com/maps/dir/?api=1&destination={{ dest | urlencode }}">🧭 Navigate</a>
+        <a class="btn btn-alt" target="_blank" rel="noopener"
+           href="https://waze.com/ul?q={{ dest | urlencode }}&navigate=yes">Waze</a>
+        {% if jc %}
+        <a class="btn btn-list" href="{{ url_for('workorders.view_checklist', token=jc.token) }}">📋 Checklist</a>
         {% endif %}
       </div>
-      {% endfor %}
+
+      {% if s.agreement_token and b.id %}
+      <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"
+            onsubmit="return confirm('Release this job back to the team? Someone else will be able to grab it.')">
+        <button type="submit" class="release">Can't make it? Release this job</button>
+      </form>
+      {% endif %}
     </div>
+    {% endfor %}
     {% else %}
-    <div class="empty">No jobs scheduled right now. Enjoy the break — we'll text you when a new job is assigned! 🌟</div>
+    <div class="none">
+      <span class="big">🌤</span>
+      No jobs scheduled right now.<br>Enjoy the break — we'll text you when a new job is assigned.
+    </div>
     {% endfor %}
 
     <div class="foot">
-      <a href="{{ url_for('sops.library') }}" target="_blank">📖 Cleaning SOPs</a>
+      <a href="{{ url_for('sops.library') }}" target="_blank">📖 Cleaning guides</a>
     </div>
   </div>
 </body>
