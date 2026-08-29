@@ -1,0 +1,35 @@
+{# Shell for the legal pages. Plain and readable on purpose: a cleaning-company
+   owner is the audience, and a document nobody reads protects nobody. #}
+{% extends "marketing/_shell.html" %}
+{% block body %}
+<section>
+  <div class="wrap" style="max-width:720px">
+    <h1 style="font-size:1.9rem">{% block heading %}{% endblock %}</h1>
+    <p style="color:var(--softer);font-size:.9rem;margin-top:6px">
+      Last updated {{ UPDATED }} · <a href="{{ url_for('marketing.terms') }}">Terms</a> ·
+      <a href="{{ url_for('marketing.privacy') }}">Privacy</a> ·
+      <a href="{{ url_for('marketing.subprocessors') }}">Who we share data with</a>
+    </p>
+
+    <div style="background:#fff8e6;border:1px solid var(--gold);border-radius:12px;
+                padding:14px 18px;margin:22px 0;font-size:.92rem">
+      <strong>Draft.</strong> These pages have not yet been reviewed by a lawyer.
+      They are written to describe accurately what the software does, which is the
+      part a lawyer cannot do for us — but they are not legal advice and must be
+      reviewed before anybody relies on them.
+    </div>
+
+    <div class="legal">{% block doc %}{% endblock %}</div>
+  </div>
+</section>
+<style>
+  .legal h2 { font-size:1.15rem; margin:30px 0 8px; }
+  .legal h3 { font-size:1rem; margin:20px 0 6px; }
+  .legal p, .legal li { color:var(--muted); font-size:.97rem; }
+  .legal ul { margin:8px 0 8px 20px; }
+  .legal li { padding:3px 0; }
+  .legal strong { color:var(--ink); }
+  .legal .fill { background:var(--gold-soft); padding:1px 6px; border-radius:4px;
+                 font-weight:600; color:var(--gold-deep); }
+</style>
+{% endblock %}

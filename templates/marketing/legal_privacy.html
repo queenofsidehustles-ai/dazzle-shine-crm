@@ -1,0 +1,112 @@
+{% extends "marketing/_legal.html" %}
+{% block title %}Privacy Policy — {{ PRODUCT }}{% endblock %}
+{% block heading %}Privacy Policy{% endblock %}
+{% block doc %}
+
+<p>This describes what {{ PRODUCT }} does with personal information. It is
+written to be read, not to be survived.</p>
+
+<h2>Two different roles</h2>
+<p>This is the part most policies muddle, and it decides everything else.</p>
+<ul>
+  <li><strong>About you, our customer</strong> — your name, your email, what you
+      pay us. We decide what to do with that, and this policy governs it.</li>
+  <li><strong>About the people in your CRM</strong> — your cleaning customers,
+      your cleaners, your applicants. <strong>That is yours, not ours.</strong>
+      You decide what is collected and why; we hold it and process it on your
+      instructions. If one of them asks what is held about them, you are the one
+      who answers, and we will help you do it.</li>
+</ul>
+
+<h2>What is stored, and how sensitive it is</h2>
+<p>Being specific here matters more than being brief, because some of it is
+genuinely sensitive:</p>
+<ul>
+  <li><strong>Your cleaning customers</strong> — name, address, phone, email,
+      notes, and <em>how to get into their home</em>. Access notes are the most
+      sensitive field in this software.</li>
+  <li><strong>Your cleaners and applicants</strong> — contact details, work
+      history, availability, interview answers, signed agreements, pay records,
+      and any documents you upload, <strong>which can include W-9s and
+      background check results</strong>. Uploaded documents are stored in your
+      database, reachable only through links that expire.</li>
+  <li><strong>Jobs</strong> — addresses, prices, times, checklists, and before
+      and after photos taken inside people's homes.</li>
+  <li><strong>Messages</strong> — texts and emails sent through the software,
+      kept so there is a record of what was said.</li>
+  <li><strong>Money</strong> — what was charged and what was paid. <strong>Card
+      numbers are never stored by us</strong>; Stripe holds those and we keep
+      only the last four digits and the card type.</li>
+</ul>
+
+<h2>What we do with it</h2>
+<p>Run the service. Send the messages you tell it to send. Take payment for the
+subscription. Fix faults. Nothing else.</p>
+<p><strong>We do not sell it, rent it, or use it for advertising. We do not use
+your business data to train AI models.</strong></p>
+
+<h2>Where it goes</h2>
+<p>Some of it has to leave our servers to do its job — a text has to reach a
+phone company. The full list is on the
+<a href="{{ url_for('marketing.subprocessors') }}">who we share data with</a>
+page, and we will tell you before adding anyone to it.</p>
+
+<h2>AI features</h2>
+<p>Some optional features send text to an AI provider: translating a message
+into Spanish, and drafting social posts. Only the text you asked to be
+processed is sent. <strong>Your customer list, addresses, pay records and
+documents are never sent to an AI provider</strong>, and the provider does not
+train on it.</p>
+
+<h2>How long it is kept</h2>
+<ul>
+  <li>While your account is open, everything stays until you delete it.</li>
+  <li>If you close your account, you have <strong>at least 30 days</strong> to
+      export. After that it is deleted from the live system.</li>
+  <li><strong>Backups take longer.</strong> We keep nightly encrypted backups for
+      30 days, so deleted data can persist in those for up to a month before it
+      rotates out. Saying otherwise would be untrue.</li>
+</ul>
+
+<h2>How it is protected</h2>
+<ul>
+  <li>Encrypted in transit, and databases encrypted at rest by our host.</li>
+  <li><strong>Each business's data is in a separate database schema.</strong> It
+      is not filtered apart by a query somebody could forget to write — one
+      company's software physically cannot see another's rows.</li>
+  <li>Passwords are hashed and never stored readable. Nor are password-reset
+      links: only a one-way scramble of them, so a stolen backup contains no
+      working links.</li>
+  <li>Sign-in attempts are rate-limited, and repeated failures are blocked.</li>
+  <li>Saved integration keys are encrypted before storage.</li>
+  <li>Nightly backups, encrypted, kept off our hosting provider — and tested by
+      restoring them.</li>
+</ul>
+<p>No system is perfect. If there is a breach affecting your data, we will tell
+you what happened, what was affected and what we are doing, <strong>within 72
+hours of finding out</strong>.</p>
+
+<h2>Your rights</h2>
+<p>You can ask for a copy of your data, correct it, or have it deleted, by
+emailing <span class="fill">[SUPPORT EMAIL]</span>. Depending where you live you
+may have specific rights — in California under the CCPA, in the UK and EU under
+the GDPR — and we will honour them whether or not they strictly apply to us.</p>
+<p><strong>If you are one of our customers' cleaners or clients</strong> and want
+to know what is held about you, ask the cleaning company directly. It is their
+record and they control it. If you cannot reach them, contact us and we will try
+to help.</p>
+
+<h2>Children</h2>
+<p>{{ PRODUCT }} is for businesses. It is not for under-18s and we do not
+knowingly collect anything about them.</p>
+
+<h2>Changes</h2>
+<p>We will email you before anything material changes here, and the date at the
+top always shows the current version.</p>
+
+<h2>Contact</h2>
+<p><span class="fill">[LEGAL ENTITY NAME]</span><br />
+<span class="fill">[POSTAL ADDRESS]</span><br />
+<span class="fill">[SUPPORT EMAIL]</span></p>
+
+{% endblock %}

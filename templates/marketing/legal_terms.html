@@ -1,0 +1,149 @@
+{% extends "marketing/_legal.html" %}
+{% block title %}Terms of Service — {{ PRODUCT }}{% endblock %}
+{% block heading %}Terms of Service{% endblock %}
+{% block doc %}
+
+<p>These terms are between <span class="fill">[LEGAL ENTITY NAME, e.g. Dazzle &amp;
+Shine Holdings LLC]</span> (“we”, “us”) and the business that signs up
+(“you”). Using {{ PRODUCT }} means agreeing to them.</p>
+
+<h2>1. What {{ PRODUCT }} is</h2>
+<p>Software for running a cleaning or field-service business: scheduling jobs,
+assigning crews, recording what they are paid, keeping checklists and standard
+procedures, and managing applicants and hiring.</p>
+<p><strong>It is a record-keeping tool.</strong> That distinction matters and
+section 5 explains why.</p>
+
+<h2>2. Your account</h2>
+<ul>
+  <li>You are responsible for what happens under your logins, including anything
+      your staff or contractors do with them.</li>
+  <li>Give us a real email address. It is how we reach you about outages,
+      billing and security.</li>
+  <li>One subscription covers one business. Reselling access, or running
+      several unrelated businesses through one account, needs a separate
+      agreement.</li>
+</ul>
+
+<h2>3. Your data is yours</h2>
+<ul>
+  <li>Everything you put in — customers, workers, jobs, photos, documents,
+      pay records — <strong>belongs to you</strong>. We do not sell it, and we
+      do not use it to train anything.</li>
+  <li>You can export it at any time, and we will help if the built-in export
+      does not cover what you need.</li>
+  <li>We access it only to run the service, fix a fault, or when you ask us to.
+      Any support access is recorded.</li>
+</ul>
+
+<h2>4. What you are responsible for</h2>
+<p>You are the one with the relationship with your customers and your workers,
+so some obligations can only be yours:</p>
+<ul>
+  <li><strong>Permission to contact people.</strong> {{ PRODUCT }} sends texts
+      and emails on your behalf. You must have the consent the law requires
+      before adding somebody's number, and you must honour opt-outs. In the
+      United States that includes the TCPA; texting people who have not agreed
+      to it is expensive and it is your exposure, not ours.</li>
+  <li><strong>Accuracy of what you enter.</strong> Prices, pay rates, hours and
+      addresses come from you. We calculate from them; we cannot know whether
+      they are right.</li>
+  <li><strong>Your own legal duties as an employer or engager</strong> —
+      wage law, classification, insurance, licensing, tax filing.</li>
+</ul>
+
+<h2>5. What {{ PRODUCT }} is <em>not</em></h2>
+<p>Read this section even if you skip the rest.</p>
+
+<h3>Not a payroll provider</h3>
+<p>{{ PRODUCT }} records what you decide to pay somebody and can total it for
+the year. <strong>It does not pay anybody, withhold anything, file anything, or
+remit any tax.</strong> The figures it produces — including any 1099 totals —
+are a record of what you told it, for you and your accountant to check. They are
+not a filed return and they are not reviewed by anybody.</p>
+
+<h3>Not advice on whether somebody is a contractor or an employee</h3>
+<p>The software is built around paying people per job, which is common among
+cleaning contractors. <strong>That is not us telling you anybody is an
+independent contractor.</strong> Classification is a legal question about the
+real working relationship, it is decided by tests that differ by state and by
+federal agency, and getting it wrong is expensive. Using per-job pay in this
+software is not evidence of anything and must not be treated as such. Ask an
+employment lawyer or your accountant.</p>
+
+<h3>Not a background check company</h3>
+<p>{{ PRODUCT }} can request a background check and store the result you upload.
+<strong>We do not perform checks, we do not obtain them, and we are not a
+consumer reporting agency.</strong> If you use background checks in hiring, the
+obligations under the Fair Credit Reporting Act and equivalent state law — the
+standalone disclosure, written consent, the pre-adverse-action notice and the
+waiting period before you act — are yours, and they apply whoever ran the check.</p>
+
+<h3>Not a payment processor</h3>
+<p>Card payments run through Stripe under your own Stripe account. We never see
+or store a full card number. Your relationship for those payments is with
+Stripe, on their terms.</p>
+
+<h3>Not legal, tax, insurance or accounting advice</h3>
+<p>The starting checklists, standard procedures, scripts, contractor agreements
+and customer terms included in the software are <strong>drafts written from one
+cleaning company's experience</strong>. They are a place to start, not documents
+prepared for your business, your state or your situation. Read them, change
+them, and have anything that matters reviewed.</p>
+
+<h2>6. Paying for it</h2>
+<ul>
+  <li>Plans and prices are on the <a href="{{ url_for('marketing.pricing') }}">pricing
+      page</a>. Subscriptions bill monthly in advance through Stripe.</li>
+  <li>You can cancel any time, effective at the end of the period you have paid
+      for. We do not refund part-months unless something was our fault.</li>
+  <li><strong>A failed payment does not lock you out of your data.</strong> Your
+      account drops to the free plan and everything stays where it is until you
+      fix the card.</li>
+  <li>We will give at least 30 days' notice by email before raising a price. If
+      you were promised a fixed founding price, that promise holds for as long
+      as your subscription runs without a break.</li>
+</ul>
+
+<h2>7. Acceptable use</h2>
+<p>Do not use {{ PRODUCT }} to send messages to people who have not agreed to
+receive them, to store data you have no right to hold, to break into or
+overload the service, or to resell access as your own product. We may suspend
+an account doing any of those — and we will tell you why and give you your data.</p>
+
+<h2>8. Availability</h2>
+<p>We aim to keep {{ PRODUCT }} running and we take nightly backups, but this is
+software and outages happen. There is no uptime guarantee on the plans listed
+publicly. If you need one in writing, ask.</p>
+
+<h2>9. If we get something wrong</h2>
+<p>We will fix faults as quickly as we can and tell you honestly what happened.
+But to the extent the law allows: the service is provided as it is, and
+<strong>our total liability to you for any claim is limited to what you paid us
+in the twelve months before it arose</strong>. We are not liable for lost
+profits, lost business or indirect losses.</p>
+<p>Nothing here limits liability for anything that cannot lawfully be limited,
+including fraud.</p>
+
+<h2>10. Ending the agreement</h2>
+<ul>
+  <li>You can close your account whenever you like.</li>
+  <li>We can end it with 30 days' notice, or immediately for a serious breach of
+      section 7.</li>
+  <li>Either way, you get <strong>at least 30 days</strong> to export your data.
+      After that, and after any backup rotation has passed, it is deleted. See
+      the <a href="{{ url_for('marketing.privacy') }}">privacy policy</a>.</li>
+</ul>
+
+<h2>11. Changes to these terms</h2>
+<p>We will email you at least 14 days before anything material changes.
+Continuing to use {{ PRODUCT }} after that means accepting the new version. If
+you would rather not, cancel and we will refund the unused part of the month.</p>
+
+<h2>12. Law and disputes</h2>
+<p>These terms are governed by the law of <span class="fill">[STATE, e.g.
+Florida]</span>, and disputes go to the courts of <span class="fill">[COUNTY /
+STATE]</span>. Talk to us first — <span class="fill">[SUPPORT EMAIL]</span>.
+Most things are a misunderstanding.</p>
+
+{% endblock %}

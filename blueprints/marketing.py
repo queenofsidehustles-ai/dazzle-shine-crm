@@ -68,6 +68,33 @@ def home():
                            signups_open=signups_open())
 
 
+@marketing_bp.route('/terms')
+def terms():
+    _require_product_site()
+    return render_template('marketing/legal_terms.html', **_legal_ctx())
+
+
+@marketing_bp.route('/privacy')
+def privacy():
+    _require_product_site()
+    return render_template('marketing/legal_privacy.html', **_legal_ctx())
+
+
+@marketing_bp.route('/subprocessors')
+def subprocessors():
+    _require_product_site()
+    return render_template('marketing/legal_subprocessors.html', **_legal_ctx())
+
+
+def _legal_ctx():
+    """One date for all three, so they cannot silently disagree about when they
+    were last changed."""
+    import os
+    from blueprints.signup import signups_open
+    return {'UPDATED': os.environ.get('LEGAL_UPDATED', '29 August 2026'),
+            'signups_open': signups_open()}
+
+
 @marketing_bp.route('/pricing')
 def pricing():
     _require_product_site()

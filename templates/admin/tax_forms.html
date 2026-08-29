@@ -2,6 +2,21 @@
 {% block title %}1099 &amp; W-9 — {{ BIZ }}{% endblock %}
 
 {% block content %}
+{# In the product, on the page, not only in a document nobody reads.
+   These figures are a record of what the owner told the software. They are not
+   a filed return, nobody has reviewed them, and the software takes no view on
+   whether the people in this list are contractors or employees -- which is a
+   legal question decided by the real working relationship, differs by state,
+   and is expensive to get wrong. Saying so here is the only place it lands. #}
+<div style="background:#fff8e6;border:1px solid var(--gold);border-radius:10px;
+            padding:12px 16px;margin-bottom:18px;font-size:.9rem;color:var(--muted)">
+  <strong style="color:var(--ink)">These are your records, not a tax filing.</strong>
+  This totals what you recorded paying people. It does not withhold, remit or
+  file anything, and nobody has checked it. Whether somebody is a contractor or
+  an employee is a legal question about how you actually work together — this
+  software takes no view on it. Check both with your accountant.
+</div>
+
 <div class="topbar">
   <div>
     <h1>1099 &amp; W-9</h1>
