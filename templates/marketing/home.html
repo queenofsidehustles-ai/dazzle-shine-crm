@@ -1,0 +1,83 @@
+{% extends "marketing/_shell.html" %}
+{% block body %}
+
+<section>
+  <div class="wrap" style="max-width:760px">
+    <h1>Every other tool puts your jobs on a calendar.</h1>
+    <p class="lead">
+      {{ PRODUCT }} helps you <strong>hire the cleaners</strong>, <strong>pay them
+      per job</strong>, and <strong>prove the work got done to your standard</strong>.
+      Scheduling is the easy part.
+    </p>
+    <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap">
+      {% if signups_open %}
+        <a class="btn" href="/signup">Start free — no card</a>
+      {% endif %}
+      <a class="btn ghost" href="{{ url_for('marketing.pricing') }}">See pricing</a>
+    </div>
+    <p style="color:var(--softer);font-size:.9rem;margin-top:14px">
+      Built by someone who runs a cleaning company. Every screen exists because
+      something went wrong without it.
+    </p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>The three things that actually run a cleaning business</h2>
+    <p style="color:var(--muted)">Scheduling software solves one of them.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>🧹 Finding cleaners</h3>
+        <p>Applications, video interviews, background-check requests, offers,
+           agreements and onboarding — one pipeline instead of a phone full of
+           text threads.</p>
+      </div>
+      <div class="card">
+        <h3>💵 Paying them right</h3>
+        <p>Pay per job, not per hour. The offer, the job page and payroll all
+           read the same figure, so nobody is ever told two different numbers.
+           1099s and W-9s included.</p>
+      </div>
+      <div class="card">
+        <h3>✅ Knowing it got done</h3>
+        <p>Checklists with photos, clock-in and out, and a customer signature —
+           on a texted link, with no app for the cleaner to install.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Your cleaners never install anything</h2>
+    <p class="lead" style="max-width:640px">
+      They get a text. They tap it. The job is there — address, entry notes,
+      what they earn, the checklist, and a Navigate button that opens their maps
+      app. Somebody hired on Tuesday can work a job on Wednesday.
+    </p>
+    <p style="color:var(--softer);margin-top:14px;max-width:640px">
+      Every competitor makes a cleaner download an app, create an account and
+      remember a password. Then pays for the support calls when she can't log in.
+    </p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap" style="text-align:center;max-width:620px">
+    <h2>Start free. Really free.</h2>
+    <p style="color:var(--muted)">
+      Two cleaners, twenty jobs a month, and the whole job flow — booking to
+      checklist to getting paid. No card, no trial clock.
+    </p>
+    <div style="margin-top:22px">
+      {% if signups_open %}
+        <a class="btn" href="/signup">Create your account</a>
+      {% else %}
+        <a class="btn ghost" href="{{ url_for('marketing.pricing') }}">See what's included</a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% endblock %}

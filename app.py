@@ -109,6 +109,13 @@ def create_app():
     app.register_blueprint(signup_bp)
     from blueprints.billing_routes import billing_bp
     app.register_blueprint(billing_bp)
+    # The product's own public pages. They appear on the product domain
+    # and nowhere else -- never over a customer's CRM, never on the
+    # single-business instance.
+    from blueprints.marketing import marketing_bp
+    import blueprints.marketing as _marketing
+    app.register_blueprint(marketing_bp)
+    _marketing.install(app)
     # Let entitlements read the plan from the control plane rather than
     # from the company's own settings, so a business cannot change what
     # it is paying for by editing its own records.
@@ -168,6 +175,12 @@ def create_app():
         except Exception:
             # A broken menu must never take a working page down with it.
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [], 'NAV_ACTIVE_TAB': None}
+
+    @app.context_processor
+    def inject_product():
+        import product
+        return {'PRODUCT': product.name(), 'TAGLINE': product.tagline(),
+                'SUPPORT_EMAIL': product.support_email()}
 
     # How far a brand-new business has got towards its first real job. None
     # once they are up and running, so the banner disappears by itself rather

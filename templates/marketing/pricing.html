@@ -1,0 +1,65 @@
+{% extends "marketing/_shell.html" %}
+{% block title %}Pricing — {{ PRODUCT }}{% endblock %}
+{% block body %}
+<section>
+  <div class="wrap">
+    <h1 style="font-size:2.1rem">Pricing</h1>
+    <p class="lead" style="max-width:620px">
+      The free plan runs a real business. It stops being enough at the point
+      you hire a third cleaner — which is exactly when the rest of this starts
+      being worth paying for.
+    </p>
+
+    {# Rendered from the same table the software enforces. A pricing page kept
+       separately drifts, and it always drifts the same way: it promises
+       something the product then refuses to do, and the customer finds out
+       after paying. #}
+    <div class="grid" style="margin-top:36px">
+      {% for key in ['solo', 'pro', 'scale'] %}
+        {% set p = plans[key] %}
+        <div class="card" style="{{ 'border:2px solid var(--gold)' if key == 'pro' }}">
+          {% if key == 'pro' %}
+            <div style="font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;
+                        color:var(--gold-deep);font-weight:700">Most businesses</div>
+          {% endif %}
+          <h3 style="font-size:1.2rem;margin-top:4px">{{ p.label }}</h3>
+          <div style="font-size:1.9rem;font-weight:800;letter-spacing:-.02em">
+            {{ 'Free' if p.price == 0 else '$%d' % p.price }}
+            {% if p.price %}<span style="font-size:.95rem;font-weight:500;color:var(--softer)">/month</span>{% endif %}
+          </div>
+          <p style="margin:8px 0 14px">{{ p.blurb }}</p>
+          <ul style="list-style:none;font-size:.93rem;color:var(--muted)">
+            <li style="padding:4px 0">
+              {{ p.limits.field_workers or 'Unlimited' }} cleaner{{ '' if p.limits.field_workers == 1 else 's' }}</li>
+            <li style="padding:4px 0">
+              {{ p.limits.jobs_per_month or 'Unlimited' }} jobs a month</li>
+            <li style="padding:4px 0">
+              {{ 'Texting included' if p.limits.sms_per_month else 'Email only — no texting' }}</li>
+            {% if key != 'solo' %}
+              <li style="padding:4px 0">Per-job pay, payroll, 1099s</li>
+              <li style="padding:4px 0">Hiring pipeline &amp; interviews</li>
+              <li style="padding:4px 0">SOP library, automations, reporting</li>
+            {% endif %}
+            {% if key == 'scale' %}
+              <li style="padding:4px 0">Commercial accounts &amp; quotes</li>
+              <li style="padding:4px 0">Lead finder, second brand</li>
+            {% endif %}
+          </ul>
+          {% if signups_open %}
+            <a class="btn {{ 'ghost' if key != 'pro' }}" style="margin-top:16px" href="/signup">
+              {{ 'Start free' if key == 'solo' else 'Start free, upgrade later' }}</a>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div style="margin-top:40px;max-width:640px;color:var(--muted)">
+      <h2 style="font-size:1.15rem">Changing plan never costs you anything</h2>
+      <p>Moving down means you can't add more of something — never that anything
+         disappears. Every customer, job and record stays exactly where it is,
+         whatever you're paying. If a card fails you drop to the free plan and
+         keep everything until you fix it.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

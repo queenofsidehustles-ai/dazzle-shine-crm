@@ -1,0 +1,76 @@
+{# The product's own pages. Deliberately does not extend base_admin.html: that
+   template is a business's CRM, carries a business's branding, and assumes
+   somebody is signed in. Nobody here is. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}{{ PRODUCT }} — software for cleaning companies{% endblock %}</title>
+  <meta name="description" content="{{ TAGLINE }}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root { --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,.12);
+            --ink:#1f1333; --muted:#5f5878; --softer:#9a95ad; --line:#e4dfef;
+            --bg:#faf9fc; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:Inter,-apple-system,sans-serif; color:var(--ink);
+           background:#fff; line-height:1.6; }
+    .wrap { max-width:960px; margin:0 auto; padding:0 22px; }
+    header { border-bottom:1px solid var(--line); padding:18px 0; }
+    header .wrap { display:flex; align-items:center; gap:20px; }
+    .logo { font-weight:800; font-size:1.3rem; letter-spacing:-.02em; text-decoration:none; color:var(--ink); }
+    .logo span { color:var(--gold-deep); }
+    nav { margin-left:auto; display:flex; gap:20px; align-items:center; }
+    nav a { color:var(--muted); text-decoration:none; font-weight:500; font-size:.94rem; }
+    nav a:hover { color:var(--ink); }
+    .btn { display:inline-block; background:var(--gold); color:#1a1225; padding:11px 22px;
+           border-radius:999px; text-decoration:none; font-weight:700; font-size:.95rem; }
+    .btn:hover { background:var(--gold-deep); }
+    .btn.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+    h1 { font-size:2.6rem; line-height:1.15; letter-spacing:-.03em; font-weight:800; }
+    h2 { font-size:1.6rem; letter-spacing:-.02em; margin-bottom:10px; }
+    .lead { font-size:1.15rem; color:var(--muted); margin-top:16px; }
+    section { padding:64px 0; }
+    section.alt { background:var(--bg); border-top:1px solid var(--line);
+                  border-bottom:1px solid var(--line); }
+    .grid { display:grid; gap:22px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); margin-top:34px; }
+    .card { border:1px solid var(--line); border-radius:14px; padding:22px; background:#fff; }
+    .card h3 { font-size:1.05rem; margin-bottom:6px; }
+    .card p { color:var(--muted); font-size:.95rem; }
+    footer { border-top:1px solid var(--line); padding:34px 0; color:var(--softer); font-size:.88rem; }
+    footer a { color:var(--muted); text-decoration:none; }
+    .say { color:var(--softer); font-size:.9rem; font-weight:500; }
+    @media (max-width:640px){ h1{font-size:2rem} nav a:not(.btn){display:none} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <a class="logo" href="/">{{ PRODUCT }}<span>.</span></a>
+      {# The name is unfamiliar on purpose. Saying how it sounds once, here,
+         beats leaving every visitor to guess -- and the meaning is the story. #}
+      <span class="say">ah-CHEH · “good morning”</span>
+      <nav>
+        <a href="{{ url_for('marketing.pricing') }}">Pricing</a>
+        <a href="/login">Sign in</a>
+        {% if signups_open %}<a class="btn" href="/signup">Start free</a>{% endif %}
+      </nav>
+    </div>
+  </header>
+
+  {% block body %}{% endblock %}
+
+  <footer>
+    <div class="wrap">
+      <strong>{{ PRODUCT }}</strong> — {{ TAGLINE }}<br />
+      <span style="display:inline-block;margin-top:8px">
+        <a href="{{ url_for('marketing.pricing') }}">Pricing</a> ·
+        <a href="/login">Sign in</a>
+        {% if SUPPORT_EMAIL %} · <a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>{% endif %}
+      </span>
+    </div>
+  </footer>
+</body>
+</html>
