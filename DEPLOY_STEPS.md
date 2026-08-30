@@ -38,29 +38,56 @@ you. It is not the Stripe keys a cleaning company enters to charge its own
 customers. Different accounts, different money. Do not mix them up.
 
 1. Go to **dashboard.stripe.com** and sign in.
-2. Top right, find the toggle that says **Test mode**. **Turn it ON.**
-   Everything in this step is pretend money until we say otherwise.
-3. Left sidebar → **Product catalogue** (older accounts say **Products**).
-4. Click **+ Add product**.
-5. Name: `Pro`
-6. Price: `79.00`, currency **USD**.
-7. Under it, choose **Recurring**, and set the billing period to **Monthly**.
-8. Click **Add product** to save.
-9. Do steps 4–8 again, but name it `Scale` and price it `149.00`.
+
+2. **Check which account you are in.** Look at the **top left**. It shows a
+   business name. It must be the one that owns Akye — **Yaa Mansa LLC** — and
+   not any other business of yours.
+
+   ⚠️ This matters more than anything else in this step. Subscription income
+   has to land in the company named on your terms of service. Building the
+   products in the wrong account tangles two businesses' money and tax
+   reporting together, and untangling it later means refunding and
+   re-subscribing every customer.
+
+   Click the business name to see your other accounts and switch. If there is
+   no account for Yaa Mansa LLC, you need to create one before going further —
+   tell me and I will walk you through it.
+
+3. **Get into test mode.** Stripe renamed this and where it lives depends on
+   how old your account is:
+
+   - **Newer accounts:** there is no "Test mode" switch. It is called a
+     **Sandbox**. Click the business name at the top left; below the list of
+     accounts there is a **Sandboxes** section. Open one, or create one.
+   - **Older accounts:** a **Test mode** toggle sits in the top right.
+
+   Either way you are in the right place when the screen carries an obvious
+   orange or yellow marking saying test or sandbox. Nothing you do there
+   involves real money.
+
+4. Left sidebar → **Product catalogue** (older accounts say **Products**).
+5. Click **+ Add product**.
+6. Name: `Pro`
+7. Price: `79.00`, currency **USD**.
+8. Under it, choose **Recurring**, and set the billing period to **Monthly**.
+9. Click **Add product** to save.
+10. Do steps 5–9 again, but name it `Scale` and price it `149.00`.
 
 Now collect three things. Keep them in a note on your computer — not in a
 message to me.
 
-10. Open the **Pro** product. Under **Pricing** there is a row with the price.
+11. Open the **Pro** product. Under **Pricing** there is a row with the price.
     On the right of that row is an ID starting with **`price_`**. Copy it.
     ⚠️ It is **not** the one starting `prod_`. That is the product ID and it
     will not work.
-11. Do the same for **Scale**.
-12. Left sidebar → **Developers** → **API keys**. Find **Secret key**. Click
+12. Do the same for **Scale**.
+13. Left sidebar → **Developers** → **API keys**. Find **Secret key**. Click
     **Reveal test key**. Copy it. It starts `sk_test_`.
 
-**✅ Done when:** you have two IDs starting `price_` and one key starting
-`sk_test_`.
+**✅ Done when:** you are in the Yaa Mansa LLC account, in test mode, and you
+have two IDs starting `price_` and one key starting `sk_test_`.
+
+⚠️ If your key starts `sk_live_` you are not in test mode. Go back to point 3.
 
 ---
 
