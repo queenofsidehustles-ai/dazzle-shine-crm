@@ -39,19 +39,21 @@ customers. Different accounts, different money. Do not mix them up.
 
 1. Go to **dashboard.stripe.com** and sign in.
 
-2. **Check which account you are in.** Look at the **top left**. It shows a
-   business name. It must be the one that owns Akye — **Yaa Mansa LLC** — and
-   not any other business of yours.
+2. **Check the account belongs to Yaa Mansa LLC.** The name at the top left
+   may be a trading name rather than the company — Kids Party Profit System is
+   a DBA of Yaa Mansa LLC, and that is fine. What matters is the legal entity
+   underneath, because that is the company named on the terms of service.
 
-   ⚠️ This matters more than anything else in this step. Subscription income
-   has to land in the company named on your terms of service. Building the
-   products in the wrong account tangles two businesses' money and tax
-   reporting together, and untangling it later means refunding and
-   re-subscribing every customer.
+   To be sure: **Settings** (the gear, top right) → **Business** → check the
+   registered business name.
 
-   Click the business name to see your other accounts and switch. If there is
-   no account for Yaa Mansa LLC, you need to create one before going further —
-   tell me and I will walk you through it.
+   ⚠️ **Before going live, check the statement descriptor** — Settings →
+   Business → Public details. That short line is what appears on a customer's
+   card statement. If it says the name of a different DBA, a cleaning company
+   owner will see a charge they do not recognise and dispute it. Stripe can
+   set a different descriptor per subscription, so this does not need a
+   separate account. It does not matter in test mode; it matters the day real
+   cards are charged.
 
 3. **Get into test mode.** Stripe renamed this and where it lives depends on
    how old your account is:
@@ -59,7 +61,12 @@ customers. Different accounts, different money. Do not mix them up.
    - **Newer accounts:** there is no "Test mode" switch. It is called a
      **Sandbox**. Click the business name at the top left; below the list of
      accounts there is a **Sandboxes** section. Open one, or create one.
+   - **If that section is not there:** click **Developers** at the bottom left.
+     The sandbox controls often live in that panel.
    - **Older accounts:** a **Test mode** toggle sits in the top right.
+   - **Last resort:** type `dashboard.stripe.com/test/products` into the
+     address bar. On older accounts the `/test/` puts you straight into test
+     mode.
 
    Either way you are in the right place when the screen carries an obvious
    orange or yellow marking saying test or sandbox. Nothing you do there
