@@ -7,8 +7,26 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#16213a" />
-  <title>{% block title %}{{ PRODUCT }} — software for cleaning companies{% endblock %}</title>
-  <meta name="description" content="{{ TAGLINE }}" />
+  <title>{% block title %}Cleaning Business Software for Hiring, Pay &amp; Proof | {{ PRODUCT }}{% endblock %}</title>
+  <meta name="description" content="{% block description %}{{ PRODUCT }} is cleaning business software that hires your cleaners, pays them per job, and proves the work got done. Free booking page on every plan. Start free, no card.{% endblock %}" />
+
+  {# Search engines and link previews. Without these, sharing the address in a
+     Facebook group -- which is where cleaning company owners actually are --
+     showed a blank grey card with a bare URL. #}
+  <link rel="canonical" href="{% block canonical %}{{ PRODUCT_BASE }}/{% endblock %}" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="{{ PRODUCT }}" />
+  <meta property="og:title" content="{{ self.title() }}" />
+  <meta property="og:description" content="{{ self.description() }}" />
+  <meta property="og:url" content="{{ self.canonical() }}" />
+  <meta property="og:image" content="{{ PRODUCT_BASE }}{{ url_for('static', filename='shots/dashboard.png') }}" />
+  <meta property="og:image:alt" content="The {{ PRODUCT }} dashboard, showing which jobs tomorrow have nobody assigned to them" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{{ self.title() }}" />
+  <meta name="twitter:description" content="{{ self.description() }}" />
+  <meta name="twitter:image" content="{{ PRODUCT_BASE }}{{ url_for('static', filename='shots/dashboard.png') }}" />
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />

@@ -178,10 +178,19 @@ def create_app():
 
     @app.context_processor
     def inject_product():
-        import product
+        import product, branding
         return {'PRODUCT': product.name(), 'TAGLINE': product.tagline(),
                 'SUPPORT_EMAIL': product.support_email(),
                 'PRODUCT_DOMAIN': product.domain(),
+                # Absolute, because OpenGraph and canonical links are not
+                # allowed to be relative — a share card with a relative image
+                # URL simply shows nothing.
+                #
+                # crm_base() rather than product.base_url(): the product is
+                # served on www.akyehq.com, while BASE_DOMAIN is the bare
+                # akyehq.com that company subdomains hang off. An og:image on
+                # the bare domain would 404 for every crawler.
+                'PRODUCT_BASE': branding.crm_base().rstrip('/'),
                 'LEGAL_ENTITY': product.legal_entity(),
                 'LEGAL_ADDRESS': product.legal_address()}
 

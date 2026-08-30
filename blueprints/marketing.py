@@ -23,7 +23,8 @@ pricing page maintained separately drifts, and the direction it drifts is
 always the same: it promises something the product then refuses to do, and the
 customer finds out after paying.
 """
-from flask import Blueprint, render_template, redirect, url_for, abort, request
+from flask import (Blueprint, render_template, redirect, url_for, abort,
+                   request, make_response)
 
 import entitlements
 import product
@@ -149,4 +150,60 @@ def workspace():
     from blueprints.signup import signups_open
     return render_template('marketing/workspace.html', error=error, typed=typed,
                            signups_open=signups_open())
+
+
+@marketing_bp.route('/robots.txt')
+def robots():
+    """What a crawler may look at.
+
+    Only exists on the product's own domain. A cleaning company's CRM is not
+    something we want indexed -- every tenant host returns 404 here, and the
+    tenant pages a customer legitimately shares (a booking page, a quote) carry
+    their own rules.
+    """
+    _require_product_site()
+    base = _base()
+    body = '\n'.join([
+        'User-agent: *',
+        'Allow: /',
+        # Nothing behind a login, and nothing that is a single-use link.
+        'Disallow: /login',
+        'Disallow: /workspace',
+        'Disallow: /api/',
+        '',
+        f'Sitemap: {base}/sitemap.xml',
+        '',
+    ])
+    resp = make_response(body)
+    resp.headers['Content-Type'] = 'text/plain; charset=utf-8'
+    return resp
+
+
+@marketing_bp.route('/sitemap.xml')
+def sitemap():
+    """The pages worth indexing, which is only the public ones."""
+    _require_product_site()
+    base = _base()
+    pages = [
+        ('/', '1.0'),
+        (url_for('marketing.pricing'), '0.9'),
+        (url_for('marketing.terms'), '0.3'),
+        (url_for('marketing.privacy'), '0.3'),
+        (url_for('marketing.subprocessors'), '0.2'),
+    ]
+    urls = '\n'.join(
+        f'  <url><loc>{base}{path}</loc><priority>{pri}</priority></url>'
+        for path, pri in pages)
+    body = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            f'{urls}\n</urlset>\n')
+    resp = make_response(body)
+    resp.headers['Content-Type'] = 'application/xml; charset=utf-8'
+    return resp
+
+
+def _base():
+    """The address this site is actually served on, without a trailing slash."""
+    import branding
+    return branding.crm_base().rstrip('/')
 

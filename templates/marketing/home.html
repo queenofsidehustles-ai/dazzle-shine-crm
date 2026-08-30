@@ -47,6 +47,7 @@
   }
 
   .cta-row { margin-top:24px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .also { color:var(--muted); font-size:.95rem; margin-top:12px; max-width:520px; }
   .built { color:var(--softer); font-size:.88rem; margin-top:14px; max-width:460px; }
 
   /* ── The product shot ──────────────────────────────────────────────────
@@ -181,6 +182,30 @@
   .stat b { display:block; font-size:1.9rem; font-weight:800; letter-spacing:-.03em; color:var(--amber); }
   .stat span { color:rgba(255,255,255,.66); font-size:.92rem; }
 
+  /* ── Questions people actually ask ─────────────────────────────────────
+     Objection handling and long-tail search in the same block. Every one of
+     these is something a cleaning company owner has either typed into Google
+     or asked on a call. Real <details> elements, so they work without
+     JavaScript and a crawler reads the answers whether or not they are open. */
+  .faq { max-width:760px; margin:26px auto 0; display:grid; gap:10px; }
+  .faq details {
+    background:linear-gradient(180deg,#fff,#fbfcfe);
+    border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--lift-1); overflow:hidden;
+  }
+  .faq summary {
+    cursor:pointer; padding:16px 20px; font-weight:650; font-size:1rem;
+    list-style:none; display:flex; align-items:center; gap:12px;
+  }
+  .faq summary::-webkit-details-marker { display:none; }
+  .faq summary::after {
+    content:'+'; margin-left:auto; color:var(--gold-deep);
+    font-weight:700; font-size:1.2rem; line-height:1;
+  }
+  .faq details[open] summary::after { content:'−'; }
+  .faq details[open] summary { border-bottom:1px solid var(--line-soft); }
+  .faq .a { padding:14px 20px 18px; color:var(--muted); font-size:.96rem; line-height:1.65; }
+
   /* ── Closing call to action ────────────────────────────────────────── */
   .close-card {
     max-width:680px; margin:0 auto; text-align:center;
@@ -201,17 +226,106 @@
 </style>
 {% endblock %}
 
+{% block head_extra_2 %}{% endblock %}
 {% block body %}
+
+{# Structured data. Three things Google understands: what the product is, who
+   makes it, and the questions it answers. The FAQ block is what earns the
+   expandable answers under a search result, and it is generated from the same
+   plan table the software enforces rather than restated by hand. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "{{ PRODUCT }}",
+      "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "Field service management",
+      "operatingSystem": "Web",
+      "url": "{{ PRODUCT_BASE }}/",
+      "description": "Cleaning business software that hires your crew, pays them per job, and proves the work got done.",
+      "screenshot": "{{ PRODUCT_BASE }}{{ url_for('static', filename='shots/dashboard.png') }}",
+      "offers": [
+        {% for key, plan in plans.items() %}
+        {
+          "@type": "Offer",
+          "name": "{{ plan.label }}",
+          "price": "{{ plan.price }}",
+          "priceCurrency": "USD",
+          "category": "{{ 'Free' if plan.price == 0 else 'Subscription' }}"
+        }{{ "," if not loop.last }}
+        {% endfor %}
+      ],
+      "publisher": { "@id": "{{ PRODUCT_BASE }}/#org" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "{{ PRODUCT_BASE }}/#org",
+      "name": "{{ PRODUCT }}",
+      "url": "{{ PRODUCT_BASE }}/",
+      "logo": "{{ PRODUCT_BASE }}{{ url_for('static', filename='favicon.svg') }}"
+      {%- if LEGAL_ENTITY %},
+      "legalName": "{{ LEGAL_ENTITY }}"
+      {%- endif %}
+      {%- if SUPPORT_EMAIL %},
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "{{ SUPPORT_EMAIL }}",
+        "contactType": "customer support"
+      }
+      {%- endif %}
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {% for q, a in [
+          ('What does ' ~ PRODUCT ~ ' actually do?',
+           'It runs the operating side of a cleaning company: quoting and booking customers, scheduling jobs, assigning or broadcasting them to cleaners, working out what each cleaner is owed per job, keeping checklists and photos as proof, and tracking what you kept after pay and fees. Hiring is built in.'),
+          ('Do my cleaners need to download an app?',
+           'No. They get a text with a link. They tap it and the job is there, with the address, entry notes, what they earn, the checklist and a Navigate button. No account, no password, nothing to install.'),
+          ('Is there a free plan?',
+           'Yes, with no card. Two cleaners, twenty jobs a month, your own booking page, and the whole job flow from booking through to getting paid.'),
+          ('Does it handle contractor pay and 1099s?',
+           'It works out what each cleaner is owed per job, keeps a running yearly total, and collects W-9s during onboarding. It is a record-keeping tool, not a payroll provider, and it takes no view on whether somebody is a contractor or an employee.'),
+          ('Will it work for landscaping or pressure washing?',
+           'Probably. Anything where you send a person to an address, pay per job rather than per hour, and need proof it was done, fits the same shape.')
+        ] %}
+        {
+          "@type": "Question",
+          "name": {{ q | tojson }},
+          "acceptedAnswer": { "@type": "Answer", "text": {{ a | tojson }} }
+        }{{ "," if not loop.last }}
+        {% endfor %}
+      ]
+    }
+  ]
+}
+</script>
+
 
 <section class="hero">
   <div class="wrap">
     <div class="hero-copy">
       <span class="eyebrow"><span class="dot"></span> Built by someone who runs a cleaning company</span>
-      <h1>Every other tool puts your jobs on a calendar.</h1>
+      {# The headline says what this is before it says anything clever. A
+         stranger arriving from a search has about three seconds to learn the
+         category, and "every other tool puts your jobs on a calendar" is a
+         good second line and a terrible first one -- it assumes you already
+         know what kind of tool we are talking about. The contrarian line
+         still gets said, immediately underneath, where it now lands on
+         somebody who knows what they are reading. #}
+      <h1>Cleaning business software that hires your crew,
+          pays them per job, and proves the work got done.</h1>
       <p class="lead">
-        {{ PRODUCT }} helps you <strong>hire the cleaners</strong>, <strong>pay them
-        per job</strong>, and <strong>prove the work got done to your standard</strong>.
-        Scheduling is the easy part.
+        Every other tool puts your jobs on a calendar. <strong>Scheduling is the
+        easy part.</strong> {{ PRODUCT }} runs the parts that actually cost you
+        money — finding cleaners, paying them right, and knowing the job was
+        done to your standard.
+      </p>
+      <p class="also">
+        Made for house cleaning and maid services. Works for any team you send to
+        an address — landscaping, pressure washing, window cleaning, detailing.
       </p>
       <div class="cta-row">
         {% if signups_open %}
@@ -274,7 +388,7 @@
   <div class="wrap">
     <div class="split">
       <div>
-        <h2>Your cleaners never install anything</h2>
+        <h2>No app for your cleaners to download</h2>
         <p style="color:var(--muted);margin-top:12px">
           They get a text. They tap it. The job is there.
         </p>
@@ -306,7 +420,7 @@
              loading="lazy" />
       </div>
       <div>
-        <h2>See the hole before it becomes a phone call</h2>
+        <h2>Scheduling that shows you the gap before the customer does</h2>
         <p style="color:var(--muted);margin-top:12px">
           A job on Thursday with nobody on it is marked on the calendar and on your
           dashboard — not buried a click deep inside the day.
@@ -325,7 +439,7 @@
   <div class="wrap">
     <div class="split">
       <div>
-        <h2>Stop ringing round for cover</h2>
+        <h2>Send a job to the whole team and let them claim it</h2>
         <p style="color:var(--muted);margin-top:12px">
           Somebody calls out on Tuesday morning. Instead of working down your
           contacts, you send the job to the whole team and the first cleaner to
@@ -361,7 +475,7 @@
 
 <section class="alt">
   <div class="wrap">
-    <h2>The parts that should run themselves</h2>
+    <h2>Online booking, instant quotes and automatic reminders</h2>
     <p style="color:var(--muted)">A customer should be able to get a price at eleven at night without waking you up.</p>
     <div class="auto-grid">
       <div class="auto">
@@ -392,13 +506,84 @@
 
 <section class="dark">
   <div class="wrap">
-    <h2>What it actually keeps track of</h2>
+    <h2>Cleaner pay, 1099s and job profit, kept as you go</h2>
     <p class="sub">The parts a spreadsheet stops coping with somewhere around the third cleaner.</p>
     <div class="stats">
       <div class="stat"><b>Per job</b><span>Cleaner pay worked out per job, not per hour</span></div>
       <div class="stat"><b>1099</b><span>Contractor totals and W-9s, kept as you go</span></div>
       <div class="stat"><b>Photos</b><span>Proof the standard was met, on every visit</span></div>
       <div class="stat"><b>To the cent</b><span>What you kept on each job, after pay and fees</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>Questions cleaning company owners ask</h2>
+    <p style="color:var(--muted)">The ones that come up on nearly every call.</p>
+    <div class="faq">
+      <details open>
+        <summary>What does {{ PRODUCT }} actually do?</summary>
+        <div class="a">It runs the operating side of a cleaning company: quoting and
+          booking customers, scheduling jobs, assigning or broadcasting them to
+          cleaners, working out what each cleaner is owed per job, keeping
+          checklists and photos as proof the work was done, and tracking what you
+          kept on each job after pay and fees. Hiring is built in too —
+          applications, interviews, offers and onboarding.</div>
+      </details>
+      <details>
+        <summary>Do my cleaners need to download an app?</summary>
+        <div class="a">No. They get a text with a link. They tap it and the job is
+          there — the address, how to get in, what they earn, the checklist, and a
+          Navigate button that opens their own maps app. No account, no password,
+          nothing to install. Somebody you hire on Tuesday can work on Wednesday.</div>
+      </details>
+      <details>
+        <summary>How is this different from ZenMaid, Jobber or Housecall Pro?</summary>
+        <div class="a">Those are scheduling tools with pay bolted on. {{ PRODUCT }}
+          is built the other way round: the hiring pipeline, per-job cleaner pay and
+          proof of work are the product, and the calendar is the easy part that
+          everybody already does well. If your problem is finding cleaners and
+          working out what you owe them on a Friday, that is what this is for.</div>
+      </details>
+      <details>
+        <summary>Is there really a free plan?</summary>
+        <div class="a">Yes, and no card is needed. Two cleaners, twenty jobs a month,
+          your own booking page, and the whole job flow from booking through to
+          getting paid. Pro is ${{ plans['pro']['price'] }} a month
+          when you outgrow it.</div>
+      </details>
+      <details>
+        <summary>Do I get a website?</summary>
+        <div class="a">You get a booking page, which is the part of a website that
+          actually earns money — your name, your colours, your prices, and a form
+          that puts the job straight into your CRM. Put the link in your Facebook
+          bio or your Google listing. On Pro you can drop it into the website you
+          already have with one line of code.</div>
+      </details>
+      <details>
+        <summary>Does it handle contractor pay and 1099s?</summary>
+        <div class="a">It works out what each cleaner is owed per job, keeps a running
+          total for the year, and collects W-9s during onboarding. It is a
+          record-keeping tool, not a payroll provider — it does not pay anybody or
+          file anything with the IRS, and it takes no view on whether somebody is a
+          contractor or an employee. That decision is yours.</div>
+      </details>
+      <details>
+        <summary>I do landscaping, not cleaning. Will it work?</summary>
+        <div class="a">Probably. Anything where you send a person to an address, pay
+          them for the job rather than the hour, and need proof it was done, fits
+          the same shape. The wording says "cleaning" in places because that is
+          where it was built and tested. Try the free plan and tell us what does not
+          fit.</div>
+      </details>
+      <details>
+        <summary>What happens to my data if I leave?</summary>
+        <div class="a">It is yours. You can export your customers, jobs and pay
+          records, and ask for the account to be deleted. That is written into the
+          <a href="{{ url_for('marketing.terms') }}">terms</a>, not just promised
+          here.</div>
+      </details>
     </div>
   </div>
 </section>
