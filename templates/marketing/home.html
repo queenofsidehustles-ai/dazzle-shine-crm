@@ -8,7 +8,7 @@
      has a light source instead of a fill.                                */
   .hero {
     position:relative; overflow:hidden;
-    padding:76px 0 40px;
+    padding:52px 0 56px;
     background:
       radial-gradient(760px 420px at 12% -8%,  rgba(240,164,75,.16), transparent 62%),
       radial-gradient(900px 520px at 92% 4%,   rgba(59,111,181,.11), transparent 60%),
@@ -21,17 +21,24 @@
       linear-gradient(rgba(22,33,58,.045) 1px, transparent 1px),
       linear-gradient(90deg, rgba(22,33,58,.045) 1px, transparent 1px);
     background-size:64px 64px;
-    -webkit-mask-image:linear-gradient(180deg, rgba(0,0,0,.55), transparent 72%);
-            mask-image:linear-gradient(180deg, rgba(0,0,0,.55), transparent 72%);
+    -webkit-mask-image:linear-gradient(180deg, rgba(0,0,0,.5), transparent 76%);
+            mask-image:linear-gradient(180deg, rgba(0,0,0,.5), transparent 76%);
   }
-  .hero .wrap { position:relative; }
-  .hero-copy { max-width:720px; }
+  /* Words on the left, the software on the right. The headline was running
+     to about half the width and leaving the rest of the fold empty, which is
+     the most valuable space on the site. */
+  .hero .wrap {
+    position:relative;
+    display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);
+    gap:40px; align-items:center;
+  }
+  .hero-copy { max-width:560px; }
 
   .eyebrow {
     display:inline-flex; align-items:center; gap:8px;
     background:#fff; border:1px solid var(--amber-line);
-    color:var(--amber-deep); font-size:.8rem; font-weight:650;
-    padding:6px 14px; border-radius:999px; margin-bottom:22px;
+    color:var(--amber-deep); font-size:.78rem; font-weight:650;
+    padding:5px 13px; border-radius:999px; margin-bottom:16px;
     box-shadow:var(--lift-1);
   }
   .eyebrow .dot {
@@ -39,62 +46,63 @@
     box-shadow:0 0 0 3px rgba(240,164,75,.24);
   }
 
-  .cta-row { margin-top:30px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-  .built { color:var(--softer); font-size:.9rem; margin-top:16px; max-width:560px; }
+  .cta-row { margin-top:24px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .built { color:var(--softer); font-size:.88rem; margin-top:14px; max-width:460px; }
 
   /* ── The product shot ──────────────────────────────────────────────────
      A real screenshot in a browser frame, tilted very slightly and lifted
      off the page. Nothing here is a mockup: it is the software, with the
-     demo company's real numbers in it. That is the entire argument.      */
-  .shot-stage { margin-top:56px; perspective:1800px; }
-  /* The screenshot is a tall page. Showing the top of it and fading the rest
-     says "this carries on" -- letting the next section slice it in half says
-     the page is broken. */
+     demo company's real numbers in it. That is the entire argument.
+
+     It runs past the right edge of the column on purpose. A screenshot that
+     stops neatly inside its box looks like a picture of software; one that
+     carries off the edge looks like software.                            */
+  .shot-stage { position:relative; perspective:1600px; }
   .frame {
-    position:relative; border-radius:14px; overflow:hidden;
+    position:relative; border-radius:12px; overflow:hidden;
     background:#fff; border:1px solid var(--line);
     box-shadow:var(--lift-3);
-    transform:rotateX(2.4deg); transform-origin:50% 100%;
-    max-height:470px;
+    transform:perspective(1600px) rotateY(-7deg) rotateX(2deg) scale(1.06);
+    transform-origin:0% 50%;
+    max-height:430px;
   }
   .frame::after {
-    content:''; position:absolute; left:0; right:0; bottom:0; height:110px;
-    background:linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,.96));
+    content:''; position:absolute; left:0; right:0; bottom:0; height:90px;
+    background:linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,.97));
     pointer-events:none;
   }
   .chrome {
-    display:flex; align-items:center; gap:8px;
-    padding:11px 14px; background:linear-gradient(180deg,#fbfcfe,#f2f4f9);
+    display:flex; align-items:center; gap:7px;
+    padding:9px 12px; background:linear-gradient(180deg,#fbfcfe,#f2f4f9);
     border-bottom:1px solid var(--line);
   }
-  .chrome i { width:11px; height:11px; border-radius:50%; display:block; }
+  .chrome i { width:9px; height:9px; border-radius:50%; display:block; }
   .chrome .r{background:#ff5f57} .chrome .y{background:#febc2e} .chrome .g{background:#28c840}
   .chrome .bar {
-    flex:1; margin-left:10px; height:22px; border-radius:6px;
+    flex:1; margin-left:8px; height:19px; border-radius:5px;
     background:#fff; border:1px solid var(--line);
-    display:flex; align-items:center; padding:0 10px;
-    font-size:.7rem; color:var(--softer); font-weight:550;
+    display:flex; align-items:center; padding:0 9px;
+    font-size:.64rem; color:var(--softer); font-weight:550;
   }
   .frame img { display:block; width:100%; height:auto; }
 
-  /* The phone, overlapping the corner of the browser. The two screens in one
-     picture are the product: the office view and the cleaner's view. */
-  .shot-stage { position:relative; }
+  /* The phone, overlapping the bottom-left of the browser. The two screens
+     in one picture are the product: the office view and the cleaner's. */
   .phone {
-    position:absolute; right:6px; bottom:-18px; width:172px;
-    border-radius:26px; padding:7px; background:#0d1526;
-    box-shadow:var(--lift-3), 0 0 0 1px rgba(255,255,255,.06) inset;
-    transform:rotate(-3deg);
+    position:absolute; left:-26px; bottom:-24px; width:146px;
+    border-radius:22px; padding:6px; background:#0d1526;
+    box-shadow:var(--lift-3), inset 0 0 0 1px rgba(255,255,255,.07);
+    transform:rotate(-4deg);
   }
-  .phone img { display:block; width:100%; border-radius:20px; }
+  .phone img { display:block; width:100%; border-radius:17px; }
   .phone .notch {
-    position:absolute; top:13px; left:50%; transform:translateX(-50%);
-    width:52px; height:5px; border-radius:3px; background:rgba(255,255,255,.22);
+    position:absolute; top:11px; left:50%; transform:translateX(-50%);
+    width:44px; height:4px; border-radius:3px; background:rgba(255,255,255,.22);
   }
 
   /* ── Feature rows with a shot beside the words ─────────────────────── */
   .split {
-    display:grid; grid-template-columns:1fr 1fr; gap:56px; align-items:center;
+    display:grid; grid-template-columns:1fr 1fr; gap:44px; align-items:center;
   }
   .split .shot {
     border-radius:14px; overflow:hidden; border:1px solid var(--line);
@@ -102,7 +110,7 @@
   }
   .split .shot img { display:block; width:100%; height:auto; }
 
-  .points { list-style:none; margin-top:22px; display:grid; gap:14px; }
+  .points { list-style:none; margin-top:18px; display:grid; gap:11px; }
   .points li { display:flex; gap:12px; align-items:flex-start; color:var(--muted); font-size:.97rem; }
   .points .tick {
     flex:0 0 auto; width:22px; height:22px; border-radius:50%;
@@ -122,7 +130,7 @@
   }
   .dark h2 { color:#fff; }
   .dark .sub { color:rgba(255,255,255,.62); }
-  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:20px; margin-top:38px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-top:26px; }
   .stat {
     background:rgba(255,255,255,.055); border:1px solid rgba(255,255,255,.12);
     border-radius:14px; padding:22px;
@@ -136,11 +144,14 @@
     max-width:680px; margin:0 auto; text-align:center;
     background:linear-gradient(180deg,#fff,#fbfcfe);
     border:1px solid var(--line); border-radius:20px;
-    padding:48px 36px; box-shadow:var(--lift-2);
+    padding:40px 32px; box-shadow:var(--lift-2);
   }
 
-  @media (max-width:900px){
-    .split { grid-template-columns:1fr; gap:32px; }
+  @media (max-width:980px){
+    .hero .wrap { grid-template-columns:1fr; gap:34px; }
+    .hero-copy { max-width:none; }
+    .frame { transform:none; max-height:340px; }
+    .split { grid-template-columns:1fr; gap:28px; }
     .phone { display:none; }
     .hero::before { display:none; }
   }

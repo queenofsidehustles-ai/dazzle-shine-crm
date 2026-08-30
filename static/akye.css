@@ -243,8 +243,18 @@ a.stat-card:hover {
   transition: background var(--ease), border-color var(--ease),
               transform var(--ease), box-shadow var(--ease);
 }
-.btn-primary, button[type="submit"]:not([class]) { background: var(--amber); color: #fff; }
-.btn-primary:hover, button[type="submit"]:not([class]):hover { background: var(--amber-deep); color: #fff; }
+/* Lit from above: brighter along the top edge, deeper at the bottom, with a
+   hairline of white inside the top rim and a matching dark line at the base.
+   That is the difference between a physical control and a coloured box. */
+.btn-primary, button[type="submit"]:not([class]) {
+  background: linear-gradient(180deg, #f7bd76 0%, var(--amber) 46%, var(--amber-deep) 100%);
+  color: #fff; border-color: #cf8226;
+  text-shadow: 0 1px 1px rgba(133,80,10,.26);
+}
+.btn-primary:hover, button[type="submit"]:not([class]):hover {
+  background: linear-gradient(180deg, #f9c58a 0%, #f2ab5b 46%, #cf8226 100%);
+  color: #fff; border-color: #c07a22;
+}
 .btn-secondary, .btn.ghost {
   background: var(--surface); color: var(--ink); border-color: var(--line);
 }
@@ -456,16 +466,23 @@ a.money-cell:hover { background:var(--ground); }
 /* Buttons. `btn-gold` is the old name for the primary action and
    is kept as an alias so no template has to change. */
 .btn-gold, .btn-primary {
-  background:var(--amber); color:#fff; border:1px solid var(--amber);
-  font-weight:600;
+  background:linear-gradient(180deg, #f7bd76 0%, var(--amber) 46%, var(--amber-deep) 100%);
+  color:#fff; border:1px solid #cf8226; font-weight:600;
+  text-shadow:0 1px 1px rgba(133,80,10,.26);
 }
-.btn-gold:hover, .btn-primary:hover { background:var(--amber-deep); border-color:var(--amber-deep); }
+.btn-gold:hover, .btn-primary:hover {
+  background:linear-gradient(180deg, #f9c58a 0%, #f2ab5b 46%, #cf8226 100%);
+  border-color:#c07a22;
+}
 .btn-outline {
-  background:var(--surface); color:var(--ink); border:1px solid var(--line);
-  font-weight:550;
+  background:linear-gradient(180deg,#fff,#f8fafd); color:var(--ink);
+  border:1px solid var(--line); font-weight:550;
 }
 .btn-outline:hover { border-color:var(--softer); background:var(--ground); }
-.btn-dark { background:var(--ink); color:#fff; border:1px solid var(--ink); font-weight:600; }
+.btn-dark {
+  background:linear-gradient(180deg, var(--ink-2) 0%, var(--ink) 62%, #101a2e 100%);
+  color:#fff; border:1px solid #0f1829; font-weight:600;
+}
 .btn-dark:hover { background:var(--ink-2); border-color:var(--ink-2); }
 .btn-danger { background:var(--warn); color:#fff; border:1px solid var(--warn); font-weight:600; }
 .btn-danger:hover { filter:brightness(.92); }
@@ -750,3 +767,25 @@ thead th {
   }
   .card:hover, a.stat-card:hover, .attn-item:hover { transform: none !important; }
 }
+
+/* The inner rim on every raised button. Kept in one place so the primary,
+   the gold alias and a bare submit button cannot drift apart. */
+.btn-primary, .btn-gold, .btn-dark, button[type="submit"]:not([class]) {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.38),
+              inset 0 -1px 0 rgba(0,0,0,.14),
+              0 1px 2px rgba(158,97,17,.22),
+              0 5px 14px rgba(240,164,75,.24);
+}
+.btn-dark {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14),
+              0 1px 2px rgba(22,33,58,.20),
+              0 6px 16px rgba(22,33,58,.20);
+}
+.btn-outline {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(22,33,58,.05);
+}
+.btn-primary:active, .btn-gold:active, .btn-dark:active,
+button[type="submit"]:not([class]):active {
+  box-shadow: inset 0 2px 5px rgba(120,71,8,.26), 0 1px 2px rgba(158,97,17,.2);
+}
+.btn-dark:active { box-shadow: inset 0 2px 5px rgba(0,0,0,.34); }
