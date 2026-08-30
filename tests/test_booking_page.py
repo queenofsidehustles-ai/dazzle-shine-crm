@@ -249,7 +249,10 @@ for plan in ('free', 'pro', 'scale'):
     html = r.data.decode('utf8', 'replace')
     if plan == 'free':
         check('eb-locked' in html, 'and free sees why it is locked, not a blank space')
-        check('copyembed' not in html, 'with no copy button')
+        # The element, not the word. The copy helper is wired unconditionally
+        # in a script at the bottom of the page and returns early when the
+        # button is absent, so the name appears either way.
+        check('id="copyembed"' not in html, 'with no copy button to press')
     else:
         check('copyembed' in html, f'{plan} gets the snippet to copy')
 set_plan('free')

@@ -319,6 +319,7 @@ def business():
     embed_base = _b.crm_base().rstrip('/')
     current['_embed_snippet'] = f'<script src="{embed_base}/embed.js" async></script>'
     current['_embed_allowed'] = _ent.can('booking_widget')
+    current['_booking_url'] = f'{embed_base}/book'
     if not current.get('customer_terms'):
         import customer_terms as _ct
         current['customer_terms'] = _ct.DEFAULT_TERMS

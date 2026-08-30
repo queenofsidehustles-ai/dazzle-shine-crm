@@ -188,6 +188,20 @@ def book():
     # no footer, transparent behind it, and it reports its height to the parent
     # so the frame grows instead of scrolling inside itself.
     embed = request.args.get('embed') in ('1', 'true', 'yes')
+
+    # The first time anybody opens this page, remember it. That single fact is
+    # what tells the getting-started list the business has actually put the
+    # link somewhere, rather than being a step you dismiss by clicking it.
+    # One write in the lifetime of an account, not one per visit.
+    try:
+        from models import BusinessSetting
+        from extensions import db as _db
+        if not BusinessSetting.get('booking_page_seen'):
+            BusinessSetting.set('booking_page_seen', '1')
+            _db.session.commit()
+    except Exception:
+        pass                     # never let bookkeeping stop somebody booking
+
     return render_template(
         'public/book.html',
         embed=embed,

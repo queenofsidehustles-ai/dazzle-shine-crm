@@ -196,7 +196,29 @@ check(not stragglers,
       f'every page that renders to somebody loads the palette ({stragglers[:4]})')
 
 
-print('\n8. Tap targets on the phone pages are thumb-sized')
+print('\n8. Nothing is written outside a block, where Jinja discards it')
+# A child template may only contribute inside a {% block %}. Anything after the
+# last {% endblock %} is silently thrown away -- 6KB of styles and scripts for
+# the brand colour picker sat there and never once reached a browser. Nothing
+# errors, nothing logs, the page just renders unstyled and the buttons do
+# nothing.
+import re as _re
+orphaned = []
+for p in templates():
+    text = p.read_text(errors='replace')
+    if '{% extends' not in text:
+        continue
+    idx = text.rfind('{% endblock %}')
+    if idx == -1:
+        continue
+    tail = text[idx + len('{% endblock %}'):]
+    if _re.sub(r'\s+', '', tail):
+        orphaned.append(f'{p.relative_to(ROOT)} ({len(tail.strip())} bytes)')
+check(not orphaned,
+      f'no child template has content after its last endblock ({orphaned})')
+
+
+print('\n9. Tap targets on the phone pages are thumb-sized')
 # 48px is the accepted minimum for a finger. The cleaner is standing outside
 # holding a phone in one hand, which is the whole reason this page exists.
 day = (TEMPLATES / 'public' / 'my_day.html').read_text()

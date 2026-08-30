@@ -150,6 +150,11 @@ def journey():
          'title': 'Check your prices',
          'why': 'The CRM quotes from these. Until you have looked, it is quoting somebody else’s numbers.',
          'cta': 'Review prices', 'link': '/settings/pricing'},
+        {'key': 'booking_page', 'done': setting('booking_page_seen'),
+         'title': 'Share your booking page',
+         'why': 'Your own page, in your colours, quoting your prices. Put the link '
+                'in your Facebook bio and customers can book without ringing you.',
+         'cta': 'See your page', 'link': '/book'},
         {'key': 'team', 'done': has_staff,
          'title': 'Add a cleaner',
          'why': 'You need somebody to send a job to. Add yourself if you are still cleaning.',

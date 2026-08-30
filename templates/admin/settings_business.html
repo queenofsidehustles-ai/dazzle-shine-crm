@@ -140,14 +140,23 @@
     </div>
     {# Where the page they are colouring actually lives. Without this it is a
        setting with no visible effect, which is how settings get ignored. #}
+    {# The link itself, shown and copyable. A settings page that only says the
+       feature exists is a settings page nobody acts on. #}
     <div class="bookinglink">
-      <div>
-        <b>Your booking page</b>
-        <span>Customers pick a service, see your price and book. Send them the
-              link, or put it on your website.</span>
+      <div class="bl-top">
+        <div>
+          <b>Your booking page</b>
+          <span>Customers pick a service, see your price and book — it arrives
+                as a job. Put this link in your Facebook bio, your Google
+                listing, your email signature.</span>
+        </div>
+        <a href="{{ url_for('pricing_public.book') }}" target="_blank" rel="noopener"
+           class="btn btn-outline btn-sm">Open it →</a>
       </div>
-      <a href="{{ url_for('pricing_public.book') }}" target="_blank" rel="noopener"
-         class="btn btn-outline btn-sm">Open it →</a>
+      <div class="bl-url">
+        <code id="bookingurl">{{ current._booking_url }}</code>
+        <button type="button" class="btn btn-outline btn-sm" id="copybooking">Copy link</button>
+      </div>
     </div>
 
     {# Putting it on the website they already have. An iframe, so the form
@@ -333,7 +342,6 @@
     <button type="submit" class="btn btn-gold">Save Hiring Settings</button>
   </form>
 </div>
-{% endblock %}
 
 <style>
   .embedbox {
@@ -358,13 +366,20 @@
   .eb-locked p { color:var(--muted); font-size:var(--t-sm); margin-top:var(--s2); }
 
   .bookinglink {
-    display:flex; align-items:center; gap:var(--s4); flex-wrap:wrap;
     background:var(--amber-soft); border:1px solid var(--amber-line);
     border-radius:var(--r-sm); padding:var(--s4); margin-bottom:var(--s5);
   }
-  .bookinglink > div { flex:1; min-width:220px; }
+  .bl-top { display:flex; align-items:flex-start; gap:var(--s4); flex-wrap:wrap; }
+  .bl-top > div { flex:1; min-width:220px; }
   .bookinglink b { display:block; font-weight:650; }
   .bookinglink span { color:var(--muted); font-size:var(--t-sm); }
+  .bl-url { display:flex; gap:var(--s2); align-items:center; margin-top:var(--s3); }
+  .bl-url code {
+    flex:1; min-width:0; overflow-x:auto; white-space:nowrap;
+    background:var(--surface); border:1px solid var(--amber-line);
+    border-radius:var(--r-sm); padding:var(--s3);
+    font-family:ui-monospace,monospace; font-size:var(--t-sm); color:var(--ink);
+  }
 
   /* ── Brand colour picker ───────────────────────────────────────────────
      Two colours and a picture of the result. The third value — what colour
@@ -462,9 +477,9 @@
 </script>
 
 <script>
-(function () {
-  const btn = document.getElementById('copyembed');
-  const code = document.getElementById('embedsnippet');
+function wireCopy(btnId, codeId, label) {
+  const btn = document.getElementById(btnId);
+  const code = document.getElementById(codeId);
   if (!btn || !code) return;
   btn.addEventListener('click', async () => {
     try {
@@ -479,7 +494,11 @@
       sel.removeAllRanges(); sel.addRange(r);
       btn.textContent = 'Selected — press Cmd/Ctrl+C';
     }
-    setTimeout(() => { btn.textContent = 'Copy'; }, 2500);
+    setTimeout(() => { btn.textContent = label; }, 2500);
   });
-})();
+}
+wireCopy('copyembed', 'embedsnippet', 'Copy');
+wireCopy('copybooking', 'bookingurl', 'Copy link');
 </script>
+
+{% endblock %}

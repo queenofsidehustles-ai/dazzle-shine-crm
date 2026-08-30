@@ -55,13 +55,20 @@ with app.app_context():
 check(p['done'] == 0 and p['percent'] == 0, 'nothing done yet')
 check(p['activated'] is False, 'and not activated')
 check(p['next']['key'] == 'business', 'the first thing asked for is the business name')
-check(len([s for s in p['steps'] if not s['done']]) == 5, 'five steps in total')
+# Counted from the journey rather than typed in. Adding a step is a product
+# decision, not a regression, and this assertion existed to check that a fresh
+# account has nothing done -- not to freeze the number at five.
+with app.app_context():
+    _total = len(onboarding.journey())
+check(len([s for s in p['steps'] if not s['done']]) == _total,
+      f'all {_total} steps are outstanding on a brand-new account')
+check(_total >= 5, f'and the journey has not been quietly gutted ({_total} steps)')
 
 c = client()
 r = c.get('/settings/getting-started')
 check(r.status_code == 200, 'the getting-started page loads')
 check(b'Next' in r.data, 'and shows a single next action')
-check(b'0%' in r.data or b'of 5 done' in r.data, 'with progress on it')
+check(b'0%' in r.data or b'done' in r.data, 'with progress on it')
 
 print('\n2. The dashboard says the same thing, without being asked')
 r = c.get('/')
@@ -69,17 +76,24 @@ check(b'Getting started' in r.data, 'a new business sees it on the dashboard')
 check(b'Tell us about your business' in r.data, 'naming the next step')
 
 print('\n3. Each step done moves it along, in order')
-expected = ['business', 'pricing', 'team', 'client', 'job']
+# Read the order from the journey rather than restating it. What is being
+# checked is that finishing a step advances to the *next* one, not that the
+# list has a particular length -- adding a step is a product decision.
 with app.app_context():
+    expected = [s['key'] for s in onboarding.journey()]
     for i, key in enumerate(expected):
         p = onboarding.progress()
         check(p['next']['key'] == key,
-              f'step {i + 1} of 5 asks for {key!r}')
+              f'step {i + 1} of {len(expected)} asks for {key!r}')
         # Do that step the way a real owner would.
         if key == 'business':
             BusinessSetting.set('business_name', 'Sparkle Cleaning')
         elif key == 'pricing':
             BusinessSetting.set('pricing_reviewed', '1')
+        elif key == 'booking_page':
+            # Marked when somebody actually opens the page, not by clicking a
+            # button that says "done".
+            BusinessSetting.set('booking_page_seen', '1')
         elif key == 'team':
             db.session.add(Staff(name='Maria', is_active=True))
         elif key == 'client':
@@ -101,7 +115,12 @@ with app.app_context():
     p = onboarding.progress()
 check(p['activated'] is False, 'an unassigned job does not count as activated')
 check(p['next']['key'] == 'job', 'and the remaining step is still the job')
-check(p['done'] == 4 and p['percent'] == 80, 'four of five, 80%')
+with app.app_context():
+    _n = len(onboarding.journey())
+check(p['done'] == _n - 1,
+      f'every step but the last is done ({p["done"]} of {_n})')
+check(p['percent'] == round((_n - 1) / _n * 100),
+      f'and the percentage matches ({p["percent"]}%)')
 
 print('\n5. Assigning it is the moment it counts')
 with app.app_context():
