@@ -284,6 +284,24 @@ def business():
         for f in fields:
             if f in request.form:
                 BusinessSetting.set(f, request.form.get(f, ''))
+
+        # Colours are tidied and the readable text colour is worked out here as
+        # well as in the browser. The page computes it live so the owner can see
+        # what she is choosing; this recomputes it on the way in so a form
+        # posted with scripting off, or by hand, still cannot produce a booking
+        # page whose only button is unreadable.
+        import brands as _brands
+        for accent_key, text_key in (('brand_accent', 'brand_accent_text'),
+                                     ('commercial_accent', 'commercial_accent_text')):
+            if accent_key in request.form:
+                clean = _brands.normalise_hex(request.form.get(accent_key, ''))
+                BusinessSetting.set(accent_key, clean)
+                if clean:
+                    BusinessSetting.set(text_key, _brands.readable_on(clean))
+        for dark_key in ('brand_dark', 'commercial_dark'):
+            if dark_key in request.form:
+                BusinessSetting.set(dark_key,
+                                    _brands.normalise_hex(request.form.get(dark_key, '')))
         db.session.commit()
         # Typing the original business name back in is enough to trigger the
         # one-time restore of its commercial brand, palette and review link —

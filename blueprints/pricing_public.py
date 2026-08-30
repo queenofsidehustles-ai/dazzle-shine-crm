@@ -52,19 +52,75 @@ def pricing_data():
     return resp
 
 
+# What a customer is allowed to see. Everything else `calculate_job` returns
+# stays on the server.
+_CUSTOMER_FIELDS = (
+    'client_price', 'list_price', 'discount_amount', 'discount_pct',
+    'hours', 'service_label', 'extras_total', 'extras_list', 'beds', 'baths',
+)
+
+
 @pricing_public_bp.route('/api/calculate', methods=['POST'])
 def api_calculate():
-    """Calculate price+hours+earnings for a given job configuration."""
-    d = request.get_json() or {}
-    result = calculate_job(
-        service_type=d.get('service_type', 'standard'),
-        beds=d.get('beds', 1),
-        baths=d.get('baths', 1),
-        sqft=d.get('sqft'),
-        extras=d.get('extras', ''),
-        frequency=d.get('frequency', 'one_time'),
-    )
-    resp = make_response(jsonify(result))
+    """Price a job for somebody who is thinking about booking one.
+
+    This is public and answers to any origin, because it is what a business's
+    own website posts to. Two things follow from that.
+
+    First, it must not return what the cleaner is paid. `calculate_job` works
+    out `contractor_earnings` and `contractor_split_pct` in the same call, and
+    those were going straight back over an `Access-Control-Allow-Origin: *`
+    header -- so anybody who opened the network tab on a booking page could
+    read what that company pays its cleaners and the exact split it keeps.
+    Whitelisted rather than blacklisted, so a new field added to the pricing
+    engine is private until somebody decides otherwise.
+
+    Second, the field names have to be forgiving. The office page sends
+    `beds`, a form on somebody's website sends `bedrooms`, and neither should
+    be quietly priced as a one-bedroom.
+    """
+    d = request.get_json(silent=True) or request.form.to_dict() or {}
+
+    def num(*names, default=1):
+        """The first of these keys that was sent, as a whole number.
+
+        The pricing engine parses with `int(str(value))`, so handing it a
+        float turns 3 into the string "3.0" and raises -- which on a public
+        endpoint means a 500 where a price should be."""
+        for n in names:
+            raw = d.get(n)
+            if raw in (None, ''):
+                continue
+            try:
+                return int(float(raw))
+            except (TypeError, ValueError):
+                continue
+        return default
+
+    try:
+        result = calculate_job(
+            service_type=d.get('service_type', 'standard'),
+            beds=num('beds', 'bedrooms'),
+            baths=num('baths', 'bathrooms'),
+            sqft=d.get('sqft'),
+            extras=d.get('extras', ''),
+            frequency=d.get('frequency', 'one_time'),
+        )
+    except Exception:
+        # A customer typing something odd into a form on somebody's website
+        # must not get an error page where a price belongs. Say so plainly and
+        # let the booking page keep the last good figure on screen.
+        resp = make_response(jsonify({'ok': False,
+                                      'error': 'Could not price that combination.'}), 400)
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp
+    safe = {k: result[k] for k in _CUSTOMER_FIELDS if k in result}
+    # `total` and `price` are aliases for the one figure anybody actually wants.
+    # The admin quote page was already reading `d.price ?? d.total`, both of
+    # which were absent, so its price hint had quietly stopped appearing.
+    safe['total'] = safe['price'] = result.get('client_price')
+
+    resp = make_response(jsonify(safe))
     resp.headers['Access-Control-Allow-Origin'] = '*'
     return resp
 
@@ -111,3 +167,37 @@ def pay_chart():
         extras=extras,
         service_labels=SERVICE_LABELS,
     )
+
+@pricing_public_bp.route('/book')
+def book():
+    """The business's own booking page, on its own address, in its own colours.
+
+    Every company gets this on every plan, including the free one. It is the
+    same app and the same database, so it costs us nothing to run -- and the
+    setting-up it requires (services, prices, extras) is exactly the work that
+    makes the rest of the software useful. Charging for it would mean free
+    accounts never enter their prices and never see what the product does.
+
+    What IS paid is putting it on their own domain and taking our name off the
+    bottom, which is `booking_widget` in the plan table.
+    """
+    import branding, brands, entitlements
+    palette = brands.get_brand('primary')
+    accent = brands.normalise_hex(palette.get('accent'), '#2563eb')
+    return render_template(
+        'public/book.html',
+        biz=branding.biz_name(),
+        phone=branding.phone(),
+        city_line=branding.city_line(),
+        valid_baths=VALID_BATHS,
+        extras={name: get_extra_price(name) for name in EXTRAS},
+        frequency_labels=FREQUENCY_LABELS,
+        service_labels=SERVICE_LABELS,
+        deposit=get_deposit(),
+        brand_dark=brands.normalise_hex(palette.get('dark'), '#1f2937'),
+        brand_accent=accent,
+        brand_accent_text=brands.readable_on(accent),
+        # Our name comes off the page once they are paying for that.
+        show_badge=not entitlements.can('booking_widget'),
+    )
+

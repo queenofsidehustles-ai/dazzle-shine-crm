@@ -138,18 +138,58 @@
              placeholder="Professional Cleaning Proposal" />
       <span style="font-size:0.76rem;color:var(--softer)">The small line under your name at the top of quote emails.</span>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
-      <div class="form-group">
-        <label>Header Colour</label>
-        <input type="text" name="brand_dark" value="{{ current.brand_dark }}" placeholder="var(--info)" />
+    {# Where the page they are colouring actually lives. Without this it is a
+       setting with no visible effect, which is how settings get ignored. #}
+    <div class="bookinglink">
+      <div>
+        <b>Your booking page</b>
+        <span>Customers pick a service, see your price and book. Send them the
+              link, or put it on your website.</span>
       </div>
-      <div class="form-group">
-        <label>Accent Colour</label>
-        <input type="text" name="brand_accent" value="{{ current.brand_accent }}" placeholder="var(--info)" />
+      <a href="{{ url_for('pricing_public.book') }}" target="_blank" rel="noopener"
+         class="btn btn-outline btn-sm">Open it →</a>
+    </div>
+
+    {# Your colours, on the pages your customers see: the booking page, quotes,
+       receipts and review prompts. Two pickers rather than three boxes of hex,
+       because "text on accent" is not a decision anybody wants to make -- it is
+       computed from the accent so a pale colour never ends up with white text
+       on it. #}
+    {% set _dark = current.brand_dark or '#1f2937' %}
+    {% set _accent = current.brand_accent or '#2563eb' %}
+    <div class="brandpick">
+      <div class="bp-fields">
+        <div class="form-group">
+          <label>Header colour</label>
+          <div class="swatch-row">
+            <input type="color" id="pick_dark" value="{{ _dark }}" aria-label="Pick the header colour" />
+            <input type="text" name="brand_dark" id="hex_dark" value="{{ current.brand_dark }}"
+                   placeholder="#1f2937" spellcheck="false" />
+          </div>
+          <span class="hint">The band across the top of your booking page and emails.</span>
+        </div>
+        <div class="form-group">
+          <label>Button colour</label>
+          <div class="swatch-row">
+            <input type="color" id="pick_accent" value="{{ _accent }}" aria-label="Pick the button colour" />
+            <input type="text" name="brand_accent" id="hex_accent" value="{{ current.brand_accent }}"
+                   placeholder="#2563eb" spellcheck="false" />
+          </div>
+          <span class="hint">Buttons and prices. Pick the colour customers know you by.</span>
+        </div>
+        <input type="hidden" name="brand_accent_text" id="hex_accent_text"
+               value="{{ current.brand_accent_text or '#ffffff' }}" />
       </div>
-      <div class="form-group">
-        <label>Text On Accent</label>
-        <input type="text" name="brand_accent_text" value="{{ current.brand_accent_text }}" placeholder="#ffffff" />
+
+      {# Shown, not described. Nobody can picture a hex code. #}
+      <div class="bp-preview" aria-hidden="true">
+        <div class="bp-head" id="pv_head">{{ current.business_name or 'Your business' }}</div>
+        <div class="bp-body">
+          <div class="bp-line"></div>
+          <div class="bp-line short"></div>
+          <div class="bp-price" id="pv_price">$180.00</div>
+          <div class="bp-btn" id="pv_btn">Book this clean</div>
+        </div>
       </div>
     </div>
     <div class="form-group">
@@ -207,11 +247,11 @@
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
       <div class="form-group">
         <label>Header Colour</label>
-        <input type="text" name="commercial_dark" value="{{ current.commercial_dark }}" placeholder="var(--info)" />
+        <input type="text" name="commercial_dark" value="{{ current.commercial_dark }}" placeholder="#1f2937" />
       </div>
       <div class="form-group">
         <label>Accent Colour</label>
-        <input type="text" name="commercial_accent" value="{{ current.commercial_accent }}" placeholder="var(--info)" />
+        <input type="text" name="commercial_accent" value="{{ current.commercial_accent }}" placeholder="#2563eb" />
       </div>
       <div class="form-group">
         <label>Text On Accent</label>
@@ -265,3 +305,108 @@
   </form>
 </div>
 {% endblock %}
+
+<style>
+  .bookinglink {
+    display:flex; align-items:center; gap:var(--s4); flex-wrap:wrap;
+    background:var(--amber-soft); border:1px solid var(--amber-line);
+    border-radius:var(--r-sm); padding:var(--s4); margin-bottom:var(--s5);
+  }
+  .bookinglink > div { flex:1; min-width:220px; }
+  .bookinglink b { display:block; font-weight:650; }
+  .bookinglink span { color:var(--muted); font-size:var(--t-sm); }
+
+  /* ── Brand colour picker ───────────────────────────────────────────────
+     Two colours and a picture of the result. The third value — what colour
+     the text on a button should be — is worked out rather than asked for,
+     because it is the one somebody always gets wrong and the cost is a
+     booking page nobody can read. */
+  .brandpick { display:grid; grid-template-columns:1fr 260px; gap:var(--s6); align-items:start; }
+  .bp-fields { display:grid; gap:var(--s4); }
+  .swatch-row { display:flex; gap:var(--s2); align-items:center; }
+  .swatch-row input[type="color"] {
+    -webkit-appearance:none; appearance:none;
+    width:46px; height:42px; padding:0; cursor:pointer;
+    border:1px solid var(--line); border-radius:var(--r-sm); background:none;
+    flex:0 0 auto;
+  }
+  .swatch-row input[type="color"]::-webkit-color-swatch-wrapper { padding:3px; }
+  .swatch-row input[type="color"]::-webkit-color-swatch { border:0; border-radius:6px; }
+  .swatch-row input[type="text"] { flex:1; min-width:0; font-family:ui-monospace,monospace; }
+  .brandpick .hint { display:block; font-size:var(--t-xs); color:var(--softer); margin-top:var(--s1); }
+
+  .bp-preview {
+    border:1px solid var(--line); border-radius:var(--r);
+    overflow:hidden; box-shadow:var(--shadow); background:#fff;
+  }
+  .bp-head {
+    padding:var(--s4) var(--s4) var(--s5);
+    color:#fff; font-weight:700; font-size:var(--t-sm);
+    background:#1f2937;
+  }
+  .bp-body { padding:var(--s4); }
+  .bp-line { height:8px; border-radius:4px; background:var(--line); margin-bottom:var(--s2); }
+  .bp-line.short { width:62%; margin-bottom:var(--s4); }
+  .bp-price { font-size:var(--t-xl); font-weight:800; letter-spacing:-.02em; color:#2563eb; }
+  .bp-btn {
+    margin-top:var(--s4); text-align:center; padding:var(--s3);
+    border-radius:var(--r-pill); font-weight:650; font-size:var(--t-sm);
+    background:#2563eb; color:#fff;
+  }
+  @media (max-width:760px) { .brandpick { grid-template-columns:1fr; } }
+</style>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const pickD = $('pick_dark'), hexD = $('hex_dark');
+  const pickA = $('pick_accent'), hexA = $('hex_accent');
+  const outT  = $('hex_accent_text');
+  if (!pickA) return;
+
+  const norm = v => {
+    v = (v || '').trim();
+    if (!v) return null;
+    if (v[0] !== '#') v = '#' + v;
+    if (/^#[0-9a-f]{3}$/i.test(v)) v = '#' + v[1]+v[1] + v[2]+v[2] + v[3]+v[3];
+    return /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : null;
+  };
+
+  // Relative luminance, the WCAG way. A mid yellow and a mid blue are nothing
+  // alike to a human eye even when their hex values look similarly "medium",
+  // and this is what tells them apart.
+  const readable = hex => {
+    const c = [1, 3, 5].map(i => {
+      const v = parseInt(hex.substr(i, 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    const L = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    // Contrast against white vs against near-black; pick the better one.
+    return (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.05) ? '#ffffff' : '#111827';
+  };
+
+  function paint() {
+    const d = norm(hexD.value) || pickD.value;
+    const a = norm(hexA.value) || pickA.value;
+    const t = readable(a);
+    outT.value = t;
+    $('pv_head').style.background = d;
+    $('pv_head').style.color = readable(d);
+    $('pv_price').style.color = a;
+    $('pv_btn').style.background = a;
+    $('pv_btn').style.color = t;
+  }
+
+  const sync = (pick, hex) => {
+    pick.addEventListener('input', () => { hex.value = pick.value; paint(); });
+    hex.addEventListener('input', () => {
+      const n = norm(hex.value);
+      if (n) pick.value = n;
+      paint();
+    });
+  };
+  sync(pickD, hexD);
+  sync(pickA, hexA);
+  paint();
+})();
+</script>

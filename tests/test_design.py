@@ -118,22 +118,49 @@ for p in templates():
 check(not offenders, f'every page using tokens can resolve them ({offenders[:4]})')
 
 
-print('\n5. The old palette is gone from the pages that were converted')
-# Not an absolute rule -- a literal is legitimate in a meta tag, in an email
-# template that cannot load a stylesheet, and in rgba() with an alpha. This
-# counts what is left so a regression is visible rather than assumed.
-lit = collections.Counter()
+print('\n5. The old palette is gone, and new literals are accounted for')
+# A raw count was the wrong shape for this. Literals are not the problem --
+# OUR palette being retyped by hand is. Some hex is legitimate and always will
+# be: a meta tag the CSS engine never sees, the stops of a gradient, and above
+# all a *customer's* own brand colour, which is theirs and cannot be one of our
+# tokens by definition. So this names who is allowed how many, and why.
+ALLOWED = {
+    'admin/settings_business.html': (14, "the brand colour picker: a customer's "
+                                         "own colours and the preview swatches"),
+    'marketing/home.html':          (14, 'browser-chrome dots and gradient stops'),
+    'marketing/_shell.html':        (10, 'the lit button gradient stops'),
+    'admin/login_shell.html':        (2, 'theme-color meta tag'),
+    'admin/login.html':              (2, 'theme-color meta tag'),
+    'admin/signup.html':             (2, 'inherited shell'),
+    'marketing/workspace.html':      (2, 'inherited shell'),
+    'base_admin.html':               (2, 'theme-color meta tag'),
+    'public/checklist.html':         (2, 'signature pad fallback'),
+    'public/my_day.html':            (2, 'theme-color meta tag'),
+    'public/book.html':              (2, "fallback for a business that has set no colour"),
+    'interview/interview.html':      (2, 'its own :root aliases'),
+}
+OLD = {'#d3a84f', '#1f1333', '#9a95ad', '#5f5878', '#e4dfef', '#b98a33'}
+unexplained, over, still_old = [], [], {}
 for p in templates():
     if not loads_design_system(p):
         continue
-    for h in re.findall(r'#[0-9a-fA-F]{6}\b', p.read_text(errors='replace')):
-        lit[h.lower()] += 1
-OLD = {'#d3a84f', '#1f1333', '#9a95ad', '#5f5878', '#e4dfef', '#b98a33'}
-still = {h: n for h, n in lit.items() if h in OLD}
-check(not still, f'none of the six old signature colours remain ({still})')
-check(sum(lit.values()) < 40,
-      f'only {sum(lit.values())} colour literals left in converted pages '
-      f'(was 2,410 across the product)')
+    found = [h.lower() for h in re.findall(r'#[0-9a-fA-F]{6}\b',
+                                           p.read_text(errors='replace'))]
+    if not found:
+        continue
+    rel = str(p.relative_to(TEMPLATES))
+    for h in found:
+        if h in OLD:
+            still_old[rel] = h
+    if rel not in ALLOWED:
+        unexplained.append(f'{rel} ({len(found)})')
+    elif len(found) > ALLOWED[rel][0]:
+        over.append(f'{rel}: {len(found)} > {ALLOWED[rel][0]} allowed')
+
+check(not still_old, f'none of the six old signature colours remain ({still_old})')
+check(not unexplained,
+      f'no page grows hardcoded colours without a stated reason ({unexplained})')
+check(not over, f'and no listed page drifts past its allowance ({over})')
 
 
 print('\n6. The cleaner\'s phone pages are on the system')

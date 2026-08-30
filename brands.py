@@ -249,3 +249,37 @@ def email_shell(key, heading, inner_html, cta_text=None, cta_url=None, footer_no
     <p style="font-size:0.8rem;color:#9a95ad;margin:0">{foot}<br>{contact}</p>
   </div>
 </div>"""
+
+def normalise_hex(value, fallback=''):
+    """'2563EB', '#25f', ' #2563eb ' -> '#2563eb'. Anything else -> fallback."""
+    import re
+    v = (value or '').strip().lstrip('#').lower()
+    if re.fullmatch(r'[0-9a-f]{3}', v):
+        v = ''.join(ch * 2 for ch in v)
+    return f'#{v}' if re.fullmatch(r'[0-9a-f]{6}', v) else fallback
+
+
+def readable_on(background, fallback='#ffffff'):
+    """Black or white, whichever a person can actually read on that colour.
+
+    Asked as a third form field this was answered wrong often enough to matter:
+    a business picks a soft yellow for its buttons, leaves the text white, and
+    ships a booking page whose only button is invisible. Computed with the WCAG
+    relative-luminance formula rather than by eyeballing the hex, because a mid
+    yellow and a mid blue look nothing alike to an eye even when their numbers
+    look similar.
+    """
+    hexv = normalise_hex(background)
+    if not hexv:
+        return fallback
+
+    def channel(c):
+        c = int(c, 16) / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = channel(hexv[1:3]), channel(hexv[3:5]), channel(hexv[5:7])
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    on_white = 1.05 / (lum + 0.05)
+    on_black = (lum + 0.05) / 0.05
+    return '#ffffff' if on_white >= on_black else '#111827'
+
