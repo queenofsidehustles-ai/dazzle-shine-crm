@@ -196,6 +196,65 @@ check(r.status_code == 200,
       'a free account is not sent to the upgrade page for its own booking page')
 
 
+print('\n10. Putting it on the website they already have')
+# An iframe rather than a script that injects a form: the form posts to the
+# origin it was served from, so there is no CORS to get wrong and nothing on
+# the customer's own site can read what is typed into it.
+plain = c.get('/book', headers=HOST).data.decode('utf8', 'replace')
+emb = c.get('/book?embed=1', headers=HOST).data.decode('utf8', 'replace')
+
+
+def markup(html):
+    """The rendered body, without the scripts -- a string inside a JS literal
+    is not the same as a tag on the page, and confusing the two sent me
+    chasing a bug that was not there."""
+    body = html.split('<body>', 1)[1] if '<body>' in html else html
+    return body.split('<script>')[0]
+
+
+check('<div class="masthead">' in markup(plain), 'the standalone page has its header')
+check('<div class="masthead">' not in markup(emb),
+      'the embedded one does not — it sits inside somebody else\'s design')
+check('background:transparent' in emb, 'and paints no background of its own')
+check('/api/booking' in emb, 'but books through exactly the same form')
+
+js = c.get('/embed.js', headers=HOST)
+body = js.data.decode('utf8', 'replace')
+check(js.status_code == 200, f'/embed.js serves (HTTP {js.status_code})')
+check('javascript' in js.headers.get('Content-Type', ''), 'as javascript')
+check('/book?embed=1' in body, 'and points the frame at the embedded page')
+
+print('\n11. The frame only listens to itself')
+# A page receives messages from anywhere. Acting on them is the careful part:
+# without these two guards any site could resize the frame, or a hostile
+# embed elsewhere on the page could drive it.
+check('e.source !== f.contentWindow' in body,
+      'a message from any other window is ignored')
+check("e.data.akye !== 'height'" in body, 'as is a message that is not ours')
+check('h > 200 && h < 20000' in body, 'and an implausible height is refused')
+
+print('\n12. The snippet is a paid feature, and the page still loads without it')
+# The first version of this raised on the free plan, because the upgrade link
+# named a blueprint that does not exist. That did not break the embed box --
+# it broke the whole Business Settings page, for every free account.
+admin2 = app.test_client()
+with admin2.session_transaction() as sess:
+    sess['logged_in'] = True
+    sess['role'] = 'owner'
+for plan in ('free', 'pro', 'scale'):
+    set_plan(plan)
+    r = admin2.get('/settings/business')
+    check(r.status_code == 200,
+          f'Business Settings renders on the {plan} plan (HTTP {r.status_code})')
+    html = r.data.decode('utf8', 'replace')
+    if plan == 'free':
+        check('eb-locked' in html, 'and free sees why it is locked, not a blank space')
+        check('copyembed' not in html, 'with no copy button')
+    else:
+        check('copyembed' in html, f'{plan} gets the snippet to copy')
+set_plan('free')
+
+
 if failures:
     print(f'\n\n❌ {len(failures)} booking-page check(s) failed.\n')
     sys.exit(1)

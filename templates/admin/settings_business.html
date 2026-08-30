@@ -150,6 +150,35 @@
          class="btn btn-outline btn-sm">Open it →</a>
     </div>
 
+    {# Putting it on the website they already have. An iframe, so the form
+       posts to the same place it was served from -- nothing on their site can
+       read what a customer types into it. #}
+    <div class="embedbox">
+      <div class="eb-top">
+        <div>
+          <b>Put it on your own website</b>
+          <span>Paste this one line where you want the booking form to appear.
+                It sizes itself.</span>
+        </div>
+        {% if not current._embed_allowed %}
+        <a href="{{ url_for('billing.upgrade') }}" class="badge badge-warn">Pro</a>
+        {% endif %}
+      </div>
+      {% if current._embed_allowed %}
+      <div class="eb-code">
+        <code id="embedsnippet">{{ current._embed_snippet }}</code>
+        <button type="button" class="btn btn-outline btn-sm" id="copyembed">Copy</button>
+      </div>
+      {% else %}
+      <div class="eb-locked">
+        <code>{{ current._embed_snippet }}</code>
+        <p>On the free plan your booking page lives at its own address and
+           carries our name at the bottom. Pro puts it inside your own website
+           and takes our name off.</p>
+      </div>
+      {% endif %}
+    </div>
+
     {# Your colours, on the pages your customers see: the booking page, quotes,
        receipts and review prompts. Two pickers rather than three boxes of hex,
        because "text on accent" is not a decision anybody wants to make -- it is
@@ -307,6 +336,27 @@
 {% endblock %}
 
 <style>
+  .embedbox {
+    border:1px solid var(--line); border-radius:var(--r-sm);
+    padding:var(--s4); margin-bottom:var(--s5); background:var(--surface);
+  }
+  .eb-top { display:flex; gap:var(--s4); align-items:flex-start; }
+  .eb-top > div { flex:1; }
+  .eb-top b { display:block; font-weight:650; }
+  .eb-top span { color:var(--muted); font-size:var(--t-sm); }
+  .eb-code {
+    display:flex; gap:var(--s2); align-items:center; margin-top:var(--s3);
+  }
+  .eb-code code, .eb-locked code {
+    flex:1; min-width:0; display:block; overflow-x:auto; white-space:nowrap;
+    background:var(--ground); border:1px solid var(--line-soft);
+    border-radius:var(--r-sm); padding:var(--s3); font-size:var(--t-xs);
+    font-family:ui-monospace,monospace; color:var(--ink);
+  }
+  .eb-locked { margin-top:var(--s3); }
+  .eb-locked code { opacity:.45; }
+  .eb-locked p { color:var(--muted); font-size:var(--t-sm); margin-top:var(--s2); }
+
   .bookinglink {
     display:flex; align-items:center; gap:var(--s4); flex-wrap:wrap;
     background:var(--amber-soft); border:1px solid var(--amber-line);
@@ -408,5 +458,28 @@
   sync(pickD, hexD);
   sync(pickA, hexA);
   paint();
+})();
+</script>
+
+<script>
+(function () {
+  const btn = document.getElementById('copyembed');
+  const code = document.getElementById('embedsnippet');
+  if (!btn || !code) return;
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(code.textContent.trim());
+      btn.textContent = 'Copied';
+    } catch (e) {
+      // Clipboard access is refused often enough -- over plain http, or with
+      // the permission denied -- that failing silently would look broken.
+      const r = document.createRange();
+      r.selectNodeContents(code);
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(r);
+      btn.textContent = 'Selected — press Cmd/Ctrl+C';
+    }
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2500);
+  });
 })();
 </script>

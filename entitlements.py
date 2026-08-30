@@ -118,7 +118,7 @@ FEATURE_LABELS = {
     'job_economics': 'Job economics',
     'discounts': 'Discount codes',
     'card_payments': 'Card payments',
-    'booking_widget': 'Booking page on your own domain, without our name on it',
+    'booking_widget': 'Booking form on your own website, without our name on it',
     'templates': 'Email and text templates',
     'invoices': 'Invoicing',
     'team_logins': 'Extra office logins',

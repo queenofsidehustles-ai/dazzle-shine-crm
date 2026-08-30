@@ -312,6 +312,13 @@ def business():
         return redirect(url_for('settings.business'))
 
     current = {f: BusinessSetting.get(f) for f in fields}
+    # The snippet is built here rather than in the template so there is one
+    # copy of it, and so the plan check that decides whether to show it lives
+    # next to the thing it is gating.
+    import branding as _b, entitlements as _ent
+    embed_base = _b.crm_base().rstrip('/')
+    current['_embed_snippet'] = f'<script src="{embed_base}/embed.js" async></script>'
+    current['_embed_allowed'] = _ent.can('booking_widget')
     if not current.get('customer_terms'):
         import customer_terms as _ct
         current['customer_terms'] = _ct.DEFAULT_TERMS

@@ -184,8 +184,13 @@ def book():
     import branding, brands, entitlements
     palette = brands.get_brand('primary')
     accent = brands.normalise_hex(palette.get('accent'), '#2563eb')
+    # `?embed=1` is the same page inside somebody's own website: no masthead,
+    # no footer, transparent behind it, and it reports its height to the parent
+    # so the frame grows instead of scrolling inside itself.
+    embed = request.args.get('embed') in ('1', 'true', 'yes')
     return render_template(
         'public/book.html',
+        embed=embed,
         biz=branding.biz_name(),
         phone=branding.phone(),
         city_line=branding.city_line(),
@@ -200,4 +205,43 @@ def book():
         # Our name comes off the page once they are paying for that.
         show_badge=not entitlements.can('booking_widget'),
     )
+
+
+@pricing_public_bp.route('/embed.js')
+def embed_js():
+    """The one line a business pastes into its own website.
+
+    An iframe rather than a script that injects a form. The form posts to the
+    same origin it was served from, so there is no cross-origin request to
+    whitelist, no CORS header to get wrong, and nothing on the customer's site
+    can read what is typed into it. The only thing crossing the boundary is a
+    number: how tall the frame needs to be.
+    """
+    import branding
+    js = """(function () {
+  var s = document.currentScript;
+  var base = %s;
+  var box = document.createElement('div');
+  var f = document.createElement('iframe');
+  f.src = base + '/book?embed=1';
+  f.title = 'Book a clean';
+  f.loading = 'lazy';
+  f.style.cssText = 'width:100%%;border:0;display:block;min-height:620px';
+  f.setAttribute('scrolling', 'no');
+  box.appendChild(f);
+  (s && s.parentNode ? s.parentNode : document.body).insertBefore(box, s);
+  window.addEventListener('message', function (e) {
+    // Only resize for our own frame, and only for a plausible height. A page
+    // is free to receive messages from anywhere; acting on them is the part
+    // that has to be careful.
+    if (!e.data || e.data.akye !== 'height') return;
+    if (e.source !== f.contentWindow) return;
+    var h = parseInt(e.data.height, 10);
+    if (h > 200 && h < 20000) f.style.height = h + 'px';
+  });
+})();""" % (json.dumps(branding.crm_base().rstrip('/')),)
+    resp = make_response(js)
+    resp.headers['Content-Type'] = 'application/javascript; charset=utf-8'
+    resp.headers['Cache-Control'] = 'public, max-age=300'
+    return resp
 

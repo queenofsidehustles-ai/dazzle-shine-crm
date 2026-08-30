@@ -26,6 +26,15 @@
     }
     body { background:var(--ground); color:var(--ink); }
     .page { max-width:640px; margin:0 auto; padding:0 0 var(--s12); }
+{% if embed %}
+    /* Inside somebody else's page: no ground colour of our own, no sticky
+       price bar fighting their scroll, and no bottom gap. */
+    body { background:transparent; }
+    .page { padding-bottom:0; }
+    .card-stack { margin-top:0; padding-top:var(--s2); }
+    .panel { box-shadow:var(--shadow); }
+    .quote { position:static; border-radius:var(--r-lg); margin:var(--s4) var(--s4) var(--s2); }
+{% endif %}
 
     .masthead {
       background:var(--b-dark); color:#fff;
@@ -154,6 +163,7 @@
 <body>
 <div class="page">
 
+  {% if not embed %}
   <div class="masthead">
     <h1>{{ biz }}</h1>
     <p>
@@ -161,6 +171,7 @@
       {% if phone %}Or call <a class="tel" href="tel:{{ phone }}">{{ phone }}</a>.{% endif %}
     </p>
   </div>
+  {% endif %}
 
   <form id="bookform" class="card-stack" novalidate>
     <div class="panel">
@@ -277,13 +288,29 @@
   </div>
 
   <div class="foot">
-    {% if city_line %}{{ biz }} · {{ city_line }}{% else %}{{ biz }}{% endif %}
+    {% if not embed %}{% if city_line %}{{ biz }} · {{ city_line }}{% else %}{{ biz }}{% endif %}{% endif %}
     {% if show_badge %}<br />Booking powered by
       <a href="https://{{ PRODUCT_DOMAIN or 'akyehq.com' }}">{{ PRODUCT or 'Akye' }}</a>{% endif %}
   </div>
 </div>
 
 <script>
+{% if embed %}
+(function () {
+  // The only thing that crosses out of this frame is a number. Sent on load,
+  // on resize, and whenever the page changes shape -- picking a service adds
+  // rows, and submitting replaces the whole thing with a short thank-you.
+  const send = () => {
+    const h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+    parent.postMessage({ akye: 'height', height: h }, '*');
+  };
+  window.addEventListener('load', send);
+  window.addEventListener('resize', send);
+  if (window.ResizeObserver) new ResizeObserver(send).observe(document.body);
+  setTimeout(send, 300);
+})();
+{% endif %}
+
 (function () {
   const form   = document.getElementById('bookform');
   const totalEl= document.getElementById('total');
@@ -366,13 +393,22 @@
       const j = await res.json();
       if (!res.ok || j.ok === false) throw new Error(j.error || 'Something went wrong.');
       document.querySelector('.page').innerHTML =
-        '<div class="masthead"><h1>{{ biz }}</h1></div>' +
+        // Embedded, this sits inside somebody's own page and must not suddenly
+        // paint a header bar across it.
+        {% if not embed %}'<div class="masthead"><h1>{{ biz }}</h1></div>' +{% endif %}
         '<div class="done"><div class="tick">✓</div>' +
         '<h2>Thank you — we have your request.</h2>' +
         '<p>We will confirm your booking shortly' +
         (payload.preferred_date ? ' for ' + payload.preferred_date : '') +
         '. A confirmation is on its way to ' + payload.email + '.</p></div>';
       window.scrollTo(0, 0);
+      {% if embed %}
+      // The page just shrank from a form to two lines. Tell the frame.
+      setTimeout(function () {
+        parent.postMessage({ akye: 'height',
+          height: Math.ceil(document.documentElement.getBoundingClientRect().height) }, '*');
+      }, 50);
+      {% endif %}
     } catch (e) {
       errEl.innerHTML = '<div class="err">' + (e.message || 'Something went wrong.') +
                         ' Please try again, or call us.</div>';

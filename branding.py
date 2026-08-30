@@ -14,12 +14,27 @@ import os
 
 
 def crm_base():
-    """Absolute base URL of THIS deployment.
+    """Absolute base URL of THIS business — not of the deployment.
 
-    Every texted link — job offers, claim pages, My Day, availability, payment
-    pages — is built from this. Set CRM_BASE per deployment. Falls back to the
-    live request's own host, which is right in almost every case and means a
-    misconfigured instance still links to itself rather than to somebody else."""
+    Every texted link is built from this: job offers, claim pages, My Day,
+    availability, payment pages, and the booking form a company embeds in its
+    own website.
+
+    `CRM_BASE` used to win outright. On a single-business install that is
+    correct. On the hosted product it is one environment variable shared by
+    every company on the box, so it would have addressed every cleaner at every
+    company to `akyehq.com` — a host where their company does not exist. Every
+    claim link and every My Day link, for everybody, pointing at the wrong
+    place.
+
+    So when this request belongs to a company, that company's own address wins.
+    `CRM_BASE` is the answer only when there is no company in play, which is
+    exactly the single-business case it was written for.
+    """
+    company = _tenant_base()
+    if company:
+        return company
+
     configured = (os.environ.get('CRM_BASE') or '').strip().rstrip('/')
     if configured:
         return configured
@@ -27,6 +42,42 @@ def crm_base():
         from flask import request, has_request_context
         if has_request_context():
             return request.host_url.rstrip('/')
+    except Exception:
+        pass
+    return ''
+
+
+def _tenant_base():
+    """This company's own address, or '' if we are not inside one.
+
+    Inside a request the host is already right, so it is used as-is. Outside
+    one -- a nightly reminder, a scheduled follow-up -- there is no host to
+    read, so it is rebuilt from the schema name and the product domain. A text
+    sent by a background job has to reach the same place a text sent by a
+    click does.
+    """
+    try:
+        import tenancy
+        if not tenancy.is_tenant():
+            return ''
+    except Exception:
+        return ''
+
+    try:
+        from flask import request, has_request_context
+        if has_request_context():
+            return request.host_url.rstrip('/')
+    except Exception:
+        pass
+
+    try:
+        import product
+        schema = tenancy.current_schema() or ''
+        slug = schema[len(tenancy.SCHEMA_PREFIX):] if schema.startswith(
+            tenancy.SCHEMA_PREFIX) else ''
+        domain = product.domain()
+        if slug and domain:
+            return f'{product.scheme_for(domain)}://{slug}.{domain}'
     except Exception:
         pass
     return ''
