@@ -244,13 +244,22 @@ Every company gets its own address, like `acme.akyehq.com`. That needs a
 6. Add these two:
 
 ```
-Type    Name    Value
-CNAME   @       <the target Railway gave you>
-CNAME   *       <the same target>
+Type    Name                 Value
+CNAME   www                  <the www target Railway gave>
+TXT     _railway-verify.www  <the www verify string>
+CNAME   *                    <the WILDCARD target — a different one>
+CNAME   _acme-challenge      <…authorize.railwaydns.net>
+TXT     _railway-verify      <the wildcard verify string>
 ```
 
-Some registrars refuse a CNAME on `@`. If yours does, look for **ALIAS** or
-**ANAME** and use that for `@` instead. The `*` one is a normal CNAME either way.
+The underscores are real. Names are short — GoDaddy appends the domain itself,
+so `www`, not `www.akyehq.com`.
+
+The TXT values are **truncated on screen**. Copy them from Railway rather than
+typing what you can see, or verification silently never completes.
+
+⚠️ `www` usually already exists at GoDaddy, pointing at `@`. **Edit** that row
+rather than adding a second — two CNAMEs on one name is not allowed.
 
 7. Save, and wait. Usually a few minutes. Sometimes a few hours.
 
