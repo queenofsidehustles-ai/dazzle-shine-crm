@@ -5,13 +5,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Job Available — {{ biz }}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Inter,sans-serif;background:var(--ground);color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
     .card{background:#fff;border:1px solid var(--line);border-radius:16px;max-width:440px;width:100%;padding:30px 26px;box-shadow:0 8px 40px rgba(15,7,40,0.09)}
-    .script{font-family:Allura,cursive;font-size:1.8rem;color:var(--amber);display:block;text-align:center;line-height:1;margin-bottom:4px}
+    .script{font-size:1.15rem;font-weight:700;letter-spacing:-.02em;color:var(--ink);display:block;text-align:center;line-height:1;margin-bottom:4px}
     h1{font-size:1.3rem;text-align:center;margin:8px 0 16px}
     .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--info-soft);font-size:0.95rem}
     .row .k{color:var(--softer)}.row .v{font-weight:700;text-align:right}
@@ -41,7 +41,7 @@
       <div class="banner crew">👥 Big house — <b>{{ b.crew_size }} cleaners</b> on this one.
         {{ b.spots_left }} spot{{ 's' if b.spots_left != 1 }} left{% if b.crew_names %}, working with {{ b.crew_names | join(', ') }}{% endif %}.</div>
       {% endif %}
-      <div class="row"><span class="k">When</span><span class="v">{{ b.preferred_date or 'TBD' }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
+      <div class="row"><span class="k">When</span><span class="v">{{ when_label }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">Service</span><span class="v">{{ b.service_label }}{% if b.size_line() %} · {{ b.size_line() }}{% endif %}</span></div>
       <div class="row"><span class="k">Area</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
       <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'd earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
@@ -65,7 +65,7 @@
       <div class="banner crew" style="margin-top:10px">👥 Team job — {{ b.crew_size }} cleaners.
         {% if mates %}You're working with <b>{{ mates | join(', ') }}</b>.{% else %}Still filling the other spot{{ 's' if b.spots_left != 1 }} — we'll text you who joins.{% endif %}</div>
       {% endif %}
-      <div class="row" style="margin-top:10px"><span class="k">When</span><span class="v">{{ b.preferred_date }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
+      <div class="row" style="margin-top:10px"><span class="k">When</span><span class="v">{{ when_label }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">Client</span><span class="v">{{ b.name }}</span></div>
       <div class="row"><span class="k">Address</span><span class="v">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span></div>
       {{ nav.navigate(b.address, b.city, b.zip_code) }}

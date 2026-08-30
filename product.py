@@ -39,12 +39,23 @@ def domain():
     return (os.environ.get('BASE_DOMAIN') or '').strip()
 
 
+def scheme_for(host):
+    """http for a local host, https for a real one.
+
+    `startswith('localhost')` was wrong the moment the preview ran on
+    `akye.localhost:5055` -- the name is in the middle, not at the front, so
+    every local link came out as https and refused to connect."""
+    h = (host or '').lower()
+    local = ('localhost' in h or h.startswith('127.0.0.1')
+             or h.startswith('0.0.0.0') or h.endswith('.local'))
+    return 'http' if local else 'https'
+
+
 def base_url():
     d = domain()
     if not d:
         return ''
-    scheme = 'http' if d.startswith('localhost') else 'https'
-    return f'{scheme}://{d}'
+    return f'{scheme_for(d)}://{d}'
 
 
 DEFAULT_SUPPORT = 'support@akyehq.com'

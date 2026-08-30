@@ -120,6 +120,48 @@
     box-shadow:inset 0 0 0 1px rgba(47,158,107,.22);
   }
 
+  /* ── The broadcast section ─────────────────────────────────────────────
+     Three steps, connected by a line, with the real claim screen at the end.
+     This is the feature nobody else has and it needs to be shown, not told. */
+  .flow { display:grid; gap:14px; margin-top:24px; }
+  .step {
+    display:flex; gap:14px; align-items:flex-start;
+    background:linear-gradient(180deg,#fff,#fbfcfe);
+    border:1px solid var(--line); border-radius:14px; padding:16px 18px;
+    box-shadow:var(--lift-1);
+  }
+  .step .n {
+    flex:0 0 auto; width:26px; height:26px; border-radius:50%;
+    background:linear-gradient(180deg,#f7bd76,var(--amber) 50%,var(--gold-deep));
+    color:#fff; font-weight:800; font-size:.8rem;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 2px 6px rgba(240,164,75,.34);
+  }
+  .step b { display:block; font-size:.99rem; letter-spacing:-.01em; }
+  .step span { color:var(--muted); font-size:.92rem; }
+
+  .claim-shot {
+    max-width:250px; margin:0 auto;
+    border-radius:22px; padding:6px; background:#0d1526;
+    box-shadow:var(--lift-3), inset 0 0 0 1px rgba(255,255,255,.07);
+    transform:rotate(2deg);
+  }
+  .claim-shot img { display:block; width:100%; border-radius:17px; }
+
+  /* ── The automation section ───────────────────────────────────────────── */
+  .auto-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; margin-top:26px; }
+  .auto {
+    background:linear-gradient(180deg,#fff,#fbfcfe); border:1px solid var(--line);
+    border-radius:14px; padding:20px; box-shadow:var(--lift-1);
+  }
+  .auto .ico {
+    width:34px; height:34px; border-radius:10px; margin-bottom:12px;
+    background:var(--amber-soft); border:1px solid var(--amber-line);
+    display:flex; align-items:center; justify-content:center; font-size:1rem;
+  }
+  .auto b { display:block; font-size:1rem; margin-bottom:5px; letter-spacing:-.01em; }
+  .auto span { color:var(--muted); font-size:.92rem; }
+
   /* ── The numbers band, on dark ─────────────────────────────────────── */
   .dark {
     background:
@@ -274,6 +316,73 @@
           <li><span class="tick">✓</span> Send a job out to the whole team and let somebody claim it</li>
           <li><span class="tick">✓</span> Recurring work books itself forward</li>
         </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <h2>Stop ringing round for cover</h2>
+        <p style="color:var(--muted);margin-top:12px">
+          Somebody calls out on Tuesday morning. Instead of working down your
+          contacts, you send the job to the whole team and the first cleaner to
+          take it owns it.
+        </p>
+        <div class="flow">
+          <div class="step">
+            <span class="n">1</span>
+            <span><b>Send it out</b><span>One tap. Every available cleaner gets a text with the date, the area and what the job pays.</span></span>
+          </div>
+          <div class="step">
+            <span class="n">2</span>
+            <span><b>First to claim keeps it</b><span>No app, no login. They tap the text and take it. Anyone already double-booked is told before they can.</span></span>
+          </div>
+          <div class="step">
+            <span class="n">3</span>
+            <span><b>It is theirs</b><span>The address and entry notes unlock, the job lands on their day, and the pay is already agreed.</span></span>
+          </div>
+        </div>
+        <p style="color:var(--softer);margin-top:18px;font-size:.92rem">
+          The full address only appears once somebody has actually taken the
+          job — a broadcast is not a list of your customers' homes.
+        </p>
+      </div>
+      <div class="claim-shot">
+        <img src="{{ url_for('static', filename='shots/claim.png') }}"
+             alt="A job offered to the team on a cleaner's phone, showing what it pays and a Claim this job button"
+             loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>The parts that should run themselves</h2>
+    <p style="color:var(--muted)">A customer should be able to get a price at eleven at night without waking you up.</p>
+    <div class="auto-grid">
+      <div class="auto">
+        <div class="ico">💬</div>
+        <b>Quotes from your website</b>
+        <span>Your own prices, your own extras. Somebody fills in the form and gets a real number back — and the lead is already in your CRM.</span>
+      </div>
+      <div class="auto">
+        <div class="ico">📅</div>
+        <b>Booking without the phone call</b>
+        <span>They pick the service and the day. It arrives as a job waiting for you to confirm, not as a voicemail.</span>
+      </div>
+      <div class="auto">
+        <div class="ico">🔁</div>
+        <b>Recurring work books itself</b>
+        <span>Every two weeks, every month — the next visit is on the calendar without anybody re-entering it.</span>
+      </div>
+      <div class="auto">
+        <div class="ico">🔔</div>
+        <b>Reminders and follow-ups</b>
+        <span>Confirmations, day-before reminders, the review request afterwards. Sent whether or not you remembered.</span>
       </div>
     </div>
   </div>

@@ -23,7 +23,7 @@ pricing page maintained separately drifts, and the direction it drifts is
 always the same: it promises something the product then refuses to do, and the
 customer finds out after paying.
 """
-from flask import Blueprint, render_template, redirect, url_for, abort
+from flask import Blueprint, render_template, redirect, url_for, abort, request
 
 import entitlements
 import product
@@ -47,10 +47,22 @@ def install(app):
 
     @app.before_request
     def _front_door():
-        if request.path != '/' or request.method != 'GET':
+        if request.method != 'GET':
             return None
         if not product.is_product_site():
             return None                 # a real CRM lives here; leave it alone
+
+        # `/login` on the product domain used to render the single-business
+        # CRM sign-in: a form titled "Your Cleaning Company" saying no owner
+        # login exists, on a host where that is true and always will be. It is
+        # linked from the main navigation, so it was the second thing a
+        # prospect clicked. There is no CRM at akyehq.com -- every business is
+        # on its own address -- so the honest answer is to ask which one.
+        if request.path == '/login':
+            return redirect(url_for('marketing.workspace'))
+
+        if request.path != '/':
+            return None
         from flask import session
         if session.get('logged_in'):
             # Signed in on the product domain itself. There is no CRM here to
@@ -102,3 +114,39 @@ def pricing():
     return render_template('marketing/pricing.html',
                            plans=entitlements.PLANS,
                            signups_open=signups_open())
+
+
+@marketing_bp.route('/workspace', methods=['GET', 'POST'])
+def workspace():
+    """Send somebody to their own company's sign-in page.
+
+    Deliberately looks nothing up. Typing an address here and being told
+    "no such company" would let anybody enumerate our customer list one guess
+    at a time, and the list of which cleaning companies pay for which software
+    is exactly what a competitor would like. So this normalises what was typed
+    and redirects. A company that does not exist gets that host's own error,
+    which tells the visitor nothing they did not already type.
+    """
+    _require_product_site()
+    import re
+    error = None
+    typed = ''
+    if request.method == 'POST':
+        typed = (request.form.get('workspace') or '').strip().lower()
+        # Accept anything they might paste: a bare name, the full host, a URL.
+        typed = re.sub(r'^https?://', '', typed).split('/')[0]
+        base = (product.domain() or '').lower()
+        if base and typed.endswith('.' + base):
+            typed = typed[:-(len(base) + 1)]
+        slug = re.sub(r'[^a-z0-9-]', '', typed)
+        if not slug:
+            error = 'Please enter your company\'s address.'
+        elif not base:
+            error = 'This deployment has no company addresses configured.'
+        else:
+            scheme = product.scheme_for(base)
+            return redirect(f'{scheme}://{slug}.{base}/login')
+    from blueprints.signup import signups_open
+    return render_template('marketing/workspace.html', error=error, typed=typed,
+                           signups_open=signups_open())
+

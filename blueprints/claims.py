@@ -196,12 +196,30 @@ def _claim_state(booking, staff):
     return 'taken'
 
 
+def _friendly_date(iso):
+    """"Tomorrow", or "Monday 1 September". Nobody reads a job off an ISO date."""
+    from datetime import date as _date
+    if not iso:
+        return 'Date to be confirmed'
+    try:
+        d = _date.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return iso
+    delta = (d - _date.today()).days
+    if delta == 0:
+        return 'Today'
+    if delta == 1:
+        return 'Tomorrow'
+    return d.strftime('%A %-d %B')
+
+
 @claims_bp.route('/claim/<ctoken>/<stoken>')
 def claim_page(ctoken, stoken):
     booking = Booking.query.filter_by(claim_token=ctoken).first_or_404()
     staff = Staff.query.filter_by(agreement_token=stoken).first_or_404()
     state = _claim_state(booking, staff)
     return render_template('public/claim.html', b=booking, s=staff,
+                           when_label=_friendly_date(booking.preferred_date),
                            pay=_pay_for(booking, staff), state=state,
                            hours_each=booking.hours_each(), labor_rate=get_labor_rate(),
                            clash=clash_reason(staff, booking) if state == 'open' else None,
@@ -246,6 +264,7 @@ def claim_do(ctoken, stoken):
     reason = clash_reason(staff, booking)
     if reason:
         return render_template('public/claim.html', b=booking, s=staff,
+                               when_label=_friendly_date(booking.preferred_date),
                                pay=_pay_for(booking, staff),
                                hours_each=booking.hours_each(), labor_rate=get_labor_rate(),
                                state='clash', clash=reason, biz=_biz(),

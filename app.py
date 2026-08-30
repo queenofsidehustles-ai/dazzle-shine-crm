@@ -181,6 +181,7 @@ def create_app():
         import product
         return {'PRODUCT': product.name(), 'TAGLINE': product.tagline(),
                 'SUPPORT_EMAIL': product.support_email(),
+                'PRODUCT_DOMAIN': product.domain(),
                 'LEGAL_ENTITY': product.legal_entity(),
                 'LEGAL_ADDRESS': product.legal_address()}
 
