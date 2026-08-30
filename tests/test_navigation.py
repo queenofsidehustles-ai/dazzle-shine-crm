@@ -90,7 +90,13 @@ with app.app_context():
     tabs, _ = navigation.tabs_for('bookings.calendar', 'owner')
     check(tabs == [], 'Calendar has no tabs — one tab is just the title twice')
     tabs, _ = navigation.tabs_for('money.pnl', 'owner')
-    check(len(tabs) == 7, f'Money has its seven tabs (got {len(tabs)})')
+    # Counted from navigation.py rather than typed in. Adding a tab is a
+    # product decision; what this assertion is for is that the Money section
+    # renders every tab it declares, not that the number never moves.
+    _declared = next(len(item[4]) for heading, items in navigation.SECTIONS
+                     if heading == 'Money' for item in items)
+    check(len(tabs) == _declared,
+          f'Money renders all {_declared} tabs it declares (got {len(tabs)})')
 
     print('\n9. Every admin page still renders')
     c = app.test_client()

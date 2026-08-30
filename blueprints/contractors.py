@@ -1066,6 +1066,49 @@ def onboarding_start_date(token):
     return redirect(url_for('contractors.onboarding_hub', token=token))
 
 
+def _open_entry(booking_id, staff_id):
+    """This cleaner's running spell on this job, if they are clocked in."""
+    from models import TimeEntry
+    return (TimeEntry.query
+            .filter_by(booking_id=booking_id, staff_id=staff_id,
+                       clock_out_at=None)
+            .order_by(TimeEntry.id.desc()).first())
+
+
+@contractors_bp.route('/my-day/<token>/clock-in/<int:booking_id>', methods=['POST'])
+def clock_in(token, booking_id):
+    """Start the clock for the cleaner holding this link.
+
+    The token says who they are, which is why this lives on My Day rather than
+    on the checklist: a checklist belongs to the job and cannot tell one member
+    of a crew from another.
+    """
+    from models import TimeEntry
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    b = Booking.query.get_or_404(booking_id)
+
+    # Already running? Do nothing rather than open a second spell. Somebody
+    # double-tapping on a phone with a poor signal must not end up being paid
+    # twice for the same hour.
+    if not _open_entry(b.id, s.id):
+        db.session.add(TimeEntry(booking_id=b.id, staff_id=s.id,
+                                 clock_in_at=datetime.utcnow()))
+        db.session.commit()
+    return redirect(url_for('contractors.my_day', token=token))
+
+
+@contractors_bp.route('/my-day/<token>/clock-out/<int:booking_id>', methods=['POST'])
+def clock_out(token, booking_id):
+    """Stop the clock. Closes only the spell that is actually open."""
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    b = Booking.query.get_or_404(booking_id)
+    entry = _open_entry(b.id, s.id)
+    if entry:
+        entry.clock_out_at = datetime.utcnow()
+        db.session.commit()
+    return redirect(url_for('contractors.my_day', token=token))
+
+
 @contractors_bp.route('/my-day/<token>')
 def my_day(token):
     """A cleaner's personal daily job board — today + next 7 days, with navigate,
@@ -1100,9 +1143,20 @@ def my_day(token):
             labels[iso] = 'Tomorrow'
         else:
             labels[iso] = d.strftime('%A %-d %B')
+    # Per job: is this cleaner's clock running, and what have they logged so
+    # far. Worked out here rather than in the template so the page stays a
+    # page and does not start querying.
+    clocked = {}
+    for b in jobs:
+        clocked[b.id] = {
+            'open': _open_entry(b.id, s.id) is not None,
+            'hours': s.hours_on(b),
+        }
+
     biz = branding.biz_name()
     return render_template('public/my_day.html', s=s, days=days,
-                           day_labels=labels, today=today.isoformat(), biz=biz)
+                           day_labels=labels, today=today.isoformat(),
+                           clocked=clocked, biz=biz)
 
 
 @contractors_bp.route('/sample-day')
@@ -1373,6 +1427,66 @@ def staff_toggle_active(staff_id):
 
 
 # ── Payroll ────────────────────────────────────────────────────────────────────
+
+@contractors_bp.route('/timesheet')
+@owner_required
+@requires_plan('payroll')
+def timesheet():
+    """Hours worked per cleaner for a week, from the clock.
+
+    Deliberately hours and nothing else. No overtime, no break deduction, no
+    state rounding rules — those are regulated, they differ by state, and the
+    terms of service say plainly that this is not a payroll provider. What a
+    business needs from us is an accurate record of who worked when; their
+    payroll provider applies the rules to it.
+    """
+    from models import TimeEntry
+    today = date.today()
+    start_str = request.args.get(
+        'start', (today - timedelta(days=today.weekday())).isoformat())
+    try:
+        start = date.fromisoformat(start_str)
+    except ValueError:
+        start = today - timedelta(days=today.weekday())
+    end = start + timedelta(days=6)
+
+    entries = (TimeEntry.query
+               .filter(TimeEntry.clock_in_at >= datetime.combine(start, datetime.min.time()),
+                       TimeEntry.clock_in_at < datetime.combine(end + timedelta(days=1),
+                                                                datetime.min.time()))
+               .order_by(TimeEntry.clock_in_at).all())
+
+    # Group by cleaner, then by day, so the table reads the way a week does.
+    days = [start + timedelta(days=i) for i in range(7)]
+    rows = {}
+    for e in entries:
+        person = rows.setdefault(e.staff_id, {
+            'staff': e.staff,
+            'by_day': {d.isoformat(): 0.0 for d in days},
+            'total': 0.0,
+            'open': 0,
+            'entries': [],
+        })
+        key = e.clock_in_at.date().isoformat()
+        if e.is_open:
+            person['open'] += 1
+        if key in person['by_day']:
+            person['by_day'][key] += e.hours
+        person['total'] = round(person['total'] + e.hours, 2)
+        person['entries'].append(e)
+
+    ordered = sorted(rows.values(), key=lambda r: (r['staff'].name or '').lower())
+    grand = round(sum(r['total'] for r in ordered), 2)
+    day_totals = {d.isoformat(): round(sum(r['by_day'][d.isoformat()] for r in ordered), 2)
+                  for d in days}
+
+    return render_template('admin/timesheet.html',
+                           rows=ordered, days=days, start=start, end=end,
+                           grand=grand, day_totals=day_totals,
+                           prev_start=(start - timedelta(days=7)).isoformat(),
+                           next_start=(start + timedelta(days=7)).isoformat(),
+                           today_iso=today.isoformat())
+
 
 @contractors_bp.route('/payroll')
 @owner_required

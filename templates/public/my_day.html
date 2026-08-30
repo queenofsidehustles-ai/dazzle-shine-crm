@@ -96,6 +96,33 @@
     }
     .btn-list { background:var(--amber-soft); color:var(--amber-deep); border:1px solid var(--amber-line); }
 
+    /* The clock. Only shown to somebody paid by the hour -- a cleaner on a
+       flat rate has no reason to press it, and a button that changes nothing
+       teaches people to ignore buttons. */
+    .clock {
+      margin-top:var(--s4); padding-top:var(--s4);
+      border-top:1px solid var(--line-soft);
+      display:flex; align-items:center; gap:var(--s3); flex-wrap:wrap;
+    }
+    .clock form { flex:1 1 auto; }
+    .clock button {
+      width:100%; min-height:48px; border-radius:var(--r-sm);
+      font-family:inherit; font-size:var(--t-sm); font-weight:650;
+      cursor:pointer; border:1px solid transparent;
+    }
+    .clock .in  { background:var(--good); color:#fff; border-color:var(--good); }
+    .clock .out { background:var(--warn); color:#fff; border-color:var(--warn); }
+    .clock button:active { transform:translateY(1px); }
+    .clock .state {
+      flex:0 0 auto; font-size:var(--t-xs); font-weight:650;
+      display:flex; align-items:center; gap:6px; color:var(--muted);
+    }
+    .clock .dot {
+      width:8px; height:8px; border-radius:50%; background:var(--good);
+      box-shadow:0 0 0 3px rgba(47,158,107,.22);
+    }
+    .clock .logged { color:var(--muted); font-size:var(--t-xs); }
+
     .release {
       background:none; border:0; color:var(--softer); font-size:var(--t-xs);
       font-weight:550; cursor:pointer; padding:var(--s3) 0 0; text-decoration:underline;
@@ -157,6 +184,26 @@
         <a class="btn btn-list" href="{{ url_for('workorders.view_checklist', token=jc.token) }}">📋 Checklist</a>
         {% endif %}
       </div>
+
+      {# Clocking in and out, for cleaners paid by the hour. The link this
+         page was opened with says who they are, so the hours belong to a
+         person rather than to the job. #}
+      {% if s.pay_type == 'hourly' and s.agreement_token %}
+      {% set c = (clocked or {}).get(b.id, {}) %}
+      <div class="clock">
+        {% if c.get('open') %}
+        <span class="state"><span class="dot"></span>On the clock</span>
+        <form method="POST" action="{{ url_for('contractors.clock_out', token=s.agreement_token, booking_id=b.id) }}">
+          <button type="submit" class="out">Clock out</button>
+        </form>
+        {% else %}
+        {% if c.get('hours') %}<span class="logged">{{ '%.2f'|format(c['hours']) }} h logged</span>{% endif %}
+        <form method="POST" action="{{ url_for('contractors.clock_in', token=s.agreement_token, booking_id=b.id) }}">
+          <button type="submit" class="in">{{ 'Clock in again' if c.get('hours') else 'Clock in' }}</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
 
       {% if s.agreement_token and b.id %}
       <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"

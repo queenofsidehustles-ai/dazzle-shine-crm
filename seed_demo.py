@@ -121,8 +121,13 @@ def seed(quiet=False):
         s = Staff(name=f'{FIRST[i]} {LAST[i]}',
                   phone=f'407555{2100 + i:04d}',
                   email=f'{FIRST[i].lower()}@example.com',
-                  is_active=True, pay_type='percent',
-                  pay_rate=55.0 if i < 2 else 50.0,
+                  # Two of the six are paid by the hour. A real company rarely
+                  # pays everybody the same way, and a demo where nobody is
+                  # hourly never shows the timesheet at all.
+                  is_active=True,
+                  pay_type='hourly' if i in (4, 5) else 'percent',
+                  pay_rate=(21.0 if i == 4 else 18.5) if i in (4, 5)
+                           else (55.0 if i < 2 else 50.0),
                   experience_level='senior' if i < 2 else 'new',
                   language='es' if i in (2, 4) else 'en',
                   worker_model='contractor',

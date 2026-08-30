@@ -45,6 +45,7 @@
   --warn-soft:    #fdecec;
   --info:         #3b6fb5;
   --info-soft:    #eaf1fa;
+  --info-line:    #cfe0f3;   /* the border that goes with --info-soft */
 
   /* ── Spacing ───────────────────────────────────────────────────────────
    * A 4px scale. Ad-hoc padding is most of what reads as unevenness, and a
@@ -497,7 +498,7 @@ a.money-cell:hover { background:var(--ground); }
   background:var(--ground); color:var(--muted); border:1px solid var(--line);
 }
 .status-pending    { background:var(--amber-soft); color:var(--amber-deep); border-color:var(--amber-line); }
-.status-confirmed  { background:var(--info-soft);  color:var(--info);       border-color:#cfe0f3; }
+.status-confirmed  { background:var(--info-soft);  color:var(--info);       border-color:var(--info-line); }
 .status-completed  { background:var(--good-soft);  color:var(--good);       border-color:#c9e9da; }
 .status-cancelled  { background:var(--ground);     color:var(--softer);     border-color:var(--line);
                      text-decoration:line-through; }

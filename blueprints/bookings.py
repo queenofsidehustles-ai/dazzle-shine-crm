@@ -1116,6 +1116,39 @@ def send_crew(booking_id):
     return _send_job_to(b, [c.staff for c in rows])
 
 
+@bookings_bp.route('/<int:booking_id>/crew/<int:crew_id>/use-clocked', methods=['POST'])
+@login_required
+def use_clocked_pay(booking_id, crew_id):
+    """Set one cleaner's pay on this job to what their clock says it is worth.
+
+    A deliberate press, not something that happens on clock-out. The owner
+    decides what somebody is paid; the clock only offers a figure. Money that
+    changes itself between one look at a page and the next is how an owner
+    stops trusting the numbers.
+
+    Refused once the money has gone out — a payment already made is a record,
+    not a draft.
+    """
+    b = Booking.query.get_or_404(booking_id)
+    row = BookingCrew.query.filter_by(id=crew_id, booking_id=b.id).first_or_404()
+
+    if row.paid_at:
+        flash('That cleaner has already been paid for this job.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    due = row.staff.hourly_pay_for(b) if row.staff else None
+    if due is None:
+        flash('No clocked hours to work from yet.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    row.pay_amount = due
+    db.session.commit()
+    hours = row.staff.hours_on(b)
+    flash(f'{row.staff.name} set to ${due:.2f} — {hours:.2f} hours at '
+          f'${row.staff.pay_rate:.2f}/hr.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=b.id))
+
+
 @bookings_bp.route('/<int:booking_id>/crew/remove/<int:crew_id>', methods=['POST'])
 @login_required
 def remove_crew(booking_id, crew_id):

@@ -312,6 +312,65 @@ _head = _mig.ScriptDirectory.from_config(_mig._config()).get_current_head()
 check(f'ACME VERSION: {_head}' in out,
       f'and each company records its own migration position ({_head})')
 
+print("\n11b. A new migration reaches companies that already exist")
+# The gap this closes: boot migrates the default schema only. Companies are
+# provisioned once and then never touched again, so the first release carrying
+# a new migration left every existing customer on the old schema -- the table
+# simply absent, and the first page that read it erroring for them and nobody
+# else. It looks like one customer's data being corrupt rather than a deploy
+# that only half happened.
+out = run('''
+import os
+# migrate_all is a no-op without BASE_DOMAIN, and rightly so: a single-business
+# install has no companies to migrate. Set it for this run only, rather than
+# for the whole file, where it would change how every other check behaves.
+os.environ["BASE_DOMAIN"] = "akye.test"
+import notifications
+notifications.send_sms = lambda *a, **k: (True, "s")
+notifications.send_email = lambda *a, **k: (True, "s")
+import provisioning, tenancy
+from sqlalchemy import text, inspect
+
+engine = provisioning._engine()
+
+# Wind Acme back a step and drop the table that migration brought, so the
+# schema genuinely is behind rather than merely labelled as behind.
+with engine.begin() as c:
+    c.execute(text(\'SET search_path TO "tenant_acme"\'))
+    c.execute(text("DROP TABLE IF EXISTS time_entry"))
+    c.execute(text("UPDATE alembic_version SET version_num = :v"),
+              {"v": "0005_entitlement_denial"})
+
+names = inspect(engine).get_table_names(schema="tenant_acme")
+print("BEFORE HAS TABLE:", "time_entry" in names)
+
+moved, failed = provisioning.migrate_all(quiet=True)
+print("MOVED:", [m[0] for m in moved])
+print("FAILED:", failed)
+
+names = inspect(engine).get_table_names(schema="tenant_acme")
+print("AFTER HAS TABLE:", "time_entry" in names)
+with engine.connect() as c:
+    c.execute(text(\'SET search_path TO "tenant_acme"\'))
+    print("AFTER VERSION:", c.execute(
+        text("SELECT version_num FROM alembic_version")).scalar())
+
+# And the other company was left alone rather than re-run.
+moved2, _ = provisioning.migrate_all(quiet=True)
+print("SECOND RUN MOVED:", [m[0] for m in moved2])
+print("OK")
+''', 'migrating existing companies')
+
+check('BEFORE HAS TABLE: False' in out, 'a company behind on migrations is missing the table')
+check('MOVED: [' in out and 'acme' in out.split('MOVED:')[1].split(chr(10))[0],
+      f"migrate_all moves it forward ({out.split('MOVED:')[1].split(chr(10))[0].strip() if 'MOVED:' in out else 'no MOVED line'})")
+check('AFTER HAS TABLE: True' in out, 'and the table now exists')
+check(f'AFTER VERSION: {_head}' in out, f'at the current head ({_head})')
+check('FAILED: []' in out, 'with nothing failing')
+check('SECOND RUN MOVED: []' in out,
+      'and running it again moves nothing — it is safe on every boot')
+
+
 print('\n12. Removing a company removes only that company')
 out = run('''
 import notifications

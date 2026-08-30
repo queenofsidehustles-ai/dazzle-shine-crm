@@ -429,8 +429,30 @@
             </div>
             <div style="font-size:0.75rem;color:var(--softer)">
               {% if c.paid_at %}✅ Paid {{ c.paid_at.strftime('%b %-d') }}{% elif c.claimed_at %}Claimed {{ c.claimed_at.strftime('%b %-d') }}{% else %}Assigned by you{% endif %}
-              {% if booking.hours_each() %} · {{ '%g' % booking.hours_each() }} hrs{% endif %}
+              {% if booking.hours_each() %} · {{ '%g' % booking.hours_each() }} hrs est{% endif %}
             </div>
+            {# What the clock says, for a cleaner paid by the hour. The figure
+               is shown and offered; it is never applied on its own. Money that
+               changes itself between one look at a page and the next is how an
+               owner stops trusting the numbers. #}
+            {% if c.staff and c.staff.pay_type == 'hourly' %}
+            {% set worked = c.staff.hours_on(booking) %}
+            {% set due = c.staff.hourly_pay_for(booking) %}
+            <div class="clocked">
+              {% if worked is none %}
+                <span class="no">Not clocked in yet</span>
+              {% else %}
+                <span class="yes">🕒 {{ '%.2f'|format(worked) }} h actual</span>
+                <span class="calc">× ${{ '%.2f'|format(c.staff.pay_rate or 0) }} = <b>${{ '%.2f'|format(due or 0) }}</b></span>
+                {% if not c.paid_at and due is not none and (due - (c.pay_amount or 0))|abs > 0.005 %}
+                <button type="submit" class="useclock"
+                        formaction="{{ url_for('bookings.use_clocked_pay', booking_id=booking.id, crew_id=c.id) }}">
+                  Use this
+                </button>
+                {% endif %}
+              {% endif %}
+            </div>
+            {% endif %}
           </div>
           <div style="display:flex;align-items:center;gap:3px">
             <span style="color:var(--softer)">$</span>
@@ -1020,4 +1042,22 @@ async function chargeBalance(bookingId, balanceDue) {
   }
 }
 </script>
+
+<style>
+  /* Clocked hours on the crew card. Quiet until there is something to say,
+     and the "use this" button only appears when the clock disagrees with the
+     figure already in the box. */
+  .clocked { font-size:var(--t-xs); margin-top:3px; display:flex;
+             align-items:center; gap:var(--s2); flex-wrap:wrap; }
+  .clocked .no { color:var(--softer); }
+  .clocked .yes { color:var(--good); font-weight:650; }
+  .clocked .calc { color:var(--muted); }
+  .clocked .useclock {
+    background:var(--amber-soft); border:1px solid var(--amber-line);
+    color:var(--amber-deep); border-radius:var(--r-pill);
+    padding:2px 10px; font-size:var(--t-xs); font-weight:650; cursor:pointer;
+  }
+  .clocked .useclock:hover { background:var(--amber); color:#fff; border-color:var(--amber); }
+</style>
+
 {% endblock %}

@@ -317,6 +317,18 @@ def create_app():
         # out once every instance carries a version row. See migrate.py.
         import migrate
         migrate.run_at_boot(app)
+
+        # And every company's own schema. run_at_boot handles the default
+        # schema only, so without this the first release carrying a migration
+        # leaves every existing customer on the old one — the new table simply
+        # absent, and the first page that reads it erroring for them alone.
+        # Never fatal: a company that cannot be migrated is a problem for that
+        # company, and refusing to start makes it everybody's.
+        try:
+            import provisioning
+            provisioning.migrate_all()
+        except Exception as _e:
+            print(f'  ⚠️  company schemas not migrated: {_e}')
         db.create_all()
         _migrate_db()
         _seed_checklists()

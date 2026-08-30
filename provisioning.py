@@ -92,6 +92,68 @@ def seed(app, schema):
                     print(f'   ⚠️  {fn}: {type(e).__name__}: {e}')
 
 
+def migrate_all(quiet=False):
+    """Bring every existing company's schema up to the latest migration.
+
+    Companies are provisioned once and then never touched again by the boot
+    sequence, which migrates the default schema only. So the first release
+    carrying a new migration would leave every existing customer on the old
+    schema — the table simply absent — and the first page that reads it errors
+    for them and nobody else. It would look like one customer's data being
+    corrupt rather than a deploy that only half happened.
+
+    Runs one schema at a time and keeps going if one fails. A single company
+    with a wedged schema is a problem for that company; stopping would make it
+    everybody's.
+
+    Returns (moved, failed) for the log.
+    """
+    if not (os.environ.get('BASE_DOMAIN') or '').strip():
+        return [], []                       # single business: nothing to do
+
+    engine = _engine()
+    try:
+        orgs = control_plane.all_orgs(engine)
+    except Exception as e:
+        print(f'  ⚠️  could not read the company list: {e}')
+        return [], []
+
+    moved, failed = [], []
+    for org in orgs:
+        slug = org.get('slug')
+        schema = tenancy.schema_for(slug) if slug else None
+        if not schema or not schema_exists(engine, schema):
+            continue
+        before = _schema_version(engine, schema)
+        try:
+            migrate_schema(engine, schema)
+        except Exception as e:
+            failed.append((slug, str(e)[:200]))
+            print(f'  ❌ {slug}: {e}')
+            continue
+        after = _schema_version(engine, schema)
+        if before != after:
+            moved.append((slug, before, after))
+            if not quiet:
+                print(f'  ✅ {slug}: {before} → {after}')
+
+    if not quiet and not moved and not failed and orgs:
+        print(f'  ✅ {len(orgs)} companies already up to date')
+    return moved, failed
+
+
+def _schema_version(engine, schema):
+    """Which migration one company's schema is on, or None if it has no record."""
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f'SET search_path TO "{schema}"'))
+            return conn.execute(
+                text('SELECT version_num FROM alembic_version LIMIT 1')).scalar()
+    except Exception:
+        return None
+
+
 def provision(slug, name, owner_email=None, quiet=False):
     """Everything, in the order that leaves the least mess if it stops."""
     engine = _engine()

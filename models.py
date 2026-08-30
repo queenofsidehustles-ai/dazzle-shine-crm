@@ -989,10 +989,93 @@ class Staff(db.Model):
             return f'${self.pay_rate:.2f}/hr'
         return f'{self.pay_rate:.0f}% of job'
 
+    def hours_on(self, booking):
+        """Hours this cleaner actually clocked on one job.
+
+        The sum of their spells, so somebody who broke off and came back is
+        counted once for each. Returns None -- not zero -- when they never
+        clocked at all, because "worked no hours" and "we have no record" are
+        different answers and only one of them should be used to pay somebody.
+        """
+        rows = [t for t in (booking.time_entries or []) if t.staff_id == self.id]
+        if not rows:
+            return None
+        return round(sum(t.hours for t in rows), 2)
+
+    def hourly_pay_for(self, booking):
+        """What the clock says this job is worth to an hourly cleaner.
+
+        None unless all three things are true: they are paid by the hour, they
+        have a rate, and they actually clocked. Never guessed from the job's
+        estimated hours -- an estimate is what the job was priced on, not what
+        somebody worked, and quietly paying one as if it were the other is how
+        a cleaner ends up short.
+
+        This is a suggestion. Nothing calls it to move money on its own; the
+        owner sees the figure and applies it, the same way every other pay
+        number in here works.
+        """
+        if (self.pay_type or '') != 'hourly' or not self.pay_rate:
+            return None
+        hours = self.hours_on(booking)
+        if hours is None:
+            return None
+        return round(hours * self.pay_rate, 2)
+
     def calc_pay(self, job_price=0, hours_worked=0):
         if self.pay_type == 'hourly':
             return round((hours_worked or 0) * (self.pay_rate or 0), 2)
         return round((job_price or 0) * ((self.pay_rate or 0) / 100), 2)
+
+
+class TimeEntry(db.Model):
+    """One cleaner's clock-in and clock-out on one job.
+
+    The job already had `clock_in_at` on its checklist, but there is one
+    checklist per job, not one per cleaner — so a two-person job recorded a
+    single shared clock and could not say that Maria did three hours and Ana
+    did two. That is fine for "did somebody turn up", and useless for paying
+    anybody by the hour.
+
+    Several rows per cleaner per job are allowed on purpose. Somebody who
+    leaves to fetch a machine and comes back has two spells, and the honest
+    record of that is two rows, not one long one with a note attached.
+
+    This records hours. It does not pay anybody, apply overtime, deduct breaks
+    or round to anybody's state rules — see `Staff.hourly_pay_for`, and see the
+    terms of service, which say plainly that this is not a payroll provider.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'),
+                           nullable=False, index=True)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'),
+                         nullable=False, index=True)
+    clock_in_at = db.Column(db.DateTime, nullable=False)
+    clock_out_at = db.Column(db.DateTime)          # null while still on the job
+    note = db.Column(db.String(200))               # why it was edited, if it was
+    edited_by = db.Column(db.String(80))           # who changed it, if anybody
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    booking = db.relationship('Booking', backref='time_entries')
+    staff = db.relationship('Staff', backref='time_entries')
+
+    @property
+    def is_open(self):
+        """Still clocked in. Shown differently, and worth nothing yet."""
+        return self.clock_in_at is not None and self.clock_out_at is None
+
+    @property
+    def hours(self):
+        """Hours on this spell, or 0 while it is still running.
+
+        Never negative. A clock-out earlier than its clock-in is a mistake
+        somebody made in an edit box, and paying a negative number of hours is
+        worse than paying none.
+        """
+        if not self.clock_in_at or not self.clock_out_at:
+            return 0.0
+        seconds = (self.clock_out_at - self.clock_in_at).total_seconds()
+        return round(max(0.0, seconds) / 3600, 2)
 
 
 class Availability(db.Model):
