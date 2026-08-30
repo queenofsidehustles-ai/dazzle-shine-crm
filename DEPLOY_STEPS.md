@@ -98,23 +98,37 @@ have two IDs starting `price_` and one key starting `sk_test_`.
 
 ---
 
-## Step 2 — Make a long random password for the app
+## Step 2 — The app's secret key
 
-The app needs one secret string to lock its cookies with. Generate it once and
-never change it — changing it later signs everybody out and makes saved keys
-unreadable.
+The app needs one long random string to lock its cookies with.
 
-1. Open **Terminal** on your Mac.
-2. Paste this and press return:
+**This is already done.** There is a file on your Desktop called
+`AKYE-SECRET-KEY-delete-after-use.txt`. Open it, and it tells you what to do
+with what is inside.
 
-```bash
-python3 -c "import secrets; print(secrets.token_urlsafe(48))"
-```
+You need it in Step 4. **Delete the file once it is in Railway.**
 
-3. Copy the line it prints into the same note. It is long and looks like
-   nonsense. That is correct.
+⚠️ Generate it once and never change it. Changing it later signs everybody out
+and makes every saved Stripe key unreadable.
 
-**✅ Done when:** you have a long random line saved.
+⚠️ Never paste it into a chat, an email or a screenshot — not to me, not to
+anybody.
+
+<details>
+<summary>If you ever need to make another one yourself</summary>
+
+Open **Terminal** and paste this **one line only**:
+
+    python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+
+⚠️ Copy the line starting `python3`. Do **not** copy any line made of three
+backticks — that is formatting from this document, and pasting it leaves the
+terminal stuck at a prompt that says `bquote>`. If that happens, press
+**Control + C** and try again.
+
+</details>
+
+**✅ Done when:** you know where that file is.
 
 ---
 
