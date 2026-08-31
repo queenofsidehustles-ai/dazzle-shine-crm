@@ -81,7 +81,7 @@ PLANS = {
     },
     'scale': {
         'label': 'Scale',
-        'price': 149,
+        'price': 249,
         'blurb': 'For multi-crew operations and commercial contracts.',
         'limits': {
             'field_workers': None,

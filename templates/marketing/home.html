@@ -32,6 +32,13 @@
     display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);
     gap:40px; align-items:center;
   }
+  /* Centring two columns only looks right while they are a similar height.
+     Once the copy is taller than the picture, centring reads as the picture
+     having slipped down the page. Line them up at the top instead. */
+  @media (max-width:1200px) {
+    .hero .wrap { align-items:start; gap:32px; }
+    .shot-stage { margin-top:8px; }
+  }
   .hero-copy { max-width:560px; }
 
   .eyebrow {
@@ -66,6 +73,17 @@
     transform:perspective(1600px) rotateY(-7deg) rotateX(2deg) scale(1.06);
     transform-origin:0% 50%;
     max-height:430px;
+  }
+  /* The turn and the overscale are what make it read as software rather than
+     a picture of software, but they push it past the right edge — which is
+     fine with room to spare and a slice off the dashboard without. Both ease
+     off as the window narrows, and stop entirely before the layout stacks. */
+  @media (max-width:1200px) {
+    .frame { transform:perspective(1600px) rotateY(-4deg) rotateX(1deg) scale(1.0); }
+  }
+  @media (max-width:1080px) {
+    .frame { transform:none; max-height:380px; }
+    .phone { width:132px; left:-14px; bottom:-14px; }
   }
   .frame::after {
     content:''; position:absolute; left:0; right:0; bottom:0; height:90px;

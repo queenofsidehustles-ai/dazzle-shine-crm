@@ -54,7 +54,7 @@ In the Stripe dashboard, in **test mode** first:
 
 1. **Products → Add product** → name it **Pro**, price **$79**, *Recurring,
    monthly*. Save.
-2. Same again for **Scale** at **$149**.
+2. Same again for **Scale** at **$249**.
 3. On each product, copy the **price ID** — it starts `price_`. Not the product
    ID. Keep both somewhere.
 4. **Developers → API keys** → copy the **Secret key** (`sk_test_…`).

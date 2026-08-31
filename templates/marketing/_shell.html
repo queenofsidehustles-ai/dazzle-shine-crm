@@ -117,7 +117,12 @@
     .btn.ghost:hover { filter:none; border-color:var(--softer); box-shadow:inset 0 1px 0 #fff, var(--lift-2); }
     .btn.ghost:active { box-shadow:inset 0 2px 4px rgba(22,33,58,.10); }
 
-    h1 { font-size:2.85rem; line-height:1.07; letter-spacing:-.035em; font-weight:800; }
+    /* Scales with the window rather than holding one size until a
+       breakpoint. At around 1024px the fixed 2.85rem ran to five lines,
+       which made the left column tall enough that the product shot beside
+       it — vertically centred — sat noticeably lower than the headline. */
+    h1 { font-size:clamp(1.9rem, 2.4vw + 1.05rem, 2.85rem);
+         line-height:1.08; letter-spacing:-.035em; font-weight:800; }
     h2 { font-size:1.85rem; letter-spacing:-.025em; margin-bottom:10px; font-weight:750; }
     .lead { font-size:1.1rem; color:var(--muted); margin-top:14px; }
 
