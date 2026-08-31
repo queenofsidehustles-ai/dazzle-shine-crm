@@ -181,7 +181,13 @@ org = control_plane.find(eng, "acme")
 print("AFTER 5x:", billing.plan_for(org), org["plan"], org["subscription_status"])
 print("OK")
 ''', 'subscription created')
-check('START PLAN: solo trialing' in out, 'a new company starts on the free plan')
+# A new company now starts on the top plan, trialing. It used to start on the
+# free one, which meant somebody could not miss the hiring pipeline because
+# they had never had it — and a free plan nobody has seen the paid features
+# from is a plan nobody upgrades out of. See tests/test_trial.py for the two
+# clocks that bound it.
+check('START PLAN: scale trialing' in out,
+      'a new company starts on everything, trialing')
 check('AFTER: True pro sub_1' in out, 'a subscription event moves it to Pro')
 check('AFTER 5x: pro pro active' in out,
       'and the same event five times leaves it in exactly the same place')

@@ -861,3 +861,23 @@ button[type="submit"]:not([class]):active {
 }
 .howto-note code { background:rgba(255,255,255,.6); border-color:var(--amber-line); }
 .howto-body .btn { margin-top:var(--s4); }
+
+/* The trial countdown. Always saying something: not-started, running out,
+   or finished. A state with no clock is how a trial becomes a thing somebody
+   believes they can come back to whenever. */
+.trialbar {
+  display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap;
+  padding:var(--s3) var(--s4); margin-bottom:var(--s4);
+  border-radius:var(--r-sm); text-decoration:none;
+  font-size:var(--t-sm); line-height:1.5;
+  background:var(--info-soft); border:1px solid var(--info-line); color:var(--ink);
+  transition:box-shadow var(--ease);
+}
+.trialbar:hover { box-shadow:var(--shadow); }
+.trialbar b { font-weight:700; }
+.trialbar .left { font-weight:650; }
+.trialbar .go { margin-left:auto; color:var(--info); font-weight:650; white-space:nowrap; }
+.trialbar.urgent { background:var(--amber-soft); border-color:var(--amber-line); }
+.trialbar.urgent .go { color:var(--amber-deep); }
+.trialbar.over { background:var(--ground); border-color:var(--line); color:var(--muted); }
+.trialbar.over .go { color:var(--ink); }

@@ -115,6 +115,31 @@
           <div class="flash flash-{{ category }}">{{ msg }}</div>
         {% endfor %}
       {% endwith %}
+      {# Where they are in the trial. Always a countdown of some kind: one
+         clock says "you have not begun", the other says "you are running
+         out", and a state with neither is how a trial becomes something
+         somebody thinks they can come back to whenever. #}
+      {% if TRIAL and not TRIAL.expired %}
+      <a href="{{ url_for('billing.upgrade') }}" class="trialbar {{ 'urgent' if TRIAL.days_left <= 3 }}">
+        {% if TRIAL.phase == 'not_started' %}
+          <b>Your 14 days haven't started yet.</b>
+          Assign a job to somebody and the clock begins —
+          <span class="left">{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left to start</span>.
+        {% else %}
+          <b>{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left</b>
+          of everything. After that you keep working on the free plan —
+          nothing is deleted.
+        {% endif %}
+        <span class="go">See plans →</span>
+      </a>
+      {% elif TRIAL and TRIAL.expired %}
+      <a href="{{ url_for('billing.upgrade') }}" class="trialbar over">
+        <b>Your trial has finished.</b>
+        You are on the free plan — everything you entered is still here.
+        <span class="go">See plans →</span>
+      </a>
+      {% endif %}
+
       {% if SETUP_PENDING and request.endpoint != 'settings.setup' %}
       <a href="{{ url_for('settings.setup') }}" class="setup-banner">
         <strong>Finish setting up your CRM</strong> — {{ SETUP_PENDING }} still to do before you can take real bookings.

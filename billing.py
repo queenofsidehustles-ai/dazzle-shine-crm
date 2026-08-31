@@ -27,7 +27,7 @@ owner locked out of her own schedule over an expired card would rightly never
 come back, and we would have taken her data hostage over $99.
 """
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import control_plane
 import tenancy
@@ -102,6 +102,79 @@ def plan_for(org):
         if not ends or ends < datetime.utcnow():
             return 'solo'
     return org.get('plan') or 'solo'
+
+
+# How long somebody gets, and how long they have to start.
+TRIAL_DAYS = 14
+START_WITHIN_DAYS = 30
+
+
+def trial_state(org):
+    """Where a company is in its trial, in the words the banner needs.
+
+    Two clocks, because one is not honest:
+
+      * 14 days from the moment they first assign a job to somebody. A
+        fortnight measured from signup is a trial a busy company can lose
+        without ever having used the product — and then they are owed an
+        apology and a manual extension, which is a conversation worth
+        designing out.
+
+      * 30 days from signup to make that start. Without it the first clock
+        never runs for somebody who signs up and does nothing, and a trial
+        that waits indefinitely creates no reason to begin.
+
+    Returns None when there is no trial in play at all — a paying customer, or
+    a single-business install with no control plane.
+    """
+    if not org:
+        return None
+    status = (org.get('subscription_status') or '').lower()
+    if status and status != 'trialing':
+        return None                       # paying, cancelled, or past due
+
+    now = datetime.utcnow()
+    started = org.get('activated_at')
+    ends = org.get('trial_ends_at')
+    created = org.get('created_at') or now
+
+    if not ends:
+        # A trial with no end date is not a trial — see plan_for. Treat it as
+        # the start-by window so it is at least bounded.
+        ends = created + timedelta(days=START_WITHIN_DAYS)
+
+    days = (ends - now).days
+    over = ends <= now
+
+    return {
+        'started': bool(started),
+        'expired': over,
+        'ends_at': ends,
+        'days_left': max(0, days),
+        # Distinguishing these two matters: one says "you have not begun", the
+        # other says "you are running out". They need different sentences.
+        'phase': 'over' if over else ('running' if started else 'not_started'),
+    }
+
+
+def mark_activated(engine, slug, when=None):
+    """Start the 14 days, now that they have actually used it.
+
+    Called the first time a company has a job with somebody assigned to it.
+    Moves the end date to fourteen days from that moment — which may be later
+    than the original start-by deadline, and should be: they engaged, so they
+    get their fortnight.
+
+    Does nothing if it has already been called.
+    """
+    org = control_plane.find(engine, slug)
+    if not org or org.get('activated_at'):
+        return False
+    when = when or datetime.utcnow()
+    control_plane.set_billing(engine, slug,
+                activated_at=when,
+                trial_ends_at=when + timedelta(days=TRIAL_DAYS))
+    return True
 
 
 def current_org():

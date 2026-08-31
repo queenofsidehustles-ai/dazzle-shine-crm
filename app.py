@@ -207,6 +207,33 @@ def create_app():
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [], 'NAV_ACTIVE_TAB': None}
 
     @app.context_processor
+    def inject_trial():
+        """Where this company is in its trial, for the banner.
+
+        Also the place activation gets stamped. There is no single event for
+        "first job assigned" -- a job can be assigned directly, claimed off
+        the board, or added as a crew row -- so rather than hook three
+        routes and miss a fourth, this notices the first time the condition
+        is true. It runs once per company for the lifetime of the account.
+        """
+        try:
+            import billing, onboarding, provisioning, tenancy
+            org = billing.current_org()
+            if not org:
+                return {'TRIAL': None}
+
+            state = billing.trial_state(org)
+            if state and not state['started']:
+                # Have they actually begun? Cheap: onboarding already knows.
+                if onboarding.progress().get('activated'):
+                    billing.mark_activated(provisioning._engine(), org['slug'])
+                    org = billing.current_org()
+                    state = billing.trial_state(org)
+            return {'TRIAL': state}
+        except Exception:
+            return {'TRIAL': None}          # never take a page down for a banner
+
+    @app.context_processor
     def inject_product():
         import product, branding
         return {'PRODUCT': product.name(), 'TAGLINE': product.tagline(),

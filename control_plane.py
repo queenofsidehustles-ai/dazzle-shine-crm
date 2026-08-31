@@ -16,7 +16,7 @@ business running today never touches it.
 from datetime import datetime
 
 from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
-                        Table, select, insert, update)
+                        Table, select, insert, update, text)
 
 # Its own MetaData: these tables must never be created inside a tenant schema,
 # and must never be swept up by a migration that walks models.py.
@@ -57,6 +57,10 @@ organizations = Table(
     # A founding customer's price is theirs for as long as they stay. This
     # survives every future price change, which is the whole promise.
     Column('grandfathered', Boolean, default=False),
+    # When they first assigned a job to somebody. The trial's 14 days run from
+    # here rather than from signup: a fortnight that starts before anybody has
+    # used the product is a trial they never had.
+    Column('activated_at', DateTime),
 )
 
 
@@ -84,9 +88,50 @@ product_leads = Table(
 )
 
 
+def ensure_columns(engine):
+    """Add any column this code expects and the table does not have.
+
+    `create_all` creates missing tables. It does not touch a table that
+    already exists, so a column added to `organizations` after a deployment
+    went live would simply never appear there — and every read of it would
+    fail on the one database that matters.
+
+    Per-company schemas have alembic for this. The control plane sits outside
+    it by design, so it needs its own small version: additive only, one column
+    at a time, and silent when there is nothing to do.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    try:
+        have = {c['name'] for c in sa_inspect(engine).get_columns(
+            'organizations', schema='public')}
+    except Exception:
+        return                      # table is not there yet; create_all will make it
+    ddl = {
+        'plan': 'VARCHAR(20)',
+        'subscription_status': 'VARCHAR(30)',
+        'stripe_customer_id': 'VARCHAR(80)',
+        'stripe_subscription_id': 'VARCHAR(80)',
+        'trial_ends_at': 'TIMESTAMP',
+        'current_period_end': 'TIMESTAMP',
+        'grandfathered': 'BOOLEAN',
+        'activated_at': 'TIMESTAMP',
+    }
+    for name, sqltype in ddl.items():
+        if name in have:
+            continue
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    f'ALTER TABLE public.organizations ADD COLUMN {name} {sqltype}'))
+            print(f'  ✅ control plane: added organizations.{name}')
+        except Exception as e:
+            print(f'  ⚠️  could not add organizations.{name}: {e}')
+
+
 def ensure_table(engine):
     """Create the control-plane table if it is not there. Safe to call always."""
     control_metadata.create_all(engine, tables=[organizations, product_leads])
+    ensure_columns(engine)
 
 
 def all_orgs(engine):
@@ -111,11 +156,25 @@ def create(engine, slug, name, owner_email=None):
             f'hyphens, 3-40 characters, and not one of the reserved names.')
     if find(engine, slug):
         raise ValueError(f'{slug!r} is already taken.')
+    # Everything, for a fortnight — but the fortnight does not start until they
+    # assign a job. Until then they have thirty days to begin, which is what
+    # `trial_ends_at` holds; `billing.mark_activated` moves it when they do.
+    #
+    # A free plan nobody has seen the paid features from is a plan nobody
+    # upgrades out of: they cannot miss the hiring pipeline if they never had
+    # it. So the trial gives the top plan and then steps down, rather than
+    # asking somebody to imagine what they are not being shown.
+    from datetime import timedelta
+    now = datetime.utcnow()
     with engine.begin() as conn:
         conn.execute(insert(organizations).values(
             slug=slug, name=name, schema_name=tenancy.schema_for(slug),
             owner_email=owner_email, status='active',
-            created_at=datetime.utcnow()))
+            created_at=now,
+            plan='scale',
+            subscription_status='trialing',
+            trial_ends_at=now + timedelta(days=30),
+            activated_at=None))
     return find(engine, slug)
 
 
@@ -136,10 +195,16 @@ def set_status(engine, slug, status):
 
 
 def set_billing(engine, slug, **fields):
-    """Record what Stripe told us. Only ever called from a verified webhook."""
+    """Record what Stripe told us, or when a trial actually began.
+
+    The whitelist is the point: a caller that has not thought about which
+    field it is writing cannot write one by accident. `activated_at` is on it
+    because the trial clock starts from the product being used, which is
+    something only this application knows and Stripe never will.
+    """
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
-               'grandfathered', 'status'}
+               'grandfathered', 'status', 'activated_at'}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f'not billing fields: {sorted(bad)}')
