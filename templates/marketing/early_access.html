@@ -1,0 +1,136 @@
+{% extends "marketing/_shell.html" %}
+{% block title %}Early access — {{ PRODUCT }}{% endblock %}
+{% block description %}{{ PRODUCT }} is onboarding its first cleaning companies by hand. Tell us about yours and we will get in touch.{% endblock %}
+{% block canonical %}{{ PRODUCT_BASE }}/early-access{% endblock %}
+
+{% block head_extra %}
+<style>
+  .ea-wrap { max-width:600px; margin:0 auto; }
+  .ea-card {
+    background:linear-gradient(180deg,#fff,var(--surface-2));
+    border:1px solid var(--line); border-radius:20px;
+    padding:40px 34px; box-shadow:var(--lift-2);
+  }
+  .ea-card h1 { font-size:1.9rem; letter-spacing:-.03em; line-height:1.15; }
+  .ea-card .sub { color:var(--muted); margin-top:12px; line-height:1.65; }
+
+  .ea-field { margin-top:18px; }
+  .ea-field label { display:block; font-weight:600; font-size:.92rem; margin-bottom:6px; }
+  .ea-field input, .ea-field textarea {
+    width:100%; padding:12px 14px; border:1px solid var(--line);
+    border-radius:10px; font-family:inherit; font-size:1rem; color:var(--ink);
+    background:#fff; outline:none;
+    transition:border-color .14s, box-shadow .14s;
+  }
+  .ea-field input:focus, .ea-field textarea:focus {
+    border-color:var(--gold); box-shadow:0 0 0 3px rgba(240,164,75,.22);
+  }
+  .ea-field .err { color:var(--warn); font-size:.86rem; margin-top:5px; }
+  .ea-field input.bad { border-color:var(--warn); }
+  .ea-two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .ea-opt { color:var(--softer); font-weight:400; font-size:.84rem; }
+  .ea-card button { width:100%; margin-top:24px; border:0; cursor:pointer; font-family:inherit; }
+  .ea-foot { color:var(--softer); font-size:.86rem; margin-top:16px; line-height:1.6; text-align:center; }
+
+  .ea-done { text-align:center; }
+  .ea-done .tick {
+    width:64px; height:64px; margin:0 auto 20px; border-radius:50%;
+    background:var(--good-soft); color:var(--good);
+    display:flex; align-items:center; justify-content:center; font-size:1.8rem;
+  }
+  @media (max-width:560px) { .ea-two { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block body %}
+<section>
+  <div class="wrap">
+    <div class="ea-wrap">
+      <div class="ea-card">
+
+        {% if done %}
+        {# Says what happens next and roughly when. "Thanks, we'll be in touch"
+           with no timeframe is how a form becomes a black hole. #}
+        <div class="ea-done">
+          <div class="tick">✓</div>
+          <h1>Thank you — we have it.</h1>
+          <p class="sub">
+            {{ PRODUCT }} is being handed to its first cleaning companies one at
+            a time, by the person who built it. You will hear back within a
+            couple of days{% if form.phone %}, on {{ form.phone }} or by email{% endif %}.
+          </p>
+          <p class="sub">
+            When we set you up, we load your customers, your cleaners, your
+            prices and next week's jobs for you — so you sign in and find your
+            business already in there.
+          </p>
+          <p class="ea-foot">
+            In the meantime, have a look at
+            <a href="{{ url_for('marketing.pricing') }}">what is included</a>.
+          </p>
+        </div>
+
+        {% else %}
+        <h1>Get early access</h1>
+        <p class="sub">
+          We are onboarding the first cleaning companies by hand rather than
+          opening the doors — so that setup is done for you and we learn what
+          actually breaks. Tell us about yours.
+        </p>
+
+        <form method="POST" novalidate>
+          <div class="ea-field">
+            <label for="name">Your name</label>
+            <input id="name" name="name" value="{{ form.name }}" autocomplete="name"
+                   class="{{ 'bad' if errors.name }}" />
+            {% if errors.name %}<div class="err">{{ errors.name }}</div>{% endif %}
+          </div>
+
+          <div class="ea-field">
+            <label for="company">Your company <span class="ea-opt">— optional</span></label>
+            <input id="company" name="company" value="{{ form.company }}"
+                   autocomplete="organization" />
+          </div>
+
+          <div class="ea-two">
+            <div class="ea-field">
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" value="{{ form.email }}"
+                     autocomplete="email" class="{{ 'bad' if errors.email }}" />
+              {% if errors.email %}<div class="err">{{ errors.email }}</div>{% endif %}
+            </div>
+            <div class="ea-field">
+              <label for="phone">Phone <span class="ea-opt">— optional</span></label>
+              <input id="phone" name="phone" type="tel" value="{{ form.phone }}"
+                     autocomplete="tel" />
+            </div>
+          </div>
+
+          <div class="ea-field">
+            <label for="cleaners">How many cleaners <span class="ea-opt">— roughly</span></label>
+            <input id="cleaners" name="cleaners" value="{{ form.cleaners }}"
+                   placeholder="e.g. 4, or 'just me and my sister'" />
+          </div>
+
+          <div class="ea-field">
+            <label for="note">What is the worst part of your week?
+              <span class="ea-opt">— optional</span></label>
+            <textarea id="note" name="note" rows="3"
+                      placeholder="Finding cleaners, working out pay on a Friday, no-shows…">{{ form.note }}</textarea>
+          </div>
+
+          <button type="submit" class="btn">Request early access</button>
+        </form>
+
+        <p class="ea-foot">
+          No card, and nothing is charged. We will only use this to get in touch
+          about {{ PRODUCT }} — see the
+          <a href="{{ url_for('marketing.privacy') }}">privacy policy</a>.
+        </p>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

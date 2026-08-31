@@ -188,7 +188,14 @@
       <nav>
         <a href="{{ url_for('marketing.pricing') }}">Pricing</a>
         <a href="/login">Sign in</a>
-        {% if signups_open %}<a class="btn" href="/signup">Start free</a>{% endif %}
+        {# The door being shut is not a reason to have no call to action. It
+           is a reason to have a different one — otherwise every visitor who
+           arrives while the first ten are being onboarded by hand is lost. #}
+        {% if signups_open %}
+          <a class="btn" href="/signup">Start free</a>
+        {% else %}
+          <a class="btn" href="{{ url_for('marketing.early_access') }}">Get early access</a>
+        {% endif %}
       </nav>
     </div>
   </header>

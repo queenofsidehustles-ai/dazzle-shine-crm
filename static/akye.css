@@ -34,7 +34,8 @@
   --muted:        #6b7590;   /* secondary text */
   --softer:       #98a1b8;   /* tertiary — labels, timestamps */
 
-  --surface:      #ffffff;   /* cards */
+  --surface:      #ffffff;
+  --surface-2:    #fbfcfe;   /* the near-white a raised card fades to */   /* cards */
   --ground:       #f7f8fb;   /* page background, faintly cool */
   --line:         #e3e7f0;   /* borders */
   --line-soft:    #eef1f7;   /* internal dividers */
@@ -195,7 +196,7 @@ a  { color: var(--amber-deep); }
 
 .card {
   position: relative;
-  background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
   border: 1px solid var(--line);
   border-radius: var(--r); box-shadow: var(--shadow);
   padding: var(--s5);
@@ -214,7 +215,7 @@ a  { color: var(--amber-deep); }
 .stat-grid { display: grid; gap: var(--s4); margin-bottom: var(--s6);
              grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .stat-card {
-  background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
   border: 1px solid var(--line);
   border-radius: var(--r); padding: var(--s4) var(--s5); box-shadow: var(--shadow);
   transition: transform var(--ease), box-shadow var(--ease), border-color var(--ease);

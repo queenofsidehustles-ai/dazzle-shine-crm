@@ -115,7 +115,11 @@ def migrate_all(quiet=False):
     try:
         orgs = control_plane.all_orgs(engine)
     except Exception as e:
-        print(f'  ⚠️  could not read the company list: {e}')
+        # On the very first boot the control plane has not been created yet,
+        # and on SQLite it does not exist at all. Neither is worth shouting
+        # about; anything else is.
+        if 'no such table' not in str(e) and 'does not exist' not in str(e):
+            print(f'  ⚠️  could not read the company list: {e}')
         return [], []
 
     moved, failed = [], []
@@ -197,6 +201,9 @@ def main():
 
     sub.add_parser('list', help='every company on this deployment')
 
+    lg = sub.add_parser('leads', help='everybody who asked for early access')
+    lg.add_argument('--csv', action='store_true', help='output as CSV to paste into a sheet')
+
     d = sub.add_parser('destroy', help='remove a company and ALL of its data')
     d.add_argument('slug')
     d.add_argument('--yes', action='store_true')
@@ -220,6 +227,36 @@ def main():
             created = r['created_at'].strftime('%d %b %Y') if r['created_at'] else ''
             print(f'  {r["slug"]:<20} {r["name"][:27]:<28} {r["status"]:<10} {created}')
         print()
+    elif args.action == 'leads':
+        rows = control_plane.all_leads(engine)
+        if not rows:
+            print('\n  Nobody has asked for early access yet.\n')
+            return 0
+        if args.csv:
+            import csv, sys as _sys
+            w = csv.writer(_sys.stdout)
+            w.writerow(['when', 'name', 'company', 'email', 'phone',
+                        'cleaners', 'note', 'source'])
+            for r in rows:
+                w.writerow([
+                    r['created_at'].strftime('%Y-%m-%d %H:%M') if r['created_at'] else '',
+                    r['name'] or '', r['company'] or '', r['email'] or '',
+                    r['phone'] or '', r['cleaners'] or '',
+                    (r['note'] or '').replace('\n', ' '), r['source'] or ''])
+            return 0
+        print(f'\n  {len(rows)} early-access request'
+              f'{"s" if len(rows) != 1 else ""}, newest first\n')
+        for r in rows:
+            when = r['created_at'].strftime('%d %b, %H:%M') if r['created_at'] else ''
+            print(f'  {r["name"] or "(no name)"}'
+                  f'{" — " + r["company"] if r["company"] else ""}   [{when}]')
+            print(f'     {r["email"] or ""}'
+                  f'{"   " + r["phone"] if r["phone"] else ""}'
+                  f'{"   " + r["cleaners"] + " cleaners" if r["cleaners"] else ""}')
+            if r['note']:
+                print(f'     “{r["note"]}”')
+            print()
+        print('  Add --csv to paste this into a spreadsheet.\n')
     elif args.action == 'destroy':
         org = control_plane.find(engine, args.slug)
         if not org:

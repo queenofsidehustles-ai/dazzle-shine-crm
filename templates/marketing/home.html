@@ -12,7 +12,7 @@
     background:
       radial-gradient(760px 420px at 12% -8%,  rgba(240,164,75,.16), transparent 62%),
       radial-gradient(900px 520px at 92% 4%,   rgba(59,111,181,.11), transparent 60%),
-      linear-gradient(180deg,#fff 0%,#fbfcfe 68%,var(--ground) 100%);
+      linear-gradient(180deg,#fff 0%,var(--surface-2) 68%,var(--ground) 100%);
   }
   /* A faint grid, fading out downwards, to give the space a floor. */
   .hero::before {
@@ -74,7 +74,7 @@
   }
   .chrome {
     display:flex; align-items:center; gap:7px;
-    padding:9px 12px; background:linear-gradient(180deg,#fbfcfe,#f2f4f9);
+    padding:9px 12px; background:linear-gradient(180deg,var(--surface-2),#f2f4f9);
     border-bottom:1px solid var(--line);
   }
   .chrome i { width:9px; height:9px; border-radius:50%; display:block; }
@@ -127,7 +127,7 @@
   .flow { display:grid; gap:14px; margin-top:24px; }
   .step {
     display:flex; gap:14px; align-items:flex-start;
-    background:linear-gradient(180deg,#fff,#fbfcfe);
+    background:linear-gradient(180deg,#fff,var(--surface-2));
     border:1px solid var(--line); border-radius:14px; padding:16px 18px;
     box-shadow:var(--lift-1);
   }
@@ -152,7 +152,7 @@
   /* ── The automation section ───────────────────────────────────────────── */
   .auto-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; margin-top:26px; }
   .auto {
-    background:linear-gradient(180deg,#fff,#fbfcfe); border:1px solid var(--line);
+    background:linear-gradient(180deg,#fff,var(--surface-2)); border:1px solid var(--line);
     border-radius:14px; padding:20px; box-shadow:var(--lift-1);
   }
   .auto .ico {
@@ -189,7 +189,7 @@
      JavaScript and a crawler reads the answers whether or not they are open. */
   .faq { max-width:760px; margin:26px auto 0; display:grid; gap:10px; }
   .faq details {
-    background:linear-gradient(180deg,#fff,#fbfcfe);
+    background:linear-gradient(180deg,#fff,var(--surface-2));
     border:1px solid var(--line); border-radius:12px;
     box-shadow:var(--lift-1); overflow:hidden;
   }
@@ -209,7 +209,7 @@
   /* ── Closing call to action ────────────────────────────────────────── */
   .close-card {
     max-width:680px; margin:0 auto; text-align:center;
-    background:linear-gradient(180deg,#fff,#fbfcfe);
+    background:linear-gradient(180deg,#fff,var(--surface-2));
     border:1px solid var(--line); border-radius:20px;
     padding:40px 32px; box-shadow:var(--lift-2);
   }
@@ -330,6 +330,8 @@
       <div class="cta-row">
         {% if signups_open %}
           <a class="btn" href="/signup">Start free — no card</a>
+        {% else %}
+          <a class="btn" href="{{ url_for('marketing.early_access') }}">Get early access</a>
         {% endif %}
         <a class="btn ghost" href="{{ url_for('marketing.pricing') }}">See pricing</a>
       </div>
@@ -593,16 +595,25 @@
 <section>
   <div class="wrap">
     <div class="close-card">
+      {% if signups_open %}
       <h2>Start free. Really free.</h2>
       <p style="color:var(--muted);margin-top:10px">
         Your own booking page, two cleaners, twenty jobs a month, and the whole
         job flow — booking to checklist to getting paid. No card, no trial clock.
       </p>
+      {% else %}
+      <h2>We are setting up the first companies by hand</h2>
+      <p style="color:var(--muted);margin-top:10px">
+        Rather than opening the doors, we are onboarding a handful of cleaning
+        companies one at a time — loading your customers, cleaners, prices and
+        next week's jobs for you. Tell us about yours.
+      </p>
+      {% endif %}
       <div style="margin-top:26px">
         {% if signups_open %}
           <a class="btn" href="/signup">Create your account</a>
         {% else %}
-          <a class="btn ghost" href="{{ url_for('marketing.pricing') }}">See what's included</a>
+          <a class="btn" href="{{ url_for('marketing.early_access') }}">Get early access</a>
         {% endif %}
       </div>
     </div>

@@ -48,6 +48,12 @@
           {% if signups_open %}
             <a class="btn {{ 'ghost' if key != 'pro' }}" style="margin-top:16px" href="/signup">
               {{ 'Start free' if key == 'solo' else 'Start free, upgrade later' }}</a>
+          {% else %}
+            {# Every plan card ended in nothing while the door was shut, so
+               somebody who had just read the prices and decided had no way to
+               say so. #}
+            <a class="btn {{ 'ghost' if key != 'pro' }}" style="margin-top:16px"
+               href="{{ url_for('marketing.early_access') }}">Get early access</a>
           {% endif %}
         </div>
       {% endfor %}

@@ -207,3 +207,64 @@ def _base():
     import branding
     return branding.crm_base().rstrip('/')
 
+
+@marketing_bp.route('/early-access', methods=['GET', 'POST'])
+def early_access():
+    """For somebody who wants it before the door is open.
+
+    Signups stay shut while the first ten companies are onboarded by hand, and
+    that window is weeks long. Without this, every visitor who arrives in it —
+    from a search, from a Facebook group, from a link somebody forwarded — has
+    no way to raise their hand except spotting an email address in the footer.
+
+    The details are written down AND emailed. The write can fail; the person
+    filling in the form cannot be the one who pays for that.
+    """
+    _require_product_site()
+    from blueprints.signup import signups_open
+
+    # Door open? Then this page has no reason to exist — send them to sign up.
+    if signups_open():
+        return redirect(url_for('signup.signup'))
+
+    errors = {}
+    form = {k: (request.form.get(k) or '').strip()
+            for k in ('name', 'company', 'email', 'phone', 'cleaners', 'note')}
+
+    if request.method == 'POST':
+        if not form['name']:
+            errors['name'] = 'Please tell us your name.'
+        if not form['email'] or '@' not in form['email']:
+            errors['email'] = 'We need an email to reply to.'
+
+        if not errors:
+            import provisioning, control_plane, product
+            saved = False
+            try:
+                saved = control_plane.add_lead(
+                    provisioning._engine(),
+                    source=(request.referrer or '')[:120] or 'direct', **form)
+            except Exception:
+                saved = False
+
+            # Emailed as well as written down, so a failed write still reaches
+            # a person. This is somebody asking to give us money.
+            try:
+                import notifications
+                to = product.support_email()
+                if to:
+                    body = '\n'.join(
+                        f'{k.title()}: {v}' for k, v in form.items() if v)
+                    notifications.send_email(
+                        to, f'Early access request — {form["company"] or form["name"]}',
+                        f'<pre>{body}</pre>'
+                        f'<p>Stored: {"yes" if saved else "NO — write failed"}</p>')
+            except Exception:
+                pass
+
+            return render_template('marketing/early_access.html',
+                                   done=True, form=form, errors={})
+
+    return render_template('marketing/early_access.html',
+                           done=False, form=form, errors=errors)
+

@@ -60,9 +60,33 @@ organizations = Table(
 )
 
 
+# Somebody who wanted the product before the door was open.
+#
+# Lives here rather than in models.py for the same reason `organizations`
+# does: this is the product's own list, not any one cleaning company's, and
+# copying it into every tenant schema would be both absurd and a leak.
+product_leads = Table(
+    'product_leads', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('name', String(120)),
+    Column('company', String(200)),
+    Column('email', String(200), index=True),
+    Column('phone', String(40)),
+    # Roughly how many cleaners. Free text on purpose -- "3 or 4, depends" is
+    # a more useful answer than a number they had to round.
+    Column('cleaners', String(40)),
+    Column('note', String(500)),
+    # Where they came from, so the first ten can be traced back to whatever
+    # actually worked.
+    Column('source', String(120)),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
+    Column('contacted_at', DateTime),
+)
+
+
 def ensure_table(engine):
     """Create the control-plane table if it is not there. Safe to call always."""
-    control_metadata.create_all(engine, tables=[organizations])
+    control_metadata.create_all(engine, tables=[organizations, product_leads])
 
 
 def all_orgs(engine):
@@ -133,3 +157,34 @@ def find_by_customer(engine, stripe_customer_id):
                 organizations.c.stripe_customer_id == stripe_customer_id)
         ).mappings().first()
         return dict(row) if row else None
+
+
+def add_lead(engine, **fields):
+    """Record somebody who asked for early access. Never raises.
+
+    A form that loses the person filling it in is worse than no form. If the
+    table is missing or the write fails, the caller still emails the details
+    on, so the lead reaches a human either way.
+    """
+    allowed = {'name', 'company', 'email', 'phone', 'cleaners', 'note', 'source'}
+    row = {k: (v or None) for k, v in fields.items() if k in allowed}
+    row['created_at'] = datetime.utcnow()
+    try:
+        ensure_table(engine)
+        with engine.begin() as conn:
+            conn.execute(insert(product_leads).values(**row))
+        return True
+    except Exception:
+        return False
+
+
+def all_leads(engine):
+    """Everybody who has asked, newest first."""
+    try:
+        with engine.connect() as conn:
+            return [dict(r) for r in conn.execute(
+                select(product_leads).order_by(
+                    product_leads.c.created_at.desc())).mappings()]
+    except Exception:
+        return []
+
