@@ -141,16 +141,122 @@
     </div>
 
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Service Details</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+        Service Details
+        <a href="#" onclick="document.getElementById('serviceBox').open=true;this.blur();return false"
+           style="float:right;font-size:0.72rem;color:#b98a33;text-transform:none;letter-spacing:0;font-weight:600">✎ edit</a>
+      </h2>
       <div class="detail-row"><span class="dl">Service</span><span class="dv">{{ booking.service_label }}</span></div>
       <div class="detail-row"><span class="dl">Bedrooms</span><span class="dv">{{ booking.bedrooms or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Bathrooms</span><span class="dv">{{ booking.bathrooms or '—' }}</span></div>
-      {% if booking.extras %}
-      <div class="detail-row"><span class="dl">Add-ons</span><span class="dv">{{ booking.extras }}</span></div>
-      {% endif %}
+      <div class="detail-row"><span class="dl">Add-ons</span><span class="dv">{{ booking.extras or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Repeats</span><span class="dv">{{ FREQUENCY_LABELS.get(booking.frequency, '—') }}</span></div>
       <div class="detail-row"><span class="dl">Requested Date</span><span class="dv">{{ booking.preferred_date or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Requested Time</span><span class="dv">{{ booking.preferred_time or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Received</span><span class="dv" style="color:#9a95ad;font-size:0.88rem">{{ booking.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span></div>
+
+      {# What was booked could not be corrected at all: the only way to change a
+         bedroom count was to cancel and re-key the job, losing its history. #}
+      <details id="serviceBox" style="margin-top:12px;border:1px solid #e4dfef;border-radius:10px;background:#faf9fd">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:#5f5878">
+          ✎ Correct what was booked
+        </summary>
+        <form method="POST" action="{{ url_for('bookings.update_service', booking_id=booking.id) }}"
+              id="svcForm" style="padding:0 13px 14px">
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Service</label>
+            <select name="service_type" style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+              {% for key, label in SERVICE_LABELS.items() %}
+              <option value="{{ key }}" {{ 'selected' if booking.service_type == key }}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">Bedrooms</label>
+              <select name="bedrooms" style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+                {% for n in ['1','2','3','4','5'] %}
+                <option value="{{ n }}" {{ 'selected' if (booking.bedrooms|string) == n }}>{{ n }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">Bathrooms</label>
+              <select name="bathrooms" style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+                {% for n in ['1','2','3','4'] %}
+                <option value="{{ n }}" {{ 'selected' if (booking.bathrooms|string) == n }}>{{ n }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          {# Deliberately NOT a .form-group: that class styles every input inside
+             it to width:100%, which stretches a checkbox across the card and
+             shoves its label to the far right. #}
+          <div style="margin-bottom:9px">
+            <label style="display:block;font-size:0.78rem;font-weight:600;color:#5f5878;margin-bottom:5px">Add-ons</label>
+            <div style="display:flex;flex-direction:column;gap:5px;padding:2px 0">
+              {% for name, cost in EXTRAS.items() %}
+              <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;color:#5f5878;font-weight:400;margin:0">
+                <input type="checkbox" name="extras" value="{{ name }}"
+                       style="width:auto;flex:none;margin:0;padding:0"
+                       {{ 'checked' if booking.extras and name in booking.extras }}>
+                <span>{{ name }} <span style="color:#9a95ad">+${{ cost }}</span></span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">Repeats</label>
+              <select name="frequency" style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+                {% for key, label in FREQUENCY_LABELS.items() %}
+                <option value="{{ key }}" {{ 'selected' if (booking.frequency or 'one_time') == key }}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">Sq ft <span style="color:#9a95ad;font-weight:400">optional</span></label>
+              <input type="number" name="sqft" value="{{ booking.sqft or '' }}" placeholder="e.g. 1800"
+                     style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">Requested date</label>
+              <input type="date" name="preferred_date" value="{{ booking.preferred_date or '' }}"
+                     style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">Requested time</label>
+              <input type="text" name="preferred_time" value="{{ booking.preferred_time or '' }}"
+                     placeholder="e.g. 10:00 AM"
+                     style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+            </div>
+          </div>
+
+          {# Every field above feeds the quote, so she is shown what the new one
+             would be BEFORE saving — and re-pricing stays her decision. Saving
+             a bedroom count must never move money on its own. #}
+          <div style="background:#fff;border:1px solid #e4dfef;border-radius:9px;padding:11px 13px;margin-bottom:10px">
+            <div style="font-size:0.8rem;color:#5f5878">
+              These details quote <strong id="svc-quote" style="color:#1f1333">—</strong>.
+              Current price <strong>${{ '%.2f'|format(booking.price or 0) }}</strong>.
+            </div>
+            <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:#5f5878;margin-top:9px">
+              <input type="checkbox" name="reprice" value="1" style="margin-top:2px">
+              <span>Re-price this job to match.
+                {% if booking.deposit_paid or booking.paid_at %}
+                <span style="color:#c53030;font-weight:600">They've already paid against the old price —
+                  use “correct the price” instead so they're told.</span>
+                {% else %}
+                <span style="color:#9a95ad">The customer isn't told either way.</span>
+                {% endif %}
+              </span>
+            </label>
+          </div>
+          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save service details</button>
+        </form>
+      </details>
     </div>
   </div>
 
@@ -1028,6 +1134,43 @@
 </div>
 
 <script>
+// What the service details she is choosing would actually quote. Asks the same
+// endpoint the New Booking form uses, so the figure here and the figure there
+// can never disagree. She sees the money implication before saving rather than
+// discovering it in a flash message afterwards.
+(function () {
+  const form = document.getElementById('svcForm');
+  const out = document.getElementById('svc-quote');
+  if (!form || !out) return;
+  const LEAD_FEE = {{ booking.lead_fee or 0 }};
+  let seq = 0;
+  async function quote() {
+    const mine = ++seq;
+    const d = new FormData(form);
+    const p = new URLSearchParams({
+      service_type: d.get('service_type') || 'standard',
+      bedrooms: d.get('bedrooms') || '1',
+      bathrooms: d.get('bathrooms') || '1',
+      extras: d.getAll('extras').join(','),
+      frequency: d.get('frequency') || 'one_time',
+      sqft: d.get('sqft') || '',
+      lead_fee: LEAD_FEE,
+    });
+    try {
+      const r = await fetch('{{ url_for("bookings.price_preview") }}?' + p);
+      const j = await r.json();
+      // A slow reply for an older selection must not overwrite a newer one.
+      if (mine !== seq) return;
+      out.textContent = '$' + Number(j.total || 0).toFixed(2);
+    } catch (e) {
+      if (mine === seq) out.textContent = '—';
+    }
+  }
+  form.addEventListener('change', quote);
+  form.addEventListener('input', quote);
+  quote();
+})();
+
 // Live pay breakdown as you edit the total / lead fee
 (function () {
   const price = document.getElementById('f-price');
@@ -1040,7 +1183,11 @@
     document.getElementById('rt-total').textContent = money(p);
     document.getElementById('rt-fee').textContent = money(f);
     document.getElementById('rt-base').textContent = money(base);
-    document.getElementById('rt-half').textContent = money(base * 0.5);
+    // There is no 'rt-half' on this page. It was the old 50/50 contractor split,
+    // and the line went when pay moved to hours worked — but this assignment
+    // stayed, so recalc() threw on a null every time the price or the lead fee
+    // was touched. The three figures above are written before the throw, which
+    // is the only reason the breakdown appeared to work at all.
   }
   price.addEventListener('input', recalc);
   fee.addEventListener('input', recalc);

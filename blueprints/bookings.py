@@ -418,10 +418,13 @@ def detail(booking_id):
             Booking.id != booking.id,
         ).count()
 
+    from pricing import SERVICE_LABELS, EXTRAS
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff,
                            future_visits=future_visits,
                            series_visits=series_visits,
                            email_ok=looks_like_email(booking.email),
+                           SERVICE_LABELS=SERVICE_LABELS, EXTRAS=EXTRAS,
+                           FREQUENCY_LABELS=FREQUENCY_LABELS,
                            pay_url=pay_url, due=amount_due(booking),
                            recurring_upcoming=recurring_upcoming,
                            monthly_choices=monthly_choices,
@@ -1305,6 +1308,116 @@ def send_invoice(booking_id):
         flash(f'🧾 Invoice {booking.invoice_number} sent to {booking.email}.', 'success')
     else:
         flash(f'Invoice {booking.invoice_number} created — share the link manually (no email on file, or send failed).', 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/service', methods=['POST'])
+@login_required
+def update_service(booking_id):
+    """Correct what was actually booked — service, size, add-ons, when.
+
+    These were fixed at the moment the booking was created. A customer who
+    said two bedrooms and meant three, or wanted a deep clean rather than a
+    standard one, could not be corrected: the only way to change any of it was
+    to cancel the booking and key in a new one, losing its history, its notes
+    and its place in a recurring plan.
+
+    The price is deliberately NOT moved on its own. Every one of these fields
+    feeds the quote, so saving a change silently re-priced work the customer
+    has already been told the cost of — and on a job with a deposit against it,
+    that is somebody's money moving without them being told. So the new quote
+    is shown, re-pricing is a decision she makes explicitly, and correcting a
+    price the customer has already seen still belongs in correct_price(), which
+    notifies them."""
+    from pricing import calculate_price, SERVICE_LABELS, EXTRAS
+    booking = Booking.query.get_or_404(booking_id)
+
+    service_type = (request.form.get('service_type') or '').strip()
+    if service_type not in SERVICE_LABELS:
+        flash('Pick one of the services on the list.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    frequency = (request.form.get('frequency') or 'one_time').strip()
+    if frequency not in FREQUENCY_LABELS:
+        frequency = 'one_time'
+
+    bedrooms = (request.form.get('bedrooms') or '').strip()
+    bathrooms = (request.form.get('bathrooms') or '').strip()
+    # Only the add-ons this business actually prices. Anything else would raise
+    # the customer's total by a number nothing in the CRM can explain.
+    extras = ','.join(e for e in request.form.getlist('extras') if e in EXTRAS)
+    sqft_raw = (request.form.get('sqft') or '').strip()
+    try:
+        sqft = int(sqft_raw) if sqft_raw else None
+    except ValueError:
+        sqft = booking.sqft
+
+    changes = []
+    for label, old, new in (
+        ('Service', SERVICE_LABELS.get(booking.service_type, booking.service_type),
+         SERVICE_LABELS[service_type]),
+        ('Bedrooms', booking.bedrooms, bedrooms),
+        ('Bathrooms', booking.bathrooms, bathrooms),
+        ('Add-ons', booking.extras, extras),
+        ('Frequency', FREQUENCY_LABELS.get(booking.frequency, booking.frequency),
+         FREQUENCY_LABELS[frequency]),
+        ('Sq ft', booking.sqft, sqft),
+        ('Date', booking.preferred_date, (request.form.get('preferred_date') or '').strip()),
+        ('Time', booking.preferred_time, (request.form.get('preferred_time') or '').strip()),
+    ):
+        if (old or '') != (new or ''):
+            changes.append(f'{label} "{old or "blank"}" → "{new or "blank"}"')
+
+    booking.service_type = service_type
+    booking.bedrooms = bedrooms
+    booking.bathrooms = bathrooms
+    booking.extras = extras
+    booking.frequency = frequency
+    booking.sqft = sqft
+    booking.preferred_date = (request.form.get('preferred_date') or '').strip()
+    booking.preferred_time = (request.form.get('preferred_time') or '').strip()
+
+    # What this configuration is worth now, keeping the lead fee, which is an ad
+    # cost rather than anything the house size decides.
+    try:
+        quote = round((calculate_price(
+            service_type=service_type, bedrooms=bedrooms or 1, bathrooms=bathrooms or 1,
+            extras=extras, frequency=frequency, sqft=sqft) or 0)
+            + (booking.lead_fee or 0), 2)
+    except Exception:
+        quote = None
+
+    old_price = round(booking.price or 0, 2)
+    repriced = False
+    if request.form.get('reprice') and quote is not None and quote != old_price:
+        booking.price = quote
+        changes.append(f'Price ${old_price:.2f} → ${quote:.2f}')
+        repriced = True
+
+    # The balance follows the price, or the charge button goes on offering a
+    # figure that is no longer owed.
+    from blueprints.payments import amount_due as _due
+    booking.balance_due = _due(booking)
+
+    if changes:
+        note = f'[{date.today().isoformat()}] Service details corrected: {"; ".join(changes)}.'
+        booking.internal_notes = (note + '\n' + (booking.internal_notes or '')).strip()
+    db.session.commit()
+
+    if not changes:
+        flash('Nothing to change — those are the details already on file.', 'info')
+    elif repriced:
+        flash(f'✅ Service details updated and the price re-quoted to ${quote:.2f}. '
+              f'The customer has not been told — use “correct the price” if they '
+              f'need to know.', 'success')
+    elif quote is not None and quote != old_price:
+        # Say the number rather than leaving her to wonder. A quote that has
+        # drifted from the price is not necessarily wrong — she may have agreed
+        # a figure deliberately — but she should not have to guess that it has.
+        flash(f'✅ Service details updated. These details now quote '
+              f'${quote:.2f}, but the price is still ${old_price:.2f} — '
+              f'unchanged, because the customer was quoted that.', 'success')
+    else:
+        flash('✅ Service details updated.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
