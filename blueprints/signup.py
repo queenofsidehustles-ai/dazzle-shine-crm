@@ -104,7 +104,24 @@ def signup():
         password = request.form.get('password') or ''
         slug = form['slug'].lower() or suggest_slug(form['business'])
 
-        error = _validate(form, slug, password)
+        # _validate touches the database — it creates the control-plane table
+        # if it is missing and looks the slug up. Outside a guard, any problem
+        # there returned the generic "something went wrong" page instead of
+        # the signup form, which tells somebody trying to give us money
+        # nothing at all and leaves no message on screen to report.
+        try:
+            error = _validate(form, slug, password)
+        except Exception as e:
+            import errors
+            try:
+                errors.capture(e, path='/signup', method='POST')
+            except Exception:
+                pass                      # never let the reporting be the fault
+            print(f'  ❌ signup validation failed: {type(e).__name__}: {e}')
+            return render_template(
+                'admin/signup.html', form=form, slug=slug, base=base,
+                error='We could not check that address just now. Please try '
+                      'again in a moment — nothing was created.')
         if error:
             return render_template('admin/signup.html', form=form, slug=slug,
                                    base=base, error=error)
@@ -115,8 +132,17 @@ def signup():
             # Whatever went wrong, the half-built company is removed so the same
             # address can be tried again.
             _cleanup(slug)
-            import errors
-            errors.capture(e, path='/signup', method='POST')
+            # Printed as well as captured. The capture writes to a table, and a
+            # failure severe enough to break signup may be the same failure
+            # that stops it being written — in which case the deploy log is
+            # the only place the reason survives.
+            print(f'  ❌ signup failed for {slug!r}: {type(e).__name__}: {e}')
+            import traceback; traceback.print_exc()
+            try:
+                import errors
+                errors.capture(e, path='/signup', method='POST')
+            except Exception:
+                pass
             return render_template(
                 'admin/signup.html', form=form, slug=slug, base=base,
                 error='Something went wrong setting your account up. Nothing was '
