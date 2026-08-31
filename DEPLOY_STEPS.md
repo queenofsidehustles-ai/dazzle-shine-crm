@@ -377,7 +377,47 @@ the same protection your CRM already has.
 
 ---
 
-## Step 11 — Turn on the trial emails
+## Step 11 — Give the product its own email account
+
+The product sends two things a cleaning company never does: trial reminders,
+and the alert that says a customer's CRM just broke. Both need an email
+account that belongs to **us**, not to any customer.
+
+Three Railway variables. They answer three different questions, which is why
+they are not one setting:
+
+| Variable | The question it answers | Can be |
+|---|---|---|
+| `PRODUCT_SUPPORT_EMAIL` | Where does a person write to reach us? | Anything you read — a Gmail address is fine |
+| `PRODUCT_FROM_EMAIL` | What address may we send *from*? | **Must** be on a domain verified with Resend |
+| `PRODUCT_RESEND_API_KEY` | Which account pays for it? | A key from *your* Resend account |
+
+The middle one is the one that bites. Email providers will not let you send
+from a domain you have not proved you own, so `PRODUCT_FROM_EMAIL` has to be
+on `akyehq.com` and that domain has to be verified in Resend — even if the
+replies forward straight to Gmail.
+
+**Until you have that**, set `PRODUCT_SUPPORT_EMAIL` to your Gmail and leave
+the other two. Alerts will reach you as soon as the from-address exists; the
+`/version` page will keep telling you it is not set up until then.
+
+Then prove it actually sends. Not "I set the variable" — an email that arrived:
+
+```
+python3 provisioning.py testmail your.name@gmail.com
+```
+
+It prints who it is sending as, whether the key is there, and exactly what the
+provider said. Then go and look in that inbox. "Accepted" means the provider
+took it, not that it landed — it can still bounce or go to spam, and that is
+the half no command can tell you.
+
+**✅ Done when:** the test email is sitting in your inbox, and
+`www.akyehq.com/version` says `"product_mail": "ok"`.
+
+---
+
+## Step 12 — Turn on the trial emails
 
 The countdown in the banner is only ever seen by somebody who logs in. The
 person the trial is really aimed at — signed up on a Tuesday, got busy, has

@@ -259,8 +259,11 @@ def _alert(row):
                 <pre style="font-size:12px;background:#f6f7fa;padding:10px;
                      border-radius:6px;overflow-x:auto;white-space:pre-wrap">{trace}</pre>''',
                 from_name=product.name(),
-                from_email=os.environ.get('PRODUCT_FROM_EMAIL') or support,
-                reply_to=support)
+                from_email=product.from_email() or support,
+                reply_to=support,
+                # Our key, not the customer's. Without this, a crash inside
+                # their CRM emails us through their Resend account.
+                api_key=product.resend_api_key() or None)
         except Exception:
             pass
 

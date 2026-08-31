@@ -235,13 +235,15 @@ def _send(org, kind):
     support = product.support_email()
     return notifications.send_email(
         to, org.get('name') or '', subject, html,
-        # Explicit, all three. Left to default these would come from
-        # `branding`, which describes whichever cleaning business the process
-        # last looked at — so the email would arrive signed by somebody
-        # else's company, sent from their domain.
+        # Explicit, all four. Left to default, the identity comes from
+        # `branding` and the key from `integrations` — both of which describe
+        # whichever cleaning business the process last looked at. The email
+        # would arrive signed by somebody else's company, sent from their
+        # domain, billed to their email account.
         from_name=product.name(),
-        from_email=os.environ.get('PRODUCT_FROM_EMAIL') or support or None,
-        reply_to=support or None)
+        from_email=product.from_email() or None,
+        reply_to=support or None,
+        api_key=product.resend_api_key() or None)
 
 
 def run(engine=None, now=None, dry_run=False):

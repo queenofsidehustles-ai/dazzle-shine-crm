@@ -38,6 +38,25 @@ def version():
         out['problem'] = ('DATABASE_URL is not set. Running on SQLite, so no '
                           'company can be signed up and nothing survives a '
                           'restart. Point DATABASE_URL at the Postgres.')
+
+    # Whether the product itself can email anybody — trial reminders, and the
+    # alert that says a customer's CRM just broke. Both fail silently by
+    # nature: nobody notices an email that was never sent, and the crash alert
+    # is the one thing whose whole job is to be noticed.
+    try:
+        import product
+        mail = product.mail_status()
+        if mail['applies']:
+            out['product_mail'] = 'ok' if not mail['problem'] else 'not configured'
+            if mail['problem']:
+                # Under its own key as well as the headline. A missing
+                # DATABASE_URL is more urgent and wins `problem`, but it must
+                # not hide this one — two faults at once is exactly when a
+                # deployment is being set up, and exactly when both matter.
+                out['product_mail_problem'] = mail['problem']
+                out.setdefault('problem', mail['problem'])
+    except Exception:
+        pass
     return out
 
 

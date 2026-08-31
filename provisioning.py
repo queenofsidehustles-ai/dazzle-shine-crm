@@ -204,6 +204,10 @@ def main():
     lg = sub.add_parser('leads', help='everybody who asked for early access')
     lg.add_argument('--csv', action='store_true', help='output as CSV to paste into a sheet')
 
+    tm = sub.add_parser('testmail',
+                        help="prove the product can actually send an email")
+    tm.add_argument('to', help='where to send it — your own inbox')
+
     n = sub.add_parser('nudges', help='send the trial emails that are due today')
     n.add_argument('--dry-run', action='store_true',
                    help='send nothing; print exactly what a real run would do')
@@ -261,6 +265,44 @@ def main():
                 print(f'     “{r["note"]}”')
             print()
         print('  Add --csv to paste this into a spreadsheet.\n')
+    elif args.action == 'testmail':
+        # The same lesson as the backups: a thing nobody has tested is not a
+        # working thing, it is an assumption with a config value attached. The
+        # two emails this proves out — trial reminders and crash alerts — both
+        # fail invisibly, because nobody notices an email that never came.
+        import notifications
+        import product
+        st = product.mail_status()
+        print()
+        if not st['applies']:
+            print('  This deployment is not the hosted product (no BASE_DOMAIN),')
+            print('  so there is no product mail to test.\n')
+            return 0
+        print(f'  Sending as:  {product.name()} <{st["from"]}>')
+        print(f'  Support:     {st["to"] or "— not set —"}')
+        print(f'  Key:         {"set" if st["key"] else "— MISSING —"}')
+        if st['problem']:
+            print(f'\n  ⚠️  {st["problem"]}\n')
+            return 1
+        ok, detail = notifications.send_email(
+            args.to, 'Test', f'{product.name()} test email',
+            f'''<p>If you are reading this, the product can send email.</p>
+            <p>This is the same path as the trial reminders and the alert that
+            tells you a customer's CRM has broken. Both of those fail
+            invisibly, which is why this command exists.</p>
+            <p style="color:#777;font-size:13px">Sent from {st["from"]},
+            replies go to {st["to"]}.</p>''',
+            from_name=product.name(), from_email=st['from'],
+            reply_to=st['to'], api_key=product.resend_api_key())
+        print()
+        if ok:
+            print(f'  ✅ Accepted by the provider: {detail}')
+            print(f'\n  Now go and look in {args.to}. "Accepted" means it was')
+            print('  taken, not that it arrived — it can still bounce or land')
+            print('  in spam, and that is the half this cannot tell you.\n')
+            return 0
+        print(f'  ❌ Not sent: {detail}\n')
+        return 1
     elif args.action == 'nudges':
         import trial_nudges
         try:

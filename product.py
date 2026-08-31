@@ -77,6 +77,62 @@ def support_email():
     return DEFAULT_SUPPORT if d == 'akyehq.com' else f'support@{d}'
 
 
+def from_email():
+    """The address the product's own mail is sent FROM.
+
+    Separate from `support_email()` because they are answers to different
+    questions. Support is where a person writes to reach us, and can be a
+    Gmail address behind a forward. This one has to be on a domain verified
+    with the email provider, or nothing sends at all — so it is set
+    explicitly, and falls back to the support address only because on a
+    properly-configured deployment they are the same thing.
+    """
+    explicit = (os.environ.get('PRODUCT_FROM_EMAIL') or '').strip()
+    return explicit or support_email()
+
+
+def resend_api_key():
+    """The PRODUCT's own email key, from the environment only.
+
+    Deliberately not `integrations.resend_api_key()`, which reads the settings
+    of whichever cleaning company the current request belongs to. Our mail
+    goes out on our key; theirs goes out on theirs. Mixing the two would bill
+    a customer for our crash alerts and put them in their sending logs.
+    """
+    return (os.environ.get('PRODUCT_RESEND_API_KEY')
+            or os.environ.get('RESEND_API_KEY') or '').strip()
+
+
+def mail_status():
+    """Whether the product can actually email anybody, and what is missing.
+
+    Written because "I think I set that up" and "an email arrived" are
+    different claims, and only the second one is worth anything. The same
+    lesson as the backups: a thing nobody has tested is not a working thing,
+    it is an assumption with a config value attached.
+
+    Returns a dict, always. `problem` is None when it should work.
+    """
+    if not domain():
+        # Not the hosted product. There is no product mail to send.
+        return {'applies': False, 'problem': None, 'to': '', 'from': '',
+                'key': False}
+    to, sender, key = support_email(), from_email(), resend_api_key()
+    problem = None
+    if not key:
+        problem = ('No email key. Set PRODUCT_RESEND_API_KEY (or RESEND_API_KEY) '
+                   'or the product cannot send trial reminders or crash alerts.')
+    elif not to:
+        problem = ('No support address. Set PRODUCT_SUPPORT_EMAIL to an inbox '
+                   'somebody reads, or crash alerts go nowhere.')
+    elif not sender:
+        problem = 'No from-address. Set PRODUCT_FROM_EMAIL.'
+    elif '@' not in sender:
+        problem = f'PRODUCT_FROM_EMAIL is not an email address: {sender!r}'
+    return {'applies': True, 'problem': problem, 'to': to, 'from': sender,
+            'key': bool(key)}
+
+
 # Who is legally on the other side of the terms of service. This is OUR
 # company -- the one selling the software -- and it is deliberately not in
 # `branding.py`, which holds the details of the cleaning business that a given

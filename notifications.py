@@ -243,12 +243,20 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
 
 
 def send_email(to_email, to_name, subject, html, from_name=None,
-               from_email=None, reply_to=None):
+               from_email=None, reply_to=None, api_key=None):
     """Send via Resend. Returns (ok: bool, detail: str) so callers/diagnostics
     can see what happened. Existing callers that ignore the return value are
     unaffected. from_email/reply_to let a branded caller (e.g. a commercial
-    quote) override the sender identity per brand."""
-    api_key = integrations.resend_api_key()
+    quote) override the sender identity per brand.
+
+    `api_key` exists for mail the PRODUCT sends — a trial reminder, a crash
+    alert — as opposed to mail a cleaning company sends its own customers.
+    Without it the key comes from `integrations`, which reads whichever
+    company's settings the current request belongs to. So a crash inside a
+    customer's CRM would have emailed us through that customer's Resend
+    account: billed to them, in their logs, and failing outright if they had
+    never connected one. Those are our emails and they go out on our key."""
+    api_key = (api_key or '').strip() or integrations.resend_api_key()
     from_email = from_email or branding.from_email()
     if not from_name:
         from_name = branding.biz_name()
