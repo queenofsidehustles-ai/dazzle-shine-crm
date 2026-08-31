@@ -5,6 +5,7 @@ from auth import login_required
 from models import Booking, BookingCrew, Client, Staff
 from extensions import db
 from pricing import FREQUENCY_LABELS
+from notifications import looks_like_email
 import recurring
 import branding
 
@@ -96,7 +97,6 @@ def new():
         # it and the owner does not.
         typed_email = request.form.get('email', '').strip()
         if typed_email:
-            from notifications import looks_like_email
             if not looks_like_email(typed_email):
                 flash(f'“{typed_email}” doesn\'t look like a complete email '
                       f'address — check for a missing .com. Leave it blank if '
@@ -408,8 +408,20 @@ def detail(booking_id):
             Booking.status.in_(('pending', 'confirmed')),
         ).count()
 
+    # Every visit on the plan, not just the ones still to come. A phone number
+    # is the same person's on the visits already done, so correcting it there
+    # is right too — unlike an address, which records where work happened.
+    series_visits = 0
+    if booking.recurring_group:
+        series_visits = Booking.query.filter(
+            Booking.recurring_group == booking.recurring_group,
+            Booking.id != booking.id,
+        ).count()
+
     return render_template('admin/booking_detail.html', booking=booking, staff=active_staff,
                            future_visits=future_visits,
+                           series_visits=series_visits,
+                           email_ok=looks_like_email(booking.email),
                            pay_url=pay_url, due=amount_due(booking),
                            recurring_upcoming=recurring_upcoming,
                            monthly_choices=monthly_choices,
@@ -616,7 +628,6 @@ def email_customer(booking_id):
         message = (request.form.get('message') or '').strip()
         # '@' alone is not enough: 'someone@gmail' passes it, saves to the
         # booking, and then breaks the payment page.
-        from notifications import looks_like_email
         if not looks_like_email(to_email):
             flash(f'“{to_email}” doesn\'t look like a complete email address — '
                   f'check for a missing .com.', 'warning')
@@ -1297,6 +1308,82 @@ def send_invoice(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+@bookings_bp.route('/<int:booking_id>/contact', methods=['POST'])
+@login_required
+def update_contact(booking_id):
+    """Correct the customer's name, email or phone on a booking.
+
+    None of these could be edited once a booking existed. The only way to change
+    an email was to open Email Customer and send the customer a message, because
+    that form happens to write the address it sent to back onto the booking — a
+    correction you could not make without also mailing somebody.
+
+    That is how `duffytyler96@gmail`, with no `.com`, stayed on booking #59:
+    the address was refused by Stripe when the customer record was created,
+    which happens before the payment intent, so the booking could not be paid at
+    all. The payment path no longer breaks on a bad address, but the address
+    still has to be fixable, or no receipt ever reaches them.
+
+    Unlike an address, a contact detail is not a historical fact about where the
+    work happened — it is how to reach a person, and a wrong one is wrong on
+    every visit. So the whole plan is offered, past visits included, rather than
+    only the future ones."""
+    booking = Booking.query.get_or_404(booking_id)
+    name = (request.form.get('name') or '').strip()
+    email = (request.form.get('email') or '').strip().lower()
+    phone = (request.form.get('phone') or '').strip()
+
+    if not name:
+        flash('A booking needs a customer name.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    # Blank is allowed — some customers only ever give a phone number. What is
+    # not allowed is an address that cannot be delivered to, which is the whole
+    # reason this form exists.
+    if email and not looks_like_email(email):
+        flash(f'“{email}” doesn\'t look like a complete email address — check '
+              f'for a missing .com. Leave it blank if you don\'t have one.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    changes = []
+    for label, old, new in (('Name', booking.name, name),
+                            ('Email', booking.email, email),
+                            ('Phone', booking.phone, phone)):
+        if (old or '') != new:
+            changes.append(f'{label} "{old or "blank"}" → "{new or "blank"}"')
+    if not changes:
+        flash('Nothing to change — those are the details already on file.', 'info')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    booking.name, booking.email, booking.phone = name, email, phone
+
+    updated = 0
+    if request.form.get('apply_series') and booking.recurring_group:
+        for visit in Booking.query.filter_by(recurring_group=booking.recurring_group).all():
+            if visit.id == booking.id:
+                continue
+            visit.name, visit.email, visit.phone = name, email, phone
+            updated += 1
+
+    client_updated = False
+    if request.form.get('apply_client') and booking.client_id:
+        client = Client.query.get(booking.client_id)
+        if client:
+            client.name, client.email, client.phone = name, email, phone
+            client_updated = True
+
+    note = f'[{date.today().isoformat()}] Contact details corrected: {"; ".join(changes)}.'
+    booking.internal_notes = (note + '\n' + (booking.internal_notes or '')).strip()
+    db.session.commit()
+
+    msg = '✅ Contact details updated.'
+    if updated:
+        msg += f' {updated} other visit{"s" if updated != 1 else ""} on this plan too.'
+    if client_updated:
+        msg += ' Her client record was updated as well.'
+    flash(msg, 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
 @bookings_bp.route('/<int:booking_id>/address', methods=['POST'])
 @login_required
 def update_address(booking_id):
@@ -1700,7 +1787,60 @@ def client_detail(client_id):
     portal_url = f"{branding.crm_base()}/portal/{ensure_portal_token(client)}"
     from models import BusinessSetting
     return render_template('admin/client_detail.html', client=client, portal_url=portal_url,
+                           email_ok=looks_like_email(client.email),
                            invite_sent=BusinessSetting.get(f'portal_invite_sent_{client.id}'))
+
+
+@bookings_bp.route('/clients/<int:client_id>/contact', methods=['POST'])
+@login_required
+def update_client_contact(client_id):
+    """Edit a customer's details from their own page.
+
+    The client record is what a new booking is prefilled from and what the
+    customer portal is addressed to, so a wrong detail here reproduces itself
+    onto every future job. It was read-only: the page showed an email and a
+    phone number with no way to change either.
+
+    Correcting it here offers to carry the correction onto the jobs already
+    taken, because a detail fixed only on the client record leaves every
+    existing booking still holding the broken one — including the unpaid ones,
+    which is exactly where it matters."""
+    client = Client.query.get_or_404(client_id)
+    name = (request.form.get('name') or '').strip()
+    email = (request.form.get('email') or '').strip().lower()
+    phone = (request.form.get('phone') or '').strip()
+    address = (request.form.get('address') or '').strip()
+    city = (request.form.get('city') or '').strip()
+    zip_code = (request.form.get('zip_code') or '').strip()
+
+    if not name:
+        flash('A customer needs a name.', 'error')
+        return redirect(url_for('bookings.client_detail', client_id=client_id))
+    if email and not looks_like_email(email):
+        flash(f'“{email}” doesn\'t look like a complete email address — check '
+              f'for a missing .com. Leave it blank if you don\'t have one.', 'error')
+        return redirect(url_for('bookings.client_detail', client_id=client_id))
+
+    client.name, client.email, client.phone = name, email, phone
+    client.address, client.city, client.zip_code = address, city, zip_code
+
+    # Only the contact details travel to the bookings. The address deliberately
+    # does not: a past visit records where the work was actually done, and
+    # update_address() exists to move a plan properly, with its own rules about
+    # which visits may move.
+    updated = 0
+    if request.form.get('apply_bookings'):
+        for b in Booking.query.filter_by(client_id=client.id).all():
+            b.name, b.email, b.phone = name, email, phone
+            updated += 1
+
+    db.session.commit()
+    msg = f'✅ {client.name} updated.'
+    if updated:
+        msg += (f' {updated} booking{"s" if updated != 1 else ""} now carry '
+                f'the corrected contact details.')
+    flash(msg, 'success')
+    return redirect(url_for('bookings.client_detail', client_id=client_id))
 
 
 def _portal_email(client, kind):

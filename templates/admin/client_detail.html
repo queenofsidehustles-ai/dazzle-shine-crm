@@ -15,12 +15,75 @@
 <div class="detail-grid">
   <div>
     <div class="card" style="margin-bottom:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
-      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ client.email }}" style="color:#5d4f7d">{{ client.email }}</a></span></div>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+        Contact Info
+        <a href="#" onclick="document.getElementById('clientContactBox').open=true;this.blur();return false"
+           style="float:right;font-size:0.72rem;color:#b98a33;text-transform:none;letter-spacing:0;font-weight:600">✎ edit</a>
+      </h2>
+      <div class="detail-row"><span class="dl">Email</span><span class="dv">
+        {% if client.email %}<a href="mailto:{{ client.email }}" style="color:#5d4f7d">{{ client.email }}</a>
+        {% else %}<span style="color:#9a95ad">—</span>{% endif %}
+        {% if client.email and not email_ok %}
+        <a href="#" onclick="document.getElementById('clientContactBox').open=true;this.blur();return false"
+           style="display:block;margin-top:4px;font-size:0.78rem;color:#c53030;font-weight:600;text-decoration:none">
+          ⚠️ This address looks incomplete — nothing can reach it. Fix it →</a>
+        {% endif %}
+      </span></div>
       <div class="detail-row"><span class="dl">Phone</span><span class="dv"><a href="tel:{{ client.phone }}" style="color:#5d4f7d">{{ client.phone or '—' }}</a></span></div>
       <div class="detail-row"><span class="dl">Address</span><span class="dv">{{ client.address or '—' }}</span></div>
       <div class="detail-row"><span class="dl">City</span><span class="dv">{{ client.city or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Client Since</span><span class="dv" style="color:#9a95ad">{{ client.created_at.strftime('%B %d, %Y') }}</span></div>
+
+      <details id="clientContactBox" style="margin-top:12px;border:1px solid #e4dfef;border-radius:10px;background:#faf9fd">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:#5f5878">
+          ✎ Edit {{ client.name.split()[0] }}'s details
+        </summary>
+        <form method="POST" action="{{ url_for('bookings.update_client_contact', client_id=client.id) }}"
+              style="padding:0 13px 14px">
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Name</label>
+            <input type="text" name="name" value="{{ client.name or '' }}" required
+                   style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+          </div>
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Email</label>
+            <input type="email" name="email" value="{{ client.email or '' }}"
+                   placeholder="name@example.com"
+                   style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+          </div>
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Phone</label>
+            <input type="text" name="phone" value="{{ client.phone or '' }}"
+                   style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+          </div>
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Street address</label>
+            <input type="text" name="address" value="{{ client.address or '' }}"
+                   style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:9px;margin-bottom:10px">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">City</label>
+              <input type="text" name="city" value="{{ client.city or '' }}"
+                     style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:0.78rem">ZIP</label>
+              <input type="text" name="zip_code" value="{{ client.zip_code or '' }}"
+                     style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+            </div>
+          </div>
+
+          {% if client.total_bookings %}
+          <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:#5f5878;margin-bottom:12px">
+            <input type="checkbox" name="apply_bookings" value="1" checked style="margin-top:2px">
+            <span>Correct the name, email and phone on their <strong>{{ client.total_bookings }}</strong> booking{{ '' if client.total_bookings == 1 else 's' }} too.
+              <span style="color:#9a95ad">Each booking keeps the address the work was done at.</span></span>
+          </label>
+          {% endif %}
+          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save details</button>
+        </form>
+      </details>
     </div>
 
     <div class="card" style="margin-bottom:18px">

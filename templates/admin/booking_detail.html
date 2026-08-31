@@ -11,9 +11,24 @@
   <!-- LEFT: Client & Service Info -->
   <div style="display:flex;flex-direction:column;gap:18px">
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Client Info</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+        Client Info
+        <a href="#" onclick="document.getElementById('contactBox').open=true;this.blur();return false"
+           style="float:right;font-size:0.72rem;color:#b98a33;text-transform:none;letter-spacing:0;font-weight:600">✎ edit</a>
+      </h2>
       <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ booking.name }}</span></div>
-      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ booking.email }}" style="color:#5d4f7d">{{ booking.email }}</a></span></div>
+      <div class="detail-row"><span class="dl">Email</span><span class="dv">
+        {% if booking.email %}<a href="mailto:{{ booking.email }}" style="color:#5d4f7d">{{ booking.email }}</a>
+        {% else %}<span style="color:#9a95ad">— none on file</span>{% endif %}
+        {# An address Stripe will refuse is worth saying out loud, here, rather
+           than letting it surface as a failed payment the customer sees and
+           she does not. #}
+        {% if booking.email and not email_ok %}
+        <a href="#" onclick="document.getElementById('contactBox').open=true;this.blur();return false"
+           style="display:block;margin-top:4px;font-size:0.78rem;color:#c53030;font-weight:600;text-decoration:none">
+          ⚠️ This address looks incomplete — no receipt can reach it. Fix it →</a>
+        {% endif %}
+      </span></div>
       <div class="detail-row"><span class="dl">Phone</span><span class="dv">
         <a href="tel:{{ booking.phone }}" style="color:#5d4f7d">{{ booking.phone }}</a>
         {% if booking.phone %}
@@ -21,6 +36,50 @@
            style="color:#6b46c1;text-decoration:none;font-size:0.82rem;margin-left:8px;font-weight:600">💬 Message</a>
         {% endif %}
       </span></div>
+
+      {# Correcting a contact detail used to mean sending the customer an email
+         through Email Customer, the only form that wrote an address back. #}
+      <details id="contactBox" style="margin-top:10px;border:1px solid #e4dfef;border-radius:10px;background:#faf9fd">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:#5f5878">
+          ✎ Correct their name, email or phone
+        </summary>
+        <form method="POST" action="{{ url_for('bookings.update_contact', booking_id=booking.id) }}"
+              style="padding:0 13px 14px">
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Name</label>
+            <input type="text" name="name" value="{{ booking.name or '' }}" required
+                   style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+          </div>
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Email</label>
+            {# type=email so the browser catches the missing .com before the
+               form is even submitted. The server checks it again regardless. #}
+            <input type="email" name="email" value="{{ booking.email or '' }}"
+                   placeholder="name@example.com"
+                   style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.78rem">Phone</label>
+            <input type="text" name="phone" value="{{ booking.phone or '' }}"
+                   style="width:100%;padding:8px 10px;border:1px solid #e3e0ec;border-radius:7px;font-size:0.9rem">
+          </div>
+
+          {% if series_visits %}
+          <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:#5f5878;margin-bottom:8px">
+            <input type="checkbox" name="apply_series" value="1" checked style="margin-top:2px">
+            <span>Fix the other <strong>{{ series_visits }}</strong> visit{{ '' if series_visits == 1 else 's' }} on this plan too.
+              <span style="color:#9a95ad">It's the same person on every one of them.</span></span>
+          </label>
+          {% endif %}
+          {% if booking.client_id %}
+          <label style="display:flex;gap:8px;align-items:center;font-size:0.82rem;color:#5f5878;margin-bottom:12px">
+            <input type="checkbox" name="apply_client" value="1" checked>
+            <span>Update their client record as well</span>
+          </label>
+          {% endif %}
+          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save details</button>
+        </form>
+      </details>
       <div class="detail-row">
         <span class="dl">Address</span>
         <span class="dv">
