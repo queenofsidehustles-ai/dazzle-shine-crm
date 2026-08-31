@@ -705,6 +705,17 @@ def create_booking():
         resp = jsonify({'ok': False, 'error': f'Missing: {", ".join(missing)}'})
         return add_cors(resp, origin), 400
 
+    # Catch the typo here, while the customer is still on the form and can fix
+    # it. An address missing its .com is accepted by every later step and only
+    # fails on the payment page, days on, as an error the customer cannot act
+    # on and the owner never sees.
+    from notifications import looks_like_email
+    if not looks_like_email(data.get('email')):
+        resp = jsonify({'ok': False,
+                        'error': 'That email address looks incomplete — '
+                                 'please check it and try again.'})
+        return add_cors(resp, origin), 400
+
     # Find or create client
     client = Client.query.filter_by(email=data['email'].lower().strip()).first()
     if not client:

@@ -75,6 +75,30 @@ def ensure_pay_token(booking):
     return booking.pay_token
 
 
+def stripe_customer_id_for(booking):
+    """This booking's Stripe customer, created on first use.
+
+    The email is only sent to Stripe if it could actually be delivered to.
+    Stripe validates the address and rejects the whole call when it is
+    malformed, and because the customer is created *before* the payment intent,
+    one mistyped address stopped the customer paying at all — with nothing in
+    the Stripe dashboard to show for it, because no charge was ever attempted.
+    A typo in a contact detail must not be able to refuse somebody's money. The
+    address is still stored on the booking either way, so correcting it and
+    resending is all it takes to get a receipt out.
+
+    Shared by the deposit page and the balance page so the two cannot drift."""
+    if booking.stripe_customer_id:
+        return booking.stripe_customer_id
+    from notifications import looks_like_email
+    fields = {'name': booking.name, 'phone': booking.phone}
+    if looks_like_email(booking.email):
+        fields['email'] = booking.email
+    customer = stripe.Customer.create(**fields)
+    booking.stripe_customer_id = customer.id
+    return customer.id
+
+
 def amount_due(booking):
     """What the customer still owes: total minus the deposit they actually paid.
 
@@ -350,13 +374,7 @@ def create_intent(token):
     if not stripe.api_key:
         return jsonify({'ok': False, 'error': 'Payments not configured'}), 500
     try:
-        if booking.stripe_customer_id:
-            customer_id = booking.stripe_customer_id
-        else:
-            customer = stripe.Customer.create(name=booking.name, email=booking.email,
-                                              phone=booking.phone)
-            customer_id = customer.id
-            booking.stripe_customer_id = customer_id
+        customer_id = stripe_customer_id_for(booking)
         intent = stripe.PaymentIntent.create(
             amount=int(round((due + tip) * 100)), currency='usd', customer=customer_id,
             metadata={'booking_id': str(booking.id), 'pay_token': token,

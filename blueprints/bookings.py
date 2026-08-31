@@ -90,6 +90,18 @@ def new():
         if not name:
             flash('Customer name is required.', 'error')
             return redirect(url_for('bookings.new'))
+        # Optional, but if one is given it has to be a real one. An address
+        # with the .com missing is accepted everywhere else in the booking and
+        # only fails much later, on the payment page, where the customer sees
+        # it and the owner does not.
+        typed_email = request.form.get('email', '').strip()
+        if typed_email:
+            from notifications import looks_like_email
+            if not looks_like_email(typed_email):
+                flash(f'“{typed_email}” doesn\'t look like a complete email '
+                      f'address — check for a missing .com. Leave it blank if '
+                      f'you don\'t have one.', 'error')
+                return redirect(url_for('bookings.new'))
         service_type = request.form.get('service_type', 'standard')
         bedrooms = request.form.get('bedrooms', '1')
         bathrooms = request.form.get('bathrooms', '1')
@@ -602,8 +614,12 @@ def email_customer(booking_id):
         to_email = (request.form.get('to_email') or '').strip()
         subject = (request.form.get('subject') or '').strip()
         message = (request.form.get('message') or '').strip()
-        if not to_email or '@' not in to_email:
-            flash('Please enter a valid email address to send to.', 'warning')
+        # '@' alone is not enough: 'someone@gmail' passes it, saves to the
+        # booking, and then breaks the payment page.
+        from notifications import looks_like_email
+        if not looks_like_email(to_email):
+            flash(f'“{to_email}” doesn\'t look like a complete email address — '
+                  f'check for a missing .com.', 'warning')
             return redirect(url_for('bookings.email_customer', booking_id=booking_id))
         if not subject or not message:
             flash('Please fill in both a subject and a message.', 'warning')
@@ -1726,6 +1742,15 @@ def new_client():
             flash('A customer needs a name.', 'error')
             return render_template('admin/client_new.html',
                                    form=request.form.to_dict())
+
+        typed_email = (request.form.get('email') or '').strip()
+        if typed_email:
+            from notifications import looks_like_email
+            if not looks_like_email(typed_email):
+                flash(f'“{typed_email}” doesn\'t look like a complete email '
+                      f'address — check for a missing .com.', 'error')
+                return render_template('admin/client_new.html',
+                                       form=request.form.to_dict())
 
         c = Client(
             name=name,

@@ -14,12 +14,22 @@ def pay_deposit_page(token):
     booking = Booking.query.filter_by(deposit_token=token).first_or_404()
     pk = integrations.stripe_publishable_key()
     import customer_terms
+    deposit = get_deposit()
+    # What they will still owe once this deposit is taken, worked out from the
+    # price. The template used to print booking.balance_due, a column only ever
+    # written by the price-correction route — so on every ordinary booking it
+    # sat at zero and the page told the customer, in writing, that nothing
+    # would be owed after the cleaning. They then received an invoice for the
+    # rest. A quoted figure a customer reads before paying has to be the real
+    # one.
+    balance = round(max(0.0, (booking.price or 0) - deposit), 2)
     return render_template('public/pay_deposit.html',
         booking=booking,
         token=token,
         stripe_pk=pk,
         terms=customer_terms.as_html(),
-        deposit=get_deposit(),
+        deposit=deposit,
+        balance=balance,
         already_paid=bool(booking.deposit_paid),
     )
 
@@ -35,15 +45,11 @@ def create_deposit_intent(token):
         return jsonify({'ok': False, 'error': 'Payments not configured'}), 500
 
     try:
-        # Reuse an existing Stripe customer if we have one, else create
-        if booking.stripe_customer_id:
-            customer_id = booking.stripe_customer_id
-        else:
-            customer = stripe.Customer.create(
-                name=booking.name, email=booking.email, phone=booking.phone,
-            )
-            customer_id = customer.id
-            booking.stripe_customer_id = customer_id
+        # Reuse an existing Stripe customer if we have one, else create — and
+        # never let a mistyped email address be the reason a payment cannot be
+        # taken. See stripe_customer_id_for().
+        from blueprints.payments import stripe_customer_id_for
+        customer_id = stripe_customer_id_for(booking)
 
         intent = stripe.PaymentIntent.create(
             amount=int(round(get_deposit() * 100)),
