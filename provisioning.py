@@ -204,6 +204,10 @@ def main():
     lg = sub.add_parser('leads', help='everybody who asked for early access')
     lg.add_argument('--csv', action='store_true', help='output as CSV to paste into a sheet')
 
+    n = sub.add_parser('nudges', help='send the trial emails that are due today')
+    n.add_argument('--dry-run', action='store_true',
+                   help='send nothing; print exactly what a real run would do')
+
     d = sub.add_parser('destroy', help='remove a company and ALL of its data')
     d.add_argument('slug')
     d.add_argument('--yes', action='store_true')
@@ -257,6 +261,36 @@ def main():
                 print(f'     “{r["note"]}”')
             print()
         print('  Add --csv to paste this into a spreadsheet.\n')
+    elif args.action == 'nudges':
+        import trial_nudges
+        try:
+            control_plane.ensure_table(engine)
+        except Exception:
+            # No control plane means this is one cleaning company and not the
+            # hosted product. There are no trials to nudge, and saying so is
+            # better than a page of SQLAlchemy.
+            print('\n  This deployment has no control plane — it is a single '
+                  'business,\n  not the hosted product. Nothing to nudge.\n')
+            return 0
+        counts = trial_nudges.run(engine, dry_run=args.dry_run)
+        plan = counts.get('plan') or []
+        head = 'Would send' if args.dry_run else 'Sent'
+        print(f'\n  {counts["considered"]} compan'
+              f'{"y" if counts["considered"] == 1 else "ies"} checked.')
+        if not plan:
+            print('  Nothing due today.\n')
+            return 0
+        print(f'\n  {head} {len(plan)}:\n')
+        for slug, kind, email in plan:
+            print(f'    {kind:<10} {slug:<20} {email}')
+        if counts.get('skipped_no_email'):
+            print(f'\n  {counts["skipped_no_email"]} skipped — no owner email '
+                  f'on the account.')
+        if counts.get('failed'):
+            print(f'  {counts["failed"]} failed and will be retried tomorrow.')
+        if args.dry_run:
+            print('\n  Nothing was sent. Drop --dry-run to send it.')
+        print()
     elif args.action == 'destroy':
         org = control_plane.find(engine, args.slug)
         if not org:

@@ -61,6 +61,17 @@ organizations = Table(
     # here rather than from signup: a fortnight that starts before anybody has
     # used the product is a trial they never had.
     Column('activated_at', DateTime),
+    # Which trial emails have gone to this company, comma-separated. The
+    # countdown in the banner only reaches somebody who logs in, and the whole
+    # reason the 30-day cap exists is the person who does not — so the nudges
+    # are the half of that feature that actually leaves the building.
+    #
+    # Written down rather than derived, because "have we already emailed
+    # them?" cannot be worked out from dates alone: a cron that runs twice, or
+    # a deploy that replays a day, would send the same email again, and the
+    # second copy of "9 days left" is the one that gets the sender marked as
+    # spam.
+    Column('nudges_sent', String(200)),
 )
 
 
@@ -115,6 +126,7 @@ def ensure_columns(engine):
         'current_period_end': 'TIMESTAMP',
         'grandfathered': 'BOOLEAN',
         'activated_at': 'TIMESTAMP',
+        'nudges_sent': 'VARCHAR(200)',
     }
     for name, sqltype in ddl.items():
         if name in have:
@@ -204,7 +216,7 @@ def set_billing(engine, slug, **fields):
     """
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
-               'grandfathered', 'status', 'activated_at'}
+               'grandfathered', 'status', 'activated_at', 'nudges_sent'}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f'not billing fields: {sorted(bad)}')

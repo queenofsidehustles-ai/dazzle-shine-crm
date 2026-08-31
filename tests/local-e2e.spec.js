@@ -250,29 +250,71 @@ test.describe('Calendar — drag to reschedule', () => {
   test.beforeEach(async ({ page }) => { await login(page); });
 
   test('dragging a job to another day moves it', async ({ page }) => {
-    // A job on a known date so we can find and move it.
+    // Three things had to be fixed here, and all three were the test's fault
+    // rather than the calendar's — the drag itself always worked.
+    //
+    // 1. The booking is named uniquely and deleted at the end. It used to be
+    //    called "Drag Me" and left behind, so every run added another chip to
+    //    the 5th. By the tenth the day cell was tall enough that the drop
+    //    landed nowhere and the test failed with no job having moved.
+    //
+    // 2. The drop is dispatched rather than mimed. `dragTo` moves a mouse and
+    //    hopes the browser synthesises HTML5 drag events from it, which it
+    //    does most of the time. Dispatching dragstart/dragover/drop with one
+    //    shared DataTransfer is what the page actually listens for.
+    //
+    // 3. The toast is read immediately. The calendar reloads itself 900ms
+    //    after a drop to re-read the grid from the server, which wipes it.
+    //    (Holding the reload is not an option — Chromium will not let you
+    //    reassign `location.reload`, and the assignment fails silently, which
+    //    is its own small trap.) The message lands about 20ms after the drop,
+    //    so reading it straight away has a wide margin; sleeping first does
+    //    not, which is what an earlier version of this did.
+    const who = `Drag Me ${Math.random().toString(36).slice(2, 8)}`;
     await page.goto(CRM + '/bookings/new');
-    await page.fill('input[name="name"]', 'Drag Me');
+    await page.fill('input[name="name"]', who);
     await page.fill('input[name="address"]', '5 Drag St');
     await page.fill('input[name="cleaning_price"]', '260');
     await page.fill('input[name="preferred_date"]', '2026-08-05');
     const notify = page.locator('input[name="notify_customer"]');
     if (await notify.count() && await notify.isChecked()) await notify.uncheck();
     await page.click('button[type="submit"]');
+    const bookingUrl = page.url();
 
     await page.goto(CRM + '/bookings/calendar?year=2026&month=8');
-    const chip = page.locator('.jobchip', { hasText: 'Drag' }).first();
+    // The chip shows only the first word of the name; the whole of it is in
+    // the title attribute, which is what makes this run-unique locator work.
+    const chip = page.locator(`.jobchip[title^="${who}"]`).first();
     await expect(chip, 'the job should be on the calendar and draggable').toBeVisible();
+    await expect(chip).toHaveAttribute('draggable', 'true');
 
     const target = page.locator('.daycell[data-date="2026-08-19"]');
     await expect(target).toBeVisible();
-    await chip.dragTo(target);
 
-    // The toast confirms, then the page reloads with the job on its new day.
-    await expect(page.locator('#dropToast')).toContainText('Moved Drag Me to 2026-08-19');
-    await page.waitForTimeout(1500);
+    const dt = await page.evaluateHandle(() => new DataTransfer());
+    await chip.dispatchEvent('dragstart', { dataTransfer: dt });
+    await target.dispatchEvent('dragover', { dataTransfer: dt });
+    await target.dispatchEvent('drop', { dataTransfer: dt });
+
+    // Read straight away — see (3) above.
+    await expect(page.locator('#dropMsg'),
+      'the calendar should say what it just did').toContainText(`Moved ${who} to 2026-08-19`);
+
+    // And it stuck. The server is the source of truth, so this re-reads the
+    // grid rather than trusting the toast.
     await page.goto(CRM + '/bookings/calendar?year=2026&month=8');
-    const moved = page.locator('.daycell[data-date="2026-08-19"] .jobchip', { hasText: 'Drag' });
+    const moved = page.locator(`.daycell[data-date="2026-08-19"] .jobchip[title^="${who}"]`);
     await expect(moved, 'the job should now sit on the 19th').toBeVisible();
+    await expect(page.locator(`.daycell[data-date="2026-08-05"] .jobchip[title^="${who}"]`),
+      'and no longer on the 5th').toHaveCount(0);
+
+    // Put the database back. Leaving this behind is what broke (1).
+    page.on('dialog', d => d.accept());
+    await page.goto(bookingUrl);
+    const del = page.locator('button:has-text("Delete Booking")');
+    if (await del.count()) {
+      await del.first().click();
+      await page.waitForLoadState('networkidle');
+    }
   });
 });

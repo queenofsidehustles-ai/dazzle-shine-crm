@@ -377,6 +377,46 @@ the same protection your CRM already has.
 
 ---
 
+## Step 11 — Turn on the trial emails
+
+The countdown in the banner is only ever seen by somebody who logs in. The
+person the trial is really aimed at — signed up on a Tuesday, got busy, has
+not been back — never sees it. These four emails are what reaches them:
+
+| When | What it says |
+|---|---|
+| Day 7, not started | you have not begun, and here is the one thing that starts it |
+| Day 21, not started | the last useful reminder before the door closes |
+| 3 days left, running | the one about money |
+| The day it lapses | what changed, what did not, and that nothing was deleted |
+
+Four in a month. Not a drip campaign — a cleaning company that wanted software
+does not want a drip campaign.
+
+1. Go to **cron-job.org** (the same place as your other jobs).
+2. **Create cronjob**.
+3. URL: `https://www.akyehq.com/api/trial-nudges`
+4. Method: **POST**
+5. Header: `X-Api-Key` set to the same `REMINDER_API_KEY` your other jobs use.
+6. Schedule: **once a day**, around 9am your time. Not hourly — every nudge is
+   recorded so it can never be sent twice, but hourly would fire "3 days left"
+   at 2am the moment the threshold ticked over.
+
+**Before you switch it on**, see exactly who would get what — this sends
+nothing:
+
+```
+python3 provisioning.py nudges --dry-run
+```
+
+Run it against the live database and read the list. It should be short and it
+should make sense. Drop `--dry-run` to actually send.
+
+**✅ Done when:** the dry run prints a list you agree with, and the cron is
+saved.
+
+---
+
 ## When you are done
 
 Tell me which step you finished and anything that did not match what I said.

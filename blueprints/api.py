@@ -499,6 +499,31 @@ def lifecycle_emails():
     return jsonify({'ok': True, **counts})
 
 
+# ── Trial nudges (cron — run once daily) ─────────────────────────────────────
+# The countdown in the banner only reaches somebody who logs in, and the whole
+# reason the trial has a start-by cap is the owner who does not. This is the
+# half of that feature that leaves the building.
+#
+# Deliberately once a day and no more. Every nudge is recorded against the
+# company, so running it twice sends nothing twice — but a schedule that fires
+# hourly would still be a schedule that sends "3 days left" the moment the
+# threshold is crossed rather than in the morning.
+
+@api_bp.route('/trial-nudges', methods=['POST'])
+def trial_nudges():
+    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
+    expected = os.environ.get('REMINDER_API_KEY', '')
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    import trial_nudges as tn
+    dry = request.args.get('dry_run') in ('1', 'true', 'yes')
+    counts = tn.run(dry_run=dry)
+    sent = sum(counts.get(k, 0) for k in tn.ALL)
+    if not dry:
+        automations.record('trial-nudges', items=sent)
+    return jsonify({'ok': True, 'sent': sent, **counts})
+
+
 # ── One-click unsubscribe (public) ────────────────────────────────────────────
 
 @api_bp.route('/unsubscribe/<token>')

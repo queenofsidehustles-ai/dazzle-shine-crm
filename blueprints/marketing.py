@@ -256,7 +256,8 @@ def early_access():
                     body = '\n'.join(
                         f'{k.title()}: {v}' for k, v in form.items() if v)
                     notifications.send_email(
-                        to, f'Early access request — {form["company"] or form["name"]}',
+                        to, product.name(),
+                        f'Early access request — {form["company"] or form["name"]}',
                         f'<pre>{body}</pre>'
                         f'<p>Stored: {"yes" if saved else "NO — write failed"}</p>')
             except Exception:

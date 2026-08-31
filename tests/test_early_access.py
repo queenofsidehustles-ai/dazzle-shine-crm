@@ -30,8 +30,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import notifications
 SENT = []
 notifications.send_sms = lambda *a, **k: (True, 'stub')
-notifications.send_email = lambda to, subj, body, **k: (
-    SENT.append({'to': to, 'subject': subj, 'body': body}), (True, 'stub'))[1]
+# The stub takes the SAME arguments as the real function. It used to take
+# three, which is why nobody noticed the caller was passing three to a
+# function that needs four: the stub accepted what production rejected, and
+# the `except Exception: pass` around the call swallowed the difference.
+# A stub that is easier to call than the real thing tests the stub.
+notifications.send_email = lambda to_email, to_name, subject, html, **k: (
+    SENT.append({'to': to_email, 'subject': subject, 'body': html}), (True, 'stub'))[1]
 
 from app import create_app
 

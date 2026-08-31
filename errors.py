@@ -152,6 +152,7 @@ def _alert(row):
                 if row.count and row.count > 1 else '')
         notifications.send_email(
             to,
+            biz,
             f'[{biz}] Something broke: {row.kind}',
             f'''<p>An error happened on your CRM. Nobody had to tell you — it
             reported itself.</p>
