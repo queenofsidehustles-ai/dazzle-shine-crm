@@ -22,10 +22,23 @@ def version():
     channel 'stable' is a customer instance, which only moves when a release is
     promoted. 'main' is this business's own, which moves on every push.
     """
-    import branding
-    return {'build': branding.version(),
-            'channel': branding.release_channel(),
-            'release': branding.release_tag()}
+    import branding, os
+    from flask import current_app
+    out = {'build': branding.version(),
+           'channel': branding.release_channel(),
+           'release': branding.release_tag()}
+
+    # Which engine is actually in use, and a plain warning when that is the one
+    # combination that cannot work. This is here rather than only in the deploy
+    # log because a deploy log is somewhere you have to know to look, and this
+    # is a URL you can open on a phone.
+    uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    out['db'] = uri.split(':', 1)[0].split('+')[0] or 'unknown'
+    if out['db'] == 'sqlite' and (os.environ.get('BASE_DOMAIN') or '').strip():
+        out['problem'] = ('DATABASE_URL is not set. Running on SQLite, so no '
+                          'company can be signed up and nothing survives a '
+                          'restart. Point DATABASE_URL at the Postgres.')
+    return out
 
 
 @admin_bp.route('/')

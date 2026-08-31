@@ -33,9 +33,22 @@ with app.app_context():
     r = c.get('/version')
     body = r.get_json()
     check(r.status_code == 200, 'the version endpoint answers')
-    check(set(body) == {'build', 'channel', 'release'},
-          f'reporting build, channel and release ({body})')
+    # Required keys, not an exact set. This endpoint is where somebody looks
+    # when a deploy behaves oddly, so it is meant to grow — freezing the shape
+    # made adding a diagnosis to it look like a regression.
+    for key in ('build', 'channel', 'release', 'db'):
+        check(key in body, f'reports {key} ({body.get(key)!r})')
     check(body['build'] and body['build'] != 'dev', f"a real commit ({body['build']})")
+
+    print('\n1b. It says which database engine is actually in use')
+    # A day was lost to this: DATABASE_URL was never set on the deployment, the
+    # app silently fell back to SQLite inside the container, and the only sign
+    # was one line in a deploy log reading "SQLiteImpl". Multi-tenancy gives
+    # each company its own Postgres schema, so SQLite is not a degraded setup
+    # there — it is one where signing anybody up cannot work at all.
+    check(body['db'] in ('sqlite', 'postgresql'), f"the engine is named ({body['db']})")
+    check('problem' not in body,
+          'and no problem is reported on a correctly configured instance')
 
     print('\n2. The channel says whether this is a customer instance or ours')
     os.environ['RAILWAY_GIT_BRANCH'] = 'stable'

@@ -55,8 +55,38 @@ def create_app():
     # Database
     db_url = os.environ.get('DATABASE_URL', '')
     # Fall back to SQLite if URL is missing or unresolved template
+    fell_back = False
     if not db_url or db_url.startswith('$') or '://' not in db_url:
         db_url = 'sqlite:///crm.db'
+        fell_back = True
+
+    # That fallback is right on a laptop and catastrophic on the product.
+    #
+    # It cost most of a day: DATABASE_URL was never set on the deployment, so
+    # the app quietly used a SQLite file inside the container. Every restart
+    # began with an empty database, the Postgres that had been created sat
+    # untouched, and signup returned a 500 with no obvious cause — because
+    # multi-tenancy gives each company its own Postgres *schema*, and SQLite
+    # has no schemas at all. Nothing in the logs said so except one line
+    # reading "SQLiteImpl" that nobody would think to look for.
+    #
+    # BASE_DOMAIN means this is the multi-company product. SQLite there is not
+    # a degraded setup, it is one that cannot work. Say so where it will be
+    # seen, and keep saying it: /version reports it too, so the answer is one
+    # click away rather than buried in a deploy log.
+    MISCONFIGURED = bool(fell_back and (os.environ.get('BASE_DOMAIN') or '').strip())
+    if MISCONFIGURED:
+        banner = '=' * 72
+        print(f'\n{banner}')
+        print('  DATABASE_URL IS NOT SET, AND THIS IS THE MULTI-COMPANY PRODUCT.')
+        print('')
+        print('  Running on a SQLite file inside the container. That means:')
+        print('    * every restart starts from an empty database')
+        print('    * signing a company up CANNOT work — SQLite has no schemas')
+        print('    * any Postgres attached to this project is unused')
+        print('')
+        print('  Set DATABASE_URL on this service to reference the Postgres.')
+        print(f'{banner}\n')
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
     if db_url.startswith('postgresql://') and '+psycopg2' not in db_url:
