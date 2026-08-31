@@ -89,12 +89,17 @@ SECTIONS = [
     ]),
 
     ('Setup', [
+        # Its own item, above Settings. Getting back to the setup list meant
+        # noticing a banner that disappears the moment the last step is done —
+        # so a business that half-finished had no way back to it, and said so.
+        ('settings.getting_started', '🚀', 'Getting started', False, []),
         ('settings.pricing', '⚙️', 'Settings', True, [
             ('settings.pricing', 'Pricing', True),
             ('settings.business', 'Business', True),
             ('settings.commercial', 'Commercial brand', True),
             ('settings.followup_texts', 'Follow-up texts', True),
             ('settings.connections', 'Connections', True),
+            ('settings.setup', 'What is left to do', True),
             ('settings.automations_page', 'Automations', True),
             ('team_logins.index', 'Team logins', True),
             ('settings.errors_page', 'Errors', True),

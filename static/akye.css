@@ -812,3 +812,52 @@ button[type="submit"]:not([class]):active {
 .langsw a:hover { background:var(--ground); color:var(--ink); }
 .langsw a.on { background:var(--ink); color:#fff; }
 .langsw a.on:hover { background:var(--ink-2); }
+
+/* ─────────────────────────────────────────────────────────────
+   "How do I get this?"
+   Instructions beside the box they fill in, closed until asked
+   for. Somebody stuck on a Twilio token at nine at night will
+   not go and find a help centre — they will give up, and the
+   CRM will never send a text.
+   ───────────────────────────────────────────────────────────── */
+.howto {
+  border:1px solid var(--line); border-radius:var(--r-sm);
+  background:var(--ground); margin:var(--s3) 0 var(--s5);
+  overflow:hidden;
+}
+.howto summary {
+  cursor:pointer; padding:var(--s3) var(--s4); list-style:none;
+  font-size:var(--t-sm); font-weight:650; color:var(--info);
+  display:flex; align-items:center; gap:var(--s2);
+}
+.howto summary::-webkit-details-marker { display:none; }
+.howto summary::before {
+  content:'?'; flex:0 0 auto;
+  width:18px; height:18px; border-radius:50%;
+  background:var(--info-soft); color:var(--info);
+  font-size:.72rem; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+}
+.howto summary::after { content:'▸'; margin-left:auto; color:var(--softer); }
+.howto[open] summary::after { content:'▾'; }
+.howto summary:hover { background:var(--info-soft); }
+.howto summary .mins {
+  font-weight:500; color:var(--softer); font-size:var(--t-xs);
+}
+.howto[open] summary { border-bottom:1px solid var(--line); }
+
+.howto-body { padding:var(--s4) var(--s5) var(--s5); background:var(--surface); }
+.howto-body ol { margin:0; padding-left:var(--s5); display:grid; gap:var(--s3); }
+.howto-body li { font-size:var(--t-sm); line-height:1.6; color:var(--ink); }
+.howto-body code {
+  background:var(--ground); border:1px solid var(--line-soft);
+  border-radius:4px; padding:1px 5px; font-size:.86em;
+}
+.howto-note {
+  margin-top:var(--s4); padding:var(--s3) var(--s4);
+  background:var(--amber-soft); border:1px solid var(--amber-line);
+  border-radius:var(--r-sm); color:var(--amber-deep);
+  font-size:var(--t-sm); line-height:1.6;
+}
+.howto-note code { background:rgba(255,255,255,.6); border-color:var(--amber-line); }
+.howto-body .btn { margin-top:var(--s4); }

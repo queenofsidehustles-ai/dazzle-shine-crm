@@ -135,8 +135,14 @@ check(p['next'] is None, 'and there is nothing left to tell them to do')
 print('\n6. And then it gets out of the way')
 c = client()
 r = c.get('/')
-check(b'Getting started' not in r.data,
+# The banner, not the words. There is now a permanent "Getting started" link
+# in the sidebar — added because a business that half-finished had no way back
+# to the list once the banner had gone — so the string is on every page by
+# design. What must disappear is the card.
+check(b'class="onboard-card"' not in r.data,
       'the dashboard banner disappears by itself — nothing to dismiss')
+check(b'getting-started' in r.data,
+      'but the sidebar link stays, so the list can always be found again')
 r = c.get('/settings/getting-started')
 check(b'up and running' in r.data,
       'and the page itself says so rather than showing an empty list')

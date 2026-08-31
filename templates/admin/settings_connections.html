@@ -60,10 +60,27 @@
   <div class="card" style="margin-top:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Stripe — taking payments</h2>
     <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
-      From your Stripe dashboard → <strong>Developers → API keys</strong>.
-      Start with the <strong>test</strong> keys if you'd like to try the CRM without charging anyone,
-      then swap in the live keys when you're ready.
+      This is how your customers pay you by card. It is your own Stripe
+      account and your own money — it has nothing to do with what you pay for
+      this software.
     </p>
+    {% set howto_title = 'How do I get my Stripe keys?' %}
+    {% set howto_mins = 'about 10 minutes' %}
+    {% set howto_link = 'https://dashboard.stripe.com/register' %}
+    {% set howto_link_text = 'Open Stripe' %}
+    {% set howto_note = 'Start in <strong>test mode</strong> if you want to try
+        the CRM without charging anybody. The keys look the same but begin
+        <code>pk_test_</code> and <code>sk_test_</code>, and no real card is ever
+        charged. Swap them for the live ones when you are ready.' %}
+    {% set steps = [
+      'Go to <strong>stripe.com</strong> and create an account, or sign in to the one you have.',
+      'They will ask for your business details and a bank account — this is where your customers\' money lands, so it has to be a real one.',
+      'In the left-hand menu click <strong>Developers</strong>, then <strong>API keys</strong>.',
+      'Copy the <strong>Publishable key</strong>. It starts <code>pk_</code> and is safe to show anybody.',
+      'Next to the <strong>Secret key</strong> click <strong>Reveal</strong>, then copy it. It starts <code>sk_</code>. Treat this one like a password.',
+      'Paste both into the boxes below and press Save.',
+    ] %}
+    {% include '_howto.html' %}
     {% for name in ['stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret'] %}
     {% set f = fields[name] %}
     <div class="form-group">
@@ -88,9 +105,29 @@
   <div class="card" style="margin-top:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Texting</h2>
     <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
-      From your Twilio console. The account SID and auth token are on the dashboard;
-      the phone number is the one you bought, written as <code>+14075550142</code>.
+      This is how your cleaners get their job offers and reminders by text.
+      Without it they get email instead, which is slower and easier to miss.
     </p>
+    {% set howto_title = 'How do I get my Twilio details?' %}
+    {% set howto_mins = 'about 15 minutes, then a wait' %}
+    {% set howto_link = 'https://www.twilio.com/try-twilio' %}
+    {% set howto_link_text = 'Open Twilio' %}
+    {% set howto_note = '<strong>In the US, texts will not arrive until you also
+        complete A2P 10DLC registration.</strong> It is a form about your business
+        that the phone networks require, it costs a few dollars, and it takes a
+        few days to clear. Twilio will accept your texts and quietly not deliver
+        them until it does — so do this early, and do not judge whether texting
+        works before it clears.' %}
+    {% set steps = [
+      'Go to <strong>twilio.com</strong> and sign up. You get a small free credit to try it.',
+      'On the Console dashboard you will see <strong>Account SID</strong> and <strong>Auth Token</strong>. Copy both. The auth token is hidden until you click to show it.',
+      'In the left menu go to <strong>Phone Numbers → Manage → Buy a number</strong>.',
+      'Tick <strong>SMS</strong> in the capabilities filter, pick a number with your local area code, and buy it. It costs about a dollar a month.',
+      'Copy the number in full, including the country code: <code>+14075550142</code>, not <code>(407) 555-0142</code>.',
+      'Paste all three below and press Save.',
+      'Then search Twilio for <strong>A2P 10DLC</strong> and complete the registration — see the note underneath.',
+    ] %}
+    {% include '_howto.html' %}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       {% for name in ['twilio_account_sid', 'twilio_auth_token', 'twilio_phone'] %}
       {% set f = fields[name] %}
@@ -116,9 +153,28 @@
   <div class="card" style="margin-top:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Email</h2>
     <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
-      From your Resend dashboard → <strong>API Keys</strong>. This sends booking confirmations,
-      invoices and receipts.
+      This is how booking confirmations, invoices and receipts reach your
+      customers.
     </p>
+    {% set howto_title = 'How do I get a Resend key?' %}
+    {% set howto_mins = 'about 5 minutes' %}
+    {% set howto_link = 'https://resend.com/signup' %}
+    {% set howto_link_text = 'Open Resend' %}
+    {% set howto_note = 'At first your emails will come from a Resend address
+        rather than your own. To send from <em>your</em> domain you add a few DNS
+        records — worth doing before you email real customers, because mail from
+        your own name is far less likely to land in junk. Resend walks you
+        through it under <strong>Domains</strong>.' %}
+    {% set steps = [
+      'Go to <strong>resend.com</strong> and sign up. The free plan sends 3,000 emails a month, which is plenty to start.',
+      'In the left menu click <strong>API Keys</strong>.',
+      'Click <strong>Create API Key</strong>. Give it any name — "CRM" will do.',
+      'Leave the permission on <strong>Sending access</strong> and create it.',
+      'Copy the key. It starts <code>re_</code>. <strong>Copy it now</strong> — Resend will not show it to you a second time.',
+      'Paste it below and press Save.',
+    ] %}
+    {% include '_howto.html' %}
+    <p style="display:none"></p>
     {% set f = fields['resend_api_key'] %}
     <div class="form-group">
       <label>{{ f.label }}</label>
