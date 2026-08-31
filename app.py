@@ -316,6 +316,10 @@ def create_app():
         # instance is still missing that predates migrations existing. Both come
         # out once every instance carries a version row. See migrate.py.
         import migrate
+        # English and Spanish on the pages a cleaner or applicant opens.
+        import i18n
+        i18n.install(app)
+
         migrate.run_at_boot(app)
 
         # And every company's own schema. run_at_boot handles the default

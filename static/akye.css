@@ -791,3 +791,24 @@ button[type="submit"]:not([class]):active {
   box-shadow: inset 0 2px 5px rgba(120,71,8,.26), 0 1px 2px rgba(158,97,17,.2);
 }
 .btn-dark:active { box-shadow: inset 0 2px 5px rgba(0,0,0,.34); }
+
+/* ─────────────────────────────────────────────────────────────
+   Language toggle
+   Two words, not a dropdown of flags. A cleaner who opened the
+   page in the wrong language needs one tap, and a flag is a
+   country rather than a language.
+   ───────────────────────────────────────────────────────────── */
+.langsw {
+  display:inline-flex; align-items:center; gap:0;
+  border:1px solid var(--line); border-radius:var(--r-pill);
+  overflow:hidden; background:var(--surface); font-size:var(--t-xs);
+  box-shadow:0 1px 2px rgba(22,33,58,.05);
+}
+.langsw a {
+  padding:5px 12px; text-decoration:none; color:var(--muted);
+  font-weight:650; letter-spacing:.02em; min-width:38px; text-align:center;
+  transition:background var(--ease), color var(--ease);
+}
+.langsw a:hover { background:var(--ground); color:var(--ink); }
+.langsw a.on { background:var(--ink); color:#fff; }
+.langsw a.on:hover { background:var(--ink-2); }

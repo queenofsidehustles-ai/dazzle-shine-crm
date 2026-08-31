@@ -218,6 +218,10 @@ def claim_page(ctoken, stoken):
     booking = Booking.query.filter_by(claim_token=ctoken).first_or_404()
     staff = Staff.query.filter_by(agreement_token=stoken).first_or_404()
     state = _claim_state(booking, staff)
+    # The text that brought them here was in their language; the page it opens
+    # has to match, or the translation was worse than useless.
+    import i18n
+    i18n.set_person(staff)
     return render_template('public/claim.html', b=booking, s=staff,
                            when_label=_friendly_date(booking.preferred_date),
                            pay=_pay_for(booking, staff), state=state,

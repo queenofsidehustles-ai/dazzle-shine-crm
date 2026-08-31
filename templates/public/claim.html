@@ -1,10 +1,10 @@
 {% import "public/_navigate.html" as nav %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANG }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Job Available — {{ biz }}</title>
+  <title>{{ t('New job available!') }} — {{ biz }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
@@ -36,24 +36,33 @@
     <span class="script">{{ biz }}</span>
 
     {% if state == 'open' %}
-      <h1>{{ 'Team job available! 🧹👥' if b.is_crew_job else 'New job available! 🧹' }}</h1>
+      <h1>{{ t('Team job available!') if b.is_crew_job else t('New job available!') }} 🧹{{ '👥' if b.is_crew_job }}</h1>
       {% if b.is_crew_job %}
       <div class="banner crew">👥 Big house — <b>{{ b.crew_size }} cleaners</b> on this one.
         {{ b.spots_left }} spot{{ 's' if b.spots_left != 1 }} left{% if b.crew_names %}, working with {{ b.crew_names | join(', ') }}{% endif %}.</div>
       {% endif %}
-      <div class="row"><span class="k">When</span><span class="v">{{ when_label }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
-      <div class="row"><span class="k">Service</span><span class="v">{{ b.service_label }}{% if b.size_line() %} · {{ b.size_line() }}{% endif %}</span></div>
-      <div class="row"><span class="k">Area</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
+      <div class="row"><span class="k">{{ t('When') }}</span><span class="v">{{ when_label }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
+      <div class="row"><span class="k">{{ t('Service') }}</span><span class="v">{{ b.service_label }}{% if b.size_line() %} · {{ b.size_line() }}{% endif %}</span></div>
+      <div class="row"><span class="k">{{ t('Area') }}</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
       <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'd earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
-        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">flat for the job</div>
+        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">{{ t('flat for the job') }}</div>
       </div>
       {% if clash %}
         <div class="banner clash">⚠️ {{ clash }}</div>
       {% else %}
         <form method="POST" action="{{ url_for('claims.claim_do', ctoken=b.claim_token, stoken=s.agreement_token) }}">
-          <button class="claim" type="submit">{{ '✋ Claim my spot' if b.is_crew_job else '✋ Claim this job' }}</button>
+          <button class="claim" type="submit">
+            ✋ {{ t('Claim my spot') if b.is_crew_job else t('Claim this job') }}
+          </button>
         </form>
-        <p class="muted">{{ 'First ' ~ b.spots_left ~ ' to claim get the open spots.' if b.is_crew_job else 'First to claim gets it.' }} The full address appears once it's yours.</p>
+        <p class="muted">
+          {%- if b.is_crew_job -%}
+            {{ t('First') }} {{ b.spots_left }} {{ t('to claim get the open spots.') }}
+          {%- else -%}
+            {{ t('First to claim gets it.') }}
+          {%- endif %}
+          {{ t("The full address appears once it's yours.") }}
+        </p>
       {% endif %}
 
     {% elif state == 'mine' %}
@@ -65,12 +74,12 @@
       <div class="banner crew" style="margin-top:10px">👥 Team job — {{ b.crew_size }} cleaners.
         {% if mates %}You're working with <b>{{ mates | join(', ') }}</b>.{% else %}Still filling the other spot{{ 's' if b.spots_left != 1 }} — we'll text you who joins.{% endif %}</div>
       {% endif %}
-      <div class="row" style="margin-top:10px"><span class="k">When</span><span class="v">{{ when_label }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
+      <div class="row" style="margin-top:10px"><span class="k">{{ t('When') }}</span><span class="v">{{ when_label }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">Client</span><span class="v">{{ b.name }}</span></div>
       <div class="row"><span class="k">Address</span><span class="v">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span></div>
       {{ nav.navigate(b.address, b.city, b.zip_code) }}
       <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'll earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
-        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">flat for the job</div>
+        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">{{ t('flat for the job') }}</div>
       </div>
       <a class="btnlink" href="{{ myday }}">📅 See it in My Day</a>
       <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"

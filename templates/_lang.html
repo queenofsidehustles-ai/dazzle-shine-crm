@@ -1,0 +1,13 @@
+{# The two-word language switch.
+
+   Included on every page a cleaner or an applicant opens. It keeps whatever
+   is already in the address bar and only changes `lang`, so switching
+   language never loses the token that got you here -- which it did, once. #}
+<span class="langsw" role="group" aria-label="Language">
+  <a href="{{ url_for(request.endpoint, **dict(request.view_args or {},
+                       **dict(request.args.to_dict(), lang='en'))) }}"
+     class="{{ 'on' if LANG != 'es' }}" hreflang="en">EN</a>
+  <a href="{{ url_for(request.endpoint, **dict(request.view_args or {},
+                       **dict(request.args.to_dict(), lang='es'))) }}"
+     class="{{ 'on' if LANG == 'es' }}" hreflang="es">ES</a>
+</span>

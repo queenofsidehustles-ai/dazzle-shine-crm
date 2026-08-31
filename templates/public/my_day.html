@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANG }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#16213a">
-  <title>My Day — {{ biz }}</title>
+  <title>{{ t('My Day') }} — {{ biz }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     /* This page is opened one-handed, outdoors, from a text message, by
@@ -24,6 +24,7 @@
     }
     .hero h1 { font-size:var(--t-xl); margin:0; font-weight:650; letter-spacing:-.02em; }
     .hero p { color:rgba(255,255,255,.62); margin:var(--s1) 0 0; font-size:var(--t-sm); }
+    .langrow { margin-top:var(--s3); }
     .hero .count {
       display:inline-block; margin-top:var(--s3); padding:var(--s1) var(--s3);
       background:var(--amber); color:var(--ink); border-radius:var(--r-pill);
@@ -145,43 +146,44 @@
   <div class="wrap">
     {% set total = days.values() | map('length') | sum %}
     <div class="hero">
-      <h1>Hi {{ s.name.split()[0] }}</h1>
-      <p>Your schedule — {{ biz }}</p>
+      <h1>{{ t('Hi') }} {{ s.name.split()[0] }}</h1>
+      <p>{{ t('Your schedule') }} — {{ biz }}</p>
+      <div class="langrow">{% include '_lang.html' %}</div>
       {% if total %}
-      <span class="count">{{ total }} job{{ 's' if total != 1 }} coming up</span>
+      <span class="count">{{ total }} {{ t('jobs coming up') if total != 1 else t('job coming up') }}</span>
       {% endif %}
     </div>
 
     {% for day, jobs in days.items() %}
-    <p class="dayhdr {{ 'today' if day == today }}">{{ (day_labels or {}).get(day, day) }}</p>
+    <p class="dayhdr {{ 'today' if day == today }}">{{ t((day_labels or {}).get(day, day)) }}</p>
     {% for b in jobs %}
     {% set jc = (b.job_checklists | sort(attribute='sent_at', reverse=True) | first) if b.job_checklists else none %}
     {% set dest = ((b.address or '') ~ (', ' ~ b.city if b.city else '') ~ (' ' ~ b.zip_code if b.zip_code else '')) %}
     <div class="job {{ 'is-today' if day == today }}">
       <div class="job-top">
-        <span class="job-time">{{ b.preferred_time or 'Time TBD' }}</span>
-        <span class="job-pay">${{ '%.0f'|format(b.pay_for(s)) }}<small>YOU EARN</small></span>
+        <span class="job-time">{{ b.preferred_time or t('Time TBD') }}</span>
+        <span class="job-pay">${{ '%.0f'|format(b.pay_for(s)) }}<small>{{ t('YOU EARN') }}</small></span>
       </div>
       <div class="job-client">{{ b.name }}</div>
       <div class="job-svc">{{ b.service_label }} · {{ b.bedrooms or '?' }} bd / {{ b.bathrooms or '?' }} ba</div>
       {% if b.is_crew_job %}
       {% set mates = b.crew_names | reject('equalto', s.name) | list %}
-      <div class="job-mates">👥 With {{ mates | join(', ') if mates else 'a teammate (still being assigned)' }}</div>
+      <div class="job-mates">👥 {{ t('With') }} {{ mates | join(', ') if mates else t('a teammate (still being assigned)') }}</div>
       {% endif %}
 
       <span class="job-addr"><span class="pin">📍</span> {{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span>
 
       {% if b.access_notes %}
-      <div class="access">🔑 <b>Getting in:</b> {{ b.access_notes }}</div>
+      <div class="access">🔑 <b>{{ t('Getting in:') }}</b> {{ tr_auto(b.access_notes) }}</div>
       {% endif %}
 
       <div class="btns">
         <a class="btn btn-nav" target="_blank" rel="noopener"
-           href="https://www.google.com/maps/dir/?api=1&destination={{ dest | urlencode }}">🧭 Navigate</a>
+           href="https://www.google.com/maps/dir/?api=1&destination={{ dest | urlencode }}">🧭 {{ t('Navigate') }}</a>
         <a class="btn btn-alt" target="_blank" rel="noopener"
            href="https://waze.com/ul?q={{ dest | urlencode }}&navigate=yes">Waze</a>
         {% if jc %}
-        <a class="btn btn-list" href="{{ url_for('workorders.view_checklist', token=jc.token) }}">📋 Checklist</a>
+        <a class="btn btn-list" href="{{ url_for('workorders.view_checklist', token=jc.token) }}">📋 {{ t('Checklist') }}</a>
         {% endif %}
       </div>
 
@@ -192,14 +194,14 @@
       {% set c = (clocked or {}).get(b.id, {}) %}
       <div class="clock">
         {% if c.get('open') %}
-        <span class="state"><span class="dot"></span>On the clock</span>
+        <span class="state"><span class="dot"></span>{{ t('On the clock') }}</span>
         <form method="POST" action="{{ url_for('contractors.clock_out', token=s.agreement_token, booking_id=b.id) }}">
-          <button type="submit" class="out">Clock out</button>
+          <button type="submit" class="out">{{ t('Clock out') }}</button>
         </form>
         {% else %}
-        {% if c.get('hours') %}<span class="logged">{{ '%.2f'|format(c['hours']) }} h logged</span>{% endif %}
+        {% if c.get('hours') %}<span class="logged">{{ '%.2f'|format(c['hours']) }} {{ t('h logged') }}</span>{% endif %}
         <form method="POST" action="{{ url_for('contractors.clock_in', token=s.agreement_token, booking_id=b.id) }}">
-          <button type="submit" class="in">{{ 'Clock in again' if c.get('hours') else 'Clock in' }}</button>
+          <button type="submit" class="in">{{ t('Clock in again') if c.get('hours') else t('Clock in') }}</button>
         </form>
         {% endif %}
       </div>
@@ -208,7 +210,7 @@
       {% if s.agreement_token and b.id %}
       <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"
             onsubmit="return confirm('Release this job back to the team? Someone else will be able to grab it.')">
-        <button type="submit" class="release">Can't make it? Release this job</button>
+        <button type="submit" class="release">{{ t("Can't make it? Release this job") }}</button>
       </form>
       {% endif %}
     </div>
@@ -216,12 +218,12 @@
     {% else %}
     <div class="none">
       <span class="big">🌤</span>
-      No jobs scheduled right now.<br>Enjoy the break — we'll text you when a new job is assigned.
+      {{ t('No jobs scheduled right now.') }}<br>{{ t("Enjoy the break — we'll text you when a new job is assigned.") }}
     </div>
     {% endfor %}
 
     <div class="foot">
-      <a href="{{ url_for('sops.library') }}" target="_blank">📖 Cleaning guides</a>
+      <a href="{{ url_for('sops.library') }}" target="_blank">📖 {{ t('Cleaning guides') }}</a>
     </div>
   </div>
 </body>

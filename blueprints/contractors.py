@@ -1153,6 +1153,11 @@ def my_day(token):
             'hours': s.hours_on(b),
         }
 
+    # Whose language this page is in: the cleaner holding the link. A toggle
+    # on the page still overrides it for this browser.
+    import i18n
+    i18n.set_person(s)
+
     biz = branding.biz_name()
     return render_template('public/my_day.html', s=s, days=days,
                            day_labels=labels, today=today.isoformat(),
