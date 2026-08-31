@@ -61,7 +61,10 @@
         <div class="row"><span class="k">Date</span><span class="v">{{ booking.preferred_date or 'Flexible' }}{% if booking.preferred_time %} · {{ booking.preferred_time }}{% endif %}</span></div>
         {% if booking.deposit_paid %}
         <div class="row"><span class="k">Total</span><span class="v">${{ '%.2f'|format(booking.price or 0) }}</span></div>
-        <div class="row"><span class="k">Deposit already paid</span><span class="v">−${{ '%.2f'|format(50) }}</span></div>
+        {# What they actually paid, not a hardcoded 50. amount_due() has always
+           credited the recorded figure, so a booking whose deposit was taken at
+           a different amount had this line contradict the total below it. #}
+        <div class="row"><span class="k">Deposit already paid</span><span class="v">−${{ '%.2f'|format((booking.price or 0) - due) }}</span></div>
         {% endif %}
       </div>
 

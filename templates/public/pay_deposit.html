@@ -70,7 +70,11 @@
     {% else %}
 
     <div class="card" id="pay-card">
-      <h1>Pay your $50 deposit to confirm</h1>
+      {# The figure comes from the setting, like every other one on this page.
+         This heading was left hardcoded at $50 when the deposit became
+         configurable, so an owner who changed it had the page ask for one
+         amount in the title and a different one on the button. #}
+      <h1>Pay your ${{ '%.0f'|format(deposit) }} deposit to confirm</h1>
 
       <div class="summary">
         <div class="row"><span class="k">Service</span><span class="v">{{ booking.service_label }}</span></div>
@@ -78,7 +82,7 @@
         <div class="row"><span class="k">Date</span><span class="v">{{ booking.preferred_date or 'Flexible' }}{% if booking.preferred_time and booking.preferred_time != 'Flexible' %} · {{ booking.preferred_time }}{% endif %}</span></div>
         <div class="row"><span class="k">Estimated total</span><span class="v">${{ '%.2f'|format(booking.price or 0) }}</span></div>
         <div class="row dep"><span class="k">Deposit today</span><span class="v">${{ '%.2f'|format(deposit) }}</span></div>
-        <div class="row"><span class="k">Balance after cleaning</span><span class="v">${{ '%.2f'|format(booking.balance_due or 0) }}</span></div>
+        <div class="row"><span class="k">Balance after cleaning</span><span class="v">${{ '%.2f'|format(balance) }}</span></div>
       </div>
 
       <div class="deposit-banner">

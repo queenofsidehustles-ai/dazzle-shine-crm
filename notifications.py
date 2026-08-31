@@ -1,10 +1,30 @@
 import os
+import re
 import hmac
 import hashlib
 import base64
 import requests as http_requests
 import branding
 import integrations
+
+
+# An address has to have a domain with a dot and a real suffix. Deliberately
+# not RFC-complete — the job is to catch a human typo, not to adjudicate the
+# spec, and the only thing worse than letting a bad address through is
+# rejecting somebody's real one.
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[a-z]{2,}$', re.I)
+
+
+def looks_like_email(value):
+    """True if this could plausibly be delivered to.
+
+    `duffytyler96@gmail` — no `.com` — passes an `'@' in value` check and fails
+    at Stripe, which rejects the address when the customer record is created.
+    That happens *before* the payment intent exists, so a typo in an email
+    address silently stopped a customer paying at all and left no trace in the
+    Stripe dashboard to explain why. Anywhere an address is typed, it gets
+    checked here first."""
+    return bool(EMAIL_RE.match((value or '').strip()))
 
 
 def _log_outbound(channel, to_address, to_name, subject, body, ok, detail,
