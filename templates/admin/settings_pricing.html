@@ -4,6 +4,75 @@
 
 {% block content %}
 <form method="POST">
+  <div class="card" style="margin-bottom:16px">
+    <h2 class="sec">What you charge</h2>
+
+    <div class="anchor">
+      <label for="anchor_price">
+        What do you charge for a standard clean of a
+        <strong>{{ anchor[0] }} bed / {{ anchor[1] }} bath</strong> house?
+      </label>
+      <div class="anchor-row">
+        <span class="cur">$</span>
+        <input type="number" id="anchor_price" step="1" min="0"
+               value="{{ '%g'|format(anchor_price or 0) }}" />
+        <button type="button" class="btn btn-outline btn-sm" id="fillgrid">
+          Fill in the rest
+        </button>
+      </div>
+      <span class="hint">
+        Press that and we will suggest the whole list from it. Change any of
+        them — these are your prices, not a formula you have to live inside.
+      </span>
+    </div>
+
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>House size</th>
+          <th class="num">Standard</th>
+          <th class="num dim">Deep</th>
+          <th class="num dim">Move-out</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for beds, baths in sizes %}
+        <tr>
+          <td><strong>{{ beds }}</strong> bed / <strong>{{ baths }}</strong> bath</td>
+          <td class="num">
+            <span class="cur">$</span>
+            <input type="number" step="1" min="0" class="pcell"
+                   name="std_price_{{ beds }}_{{ baths }}"
+                   data-size="{{ beds }}-{{ baths }}"
+                   value="{{ '%g'|format(matrix[(beds, baths)] or 0) }}" />
+          </td>
+          <td class="num dim derived" data-mult="deep">—</td>
+          <td class="num dim derived" data-mult="moveout">—</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <p class="hint" style="margin-top:14px">
+      Deep and move-out are worked out from the standard price, so you keep one
+      list rather than three.
+    </p>
+    <div class="mults">
+      <div class="form-group">
+        <label for="deep_multiplier">Deep clean is this much of a standard clean</label>
+        <input type="number" id="deep_multiplier" name="deep_multiplier" step="0.05" min="1"
+               value="{{ '%g'|format(multipliers.deep or 1.6) }}" />
+        <span class="hint">1.6 means a deep clean costs 60% more.</span>
+      </div>
+      <div class="form-group">
+        <label for="moveout_multiplier">Move-out is this much of a standard clean</label>
+        <input type="number" id="moveout_multiplier" name="moveout_multiplier" step="0.05" min="1"
+               value="{{ '%g'|format(multipliers.moveout or 1.9) }}" />
+        <span class="hint">1.9 means nearly double.</span>
+      </div>
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Deposit</h2>
     <div class="form-group" style="max-width:200px">
@@ -56,26 +125,12 @@
     </p>
   </div>
 
-  {% for svc_key, svc in services.items() %}
-  <div class="card" style="margin-bottom:16px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">{{ svc.label }}</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
-      <div class="form-group">
-        <label>Base price (1 bed / 1 bath)</label>
-        <input type="number" name="{{ svc_key }}_base" step="1" value="{{ current[svc_key + '_base'] }}" />
-      </div>
-      <div class="form-group">
-        <label>Each extra bedroom</label>
-        <input type="number" name="{{ svc_key }}_per_extra_bed" step="1" value="{{ current[svc_key + '_per_extra_bed'] }}" />
-      </div>
-      <div class="form-group">
-        <label>Each extra bathroom</label>
-        <input type="number" name="{{ svc_key }}_per_extra_bath" step="1" value="{{ current[svc_key + '_per_extra_bath'] }}" />
-      </div>
-    </div>
-  </div>
-  {% endfor %}
-
+  {# ── What you charge ────────────────────────────────────────────────────
+     One question first, because everybody can answer it, and a whole list
+     underneath that it fills in. What was here before asked for a base price
+     plus a per-bedroom and a per-bathroom amount -- a formula almost nobody
+     prices by -- and worse, nothing ever read those boxes. This writes the
+     list every quote actually uses. #}
   <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Bigger Homes</h2>
     <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
@@ -144,4 +199,73 @@
 
   <button type="submit" class="btn btn-gold">Save Pricing</button>
 </form>
+
+<style>
+  .sec { font-size:1rem; font-weight:700; margin-bottom:16px; color:var(--softer);
+         text-transform:uppercase; letter-spacing:.12em; }
+  .anchor { background:var(--amber-soft); border:1px solid var(--amber-line);
+            border-radius:var(--r-sm); padding:var(--s4); margin-bottom:var(--s5); }
+  .anchor label { display:block; font-weight:600; margin-bottom:var(--s3); }
+  .anchor-row { display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap; }
+  .anchor-row input { width:120px; }
+  .cur { color:var(--softer); font-weight:600; }
+  .hint { display:block; font-size:var(--t-xs); color:var(--softer); margin-top:var(--s2); }
+
+  table.grid { width:100%; border-collapse:collapse; }
+  table.grid th { text-align:left; font-size:var(--t-xs); text-transform:uppercase;
+                  letter-spacing:.08em; color:var(--muted); padding:var(--s2) var(--s3); }
+  table.grid th.num, table.grid td.num { text-align:right; }
+  table.grid td { padding:var(--s2) var(--s3); border-top:1px solid var(--line-soft); }
+  table.grid td.dim { color:var(--softer); font-variant-numeric:tabular-nums; }
+  table.grid input { width:96px; text-align:right; display:inline-block; margin:0; }
+  .mults { display:grid; grid-template-columns:1fr 1fr; gap:var(--s4); margin-top:var(--s3); }
+  @media (max-width:640px) { .mults { grid-template-columns:1fr; }
+                             table.grid input { width:78px; } }
+</style>
+
+<script>
+(function () {
+  // The shape of the default list, so a single anchor price can scale the
+  // rest of it. Generated from the same table the server prices from, rather
+  // than a second copy of the numbers typed out here.
+  const SHAPE = {"1-1": 170, "1-2": 190, "2-1": 200, "2-2": 225, "3-2": 260, "3-3": 295, "4-2": 320, "4-3": 360, "5-3": 410, "5-4": 455};
+  const ANCHOR = '2-2';
+
+  const cells = () => Array.from(document.querySelectorAll('.pcell'));
+  const num = el => parseFloat(el.value) || 0;
+
+  function paintDerived() {
+    const deep = parseFloat(document.getElementById('deep_multiplier').value) || 1.6;
+    const move = parseFloat(document.getElementById('moveout_multiplier').value) || 1.9;
+    cells().forEach(c => {
+      const row = c.closest('tr');
+      const std = num(c);
+      row.querySelectorAll('.derived').forEach(d => {
+        const m = d.dataset.mult === 'deep' ? deep : move;
+        d.textContent = std ? '$' + Math.round(std * m) : '—';
+      });
+    });
+  }
+
+  document.getElementById('fillgrid').addEventListener('click', () => {
+    const anchorPrice = parseFloat(document.getElementById('anchor_price').value) || 0;
+    if (!anchorPrice) return;
+    const factor = anchorPrice / SHAPE[ANCHOR];
+    cells().forEach(c => {
+      const base = SHAPE[c.dataset.size];
+      if (base) c.value = Math.round(base * factor / 5) * 5;
+    });
+    paintDerived();
+  });
+
+  document.addEventListener('input', e => {
+    if (e.target.classList.contains('pcell') ||
+        e.target.id === 'deep_multiplier' || e.target.id === 'moveout_multiplier') {
+      paintDerived();
+    }
+  });
+  paintDerived();
+})();
+</script>
+
 {% endblock %}

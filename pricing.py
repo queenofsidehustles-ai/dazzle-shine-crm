@@ -152,6 +152,49 @@ def get_std_price(beds, baths):
                    PRICE_MATRIX_DEFAULTS.get((beds, baths), 0))
 
 
+def set_std_price(beds, baths, value):
+    """Set the price for one house size. This is what every quote reads."""
+    from models import PricingSetting
+    PricingSetting.set(f'std_price_{int(beds)}_{int(baths)}', value)
+
+
+def suggest_matrix(anchor_price, anchor=(2, 2)):
+    """A whole price list, scaled from the one price somebody actually knows.
+
+    Asking a cleaning company for "base price, plus per bedroom, plus per
+    bathroom" asks them to describe their pricing as a formula. Almost nobody
+    prices that way, which is why that form was left on its defaults and why
+    the owner of a cleaning company said it confused her.
+
+    Everybody can answer "what do you charge for a two-bed two-bath standard
+    clean". So this takes that one number and scales the rest of the list in
+    the same proportions as the defaults, giving a starting point that is
+    roughly right everywhere and exactly right where it was anchored. Every
+    cell stays editable afterwards -- these are suggestions, not a formula
+    they now have to live inside.
+    """
+    base = PRICE_MATRIX_DEFAULTS.get(tuple(anchor))
+    if not base or not anchor_price:
+        return dict(PRICE_MATRIX_DEFAULTS)
+    factor = float(anchor_price) / float(base)
+    out = {}
+    for size, default in PRICE_MATRIX_DEFAULTS.items():
+        # Rounded to the nearest 5. Nobody quotes $237.42, and a suggestion
+        # that looks calculated invites less trust than one that looks chosen.
+        out[size] = int(round(default * factor / 5.0) * 5)
+    return out
+
+
+def matrix_sizes():
+    """Every house size the price list covers, smallest first."""
+    return sorted(PRICE_MATRIX_DEFAULTS.keys())
+
+
+def current_matrix():
+    """What this business charges right now, per size."""
+    return {size: get_std_price(*size) for size in matrix_sizes()}
+
+
 def get_std_hours(beds, baths):
     beds, baths = nearest_baths(beds, baths)
     return _db_get(f'std_hours_{beds}_{baths}',

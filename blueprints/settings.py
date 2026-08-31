@@ -213,13 +213,39 @@ def pricing():
             if val not in (None, ''):     # 0 is a legitimate answer
                 PricingSetting.set(key, val)
 
-        # Save service prices
-        for svc_key in SERVICES:
-            for field in ('base', 'per_extra_bed', 'per_extra_bath'):
-                form_key = f"{svc_key}_{field}"
-                val = request.form.get(form_key)
-                if val:
-                    PricingSetting.set(form_key, val)
+        # The price list, one price per house size. This is what every quote
+        # actually reads.
+        #
+        # What used to be here saved `{service}_base`, `{service}_per_extra_bed`
+        # and `{service}_per_extra_bath` -- a formula from an older version that
+        # nothing has read for a long time. So the page appeared to set prices
+        # and set nothing, while the list that does drive every quote could not
+        # be edited anywhere in the product at all. A company in another city
+        # was stuck on the prices this was first built with.
+        import pricing as _pricing
+        for beds, baths in _pricing.matrix_sizes():
+            val = request.form.get(f'std_price_{beds}_{baths}')
+            if val not in (None, ''):
+                try:
+                    _pricing.set_std_price(beds, baths, round(float(val), 2))
+                except (TypeError, ValueError):
+                    pass          # a typo in one box must not lose the others
+
+        # Deep and move-out are a multiple of the standard price, so a business
+        # sets one list rather than three.
+        for svc_key in ('deep', 'moveout'):
+            val = request.form.get(f'{svc_key}_multiplier')
+            if val not in (None, ''):
+                try:
+                    PricingSetting.set(f'{svc_key}_multiplier', round(float(val), 2))
+                except (TypeError, ValueError):
+                    pass
+
+        # Somebody has now looked at their prices, which is what the
+        # getting-started list is asking about. BusinessSetting, not
+        # PricingSetting: onboarding reads the former, and writing to the
+        # wrong one leaves a step that can never be ticked.
+        BusinessSetting.set('pricing_reviewed', '1')
 
         # Save extras — price and the time each one takes
         for extra_name in EXTRAS:
@@ -255,8 +281,19 @@ def pricing():
         current[f'extra_{slug}'] = PricingSetting.get(f'extra_{slug}', price)
         current[f'extrahrs_{slug}'] = get_extra_hours(extra_name)
 
+    import pricing as _pricing
+    sizes = _pricing.matrix_sizes()
+    matrix = _pricing.current_matrix()
+    # The anchor is whatever they charge for the commonest house. Shown as the
+    # one question, with the rest of the list underneath it.
+    anchor = (2, 2)
     return render_template('admin/settings_pricing.html',
                            services=SERVICES, extras=EXTRAS,
+                           sizes=sizes, matrix=matrix, anchor=anchor,
+                           anchor_price=matrix.get(anchor, 0),
+                           multipliers={k: _pricing.get_multiplier(k)
+                                        for k in ('standard', 'deep', 'moveout')},
+                           service_labels=_pricing.SERVICE_LABELS,
                            current=current)
 
 
