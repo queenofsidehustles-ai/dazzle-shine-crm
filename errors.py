@@ -8,6 +8,19 @@ the page was broken at all.
 Now every unhandled error is written down, grouped, and emailed the first time
 it happens.
 
+## Two people are told, and they are not the same person
+
+The owner of the CRM it happened in, because it is their business and their
+customer who just saw a broken page. And, on the hosted product only, whoever
+runs the product — because a fault in one company's CRM is usually a fault in
+everybody's, and without that copy the only person who knows the software is
+broken is the customer it broke for. The most likely thing they do is say
+nothing and quietly stop using it.
+
+The two are sent independently. A company that has not set an owner email yet
+is exactly the one most likely to hit something, so a missing owner address
+must not swallow the copy that reaches us as well.
+
 ## Grouped, not listed
 
 The same broken page hit forty times in an evening is one problem, not forty.
@@ -138,42 +151,130 @@ def _should_alert(row, is_new):
     return datetime.utcnow() - row.alerted_at > ALERT_COOLDOWN
 
 
-def _alert(row):
-    """Email the owner. Failing to send must not raise."""
+def _which_company():
+    """Which company's CRM this happened in, for the product's own copy.
+
+    Returns (slug, url) or (None, None) on a single-business install, where
+    there is no such thing as "which company" and the question is meaningless.
+    """
     try:
-        import notifications, branding
-        from extensions import db
-        to = branding.owner_email()
-        if not to:
-            return
-        biz = branding.biz_name()
-        when = row.last_seen.strftime('%d %b %Y at %H:%M UTC') if row.last_seen else ''
-        seen = (f'<p>This has now happened <strong>{row.count} times</strong>.</p>'
-                if row.count and row.count > 1 else '')
-        notifications.send_email(
-            to,
-            biz,
-            f'[{biz}] Something broke: {row.kind}',
-            f'''<p>An error happened on your CRM. Nobody had to tell you — it
-            reported itself.</p>
-            <table cellpadding="6" style="border-collapse:collapse;font-family:sans-serif">
-              <tr><td><strong>Page</strong></td><td>{row.method} {row.path}</td></tr>
-              <tr><td><strong>Problem</strong></td><td>{row.kind}: {row.message}</td></tr>
-              <tr><td><strong>When</strong></td><td>{when}</td></tr>
-              <tr><td><strong>Who hit it</strong></td><td>{row.who or 'a visitor'}</td></tr>
-            </table>
-            {seen}
-            <p>Full details are under <strong>Settings &rarr; Errors</strong> in your CRM.</p>
-            <p style="color:#777;font-size:13px">You will not be emailed about
-            this same fault again for 24 hours, however often it happens.</p>''')
-        row.alerted_at = datetime.utcnow()
-        db.session.commit()
+        import tenancy
+        import product
+        if not tenancy.is_tenant():
+            return None, None
+        schema = tenancy.current_schema() or ''
+        slug = schema[len(tenancy.SCHEMA_PREFIX):] if schema.startswith(
+            tenancy.SCHEMA_PREFIX) else schema
+        domain = product.domain()
+        return slug, (f'https://{slug}.{domain}' if slug and domain else None)
     except Exception:
+        return None, None
+
+
+def _alert(row):
+    """Tell the people who need to know. Failing to send must not raise.
+
+    Two recipients, and they are not the same person:
+
+      * the owner of the CRM it happened in, because it is their business and
+        their customer who just saw a broken page
+
+      * whoever runs the product, because a fault in one company's CRM is
+        usually a fault in everybody's. Without this copy the only person who
+        knows the software is broken is the customer it broke for, and the
+        most likely outcome is that they say nothing and quietly stop using
+        it. During a beta that is the entire signal.
+
+    They are sent independently on purpose. A brand-new company has not set an
+    owner email yet, and that is exactly when it is most likely to hit
+    something — so a missing owner address must not also swallow the copy that
+    reaches us. It used to return early on that, before either was sent.
+    """
+    import notifications
+    from extensions import db
+
+    try:
+        import branding
+        biz = branding.biz_name()
+        owner = branding.owner_email()
+    except Exception:
+        biz, owner = 'a CRM', None
+
+    when = row.last_seen.strftime('%d %b %Y at %H:%M UTC') if row.last_seen else ''
+    seen = (f'<p>This has now happened <strong>{row.count} times</strong>.</p>'
+            if row.count and row.count > 1 else '')
+    facts = f'''
+        <table cellpadding="6" style="border-collapse:collapse;font-family:sans-serif">
+          <tr><td><strong>Page</strong></td><td>{row.method} {row.path}</td></tr>
+          <tr><td><strong>Problem</strong></td><td>{row.kind}: {row.message}</td></tr>
+          <tr><td><strong>When</strong></td><td>{when}</td></tr>
+          <tr><td><strong>Who hit it</strong></td><td>{row.who or 'a visitor'}</td></tr>
+        </table>'''
+
+    attempted = False
+
+    # ── The owner's copy: their business, their customer, their words ───────
+    if owner:
+        attempted = True
         try:
-            from extensions import db
-            db.session.rollback()
+            notifications.send_email(
+                owner, biz,
+                f'[{biz}] Something broke: {row.kind}',
+                f'''<p>An error happened on your CRM. Nobody had to tell you — it
+                reported itself.</p>
+                {facts}
+                {seen}
+                <p>Full details are under <strong>Settings &rarr; Errors</strong> in your CRM.</p>
+                <p style="color:#777;font-size:13px">You will not be emailed about
+                this same fault again for 24 hours, however often it happens.</p>''')
         except Exception:
             pass
+
+    # ── The product's copy: which company, and a traceback ──────────────────
+    # Only on the hosted product. `support_email()` is empty when BASE_DOMAIN
+    # is not set, which is precisely the single-business deployment — there the
+    # owner is already the only person there is to tell.
+    try:
+        import product
+        support = product.support_email()
+    except Exception:
+        support = ''
+
+    slug, crm_url = _which_company()
+    if support and support.lower() != (owner or '').lower():
+        attempted = True
+        try:
+            trace = (row.traceback or '')[-4000:]
+            notifications.send_email(
+                support, product.name(),
+                f'[{product.name()}] {biz}: {row.kind} on {row.path}',
+                f'''<p><strong>{biz}</strong>{f" ({slug})" if slug else ""} hit an
+                error. They have been emailed too{"" if owner else
+                " — except they have not, because there is no owner email on "
+                "the account yet"}.</p>
+                {facts}
+                {seen}
+                {f'<p><a href="{crm_url}">{crm_url}</a></p>' if crm_url else ''}
+                <p style="color:#777;font-size:13px">Traceback:</p>
+                <pre style="font-size:12px;background:#f6f7fa;padding:10px;
+                     border-radius:6px;overflow-x:auto;white-space:pre-wrap">{trace}</pre>''',
+                from_name=product.name(),
+                from_email=os.environ.get('PRODUCT_FROM_EMAIL') or support,
+                reply_to=support)
+        except Exception:
+            pass
+
+    # Stamped once, whichever copies went. The cooldown is about how often a
+    # fault is worth mentioning, not about who was told.
+    if attempted:
+        try:
+            row.alerted_at = datetime.utcnow()
+            db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
 
 
 def _to_sentry(exc):
