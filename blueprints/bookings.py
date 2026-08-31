@@ -1709,6 +1709,42 @@ def clients():
     return render_template('admin/clients.html', clients=all_clients, unlinked=unlinked)
 
 
+@bookings_bp.route('/clients/new', methods=['GET', 'POST'])
+@login_required
+def new_client():
+    """Add a customer by hand.
+
+    There was no way to do this. A Client only ever appeared as a side effect
+    of something else — a booking coming in from the website, a lead being
+    converted, or the rebuild that walks old bookings. So the getting-started
+    list said "Add a customer", linked to a page with no button on it, and
+    stopped anybody who followed it in order.
+    """
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        if not name:
+            flash('A customer needs a name.', 'error')
+            return render_template('admin/client_new.html',
+                                   form=request.form.to_dict())
+
+        c = Client(
+            name=name,
+            email=(request.form.get('email') or '').strip().lower(),
+            phone=(request.form.get('phone') or '').strip(),
+            address=(request.form.get('address') or '').strip(),
+            city=(request.form.get('city') or '').strip(),
+            zip_code=(request.form.get('zip_code') or '').strip(),
+            notes=(request.form.get('notes') or '').strip(),
+        )
+        db.session.add(c)
+        db.session.commit()
+        flash(f'{c.name} added. Book them a job whenever you are ready.',
+              'success')
+        return redirect(url_for('bookings.client_detail', client_id=c.id))
+
+    return render_template('admin/client_new.html', form={})
+
+
 @bookings_bp.route('/clients/<int:client_id>')
 @login_required
 def client_detail(client_id):

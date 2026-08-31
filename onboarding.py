@@ -162,7 +162,7 @@ def journey():
         {'key': 'client', 'done': has_client,
          'title': 'Add a customer',
          'why': 'One you already clean for. Real is better than made up — you will see how it works.',
-         'cta': 'Add a customer', 'link': '/bookings/clients'},
+         'cta': 'Add a customer', 'link': '/bookings/clients/new'},
         {'key': 'job', 'done': bookings > 0 and assigned,
          'title': 'Schedule a job and assign it',
          'why': 'This is the moment it starts being useful — the cleaner gets a text with the address, '

@@ -1,0 +1,71 @@
+{% extends "base_admin.html" %}
+{% block title %}Add a customer — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Add a customer{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('bookings.clients') }}" class="btn btn-outline btn-sm">All customers</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:640px">
+  {# Only the name is required. Every extra required field is somebody who
+     gives up part-way and goes back to their phone's contacts. #}
+  <p class="dim" style="margin-bottom:var(--s5)">
+    Somebody you already clean for is the best one to start with — you will see
+    how the rest of it works with a real name on it. Only their name is needed;
+    the rest can wait until you book them.
+  </p>
+
+  <form method="POST">
+    <div class="form-group">
+      <label for="name">Name</label>
+      <input id="name" name="name" value="{{ form.get('name', '') }}"
+             autocomplete="off" autofocus required />
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)">
+      <div class="form-group">
+        <label for="phone">Phone <span class="dim">— optional</span></label>
+        <input id="phone" name="phone" type="tel" value="{{ form.get('phone', '') }}" />
+      </div>
+      <div class="form-group">
+        <label for="email">Email <span class="dim">— optional</span></label>
+        <input id="email" name="email" type="email" value="{{ form.get('email', '') }}" />
+        <span class="hint">Needed later if you want to email them an invoice or a receipt.</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="address">Address <span class="dim">— optional</span></label>
+      <input id="address" name="address" value="{{ form.get('address', '') }}"
+             placeholder="Street address" />
+      <span class="hint">This is what your cleaner sees and navigates to.</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:var(--s4)">
+      <div class="form-group">
+        <label for="city">Town or city <span class="dim">— optional</span></label>
+        <input id="city" name="city" value="{{ form.get('city', '') }}" />
+      </div>
+      <div class="form-group">
+        <label for="zip_code">ZIP <span class="dim">— optional</span></label>
+        <input id="zip_code" name="zip_code" value="{{ form.get('zip_code', '') }}" />
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="notes">Notes <span class="dim">— optional</span></label>
+      <textarea id="notes" name="notes" rows="3"
+                placeholder="Gate code, the dog, where the key lives, how they like it done…">{{ form.get('notes', '') }}</textarea>
+      <span class="hint">Anything you would tell a cleaner going there for the first time.</span>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Add customer</button>
+    <a href="{{ url_for('bookings.clients') }}" class="btn btn-outline"
+       style="margin-left:var(--s2)">Cancel</a>
+  </form>
+</div>
+
+<style>
+  .hint { display:block; font-size:var(--t-xs); color:var(--softer); margin-top:var(--s1); }
+</style>
+{% endblock %}

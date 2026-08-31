@@ -2,6 +2,10 @@
 {% block title %}Clients — {{ BIZ }} CRM{% endblock %}
 {% block page_title %}Clients{% endblock %}
 
+{% block topbar_right %}
+  <a href="{{ url_for('bookings.new_client') }}" class="btn btn-primary btn-sm">+ Add customer</a>
+{% endblock %}
+
 {% block content %}
 <div class="card">
   {% if clients %}
