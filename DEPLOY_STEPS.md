@@ -377,43 +377,116 @@ the same protection your CRM already has.
 
 ---
 
-## Step 11 — Give the product its own email account
+## Step 11 — Email for the whole deployment
 
-The product sends two things a cleaning company never does: trial reminders,
-and the alert that says a customer's CRM just broke. Both need an email
-account that belongs to **us**, not to any customer.
+`akyehq.com` currently has **no email key at all**. Open
+`www.akyehq.com/version` and it says so. That means no trial reminders, no
+crash alerts, and no company on the platform can email its own customers
+unless it connects its own account first — which is not a thing to ask a beta
+tester to do.
 
-Three Railway variables. They answer three different questions, which is why
-they are not one setting:
+Two parts, and only the first is urgent. The second can wait weeks.
 
-| Variable | The question it answers | Can be |
-|---|---|---|
-| `PRODUCT_SUPPORT_EMAIL` | Where does a person write to reach us? | Anything you read — a Gmail address is fine |
-| `PRODUCT_FROM_EMAIL` | What address may we send *from*? | **Must** be on a domain verified with Resend |
-| `PRODUCT_RESEND_API_KEY` | Which account pays for it? | A key from *your* Resend account |
+### Part 1 — Sending. About 30 minutes, and it unblocks everything
 
-The middle one is the one that bites. Email providers will not let you send
-from a domain you have not proved you own, so `PRODUCT_FROM_EMAIL` has to be
-on `akyehq.com` and that domain has to be verified in Resend — even if the
-replies forward straight to Gmail.
+This needs **no mailbox**. Proving you own the domain is a different thing
+from having an inbox at it, and that is why this part can be done now.
 
-**Until you have that**, set `PRODUCT_SUPPORT_EMAIL` to your Gmail and leave
-the other two. Alerts will reach you as soon as the from-address exists; the
-`/version` page will keep telling you it is not set up until then.
+**1. Add the domain to Resend**
 
-Then prove it actually sends. Not "I set the variable" — an email that arrived:
+Resend → **Domains** → **Add Domain** → type `akyehq.com` → pick the region
+closest to you.
+
+**2. Copy the DNS records it shows you**
+
+Three of them, roughly: an `MX`, and two `TXT`. The values are unique to your
+account — do not copy them from anywhere else.
+
+⚠️ Notice that Resend's `MX` record is for **`send.akyehq.com`**, not for
+`akyehq.com` itself. That is deliberate and it is what keeps this from
+colliding with Part 2. Your future `support@akyehq.com` mailbox needs the MX
+record at the *root*, and Resend is not taking it.
+
+**3. Add them at GoDaddy**
+
+Same screen where you added the Railway records: GoDaddy → **My Products** →
+`akyehq.com` → **DNS** → **Add New Record**, one per row.
+
+⚠️ **Do not delete or edit anything already there.** The `A`, `CNAME` and
+wildcard records are what make the website and every company's subdomain work.
+You are only adding.
+
+⚠️ If GoDaddy warns you that a record **conflicts with an existing one** —
+stop and tell me what it says. Two `SPF` records (`v=spf1 ...`) on the same
+name break email for the whole domain, and the fix is to merge them into one,
+not to keep both.
+
+**4. Verify**
+
+Back in Resend, press **Verify DNS Records**. It can be instant or it can take
+an hour. Press it again later; nothing is lost by waiting.
+
+**5. Make a key**
+
+Resend → **API Keys** → **Create API Key** → name it `Akye product` →
+**Sending access** only.
+
+⚠️ It is shown **once**. Copy it straight into Railway in the next step, and
+never into a message, an email, or a screenshot. If you lose it, delete it and
+make another — that costs nothing.
+
+**6. Set three variables in Railway**
+
+Railway → the **Akye** project → the app service → **Variables**:
+
+| Variable | Set it to |
+|---|---|
+| `RESEND_API_KEY` | the key you just made |
+| `PRODUCT_FROM_EMAIL` | `support@akyehq.com` |
+| `PRODUCT_SUPPORT_EMAIL` | **your Gmail address**, for now |
+
+Using your Gmail for the third one is what makes this whole part possible
+today. It is where alerts get *delivered*; it has nothing to do with what the
+emails are sent *from*, and it costs nothing to change later.
+
+**7. Redeploy, then check**
+
+Open `www.akyehq.com/version`. It should now say:
+
+```
+"product_mail": "ok"
+```
+
+**8. Prove an email actually arrives**
 
 ```
 python3 provisioning.py testmail your.name@gmail.com
 ```
 
-It prints who it is sending as, whether the key is there, and exactly what the
-provider said. Then go and look in that inbox. "Accepted" means the provider
-took it, not that it landed — it can still bounce or go to spam, and that is
-the half no command can tell you.
+Then go and look in that inbox. "Accepted" means Resend took it, not that it
+landed — it can still bounce or go to spam, and that is the half no command
+can tell you.
 
-**✅ Done when:** the test email is sitting in your inbox, and
-`www.akyehq.com/version` says `"product_mail": "ok"`.
+**✅ Part 1 is done when:** the test email is in your inbox and `/version`
+says `ok`.
+
+### Part 2 — Receiving. Whenever you like
+
+A real `support@akyehq.com` that forwards to Gmail. Nothing depends on this;
+Part 1 already delivers your alerts to Gmail directly. This is about what a
+customer sees when they hit reply.
+
+1. Set up email forwarding for `akyehq.com` with whichever provider you are
+   using, forwarding `support@` to your Gmail.
+2. It will give you `MX` records for the **root** domain. Add them at GoDaddy.
+   They will not clash with the Resend ones from Part 1, which live on
+   `send.akyehq.com`.
+3. Send yourself a message at `support@akyehq.com` and check it arrives.
+4. Only then, change `PRODUCT_SUPPORT_EMAIL` in Railway to
+   `support@akyehq.com` and redeploy.
+
+Step 4 last, and only after step 3. Pointing alerts at a mailbox that does not
+receive yet is how you end up with a crash nobody hears about.
 
 ---
 
