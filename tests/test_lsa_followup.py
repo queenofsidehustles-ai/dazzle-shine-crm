@@ -278,4 +278,12 @@ with app.app_context():
     check('{mystery}' in out, 'an unknown placeholder is left as typed rather than raising')
     lsa.save_template(lsa.QUOTED, 1, '')
 
+    print('\n17. Every message in the sequence carries the opt-out')
+    # The second "spoke & quoted" text was the only one of the six without it.
+    # These go to a few hundred phones in one campaign, and the opt-out belongs
+    # in every message of a marketing sequence rather than only the first and
+    # the last — so this is asserted for all of them rather than fixed once.
+    for (track, step), body in lsa.DEFAULT_MESSAGES.items():
+        check('STOP' in body, f'{track} message {step} tells them how to stop')
+
     print('\nAll Google Ads follow-up checks passed.')
