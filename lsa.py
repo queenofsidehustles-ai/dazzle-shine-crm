@@ -281,10 +281,12 @@ DEFAULT_MESSAGES = {
                   "not right, tell us within 24 hours and we come back and re-clean "
                   "it free. We'd much rather fix it than argue about it. Want me to "
                   "hold you a spot? Reply STOP to opt out."),
+    # Every message in a marketing sequence carries the opt-out, not just the
+    # first and last. This one was the only one of the six without it.
     (QUOTED, 2): ("Hi again from {biz}. We're insured, every cleaner is "
                   "background-checked, and you get the same person each visit rather "
                   "than a stranger every time. Happy to re-quote if your dates or "
-                  "your place have changed."),
+                  "your place have changed. Reply STOP to opt out."),
     (QUOTED, 3): ("Last note from me. If whoever you went with didn't work out — it "
                   "happens more than you'd think — we're here, and we can usually "
                   "get you in the same week. {link} Reply STOP to opt out."),

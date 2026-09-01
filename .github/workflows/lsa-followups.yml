@@ -1,0 +1,106 @@
+# Send the Google Ads follow-up texts that are due, once a day.
+#
+# Nothing in the CRM schedules itself. Every automation is an HTTP endpoint an
+# outside cron has to call, which means a queued sequence sits there looking
+# perfectly healthy and sends nothing at all — no error, because nothing failed.
+# That is exactly what happened here: 22 leads were queued and waiting for a run
+# that did not exist.
+#
+# This runs the Google Ads follow-ups ONLY. The CRM has five other scheduled
+# jobs — day-before reminders, charging balances, lead drips, win-backs and
+# applicant follow-ups — and they are deliberately NOT here. Switching them all
+# on at once, after a long gap, would fire a backlog of card charges and emails
+# in a single burst. Add them one at a time, after checking what each has
+# waiting, by copying this file and changing the endpoint.
+#
+# ---------------------------------------------------------------------------
+# Two secrets are required. Settings → Secrets and variables → Actions:
+#
+#   CRM_URL             The base URL of the CRM, no trailing slash. For example
+#                       https://dazzle-shine-crm-production.up.railway.app
+#
+#   REMINDER_API_KEY    Must be character-for-character the same value as the
+#                       REMINDER_API_KEY environment variable on the Railway
+#                       service. The endpoint compares them exactly, and refuses
+#                       the call with 403 if they differ — or if the variable is
+#                       unset on Railway, which it treats as "no key configured"
+#                       rather than "no key required".
+# ---------------------------------------------------------------------------
+#
+# What the run does, in the CRM: re-matches leads against bookings first, so
+# anyone who has booked since yesterday drops out before being texted about not
+# having booked; then sends only what the 0/4/8-day sequence says is due. Every
+# reason to stop — booked, replied, opted out — is re-checked at the moment of
+# sending. A send that fails leaves the lead's step where it was, so the next
+# run retries rather than burning a message nobody received.
+name: Google Ads follow-ups
+
+on:
+  schedule:
+    # 14:00 UTC — 10am Eastern in summer, 9am in winter. Deliberately a
+    # mid-morning hour and not the small hours: these are marketing texts to
+    # real phones, and the quiet-hours rules are on local time, not UTC.
+    - cron: '0 14 * * *'
+  workflow_dispatch:          # and on demand, from the Actions tab
+
+# One run at a time. Two overlapping runs would each read the same leads as due
+# before either had recorded a send, and text some people twice.
+concurrency:
+  group: lsa-followups
+  cancel-in-progress: false
+
+jobs:
+  followups:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send what is due
+        env:
+          CRM_URL: ${{ secrets.CRM_URL }}
+          API_KEY: ${{ secrets.REMINDER_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRM_URL:-}" ] || [ -z "${API_KEY:-}" ]; then
+            echo "::error::CRM_URL or REMINDER_API_KEY is not set. Add both under"
+            echo "::error::Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          # --fail-with-body so a 403 is a red run with the reason visible,
+          # rather than a green run that quietly sent nothing. A cron that
+          # fails silently is worse than no cron: it looks like it works.
+          code=$(curl -sS --fail-with-body \
+                      -X POST "${CRM_URL%/}/api/lsa-followups" \
+                      -H "X-Api-Key: ${API_KEY}" \
+                      --max-time 300 \
+                      -o response.json \
+                      -w '%{http_code}') || {
+            echo "::error::The CRM refused or could not be reached (HTTP ${code:-none})."
+            cat response.json 2>/dev/null || true
+            exit 1
+          }
+
+          cat response.json
+
+          # Surface the numbers in the run summary, so "did it do anything?" is
+          # answerable from the Actions list without opening the CRM.
+          sent=$(jq -r '.sent // 0' response.json)
+          skipped=$(jq -r '.skipped // 0' response.json)
+          failed=$(jq -r '.failed // 0' response.json)
+          {
+            echo "### Google Ads follow-ups"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Texts sent | ${sent} |"
+            echo "| Skipped (booked, replied or opted out) | ${skipped} |"
+            echo "| Failed | ${failed} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # A failure here is texting being misconfigured, not a lead declining.
+          # It is silent in the CRM — the run records itself as having happened
+          # — so it has to be loud somewhere, and this is the only place looking.
+          if [ "${failed}" -gt 0 ]; then
+            echo "::warning::${failed} text(s) could not be sent. Check Settings →"
+            echo "::warning::Connections for texting, and the Sent log for the reason."
+          fi

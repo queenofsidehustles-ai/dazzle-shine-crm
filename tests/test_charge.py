@@ -122,14 +122,22 @@ with app.app_context():
     check(b5.balance_collected is True, 'and the balance flag too')
 
     print('\n8. So the money shows up where it should')
-    # The month the charge actually landed in, where the business is — not a
-    # hardcoded August. This asserted month 8 and so began failing on 1
-    # September for a reason that had nothing to do with charging a card.
-    import scheduling
-    _t = scheduling.local_today()
-    start, end = finance.month_bounds(_t.year, _t.month)
+    # The month the money moved, not a month written into the test. This asked
+    # for August because the job is dated August and mark_paid stamps paid_at
+    # with utcnow() — the same month, right up until the 1st of September, when
+    # it started failing every day and would have blocked every release of the
+    # month. Revenue is counted by paid_at, so that is what the window follows.
+    paid = b5.paid_at
+    start, end = finance.month_bounds(paid.year, paid.month)
     check(finance.revenue_between(start, end) >= 1420,
-          'the $1,420 counts as August income')
+          f'the $1,420 counts as income in {paid.strftime("%B")}, when it was paid')
+    # And the job's own month proves the point, on any day where the two differ:
+    # the work was done in August, so counting it there would be counting it by
+    # the wrong date entirely.
+    job_start, job_end = finance.month_bounds(2026, 8)
+    if (job_start, job_end) != (start, end):
+        check(finance.revenue_between(job_start, job_end) < 1420,
+              'and NOT in August, when the job was done but no money moved')
     owed_names = [x.name for x in Booking.query.filter(
         Booking.paid_at.is_(None),
         Booking.status.in_(['confirmed', 'completed'])).all()]
