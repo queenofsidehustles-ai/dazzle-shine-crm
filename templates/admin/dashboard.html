@@ -7,7 +7,7 @@
    useful thing this page can do is say what to do next. It disappears by
    itself the moment that happens -- nothing to dismiss, nothing to configure,
    and it never nags a business that is already working. #}
-{% if ONBOARDING and not ONBOARDING.activated and ONBOARDING.next %}
+{% if ONBOARDING and not ONBOARDING.complete and ONBOARDING.next %}
 <a href="{{ url_for('settings.getting_started') }}" class="onboard-card">
   <div>
     <div class="eyebrow">Getting started — {{ ONBOARDING.done }} of {{ ONBOARDING.total }}</div>

@@ -233,28 +233,35 @@ check('e.source !== f.contentWindow' in body,
 check("e.data.akye !== 'height'" in body, 'as is a message that is not ours')
 check('h > 200 && h < 20000' in body, 'and an implausible height is refused')
 
-print('\n12. The snippet is a paid feature, and the page still loads without it')
+print('\n12. The snippet is a paid feature, and neither page breaks without it')
 # The first version of this raised on the free plan, because the upgrade link
 # named a blueprint that does not exist. That did not break the embed box --
-# it broke the whole Business Settings page, for every free account.
+# it broke the whole Business Settings page, for every free account. Both
+# screens are checked on every plan for that reason.
+#
+# The snippet itself moved to /settings/booking-page, which explains what it
+# is. It was at the bottom of Business Settings, where the first person outside
+# the company to try the product did not find it and had to be told.
 admin2 = app.test_client()
 with admin2.session_transaction() as sess:
     sess['logged_in'] = True
     sess['role'] = 'owner'
 for plan in ('free', 'pro', 'scale'):
     set_plan(plan)
-    r = admin2.get('/settings/business')
-    check(r.status_code == 200,
-          f'Business Settings renders on the {plan} plan (HTTP {r.status_code})')
-    html = r.data.decode('utf8', 'replace')
+    for path in ('/settings/business', '/settings/booking-page'):
+        r = admin2.get(path)
+        check(r.status_code == 200,
+              f'{path} renders on the {plan} plan (HTTP {r.status_code})')
+    html = admin2.get('/settings/booking-page').data.decode('utf8', 'replace')
     if plan == 'free':
-        check('eb-locked' in html, 'and free sees why it is locked, not a blank space')
+        check('badge-warn' in html or 'Pro' in html,
+              'free sees why it is locked, not a blank space')
         # The element, not the word. The copy helper is wired unconditionally
         # in a script at the bottom of the page and returns early when the
         # button is absent, so the name appears either way.
-        check('id="copyembed"' not in html, 'with no copy button to press')
+        check('id="copysnippet"' not in html, 'with no copy button to press')
     else:
-        check('copyembed' in html, f'{plan} gets the snippet to copy')
+        check('copysnippet' in html, f'{plan} gets the snippet to copy')
 set_plan('free')
 
 

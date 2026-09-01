@@ -150,11 +150,16 @@ def journey():
          'title': 'Check your prices',
          'why': 'The CRM quotes from these. Until you have looked, it is quoting somebody else’s numbers.',
          'cta': 'Review prices', 'link': '/settings/pricing'},
-        {'key': 'booking_page', 'done': setting('booking_page_seen'),
+        # `booking_page_shared`, not `booking_page_seen`. The old flag was set
+        # by opening /book — which is where this step's own button went, so the
+        # step ticked itself the moment anybody clicked it and then sat there
+        # crossed out above a business that had shared nothing.
+        {'key': 'booking_page', 'done': setting('booking_page_shared'),
          'title': 'Share your booking page',
-         'why': 'Your own page, in your colours, quoting your prices. Put the link '
-                'in your Facebook bio and customers can book without ringing you.',
-         'cta': 'See your page', 'link': '/book'},
+         'why': 'You already have one — a page where customers pick what they want, '
+                'see your price and book themselves. It just needs to be somewhere '
+                'they will see it, like your Facebook bio.',
+         'cta': 'Show me my page', 'link': '/settings/booking-page'},
         {'key': 'team', 'done': has_staff,
          'title': 'Add a cleaner',
          'why': 'You need somebody to send a job to. Add yourself if you are still cleaning.',
@@ -174,19 +179,35 @@ def journey():
 def progress():
     """Where a business is on that path, and the single next thing to do.
 
-    `activated` is the number worth watching above all others. Not signups, not
-    logins -- a job on the calendar with a cleaner assigned to it. That is when
-    the product has been useful once, and it is the moment somebody stops
-    evaluating and starts depending on it.
+    Two different questions used to share one answer, and they are not the same
+    question:
+
+    `activated` — has this business put its real world into the software? A
+    cleaner they employ and a customer they clean for. That is the moment it
+    stops being a demo, and it is what starts the 14 days: somebody who has
+    entered a person and a customer has enough in front of them to judge the
+    product, and somebody who has not, has not.
+
+    `complete` — has every setup step been done? A longer list, and the right
+    condition for putting the getting-started card away.
+
+    Using `complete` for both meant the trial clock only began once all six
+    steps were finished, while the banner promised it began at the first
+    assigned job. The banner was describing a rule the code did not have.
     """
     steps = journey()
     done = sum(1 for s in steps if s['done'])
     nxt = next((s for s in steps if not s['done']), None)
+    by_key = {s['key']: bool(s['done']) for s in steps}
     return {
         'steps': steps,
         'done': done,
         'total': len(steps),
         'percent': int(round(done / len(steps) * 100)) if steps else 0,
         'next': nxt,
-        'activated': nxt is None,
+        # The trial trigger. Both, not either: a cleaner with nobody to clean
+        # for, or a customer with nobody to send, is half a setup and shows
+        # nothing working end to end.
+        'activated': by_key.get('team', False) and by_key.get('client', False),
+        'complete': nxt is None,
     }

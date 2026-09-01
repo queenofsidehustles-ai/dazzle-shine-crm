@@ -262,7 +262,7 @@ def create_app():
                 return {}
             import onboarding
             p = onboarding.progress()
-            return {'ONBOARDING': None if p['activated'] else p}
+            return {'ONBOARDING': None if p['complete'] else p}
         except Exception:
             return {}
 

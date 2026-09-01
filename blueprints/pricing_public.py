@@ -189,18 +189,12 @@ def book():
     # so the frame grows instead of scrolling inside itself.
     embed = request.args.get('embed') in ('1', 'true', 'yes')
 
-    # The first time anybody opens this page, remember it. That single fact is
-    # what tells the getting-started list the business has actually put the
-    # link somewhere, rather than being a step you dismiss by clicking it.
-    # One write in the lifetime of an account, not one per visit.
-    try:
-        from models import BusinessSetting
-        from extensions import db as _db
-        if not BusinessSetting.get('booking_page_seen'):
-            BusinessSetting.set('booking_page_seen', '1')
-            _db.session.commit()
-    except Exception:
-        pass                     # never let bookkeeping stop somebody booking
+    # Nothing is recorded here. Opening this page used to tick "Share your
+    # booking page" off the getting-started list — including when the click
+    # came from that list's own button, which made it a step that completed
+    # itself when you looked at it. Sharing is now recorded from an explicit
+    # action on /settings/booking-page, where the person is told what they are
+    # confirming. See settings.booking_page.
 
     return render_template(
         'public/book.html',

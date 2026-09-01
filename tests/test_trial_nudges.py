@@ -173,8 +173,12 @@ _, ending = tn.compose(running(11), 'ending')
 check('Nothing is deleted' in ending or 'nothing is deleted' in ending.lower(),
       'so does the one before it')
 _, s7 = tn.compose(o, 'start_7')
-check('assign' in s7.lower() or 'assigned' in s7.lower(),
-      'the day-7 email says the one thing that starts the clock')
+# The trigger moved from "assign a job" to "a first cleaner and a first
+# customer", and the email has to say whichever one is true — an email that
+# tells somebody to do the wrong thing is worse than one that says nothing.
+low = s7.lower()
+check('cleaner' in low and 'customer' in low,
+      'the day-7 email names both things that start the clock')
 
 
 print('\n9. It is Akye writing, not the cleaning company')

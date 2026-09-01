@@ -122,9 +122,12 @@
       {% if TRIAL and not TRIAL.expired %}
       <a href="{{ url_for('billing.upgrade') }}" class="trialbar {{ 'urgent' if TRIAL.days_left <= 3 }}">
         {% if TRIAL.phase == 'not_started' %}
+          {# Says exactly what starts it. This used to say "assign a job",
+             which was not the condition the code checked — so somebody could
+             do the thing they were told and watch nothing happen. #}
           <b>Your 14 days haven't started yet.</b>
-          Assign a job to somebody and the clock begins —
-          <span class="left">{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left to start</span>.
+          Add your first cleaner and your first customer and the clock begins —
+          <span class="left">{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left to set up</span>.
         {% else %}
           <b>{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left</b>
           of everything. After that you keep working on the free plan —

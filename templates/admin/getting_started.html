@@ -2,13 +2,13 @@
 {% block title %}Getting started · {{ BIZ }}{% endblock %}
 {% block content %}
 
-{% if p.activated %}
+{% if p.complete %}
   <div class="card" style="max-width:660px;text-align:center;padding:34px">
     <div style="font-size:2.2rem">🎉</div>
     <h2 style="margin:10px 0 6px">You're up and running</h2>
     <p style="color:var(--muted);line-height:1.6;margin:0 0 20px">
-      A job is on the calendar with a cleaner assigned to it. That is the whole
-      loop — everything from here is just doing it more often.
+      Your team, your customers, your prices and a job on the calendar. That is
+      the whole loop — everything from here is just doing it more often.
     </p>
     <a href="{{ url_for('bookings.calendar') }}" class="btn-primary">Open the calendar</a>
   </div>

@@ -166,13 +166,13 @@ def compose(org, kind):
                 wrap(
             f'Your {billing.TRIAL_DAYS} days haven\'t started yet',
             f'''<p>You have everything — scheduling, the team, quotes, hiring,
-            the lot — and the clock has not begun. It starts the first time you
-            put somebody's name on a job, so nothing is running down while you
-            are still setting up.</p>
-            <p><strong>One thing to try:</strong> add a job, assign a cleaner
-            to it, and send them the link. That is the whole product in about
-            two minutes, and it is the bit people say they wish they had seen
-            first.</p>
+            the lot — and the clock has not begun. It starts when you add your
+            first cleaner and your first customer, so nothing is running down
+            while you are still setting up.</p>
+            <p><strong>Two things, about two minutes:</strong> add one cleaner
+            (yourself counts, if you are still cleaning) and one customer you
+            already clean for. That is enough to see the whole thing work, and
+            it is what starts your {billing.TRIAL_DAYS} days.</p>
             <p style="color:#7a8499;font-size:14px">You have
             <strong>{left} day{plural}</strong> to make that start.</p>''',
             'Add your first job'))
@@ -183,7 +183,7 @@ def compose(org, kind):
             f'{left} day{plural} left to start your trial',
             f'''<p>Your account still has everything on it, and the
             {billing.TRIAL_DAYS} days still have not begun — they begin when you
-            assign a job to somebody.</p>
+            add your first cleaner and your first customer.</p>
             <p>After <strong>{left} day{plural}</strong> the account drops to
             the free plan. Nothing is deleted and you can keep working, but the
             hiring pipeline, the automations and the rest go quiet, and you

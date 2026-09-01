@@ -18,7 +18,7 @@
                 border-radius:12px;padding:16px;margin-bottom:12px">
       <div style="display:flex;align-items:baseline;gap:10px">
         <strong style="font-size:1.05rem">{{ p.label }}</strong>
-        <span style="color:var(--muted)">{{ '£0 — free' if p.price == 0 else '$%d/month' % p.price }}</span>
+        <span style="color:var(--muted)">{{ '$0 — free' if p.price == 0 else '$%d/month' % p.price }}</span>
         {% if key == state.effective_plan %}
           <span style="margin-left:auto;font-size:0.78rem;font-weight:700;
                        background:var(--gold-soft);color:var(--gold-deep);

@@ -150,8 +150,8 @@
                 as a job. Put this link in your Facebook bio, your Google
                 listing, your email signature.</span>
         </div>
-        <a href="{{ url_for('pricing_public.book') }}" target="_blank" rel="noopener"
-           class="btn btn-outline btn-sm">Open it →</a>
+        <a href="{{ url_for('settings.booking_page') }}"
+           class="btn btn-outline btn-sm">Where to put it →</a>
       </div>
       <div class="bl-url">
         <code id="bookingurl">{{ current._booking_url }}</code>
@@ -159,33 +159,20 @@
       </div>
     </div>
 
-    {# Putting it on the website they already have. An iframe, so the form
-       posts to the same place it was served from -- nothing on their site can
-       read what a customer types into it. #}
+    {# The embed used to be explained here, at the bottom of a long settings
+       page, which is where it went unread — the first person outside the
+       company to try the product had to have it explained by hand. The whole
+       explanation now lives on one screen of its own; this is a pointer to it
+       rather than a second copy that can drift. #}
     <div class="embedbox">
       <div class="eb-top">
         <div>
           <b>Put it on your own website</b>
-          <span>Paste this one line where you want the booking form to appear.
-                It sizes itself.</span>
+          <span>One line to paste, and step-by-step instructions for Wix,
+                Squarespace, WordPress and GoDaddy.</span>
         </div>
-        {% if not current._embed_allowed %}
-        <a href="{{ url_for('billing.upgrade') }}" class="badge badge-warn">Pro</a>
-        {% endif %}
+        <a href="{{ url_for('settings.booking_page') }}" class="btn btn-outline btn-sm">Show me →</a>
       </div>
-      {% if current._embed_allowed %}
-      <div class="eb-code">
-        <code id="embedsnippet">{{ current._embed_snippet }}</code>
-        <button type="button" class="btn btn-outline btn-sm" id="copyembed">Copy</button>
-      </div>
-      {% else %}
-      <div class="eb-locked">
-        <code>{{ current._embed_snippet }}</code>
-        <p>On the free plan your booking page lives at its own address and
-           carries our name at the bottom. Pro puts it inside your own website
-           and takes our name off.</p>
-      </div>
-      {% endif %}
     </div>
 
     {# Your colours, on the pages your customers see: the booking page, quotes,
@@ -497,7 +484,6 @@ function wireCopy(btnId, codeId, label) {
     setTimeout(() => { btn.textContent = label; }, 2500);
   });
 }
-wireCopy('copyembed', 'embedsnippet', 'Copy');
 wireCopy('copybooking', 'bookingurl', 'Copy link');
 </script>
 

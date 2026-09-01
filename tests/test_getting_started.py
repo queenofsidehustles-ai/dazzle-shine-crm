@@ -91,9 +91,11 @@ with app.app_context():
         elif key == 'pricing':
             BusinessSetting.set('pricing_reviewed', '1')
         elif key == 'booking_page':
-            # Marked when somebody actually opens the page, not by clicking a
-            # button that says "done".
-            BusinessSetting.set('booking_page_seen', '1')
+            # Marked when somebody copies the link or says they have shared it.
+            # It used to be marked by opening /book — which is where this very
+            # step's button pointed, so the step completed itself the moment
+            # anybody clicked it. See test_booking_page_setup.
+            BusinessSetting.set('booking_page_shared', '1')
         elif key == 'team':
             db.session.add(Staff(name='Maria', is_active=True))
         elif key == 'client':
@@ -109,11 +111,20 @@ with app.app_context():
 print('\n4. A job with nobody on it is not the finish line')
 # Booking something and never assigning it is exactly the state a business gets
 # stuck in, and calling that "done" would hide the one step that matters.
+#
+# `complete`, not `activated`. Those were one flag and are now two questions:
+# `activated` is "have they put their real world in here" — a cleaner and a
+# customer, which is what starts the 14-day trial — and `complete` is "is every
+# setup step done", which is what puts the getting-started card away. Using one
+# answer for both meant the trial clock only began after all six steps, while
+# the banner promised it began at the first assigned job.
 with app.app_context():
     BookingCrew.query.delete()
     db.session.commit()
     p = onboarding.progress()
-check(p['activated'] is False, 'an unassigned job does not count as activated')
+check(p['complete'] is False, 'an unassigned job does not finish the setup')
+check(p['activated'] is True,
+      'though the trial has started — they have a cleaner and a customer')
 check(p['next']['key'] == 'job', 'and the remaining step is still the job')
 with app.app_context():
     _n = len(onboarding.journey())
@@ -128,7 +139,7 @@ with app.app_context():
     db.session.add(BookingCrew(booking_id=b.id, staff_id=1, pay_amount=129.0))
     db.session.commit()
     p = onboarding.progress()
-check(p['activated'] is True, 'a job with a cleaner on it activates the business')
+check(p['complete'] is True, 'a job with a cleaner on it finishes the setup')
 check(p['percent'] == 100, '100%')
 check(p['next'] is None, 'and there is nothing left to tell them to do')
 

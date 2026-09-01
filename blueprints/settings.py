@@ -34,6 +34,50 @@ def setup():
     return render_template('admin/setup.html', s=onboarding.summary())
 
 
+@settings_bp.route('/booking-page')
+@login_required
+def booking_page():
+    """What the booking page is, where it lives, and how to put it to work.
+
+    The getting-started list used to send people straight to `/book` — the
+    customer-facing page itself, with no explanation and nothing on it saying
+    what it was or what to do with it. Two things went wrong with that.
+
+    Opening it ticked the step off. So the list said "Share your booking page"
+    with a line through it, to a business that had shared nothing, because the
+    only thing the tick ever meant was that somebody had clicked the link on
+    the list. A checklist item that completes itself when you look at it is
+    worse than no checklist item.
+
+    And it answered none of the questions people actually have — the owner of
+    this product had to explain it to her first beta tester by hand, which is
+    the clearest possible signal that a screen is missing.
+    """
+    import branding as _b, entitlements as _ent
+    base = _b.crm_base().rstrip('/')
+    return render_template(
+        'admin/booking_page.html',
+        booking_url=f'{base}/book',
+        embed_snippet=f'<script src="{base}/embed.js" async></script>',
+        embed_allowed=_ent.can('booking_widget'),
+        shared=BusinessSetting.get('booking_page_shared'))
+
+
+@settings_bp.route('/booking-page/shared', methods=['POST'])
+@login_required
+def booking_page_shared():
+    """They copied the link or the snippet. That is the step, not looking.
+
+    Recorded from an explicit action so the tick means something a person did
+    on purpose. It can also be undone — somebody who ticks it by accident
+    should not be stuck looking at a finished list with an unfinished job.
+    """
+    on = request.form.get('undo') != '1'
+    BusinessSetting.set('booking_page_shared', '1' if on else '')
+    db.session.commit()
+    return {'ok': True, 'shared': on}
+
+
 @settings_bp.route('/getting-started')
 @login_required
 def getting_started():
