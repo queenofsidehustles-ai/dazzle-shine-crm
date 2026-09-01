@@ -16,7 +16,7 @@ separate on purpose: a payout that could also be hand-entered as an expense is a
 payout that eventually gets counted twice.
 """
 from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func
@@ -57,9 +57,48 @@ def months_in(start, end):
 
 
 def _dt_bounds(start, end):
-    """Datetime range covering the whole of both end days."""
-    return datetime.combine(start, datetime.min.time()), \
-           datetime.combine(end + timedelta(days=1), datetime.min.time())
+    """The UTC instants that bracket these days *where the business is*.
+
+    `start` and `end` are calendar dates somebody picked on a screen — "show
+    me August". The columns they are compared against (`paid_at`,
+    `created_at`) are stamped with `datetime.utcnow()`. Combining a local
+    calendar date with midnight and comparing it to a UTC instant silently
+    mixes two clocks, and in the eastern US the two disagree for the last four
+    or five hours of every day.
+
+    So a card charged at 9pm on the 31st was stamped 01:00 UTC on the 1st and
+    dropped out of that month's revenue into the next one. Every evening
+    payment landed on the wrong day, every month-end lost its last evening,
+    and the Schedule C export inherited all of it. The owner would have seen a
+    month that was short and a next month that was long, with nothing to
+    explain either.
+
+    Fixed here rather than at the point the timestamps are written, because
+    every row already in the database is UTC. Changing what gets stored would
+    leave two meanings in one column and no way to tell which was which; this
+    reinterprets the question instead, and every reader — revenue, jobs,
+    payouts, commissions, the exports — gets it at once.
+    """
+    tz = _business_tz()
+    def _utc(d):
+        # Midnight in the business's own timezone, expressed as the naive UTC
+        # instant the columns are stored in.
+        local = datetime.combine(d, datetime.min.time()).replace(tzinfo=tz)
+        return local.astimezone(timezone.utc).replace(tzinfo=None)
+    return _utc(start), _utc(end + timedelta(days=1))
+
+
+def _business_tz():
+    """The business's timezone, falling back to UTC rather than raising.
+
+    A P&L that cannot be drawn is worse than one drawn in the wrong timezone,
+    and this runs inside every money page.
+    """
+    try:
+        import scheduling
+        return scheduling.business_timezone()
+    except Exception:
+        return timezone.utc
 
 
 # ── Money in ────────────────────────────────────────────────────────────────

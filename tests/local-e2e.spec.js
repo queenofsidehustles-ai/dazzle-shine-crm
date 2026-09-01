@@ -28,8 +28,15 @@ async function login(page) {
 }
 
 // Today, and a date inside the current month, as YYYY-MM-DD.
+//
+// Built from the local parts rather than `toISOString()`, which is UTC. After
+// 8pm in the eastern US those are different days, so the test typed tomorrow's
+// date into an expense form and then could not find the expense — because the
+// CRM, correctly, was still showing today. The suite went red every evening
+// for a reason that had nothing to do with the product.
 const today = new Date();
-const iso = (d) => d.toISOString().slice(0, 10);
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                 + `-${String(d.getDate()).padStart(2, '0')}`;
 const TODAY = iso(today);
 
 test.describe.configure({ mode: 'serial' });

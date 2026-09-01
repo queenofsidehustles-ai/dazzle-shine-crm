@@ -149,12 +149,61 @@ def signup():
                       'charged and nothing was kept — please try again, and if it '
                       'happens twice tell us.')
 
+        _tell_us(slug, form, base)
+
         # Over to their own address, where the session belongs.
         scheme = 'http' if base.startswith('localhost') else 'https'
         return redirect(f'{scheme}://{slug}.{base}/welcome/{token}')
 
     return render_template('admin/signup.html', form=form, slug='', base=base,
                            error=None)
+
+
+def _tell_us(slug, form, base):
+    """Email whoever runs the product that somebody just signed up.
+
+    A company signing up is the most important thing that happens on this
+    deployment, and until now it happened in silence — the row appeared in a
+    table nobody was watching. Somebody could sign up at eleven at night, hit
+    something broken, and be gone before anyone knew they had arrived.
+
+    It is also the honest end-to-end test of the product's email: same key,
+    same from-address, same path as a trial reminder. If this arrives, they
+    all will.
+
+    Never raises. A company has already been created and paid for with a
+    password by this point — failing to send a notification must not undo any
+    of that, or show them an error about our mail when nothing of theirs is
+    wrong.
+    """
+    try:
+        import notifications
+        import product
+        to = product.support_email()
+        if not to:
+            return
+        url = f'https://{slug}.{base}'
+        notifications.send_email(
+            to, product.name(),
+            f'New signup: {form.get("business") or slug}',
+            f'''<p><strong>{form.get('business') or slug}</strong> just signed up.</p>
+            <table cellpadding="6" style="border-collapse:collapse;font-family:sans-serif">
+              <tr><td><strong>Company</strong></td><td>{form.get('business') or ''}</td></tr>
+              <tr><td><strong>Person</strong></td><td>{form.get('name') or ''}</td></tr>
+              <tr><td><strong>Email</strong></td><td>{form.get('email') or ''}</td></tr>
+              <tr><td><strong>Address</strong></td><td><a href="{url}">{url}</a></td></tr>
+            </table>
+            <p>They are on the top plan, trialing. The 14 days start when they
+            first assign a job to somebody.</p>''',
+            from_name=product.name(),
+            from_email=product.from_email() or None,
+            reply_to=form.get('email') or to,
+            api_key=product.resend_api_key() or None)
+    except Exception as e:
+        # Printed rather than swallowed silently — see errors.py for what
+        # happens when a send failure has nowhere to be seen.
+        print(f'  ⚠️  could not send signup notice for {slug!r}: '
+              f'{type(e).__name__}: {e}')
 
 
 def _validate(form, slug, password):
