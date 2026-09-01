@@ -42,7 +42,7 @@ SECTIONS = [
     ('Get Customers', [
         ('leads.index', '💡', 'Leads', False, [
             ('leads.index', 'Website leads', False),
-            ('lsa.index', 'Google Ads leads', False),
+            ('lsa.index', 'Missed contacts', False),
         ]),
         ('places_finder.dashboard', '🏢', 'Commercial', False, [
             ('places_finder.dashboard', 'Find leads', False),

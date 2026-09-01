@@ -122,7 +122,12 @@ with app.app_context():
     check(b5.balance_collected is True, 'and the balance flag too')
 
     print('\n8. So the money shows up where it should')
-    start, end = finance.month_bounds(2026, 8)
+    # The month the charge actually landed in, where the business is — not a
+    # hardcoded August. This asserted month 8 and so began failing on 1
+    # September for a reason that had nothing to do with charging a card.
+    import scheduling
+    _t = scheduling.local_today()
+    start, end = finance.month_bounds(_t.year, _t.month)
     check(finance.revenue_between(start, end) >= 1420,
           'the $1,420 counts as August income')
     owed_names = [x.name for x in Booking.query.filter(

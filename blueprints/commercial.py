@@ -78,6 +78,31 @@ def calculator():
     return render_template('admin/commercial_calculator.html', **_tmpl_args())
 
 
+@commercial_bp.route('/quote.json')
+@login_required
+def quote_json():
+    """The one place a commercial price is worked out.
+
+    The calculators used to do the arithmetic themselves, in JavaScript, in two
+    separate copies — and the copies had already drifted. One of them ignored
+    scope add-ons entirely, so a medical office priced from the account form
+    came out at office rates. The Python function that this file's docstring
+    called "the pricing brain" was not called by anything at all, which meant
+    every correction made to it changed nothing anybody was ever quoted.
+
+    One implementation, on the server, asked over the wire. A price is also
+    not a thing to compute in a place the customer's browser can edit.
+    """
+    from flask import jsonify
+    return jsonify(cpricing.quote(
+        request.args.get('sqft'),
+        category=request.args.get('category') or 'office',
+        frequency=request.args.get('frequency') or 'weekly',
+        extras=request.args.getlist('extras'),
+        drive_mins=request.args.get('drive_minutes'),
+    ))
+
+
 @commercial_bp.route('/new', methods=['POST'])
 @login_required
 def new():
@@ -93,6 +118,7 @@ def new():
         address=(request.form.get('address') or '').strip(),
         city=(request.form.get('city') or '').strip(),
         square_footage=_int(request.form.get('square_footage')),
+        drive_minutes=_int(request.form.get('drive_minutes')),
         category=request.form.get('category', 'office'),
         frequency=request.form.get('frequency', 'weekly'),
         billing_type=request.form.get('billing_type', 'monthly'),
@@ -125,6 +151,7 @@ def convert(prospect_id):
             address=p.address or '',
             city=p.city or '',
             square_footage=_int(request.form.get('square_footage')),
+            drive_minutes=_int(request.form.get('drive_minutes')),
             category=p.category or 'office',
             frequency=request.form.get('frequency', 'weekly'),
             billing_type=request.form.get('billing_type', 'monthly'),
@@ -155,6 +182,7 @@ def detail(account_id):
         a.address = (request.form.get('address') or '').strip()
         a.city = (request.form.get('city') or '').strip()
         a.square_footage = _int(request.form.get('square_footage'))
+        a.drive_minutes = _int(request.form.get('drive_minutes'))
         a.category = request.form.get('category', a.category)
         a.frequency = request.form.get('frequency', a.frequency)
         a.billing_type = request.form.get('billing_type', a.billing_type)

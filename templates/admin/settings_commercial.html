@@ -18,7 +18,13 @@
       <input class="inp" name="comm_target_labor" value="{{ '%.0f' % (cfg.target*100) }}">
       <div style="font-size:0.72rem;color:var(--softer);margin-top:2px">Lower % → higher prices &amp; more profit. ~40% is typical.</div></div>
     <div><label class="lbl">Minimum per visit ($)</label>
-      <input class="inp" name="comm_min_visit" value="{{ '%.0f' % cfg.min_visit }}"></div>
+      <input class="inp" name="comm_min_visit" value="{{ '%.0f' % cfg.min_visit }}">
+      <div style="font-size:0.72rem;color:var(--softer);margin-top:2px">Covers a stop being worth
+        making at all. Travel is added on top of this, not swallowed by it.</div></div>
+    <div><label class="lbl">Default drive time (mins, round trip)</label>
+      <input class="inp" name="comm_drive_minutes" value="{{ '%.0f' % cfg.drive_minutes }}">
+      <div style="font-size:0.72rem;color:var(--softer);margin-top:2px">Priced like cleaning time —
+        an hour in the van is an hour you can't sell. Each account can set its own.</div></div>
 
     <div style="grid-column:1/-1;border-top:1px solid #eee;padding-top:12px">
       <strong style="font-size:0.9rem">Production rates — sq ft one cleaner covers per hour</strong>
@@ -27,6 +33,15 @@
     {% for c, rate in cfg.prod_rates.items() %}
     <div><label class="lbl">{{ category_labels.get(c, c) }}</label>
       <input class="inp" name="comm_prod_{{ c }}" value="{{ '%.0f' % rate }}"></div>
+    {% endfor %}
+
+    <div style="grid-column:1/-1;border-top:1px solid #eee;padding-top:12px">
+      <strong style="font-size:0.9rem">Scope add-ons — % added to the price</strong>
+      <div style="font-size:0.75rem;color:var(--softer)">What each extra is worth in your market. Priced a competitor's restroom line at 15%? Put 15 here.</div>
+    </div>
+    {% for e in cfg.extras %}
+    <div><label class="lbl">{{ e.label }}</label>
+      <input class="inp" name="comm_extra_{{ e.key }}" value="{{ '%.0f' % (e.pct * 100) }}"></div>
     {% endfor %}
 
     <div style="grid-column:1/-1"><button type="submit" class="btn" style="padding:10px 24px">💾 Save pricing</button></div>

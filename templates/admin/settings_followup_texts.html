@@ -6,10 +6,13 @@
 <form method="POST">
   <div class="card" style="margin-bottom:18px">
     <p style="color:var(--muted);font-size:0.9rem;line-height:1.7;margin:0">
-      What gets texted to people who called through Google Ads and never booked.
-      Two sets, because they're two different conversations: someone whose call
-      you missed has never spoken to you, and someone you quoted has — and
-      apologising for not connecting reads badly to a person you priced up.
+      What gets texted to somebody who got in touch and never booked — a missed
+      call, a voicemail, a text nobody answered, a form on your website, or a
+      quote request that went quiet. However they reached you, the conversation
+      afterwards is the same one.
+      Two sets, because they are two different conversations: someone you never
+      spoke to, and someone you quoted — and apologising for not connecting
+      reads badly to a person you already priced up.
     </p>
     <p style="color:var(--muted);font-size:0.86rem;line-height:1.7;margin:12px 0 0">
       Placeholders you can use:
@@ -26,10 +29,10 @@
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">{{ label }}</h2>
     <p style="font-size:0.85rem;color:var(--softer);margin-bottom:16px">
       {% if track == 'missed' %}
-        The call never connected — Google didn't charge you for it. These people
-        have never spoken to you.
+        They tried to reach you and it never connected — a missed call, a
+        voicemail, a message nobody got to. These people have never spoken to you.
       {% else %}
-        They got through, spoke to you and heard a price, then went elsewhere.
+        They asked for a price and heard one, then went quiet.
       {% endif %}
     </p>
 

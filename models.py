@@ -1657,6 +1657,10 @@ class CommercialAccount(db.Model):
     address = db.Column(db.String(300))
     city = db.Column(db.String(100))
     square_footage = db.Column(db.Integer)                     # drives the cost-based quote
+    # Round-trip driving for one visit. Stored per account because a
+    # customer's distance is a property of that customer, and re-quoting them
+    # a year later should not start again from the generic default.
+    drive_minutes = db.Column(db.Integer)
     category = db.Column(db.String(40), default='office')      # reuses Prospect categories
     frequency = db.Column(db.String(30), default='weekly')     # nightly/weekly/biweekly/monthly/custom
     billing_type = db.Column(db.String(20), default='monthly') # 'monthly' or 'per_visit'

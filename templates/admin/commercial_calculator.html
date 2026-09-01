@@ -31,6 +31,13 @@
     <div class="steph"><span class="stepn">2</span> How big is it?</div>
     <input class="inp big" type="number" name="square_footage" id="f_sqft" min="0" placeholder="e.g. 5000" oninput="recalc()">
     <div class="hint">Square feet. Not sure? Check the lease, or Google the business address.</div>
+    <label class="lbl" style="display:block;margin-top:12px">How far away is it?</label>
+    <input class="inp" type="number" name="drive_minutes" id="f_drive" min="0" step="5"
+           value="{{ pricing_config.drive_minutes|round|int }}" oninput="recalc()"
+           style="max-width:220px">
+    <div class="hint">Round-trip driving, in minutes. This is added to the price on
+      top of the minimum — a job forty minutes away really does cost you more than
+      the same job ten minutes away.</div>
   </div>
 
   <div class="card step">
@@ -90,7 +97,19 @@
 const CFG = {{ pricing_config|tojson }};
 let curType = 'office', curFreq = 'weekly';
 
-function pickType(btn){ curType = btn.dataset.val; highlight('typePick', btn, 'f_category'); recalc(); }
+function pickType(btn){ curType = btn.dataset.val; highlight('typePick', btn, 'f_category'); applyDefaultExtras(); recalc(); }
+
+// Some facility types carry scope that isn't optional — medical work includes
+// the disinfection protocol whether or not anyone ticks it. Tick it for them,
+// leave it removable, and un-tick it again if they move to a type that doesn't
+// require it so the last facility's rules don't quietly follow them around.
+let autoTicked = [];
+function extraBox(key){ return document.querySelector('.chk input[value="' + key + '"]'); }
+function applyDefaultExtras(){
+  autoTicked.forEach(k => { const b = extraBox(k); if(b) b.checked = false; });
+  autoTicked = (CFG.default_extras || {})[curType] || [];
+  autoTicked.forEach(k => { const b = extraBox(k); if(b) b.checked = true; });
+}
 function pickFreq(btn){ curFreq = btn.dataset.val; highlight('freqPick', btn, 'f_frequency'); recalc(); }
 function highlight(group, btn, hiddenId){
   document.querySelectorAll('#'+group+' .pick').forEach(b => b.classList.remove('on'));
@@ -99,7 +118,14 @@ function highlight(group, btn, hiddenId){
 }
 function selectedExtras(){ return Array.from(document.querySelectorAll('.chk input:checked')).map(c => c.value); }
 
-function recalc(){
+let _calcTimer = null;
+function recalc(){ clearTimeout(_calcTimer); _calcTimer = setTimeout(_recalcNow, 180); }
+
+// Worked out on the server, at /commercial/quote.json — the same call the
+// account form makes. Both used to do the sums themselves and had already
+// drifted apart from each other. A price is also not a thing to compute
+// somewhere the customer's browser can edit it.
+async function _recalcNow(){
   const sqft = parseFloat(document.getElementById('f_sqft').value) || 0;
   const out = document.getElementById('result');
   if(!sqft){
@@ -107,29 +133,42 @@ function recalc(){
     document.getElementById('f_amount').value = '';
     return;
   }
-  const rate = CFG.prod_rates[curType] || 3000;
-  const hours = sqft / rate;
-  const labor = hours * CFG.hourly;
-  let price = CFG.target ? labor / CFG.target : labor;
-  let pct = 0;
-  selectedExtras().forEach(k => { const e = CFG.extras.find(x => x.key === k); if(e) pct += e.pct; });
-  price = price * (1 + pct);
-  price = Math.max(price, CFG.min_visit);
-  const vpm = CFG.visits_per_month[curFreq] || 4.3;
-  const std = Math.round(price), low = Math.round(price*CFG.range_low), prem = Math.round(price*CFG.range_high);
-  const monthly = Math.round(std*vpm), annual = monthly*12;
-  document.getElementById('f_amount').value = std;
+  const driveEl = document.getElementById('f_drive');
+  const p = new URLSearchParams({sqft: sqft, category: curType, frequency: curFreq});
+  selectedExtras().forEach(k => p.append('extras', k));
+  if(driveEl && driveEl.value !== '') p.set('drive_minutes', driveEl.value);
+
+  let q;
+  try {
+    const r = await fetch('/commercial/quote.json?' + p.toString());
+    if(!r.ok) throw new Error(r.status);
+    q = await r.json();
+  } catch (e) {
+    out.innerHTML = '<div style="color:var(--warn);text-align:center;padding:6px">'
+      + 'Could not work out a price just now — check your connection.</div>';
+    document.getElementById('f_amount').value = '';
+    return;
+  }
+
+  document.getElementById('f_amount').value = q.standard;
   document.getElementById('f_notes').value = 'Quote: ' + Math.round(sqft) + ' sq ft ' + curType + ', ' + curFreq +
-    (selectedExtras().length ? (' + ' + selectedExtras().join(', ')) : '');
+    (selectedExtras().length ? (' + ' + selectedExtras().join(', ')) : '') +
+    (q.drive_minutes ? (' + ' + q.drive_minutes + ' min travel') : '');
+  const driveLine = q.drive_price
+    ? '<div style="margin-top:4px;font-size:0.82rem;color:var(--softer)">'
+      + '$' + q.onsite_price + ' for the clean &middot; $' + q.drive_price
+      + ' for the ' + q.drive_minutes + '-minute round trip</div>'
+    : '';
   out.innerHTML =
     '<div style="text-align:center">' +
       '<div style="font-size:0.82rem;color:var(--softer)">Your confident price</div>' +
-      '<div style="font-size:2rem;font-weight:800;color:var(--ink);line-height:1.1;margin-top:2px">$' + low + ' – $' + prem +
+      '<div style="font-size:2rem;font-weight:800;color:var(--ink);line-height:1.1;margin-top:2px">$' + q.low + ' – $' + q.premium +
         '<span style="font-size:1rem;color:var(--softer)"> / visit</span></div>' +
-      '<div style="color:var(--amber-deep);font-weight:700;margin-top:2px">Most quote around $' + std + ' / visit</div>' +
-      '<div style="margin-top:10px;font-size:1rem">≈ <b>$' + monthly + '/month</b> &middot; $' + annual + '/year</div>' +
-      '<div style="margin-top:10px;font-size:0.82rem;color:var(--softer)">~' + hours.toFixed(1) + ' hrs of work &middot; ' +
-        'pay your cleaner ~$' + Math.round(labor) + ' &middot; you keep ~$' + (std - Math.round(labor)) + '/visit</div>' +
+      '<div style="color:var(--amber-deep);font-weight:700;margin-top:2px">Most quote around $' + q.standard + ' / visit</div>' +
+      driveLine +
+      '<div style="margin-top:10px;font-size:1rem">≈ <b>$' + q.monthly + '/month</b> &middot; $' + q.annual + '/year</div>' +
+      '<div style="margin-top:10px;font-size:0.82rem;color:var(--softer)">~' + q.hours.toFixed(1) + ' hrs on site &middot; ' +
+        'your cost ~$' + Math.round(q.labor_cost) + ' &middot; you keep ~$' + q.profit_per_visit + '/visit</div>' +
     '</div>';
 }
 function resetCalc(){
@@ -138,11 +177,14 @@ function resetCalc(){
   document.querySelectorAll('.pick').forEach(b => b.classList.remove('on'));
   const t = document.querySelector('#typePick .pick[data-val=office]'); if(t) t.classList.add('on');
   const f = document.querySelector('#freqPick .pick[data-val=weekly]'); if(f) f.classList.add('on');
+  autoTicked = [];
+  applyDefaultExtras();
   recalc();
 }
 document.addEventListener('DOMContentLoaded', function(){
   const t = document.querySelector('#typePick .pick[data-val=office]'); if(t) t.classList.add('on');
   const f = document.querySelector('#freqPick .pick[data-val=weekly]'); if(f) f.classList.add('on');
+  applyDefaultExtras();
   recalc();
 });
 </script>

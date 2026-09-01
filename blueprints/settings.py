@@ -155,11 +155,23 @@ def commercial():
         except ValueError:
             pct = 40
         PricingSetting.set('comm_target_labor', round(pct / 100.0, 4))
-        PricingSetting.set('comm_min_visit', request.form.get('comm_min_visit') or 80)
+        PricingSetting.set('comm_min_visit', request.form.get('comm_min_visit') or 125)
+        PricingSetting.set('comm_drive_minutes',
+                           request.form.get('comm_drive_minutes') or 30)
         for c in cp.PROD_RATES:
             v = request.form.get(f'comm_prod_{c}')
             if v:
                 PricingSetting.set(f'comm_prod_{c}', v)
+        # Add-ons are typed as whole percents and stored as decimals, the same
+        # way target labor is, so the form never asks anyone to write 0.08.
+        for key, _lbl, _pct in cp.EXTRAS:
+            v = request.form.get(f'comm_extra_{key}')
+            if v in (None, ''):
+                continue
+            try:
+                PricingSetting.set(f'comm_extra_{key}', round(float(v) / 100.0, 4))
+            except ValueError:
+                pass
         db.session.commit()
         flash('Commercial pricing updated.', 'success')
         return redirect(url_for('settings.commercial'))

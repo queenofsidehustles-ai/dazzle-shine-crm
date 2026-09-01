@@ -1,6 +1,6 @@
 {% extends "base_admin.html" %}
-{% block title %}Google LSA Leads — {{ BIZ }} CRM{% endblock %}
-{% block page_title %}Google Ads Leads{% endblock %}
+{% block title %}Missed Contacts — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Missed Contacts{% endblock %}
 
 {% block content %}
 <div class="filter-tabs">
@@ -15,7 +15,11 @@
 
 <div class="card" style="margin-bottom:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
   <a href="{{ url_for('leads.new_quote') }}" class="btn btn-gold" style="padding:8px 16px">✉️ Quote a caller</a>
-  <a href="{{ url_for('lsa.import_csv') }}" class="btn btn-outline" style="padding:8px 16px">⬆️ Import LSA export</a>
+  <button type="button" class="btn btn-outline" style="padding:8px 16px"
+          onclick="document.getElementById('addByHand').style.display='block';document.getElementById('add_phone').focus()">
+    ➕ Add someone
+  </button>
+  <a href="{{ url_for('lsa.import_csv') }}" class="btn btn-outline" style="padding:8px 16px">⬆️ Import Google Ads export</a>
   <a href="{{ url_for('lsa.preview') }}" class="btn btn-outline" style="padding:8px 16px">👁 Preview the texts</a>
   {% if counts['not_booked'] %}
   <form method="POST" action="{{ url_for('lsa.start_all') }}" style="margin:0"
@@ -28,6 +32,38 @@
   <span style="margin-left:auto;font-size:0.83rem;color:var(--softer)">
     {% if due_count %}{{ due_count }} text{{ 's' if due_count != 1 }} due on the next run{% else %}Nothing due to send{% endif %}
   </span>
+</div>
+
+<div class="card" id="addByHand" style="display:none;margin-bottom:18px">
+  <form method="POST" action="{{ url_for('lsa.add_by_hand') }}">
+    <div style="font-weight:700;color:var(--ink);margin-bottom:4px">Somebody you didn't get to</div>
+    <p style="font-size:0.85rem;color:var(--softer);margin:0 0 14px">
+      A missed call, a voicemail, a text nobody answered, a form on your website,
+      somebody who asked for a price and went quiet. They all get chased the same way.
+    </p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div><label class="lbl">Their phone number</label>
+        <input class="inp" name="phone" id="add_phone" required placeholder="407 555 0134"
+               style="min-width:180px"></div>
+      <div><label class="lbl">What happened?</label>
+        <select class="inp" name="track" style="min-width:220px">
+          <option value="missed">They tried to reach me — we never spoke</option>
+          <option value="quoted">They asked for a price and I gave one</option>
+        </select></div>
+      <div><label class="lbl">Note <span style="color:var(--softer);font-weight:400">(optional)</span></label>
+        <input class="inp" name="note" placeholder="3 bed, wants weekly" style="min-width:200px"></div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:0.88rem;padding-bottom:9px">
+        <input type="checkbox" name="start_now" checked> Start texting them
+      </label>
+      <button type="submit" class="btn btn-primary" style="padding:9px 18px">Add</button>
+      <button type="button" class="btn btn-outline" style="padding:9px 14px"
+              onclick="document.getElementById('addByHand').style.display='none'">Cancel</button>
+    </div>
+    <p style="font-size:0.8rem;color:var(--softer);margin:12px 0 0">
+      The two choices get different messages — apologising for missing a call reads
+      badly to somebody you already quoted.
+    </p>
+  </form>
 </div>
 
 <div class="card">

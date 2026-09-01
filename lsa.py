@@ -235,7 +235,11 @@ SEQUENCE = [
 # for not connecting reads as though we don't remember them, which is worse than
 # not texting at all.
 MISSED, QUOTED = 'missed', 'quoted'
-TRACKS = [(MISSED, 'Missed call'), (QUOTED, 'Spoke & quoted')]
+# What each conversation is, in words that do not assume a phone call from
+# a Google ad. A voicemail, a web form and a text nobody answered are all
+# the first one; an emailed price request is the second.
+TRACKS = [(MISSED, 'Missed call or message'),
+          (QUOTED, 'Asked for a price')]
 
 # Google's billing status is the only signal in the export about which happened,
 # and it's a good one: it charges for calls that connected. It is only a
