@@ -150,8 +150,17 @@ def _alert(row):
         when = row.last_seen.strftime('%d %b %Y at %H:%M UTC') if row.last_seen else ''
         seen = (f'<p>This has now happened <strong>{row.count} times</strong>.</p>'
                 if row.count and row.count > 1 else '')
+        # Four arguments, not three. `send_email` takes
+        # (to_email, to_name, subject, html), so passing three raised TypeError
+        # before a single byte went anywhere — and the `except Exception` below,
+        # which is there so a mail outage cannot take a page down with it,
+        # caught the error and threw it away. This alerter had therefore never
+        # sent an email in its life: the one feature whose entire job is to
+        # tell you something broke was itself broken, silently, and the only
+        # symptom was a quiet inbox that looked exactly like a working CRM.
         notifications.send_email(
             to,
+            biz,
             f'[{biz}] Something broke: {row.kind}',
             f'''<p>An error happened on your CRM. Nobody had to tell you — it
             reported itself.</p>

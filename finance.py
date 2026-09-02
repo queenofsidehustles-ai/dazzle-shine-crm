@@ -16,7 +16,7 @@ separate on purpose: a payout that could also be hand-entered as an expense is a
 payout that eventually gets counted twice.
 """
 from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func
@@ -56,10 +56,48 @@ def months_in(start, end):
     return out
 
 
+def _business_tz():
+    """The business's timezone, falling back to UTC rather than raising.
+
+    This runs inside every money page. A P&L that cannot be drawn is worse
+    than one drawn in the wrong timezone.
+    """
+    try:
+        import scheduling
+        return scheduling.business_timezone()
+    except Exception:
+        return timezone.utc
+
+
 def _dt_bounds(start, end):
-    """Datetime range covering the whole of both end days."""
-    return datetime.combine(start, datetime.min.time()), \
-           datetime.combine(end + timedelta(days=1), datetime.min.time())
+    """The UTC instants that bracket these days *where the business is*.
+
+    `start` and `end` are calendar dates somebody picked on a screen — "show
+    me August". The columns they are compared against (`paid_at`,
+    `created_at`) are stamped with `datetime.utcnow()`. Combining a local
+    calendar date with midnight and comparing it against a UTC instant
+    silently mixes two clocks, and in the eastern US those two disagree for
+    the last four or five hours of every day.
+
+    So a card charged at 9pm on the 31st was stamped 01:00 UTC on the 1st and
+    counted in the following month. Most days that is invisible, because
+    tomorrow is still the same month. At a month end it is not: the month is
+    short by its last evening, the next one is long by the same amount, and
+    nothing on either screen explains it. It flows into the quarter, the year
+    and the Schedule C export.
+
+    Fixed at the boundary rather than at the stamp. Every row already in the
+    database is UTC, so changing what gets written would leave two meanings in
+    one column with no way to tell them apart. Reinterpreting the question
+    fixes every reader at once and needs no migration.
+    """
+    tz = _business_tz()
+
+    def _utc(d):
+        local = datetime.combine(d, datetime.min.time()).replace(tzinfo=tz)
+        return local.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return _utc(start), _utc(end + timedelta(days=1))
 
 
 # ── Money in ────────────────────────────────────────────────────────────────

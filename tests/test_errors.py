@@ -16,7 +16,14 @@ import notifications
 
 SENT = []
 notifications.send_sms = lambda *a, **k: (True, 'stub')
-notifications.send_email = lambda to, subj, body, **k: (SENT.append((to, subj)), (True, 'stub'))[1]
+# Four arguments, the same as the real function. This stub took three — and so
+# did the caller in errors.py — so "exactly one email went out" passed for
+# months while the alerter had never sent one in its life. The stub accepted
+# what production rejected, and the `except Exception` around the call swallowed
+# the difference. A stub that is easier to call than the real thing tests the
+# stub. See tests/test_email_callers.py, which now checks every call site.
+notifications.send_email = lambda to_email, to_name, subject, html, **k: (
+    SENT.append((to_email, subject)), (True, 'stub'))[1]
 
 from app import create_app
 from extensions import db
