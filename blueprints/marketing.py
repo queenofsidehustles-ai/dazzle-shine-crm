@@ -203,9 +203,14 @@ def sitemap():
 
 
 def _base():
-    """The address this site is actually served on, without a trailing slash."""
-    import branding
-    return branding.crm_base().rstrip('/')
+    """The address to advertise, without a trailing slash.
+
+    A sitemap is a promise that these URLs exist. This read crm_base(), which
+    prefers CRM_BASE — pointed at the bare apex — so the sitemap handed search
+    engines /pricing, /terms, /privacy and /subprocessors on a host that answers
+    404 to all four. See product.canonical_base()."""
+    import product
+    return product.canonical_base().rstrip('/')
 
 
 @marketing_bp.route('/early-access', methods=['GET', 'POST'])

@@ -188,7 +188,8 @@ database — and the database says **Online**.
 | `BASE_DOMAIN` | `akyehq.com` | **The main switch.** Without it there is no multi-company mode and no signup at all. |
 | `SIGNUPS_OPEN` | `0` | Keeps the door shut while you test. |
 | `SECRET_KEY` | the long random line from Step 2 | Locks the cookies. |
-| `CRM_BASE` | `https://akyehq.com` | The product's own address. |
+| `CRM_BASE` | `https://www.akyehq.com` | The product's own address — **with the `www`**, because that is the host the site is actually served on. |
+| `CANONICAL_HOST` | leave blank for now | See the note under Step 6. |
 | `STRIPE_PLATFORM_SECRET_KEY` | your `sk_test_…` key | Takes subscription money. |
 | `STRIPE_PRICE_PRO` | the Pro `price_…` ID | |
 | `STRIPE_PRICE_SCALE` | the Scale `price_…` ID | |
@@ -270,6 +271,28 @@ resolves and has a padlock.
 
 If the padlock is missing or you get a certificate warning, wait longer before
 telling me it is broken. Certificates can take a while after DNS moves.
+
+### Check the apex on a real page, not just the homepage
+
+Load **`https://akyehq.com/pricing`**, not `https://akyehq.com`.
+
+A homepage that loads proves almost nothing. A registrar's forwarding service
+will happily redirect `akyehq.com` → `www.akyehq.com` and answer **404 for every
+other path** — the redirect is configured on the root only. That is what
+happened here: the site looked fine, and `akyehq.com/pricing`, `/terms`,
+`/privacy` and `/subprocessors` were all dead, which is precisely the set of
+URLs the sitemap hands to Google.
+
+- **If `/pricing` loads** — the apex reaches Railway. Good.
+- **If `/pricing` 404s** — the apex is still on a forwarding service. Remove the
+  forwarding record and add `akyehq.com` as a Custom Domain on the Railway
+  service, alongside `*.akyehq.com`.
+
+**Only once `/pricing` loads on the apex**, set `CANONICAL_HOST` to `akyehq.com`.
+That makes `www` redirect to the apex, keeping the path, so the site has one
+address instead of two copies of itself. Setting it before the apex works would
+redirect the working site to a broken one — which is why it is blank by default
+and every page just advertises whatever host served it.
 
 ---
 

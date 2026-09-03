@@ -23,6 +23,11 @@ os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/seo.db'
 os.environ['SECRET_KEY'] = 'test'
 os.environ['BASE_DOMAIN'] = 'akye.test'
 os.environ['CRM_BASE'] = 'https://www.akye.test'
+# Which host the public site is advertised and served under. This used to be
+# inferred from CRM_BASE, and on the real deployment CRM_BASE was the bare apex
+# — so the sitemap promised /pricing, /terms and /privacy on a host that 404s
+# them. It is now said outright, because it is the address given to Google.
+os.environ['CANONICAL_HOST'] = 'www.akye.test'
 os.environ['FLASK_ENV'] = 'development'
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -35,7 +40,9 @@ import entitlements
 
 app = create_app()
 c = app.test_client()
-PRODUCT = {'Host': 'akye.test'}
+# The host the site is really served on. Requesting the bare apex here would
+# now be answered with a 301 to this one, which is the point of setting it.
+PRODUCT = {'Host': 'www.akye.test'}
 TENANT = {'Host': 'acme.akye.test'}
 
 failures = []

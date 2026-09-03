@@ -58,6 +58,43 @@ def base_url():
     return f'{scheme_for(d)}://{d}'
 
 
+def canonical_host():
+    """The one hostname the product's public pages should be advertised under.
+
+    Empty until it is set, and empty is safe: everything falls back to the host
+    that actually served the request. Set it only once that host answers on
+    every path, because the moment it is set it becomes the target of a
+    redirect and the address given to search engines.
+    """
+    return (os.environ.get('CANONICAL_HOST') or '').strip().lower().strip('/')
+
+
+def canonical_base():
+    """The absolute address to put in a canonical tag, an og:url or a sitemap.
+
+    This used to be `branding.crm_base()`, which prefers the CRM_BASE
+    environment variable — set, on the advice of our own deploy guide, to the
+    bare apex. The product is served on www. So the sitemap listed four URLs
+    that answer 404, and every canonical tag told search engines that the page
+    they had successfully fetched was a duplicate of one they could not fetch at
+    all. For a product whose problem is being found, that is the worst possible
+    thing to be wrong.
+
+    So: the configured canonical host if there is one, and otherwise the host
+    that just served this request — which is, by definition, a host that works.
+    """
+    host = canonical_host()
+    if host:
+        return f'{scheme_for(host)}://{host}'
+    try:
+        from flask import request, has_request_context
+        if has_request_context():
+            return request.host_url.rstrip('/')
+    except Exception:
+        pass
+    return base_url()
+
+
 DEFAULT_SUPPORT = 'support@akyehq.com'
 
 

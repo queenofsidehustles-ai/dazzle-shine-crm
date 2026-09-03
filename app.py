@@ -113,6 +113,52 @@ def create_app():
         g.tenant_slug = slug
         tenancy._current.set(schema)
 
+    @app.before_request
+    def _one_canonical_host():
+        """Serve the product's public site under one hostname, not two.
+
+        Once the apex and www both reach this app, both serve the whole site —
+        two copies of every page, which splits what search engines index and
+        what any link points at. This sends one to the other, keeping the path
+        and the query, so a link to the wrong host still lands on the right page
+        instead of a 404.
+
+        Off until CANONICAL_HOST is set, and the default without it is safe:
+        every page advertises the host that served it. Turning it on before that
+        host answers on every path would redirect the working site to a broken
+        one, so it is a deliberate switch and not a guess.
+        """
+        from flask import request, redirect
+        import product, re
+        host = product.canonical_host()
+        if not host:
+            return None
+        here = (request.host or '').split(':')[0].lower()
+        if here == host or not here:
+            return None
+        # Infrastructure, not a visitor. Railway health-checks the container on
+        # an internal address; a 301 there reads as an unhealthy deploy and the
+        # release rolls itself back. Local development is the same shape.
+        if (here in ('localhost', '0.0.0.0') or here.startswith('127.')
+                or here.endswith('.railway.internal') or here.endswith('.local')
+                or re.match(r'^\d+\.\d+\.\d+\.\d+$', here)):
+            return None
+        # /version is how you ask an instance what it is. It has to answer on
+        # whatever hostname you asked, or it cannot tell you the host is wrong.
+        if request.path == '/version':
+            return None
+        # Only the product's own site. A company's subdomain is its own address
+        # and must never be redirected to ours.
+        if tenancy.slug_from_host(request.host, product.domain()) is not None:
+            return None
+        # Never redirect an API call. Stripe posts webhooks and a 301 on a POST
+        # is not something a sender is obliged to follow — the payment would
+        # look delivered to us and never arrive.
+        if request.path.startswith('/api/'):
+            return None
+        target = f'{product.scheme_for(host)}://{host}{request.full_path.rstrip("?")}'
+        return redirect(target, code=301)
+
     @app.teardown_request
     def _clear_tenant(exc=None):
         # Back to public between requests. A worker thread that kept the last
@@ -243,11 +289,12 @@ def create_app():
                 # allowed to be relative — a share card with a relative image
                 # URL simply shows nothing.
                 #
-                # crm_base() rather than product.base_url(): the product is
-                # served on www.akyehq.com, while BASE_DOMAIN is the bare
-                # akyehq.com that company subdomains hang off. An og:image on
-                # the bare domain would 404 for every crawler.
-                'PRODUCT_BASE': branding.crm_base().rstrip('/'),
+                # canonical_base(), not crm_base(): crm_base() prefers the
+                # CRM_BASE environment variable, which our own deploy guide told
+                # her to set to the bare apex — while the product is served on
+                # www. Every canonical tag and og:url on the site therefore
+                # named a host that 404s on every path but "/".
+                'PRODUCT_BASE': product.canonical_base().rstrip('/'),
                 'LEGAL_ENTITY': product.legal_entity(),
                 'LEGAL_ADDRESS': product.legal_address()}
 

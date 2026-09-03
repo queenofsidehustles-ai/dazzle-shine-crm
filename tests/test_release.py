@@ -91,8 +91,24 @@ print('\n6. The release name survives the trip onto a server')
 # file that ships with it.
 rel = ROOT / 'RELEASE'
 check(rel.exists(), 'the release leaves a RELEASE file behind')
-check(rel.read_text().strip().split('\n')[0].startswith('v'),
-      f'naming the release ({rel.read_text().strip().splitlines()[0]})')
+
+
+def load_release_py():
+    """release.py as a module, so the tests read its real configuration."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('release_mod', ROOT / 'release.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# Either product's series. This asserted a leading 'v' when there was one line;
+# on the Akye branch the file correctly reads akye-v2026.09.03, and a test that
+# knows about only one product would fail every Akye release for being one. The
+# prefixes are read from release.py so the two cannot drift apart.
+stamp = rel.read_text().strip().splitlines()[0]
+prefixes = tuple(l.tag_prefix for l in load_release_py().LINES.values())
+check(stamp.startswith(prefixes), f'naming the release ({stamp})')
 check('RELEASE' in (ROOT / 'release.py').read_text(),
       'and the tool writes it on every release')
 check(branding.release_tag() == rel.read_text().split('\n')[0].strip(),
@@ -146,11 +162,7 @@ print('\n9. Two products, two lines, and they cannot be confused')
 # Akye deployed straight off feature/tenancy on every push — untested, to
 # businesses paying to use it. The product sold had weaker deployment safety
 # than the business selling it.
-sys.path.insert(0, str(ROOT))
-import importlib.util as _ilu
-_spec = _ilu.spec_from_file_location('release_mod', ROOT / 'release.py')
-rel = _ilu.module_from_spec(_spec); _spec.loader.exec_module(rel)
-
+rel = load_release_py()
 dazzle, akye = rel.LINES['dazzle'], rel.LINES['akye']
 check(dazzle.source == 'main' and dazzle.channel == 'stable',
       'Dazzle still ships main → stable, exactly as before')
