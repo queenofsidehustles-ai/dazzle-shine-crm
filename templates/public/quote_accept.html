@@ -70,8 +70,24 @@
       <h1>Here's your quote, {{ lead.name.split()[0] }}</h1>
 
       <div class="price-banner">
+        {# A discount is worth nothing to the business unless the customer can
+           see they were given it. The full price is shown struck through and
+           the reason named, so "$232" reads as a favour rather than as the
+           price. #}
+        {% if lead.has_discount %}
+        <span class="lbl">Your price</span>
+        <div style="color:rgba(255,255,255,0.55);font-size:1.35rem;font-weight:600;
+                    text-decoration:line-through;line-height:1.2">
+          ${{ '%.2f'|format(lead.quote_full_price) }}
+        </div>
+        <div style="color:var(--gold);font-size:0.9rem;font-weight:700;margin:5px 0 2px">
+          {{ lead.discount_display }} — you save ${{ '%.2f'|format(lead.discount_amount) }}
+        </div>
+        <div class="amt">${{ '%.2f'|format(lead.quoted_price or 0) }}</div>
+        {% else %}
         <span class="lbl">Your price</span>
         <div class="amt">${{ '%.2f'|format(lead.quoted_price or 0) }}</div>
+        {% endif %}
         <span class="note">${{ '%.0f'|format(deposit) }} deposit to book · ${{ '%.2f'|format(balance) }} on the day</span>
       </div>
 

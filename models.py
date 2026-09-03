@@ -548,7 +548,32 @@ class Lead(db.Model):
     # NULL means "whatever the service checklist says", which is right for leads
     # quoted from the website where nobody chose anything.
     quote_checklist = db.Column(db.Text)
+    # A discount given on the phone, kept apart from the price so the quote can
+    # show its working. `quoted_price` stays what they actually pay — every
+    # existing reader of it, including the booking it turns into, is unchanged —
+    # and these three say what it would have been and why it isn't.
+    #
+    # NULL full price means no discount was given, which is the honest reading
+    # of every quote made before this existed: not "a discount of zero", but
+    # nothing to show.
+    quote_full_price = db.Column(Money)              # before the discount
+    discount_code = db.Column(db.String(50))         # a saved code, if she used one
+    discount_amount = db.Column(Money, default=0)    # dollars off
+    discount_label = db.Column(db.String(80))        # 'Friends & Family' — what to call it
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def has_discount(self):
+        return bool(self.quote_full_price and (self.discount_amount or 0) > 0)
+
+    @property
+    def discount_display(self):
+        """'Friends & Family' — what the customer sees the money taken off for.
+
+        Falls back to the code, then to a plain word, so a discount can never
+        appear on a quote as an unexplained deduction."""
+        return (self.discount_label or '').strip() or \
+               (self.discount_code or '').strip() or 'Discount'
 
     SERVICE_LABELS = {
         'standard': 'Standard House Cleaning', 'deep': 'Deep Cleaning',
