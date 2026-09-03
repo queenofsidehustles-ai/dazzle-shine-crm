@@ -142,4 +142,44 @@ check('run_tests()' in src and 'nothing was released' in src,
 check("'--force-with-lease'" in src,
       'and a rollback cannot clobber somebody else\'s push')
 
+print('\n9. Two products, two lines, and they cannot be confused')
+# Akye deployed straight off feature/tenancy on every push — untested, to
+# businesses paying to use it. The product sold had weaker deployment safety
+# than the business selling it.
+sys.path.insert(0, str(ROOT))
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location('release_mod', ROOT / 'release.py')
+rel = _ilu.module_from_spec(_spec); _spec.loader.exec_module(rel)
+
+dazzle, akye = rel.LINES['dazzle'], rel.LINES['akye']
+check(dazzle.source == 'main' and dazzle.channel == 'stable',
+      'Dazzle still ships main → stable, exactly as before')
+check(akye.source == 'feature/tenancy' and akye.channel == 'akye-stable',
+      'Akye ships feature/tenancy → akye-stable, not straight to customers')
+check(akye.channel != dazzle.channel, 'the two channels are separate branches')
+
+check(dazzle.tag_prefix != akye.tag_prefix,
+      'each line has its own tag series, so same-day releases cannot collide')
+check(akye.tag_prefix.startswith('akye-'), "Akye's releases are named for it")
+
+# A rollback that walked one product back onto the other's release would put a
+# cleaning company on software written for a different product entirely.
+tags = ['v2026.09.03', 'akye-v2026.09.03', 'v2026.09.02', 'akye-v2026.09.01']
+_real = rel.git
+rel.git = lambda *a, **k: '\n'.join(tags) if a[:2] == ('tag', '--list') else _real(*a, **k)
+try:
+    check(all(t.startswith('akye-') for t in rel.line_tags(akye)),
+          "a rollback of Akye only ever sees Akye's own releases")
+    check(not any(t.startswith('akye-') for t in rel.line_tags(dazzle)),
+          "and a rollback of Dazzle never sees Akye's")
+finally:
+    rel.git = _real
+
+print('\n10. A release tests the code it is actually shipping')
+# The suites run against the working tree. Releasing one line while checked out
+# on the other would test one product and ship the other — green, and
+# meaningless.
+check('--abbrev-ref' in src and 'line.source' in src,
+      'preflight refuses unless the checkout is the branch being released')
+
 print('\n🎉 Release checks passed.')
