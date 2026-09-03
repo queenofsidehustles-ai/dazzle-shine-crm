@@ -50,6 +50,16 @@ html = c.get('/', base_url=f'https://{WWW}').get_data(as_text=True)
 check(f'canonical" href="https://{WWW}' in html,
       'the canonical tag names the working host')
 
+print('\n1b. Each page is canonical for itself, not for the homepage')
+# The shell defaulted every page's canonical to "/", so /pricing, /terms,
+# /privacy and /subprocessors each declared themselves a duplicate of the
+# homepage — an instruction to drop them from the index entirely. A pricing
+# page that disowns itself cannot be found.
+for path in ('/pricing', '/terms', '/privacy'):
+    page = c.get(path, base_url=f'https://{WWW}').get_data(as_text=True)
+    want = f'canonical" href="https://{WWW}{path}"'
+    check(want in page, f'{path} is canonical for {path}')
+
 print('\n2. CRM_BASE no longer decides what the public site advertises')
 check(os.environ['CRM_BASE'] == f'https://{APEX}',
       'CRM_BASE is still the apex, as deployed')

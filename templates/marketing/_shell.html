@@ -13,7 +13,12 @@
   {# Search engines and link previews. Without these, sharing the address in a
      Facebook group -- which is where cleaning company owners actually are --
      showed a blank grey card with a bare URL. #}
-  <link rel="canonical" href="{% block canonical %}{{ PRODUCT_BASE }}/{% endblock %}" />
+  {# Each page is canonical for itself. This defaulted to "/" and only
+     early-access overrode it, so /pricing, /terms, /privacy and /subprocessors
+     each told search engines they were a duplicate of the homepage — which is
+     an instruction to drop them from the index and rank the homepage instead.
+     The pricing page cannot be found while it is disowning itself. #}
+  <link rel="canonical" href="{% block canonical %}{{ PRODUCT_BASE }}{{ request.path }}{% endblock %}" />
   <meta name="robots" content="index, follow, max-image-preview:large" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="{{ PRODUCT }}" />
