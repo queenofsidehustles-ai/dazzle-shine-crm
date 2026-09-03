@@ -336,6 +336,11 @@ def detail(booking_id):
         notified = False
         try:
             if newly_completed:
+                # Write down what the work cost, the moment the work is done.
+                # Queued as pending, so it is a to-pay list with the arithmetic
+                # already done and NOT money the P&L thinks has left the bank.
+                import contractor_pay
+                contractor_pay.queue_for_booking(booking)
                 _send_followup_email(booking)
                 if not booking.skip_review:
                     _send_rating_request(booking)

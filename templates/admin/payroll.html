@@ -35,6 +35,30 @@
   </div>
 </div>
 
+{# Jobs naming a cleaner who cannot be matched to a team member. These were
+   silently skipped, so work somebody may be owed for simply was not on this
+   screen — and nothing said so. #}
+{% if unmatched %}
+<div class="card" style="margin-bottom:18px;border:1px solid #d9534f;background:#fdecec">
+  <h2 style="font-size:0.95rem;font-weight:700;color:#d9534f;margin-bottom:8px">
+    ⚠️ {{ unmatched|length }} completed job{{ '' if unmatched|length == 1 else 's' }} can't be matched to a team member
+  </h2>
+  <p style="font-size:0.85rem;color:#8a3b38;margin-bottom:10px">
+    Nobody can be paid for these until the name on the job matches someone on your team.
+    Open the job and pick the cleaner again, or check the spelling of the name below.
+  </p>
+  {% for j in unmatched %}
+  <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f6d5d4;font-size:0.87rem">
+    <div>
+      <a href="{{ url_for('bookings.detail', booking_id=j.id) }}" style="color:#8a3b38;font-weight:600">{{ j.name }}</a>
+      <span style="color:#a86663"> · {{ j.preferred_date or '—' }} · named “{{ j.assigned_cleaner }}”</span>
+    </div>
+    <div style="color:#8a3b38;font-weight:700">${{ '%.2f' % (j.price or 0) }} job</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <!-- Job Breakdown per Cleaner -->
 {% for name, data in payroll.items() %}
 <div class="card" style="margin-bottom:18px">

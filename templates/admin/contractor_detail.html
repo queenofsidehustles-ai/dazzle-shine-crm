@@ -408,15 +408,52 @@
     </div>
 
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Recent Jobs</h2>
-      {% if recent_jobs %}
-      {% for b in recent_jobs %}
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0edf8;font-size:0.88rem">
-        <div>
-          <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" style="color:#5d4f7d;font-weight:600">{{ b.name }}</a>
-          <span style="color:#9a95ad"> · {{ b.service_label }}</span>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">
+        Earnings
+      </h2>
+      {# These are what the cleaner earns. This card used to print booking.price
+         — the CUSTOMER's price — under her name, which read as though she had
+         been paid $290 for a job she earns a share of. #}
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div style="background:#faf9fd;border:1px solid #e4dfef;border-radius:10px;padding:11px 12px">
+          <div style="font-size:0.68rem;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em">Earned</div>
+          <div style="font-size:1.15rem;font-weight:700;color:#1f1333">${{ '%.2f' % pay_summary.earned }}</div>
+          <div style="font-size:0.72rem;color:#9a95ad">{{ pay_summary.jobs }} job{{ '' if pay_summary.jobs == 1 else 's' }}</div>
         </div>
-        <div style="color:#b98a33;font-weight:700">${{ '%.2f' % (b.price or 0) }}</div>
+        <div style="background:#e8f6ef;border:1px solid #2f9e6b;border-radius:10px;padding:11px 12px">
+          <div style="font-size:0.68rem;color:#2f9e6b;text-transform:uppercase;letter-spacing:0.1em">Paid</div>
+          <div style="font-size:1.15rem;font-weight:700;color:#2f9e6b">${{ '%.2f' % pay_summary.paid }}</div>
+          <div style="font-size:0.72rem;color:#2f9e6b">money out</div>
+        </div>
+        <div style="background:{{ '#fdecec' if pay_summary.owed > 0 else '#faf9fd' }};border:1px solid {{ '#d9534f' if pay_summary.owed > 0 else '#e4dfef' }};border-radius:10px;padding:11px 12px">
+          <div style="font-size:0.68rem;color:{{ '#d9534f' if pay_summary.owed > 0 else '#9a95ad' }};text-transform:uppercase;letter-spacing:0.1em">Still owed</div>
+          <div style="font-size:1.15rem;font-weight:700;color:{{ '#d9534f' if pay_summary.owed > 0 else '#9a95ad' }}">${{ '%.2f' % pay_summary.owed }}</div>
+          <div style="font-size:0.72rem;color:{{ '#d9534f' if pay_summary.owed > 0 else '#9a95ad' }}">
+            {% if pay_summary.owed > 0 %}<a href="{{ url_for('contractors.payroll') }}" style="color:#d9534f;font-weight:600">pay in payroll →</a>{% else %}all settled{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <h3 style="font-size:0.72rem;font-weight:700;margin-bottom:8px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.1em">Recent jobs</h3>
+      {% if recent_jobs %}
+      {% for r in recent_jobs %}
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f0edf8;font-size:0.88rem">
+        <div>
+          <a href="{{ url_for('bookings.detail', booking_id=r.booking.id) }}" style="color:#5d4f7d;font-weight:600">{{ r.booking.name }}</a>
+          <span style="color:#9a95ad"> · {{ r.booking.service_label }}</span>
+          {% if r.booking.crew %}<span style="color:#9a95ad;font-size:0.8rem"> · crew</span>{% endif %}
+          <div style="color:#9a95ad;font-size:0.78rem">
+            {{ r.booking.preferred_date or '—' }}
+            {% if r.paid and r.paid.status == 'paid' %}
+              · <span style="color:#2f9e6b;font-weight:600">paid{% if r.paid.method %} · {{ r.paid.method|title }}{% endif %}</span>
+            {% elif r.paid %}
+              · <span style="color:#d9534f;font-weight:600">queued to pay</span>
+            {% else %}
+              · <span style="color:#9a95ad">not recorded</span>
+            {% endif %}
+          </div>
+        </div>
+        <div style="color:#b98a33;font-weight:700;white-space:nowrap">${{ '%.2f' % (r.earned or 0) }}</div>
       </div>
       {% endfor %}
       {% else %}
