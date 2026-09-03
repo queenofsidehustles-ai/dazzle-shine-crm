@@ -108,10 +108,51 @@
            placeholder="Leave blank to use the calculated price"
            style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
     <p style="font-size:0.82rem;color:var(--softer);margin-top:7px">
-      Calculated from the above: <strong id="q-calc">—</strong>. Whatever you type
-      here is what gets emailed and what they'll pay — type the figure you
-      actually said on the phone.
+      Calculated from the above: <strong id="q-calc">—</strong>. Type the
+      <strong>full</strong> price here — if you're giving them a discount, put it
+      below and they'll see what it was before.
     </p>
+
+    {# Quoting the already-discounted figure is what this replaces: the customer
+       was told "$232" with nothing to say it had ever been $290, so the discount
+       bought no goodwill and left no record. #}
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+      <label class="dl" style="display:block;margin-bottom:6px">Discount <span style="color:var(--softer);font-weight:400">(optional)</span></label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <select name="discount_code" id="q-disc-code"
+                  style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
+            <option value="">— No code —</option>
+            {% for d in discount_codes %}
+            <option value="{{ d.code }}"
+                    data-type="{{ d.discount_type }}" data-value="{{ d.discount_value }}"
+                    {{ 'selected' if existing and existing.discount_code == d.code }}>
+              {{ d.code }} · {{ d.discount_label() }}
+            </option>
+            {% endfor %}
+          </select>
+          <p style="font-size:0.76rem;color:var(--softer);margin-top:5px">
+            From your Discounts page. Only counts as used once they book.
+          </p>
+        </div>
+        <div>
+          <input name="discount_amount" id="q-disc-amt" type="number" step="0.01" min="0"
+                 value="{{ '%.2f'|format(existing.discount_amount) if existing and existing.discount_amount and not existing.discount_code else '' }}"
+                 placeholder="or $ off"
+                 style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
+          <p style="font-size:0.76rem;color:var(--softer);margin-top:5px">
+            A one-off amount, if it isn't a code.
+          </p>
+        </div>
+      </div>
+      <input name="discount_label" id="q-disc-label"
+             value="{{ existing.discount_label if existing and existing.discount_label else '' }}"
+             placeholder="What to call it — e.g. Friends &amp; Family"
+             style="width:100%;margin-top:10px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
+      <div id="q-disc-preview"
+           style="display:none;margin-top:12px;padding:11px 13px;background:var(--surface);border:1px solid var(--line);border-radius:9px;font-size:0.9rem">
+      </div>
+    </div>
   </div>
 
   <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:14px">
@@ -235,6 +276,60 @@
     e.preventDefault();
     box.querySelectorAll('.q-item').forEach(i => i.checked = false);
   });
+})();
+
+// Show her the three lines the customer will actually see, before she sends it.
+// The arithmetic is repeated on the server and the server's answer is the one
+// that gets stored — this is a preview, not the calculation.
+(function () {
+  const price = document.getElementById('q-price');
+  const codeSel = document.getElementById('q-disc-code');
+  const amtBox = document.getElementById('q-disc-amt');
+  const labelBox = document.getElementById('q-disc-label');
+  const out = document.getElementById('q-disc-preview');
+  if (!price || !codeSel || !amtBox || !out) return;
+
+  const money = n => '$' + (Number(n) || 0).toFixed(2);
+
+  function discountOff(full) {
+    const opt = codeSel.selectedOptions[0];
+    if (opt && opt.value) {
+      const v = Number(opt.dataset.value) || 0;
+      return opt.dataset.type === 'percent'
+        ? Math.round(full * (v / 100) * 100) / 100
+        : v;
+    }
+    return Number(amtBox.value) || 0;
+  }
+
+  function render() {
+    const full = Number(price.value) || 0;
+    // A code and a typed amount are two answers to one question. The code wins
+    // on the server, so the box is disabled rather than left looking live.
+    amtBox.disabled = !!codeSel.value;
+    amtBox.style.opacity = codeSel.value ? '0.5' : '1';
+
+    const off = Math.min(discountOff(full), full);
+    if (!full || off <= 0) { out.style.display = 'none'; return; }
+
+    const opt = codeSel.selectedOptions[0];
+    const name = (labelBox.value || '').trim() || (opt && opt.value) || 'Discount';
+    out.style.display = 'block';
+    out.innerHTML =
+      '<div style="color:var(--softer);font-size:0.76rem;text-transform:uppercase;' +
+      'letter-spacing:0.1em;margin-bottom:6px">What they\'ll see</div>' +
+      '<div style="display:flex;justify-content:space-between"><span>Your price</span>' +
+      '<span style="text-decoration:line-through;color:var(--softer)">' + money(full) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;color:var(--good);font-weight:600">' +
+      '<span>' + name.replace(/</g, '&lt;') + '</span><span>−' + money(off) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;font-weight:700;' +
+      'border-top:1px solid var(--line);margin-top:6px;padding-top:6px">' +
+      '<span>They pay</span><span>' + money(full - off) + '</span></div>';
+  }
+
+  [price, codeSel, amtBox, labelBox].forEach(el =>
+    el.addEventListener('input', render) & el.addEventListener('change', render));
+  render();
 })();
 </script>
 {% endblock %}

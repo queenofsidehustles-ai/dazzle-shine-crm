@@ -105,6 +105,48 @@ def quote_lead(name, email, phone, service_type, bedrooms=None, bathrooms=None,
     return lead
 
 
+def resolve_discount(form, full_price):
+    """Work out the discount on a quote. Returns (amount_off, code, label, error).
+
+    Two ways to give one, because she gives them both ways. A saved code from
+    the Discounts page carries its own rules — percent or fixed, expiry, a usage
+    limit — and those are checked here rather than trusted, so an expired code
+    cannot quietly come off a price. Or she types an amount and what to call it,
+    for the ones that were never going to be a code: a neighbour, an apology, a
+    big job she wants.
+
+    The discount is capped at the price. A quote that owes the customer money is
+    a typo every time, and a negative price would be carried into the booking,
+    the deposit and the balance before anybody noticed.
+    """
+    from models import DiscountCode
+    code = (form.get('discount_code') or '').strip()
+    label = (form.get('discount_label') or '').strip()
+
+    if code:
+        dc = DiscountCode.query.filter(db.func.upper(DiscountCode.code) == code.upper()).first()
+        if not dc:
+            return 0.0, '', '', f'No discount code called “{code}”.'
+        ok, why = dc.check_valid()
+        if not ok:
+            return 0.0, '', '', f'{code}: {why}'
+        off = round(full_price - dc.apply(full_price), 2)
+        return (min(off, full_price), dc.code, label or dc.code, None)
+
+    raw = (form.get('discount_amount') or '').strip().replace('$', '').replace(',', '')
+    if not raw:
+        return 0.0, '', '', None
+    try:
+        off = round(float(raw), 2)
+    except ValueError:
+        return 0.0, '', '', "That discount doesn't look like a number."
+    if off <= 0:
+        return 0.0, '', '', None
+    # A discount with no name reads as an unexplained deduction, which is worth
+    # less than no discount at all — the whole point is that they can see it.
+    return min(off, full_price), '', label or 'Discount', None
+
+
 def form_context(existing=None):
     """Everything the quote form needs to render, for either way in.
 
@@ -112,11 +154,18 @@ def form_context(existing=None):
     reopening a quote shows what was actually promised rather than resetting to
     the standard list and quietly re-adding what she took off."""
     from pricing import SERVICES, EXTRAS, get_deposit
+    from models import DiscountCode
     service = (existing.service_type if existing else '') or next(iter(SERVICES))
     standard = service_checklist(service)
     chosen = checklist_for(existing) if existing else standard
     return {
         'services': SERVICES, 'extras': EXTRAS, 'deposit': get_deposit(),
+        # Only codes that could actually be honoured today. Offering an expired
+        # one on the form and refusing it on submit wastes a call she is on.
+        'discount_codes': [d for d in DiscountCode.query
+                           .filter_by(is_active=True)
+                           .order_by(DiscountCode.code).all()
+                           if d.check_valid()[0]],
         'checklist': standard,
         'chosen': chosen,
         # Lines she added by hand last time — anything promised that isn't on
@@ -155,12 +204,29 @@ def handle_quote_form(form, lsa_lead=None):
     except ValueError:
         return None, "That price doesn't look like a number."
 
+    # The price she typed is the FULL price when a discount is being given —
+    # she says "it's $290, but I'll do $250 for you", so she types 290 and the
+    # discount, not 250. Quoting the discounted figure with nothing to show for
+    # it is what this replaces: the customer could not see they had been given
+    # anything, and nothing recorded that anything had been.
+    off, code, label, derr = resolve_discount(form, price)
+    if derr:
+        return None, derr
+    final = round(max(0.0, price - off), 2)
+
     lead = quote_lead(
         name=form.get('name', ''), email=email, phone=phone,
         service_type=service_type, bedrooms=beds, bathrooms=baths, extras=extras,
-        frequency=form.get('frequency', 'one_time'), price=price,
+        frequency=form.get('frequency', 'one_time'), price=final,
         notes=form.get('notes', ''), address=form.get('address', ''),
         city=form.get('city', ''), zip_code=form.get('zip_code', ''))
+
+    # Written after quote_lead so re-quoting the same person replaces the old
+    # discount rather than leaving last week's reason on this week's price.
+    lead.quote_full_price = round(price, 2) if off > 0 else None
+    lead.discount_amount = off
+    lead.discount_code = code or None
+    lead.discount_label = label or None
 
     # What she ticked, plus anything she typed in that they asked for on the
     # phone. Both are optional; leaving it all alone means the standard list.
@@ -209,6 +275,19 @@ def send_quote(lead):
         lines = '\n'.join(f'  •  {i}' for i in items)
         checklist = f"What's included in your {lead.service_label.lower()}:\n\n{lines}"
 
+    # A discount nobody can see is money given away for nothing. The template is
+    # hers to edit and most copies predate this, so the working is appended as
+    # well as offered as {discount_line} — same reasoning as the checklist.
+    discount_line = ''
+    if lead.has_discount:
+        full = float(lead.quote_full_price or 0)
+        off = float(lead.discount_amount or 0)
+        discount_line = (f'Your price:  ${full:.2f}\n'
+                         f'{lead.discount_display}:  −${off:.2f}\n'
+                         f'You pay:  ${(lead.quoted_price or 0):.2f}')
+
+    appended = '\n\n'.join(p for p in (discount_line, checklist) if p)
+
     ok = send_triggered_email(
         trigger='lead_quote',
         to_email=lead.email,
@@ -218,12 +297,16 @@ def send_quote(lead):
             'beds': lead.bedrooms or '—',
             'baths': lead.bathrooms or '—',
             'quote_amount': f'{(lead.quoted_price or 0):.2f}',
+            'full_price': f'{float(lead.quote_full_price or lead.quoted_price or 0):.2f}',
+            'discount_amount': f'{float(lead.discount_amount or 0):.2f}',
+            'discount_label': lead.discount_display if lead.has_discount else '',
+            'discount_line': discount_line,
             'deposit': f'{get_deposit():.2f}',
             'balance': f'{max(0.0, (lead.quoted_price or 0) - get_deposit()):.2f}',
             'booking_link': quote_url(lead),
             'checklist': checklist,
         },
-        append_text=checklist,
+        append_text=appended,
         append_unless='{{checklist}}',
     )
     if not ok:
@@ -323,8 +406,24 @@ def accept_quote(lead, preferred_date, preferred_time='', address='', city='',
         deposit_token=secrets.token_urlsafe(32),
         status='pending',
         source='quote',
+        # Carry the discount onto the job. Booking has had these columns all
+        # along and the quote route never filled them, so Job Economics reported
+        # no discounting on jobs that had plainly been discounted — the money
+        # given away simply vanished from the books.
+        discount_code=lead.discount_code or '',
+        discount_amount=round(float(lead.discount_amount or 0), 2),
     )
     db.session.add(booking)
+
+    # A saved code counts as used when it turns into a job, not when it is
+    # quoted. Counting at quote time would let a limited code be exhausted by
+    # people who were told a price and never booked.
+    if lead.discount_code:
+        from models import DiscountCode
+        dc = DiscountCode.query.filter(
+            db.func.upper(DiscountCode.code) == lead.discount_code.upper()).first()
+        if dc:
+            dc.times_used = (dc.times_used or 0) + 1
 
     # They have booked, so stop chasing them — by email here, and by text
     # through the Google Ads lead they may have come in on.

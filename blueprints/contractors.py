@@ -1296,8 +1296,25 @@ def pay_contractor(staff_id):
         staff_id=s.id, amount=amount, method='stripe',
         status='paid', stripe_transfer_id=result, note=note))
     db.session.commit()
-    flash(f'✅ Sent ${amount:.2f} to {s.name} via Stripe.', 'success')
+    flash(f'✅ Sent ${amount:.2f} to {s.name} via Stripe.{_told(s, amount, "stripe")}',
+          'success')
     return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+
+def _told(s, amount, method, when=None):
+    """Notify a cleaner about a lump-sum payment, and report who was reached.
+
+    A payment made from the team page is money out exactly as a per-job payout
+    is, so it tells them the same way. Kept apart from _send_payout only because
+    these are not tied to a booking and so have no job to name."""
+    import contractor_pay
+    emailed, texted = contractor_pay.notify_paid(s, amount, method, when=when)
+    parts = ' + '.join(x for x in ('emailed' if emailed else '',
+                                   'texted' if texted else '') if x)
+    if parts:
+        return f' {s.name.split()[0]} was {parts}.'
+    return (f' ⚠️ Could not reach {s.name.split()[0]} — no email or phone on file, '
+            f'or messaging is not connected.')
 
 
 @contractors_bp.route('/team/<int:staff_id>/pay-manual', methods=['POST'])
@@ -1317,7 +1334,8 @@ def pay_manual(staff_id):
     db.session.add(ContractorPayment(
         staff_id=s.id, amount=amount, method=method, status='paid', note=note))
     db.session.commit()
-    flash(f'Recorded ${amount:.2f} paid to {s.name} via {method.title()}.', 'success')
+    flash(f'Recorded ${amount:.2f} paid to {s.name} via {method.title()}.'
+          + _told(s, amount, method), 'success')
     return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
 
 
@@ -1410,8 +1428,16 @@ def staff_detail(staff_id):
         return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
     if s.stripe_account_id:
         _sync_stripe_status(s)   # auto-refresh payment status on page load
-    recent_jobs = Booking.query.filter_by(assigned_cleaner=s.name, status='completed').order_by(Booking.created_at.desc()).limit(10).all()
+    # Solo AND crew jobs, with what SHE earned on each — not what the customer
+    # paid. This asked for assigned_cleaner only, so every crew job a cleaner
+    # worked was missing from her own page, and then showed the customer's price
+    # beside the ones that did appear.
+    import contractor_pay
+    jobs = contractor_pay.jobs_worked(s, limit=10)
+    recent_jobs = [{'booking': j, 'earned': j.pay_for(s),
+                    'paid': contractor_pay.existing_payment(s.id, j.id)} for j in jobs]
     return render_template('admin/contractor_detail.html', s=s, recent_jobs=recent_jobs,
+                           pay_summary=contractor_pay.summary_for(s),
                            exp_levels=EXP_LEVELS, secure_docs_ready=secure_docs.is_ready())
 
 
@@ -1512,6 +1538,10 @@ def payroll():
     staff_map = {s.name: s for s in staff_all}
 
     payroll_data = {}
+    # Completed jobs naming a cleaner nobody can be matched to. These used to
+    # vanish; somebody may be owed for them, so they are shown rather than
+    # dropped, and the name is quoted so the mismatch can be corrected.
+    unmatched = []
 
     # How each already-paid job was settled — so the row can say "✅ Paid · Cash"
     # rather than leaving her guessing whether it went through Stripe.
@@ -1538,8 +1568,17 @@ def payroll():
                 if c.staff:
                     add_row(c.staff, job, c.pay_amount or 0, bool(c.paid_at), crew=c)
             continue
-        s = staff_map.get(job.assigned_cleaner or '')
+        # Match against every team member, not only the active ones, and
+        # case-insensitively. This read a map built from active staff and did a
+        # bare `continue` on a miss, so deactivating a cleaner who was still
+        # owed for last week erased those jobs from the one screen that could
+        # have paid her — silently, with no row and no warning anywhere.
+        import contractor_pay
+        s = staff_map.get(job.assigned_cleaner or '') or \
+            contractor_pay.match_staff(job.assigned_cleaner)
         if not s:
+            if (job.assigned_cleaner or '').strip():
+                unmatched.append(job)
             continue
         add_row(s, job, job.pay_for(s), bool(job.cleaner_paid_at))
 
@@ -1548,6 +1587,7 @@ def payroll():
     return render_template('admin/payroll.html',
         payroll=payroll_data, grand_total=round(grand_total, 2),
         week_start=week_start_str, week_end=week_end_str,
+        unmatched=unmatched,
         stripe_configured=stripe_connect.is_configured(),
     )
 
@@ -1646,24 +1686,55 @@ def _send_payout(s, b, earned, method, idem_key, when=None, tip=0.0):
         if not ok:
             flash(f'Stripe payment failed: {result}', 'error')
             return None
-        pay = ContractorPayment(staff_id=s.id, booking_id=b.id, amount=earned,
-                                tip_amount=tip, method='stripe', status='paid',
-                                stripe_transfer_id=result, note=desc, created_at=when)
+        transfer_id = result
     else:
         # Manual: Venmo / Zelle / cash / check — recorded, not moved by us.
-        pay = ContractorPayment(staff_id=s.id, booking_id=b.id, amount=earned,
-                                tip_amount=tip, method=method, status='paid',
-                                note=desc, created_at=when)
+        transfer_id = None
 
-    db.session.add(pay)
+    # Settle the row this job queued when it was completed, rather than adding a
+    # second one beside it. Without this, every job paid would leave its pending
+    # twin sitting in the to-pay list for money that has already gone out.
+    import contractor_pay
+    pay = contractor_pay.existing_payment(s.id, b.id)
+    if pay is not None and pay.status != 'pending':
+        pay = None                     # already settled once; this is a new payment
+    if pay is None:
+        pay = ContractorPayment(staff_id=s.id, booking_id=b.id)
+        db.session.add(pay)
+
+    pay.amount = earned
+    pay.tip_amount = tip
+    pay.method = method
+    pay.status = 'paid'
+    pay.note = desc
+    pay.created_at = when              # the date the money moved — the P&L sorts on this
+    if transfer_id:
+        pay.stripe_transfer_id = transfer_id
+
     db.session.flush()                     # get pay.id
+
+    # Tell them the money is on its way. Every payout — solo or crew, Stripe or
+    # cash — comes through this one function, so notifying here is the only way
+    # it cannot be forgotten on one path and not the other. Best-effort: the
+    # money has already moved, and a text that fails must not read as a payment
+    # that failed.
+    emailed, texted = contractor_pay.notify_paid(
+        s, earned, method, when=when, tip=tip,
+        job_label=f'the {job_date} job' if job_date else '')
+    told = ' + '.join(x for x in ('emailed' if emailed else '',
+                                  'texted' if texted else '') if x)
+    # Say plainly when nobody was told, rather than letting her assume they were.
+    told = f' {s.name.split()[0]} was {told}.' if told else \
+        f' ⚠️ Could not reach {s.name.split()[0]} — no email or phone on file, or messaging is not connected.'
+
     if method == 'stripe':
         flash(f'✅ Sent ${total:.2f} to {s.name} via Stripe for the {job_date} job'
-              + (f' (${earned:.2f} pay + ${tip:.2f} tip).' if tip else '.'), 'success')
+              + (f' (${earned:.2f} pay + ${tip:.2f} tip).' if tip else '.')
+              + told, 'success')
     else:
         flash(f'Recorded ${total:.2f} paid to {s.name} via {method.title()} for the {job_date} job'
               + (f' (${earned:.2f} pay + ${tip:.2f} tip)' if tip else '')
-              + f' — dated {when.strftime("%b %-d, %Y")}.', 'success')
+              + f' — dated {when.strftime("%b %-d, %Y")}.' + told, 'success')
     return pay
 
 
