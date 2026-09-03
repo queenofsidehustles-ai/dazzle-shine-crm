@@ -4,28 +4,58 @@ Every instance used to deploy from `main`. A change pushed at eleven at night
 was live in a paying customer's business three minutes later, before anyone had
 used it once. This is how that stops.
 
-## Two channels
+## Two products, four branches
+
+There are two things being shipped, and each has a working branch and a channel
+that deployed instances follow.
 
 | Branch | Who runs it | When it moves |
 |---|---|---|
 | `main` | **Your own instance.** | Every push. Immediately. |
-| `stable` | **Every customer instance.** | Only when you run the release script. |
+| `stable` | **Every customer instance of the CRM.** | Only when you release. |
+| `feature/tenancy` | **Nobody.** The bench where Akye is built. | Every push. |
+| `akye-stable` | **Every cleaning company on Akye.** | Only when you release. |
 
-Your business is the canary. A change lands on `main`, you use it on your own
-bookings for a day or two, and whatever is wrong with it is wrong for you rather
-than for someone whose payroll depends on it. When it has earned its keep, you
-promote it.
+Your business is the canary for the CRM. A change lands on `main`, you use it on
+your own bookings for a day or two, and whatever is wrong with it is wrong for
+you rather than for someone whose payroll depends on it. When it has earned its
+keep, you promote it.
+
+Akye has no canary — nobody's own business runs it — so the test suite is the
+only gate, which is why the gate is the whole suite and not a subset.
+
+> **Akye used to have no gate at all.** It deployed straight off
+> `feature/tenancy` on every push, so anything typed went live to businesses
+> paying to use it. `/version` still said `channel: feature/tenancy`, which was
+> the tell. If you ever see a channel that is a working branch rather than a
+> `*-stable` one, that instance is taking every change the moment it is pushed.
 
 ## Releasing
 
 ```bash
-python3 release.py          # what would go out — changes nothing
-python3 release.py --go     # run every test, tag it, promote stable
+python3 release.py                 # the CRM: what would go out — changes nothing
+python3 release.py --go            # the CRM: test, tag, promote stable
+
+python3 release.py --akye          # Akye: what would go out
+python3 release.py --akye --go     # Akye: test, tag, promote akye-stable
 ```
 
-`--go` refuses to release if you have uncommitted work, if your `main` and
+`--go` refuses to release if you have uncommitted work, if your branch and
 GitHub's disagree, or if **any** test suite fails. Nothing reaches a customer
 that hasn't passed the full suite on your machine first.
+
+**You must be on the branch you're releasing.** The tests run against whatever
+is checked out, so releasing Akye from a `main` checkout would test one product
+and ship the other — green, and meaningless. The script checks and refuses:
+
+```
+You are on “main” but releasing Akye, which ships from “feature/tenancy”.
+```
+
+Releases are tagged per product — `v2026.09.03` for the CRM,
+`akye-v2026.09.03` for Akye — so two releases on the same day can't take each
+other's number, and `--rollback` can't walk one product back onto a release
+built for the other.
 
 It tags each release by date — `v2026.08.20`, then `v2026.08.20.2` if you
 release twice in a day — so every instance can tell you exactly which release it
@@ -87,6 +117,21 @@ In Railway → their service → **Settings → Source**:
 Everything else follows **NEW_CUSTOMER_SETUP.md**. If you ever find a customer's
 service pointing at `main`, that instance is taking every change the moment it's
 pushed — put it back on `stable`.
+
+## The Akye service
+
+Same rule, different branch. In Railway → the Akye service → **Settings →
+Source**:
+
+- **Branch: `akye-stable`** ← not `feature/tenancy`
+
+This is the one manual step that makes the Akye channel real. Until the service
+is repointed, `akye-stable` exists and nothing follows it, and Akye carries on
+deploying every push to `feature/tenancy`.
+
+Check it took: `https://www.akyehq.com/version` should report
+`"channel":"akye-stable"`. If it still says `feature/tenancy`, the source
+didn't save.
 
 ## Your own instance
 
