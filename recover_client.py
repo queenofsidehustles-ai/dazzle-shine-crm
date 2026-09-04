@@ -246,13 +246,34 @@ def main():
                     help='actually write the rows back (default: show only)')
     ap.add_argument('--database-url', default=os.environ.get('DATABASE_URL', ''),
                     help='where to write; defaults to $DATABASE_URL')
+    ap.add_argument('--passphrase-file',
+                    help='read the passphrase from this file instead of asking. '
+                         'The whole file is tried, then each line — so a note '
+                         'with the passphrase somewhere inside it works.')
     args = ap.parse_args()
 
     if not os.path.exists(args.backup):
         raise SystemExit(f'No such file: {args.backup}')
 
-    passphrase = getpass.getpass('BACKUP_PASSPHRASE (not shown as you type): ')
-    plain = decrypt(args.backup, passphrase)
+    plain = None
+    if args.passphrase_file and os.path.exists(args.passphrase_file):
+        # A note file rather than a bare secret: the passphrase is one line in
+        # amongst instructions. Try the obvious readings rather than making
+        # somebody find the right line and retype it under time pressure.
+        raw = open(args.passphrase_file, encoding='utf-8', errors='replace').read()
+        for cand in [raw.strip()] + [l.strip() for l in raw.splitlines() if l.strip()]:
+            try:
+                plain = decrypt(args.backup, cand)
+                print(f'Passphrase read from {os.path.basename(args.passphrase_file)}.')
+                break
+            except SystemExit:
+                continue
+        if plain is None:
+            print(f'Nothing in {os.path.basename(args.passphrase_file)} opened the '
+                  f'backup — asking instead.')
+    if plain is None:
+        plain = decrypt(args.backup,
+                        getpass.getpass('BACKUP_PASSPHRASE (not shown as you type): '))
     tmpdir = os.path.dirname(plain)
     try:
         found, _all = collect(plain, args.find)
