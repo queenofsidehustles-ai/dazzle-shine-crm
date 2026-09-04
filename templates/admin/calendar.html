@@ -41,15 +41,19 @@
           {% set movable = b.status not in ('completed', 'cancelled') %}
           <a href="{{ url_for('bookings.detail', booking_id=b.id) }}"
              {% if movable %}draggable="true" class="jobchip" data-id="{{ b.id }}"{% endif %}
-             title="{{ b.name }} — {{ b.service_label }}{% if movable %} · drag to move it{% endif %}"
+             title="{{ b.name }} — {{ b.service_label }}{% if b.needs_cleaner %} · NOBODY ASSIGNED{% endif %}{% if movable %} · drag to move it{% endif %}"
              style="display:block;font-size:0.7rem;padding:2px 5px;border-radius:4px;margin-bottom:2px;
                     text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
                     {% if movable %}cursor:grab;{% endif %}
+                    {# A job nobody is going to turn up to is the one thing on
+                       this screen worth interrupting for, and it looked exactly
+                       like every other chip. #}
+                    {% if b.needs_cleaner %}border:1px solid #c53030;{% endif %}
                     {% if b.status == 'confirmed' %}background:#dbeafe;color:#1e40af;
                     {% elif b.status == 'completed' %}background:#d1fae5;color:#065f46;
                     {% elif b.status == 'cancelled' %}background:#fee2e2;color:#991b1b;
                     {% else %}background:#fef3c7;color:#92400e;{% endif %}">
-            {{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
+            {% if b.needs_cleaner %}⚠️ {% endif %}{{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
           </a>
           {% endfor %}
         </div>
