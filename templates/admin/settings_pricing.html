@@ -181,42 +181,29 @@
       What you charge for each add-on, and how long it takes. The hours are added
       to the job so your cleaner is paid for the extra work.
     </p>
+    {# "You keep" is gone too. It only held for businesses paying by the hour —
+       plenty pay a percentage, or a flat rate per job — so for them the number
+       was simply wrong, and a confidently wrong figure about money is worse
+       than no figure. What you charge and how long it takes are true for
+       everybody. #}
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Add-on</th><th>Price ($)</th><th>Takes (hrs)</th><th style="text-align:right">You keep</th></tr></thead>
+        <thead><tr><th>Add-on</th><th>Price ($)</th><th>Takes (hrs)</th></tr></thead>
         <tbody>
           {% for extra_name, price in extras.items() %}
           {% set key = extra_name.lower().replace(' ', '_') %}
           {% set hrs = current['extrahrs_' + key] %}
-          {% set p = current['extra_' + key] | float %}
-          {% set labor = hrs | float * current.labor_rate | float %}
           <tr>
             <td style="font-weight:600">{{ extra_name }}</td>
             <td><input type="number" name="extra_{{ key }}" step="1" min="0"
                        value="{{ current['extra_' + key] }}" style="width:90px;margin:0" /></td>
             <td><input type="number" name="extrahrs_{{ key }}" step="0.25" min="0"
                        value="{{ hrs }}" style="width:90px;margin:0" /></td>
-            <td style="text-align:right;font-weight:700;color:{{ 'var(--warn)' if (p - labor) < 0 else 'var(--ink)' }}">
-              ${{ '%.2f' % (p - labor) }}
-              {% if (p - labor) < 0 %}
-              <div style="font-weight:500;font-size:0.76rem;color:var(--warn)">costs you more than you charge</div>
-              {% endif %}
-            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-    <details class="howto" style="margin-top:14px">
-      <summary>Where "you keep" comes from</summary>
-      <div class="howto-body">
-        <p style="font-size:0.88rem;line-height:1.6;margin:0">
-          The hours × your cleaner's hourly rate, taken off the price. If it comes
-          out red, that add-on costs you more in wages than you charge for it —
-          either raise the price or lower the time it's set to take.
-        </p>
-      </div>
-    </details>
   </div>
 
   <button type="submit" class="btn btn-gold">Save Pricing</button>

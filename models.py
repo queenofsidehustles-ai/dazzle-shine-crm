@@ -371,6 +371,23 @@ class Booking(db.Model):
         return ' + '.join(names) if names else (self.assigned_cleaner or '')
 
     @property
+    def needs_cleaner(self):
+        """Nobody is going to turn up to this job.
+
+        The bookings list only flagged a job whose cleaner had actively
+        DECLINED. A job nobody was ever offered looked exactly like a job that
+        was covered — no badge, no colour, nothing — so the ones most likely to
+        be forgotten were the ones the screen said least about.
+
+        A finished or cancelled job needs nobody, and a crew job is covered when
+        somebody is actually on it rather than when the row exists."""
+        if self.status in ('completed', 'cancelled'):
+            return False
+        if self.crew:
+            return not any(c.staff_id for c in self.crew)
+        return not (self.assigned_cleaner or '').strip()
+
+    @property
     def crew_allocated(self):
         """Total already handed out to the crew — compare against the pot."""
         return round(sum(c.pay_amount or 0 for c in self.crew), 2)

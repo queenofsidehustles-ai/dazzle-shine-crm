@@ -25,12 +25,54 @@
     <div style="font-weight:700;color:var(--warn);margin-bottom:6px">
       ⚠️ {{ data.broken|length }} of {{ data.rows|length }} automations {{ 'is' if data.broken|length == 1 else 'are' }} not running
     </div>
-    <p style="font-size:0.88rem;color:var(--warn);line-height:1.6;margin:0">
-      Nothing in this CRM schedules itself — an outside cron service calls each job on a timetable.
-      When that stops, the app keeps looking healthy and simply goes quiet. Check your cron service
-      and make sure each address below is being called.
+    {# "Check your cron service and make sure each address below is being
+       called" is an instruction you can only follow if you already know what a
+       cron service is. Somebody who does not has no next move at all — and
+       these are the jobs that text customers and take money. #}
+    <p style="font-size:0.88rem;color:var(--warn);line-height:1.6;margin:0 0 4px">
+      These jobs don't run on their own. Something outside has to wake them up on a
+      timetable, and right now nothing is. Reminders aren't going out and balances
+      aren't being charged.
     </p>
   </div>
+
+  <details class="howto" open>
+    <summary>Set this up — free, no card, about 10 minutes</summary>
+    <div class="howto-body">
+      <p style="font-size:0.88rem;line-height:1.6;margin:0 0 12px">
+        You are going to sign up to a free website whose whole job is to visit an
+        address on a schedule. That's it — it's a very reliable alarm clock. You do
+        this once and then never again.
+      </p>
+      <ol>
+        <li>Go to <strong>cron-job.org</strong> and make a free account. Confirm the
+          email it sends you.</li>
+        <li>Click <strong>Create cronjob</strong>.</li>
+        <li><strong>Title:</strong> type the name of the job you're setting up — for
+          the first one, <code>Day-before reminders</code>.</li>
+        <li><strong>URL:</strong> copy the address from the matching card below and
+          paste it in. Each card has its own — they are not interchangeable.</li>
+        <li><strong>Schedule:</strong> pick <strong>Every day</strong> and choose a
+          time, unless the card says hourly — then pick <strong>Every hour</strong>.</li>
+        <li>Open <strong>Advanced</strong>. Set the request method to
+          <strong>POST</strong> (not GET — it will look like it worked and do
+          nothing).</li>
+        <li>Still in Advanced, find <strong>Headers</strong> and add one.
+          Name: <code>X-Api-Key</code>. Value: your <code>REMINDER_API_KEY</code>,
+          copied exactly from your Railway settings.</li>
+        <li><strong>Save</strong>. Then press <strong>Run now</strong> — you should
+          see a green result, and this page will say <strong>Running</strong> next
+          time you reload it.</li>
+        <li>Repeat for each card below. Six jobs, six cronjobs.</li>
+      </ol>
+      <div class="howto-note">
+        Two things go wrong, and both look like nothing happening: the method is
+        left on <strong>GET</strong>, or the <code>X-Api-Key</code> has a stray
+        space at the end. If a job still says “Never run” after a Run now, check
+        those two first.
+      </div>
+    </div>
+  </details>
   {% endif %}
 
   {% for r in data.rows %}

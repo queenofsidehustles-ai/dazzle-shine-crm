@@ -24,7 +24,7 @@
    Rows only appear when the count is above zero, so this section is empty
    most days and that is the point -- when something shows up here, it means
    something.                                                              #}
-{% set has_attn = unassigned_tomorrow or pending or unpaid_done or open_claims %}
+{% set has_attn = unassigned_tomorrow or unassigned_soon or pending or unpaid_done or open_claims %}
 {% if has_attn %}
 <div class="attn">
   {% if unassigned_tomorrow %}
@@ -33,6 +33,19 @@
     <span class="what">
       <b>{{ 'job' if unassigned_tomorrow|length == 1 else 'jobs' }} tomorrow with nobody on them</b>
       <span>{% for b in unassigned_tomorrow[:3] %}{{ b.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% if unassigned_tomorrow|length > 3 %} and {{ unassigned_tomorrow|length - 3 }} more{% endif %}</span>
+    </span>
+    <span class="go">›</span>
+  </a>
+  {% endif %}
+  {# Further out than tomorrow. Less urgent, so it sits below — but a job with
+     nobody on it is far easier to fill four days ahead than the night before,
+     which is the only moment this used to mention it. #}
+  {% if unassigned_soon %}
+  <a href="{{ url_for('bookings.index') }}" class="attn-item is-warn">
+    <span class="n">{{ unassigned_soon|length }}</span>
+    <span class="what">
+      <b>later {{ 'job' if unassigned_soon|length == 1 else 'jobs' }} with nobody assigned</b>
+      <span>{% for b in unassigned_soon[:3] %}{{ b.name }} ({{ b.preferred_date }}){% if not loop.last %}, {% endif %}{% endfor %}{% if unassigned_soon|length > 3 %} and {{ unassigned_soon|length - 3 }} more{% endif %}</span>
     </span>
     <span class="go">›</span>
   </a>

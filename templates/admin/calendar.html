@@ -46,9 +46,11 @@
           {% set movable = b.status not in ('completed', 'cancelled') %}
           <a href="{{ url_for('bookings.detail', booking_id=b.id) }}"
              {% if movable %}draggable="true" data-id="{{ b.id }}"{% endif %}
-             class="jobchip s-{{ b.status }}{{ ' unassigned' if movable and not b.crew_label }}"
-             title="{{ b.name }} — {{ b.service_label }}{% if not b.crew_label %} · nobody assigned{% else %} · {{ b.crew_label }}{% endif %}{% if movable %} · drag to move it{% endif %}">
-            {{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
+             class="jobchip s-{{ b.status }}{{ ' unassigned' if b.needs_cleaner }}"
+             title="{{ b.name }} — {{ b.service_label }}{% if b.needs_cleaner %} · NOBODY ASSIGNED{% else %} · {{ b.crew_label }}{% endif %}{% if movable %} · drag to move it{% endif %}">
+            {# A border alone was too quiet for the one thing on this screen
+               that means somebody may not turn up. #}
+            {% if b.needs_cleaner %}⚠️ {% endif %}{{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
           </a>
           {% endfor %}
         </div>

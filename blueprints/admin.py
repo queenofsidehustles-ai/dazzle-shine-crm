@@ -91,7 +91,15 @@ def dashboard():
     tomorrow_jobs = Booking.query.filter(
         Booking.preferred_date == tomorrow,
         Booking.status.in_(['confirmed', 'pending'])).all()
-    unassigned_tomorrow = [b for b in tomorrow_jobs if not b.crew_label]
+    unassigned_tomorrow = [b for b in tomorrow_jobs if b.needs_cleaner]
+    # Everything ahead, not only tomorrow. A job three days out with nobody on
+    # it is the same problem noticed earlier — and this dashboard would say
+    # nothing about it until the night before, which is the point at which
+    # finding somebody is hardest.
+    unassigned_soon = [b for b in Booking.query.filter(
+        Booking.preferred_date > tomorrow,
+        Booking.status.in_(['confirmed', 'pending'])).order_by(
+            Booking.preferred_date).all() if b.needs_cleaner]
     unpaid_done = Booking.query.filter(
         Booking.status == 'completed',
         Booking.balance_collected.is_(False)).count()
@@ -103,6 +111,7 @@ def dashboard():
         'admin/dashboard.html',
         tomorrow_jobs=tomorrow_jobs,
         unassigned_tomorrow=unassigned_tomorrow,
+        unassigned_soon=unassigned_soon,
         unpaid_done=unpaid_done,
         open_claims=open_claims,
         total_bookings=total_bookings,
