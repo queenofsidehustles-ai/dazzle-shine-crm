@@ -656,10 +656,31 @@ class JobChecklist(db.Model):
         return None
 
     def get_items(self):
+        """The checklist lines, as plain strings.
+
+        Checklists made before sections existed are a list of strings; ones made
+        since are [{'text', 'group'}]. Both are read here, so a job already out
+        with a cleaner keeps working exactly as it did — its tick boxes and its
+        completed-items record are keyed on these strings."""
         try:
-            return json.loads(self.items or '[]')
+            raw = json.loads(self.items or '[]')
         except Exception:
             return []
+        return [r['text'] if isinstance(r, dict) else r for r in raw]
+
+    def get_sections(self):
+        """[(section_name_or_None, [lines])] — for folding an inherited block.
+
+        A deep clean carries every standard item too, which is right and also
+        forty lines long. Grouped, the inherited part folds into one heading and
+        the list has a shape again."""
+        try:
+            raw = json.loads(self.items or '[]')
+        except Exception:
+            return []
+        rows = [r if isinstance(r, dict) else {'text': r, 'group': None} for r in raw]
+        import checklist_expand
+        return checklist_expand.grouped(rows)
 
     def get_completed(self):
         try:

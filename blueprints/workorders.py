@@ -126,9 +126,16 @@ def create_and_send_workorder(booking, template_id=None, recipient=None):
         items = DEFAULT_ITEMS.get(booking.service_type, DEFAULT_ITEMS['standard'])
         template_name = booking.service_label
 
+    # "Everything in Standard Cleaning" is one line where twelve should be, and
+    # it is useless to a cleaner whose first job is a deep clean. Expanded here,
+    # at creation, so the stored list is the real one — the tick boxes, the
+    # "8 / 24" count and the completed-items record all work off it.
+    import checklist_expand
+    rows = checklist_expand.expand_for_booking(items)
+
     token = secrets.token_urlsafe(32)
     checklist = JobChecklist(booking_id=booking.id, template_name=template_name,
-                              items=json.dumps(items), token=token)
+                              items=json.dumps(rows), token=token)
     db.session.add(checklist)
     db.session.commit()
 
