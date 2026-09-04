@@ -10,19 +10,30 @@
       Everything essential is connected. The remaining items below are optional.
     </p>
   {% else %}
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:4px">{{ s.done }} of {{ s.total }} done</div>
+    {# The banner that sends people here counts the things that BLOCK real
+       bookings; this counted every item including the optional ones. So the
+       banner said "4 things still to do" and this page opened with "1 of 8
+       done" — both true, and flatly contradictory to read one after the other.
+       They now lead with the same number, and the full list is still below. #}
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:4px">
+      {{ s.blocking | length }} thing{{ '' if s.blocking | length == 1 else 's' }}
+      left before you can take real bookings
+    </div>
     <p style="color:var(--muted);font-size:0.9rem;margin:0 0 10px">
       Work down this list and your CRM is ready. You can do all of it yourself —
       nothing here needs anyone else.
     </p>
     <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:12px;font-size:0.87rem;color:var(--amber-deep)">
-      <strong>Not ready for real customers yet.</strong>
-      Still needed: {{ s.blocking | map(attribute='title') | join(' · ') }}
+      <strong>Still needed:</strong>
+      {{ s.blocking | map(attribute='title') | join(' · ') }}
     </div>
   {% endif %}
   <div style="margin-top:14px;height:8px;background:var(--info-soft);border-radius:999px;overflow:hidden">
     <div style="height:100%;width:{{ (s.done / s.total * 100) | round }}%;background:{{ 'var(--good)' if s.complete else 'var(--amber)' }}"></div>
   </div>
+  <p style="color:var(--softer);font-size:0.8rem;margin:8px 0 0">
+    {{ s.done }} of {{ s.total }} altogether, counting the optional ones.
+  </p>
 </div>
 
 {% for i in s['items'] %}

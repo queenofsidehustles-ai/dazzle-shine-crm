@@ -24,8 +24,11 @@
       <div style="height:100%;width:{{ p.percent }}%;background:var(--gold);
                   border-radius:999px;transition:width .3s"></div>
     </div>
+    {# "17% — you're aiming for one real job" made nobody any the wiser: a
+       percentage of an unstated total, next to a bar already showing the same
+       thing, next to "1 of 6 done" showing it a third time. Say the goal. #}
     <p style="color:var(--softer);font-size:0.86rem;margin:0 0 22px">
-      {{ p.percent }}% — you're aiming for one real job, booked and assigned.
+      You're aiming for one real job, booked and assigned to a cleaner.
     </p>
 
     {# One next action, prominent. A screen of twelve equal buttons is a screen
@@ -41,25 +44,28 @@
       </div>
     {% endif %}
 
+    {# The next step is the box above. It was ALSO listed here with a 👉, so the
+       same thing appeared twice on one card — which is what made the "Next"
+       panel read as floating loose rather than leading the list. Everything
+       else, in order, and the current one is not repeated. #}
     {% for s in p.steps %}
-      <div style="display:flex;gap:12px;padding:10px 0;
-                  border-top:1px solid var(--border);
-                  opacity:{{ '1' if s.done else ('1' if s.key == p.next.key else '0.55') }}">
-        <div style="flex:0 0 22px;font-size:1rem">
-          {{ '✅' if s.done else ('👉' if p.next and s.key == p.next.key else '○') }}
-        </div>
+      {% if not (p.next and s.key == p.next.key) %}
+      <div style="display:flex;gap:12px;align-items:baseline;padding:9px 0;
+                  border-top:1px solid var(--border)">
+        <div style="flex:0 0 20px;font-size:0.95rem">{{ '✅' if s.done else '○' }}</div>
         <div style="flex:1">
           <div style="font-weight:600{{ ';text-decoration:line-through;color:var(--softer)' if s.done else '' }}">
             {{ s.title }}</div>
-          {% if not s.done and p.next and s.key != p.next.key %}
-            <div style="color:var(--softer);font-size:0.86rem">{{ s.why }}</div>
+          {% if not s.done %}
+            <div style="color:var(--softer);font-size:0.86rem;margin-top:2px">{{ s.why }}</div>
           {% endif %}
         </div>
-        {% if not s.done and p.next and s.key != p.next.key %}
+        {% if not s.done %}
           <a href="{{ s.link }}" style="color:var(--gold-deep);font-size:0.88rem;
                                         font-weight:600;text-decoration:none;white-space:nowrap">Do it</a>
         {% endif %}
       </div>
+      {% endif %}
     {% endfor %}
   </div>
 

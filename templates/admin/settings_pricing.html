@@ -84,31 +84,41 @@
 
   <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Cleaner Pay</h2>
+    {# Four paragraphs of explanation for one number, in front of somebody who
+       has owned the software for ten minutes. It read as something to study
+       rather than something to fill in. One line says what it is; the rest is
+       behind the arrow for whoever actually wants it. #}
     <div class="form-group" style="max-width:220px">
-      <label>Pay per person-hour ($)</label>
+      <label>Cleaner pay per hour ($)</label>
       <input type="number" name="labor_rate" step="0.50" min="0" value="{{ current.labor_rate }}" />
     </div>
     <p style="font-size:0.85rem;color:var(--muted);margin-top:-8px">
-      What a cleaner earns for one hour of work — the same rate for everyone, on every job type.
-      A job's pay is <strong>its hours × this rate</strong>, split between whoever is assigned.
-      One cleaner takes the whole amount; two split it and each finish in half the time, so the
-      hourly rate is identical either way.
+      What one cleaner is paid for one hour of work.
     </p>
-    <p style="font-size:0.82rem;color:var(--softer);margin-top:8px">
-      Because pay comes from the hours and not the price, discounting a job no longer reduces
-      what the cleaner earns — the discount comes out of your margin instead. Each job's page
-      shows labor as a % of that job's price so you can see when it's getting thin.
-    </p>
-    <div class="form-group" style="max-width:220px;margin-top:14px">
-      <label>Floor: labor may not exceed (%)</label>
-      <input type="number" name="max_labor_pct" step="1" min="1" max="100" value="{{ current.max_labor_pct }}" />
-    </div>
-    <p style="font-size:0.85rem;color:var(--muted);margin-top:-8px">
-      Sets each job's <strong>floor price</strong> — the least it can be sold for and still be worth
-      doing. A job needing ${{ '%.0f' % current.labor_rate }}×hours of labor can't drop below that
-      figure ÷ {{ current.max_labor_pct }}%. Jobs under their floor are flagged red on the booking,
-      and listed on the Job Economics report. Flagged, not blocked — sometimes it's still the right call.
-    </p>
+
+    <details class="howto">
+      <summary>How a job's pay is worked out</summary>
+      <div class="howto-body">
+        <p style="font-size:0.88rem;line-height:1.6;margin:0 0 10px">
+          A job's pay is <strong>its hours × this rate</strong>, shared between whoever
+          is assigned to it. One cleaner takes the whole amount; two split it and each
+          finish in half the time — so the hourly rate is the same either way.
+        </p>
+        <p style="font-size:0.88rem;line-height:1.6;margin:0">
+          Because pay comes from the hours rather than the price, giving a customer a
+          discount doesn't reduce what your cleaner earns. The discount comes out of
+          your side, not theirs.
+        </p>
+      </div>
+    </details>
+
+    {# The "floor: labor may not exceed %" box is gone from this page. It is a
+       margin-protection rule expressed as a ratio, which is the sort of thing
+       that makes somebody close the tab on their first afternoon. The rule
+       still runs on its sensible default and still flags a job sold too cheap —
+       it just is not a question anybody is asked before they have priced their
+       first clean. #}
+    <input type="hidden" name="max_labor_pct" value="{{ current.max_labor_pct }}" />
     <div class="form-group" style="max-width:220px;margin-top:14px">
       <label>Card fee taken off tips (%)</label>
       <input type="number" name="tip_fee_pct" step="0.1" min="0" max="20" value="{{ current.tip_fee_pct }}" />
@@ -162,39 +172,51 @@
 
   <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Add-Ons</h2>
+    {# Was: Add-on | Price | Takes | Labor cost | Labor % | You keep. Six
+       columns, three of them arithmetic on the other three, and "143% labor"
+       is not a sentence anybody reads as "this one loses money". What's left is
+       what you charge, how long it takes, and what you keep — and what you keep
+       goes red when it's negative, which is the only alarm actually needed. #}
     <p style="font-size:0.85rem;color:var(--muted);margin:0 0 16px">
-      Each add-on has a price <em>and</em> the time it takes. The hours are added to the job, so the
-      cleaner is paid for the extra work — set them to 0 and they'd be doing it for free.
-      Watch the labor % on the right: anything red costs you more in labor than you charge for it.
+      What you charge for each add-on, and how long it takes. The hours are added
+      to the job so your cleaner is paid for the extra work.
     </p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Add-on</th><th>Price ($)</th><th>Takes (hrs)</th><th>Labor cost</th><th>Labor %</th><th style="text-align:right">You keep</th></tr></thead>
+        <thead><tr><th>Add-on</th><th>Price ($)</th><th>Takes (hrs)</th><th style="text-align:right">You keep</th></tr></thead>
         <tbody>
           {% for extra_name, price in extras.items() %}
           {% set key = extra_name.lower().replace(' ', '_') %}
           {% set hrs = current['extrahrs_' + key] %}
           {% set p = current['extra_' + key] | float %}
           {% set labor = hrs | float * current.labor_rate | float %}
-          {% set pct = (labor / p * 100) if p else 0 %}
           <tr>
             <td style="font-weight:600">{{ extra_name }}</td>
             <td><input type="number" name="extra_{{ key }}" step="1" min="0"
                        value="{{ current['extra_' + key] }}" style="width:90px;margin:0" /></td>
             <td><input type="number" name="extrahrs_{{ key }}" step="0.25" min="0"
                        value="{{ hrs }}" style="width:90px;margin:0" /></td>
-            <td style="color:var(--softer)">${{ '%.2f' % labor }}</td>
-            <td style="font-weight:700;color:{{ 'var(--warn)' if pct > 100 else ('var(--amber-deep)' if pct > 65 else 'var(--good)') }}">
-              {{ '%.0f' % pct }}%{% if pct > 100 %} ⚠️{% endif %}
-            </td>
             <td style="text-align:right;font-weight:700;color:{{ 'var(--warn)' if (p - labor) < 0 else 'var(--ink)' }}">
               ${{ '%.2f' % (p - labor) }}
+              {% if (p - labor) < 0 %}
+              <div style="font-weight:500;font-size:0.76rem;color:var(--warn)">costs you more than you charge</div>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+    <details class="howto" style="margin-top:14px">
+      <summary>Where "you keep" comes from</summary>
+      <div class="howto-body">
+        <p style="font-size:0.88rem;line-height:1.6;margin:0">
+          The hours × your cleaner's hourly rate, taken off the price. If it comes
+          out red, that add-on costs you more in wages than you charge for it —
+          either raise the price or lower the time it's set to take.
+        </p>
+      </div>
+    </details>
   </div>
 
   <button type="submit" class="btn btn-gold">Save Pricing</button>

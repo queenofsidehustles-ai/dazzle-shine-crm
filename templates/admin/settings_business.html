@@ -98,13 +98,63 @@
         <span style="font-size:0.76rem;color:var(--softer)">Affects scripts library labels and context.</span>
       </div>
     </div>
-    <div class="form-group" style="margin-top:4px">
-      <label>Work Agreement Template</label>
-      <textarea name="agreement_template" rows="16"
-                style="font-family:monospace;font-size:0.82rem;line-height:1.7"
-                placeholder="Leave blank to use the built-in default for your worker model. Paste your custom agreement text here to override it.">{{ current.agreement_template }}</textarea>
-      <span style="font-size:0.76rem;color:var(--softer)">Cleaners see this when they click their signing link. Leave blank to use the built-in IC or Employee agreement based on the worker model above.</span>
+    {# Sixteen rows of empty monospace box, labelled "Work Agreement Template",
+       between two dropdowns. Nobody could tell whether it was something they
+       had to write. It is not — there is a complete agreement built in, and it
+       is already what cleaners sign. So: say that first, put the box away
+       behind an arrow, and let anyone who wants to change it start from the
+       real text rather than a blank page. #}
+    <div style="margin-top:14px;padding:13px 15px;background:var(--good-soft);
+                border:1px solid var(--good);border-radius:9px">
+      <div style="font-weight:700;color:var(--good);font-size:0.9rem;margin-bottom:3px">
+        ✅ Your work agreement is ready to use
+      </div>
+      <p style="font-size:0.85rem;color:var(--good);margin:0;line-height:1.6">
+        Cleaners sign it when they join, from the link the CRM sends them. It is
+        written for the worker type you picked above, so there is nothing you need
+        to do here — unless you want your own wording.
+      </p>
     </div>
+
+    <details class="howto" style="margin-top:10px">
+      <summary>Use my own wording instead</summary>
+      <div class="howto-body">
+        <p style="font-size:0.88rem;line-height:1.6;margin:0 0 10px">
+          Anything you put here replaces the built-in agreement completely. Empty
+          the box to go back to it. Start from the built-in text rather than a
+          blank page if you only want to change a line or two:
+        </p>
+        <button type="button" id="load-default-agreement" class="btn btn-outline"
+                style="font-size:0.82rem;padding:6px 14px;margin-bottom:10px">
+          Load the built-in agreement so I can edit it
+        </button>
+        <textarea name="agreement_template" id="agreement-box" rows="16"
+                  style="font-family:monospace;font-size:0.82rem;line-height:1.7"
+                  placeholder="Empty — your cleaners are signing the built-in agreement.">{{ current.agreement_template }}</textarea>
+        <p style="font-size:0.78rem;color:var(--softer);margin:6px 0 0">
+          A work agreement is a legal document. If you change it, have somebody
+          who knows your state's rules read it before a cleaner signs it.
+        </p>
+      </div>
+    </details>
+    <script id="default-agreement-text" type="text/plain">{{ default_agreement }}</script>
+    <script>
+      // Editing from the real text beats editing from nothing — and it makes
+      // plain what the built-in agreement actually says, which was the thing
+      // nobody could tell from an empty box.
+      (function () {
+        const btn = document.getElementById('load-default-agreement');
+        const box = document.getElementById('agreement-box');
+        const src = document.getElementById('default-agreement-text');
+        if (!btn || !box || !src) return;
+        btn.addEventListener('click', function () {
+          if (box.value.trim() &&
+              !confirm('Replace what is in the box with the built-in agreement?')) return;
+          box.value = src.textContent.trim();
+          box.focus();
+        });
+      })();
+    </script>
 
     <div class="form-group" style="margin-top:18px">
       <label>📜 Customer Service &amp; Payment Terms</label>
@@ -217,14 +267,60 @@
         </div>
       </div>
     </div>
+    {# "Only switch this on once your domain is verified with your email
+       provider" assumes the reader knows what verifying a domain is, who their
+       email provider is, and how to tell when it is done. Most people running a
+       cleaning company know none of the three — and getting it wrong stops
+       every email the CRM sends, silently. #}
     <div class="form-group">
       <label>Send Email From Your Own Domain</label>
       <select name="brand_domain_verified">
         <option value="" {{ '' if current.brand_domain_verified == '1' else 'selected' }}>Not yet — send from the default address</option>
         <option value="1" {{ 'selected' if current.brand_domain_verified == '1' }}>Yes — my domain is verified</option>
       </select>
-      <span style="font-size:0.76rem;color:var(--softer)">Only switch this on once your domain is verified with your email provider. Turning it on too early means your emails stop arriving.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">
+        Leave this on “Not yet” unless you have done the steps below. Your emails
+        still send either way — this only changes the address they come from.
+      </span>
     </div>
+
+    <details class="howto">
+      <summary>What this means, and how to do it <span class="mins">about 20 minutes, once</span></summary>
+      <div class="howto-body">
+        <p style="font-size:0.88rem;line-height:1.6;margin:0 0 12px">
+          Right now your customers' emails arrive from our address. That works, and
+          plenty of businesses leave it alone. If you would rather they came from
+          <code>hello@yourbusiness.com</code>, you have to prove to the email system
+          that the domain is yours — otherwise anyone could send email pretending to
+          be you, which is exactly why spam filters check.
+        </p>
+        <ol>
+          <li><strong>Do you own a domain?</strong> If your email is
+            <code>@gmail.com</code>, you don't yet — you would need to buy one
+            (about $12 a year at Namecheap, GoDaddy or Cloudflare). If your email is
+            already <code>@yourbusiness.com</code>, you do.</li>
+          <li><strong>Add it at Resend.</strong> Sign in at
+            <code>resend.com</code> → <strong>Domains</strong> → <strong>Add
+            Domain</strong> → type your domain.</li>
+          <li><strong>Copy the records it shows you.</strong> Three or four rows,
+            named things like <code>DKIM</code> and <code>SPF</code>. They are just
+            text — you are copying, not writing.</li>
+          <li><strong>Paste them where you bought the domain</strong>, under
+            <strong>DNS</strong> or <strong>DNS Records</strong>. One row at a time,
+            copying each value exactly.</li>
+          <li><strong>Wait, then check.</strong> Back at Resend, the domain turns
+            <strong>Verified</strong> — usually minutes, sometimes a few hours.</li>
+          <li><strong>Only then</strong> change the box above to “Yes”, and set the
+            from-address you want.</li>
+        </ol>
+        <div class="howto-note">
+          Switching to “Yes” before Resend says <strong>Verified</strong> stops your
+          emails arriving — quotes, receipts and confirmations all just stop, with no
+          error to tell you. If email goes quiet after changing this, put it back to
+          “Not yet” and everything resumes.
+        </div>
+      </div>
+    </details>
     <div class="form-group">
       <label>How You Describe The Business</label>
       <input type="text" name="content_business_description" value="{{ current.content_business_description }}"

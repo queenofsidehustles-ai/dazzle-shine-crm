@@ -420,7 +420,14 @@ def business():
         current['worker_model'] = 'contractor'
     if not current['reception_model']:
         current['reception_model'] = 'va'
-    return render_template('admin/settings_business.html', current=current)
+    # The agreement cleaners actually sign today, so the page can show it rather
+    # than describing it. An empty box labelled "Work Agreement Template" read
+    # as homework; nobody could tell there was already a complete one in there.
+    from blueprints.contractors import _default_agreement
+    import branding as _b
+    return render_template('admin/settings_business.html', current=current,
+                           default_agreement=_default_agreement(
+                               _b.biz_name(), current['worker_model']))
 
 
 # ── What has broken lately ──────────────────────────────────────────────────

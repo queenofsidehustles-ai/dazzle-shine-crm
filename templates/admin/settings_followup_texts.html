@@ -4,24 +4,36 @@
 
 {% block content %}
 <form method="POST">
+  {# Two dense paragraphs before the first editable box. One line of what the
+     page is for; the reasoning and the placeholder list behind the arrow. #}
   <div class="card" style="margin-bottom:18px">
     <p style="color:var(--muted);font-size:0.9rem;line-height:1.7;margin:0">
-      What gets texted to somebody who got in touch and never booked — a missed
-      call, a voicemail, a text nobody answered, a form on your website, or a
-      quote request that went quiet. However they reached you, the conversation
-      afterwards is the same one.
-      Two sets, because they are two different conversations: someone you never
-      spoke to, and someone you quoted — and apologising for not connecting
-      reads badly to a person you already priced up.
+      What gets texted to somebody who got in touch and never booked. Edit the
+      wording below, or leave it as it is.
     </p>
-    <p style="color:var(--muted);font-size:0.86rem;line-height:1.7;margin:12px 0 0">
-      Placeholders you can use:
-      <code>{biz}</code> your business name ·
-      <code>{called}</code> the day they called ·
-      <code>{link}</code> your booking link ·
-      <code>{phone}</code> your number.
-      Anything else in braces is left as you typed it.
-    </p>
+    <details class="howto" style="margin-bottom:0">
+      <summary>Why there are two sets, and the placeholders you can use</summary>
+      <div class="howto-body">
+        <p style="font-size:0.88rem;line-height:1.7;margin:0 0 12px">
+          A missed call, a voicemail, a text nobody answered, a form on your
+          website, a quote request that went quiet — however they reached you,
+          the conversation afterwards is the same one.
+        </p>
+        <p style="font-size:0.88rem;line-height:1.7;margin:0 0 12px">
+          There are two sets because these are two different conversations:
+          someone you never spoke to, and someone you already quoted. Apologising
+          for not connecting reads badly to a person you priced up last week.
+        </p>
+        <p style="font-size:0.88rem;line-height:1.7;margin:0">
+          Placeholders you can use:
+          <code>{biz}</code> your business name ·
+          <code>{called}</code> the day they called ·
+          <code>{link}</code> your booking link ·
+          <code>{phone}</code> your number.
+          Anything else in braces is left exactly as you typed it.
+        </p>
+      </div>
+    </details>
   </div>
 
   {% for track, label in tracks %}
