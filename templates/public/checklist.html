@@ -58,6 +58,15 @@
     .photo-thumb { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #f0edf8; }
     .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
     .add-photo { aspect-ratio: 1; border: 2px dashed #d3a84f; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #b98a33; font-size: 0.76rem; font-weight: 600; text-align: center; gap: 4px; background: #fdfaf3; }
+    /* The block a deep or move-out clean inherits — closed by default, because
+       the extras are what makes this job different from the last one. */
+    .cl-section { border: 1px solid #e4dfef; border-radius: 10px; background: #faf9fd; margin: 6px 0 10px; overflow: hidden; }
+    .cl-section summary { cursor: pointer; padding: 13px 15px; font-weight: 700; font-size: 0.92rem; color: #5f5878; list-style: none; display: flex; align-items: center; gap: 8px; }
+    .cl-section summary::-webkit-details-marker { display: none; }
+    .cl-section summary::before { content: '▸'; color: #9a95ad; font-size: 0.9rem; }
+    .cl-section[open] summary::before { content: '▾'; }
+    .cl-section .cl-count { margin-left: auto; font-weight: 500; font-size: 0.8rem; color: #9a95ad; }
+    .cl-section-body { padding: 0 15px 6px; background: #fff; }
     .add-photo:active { background: #f6ecd6; }
     .add-photo .plus { font-size: 1.6rem; line-height: 1; }
     .req-tag { display:inline-block; background:#fef3c7; color:#92400e; font-size:0.66rem; font-weight:700; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:0.06em; margin-left:6px; }
@@ -160,13 +169,30 @@
             <span id="count-label" style="font-size:0.82rem;color:#9a95ad">0 / {{ checklist.get_items()|length }}</span>
           </div>
           <div class="progress-bar"><div class="progress-fill" id="progress" style="width:{{ checklist.completion_percent }}%"></div></div>
-          <div id="items">
-            {% set completed = checklist.get_completed() %}
-            {% for item in checklist.get_items() %}
-            <div class="checklist-item {{ 'done' if loop.index0 in completed }}" onclick="toggleItem({{ loop.index0 }}, this)">
-              <div class="box">{% if loop.index0 in completed %}<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7l4 4 6-7" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>{% endif %}</div>
+          {# A deep clean now carries every standard item too — which is right,
+             and is also forty lines. The inherited block folds into one heading
+             so the list has a shape, while the items inside it are real tick
+             boxes with their own indexes, exactly like the rest. #}
+          {% set completed = checklist.get_completed() %}
+          {% set ns = namespace(i=0) %}
+          {% macro row(item, idx) %}
+            <div class="checklist-item {{ 'done' if idx in completed }}" onclick="toggleItem({{ idx }}, this)">
+              <div class="box">{% if idx in completed %}<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7l4 4 6-7" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>{% endif %}</div>
               <div class="text">{{ item }}</div>
             </div>
+          {% endmacro %}
+          <div id="items">
+            {% for section, lines in checklist.get_sections() %}
+              {% if section %}
+              <details class="cl-section">
+                <summary>{{ section }}<span class="cl-count">{{ lines|length }} items</span></summary>
+                <div class="cl-section-body">
+                  {% for item in lines %}{{ row(item, ns.i) }}{% set ns.i = ns.i + 1 %}{% endfor %}
+                </div>
+              </details>
+              {% else %}
+                {% for item in lines %}{{ row(item, ns.i) }}{% set ns.i = ns.i + 1 %}{% endfor %}
+              {% endif %}
             {% endfor %}
           </div>
         </div>
