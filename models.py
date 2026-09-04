@@ -230,6 +230,9 @@ class Booking(db.Model):
         'airbnb': 'Airbnb / Vacation Rental',
         'apartment': 'Apartment & Condo Cleaning',
         'luxury': 'Luxury Home Cleaning',
+        'postcon_clean': 'Post-Construction — Detail Clean Only',
+        'postcon_final': 'Post-Construction — Clean + Final Phase',
+        'postcon_full': 'Post-Construction — Full Service',
     }
 
     STATUS_COLORS = {
@@ -537,6 +540,13 @@ class Lead(db.Model):
     service_type = db.Column(db.String(50))
     bedrooms = db.Column(db.String(10))
     bathrooms = db.Column(db.String(10))
+    # Optional floor area, and the reason it is on a lead at all: bedroom count
+    # describes a house being lived in, not a building site. Two three-bed jobs
+    # can differ by a thousand square feet of floor to vacuum twice, and on
+    # post-construction that is the difference between a day and two. Booking has
+    # carried this since the beginning; a phone quote had nowhere to put it, so
+    # the surcharge the calculator already knew how to apply never got applied.
+    sqft = db.Column(db.Integer)
     extras = db.Column(db.String(200))
     frequency = db.Column(db.String(20), default='one_time')
     address = db.Column(db.String(200))
@@ -577,7 +587,29 @@ class Lead(db.Model):
     discount_code = db.Column(db.String(50))         # a saved code, if she used one
     discount_amount = db.Column(Money, default=0)    # dollars off
     discount_label = db.Column(db.String(80))        # 'Friends & Family' — what to call it
+    # Hauling construction debris away, kept as its own line rather than folded
+    # into the service price. What it costs is dump fees plus loads, and that
+    # swings by hundreds between a tidy remodel and a gut job — a multiplier off
+    # bedrooms cannot know which one it is looking at. On its own line the
+    # customer sees what the disposal actually costs, and a job with more junk
+    # in it than expected is a number to change rather than a loss to absorb.
+    #
+    # NULL means no haul-off was quoted, which is the truth about every quote
+    # made before this existed and about every job where the builder clears
+    # their own site. Zero would claim she quoted the haul-off and charged
+    # nothing for it.
+    debris_fee = db.Column(Money)                    # dollars for the haul-off
+    debris_note = db.Column(db.String(120))          # '2 loads + dump fee' — what it buys
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def has_debris_fee(self):
+        return (self.debris_fee or 0) > 0
+
+    @property
+    def debris_display(self):
+        """What the haul-off line is called on the quote."""
+        return (self.debris_note or '').strip() or 'Construction debris removal'
 
     @property
     def has_discount(self):
@@ -598,6 +630,9 @@ class Lead(db.Model):
         'apartment': 'Apartment & Condo Cleaning', 'luxury': 'Luxury Home Cleaning',
         'commercial': 'Commercial / Janitorial',
         'apartment_turnover': 'Apartment Turnover / Make-Ready',
+        'postcon_clean': 'Post-Construction — Detail Clean Only',
+        'postcon_final': 'Post-Construction — Clean + Final Phase',
+        'postcon_full': 'Post-Construction — Full Service',
     }
 
     # Leads priced at a walkthrough, not from the residential matrix

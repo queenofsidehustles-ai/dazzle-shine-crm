@@ -70,7 +70,7 @@ def quote_url(lead):
 
 def quote_lead(name, email, phone, service_type, bedrooms=None, bathrooms=None,
                extras='', frequency='one_time', price=None, notes='',
-               address='', city='', zip_code=''):
+               address='', city='', zip_code='', sqft=None):
     """Create (or refresh) the Lead behind a quote. Returns the Lead.
 
     Matched on email so quoting the same person twice updates their quote rather
@@ -87,6 +87,11 @@ def quote_lead(name, email, phone, service_type, bedrooms=None, bathrooms=None,
     lead.service_type = service_type or lead.service_type
     lead.bedrooms = bedrooms if bedrooms not in (None, '') else lead.bedrooms
     lead.bathrooms = bathrooms if bathrooms not in (None, '') else lead.bathrooms
+    if sqft not in (None, ''):
+        try:
+            lead.sqft = int(sqft)
+        except (TypeError, ValueError):
+            pass       # a typo in an optional box shouldn't lose the whole quote
     lead.extras = extras or lead.extras
     lead.frequency = frequency or lead.frequency
     lead.notes = notes or lead.notes
@@ -153,13 +158,17 @@ def form_context(existing=None):
     The ticked/unticked state comes from the quote itself where there is one, so
     reopening a quote shows what was actually promised rather than resetting to
     the standard list and quietly re-adding what she took off."""
-    from pricing import SERVICES, EXTRAS, get_deposit
+    from pricing import SERVICES, EXTRAS, POSTCON_TYPES, POSTCON_WITH_DEBRIS, get_deposit
     from models import DiscountCode
     service = (existing.service_type if existing else '') or next(iter(SERVICES))
     standard = service_checklist(service)
     chosen = checklist_for(existing) if existing else standard
     return {
         'services': SERVICES, 'extras': EXTRAS, 'deposit': get_deposit(),
+        # So the form can put the haul-off box in front of her on the services
+        # that involve one, and keep it out of the way on the ones that don't.
+        'postcon_types': list(POSTCON_TYPES),
+        'debris_types': list(POSTCON_WITH_DEBRIS),
         # Only codes that could actually be honoured today. Offering an expired
         # one on the form and refusing it on submit wastes a call she is on.
         'discount_codes': [d for d in DiscountCode.query
@@ -190,43 +199,65 @@ def handle_quote_form(form, lsa_lead=None):
 
     service_type = form.get('service_type', '')
     beds, baths = form.get('bedrooms', ''), form.get('bathrooms', '')
+    sqft = (form.get('sqft') or '').strip()
     extras = ','.join(form.getlist('extras'))
     phone = (form.get('phone') or '').strip() or (lsa_lead.phone if lsa_lead else '')
 
     # A typed price wins over the calculated one. She was on the call, and the
     # figure she actually said is the one that has to go out — the calculator is
-    # a starting point, not a second opinion.
+    # a starting point, not a second opinion. On post-construction it is barely
+    # even a starting point: those get walked before they get priced, and the
+    # matrix number is there to stop her quoting from a blank page.
     typed = (form.get('price') or '').strip()
     try:
         price = float(typed) if typed else calculate_price(
             service_type=service_type, bedrooms=beds or 1, bathrooms=baths or 1,
-            extras=extras, frequency=form.get('frequency', 'one_time'))
+            extras=extras, frequency=form.get('frequency', 'one_time'), sqft=sqft)
     except ValueError:
         return None, "That price doesn't look like a number."
+
+    # Hauling the builder's debris away, quoted separately from cleaning it.
+    # Dump fees and load count are what this costs and neither follows from
+    # bedroom count, so it is a figure she sets per job after seeing the site.
+    debris_raw = (form.get('debris_fee') or '').strip()
+    try:
+        debris = round(float(debris_raw), 2) if debris_raw else 0.0
+    except ValueError:
+        return None, "That debris removal amount doesn't look like a number."
+    if debris < 0:
+        return None, 'A debris removal charge cannot be negative.'
 
     # The price she typed is the FULL price when a discount is being given —
     # she says "it's $290, but I'll do $250 for you", so she types 290 and the
     # discount, not 250. Quoting the discounted figure with nothing to show for
     # it is what this replaces: the customer could not see they had been given
     # anything, and nothing recorded that anything had been.
+    #
+    # The discount is worked out against the cleaning alone. Disposal is money
+    # she pays a landfill, not margin she can decide to give away — taking a
+    # friends-and-family discount out of a dump fee is taking it out of pocket.
     off, code, label, derr = resolve_discount(form, price)
     if derr:
         return None, derr
-    final = round(max(0.0, price - off), 2)
+    final = round(max(0.0, price - off) + debris, 2)
 
     lead = quote_lead(
         name=form.get('name', ''), email=email, phone=phone,
         service_type=service_type, bedrooms=beds, bathrooms=baths, extras=extras,
         frequency=form.get('frequency', 'one_time'), price=final,
         notes=form.get('notes', ''), address=form.get('address', ''),
-        city=form.get('city', ''), zip_code=form.get('zip_code', ''))
+        city=form.get('city', ''), zip_code=form.get('zip_code', ''), sqft=sqft)
 
     # Written after quote_lead so re-quoting the same person replaces the old
     # discount rather than leaving last week's reason on this week's price.
-    lead.quote_full_price = round(price, 2) if off > 0 else None
+    # Full price carries the haul-off too, so the struck-through figure and what
+    # they pay differ by the discount and nothing else.
+    lead.quote_full_price = round(price + debris, 2) if off > 0 else None
     lead.discount_amount = off
     lead.discount_code = code or None
     lead.discount_label = label or None
+    lead.debris_fee = debris if debris > 0 else None
+    lead.debris_note = (form.get('debris_note') or '').strip()[:120] or None
 
     # What she ticked, plus anything she typed in that they asked for on the
     # phone. Both are optional; leaving it all alone means the standard list.
@@ -258,6 +289,69 @@ def link_lsa_caller(lead, lsa_lead=None):
     return len(rows)
 
 
+def price_breakdown(lead):
+    """The money on a quote written out line by line, or '' if it is one number.
+
+    A single figure is fine when it really is a single figure. Once a haul-off or
+    a discount is inside it, a customer holding three quotes cannot see what they
+    are comparing — and neither can she, a month later, when they ring up asking
+    why this one was dearer. So anything that moved the price says so by name,
+    and the lines add up to what they actually pay."""
+    total = float(lead.quoted_price or 0)
+    fee = float(lead.debris_fee or 0) if lead.has_debris_fee else 0.0
+    off = float(lead.discount_amount or 0) if lead.has_discount else 0.0
+    if not fee and not off:
+        return ''
+    # What the cleaning came to before anything was taken off it. The discount
+    # only ever applied to the cleaning, so adding it back gives that figure.
+    cleaning = total - fee + off
+    lines = []
+    if fee:
+        lines.append(f'Cleaning:  ${cleaning:.2f}')
+        lines.append(f'{lead.debris_display}:  ${fee:.2f}')
+    if off:
+        lines.append(f'{"Subtotal" if fee else "Your price"}:  ${cleaning + fee:.2f}')
+        lines.append(f'{lead.discount_display}:  −${off:.2f}')
+    lines.append(f'{"You pay" if off else "Total"}:  ${total:.2f}')
+    return '\n'.join(lines)
+
+
+def scope_note(lead):
+    """What a post-construction quote has to say in writing, or ''.
+
+    Two things sink these jobs when they are left to be understood rather than
+    written down. The final phase is a second visit on a second day, and a
+    builder's handover date slips as a matter of routine — uncapped, "we'll come
+    back after the dust settles" is an unpaid third and fourth trip. And on the
+    rungs that do not include the haul-off, the debris being someone else's job
+    is the whole reason the price is lower; a customer who never read that
+    expects a cleared site and is disappointed by a quote they were given
+    correctly."""
+    from pricing import (POSTCON_TYPES, POSTCON_WITH_FINAL, POSTCON_WITH_DEBRIS,
+                         TOUCHUP_WINDOW_DAYS)
+    service = lead.service_type or ''
+    if service not in POSTCON_TYPES:
+        return ''
+    bits = []
+    if service in POSTCON_WITH_FINAL:
+        bits.append(f'Final phase included: one touch-up visit within '
+                    f'{TOUCHUP_WINDOW_DAYS} days of the detail clean, once the '
+                    f'dust has settled. Dust keeps falling after a build and one '
+                    f'pass cannot catch it all. Any visit after that is quoted '
+                    f'separately.')
+    else:
+        bits.append('This is the detail clean only — no return visit. A '
+                    'final-phase touch-up after the dust settles can be added at '
+                    'any time.')
+    if service not in POSTCON_WITH_DEBRIS and not lead.has_debris_fee:
+        bits.append('Removing construction debris, packaging and jobsite trash '
+                    'is not included — the site should be cleared before we '
+                    'arrive. We can quote the haul-off if you would like it added.')
+    bits.append('Price assumes the build is finished and all trades are off '
+                'site. Active work areas are excluded.')
+    return '\n\n'.join(bits)
+
+
 def send_quote(lead):
     """Email the quote. Returns (ok, detail).
 
@@ -275,18 +369,15 @@ def send_quote(lead):
         lines = '\n'.join(f'  •  {i}' for i in items)
         checklist = f"What's included in your {lead.service_label.lower()}:\n\n{lines}"
 
-    # A discount nobody can see is money given away for nothing. The template is
-    # hers to edit and most copies predate this, so the working is appended as
-    # well as offered as {discount_line} — same reasoning as the checklist.
-    discount_line = ''
-    if lead.has_discount:
-        full = float(lead.quote_full_price or 0)
-        off = float(lead.discount_amount or 0)
-        discount_line = (f'Your price:  ${full:.2f}\n'
-                         f'{lead.discount_display}:  −${off:.2f}\n'
-                         f'You pay:  ${(lead.quoted_price or 0):.2f}')
+    # A discount nobody can see is money given away for nothing, and a haul-off
+    # folded into one number is a quote that looks expensive next to one that
+    # excluded it. Both go in the same breakdown. The template is hers to edit
+    # and most copies predate this, so the working is appended as well as offered
+    # as {discount_line} — same reasoning as the checklist.
+    discount_line = price_breakdown(lead)
+    terms = scope_note(lead)
 
-    appended = '\n\n'.join(p for p in (discount_line, checklist) if p)
+    appended = '\n\n'.join(p for p in (discount_line, checklist, terms) if p)
 
     ok = send_triggered_email(
         trigger='lead_quote',
@@ -301,6 +392,9 @@ def send_quote(lead):
             'discount_amount': f'{float(lead.discount_amount or 0):.2f}',
             'discount_label': lead.discount_display if lead.has_discount else '',
             'discount_line': discount_line,
+            'debris_amount': f'{float(lead.debris_fee or 0):.2f}',
+            'debris_label': lead.debris_display if lead.has_debris_fee else '',
+            'scope_note': terms,
             'deposit': f'{get_deposit():.2f}',
             'balance': f'{max(0.0, (lead.quoted_price or 0) - get_deposit()):.2f}',
             'booking_link': quote_url(lead),
@@ -394,6 +488,10 @@ def accept_quote(lead, preferred_date, preferred_time='', address='', city='',
         client_id=client.id,
         service_type=lead.service_type,
         bedrooms=lead.bedrooms, bathrooms=lead.bathrooms,
+        # Carried over so the crew sees the size they were priced against — the
+        # job is scheduled off the hours in it, and on a build those hours came
+        # from the floor area rather than the bedroom count.
+        sqft=lead.sqft,
         extras=lead.extras or '', frequency=lead.frequency or 'one_time',
         preferred_date=preferred_date or '', preferred_time=preferred_time or '',
         name=lead.name, email=email, phone=lead.phone or '',

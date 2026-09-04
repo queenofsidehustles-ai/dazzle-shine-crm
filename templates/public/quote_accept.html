@@ -95,12 +95,37 @@
         <div class="row"><span class="k">Service</span><span class="v">{{ lead.service_label }}</span></div>
         {% if lead.bedrooms %}<div class="row"><span class="k">Bedrooms</span><span class="v">{{ lead.bedrooms }}</span></div>{% endif %}
         {% if lead.bathrooms %}<div class="row"><span class="k">Bathrooms</span><span class="v">{{ lead.bathrooms }}</span></div>{% endif %}
+        {% if lead.sqft %}<div class="row"><span class="k">Size</span><span class="v">{{ '{:,}'.format(lead.sqft) }} sq ft</span></div>{% endif %}
         {% if lead.extras %}<div class="row"><span class="k">Add-ons</span><span class="v">{{ lead.extras }}</span></div>{% endif %}
+        {# The haul-off shown by name and by amount. A customer holding two
+           quotes cannot tell a dearer cleaner from one who is also carting the
+           builder's rubbish away unless the quote says which it is. #}
+        {% if lead.has_debris_fee %}
+        <div class="row">
+          <span class="k">{{ lead.debris_display }}</span>
+          <span class="v">${{ '%.2f'|format(lead.debris_fee) }}</span>
+        </div>
+        <div class="row">
+          <span class="k">Cleaning</span>
+          <span class="v">${{ '%.2f'|format((lead.quoted_price or 0) - lead.debris_fee) }}</span>
+        </div>
+        {% endif %}
       </div>
 
       <p style="color:#5f5878;font-size:0.88rem;line-height:1.6">
         This is the price we quoted you — it doesn't change when you book here.
       </p>
+
+      {# What a post-construction quote has to say out loud: how many visits are
+         in it, and whose job the debris is. Both are the kind of thing everyone
+         assumes they agreed and nobody wrote down. #}
+      {% if scope_note %}
+      <div style="margin-top:14px;padding:13px 15px;background:#faf9fd;border-left:3px solid var(--gold);border-radius:0 8px 8px 0">
+        {% for para in scope_note.split('\n\n') %}
+        <p style="color:#5f5878;font-size:0.84rem;line-height:1.6;margin:0 0 8px">{{ para }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
 
     {% if checklist %}

@@ -134,6 +134,9 @@
         <option value="standard">Standard</option>
         <option value="deep">Deep Clean</option>
         <option value="moveout">Move In/Out</option>
+        <option value="postcon_clean">Post-Con — Clean Only</option>
+        <option value="postcon_final">Post-Con — Clean + Final</option>
+        <option value="postcon_full">Post-Con — Full Service</option>
       </select>
     </div>
     <div>
@@ -235,6 +238,40 @@
       </tbody>
     </table>
   </div>
+</div>
+
+<!-- EARNINGS TABLE: POST-CONSTRUCTION -->
+{# One table for all three rungs rather than three tables. What a cleaner wants
+   off this page is what a job pays, and which phases the customer bought is the
+   thing that changes it — so the rung is a column. #}
+<div class="section" style="margin-top:20px">
+  <div class="section-head"><h2>Post-Construction</h2><div class="section-line"></div></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Home Size</th>
+          <th>Service</th>
+          <th>Typical Pay</th>
+          <th>Typical Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows if r.service_type.startswith('postcon') %}
+        <tr>
+          <td>{{ r.beds }} bed / {{ r.baths }} bath</td>
+          <td>{{ r.service_label.replace('Post-Construction — ', '') }}</td>
+          <td class="earn">${{ "%.0f"|format(r.contractor_earnings) }}</td>
+          <td class="hr">about {{ r.hours }}h</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:0.82rem;color:#9a95ad;margin-top:9px">
+    Full Service includes hauling the builder's debris out before cleaning starts.
+    Clean + Final includes a second visit once the dust has settled.
+  </p>
 </div>
 
 <!-- ADD-ONS -->

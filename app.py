@@ -697,6 +697,16 @@ def _migrate_db():
         ('lead',     'quote_token',         'VARCHAR(64)'),
         ('lead',     'quote_sent_at',       'TIMESTAMP'),
         ('lead',     'quote_checklist',     'TEXT'),
+        # Debris haul-off on a post-construction quote, kept off the service
+        # price because dump fees and load count vary per job by more than any
+        # bedroom multiplier could express. NULL means none was quoted, which is
+        # true of every quote made before this and of every job where the
+        # builder clears their own site — zero would say she quoted it free.
+        ('lead',     'debris_fee',          'NUMERIC(10,2)'),
+        ('lead',     'debris_note',         'VARCHAR(120)'),
+        # Floor area, which pricing has always been able to charge for and a
+        # phone quote had nowhere to record. NULL means it wasn't asked.
+        ('lead',     'sqft',                'INTEGER'),
         ('outbound_log', 'provider_id',     'VARCHAR(100)'),
         ('lsa_lead', 'crm_lead_id',         'INTEGER'),
     ]
@@ -774,6 +784,49 @@ def _seed_checklists():
             'Scrub all bathrooms top to bottom',
             'Vacuum and mop all rooms',
             'Final walkthrough — photo ready',
+        ]),
+        # Three rungs of the same job. Each is written as the rung below it plus
+        # what that rung leaves out, so there is one place to edit when the scope
+        # changes — checklist_expand walks the chain down to standard for whoever
+        # is actually holding the list on site.
+        ('Post-Construction — Detail Clean Only', 'postcon_clean', [
+            'All deep clean tasks',
+            'Remove stickers, labels and protective film from windows, appliances and fixtures',
+            'HEPA vacuum drywall dust from walls, ceilings and corners',
+            'Wipe all walls, doors, door frames and trim',
+            'Clean baseboards, crown molding and window casings',
+            'Vacuum and wipe all HVAC vents, registers and return covers',
+            'Wipe outlets, switch plates, thermostats and smoke detectors',
+            'Clean interior windows, tracks, sills and frames',
+            'Remove paint overspray, caulk and adhesive from glass and hardware',
+            'Clean inside all cabinets, drawers and shelving',
+            'Remove grout haze and construction residue from counters, tile and fixtures',
+            'Clean inside and outside of oven, range hood and microwave',
+            'Clean inside and outside of refrigerator and dishwasher',
+            'Clean inside vanities, drawers and medicine cabinets',
+            'Polish all fixtures, mirrors and stainless surfaces',
+            'Clean interior of all closets — shelves, rods, floors',
+            'Wipe down laundry area, utility sink and water heater closet',
+            'Sweep and vacuum all hard floors, carpets and stairs',
+            'Mop all hard floors',
+            'Sweep garage and exterior entry',
+        ]),
+        ('Post-Construction — Clean + Final Phase', 'postcon_final', [
+            'Everything in Post-Construction Detail Clean',
+            'Return visit once the dust has settled — second dust-and-wipe pass throughout',
+            'Re-vacuum all vents, tracks, sills and light fixtures',
+            'Re-clean all glass, mirrors and interior windows',
+            'Damp-mop all hard floors a second time',
+            'Spot-clean marks left by trades returning to the site',
+            'Final walkthrough with the customer — document condition with photos',
+        ]),
+        ('Post-Construction — Full Service', 'postcon_full', [
+            'Haul out all remaining construction debris, packaging and jobsite trash',
+            'Remove leftover materials, offcuts and empty containers',
+            'Bag and remove loose trash from every room, the garage and the exterior',
+            'Broom-sweep the whole site before detail cleaning begins',
+            'Dispose of all removed material at a licensed facility',
+            'Everything in Post-Construction Clean + Final Phase',
         ]),
         ('Airbnb / Vacation Rental Turnover', 'airbnb', [
             'Strip and replace all bed linens',

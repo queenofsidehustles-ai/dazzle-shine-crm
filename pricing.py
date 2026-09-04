@@ -39,17 +39,43 @@ VALID_BATHS = {1: [1, 2], 2: [1, 2], 3: [2, 3], 4: [2, 3], 5: [3, 4]}
 STANDARD_SQFT = {1: 800, 2: 1200, 3: 1800, 4: 2400, 5: 3200}
 
 # Service multipliers vs standard (also stored in DB)
+#
+# The three post-construction rungs are one job sold in three sizes, because
+# which phases the customer buys is the thing that actually varies on these
+# calls. A builder with their own dumpster wants phases 2 and 3; a homeowner at
+# the end of a remodel wants all of it; somebody watching the budget wants the
+# detail clean and no return trip.
+#
+# All three sit above move-out (1.9) deliberately. Drywall dust is not dirt: it
+# is in every track, vent and light fixture, it needs a HEPA vacuum rather than
+# a mop, and the second pass exists because the first one cannot get it all.
+# Post-construction priced off a move-out number is the classic way to lose
+# money on it.
 SERVICE_MULTIPLIERS_DEFAULTS = {
-    'standard': 1.0,
-    'deep':     1.6,
-    'moveout':  1.9,
+    'standard':       1.0,
+    'deep':           1.6,
+    'moveout':        1.9,
+    'postcon_clean':  2.0,   # phase 2 only — detail clean, no return visit
+    'postcon_final':  2.4,   # phases 2–3 — detail clean + touch-up visit
+    'postcon_full':   2.8,   # phases 1–3 — debris out, clean, touch-up visit
 }
 
 SERVICE_LABELS = {
-    'standard': 'Standard Cleaning',
-    'deep':     'Deep Cleaning',
-    'moveout':  'Move-In / Move-Out',
+    'standard':       'Standard Cleaning',
+    'deep':           'Deep Cleaning',
+    'moveout':        'Move-In / Move-Out',
+    'postcon_clean':  'Post-Construction — Detail Clean Only',
+    'postcon_final':  'Post-Construction — Clean + Final Phase',
+    'postcon_full':   'Post-Construction — Full Service',
 }
+
+# Which services carry the second, after-the-dust-settles visit. The quote says
+# so in writing, because an uncapped "final phase" is an unpaid third trip every
+# time a builder's handover date slips.
+POSTCON_TYPES = ('postcon_clean', 'postcon_final', 'postcon_full')
+POSTCON_WITH_FINAL = ('postcon_final', 'postcon_full')
+POSTCON_WITH_DEBRIS = ('postcon_full',)
+TOUCHUP_WINDOW_DAYS = 7
 
 # Add-on prices
 EXTRAS = {
@@ -314,9 +340,14 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
 
 
 def build_full_matrix():
-    """Return all 30 combinations (3 services × 10 combos) sorted by client price."""
+    """Every service × bed/bath combination, sorted by client price.
+
+    The post-construction rungs are in here because cleaners are paid off these
+    rows too, and a job missing from the pay chart is one nobody can check their
+    own pay against."""
     rows = []
-    for svc in ('standard', 'deep', 'moveout'):
+    for svc in ('standard', 'deep', 'moveout',
+                'postcon_clean', 'postcon_final', 'postcon_full'):
         for (beds, baths) in sorted(PRICE_MATRIX_DEFAULTS.keys()):
             job = calculate_job(svc, beds, baths)
             job['service_type'] = svc
@@ -328,9 +359,12 @@ def build_full_matrix():
 # ── Backward-compatibility wrappers ───────────────────────────────────────────
 
 SERVICES = {
-    'standard': {'label': 'Standard House Cleaning', 'base': 110, 'per_extra_bed': 0, 'per_extra_bath': 0},
-    'deep':     {'label': 'Deep Cleaning',            'base': 176, 'per_extra_bed': 0, 'per_extra_bath': 0},
-    'moveout':  {'label': 'Move-In / Move-Out',       'base': 209, 'per_extra_bed': 0, 'per_extra_bath': 0},
+    'standard':      {'label': 'Standard House Cleaning', 'base': 110, 'per_extra_bed': 0, 'per_extra_bath': 0},
+    'deep':          {'label': 'Deep Cleaning',            'base': 176, 'per_extra_bed': 0, 'per_extra_bath': 0},
+    'moveout':       {'label': 'Move-In / Move-Out',       'base': 209, 'per_extra_bed': 0, 'per_extra_bath': 0},
+    'postcon_clean': {'label': 'Post-Construction — Detail Clean Only',  'base': 220, 'per_extra_bed': 0, 'per_extra_bath': 0},
+    'postcon_final': {'label': 'Post-Construction — Clean + Final Phase', 'base': 264, 'per_extra_bed': 0, 'per_extra_bath': 0},
+    'postcon_full':  {'label': 'Post-Construction — Full Service',        'base': 308, 'per_extra_bed': 0, 'per_extra_bath': 0},
 }
 
 

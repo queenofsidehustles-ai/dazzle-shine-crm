@@ -37,7 +37,7 @@
     {% endif %}
   </div>
 
-  <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:14px">
+  <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1.2fr;gap:14px;margin-top:14px">
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Service</label>
       <select name="service_type" id="q-service" required
@@ -55,6 +55,15 @@
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Bathrooms</label>
       <input name="bathrooms" id="q-baths" type="number" min="0" value="{{ existing.bathrooms if existing else 2 }}"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+    {# Optional everywhere, and the number that matters most on a build: bedroom
+       count describes a house somebody lives in, not a site with a thousand
+       extra square feet of floor to vacuum twice. #}
+    <div>
+      <label class="dl" style="display:block;margin-bottom:5px">Sq ft <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9a95ad">(optional)</span></label>
+      <input name="sqft" id="q-sqft" type="number" min="0" max="20000" value="{{ existing.sqft or '' if existing else '' }}"
+             placeholder="e.g. 2400"
              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
     </div>
   </div>
@@ -101,8 +110,33 @@
     </p>
   </div>
 
+  {# Hauling the builder's leftovers away, priced on its own line rather than
+     folded into the clean. What it costs is dump fees plus loads and that swings
+     by hundreds between a tidy remodel and a gut job — no bedroom multiplier can
+     tell those apart, so this is a number she sets after seeing the site. Kept
+     out of the discount for the same reason: it is money going to a landfill,
+     not margin there is any of to give away. #}
+  <div id="q-debris-block" style="margin-top:18px;padding:14px;background:#fdfbf6;border:1px solid #f0e5cd;border-radius:10px;display:none">
+    <label class="dl" style="display:block;margin-bottom:5px">Construction debris removal</label>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px">
+      <input name="debris_fee" id="q-debris" type="number" step="0.01" min="0"
+             value="{{ '%.2f'|format(existing.debris_fee) if existing and existing.debris_fee else '' }}"
+             placeholder="0.00"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
+      <input name="debris_note" id="q-debris-note" type="text" maxlength="120"
+             value="{{ existing.debris_note or '' if existing else '' }}"
+             placeholder="What it covers — e.g. 2 loads + dump fee"
+             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+    </div>
+    <p style="font-size:0.82rem;color:#9a95ad;margin-top:7px">
+      Its own line on their quote, on top of the cleaning price — and no discount
+      comes off it. Dump fees are money you pay out, not margin. Leave blank if
+      they're clearing the site themselves.
+    </p>
+  </div>
+
   <div style="margin-top:18px;padding:14px;background:#faf9fd;border-radius:10px">
-    <label class="dl" style="display:block;margin-bottom:5px">Price you quoted them</label>
+    <label class="dl" style="display:block;margin-bottom:5px">Cleaning price you quoted them</label>
     <input name="price" id="q-price" type="number" step="0.01" min="0"
            value="{{ '%.2f'|format(existing.quoted_price) if existing and existing.quoted_price else '' }}"
            placeholder="Leave blank to use the calculated price"
@@ -110,7 +144,14 @@
     <p style="font-size:0.82rem;color:#9a95ad;margin-top:7px">
       Calculated from the above: <strong id="q-calc">—</strong>. Type the
       <strong>full</strong> price here — if you're giving them a discount, put it
-      below and they'll see what it was before.
+      below and they'll see what it was before. Debris removal is added on top of
+      this, not included in it.
+    </p>
+    <p id="q-postcon-hint" style="font-size:0.82rem;color:#8a6d1f;background:#fdf6e6;border-radius:7px;padding:9px 11px;margin-top:9px;display:none">
+      Post-construction gets walked before it gets priced. The calculated figure
+      is a floor to argue up from, not a number to read out — drywall dust, how
+      much the trades left behind and how many times you'll be back all sit
+      outside what bedrooms and bathrooms can tell you.
     </p>
 
     {# Quoting the already-discounted figure is what this replaces: the customer
@@ -221,6 +262,10 @@
             service_type: document.getElementById('q-service').value,
             beds: Number(document.getElementById('q-beds').value) || 0,
             baths: Number(document.getElementById('q-baths').value) || 0,
+            // Sent as null rather than 0 when the box is empty. Zero square feet
+            // is a real answer the surcharge would try to work from; "not asked"
+            // is what an empty box actually means.
+            sqft: Number(document.getElementById('q-sqft').value) || null,
             extras: extras, frequency: 'one_time',
           }),
         });
@@ -232,9 +277,40 @@
       } catch (e) { /* the hint is a convenience; the typed price still sends */ }
     }, 250);
   }
-  document.querySelectorAll('#q-service,#q-beds,#q-baths,.q-extra')
+  document.querySelectorAll('#q-service,#q-beds,#q-baths,#q-sqft,.q-extra')
     .forEach(el => el.addEventListener('input', recalc));
   recalc();
+})();
+
+// Put the haul-off box in front of her on post-construction and keep it out of
+// the way everywhere else — a debris field on a standard clean is a field to
+// wonder about on every quote she'll ever write. It is shown on all three rungs
+// rather than only the full one, because the middle and bottom rungs are exactly
+// where a builder says "actually, could you take the rubbish too" and the answer
+// needs somewhere to go.
+(function () {
+  const svc = document.getElementById('q-service');
+  const block = document.getElementById('q-debris-block');
+  const hint = document.getElementById('q-postcon-hint');
+  const fee = document.getElementById('q-debris');
+  if (!svc || !block) return;
+  const POSTCON = {{ postcon_types|tojson }};
+  const WITH_DEBRIS = {{ debris_types|tojson }};
+
+  function sync() {
+    const on = POSTCON.includes(svc.value);
+    // An amount already typed keeps the box open even after a service change,
+    // so switching rungs mid-call can't silently drop a charge off the quote.
+    block.style.display = (on || Number(fee && fee.value)) ? '' : 'none';
+    if (hint) hint.style.display = on ? '' : 'none';
+    if (on && fee && !fee.value && WITH_DEBRIS.includes(svc.value)) {
+      fee.placeholder = 'Included in this service — put your haul-off cost here';
+    } else if (fee) {
+      fee.placeholder = '0.00';
+    }
+  }
+  svc.addEventListener('change', sync);
+  sync();
 })();
 
 // Swap the tick-list when the service changes. Anything typed into the

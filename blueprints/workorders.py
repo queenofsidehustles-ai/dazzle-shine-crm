@@ -10,6 +10,18 @@ import branding
 
 workorders_bp = Blueprint('workorders', __name__, url_prefix='/workorders')
 
+
+def service_choices():
+    """(key, label) for every service a checklist can belong to.
+
+    Read off Booking.SERVICE_LABELS rather than listed again here. The two
+    checklist templates each carried their own hardcoded list of six, which is
+    how a service could be added to the business and still have nowhere to put
+    its checklist — and the label they showed was the key with a capital letter
+    on it, so a new key had to be named for how it would look title-cased."""
+    return [(k, v) for k, v in Booking.SERVICE_LABELS.items()]
+
+
 DEFAULT_ITEMS = {
     'standard': [
         'Dust all surfaces and furniture', 'Vacuum all carpets and rugs',
@@ -29,6 +41,52 @@ DEFAULT_ITEMS = {
         'Clean inside oven', 'Clean inside refrigerator', 'Clean inside dishwasher',
         'Clean all closets', 'Remove all remaining debris',
         'Final walkthrough — document condition with photos',
+    ],
+    # The three post-construction rungs are one job in three sizes, so each one
+    # is written as the rung below it plus what that rung does not include.
+    # Nobody maintains the same forty lines in three places, and a cleaner
+    # opening the biggest one still gets every item spelled out — checklist_expand
+    # follows the chain down through deep and standard.
+    'postcon_clean': [
+        'All deep clean tasks',
+        'Remove stickers, labels and protective film from windows, appliances and fixtures',
+        'HEPA vacuum drywall dust from walls, ceilings and corners',
+        'Wipe all walls, doors, door frames and trim',
+        'Clean baseboards, crown molding and window casings',
+        'Vacuum and wipe all HVAC vents, registers and return covers',
+        'Wipe outlets, switch plates, thermostats and smoke detectors',
+        'Clean interior windows, tracks, sills and frames',
+        'Remove paint overspray, caulk and adhesive from glass and hardware',
+        'Clean inside all cabinets, drawers and shelving',
+        'Remove grout haze and construction residue from counters, tile and fixtures',
+        'Clean inside and outside of oven, range hood and microwave',
+        'Clean inside and outside of refrigerator and dishwasher',
+        'Clean inside vanities, drawers and medicine cabinets',
+        'Polish all fixtures, mirrors and stainless surfaces',
+        'Clean interior of all closets — shelves, rods, floors',
+        'Wipe down laundry area, utility sink and water heater closet',
+        'Sweep and vacuum all hard floors, carpets and stairs',
+        'Mop all hard floors',
+        'Sweep garage and exterior entry',
+    ],
+    'postcon_final': [
+        'Everything in Post-Construction Detail Clean',
+        'Return visit once the dust has settled — second dust-and-wipe pass throughout',
+        'Re-vacuum all vents, tracks, sills and light fixtures',
+        'Re-clean all glass, mirrors and interior windows',
+        'Damp-mop all hard floors a second time',
+        'Spot-clean marks left by trades returning to the site',
+        'Final walkthrough with the customer — document condition with photos',
+    ],
+    # Debris goes first because it happens first: detail cleaning a room still
+    # full of offcuts and packaging is work done twice.
+    'postcon_full': [
+        'Haul out all remaining construction debris, packaging and jobsite trash',
+        'Remove leftover materials, offcuts and empty containers',
+        'Bag and remove loose trash from every room, the garage and the exterior',
+        'Broom-sweep the whole site before detail cleaning begins',
+        'Dispose of all removed material at a licensed facility',
+        'Everything in Post-Construction Clean + Final Phase',
     ],
     'airbnb': [
         'Strip all beds — bag used linens', 'Make all beds with fresh linens',
@@ -56,7 +114,8 @@ DEFAULT_ITEMS = {
 @login_required
 def templates():
     all_templates = ChecklistTemplate.query.order_by(ChecklistTemplate.name).all()
-    return render_template('admin/checklists.html', templates=all_templates)
+    return render_template('admin/checklists.html', templates=all_templates,
+                           service_choices=service_choices())
 
 
 @workorders_bp.route('/templates/new', methods=['GET', 'POST'])
@@ -75,7 +134,8 @@ def new_template():
         return redirect(url_for('workorders.templates'))
     svc = request.args.get('service_type', 'standard')
     defaults = '\n'.join(DEFAULT_ITEMS.get(svc, DEFAULT_ITEMS['standard']))
-    return render_template('admin/checklist_form.html', template=None, default_items=defaults)
+    return render_template('admin/checklist_form.html', template=None, default_items=defaults,
+                           service_choices=service_choices(), preselect=svc)
 
 
 @workorders_bp.route('/templates/<int:template_id>', methods=['GET', 'POST'])
@@ -91,7 +151,8 @@ def edit_template(template_id):
         flash('Template updated!', 'success')
         return redirect(url_for('workorders.templates'))
     return render_template('admin/checklist_form.html', template=t,
-                           default_items='\n'.join(t.get_items()))
+                           default_items='\n'.join(t.get_items()),
+                           service_choices=service_choices())
 
 
 @workorders_bp.route('/templates/<int:template_id>/delete', methods=['POST'])
