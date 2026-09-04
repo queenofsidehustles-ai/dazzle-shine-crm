@@ -127,9 +127,39 @@ with app.app_context():
 
     print('\n9. But every fact survives')
     for fact in ['280 Ballow Dr', '2026-08-05', 'Lauren Diaz', '$1420.00',
-                 'pi_test_evidence', 'Visa ending 8313', 'before1.jpg', 'after2.jpg',
+                 'pi_test_evidence', 'Visa ending 8313',
                  'Payment received', '11.5']:
         check(fact in clean, f'kept: {fact}')
+
+    print('\n9b. The photographs are their own document, and accounted for in this one')
+    # They used to be thumbnails inline. A bank wants the written account and
+    # the pictures as a separate exhibit, and thirty images in the middle of a
+    # narrative makes both harder to read. What must not happen is the written
+    # record going quiet about them — so it states the count and says where
+    # they are.
+    check('separate photographic exhibit' in clean,
+          'the record says the photographs are submitted alongside it')
+    check('2 before' in clean or 'before' in clean, 'with how many were taken')
+    check('photos=1' in clean, 'and a way to reach the exhibit')
+
+    exhibit = c.get(f'/bookings/{b.id}/dispute-evidence?photos=1').get_data(as_text=True)
+    check('Photographic exhibit' in exhibit, 'the exhibit is its own document')
+    for fact in ['before1.jpg', 'after2.jpg']:
+        check(fact in exhibit, f'holding the photographs: {fact}')
+    for fact in ['Test Cleaning Co', 'pi_test_evidence', '280 Ballow Dr']:
+        check(fact in exhibit, f'and identifying itself: {fact}')
+    check('Before the clean' in exhibit and 'After the clean' in exhibit,
+          'captioned before and after')
+    for phrase in ('working copy', 'winnable'):
+        check(phrase not in exhibit, f'with no internal commentary ("{phrase}")')
+
+    print('\n9c. The printed page is not cut off')
+    # .main-wrap carries a left margin the width of the sidebar. Hiding the
+    # sidebar does not remove it, so every page printed shifted right and the
+    # right-hand edge fell off the paper — invisible on screen, wrong on paper.
+    check('.main-wrap { margin-left: 0 !important' in clean,
+          'the sidebar offset is cleared for print')
+    check('@page' in clean, 'and the page has margins of its own')
 
     print('\n10. The terms are in the clean copy, stated plainly')
     check('Service terms' in clean, 'a terms section is included')

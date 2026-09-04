@@ -21,6 +21,19 @@
     a { color: inherit; text-decoration: none; }
     table { page-break-inside: auto; }
     tr { page-break-inside: avoid; }
+
+    /* The right-hand edge was being cut off every time. .main-wrap carries a
+       left margin the width of the sidebar, and hiding the sidebar does not
+       remove it — so the page printed shifted right and everything past the
+       paper's edge was simply lost. Nothing looked wrong on screen. */
+    .main-wrap { margin-left: 0 !important; width: auto !important; }
+    html, body { width: auto !important; margin: 0 !important; padding: 0 !important; }
+    .detail-grid { display: block !important; }
+    @page { margin: 14mm; }
+
+    /* Photographs are the point of the exhibit — print them at full ink. */
+    img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .shot { page-break-inside: avoid; }
   }
 </style>
 
@@ -35,14 +48,26 @@
 </div>
 {% else %}
 <div class="card internal" style="background:#eefaf0;border:1px solid #a7d8b0">
-  <p style="color:#1c6b34;font-size:0.88rem;margin:0">
+  <p style="color:#1c6b34;font-size:0.88rem;margin:0 0 10px">
     Press <strong>⌘P</strong> and save as PDF. This banner won't print.
   </p>
+  {# Two documents, not one. A bank wants the written account and the
+     photographs as a separate exhibit — and thirty pictures stapled into the
+     middle of a narrative makes both harder to read. #}
+  {% if photos_only %}
+  <a href="{{ url_for('bookings.dispute_evidence', booking_id=b.id, clean=1) }}"
+     class="btn btn-outline" style="padding:7px 16px;font-size:0.85rem">← The written record</a>
+  {% elif photos.before or photos.after %}
+  <a href="{{ url_for('bookings.dispute_evidence', booking_id=b.id, photos=1) }}"
+     class="btn btn-gold" style="padding:7px 16px;font-size:0.85rem">
+     📸 Photo exhibit ({{ (photos.before|length) + (photos.after|length) }}) — print separately</a>
+  {% endif %}
 </div>
 
 <div class="card" style="margin-top:16px">
   <h1 style="font-size:1.25rem;font-weight:700;margin-bottom:4px">{{ BIZ }}</h1>
-  <p style="color:#5f5878;font-size:0.92rem;margin:0">Record of service and payment</p>
+  <p style="color:#5f5878;font-size:0.92rem;margin:0">
+    {% if photos_only %}Photographic exhibit{% else %}Record of service and payment{% endif %}</p>
   <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e4dfef">
     <div class="detail-row"><span class="dl">Customer</span><span class="dv">{{ b.name }}</span></div>
     <div class="detail-row"><span class="dl">Transaction</span><span class="dv" style="font-family:monospace;font-size:0.82rem">{{ b.stripe_payment_intent or '—' }}</span></div>
@@ -52,6 +77,53 @@
   </div>
 </div>
 {% endif %}
+
+{% if photos_only %}
+{# The exhibit. Every photograph large enough to actually show the room, each
+   captioned with what it is and which job it belongs to, so a page separated
+   from the bundle can still be identified. #}
+<div class="card" style="margin-top:16px">
+  <div class="detail-row"><span class="dl">Service address</span><span class="dv">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code or '' }}</span></div>
+  <div class="detail-row"><span class="dl">Date of service</span><span class="dv">{{ b.preferred_date or '—' }}</span></div>
+  {% if checklist and checklist.photos_submitted_at %}
+  <div class="detail-row"><span class="dl">Photographs submitted by the cleaner</span><span class="dv">{{ checklist.photos_submitted_at | stamp }}</span></div>
+  {% endif %}
+  <p style="font-size:0.86rem;color:#5f5878;margin:12px 0 0">
+    {{ (photos.before|length) + (photos.after|length) }} photographs taken by the
+    cleaner at the address on the date of service, uploaded from the job at the
+    time. Presented as an exhibit to the record of service for booking #{{ b.id }}.
+  </p>
+</div>
+
+{% for kind, heading in [('before', 'Before the clean'), ('after', 'After the clean')] %}
+  {% if photos[kind] %}
+  <div class="card" style="margin-top:16px">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px">{{ heading }}</h2>
+    <p style="font-size:0.84rem;color:#5f5878;margin:0 0 14px">
+      {{ photos[kind]|length }} photograph{{ '' if photos[kind]|length == 1 else 's' }}
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
+      {% for url in photos[kind] %}
+      <figure class="shot" style="margin:0">
+        <img src="{{ url }}" style="width:100%;border-radius:8px;border:1px solid #e4dfef;display:block" />
+        <figcaption style="font-size:0.74rem;color:#5f5878;margin-top:5px">
+          {{ heading }} — {{ loop.index }} of {{ photos[kind]|length }} ·
+          Booking #{{ b.id }} · {{ b.preferred_date or '' }}
+        </figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+
+{% if not photos.before and not photos.after %}
+<div class="card" style="margin-top:16px">
+  <p style="color:#991b1b;margin:0">No photographs were recorded for this job.</p>
+</div>
+{% endif %}
+
+{% else %}
 
 <!-- 1 · The service -->
 <div class="card" style="margin-top:16px">
@@ -131,6 +203,13 @@
       ✅ Download these and attach them — dated photographs of the address are the strongest evidence you have.
     </p>
     {% endif %}
+    {% if clean %}
+    <div class="detail-row"><span class="dl">Photographs</span><span class="dv">
+      {{ (photos.before|length) + (photos.after|length) }} taken at the address on the
+      date of service ({{ photos.before|length }} before, {{ photos.after|length }} after) —
+      submitted as a separate photographic exhibit to this record.
+    </span></div>
+    {% else %}
     {% for kind in ['before', 'after'] %}
       {% if photos[kind] %}
       <p style="font-size:0.85rem;font-weight:700;margin:12px 0 6px">{{ kind|capitalize }} ({{ photos[kind]|length }})</p>
@@ -141,6 +220,7 @@
       </div>
       {% endif %}
     {% endfor %}
+    {% endif %}
   {% elif not clean %}
     <p class="internal" style="font-size:0.87rem;color:#991b1b;margin:12px 0 0">
       ⚠️ No photographs were recorded for this job. If the cleaner took any on their own phone,
@@ -240,4 +320,6 @@
   <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;color:#5f5878;line-height:1.6;margin:0">{{ terms }}</pre>
 </div>
 {% endif %}
+
+{% endif %}{# photos_only #}
 {% endblock %}

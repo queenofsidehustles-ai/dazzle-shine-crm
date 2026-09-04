@@ -1799,10 +1799,16 @@ def dispute_evidence(booking_id):
     # The clean view is the document itself — a bank should receive a record of
     # what happened, not a running commentary on how to argue about it.
     clean = request.args.get('clean') == '1'
+    # The photographs are the strongest evidence there is and the worst thing to
+    # staple into the middle of a written record: a bank wants the account of
+    # what happened as one document and the pictures as an exhibit. Same page,
+    # same facts in the header, printed separately.
+    photos_only = request.args.get('photos') == '1'
     return render_template('admin/dispute_evidence.html', b=b, messages=messages,
                            checklist=checklist, photos=photos,
                            terms=customer_terms.get_terms(),
-                           client=b.client, clean=clean,
+                           client=b.client, clean=clean or photos_only,
+                           photos_only=photos_only,
                            prepared=_dt.utcnow())
 
 
