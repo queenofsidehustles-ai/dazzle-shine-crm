@@ -1784,14 +1784,32 @@ def dispute_evidence(booking_id):
                (phone_digits and digits and digits[-10:] == phone_digits[-10:]):
                 messages.append(r)
 
-    checklist = JobChecklist.query.filter_by(booking_id=b.id).first()
+    # Every checklist on this job, not the first one found.
+    #
+    # A job gets a new checklist each time its work order is sent, so re-sending
+    # to a second cleaner, or re-issuing after a change, leaves several. The
+    # photographs are on whichever one the cleaner actually closed out — usually
+    # the last. Reading `.first()` picked an empty one and the page then stated,
+    # in a document prepared for a bank, that no photographs were recorded. On
+    # booking #12 that hid ten before and nine after shots and the timestamp
+    # proving when they were taken: the strongest evidence there is, invisible
+    # on the one page built to collect it.
+    checklists = JobChecklist.query.filter_by(booking_id=b.id).order_by(
+        JobChecklist.id).all()
     photos = {'before': [], 'after': []}
-    if checklist:
-        for key, field in (('before', checklist.before_photos), ('after', checklist.after_photos)):
+    for cl in checklists:
+        for key, field in (('before', cl.before_photos), ('after', cl.after_photos)):
             try:
-                photos[key] = json.loads(field or '[]')
+                for url in json.loads(field or '[]'):
+                    if url not in photos[key]:      # a re-send can repeat them
+                        photos[key].append(url)
             except (ValueError, TypeError):
-                photos[key] = []
+                pass
+    # For the times and the signature, the one that was actually worked: the
+    # latest that got as far as being closed out or clocked into, else the last.
+    checklist = next((c for c in reversed(checklists)
+                      if c.photos_submitted_at or c.clock_in_at or c.completed_at),
+                     checklists[-1] if checklists else None)
 
     import customer_terms
     from datetime import datetime as _dt

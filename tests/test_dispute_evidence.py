@@ -153,6 +153,34 @@ with app.app_context():
     for phrase in ('working copy', 'winnable'):
         check(phrase not in exhibit, f'with no internal commentary ("{phrase}")')
 
+    print('\n9d. Photographs are found on whichever checklist holds them')
+    # A job gets a new checklist every time its work order is sent. Susan's
+    # booking had three: two empty, and the third carrying ten before and nine
+    # after shots. The page read .first(), found the empty one, and stated in a
+    # document prepared for a bank that no photographs were recorded.
+    from models import JobChecklist as _JC
+    extra = Booking(service_type='standard', name='Resent Twice', address='9 Elm',
+                    price=200, status='completed', preferred_date='2026-08-05',
+                    stripe_payment_intent='pi_resent')
+    db.session.add(extra); db.session.commit()
+    db.session.add_all([
+        _JC(booking_id=extra.id, template_name='first send', token='t-a', items='[]'),
+        _JC(booking_id=extra.id, template_name='second send', token='t-b', items='[]'),
+        _JC(booking_id=extra.id, template_name='the worked one', token='t-c', items='[]',
+            before_photos='["https://img/real-before.jpg"]',
+            after_photos='["https://img/real-after.jpg"]',
+            photos_submitted_at=datetime(2026, 8, 5, 18, 0)),
+    ])
+    db.session.commit()
+    page = c.get(f'/bookings/{extra.id}/dispute-evidence?clean=1').get_data(as_text=True)
+    check('separate photographic exhibit' in page,
+          'the record finds the photographs on the third checklist')
+    check('No photographs were recorded' not in page,
+          'and no longer claims there were none')
+    ex = c.get(f'/bookings/{extra.id}/dispute-evidence?photos=1').get_data(as_text=True)
+    check('real-before.jpg' in ex and 'real-after.jpg' in ex, 'the exhibit shows them')
+    check(ex.count('real-before.jpg') == 1, 'each photograph appears once, not per checklist')
+
     print('\n9c. The printed page is not cut off')
     # .main-wrap carries a left margin the width of the sidebar. Hiding the
     # sidebar does not remove it, so every page printed shifted right and the
