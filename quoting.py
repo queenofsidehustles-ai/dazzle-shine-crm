@@ -21,15 +21,43 @@ from models import Lead, Booking, Client, ChecklistTemplate
 from pricing import DEPOSIT_AMOUNT, get_deposit
 
 
+def expanded(items):
+    """A checklist with its shorthand resolved into the actual work.
+
+    Checklists are written as one rung plus the next: a move-out list opens with
+    a single line reading "All deep clean tasks", which stands for the nine deep
+    items, which in turn open with "All standard clean tasks" and another eight.
+    That is good shorthand between people who clean houses for a living, and it
+    is the wrong thing entirely to put in front of somebody deciding whether to
+    spend four hundred dollars. They were shown one line and asked to pay for
+    twenty-four.
+
+    Cleaners have had the expansion since work orders learned to spell the chain
+    out; quotes were still sending the shorthand. Same module, same chain, so
+    the list a customer is promised and the list a cleaner works from cannot
+    describe different jobs."""
+    import checklist_expand
+    return [row['text'] for row in
+            checklist_expand.expand(items or [], checklist_expand.db_lookup)]
+
+
 def service_checklist(service_type):
-    """The standard list for a service — what the cleaners actually work from.
+    """Everything a service actually involves, in full.
 
     Using the same list twice over is the point: the customer is told exactly
     what was going to happen anyway, and there is one place to edit it when the
-    service changes."""
+    service changes.
+
+    Falls back to the built-in list for the service when no template has been
+    written, for the same reason work orders do — a business that has never
+    opened the Checklists page used to send quotes describing no work at all,
+    and that is the business whose quotes most need to say what they are for."""
+    import checklist_expand
     t = (ChecklistTemplate.query.filter_by(service_type=service_type).first()
          if service_type else None)
-    return t.get_items() if t else []
+    items = t.get_items() if t else (checklist_expand.db_lookup(service_type)
+                                     if service_type else None)
+    return expanded(items)
 
 
 def checklist_for(lead_or_service):
@@ -47,7 +75,10 @@ def checklist_for(lead_or_service):
         try:
             items = json.loads(saved)
             if isinstance(items, list):
-                return [str(i) for i in items if str(i).strip()]
+                # Expanded on the way out as well as the way in. A quote saved
+                # before the shorthand was resolved still holds the one-liner,
+                # and it is the customer-facing lists that have to be complete.
+                return expanded([str(i) for i in items if str(i).strip()])
         except ValueError:
             pass          # corrupt somehow — better the standard list than none
     return service_checklist(lead.service_type)
@@ -367,7 +398,11 @@ def send_quote(lead):
     checklist = ''
     if items:
         lines = '\n'.join(f'  •  {i}' for i in items)
-        checklist = f"What's included in your {lead.service_label.lower()}:\n\n{lines}"
+        # The count is the argument. A price with one line under it reads as a
+        # number somebody made up; the same price over twenty-four named tasks
+        # reads as what it costs to do them.
+        checklist = (f"What's included in your {lead.service_label.lower()} "
+                     f"— {len(items)} tasks:\n\n{lines}")
 
     # A discount nobody can see is money given away for nothing, and a haul-off
     # folded into one number is a quote that looks expensive next to one that

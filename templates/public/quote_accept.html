@@ -128,9 +128,12 @@
       {% endif %}
     </div>
 
+    {# Every task, not the shorthand the cleaners work from. Someone deciding
+       whether to spend four hundred dollars is entitled to see the thirty-three
+       things it buys, and the count says it before they read one of them. #}
     {% if checklist %}
     <div class="card">
-      <h1>What's included</h1>
+      <h1>What's included <span style="font-weight:500;color:#9a95ad;font-size:0.8em">— {{ checklist|length }} tasks</span></h1>
       <ul class="incl">
         {% for item in checklist %}<li>{{ item }}</li>{% endfor %}
       </ul>
