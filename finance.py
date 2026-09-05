@@ -19,7 +19,7 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 
 from extensions import db
 from models import (ADVERTISING_CATEGORIES, CATEGORY_GROUP, CATEGORY_LABELS,
@@ -63,10 +63,34 @@ def _dt_bounds(start, end):
 
 
 # ── Money in ────────────────────────────────────────────────────────────────
+def _received():
+    """What a booking has actually taken in, as SQL — payments.collected() in
+    the database, and it must go on agreeing with it.
+
+    The fallbacks carry the weight. Every booking from before the amount was
+    recorded reads NULL, and a plain SUM of the column would drop the entire
+    history out of the P&L; coalescing to zero would be worse still, since it
+    would report a year of paid work as unpaid. So a paid_at means the price of
+    the day was collected, a deposit means the deposit was, and only a booking
+    with neither has taken in nothing."""
+    from pricing import get_deposit
+    return case(
+        (Booking.amount_collected.isnot(None), Booking.amount_collected),
+        (Booking.paid_at.isnot(None), Booking.price),
+        (Booking.deposit_paid.is_(True),
+         func.coalesce(Booking.deposit_amount_paid, Decimal(str(get_deposit())))),
+        else_=0,
+    )
+
+
 def revenue_between(start, end):
-    """Cash actually received in the period — jobs by the date they were PAID."""
+    """Cash actually received in the period — jobs by the date they were PAID.
+
+    Sums what was received rather than what the job costs. Those are the same
+    number until a price is corrected after the money arrived, and then the
+    price is a claim about the future and only the received figure is income."""
     lo, hi = _dt_bounds(start, end)
-    total = db.session.query(func.sum(Booking.price)).filter(
+    total = db.session.query(func.sum(_received())).filter(
         Booking.paid_at.isnot(None), Booking.paid_at >= lo, Booking.paid_at < hi,
     ).scalar()
     return round(float(total or 0), 2)
@@ -91,10 +115,17 @@ def booked_value_between(start, end):
 
 
 def unpaid_outstanding():
-    """Work that's done or confirmed but nobody has paid for yet."""
-    total = db.session.query(func.sum(Booking.price)).filter(
-        Booking.paid_at.is_(None),
+    """Money owed on work that's done or confirmed: price less what came in.
+
+    It used to be the full price of every booking with no paid_at, which both
+    overstated any job that had paid a deposit and — the reason this changed —
+    left out a job that settled and then went up in price, because it counted
+    bookings by a flag rather than by what they still owe. A re-scoped job short
+    by $92 appeared nowhere at all."""
+    owed = Booking.price - _received()
+    total = db.session.query(func.sum(owed)).filter(
         Booking.status.in_(['confirmed', 'completed']),
+        owed > 0,
     ).scalar()
     return round(float(total or 0), 2)
 

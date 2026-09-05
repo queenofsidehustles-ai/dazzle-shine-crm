@@ -65,7 +65,13 @@ with app.app_context():
     check(CHARGES[0]['amount'] == 137000, f"Stripe asked for 137000 cents = $1,370 (got {CHARGES[0]['amount']})")
     check(CHARGES[0]['off_session'] is True, 'as an off-session charge on the saved card')
     db.session.expire_all()
-    check(Booking.query.get(b.id).balance_due == 1370.0, 'and the stored figure was corrected')
+    # The stale $0 was corrected on the way past — the $1,370 Stripe was asked
+    # for above IS that correction. Afterwards the balance is zero, because it
+    # has just been collected; this used to be left reading $1,370 on a job with
+    # nothing outstanding.
+    after = Booking.query.get(b.id)
+    check(after.balance_due == 0, 'and once collected, nothing is owed')
+    check(after.amount_collected == 1420.0, 'with the whole $1,420 recorded as received')
 
     print('\n4. Editing the price keeps the balance in step')
     b2 = Booking(service_type='standard', name='Price Change', address='1 St',

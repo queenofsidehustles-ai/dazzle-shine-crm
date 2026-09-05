@@ -52,7 +52,11 @@ def issue(booking, net_days=None):
 
 
 def status(booking):
-    if booking.paid_at:
+    # Paid means nothing is owed, not that a payment happened. An invoice for a
+    # job whose price went up after it settled has to read as outstanding, or it
+    # is a document telling the customer they owe nothing while they owe $92.
+    from blueprints.payments import is_settled
+    if is_settled(booking):
         return 'paid'
     if not booking.invoice_issued_at:
         return 'draft'
@@ -67,11 +71,16 @@ STATUS_LABELS = {'paid': 'Paid', 'overdue': 'Overdue', 'sent': 'Sent', 'draft': 
 def total_paid(booking):
     """Everything the customer actually handed over — the job plus any tip.
 
-    amount_due() answers the opposite question, what is still owed, and is $0.00
-    the moment a job is paid. That is the right number on an invoice and a
-    useless one on a receipt: nobody can hand a landlord a document that says
-    they paid $0.00."""
-    return round((booking.price or 0) + (booking.tip_amount or 0), 2)
+    amount_due() answers the opposite question, what is still owed, which on a
+    settled job is $0.00. That is the right number on an invoice and a useless
+    one on a receipt: nobody can hand a landlord a document that says they paid
+    $0.00.
+
+    It quotes what was received rather than the price, because those come apart
+    the moment a price is corrected after the fact — and a receipt claiming more
+    than the customer paid is worse than no receipt at all."""
+    from blueprints.payments import collected
+    return round(collected(booking) + (booking.tip_amount or 0), 2)
 
 
 def line_items(booking):
@@ -99,12 +108,17 @@ def line_items(booking):
                      -discount))
     if booking.tip_amount:
         rows.append(('Tip for the cleaner', round(booking.tip_amount, 2)))
-    # A paid job is receipted in full — the deposit was part of what they paid,
-    # not a deduction from it. It only comes off while money is still owed.
-    if booking.deposit_paid and not booking.paid_at:
-        # What they actually paid, not what the deposit is today.
-        _paid = booking.deposit_amount_paid
-        if _paid is None:
-            _paid = get_deposit()
-        rows.append(('Deposit already paid', -abs(_paid)))
+    # A settled job is receipted in full — money already handed over was part of
+    # what they paid, not a deduction from it. It only comes off while something
+    # is still owed, and then it is everything received, not just the deposit: a
+    # job that paid a deposit and a balance and then went up in price owes the
+    # difference, and an invoice that credited only the deposit would bill them
+    # for the balance a second time.
+    from blueprints.payments import collected, is_settled
+    if not is_settled(booking):
+        already = collected(booking)
+        if already > 0:
+            label = ('Deposit already paid' if already == (booking.deposit_amount_paid or get_deposit())
+                     and booking.deposit_paid else 'Already paid')
+            rows.append((label, -abs(already)))
     return rows

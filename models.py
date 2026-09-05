@@ -143,6 +143,25 @@ class Booking(db.Model):
     tip_payment_intent = db.Column(db.String(100))  # the Stripe charge, when tipped after the job
     balance_due = db.Column(Money)
     balance_collected = db.Column(db.Boolean, default=False)
+    # Money actually received against this job's price. Tips are not part of it —
+    # they are the cleaner's, not payment for the work.
+    #
+    # Everything about payment used to be a flag: deposit_paid, balance_collected,
+    # and paid_at meaning "settled in full". A flag is only true against the price
+    # on the day it was set, and prices change — a scope correction after the job
+    # is booked is routine. Raise the price on a settled booking and every flag
+    # still says paid, amount_due() short-circuits to $0, and the difference can
+    # never be collected: the charge button says "nothing to charge" and the
+    # customer's own pay page refuses the money. The CRM reports a job as paid in
+    # full that is $92 short, and nothing anywhere disagrees.
+    #
+    # So what is stored is the amount, not the verdict. "Paid in full" is then a
+    # question the numbers answer (see payments.amount_due), and it re-answers
+    # itself the moment the price moves.
+    #
+    # NULL on every booking taken before this column existed — payments.collected()
+    # falls back to the best that can be known about those.
+    amount_collected = db.Column(Money)
     pay_token = db.Column(db.String(64))       # unique link for paying the full amount (invoice / on-site)
     paid_at = db.Column(db.DateTime)           # when paid in full (card or manual)
     paid_method = db.Column(db.String(20))     # card, cash, zelle, venmo, other

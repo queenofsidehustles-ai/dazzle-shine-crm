@@ -317,8 +317,10 @@ def detail(booking_id):
         # Keep the balance in step with the price. It used to be written only by
         # the price-correction route, so editing the price here left the
         # Balance Collection card — and its charge button — showing a stale $0.
-        from blueprints.payments import amount_due as _due
-        booking.balance_due = _due(booking)
+        # sync_balance also re-answers "is this collected?", which raising the
+        # price on a settled booking silently makes false.
+        from blueprints.payments import sync_balance
+        sync_balance(booking)
         newly_completed = (booking.status == 'completed' and old_status != 'completed')
         if newly_completed:
             from datetime import datetime as _dt
@@ -368,8 +370,9 @@ def detail(booking_id):
         return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     active_staff = Staff.query.filter_by(is_active=True).order_by(Staff.name).all()
-    from blueprints.payments import payment_link_url, amount_due
-    from pricing import get_labor_rate, get_max_labor_percent
+    from blueprints.payments import (payment_link_url, amount_due, collected,
+                                     is_settled)
+    from pricing import get_labor_rate, get_max_labor_percent, get_deposit
     from models import Expense, EXPENSE_CATEGORIES
     pay_url = payment_link_url(booking, 'full')          # ensures pay_token exists
     recurring_upcoming = recurring.upcoming_count(booking.recurring_group) if booking.recurring_group else 0
@@ -431,6 +434,16 @@ def detail(booking_id):
                            SERVICE_LABELS=SERVICE_LABELS, EXTRAS=EXTRAS,
                            FREQUENCY_LABELS=FREQUENCY_LABELS,
                            pay_url=pay_url, due=amount_due(booking),
+                           # Money received and whether anything is still owed,
+                           # kept apart: a job can carry a payment date and a
+                           # balance at the same time, which is what happens when
+                           # the price goes up after it was settled.
+                           collected=collected(booking),
+                           settled=is_settled(booking),
+                           # What a booking with no recorded deposit figure is
+                           # credited — the deposit in force. Shown rather than
+                           # the flat $50 the card used to print regardless.
+                           deposit_amount=get_deposit(),
                            recurring_upcoming=recurring_upcoming,
                            monthly_choices=monthly_choices,
                            plan_suggestion=plan_suggestion,
@@ -697,8 +710,13 @@ def correct_price(booking_id):
         # 1) Save the corrected price first so the fix always sticks.
         prev_price = old_price
         booking.price = new_price
-        deposit_paid = 50 if booking.deposit_paid else 0
-        booking.balance_due = round(max(0.0, new_price - deposit_paid), 2)
+        # What is now owed is the new price less everything actually received —
+        # not less a hardcoded $50. That constant credited a deposit the customer
+        # may never have paid, ignored a deposit that was not $50, and took no
+        # account of a balance already collected, so correcting the price on a
+        # part-paid job wrote a balance that was wrong in both directions.
+        from blueprints.payments import sync_balance
+        sync_balance(booking)
         stamp = datetime.utcnow().strftime('%b %d, %Y')
         booking.internal_notes = ((booking.internal_notes or '')
                                   + f'\n[Price corrected ${prev_price:.2f} → ${new_price:.2f} and customer notified on {stamp}]').strip()
@@ -1232,6 +1250,60 @@ def fix_payment_date(booking_id):
     return back
 
 
+@bookings_bp.route('/<int:booking_id>/amount-collected', methods=['POST'])
+@login_required
+def fix_amount_collected(booking_id):
+    """Correct how much money this booking has actually taken in.
+
+    Payment used to be stored as flags, so no booking made before that changed
+    records what it was paid — only that it was paid, which was true against
+    whatever the price happened to be that day. For almost every one of those
+    the price has not moved since and the two are the same figure. For the ones
+    where it has, the amount is unrecoverable from the row: raising the price
+    after the job settled leaves the old total written down nowhere at all.
+
+    Only the owner knows what actually landed, so she is asked rather than
+    guessed at. Setting it below the price re-opens the balance — the charge
+    button, the payment link and the invoice all follow from this one number."""
+    from blueprints.payments import sync_balance, collected as _collected
+    b = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    raw = (request.form.get('amount_collected') or '').strip().replace('$', '').replace(',', '')
+    try:
+        amount = round(float(raw), 2)
+    except ValueError:
+        flash('Enter the amount received as a number, e.g. 390.00', 'error')
+        return back
+    if amount < 0:
+        flash('The amount received cannot be negative.', 'error')
+        return back
+    price = round(b.price or 0, 2)
+    if amount > price:
+        flash(f'${amount:,.2f} is more than the ${price:,.2f} price on this job. '
+              f'Correct the price first if the job is worth more.', 'error')
+        return back
+
+    was = _collected(b)
+    b.amount_collected = amount
+    # A booking that has taken no money is not a paid booking, and revenue is
+    # counted by this date — leaving it set would keep the whole price in the
+    # P&L on a job nothing has been received for.
+    if amount == 0:
+        b.paid_at = None
+        b.paid_method = None
+    due = sync_balance(b)
+    note = (f'[{date.today().isoformat()}] Amount received corrected '
+            f'${was:,.2f} → ${amount:,.2f}.')
+    b.internal_notes = (note + '\n' + (b.internal_notes or '')).strip()
+    db.session.commit()
+    if due > 0:
+        flash(f'✅ Recorded ${amount:,.2f} received. ${due:,.2f} is still owed on '
+              f'this job — collect it from the Payment card below.', 'success')
+    else:
+        flash(f'✅ Recorded ${amount:,.2f} received — this job is paid in full.', 'success')
+    return back
+
+
 @bookings_bp.route('/_fixdb')
 @login_required
 def fixdb():
@@ -1399,9 +1471,10 @@ def update_service(booking_id):
         repriced = True
 
     # The balance follows the price, or the charge button goes on offering a
-    # figure that is no longer owed.
-    from blueprints.payments import amount_due as _due
-    booking.balance_due = _due(booking)
+    # figure that is no longer owed — and a job re-scoped upwards after it was
+    # paid goes on calling itself collected while the difference is outstanding.
+    from blueprints.payments import sync_balance
+    sync_balance(booking)
 
     if changes:
         note = f'[{date.today().isoformat()}] Service details corrected: {"; ".join(changes)}.'
@@ -1411,9 +1484,16 @@ def update_service(booking_id):
     if not changes:
         flash('Nothing to change — those are the details already on file.', 'info')
     elif repriced:
-        flash(f'✅ Service details updated and the price re-quoted to ${quote:.2f}. '
-              f'The customer has not been told — use “correct the price” if they '
-              f'need to know.', 'success')
+        msg = (f'✅ Service details updated and the price re-quoted to ${quote:.2f}. '
+               f'The customer has not been told — use “correct the price” if they '
+               f'need to know.')
+        # Money that has become owed is worth saying out loud. Raising the price
+        # on a job that was already settled leaves a shortfall that is easy to
+        # miss precisely because the booking still looks paid.
+        if booking.paid_at and booking.balance_due > 0:
+            msg += (f' ⚠️ This job was paid at the old price, so ${booking.balance_due:.2f} '
+                    f'is now outstanding — collect it from the Payment card.')
+        flash(msg, 'success')
     elif quote is not None and quote != old_price:
         # Say the number rather than leaving her to wonder. A quote that has
         # drifted from the price is not necessarily wrong — she may have agreed

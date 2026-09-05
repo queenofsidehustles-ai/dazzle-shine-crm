@@ -8,29 +8,31 @@ import integrations
 def charge_balance(booking) -> tuple:
     """Charge saved card for the remaining balance. Returns (success: bool, error: str).
 
-    The amount comes from amount_due() — price minus any deposit, worked out
-    fresh. It used to come from the stored balance_due column, which is only
-    ever written by the price-correction route: never at booking, never when the
-    price is edited. So on a hand-made booking it sat at $0 and this refused to
-    charge anything at all."""
-    from blueprints.payments import amount_due
+    The amount comes from amount_due() — price minus what has actually been
+    received, worked out fresh. It used to come from the stored balance_due
+    column, which is only ever written by the price-correction route: never at
+    booking, never when the price is edited. So on a hand-made booking it sat at
+    $0 and this refused to charge anything at all.
+
+    What is owed is the only thing that can stop a charge. It used to refuse on
+    paid_at or balance_collected as well, which are records of a past payment
+    rather than of the current balance: a job re-scoped upwards after it settled
+    still owed the difference, and both flags refused to let anyone collect it.
+    A job with nothing outstanding is still refused, by the one test that
+    actually answers that question."""
+    from blueprints.payments import sync_balance
     stripe.api_key = integrations.stripe_secret_key()
     notify_email = branding.owner_email()
 
     if not stripe.api_key:
         return False, 'Stripe not configured'
-    if booking.paid_at:
+    due = sync_balance(booking)        # keep the stored figures honest
+    if due <= 0:
         return False, 'This booking is already paid in full'
-    if booking.balance_collected:
-        return False, 'Balance already collected'
     if not booking.stripe_customer_id or not booking.stripe_payment_method_id:
         return False, 'No saved payment method on file'
 
-    due = amount_due(booking)
-    booking.balance_due = due          # keep the stored figure honest
     amount_cents = int(round(due * 100))
-    if amount_cents <= 0:
-        return False, 'No balance due — check the total price on this booking.'
 
     try:
         intent = stripe.PaymentIntent.create(

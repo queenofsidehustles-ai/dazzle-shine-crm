@@ -936,16 +936,22 @@
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">💳 Payment</h2>
 
-      {% if booking.paid_at %}
+      {# "Paid" is now a question about money, not a flag: the price can go up
+         after a job settles — a three-bed that turns out to be a four-bed — and
+         a booking that took $390 against a $482 price is not paid, however many
+         payment records it carries. #}
+      {% if settled %}
       {# One paid banner, holding the amount, the date, and the way to correct
          the date — the date decides which month this income lands in on the P&L. #}
       <div style="background:#d1fae5;color:#065f46;padding:12px 14px;border-radius:9px;margin-bottom:10px">
         <div style="font-weight:700">
-          ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % (booking.price or 0) }}
+          ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % collected }}
         </div>
         <div style="font-size:0.82rem;margin-top:3px">
-          Received <strong>{{ booking.paid_at.strftime('%b %-d, %Y') }}</strong> — counts as {{ booking.paid_at.strftime('%B') }} income.
+          Received <strong>{{ booking.paid_at.strftime('%b %-d, %Y') if booking.paid_at else '—' }}</strong>
+          {%- if booking.paid_at %} — counts as {{ booking.paid_at.strftime('%B') }} income.{% endif %}
         </div>
+        {% if booking.paid_at %}
         <details style="margin-top:7px">
           <summary style="cursor:pointer;font-size:0.78rem">✎ Wrong date? Fix it</summary>
           <p style="font-size:0.76rem;margin:6px 0;color:#276749">
@@ -959,6 +965,8 @@
             <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.8rem">Save date</button>
           </form>
         </details>
+        {% endif %}
+        {% include 'admin/_fix_collected.html' %}
       </div>
       {# Everything invoice-shaped lives in the unpaid branch below, which is
          correct for chasing money and wrong for proving it was paid. Customers
@@ -975,6 +983,25 @@
             <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
          class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">💸 Correct price &amp; notify customer</a>
       {% else %}
+      {# Money has been taken and money is still owed. Usually the deposit; but
+         also a job settled in full and then re-scoped upwards, which used to
+         claim to be paid while the difference sat uncollectable. #}
+      {% if collected > 0 %}
+      <div style="background:#fef3c7;color:#92400e;padding:12px 14px;border-radius:9px;margin-bottom:10px">
+        <div style="font-weight:700">
+          ⚠️ Part paid — ${{ '%.2f' % collected }} of ${{ '%.2f' % (booking.price or 0) }} received
+        </div>
+        <div style="font-size:0.82rem;margin-top:3px">
+          {% if booking.paid_at %}
+            Paid {{ booking.paid_at.strftime('%b %-d, %Y') }}{% if booking.price and collected < booking.price %},
+            before the price changed{% endif %}. <strong>${{ '%.2f' % due }}</strong> is still owed.
+          {% else %}
+            <strong>${{ '%.2f' % due }}</strong> is still owed.
+          {% endif %}
+        </div>
+        {% include 'admin/_fix_collected.html' %}
+      </div>
+      {% endif %}
       <div class="detail-row"><span class="dl">Amount due</span><span class="dv" style="font-size:1.2rem">${{ '%.2f' % due }}</span></div>
 
       <!-- Take payment on-site -->
@@ -1089,8 +1116,14 @@
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Balance Collection <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.78rem">(saved-card auto-charge)</span></h2>
       <div class="detail-row"><span class="dl">Total Price</span><span class="dv">${{ '%.2f' % (booking.price or 0) }}</span></div>
-      <div class="detail-row"><span class="dl">Deposit Paid</span><span class="dv">$50.00 {% if booking.deposit_paid %}<span style="color:#065f46">✓</span>{% endif %}</span></div>
-      <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:#1f1333">${{ '%.2f' % due }}</span></div>
+      {# The deposit this booking actually paid. This row printed a flat $50.00
+         whatever had happened — including on bookings that paid a different
+         deposit, and on bookings that had paid none at all. #}
+      <div class="detail-row"><span class="dl">Deposit Paid</span><span class="dv">
+        {% if booking.deposit_paid %}${{ '%.2f' % (booking.deposit_amount_paid or deposit_amount) }} <span style="color:#065f46">✓</span>{% else %}—{% endif %}
+      </span></div>
+      <div class="detail-row"><span class="dl">Received in total</span><span class="dv">${{ '%.2f' % collected }}</span></div>
+      <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:{{ '#c05621' if due > 0 else '#1f1333' }}">${{ '%.2f' % due }}</span></div>
 
       {% if booking.deposit_paid and not booking.paid_at %}
       {# For a customer asking for proof they paid the deposit. Deposits taken
@@ -1111,7 +1144,11 @@
       </p>
       {% endif %}
 
-      {% if booking.balance_collected %}
+      {# Gated on what is owed, not on the balance_collected flag. The flag
+         records that a balance was once collected, which stays true after a
+         price rise makes it no longer the whole balance — so a job needing $92
+         showed "Balance collected ✓" and offered no way to take the money. #}
+      {% if due <= 0 %}
       <div style="background:#d1fae5;color:#065f46;padding:11px 14px;border-radius:9px;font-weight:700;font-size:0.9rem;margin-top:10px">
         Balance collected ✓
       </div>

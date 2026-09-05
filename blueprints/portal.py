@@ -11,7 +11,7 @@ import stripe
 from flask import Blueprint, render_template, request, jsonify, abort, session, redirect, url_for
 from models import Client, BusinessSetting
 from extensions import db
-from blueprints.payments import amount_due, ensure_pay_token
+from blueprints.payments import amount_due, ensure_pay_token, is_settled
 import branding
 import integrations
 
@@ -88,14 +88,19 @@ def home(token):
     today = date.today().isoformat()
     active = [b for b in client.bookings if b.status != 'cancelled']
 
-    upcoming = sorted([b for b in active if (b.preferred_date or '') >= today and not b.paid_at],
+    # Still to come, and not yet settled. Judged on what is owed rather than on
+    # a payment date: a visit whose price went up after it was paid still owes
+    # the difference, and hiding it here is how a customer ends up unable to
+    # find the balance she has been asked for.
+    upcoming = sorted([b for b in active
+                       if (b.preferred_date or '') >= today and not is_settled(b)],
                       key=lambda b: b.preferred_date or '')
     # make sure every upcoming unpaid visit has a pay link ready for the "Pay now" button
     for b in upcoming:
-        if amount_due(b) > 0:
-            ensure_pay_token(b)
+        ensure_pay_token(b)
 
-    history = sorted([b for b in active if b.paid_at or (b.preferred_date or '') < today],
+    history = sorted([b for b in active
+                      if is_settled(b) or (b.preferred_date or '') < today],
                      key=lambda b: b.preferred_date or '', reverse=True)
     invoices = sorted([b for b in active if b.invoice_number],
                       key=lambda b: b.invoice_issued_at or datetime.min, reverse=True)
@@ -103,7 +108,8 @@ def home(token):
     pk = integrations.stripe_publishable_key()
     return render_template('public/portal.html', client=client, token=token,
                            upcoming=upcoming, history=history, invoices=invoices,
-                           amount_due=amount_due, stripe_pk=pk, biz=_biz(), today=today)
+                           amount_due=amount_due, settled=is_settled,
+                           stripe_pk=pk, biz=_biz(), today=today)
 
 
 @portal_bp.route('/portal/<token>/setup-intent', methods=['POST'])
@@ -154,7 +160,7 @@ def save_card(token):
 
     today = date.today().isoformat()
     for b in client.bookings:
-        if b.status != 'cancelled' and (b.preferred_date or '') >= today and not b.paid_at:
+        if b.status != 'cancelled' and (b.preferred_date or '') >= today and not is_settled(b):
             b.stripe_customer_id = client.stripe_customer_id
             b.stripe_payment_method_id = pm_id
     db.session.commit()

@@ -1,0 +1,23 @@
+{# Correcting what a booking has actually taken in.
+
+   Every booking made before payments were stored as an amount records only that
+   it was paid — true against whatever the price was that day. Raise the price
+   afterwards and the old total exists nowhere, so the CRM has to ask rather
+   than guess. This one number drives the balance, the charge button, the
+   payment link and the invoice, which is why it is editable in both the paid
+   and the unpaid branch of the Payment card. #}
+<details style="margin-top:7px">
+  <summary style="cursor:pointer;font-size:0.78rem">💵 Money actually received: ${{ '%.2f' % collected }} — correct it</summary>
+  <p style="font-size:0.76rem;margin:6px 0;opacity:0.85">
+    What has really landed for this job, deposit included and tips excluded.
+    Enter less than the ${{ '%.2f' % (booking.price or 0) }} price and the difference
+    becomes a balance you can charge.
+  </p>
+  <form method="POST" action="{{ url_for('bookings.fix_amount_collected', booking_id=booking.id) }}"
+        style="display:flex;gap:6px;align-items:center">
+    <input type="number" name="amount_collected" step="0.01" min="0" required
+           value="{{ '%.2f' % collected }}"
+           style="padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:0.82rem;width:120px" />
+    <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.8rem">Save amount</button>
+  </form>
+</details>
