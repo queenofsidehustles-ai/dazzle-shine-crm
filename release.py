@@ -113,8 +113,32 @@ def pending(line):
     return [l for l in out.split('\n') if l]
 
 
+# What the customer image is built on -- see docker/Dockerfile. The gate has to
+# run on it, because "passes the tests" means nothing if the tests ran somewhere
+# else. This is not pedantry: Python 3.12 changed sum() to compensated summation
+# for floats, so ten dimes come to $1.00 there and to $0.9999999999999999 on
+# 3.9. A suite green on the older one was recording money behaviour production
+# did not have.
+PRODUCTION_PYTHON = (3, 12)
+
+
+def check_python():
+    """Refuse to gate a release from a Python the customers do not run."""
+    if sys.version_info[:2] >= PRODUCTION_PYTHON:
+        return
+    have = '.'.join(str(n) for n in sys.version_info[:3])
+    want = '.'.join(str(n) for n in PRODUCTION_PYTHON)
+    sys.exit(
+        f'You are on Python {have}; the customer image is built on {want}.\n'
+        f'The tests would pass on a version nobody runs, which is not a gate.\n\n'
+        f'  brew install python@{want}\n'
+        f'  python{want} -m pip install -r requirements.txt\n'
+        f'  python{want} release.py ' + ' '.join(sys.argv[1:]))
+
+
 def run_tests():
     """Every suite must pass before anything reaches anybody."""
+    check_python()
     tests = sorted((ROOT / 'tests').glob('test_*.py'))
     say(f'Running {len(tests)} test suites…')
     failed = []

@@ -83,32 +83,43 @@ Checked with:
 python3 -m pip_audit -r requirements.txt
 ```
 
-### Outstanding, and why
+### Outstanding
 
-Nine known vulnerabilities remain, in `aiohttp`, `click`, `python-dotenv`,
-`requests` and `urllib3`. **Every one of them is fixed in a release that
-requires Python 3.10 or newer.**
+None. `pip-audit` reports no known vulnerabilities in what this ships.
 
-The tests run on whatever Python is on the laptop that runs `release.py`, and
-that is currently 3.9. Production builds on 3.12. So the fixes are available to
-production and cannot be verified by the test suite that gates the release —
-and shipping a version the suite has never run against is exactly the trade this
-project does not make elsewhere.
+That was not true earlier: nine remained, in `aiohttp`, `click`, `python-dotenv`,
+`requests` and `urllib3`, and every one was fixed only in a release requiring
+Python 3.10 or newer. The tests ran on the laptop's 3.9 while production built on
+3.12, so the safe versions were available to production and could not be verified
+by the suite that gates the release. Pinning them anyway would have shipped
+versions the tests had never run against, which is the trade this project
+refuses everywhere else.
 
-**The fix is to move the laptop to Python 3.12**, so the environment that gates
-a release is the environment that runs it:
+The fix was to move the gate onto the version production uses rather than to pin
+past it:
 
 ```bash
 brew install python@3.12
 python3.12 -m pip install -r requirements.txt
-python3.12 release.py --akye        # tests now run on the production version
+python3.12 release.py --akye        # the gate now runs where production runs
 ```
 
-Then the remaining pins can move to `requests==2.33.0`, `urllib3==2.7.0`,
-`aiohttp==3.14.3`, `click==8.3.3`, `python-dotenv==1.2.2` and the list is empty.
+`aiohttp`, `urllib3` and `click` are pinned explicitly although nothing here
+imports them. They arrive through twilio, requests and flask, and the versions
+those resolve to on their own still carried published vulnerabilities. A
+transitive dependency is no less reachable for being unmentioned.
 
-Until then this is the honest position: the reachable vulnerabilities have been
-closed, and the rest are held open by a version of Python, not by neglect.
+### The gate checks its own footing
+
+`release.py` now refuses to run the suite on anything older than the version in
+`docker/Dockerfile`, and `tests/test_release.py` checks the two agree.
+
+This is not tidiness. Moving the suite to 3.12 changed a money test: Python 3.12
+gave `sum()` compensated summation for floats, so ten dimes come to exactly
+$1.00 there and to $0.9999999999999999 on 3.9. The suite had been recording the
+drift as current behaviour while production, built on 3.12, no longer had it.
+A test green on a version nobody runs is not a gate, and the difference showed
+up in money.
 
 ### There is no CI running the test suite
 
@@ -116,7 +127,7 @@ Worth stating plainly, because it is easy to assume otherwise. GitHub Actions
 runs the nightly backup and the customer image build. **It does not run the
 tests.** The only thing that runs the full suite is `release.py` on one laptop,
 which is why the version of Python on that laptop is a security question and not
-a preference.
+a preference — and why the gate now refuses to run on the wrong one.
 
 ## Reporting something
 

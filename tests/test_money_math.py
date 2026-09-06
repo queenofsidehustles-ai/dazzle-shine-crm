@@ -362,10 +362,29 @@ with app.app_context():
                      paid_at=datetime.utcnow()) for i in range(10)]
     db.session.add_all(cents)
     db.session.commit()
+    # sum() is not plain repeated addition any more. Python 3.12 gave it
+    # compensated (Neumaier) summation for floats, so ten dimes added with
+    # sum() come to exactly $1.00 there and to $0.9999999999999999 on 3.9.
+    #
+    # Which version this runs on is therefore a money question. The customer
+    # image is built on 3.12, so production has the accurate one — and while
+    # the test suite ran on 3.9 it was asserting the drift as current when
+    # production no longer had it. That is the whole argument for the release
+    # gate running on the version the customers run.
+    #
+    # None of which fixes floating point. It fixes sum(). Money added up any
+    # other way still drifts, which is what the loop below shows and why the
+    # move to decimal is still worth making.
     raw = sum(c.price for c in cents)
-    eq(raw == 1.0, False,
-       'ten times $0.10 does not equal $1.00 in floating point (this is the bug)')
-    eq(round(raw, 2), 1.0, 'rounding to cents hides it — which is why it survives')
+    eq(raw == 1.0, sys.version_info >= (3, 12),
+       'ten dimes add up through sum() exactly on 3.12, and not before')
+
+    running = 0.0
+    for c in cents:
+        running += c.price
+    eq(running == 1.0, False,
+       'added one at a time they still do not reach $1.00 — this is the bug')
+    eq(round(running, 2), 1.0, 'rounding to cents hides it — which is why it survives')
 
     third = Booking(service_type='standard', name='Thirds', status='confirmed',
                     price=100.0, estimated_hours=1.0, labor_rate_applied=43.0)
