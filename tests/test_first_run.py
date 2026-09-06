@@ -125,6 +125,48 @@ check('#bookform { padding-bottom' in book,
       'and the form can scroll clear of it')
 check('flex:0 0 auto; margin:0;' in book, 'the button no longer takes a line of its own')
 
+print('\n9. Settings is seven tabs, not nine')
+settings_tabs = [t for _g, items in navigation.SECTIONS for it in items
+                 if it[2] == 'Settings' for t in it[4]]
+check(len(settings_tabs) == 7, f'{len(settings_tabs)} tabs across the top of Settings')
+names = [t[1] for t in settings_tabs]
+check('What is left to do' not in names,
+      'the setup list is not a settings tab — it is the Getting started card')
+check('Errors' not in names, 'nor is the fault log')
+check(names[0] == 'Business', 'and the first tab is the one a new company needs first')
+
+# Removed from the menu, not from the product: the alert email links straight
+# to the error log, and the Getting started card links to the setup list.
+eps = {r.endpoint for r in app.url_map.iter_rules()}
+check('settings.setup' in eps, 'the full setup list is still a page')
+check('settings.errors_page' in eps, 'and so is the error log')
+
+print('\n10. Getting started climbs while there is setup left')
+unfinished = navigation.sidebar('owner', setup_done=False)
+top = unfinished[0]
+check(top['heading'] == 'Dashboard', 'the first group is Dashboard')
+check(any(i['endpoint'] == 'settings.getting_started' for i in top['items']),
+      'and Getting started is in it while setup is unfinished')
+check(sum(1 for g in unfinished for i in g['items']
+          if i['endpoint'] == 'settings.getting_started') == 1,
+      'appearing once, not twice')
+
+finished = navigation.sidebar('owner', setup_done=True)
+check(not any(i['endpoint'] == 'settings.getting_started'
+              for i in finished[0]['items']),
+      'and drops back down once the last step is done')
+check(any(i['endpoint'] == 'settings.getting_started'
+          for g in finished for i in g['items']),
+      'still reachable, under Setup where it lives')
+
+print('\n11. The pricing page does not open with forty fields')
+pr = open(os.path.join(TPL, 'admin/settings_pricing.html')).read()
+check('<details class="more"' in pr, 'the detail sits behind a fold')
+check('{% if not first_time %} open{% endif %}' in pr,
+      'closed on a first visit, open for a business that has been here before')
+check(pr.index('Fill in the rest') < pr.index('<details class="more"'),
+      'and the one question that fills the grid comes before the fold')
+
 print('\n8. The pages still render')
 c = app.test_client()
 r = c.get('/book', headers={'Host': 'acme.akye.test'})

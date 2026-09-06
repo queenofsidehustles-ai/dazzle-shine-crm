@@ -2,6 +2,18 @@
 {% block title %}Pricing Settings — {{ BIZ }} CRM{% endblock %}
 
 {% block content %}
+<style>
+  details.more > summary {
+    cursor:pointer; list-style:none; margin:4px 0 16px;
+    font-size:1rem; font-weight:700; color:var(--softer);
+    text-transform:uppercase; letter-spacing:.12em;
+    padding:14px 16px; background:var(--surface);
+    border:1px solid var(--line); border-radius:12px;
+  }
+  details.more > summary::-webkit-details-marker { display:none; }
+  details.more > summary::after { content:' ▾'; }
+  details.more[open] > summary::after { content:' ▴'; }
+</style>
 <form method="POST">
   <div class="card" style="margin-bottom:16px">
     <h2 class="sec">What you charge</h2>
@@ -72,6 +84,11 @@
     </div>
   </div>
 
+  {# Everything past the price list. On a first visit this is folded:
+     the question above fills the whole grid, and forty fields arguing
+     with it is how somebody decides this is not for them. #}
+  <details class="more"{% if not first_time %} open{% endif %}>
+    <summary>Deposit, cleaner pay, bigger homes and add-ons</summary>
   <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Deposit</h2>
     <div class="form-group" style="max-width:200px">
@@ -204,6 +221,8 @@
       </table>
     </div>
   </div>
+
+  </details>
 
   <button type="submit" class="btn btn-gold">Save Pricing</button>
 </form>

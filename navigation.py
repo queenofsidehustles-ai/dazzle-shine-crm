@@ -93,16 +93,19 @@ SECTIONS = [
         # noticing a banner that disappears the moment the last step is done —
         # so a business that half-finished had no way back to it, and said so.
         ('settings.getting_started', '🚀', 'Getting started', False, []),
-        ('settings.pricing', '⚙️', 'Settings', True, [
-            ('settings.pricing', 'Pricing', True),
+        # Nine tabs, two of which were setup trackers or a fault log. Both
+        # routes still exist -- `settings.setup` is reached from the Getting
+        # started card, and the error log from the alert email that names it --
+        # they are simply not a thing a cleaning company reads across the top of
+        # its own settings. What is left is ordered by how soon it is needed.
+        ('settings.business', '⚙️', 'Settings', True, [
             ('settings.business', 'Business', True),
-            ('settings.commercial', 'Commercial brand', True),
+            ('settings.pricing', 'Pricing', True),
             ('settings.followup_texts', 'Follow-up texts', True),
             ('settings.connections', 'Connections', True),
-            ('settings.setup', 'What is left to do', True),
             ('settings.automations_page', 'Automations', True),
             ('team_logins.index', 'Team logins', True),
-            ('settings.errors_page', 'Errors', True),
+            ('settings.commercial', 'Commercial brand', True),
         ]),
     ]),
 ]
@@ -207,7 +210,7 @@ def _always_allowed(_feature):
     return True
 
 
-def sidebar(role='owner', can=None):
+def sidebar(role='owner', can=None, setup_done=True):
     """The menu to draw, already filtered to what this person may see.
 
     `can(feature)` decides plan access. A page their plan does not include is
@@ -217,11 +220,18 @@ def sidebar(role='owner', can=None):
     """
     can = can or _always_allowed
     out = []
+    # Getting started sits under SETUP, last, below fifteen things a company on
+    # its first day cannot use yet. For the fortnight it matters it is the most
+    # important link on the page, so while there is setup left it moves to the
+    # top and drops back once there is not.
+    promote = None if setup_done else 'settings.getting_started'
     for heading, items in SECTIONS:
         visible = []
         for ep, icon, label, owner_only, tabs in items:
             if not (_is_owner(role) or not owner_only):
                 continue
+            if ep == promote and heading != 'Dashboard':
+                continue                      # drawn at the top instead
             visible.append({
                 'endpoint': ep, 'icon': icon, 'label': label,
                 'locked': _locked(ep, can),
@@ -229,6 +239,14 @@ def sidebar(role='owner', can=None):
                           'locked': _locked(t[0], can)}
                          for t in tabs if _is_owner(role) or not t[2]],
             })
+        if heading == 'Dashboard' and promote:
+            for _h, its in SECTIONS:
+                for it in its:
+                    if it[0] == promote:
+                        visible.append({
+                            'endpoint': it[0], 'icon': it[1], 'label': it[2],
+                            'locked': _locked(it[0], can), 'tabs': [],
+                        })
         if visible:
             out.append({'heading': heading, 'items': visible})
     return out
