@@ -80,7 +80,7 @@
   <div class="main-wrap">
     <div class="topbar">
       <button class="hamburger" onclick="toggleNav()" aria-label="Open menu">☰</button>
-      <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+      <h1>{% block page_title %}{{ NAV_TITLE or 'Dashboard' }}{% endblock %}</h1>
 
       {% if BRAND_LENS_CHOICES %}
       {# Which side of the business is on screen. Deliberately loud when it is
@@ -119,7 +119,11 @@
          clock says "you have not begun", the other says "you are running
          out", and a state with neither is how a trial becomes something
          somebody thinks they can come back to whenever. #}
-      {% if TRIAL and not TRIAL.expired %}
+      {# Only where somebody is deciding what to do next. On a phone these
+         banners plus the Getting started card filled the whole first screen,
+         so you scrolled past three blocks of nagging to reach today's jobs. #}
+      {% set ON_START = request.endpoint in ('admin.dashboard', 'settings.getting_started') %}
+      {% if ON_START and TRIAL and not TRIAL.expired %}
       <a href="{{ url_for('billing.upgrade') }}" class="trialbar {{ 'urgent' if TRIAL.days_left <= 3 }}">
         {% if TRIAL.phase == 'not_started' %}
           {# Says exactly what starts it. This used to say "assign a job",
@@ -135,7 +139,7 @@
         {% endif %}
         <span class="go">See plans →</span>
       </a>
-      {% elif TRIAL and TRIAL.expired %}
+      {% elif ON_START and TRIAL and TRIAL.expired %}
       <a href="{{ url_for('billing.upgrade') }}" class="trialbar over">
         <b>Your trial has finished.</b>
         You are on the free plan — everything you entered is still here.
@@ -143,12 +147,6 @@
       </a>
       {% endif %}
 
-      {% if SETUP_PENDING and request.endpoint != 'settings.setup' %}
-      <a href="{{ url_for('settings.setup') }}" class="setup-banner">
-        <strong>Finish setting up your CRM</strong> — {{ SETUP_PENDING }} still to do before you can take real bookings.
-        <span style="text-decoration:underline">Show me →</span>
-      </a>
-      {% endif %}
       {% block content %}{% endblock %}
     </div>
   </div>

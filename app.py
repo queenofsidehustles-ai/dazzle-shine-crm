@@ -244,8 +244,20 @@ def create_app():
             role = session.get('role', 'owner')
             can = entitlements.can
             tabs, active_tab = navigation.tabs_for(request.endpoint, role, can)
-            return {'NAV': navigation.sidebar(role, can),
+            # Whether there is still setup to do decides where Getting started
+            # sits. Cheap: the flag is written once the last step is done and
+            # read from settings thereafter, so an established business is not
+            # recomputing its onboarding on every page.
+            setup_done = True
+            try:
+                from models import BusinessSetting
+                if session.get('role') == 'owner':
+                    setup_done = BusinessSetting.get('setup_complete') == '1'
+            except Exception:
+                pass
+            return {'NAV': navigation.sidebar(role, can, setup_done),
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
+                    'NAV_TITLE': navigation.title_for(request.endpoint),
                     'NAV_TABS': tabs,
                     'NAV_ACTIVE_TAB': active_tab}
         except Exception:

@@ -343,7 +343,19 @@ def pricing():
     # The anchor is whatever they charge for the commonest house. Shown as the
     # one question, with the rest of the list underneath it.
     anchor = (2, 2)
+    # A company that has never set prices is here because Getting started sent
+    # it, and the page it lands on has around forty inputs. The one question at
+    # the top answers most of them, so on the first visit everything else waits
+    # behind a fold rather than competing with it.
+    first_time = False
+    try:
+        import onboarding
+        first_time = not next((st['done'] for st in onboarding.journey()
+                               if st['key'] == 'pricing'), True)
+    except Exception:
+        pass
     return render_template('admin/settings_pricing.html',
+                           first_time=first_time,
                            services=SERVICES, extras=EXTRAS,
                            sizes=sizes, matrix=matrix, anchor=anchor,
                            anchor_price=matrix.get(anchor, 0),
