@@ -30,6 +30,7 @@ Nothing here touches a database or a customer's settings. It moves a git
 branch, and Railway does the rest.
 """
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -123,17 +124,35 @@ PRODUCTION_PYTHON = (3, 12)
 
 
 def check_python():
-    """Refuse to gate a release from a Python the customers do not run."""
+    """Refuse to gate a release from a Python the customers do not run.
+
+    Homebrew's python refuses to install packages into itself (PEP 668), so the
+    right version of Python and the packages the tests import do not live in the
+    same place. Rather than make somebody remember which interpreter to type,
+    this hands over to the project's own .venv when the one in use is too old.
+    """
     if sys.version_info[:2] >= PRODUCTION_PYTHON:
         return
-    have = '.'.join(str(n) for n in sys.version_info[:3])
+
     want = '.'.join(str(n) for n in PRODUCTION_PYTHON)
+    venv = ROOT / '.venv' / 'bin' / 'python'
+
+    # The sentinel stops this looping if the venv is itself too old: it gets one
+    # attempt, and then falls through to the message below.
+    if venv.exists() and not os.environ.get('RELEASE_HANDED_OVER'):
+        say(f'Handing over to .venv (Python {want}) — the version customers run.\n')
+        os.environ['RELEASE_HANDED_OVER'] = '1'
+        os.execv(str(venv), [str(venv), str(ROOT / 'release.py')] + sys.argv[1:])
+
+    have = '.'.join(str(n) for n in sys.version_info[:3])
     sys.exit(
         f'You are on Python {have}; the customer image is built on {want}.\n'
         f'The tests would pass on a version nobody runs, which is not a gate.\n\n'
+        f'There is no usable .venv to hand over to. Make one:\n\n'
         f'  brew install python@{want}\n'
-        f'  python{want} -m pip install -r requirements.txt\n'
-        f'  python{want} release.py ' + ' '.join(sys.argv[1:]))
+        f'  python{want} -m venv .venv\n'
+        f'  .venv/bin/python -m pip install -r requirements.txt\n\n'
+        f'Then run this again exactly as you did.')
 
 
 def run_tests():

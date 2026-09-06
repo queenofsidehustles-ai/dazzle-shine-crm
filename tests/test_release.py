@@ -186,3 +186,14 @@ if os.path.exists(_dockerfile):
     check(f'python:{_v}' in open(_dockerfile).read(),
           f'and it is the same version the Dockerfile builds ({_v})')
 check(hasattr(_rel, 'check_python'), 'and refuses to gate from an older one')
+
+# Homebrew's python will not install packages into itself (PEP 668), so the
+# right Python and the packages the tests import are in different places. Making
+# somebody remember which interpreter to type is how the wrong one gets typed,
+# so an old interpreter hands over to the project's .venv instead.
+_src = open(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), 'release.py')).read()
+check('.venv' in _src and 'execv' in _src,
+      'an older Python hands over to the project .venv rather than refusing')
+check('RELEASE_HANDED_OVER' in _src,
+      'once only, so a .venv that is also too old cannot loop')
