@@ -108,6 +108,24 @@ def _legal_ctx():
             'signups_open': signups_open()}
 
 
+@marketing_bp.route('/security')
+def security():
+    """How the data is held, for the owner deciding whether to trust us with it.
+
+    Not on the legal shell. Those pages are undertakings waiting on a lawyer;
+    this one describes what the software does, and every line of it is
+    checkable against the code.
+    """
+    _require_product_site()
+    # Its own date. The three legal pages share one so they cannot disagree
+    # about when the wording last changed; this page changes when the software's
+    # protections change, which is a different event and usually a different day.
+    import os
+    ctx = _legal_ctx()
+    ctx['UPDATED'] = os.environ.get('SECURITY_UPDATED', '6 September 2026')
+    return render_template('marketing/security.html', **ctx)
+
+
 @marketing_bp.route('/pricing')
 def pricing():
     _require_product_site()
@@ -115,6 +133,11 @@ def pricing():
     return render_template('marketing/pricing.html',
                            plans=entitlements.PLANS,
                            signups_open=signups_open())
+
+
+# Which company this browser went to last. Six months, because the gap between
+# one office manager signing in and the next can be a season.
+WORKSPACE_COOKIE = 'akye_workspace'
 
 
 @marketing_bp.route('/workspace', methods=['GET', 'POST'])
@@ -132,6 +155,18 @@ def workspace():
     import re
     error = None
     typed = ''
+
+    # What this browser used last time. A convenience only: it is this
+    # visitor's own choice written back to them, so it tells them nothing they
+    # did not already know and still looks nothing up.
+    remembered = re.sub(r'[^a-z0-9-]', '',
+                        (request.cookies.get(WORKSPACE_COOKIE) or '').lower())[:40]
+
+    if request.args.get('forget'):
+        resp = redirect(url_for('marketing.workspace'))
+        resp.delete_cookie(WORKSPACE_COOKIE)
+        return resp
+
     if request.method == 'POST':
         typed = (request.form.get('workspace') or '').strip().lower()
         # Accept anything they might paste: a bare name, the full host, a URL.
@@ -146,9 +181,20 @@ def workspace():
             error = 'This deployment has no company addresses configured.'
         else:
             scheme = product.scheme_for(base)
-            return redirect(f'{scheme}://{slug}.{base}/login')
+            resp = redirect(f'{scheme}://{slug}.{base}/login')
+            # Remembered so the next visit is one click. Not a login and not a
+            # session -- it carries a company address and nothing else, so the
+            # worst it can do if read is name the company this browser uses.
+            resp.set_cookie(WORKSPACE_COOKIE, slug,
+                            max_age=60 * 60 * 24 * 180,
+                            secure=scheme == 'https', httponly=True,
+                            samesite='Lax')
+            return resp
+
     from blueprints.signup import signups_open
     return render_template('marketing/workspace.html', error=error, typed=typed,
+                           remembered=remembered,
+                           product_domain=(product.domain() or '').lower(),
                            signups_open=signups_open())
 
 
@@ -187,6 +233,7 @@ def sitemap():
     pages = [
         ('/', '1.0'),
         (url_for('marketing.pricing'), '0.9'),
+        (url_for('marketing.security'), '0.5'),
         (url_for('marketing.terms'), '0.3'),
         (url_for('marketing.privacy'), '0.3'),
         (url_for('marketing.subprocessors'), '0.2'),

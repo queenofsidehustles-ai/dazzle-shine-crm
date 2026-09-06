@@ -32,6 +32,10 @@
     color:var(--softer); font-size:1rem; font-weight:550; white-space:nowrap;
   }
   .ws button { width:100%; margin-top:16px; border:0; cursor:pointer; font-family:inherit; }
+  .ws .btn.known {
+    display:block; width:100%; margin-top:22px; text-align:center;
+    text-decoration:none; word-break:break-all;
+  }
   .ws .err {
     background:var(--warn-soft); color:var(--warn); border:1px solid #f6cfcf;
     border-radius:10px; padding:10px 14px; font-size:.9rem; margin-top:18px;
@@ -45,10 +49,22 @@
 <div class="ws-wrap">
   <div class="wrap">
     <div class="ws">
-      <h1>Which company?</h1>
+      <h1>{% if remembered %}Welcome back{% else %}Which company?{% endif %}</h1>
       {# There is no CRM at the product's own address. Every business runs on
          its own, and its people sign in there -- so the only useful thing this
          page can do is take them to the right one. #}
+      {% if remembered %}
+      {# One click for the returning visitor. Still no lookup: this is the
+         address this browser typed last time, handed back to it. #}
+      <p class="sub">Last time you signed in here.</p>
+      <a class="btn known"
+         href="https://{{ remembered }}.{{ product_domain or 'akyehq.com' }}/login">
+        Continue to {{ remembered }}.{{ product_domain or 'akyehq.com' }}
+      </a>
+      <p class="hint" style="margin-top:14px">
+        <a href="?forget=1">Sign in to a different company</a>
+      </p>
+      {% else %}
       <p class="sub">
         Every business has its own address. Yours is in the welcome email,
         and it is the one your cleaners already use.
@@ -65,6 +81,7 @@
         {% if error %}<div class="err">{{ error }}</div>{% endif %}
         <button type="submit" class="btn">Go to my sign-in</button>
       </form>
+      {% endif %}
 
       <p class="hint">
         Not sure of the address? It is in the email you got when the account
