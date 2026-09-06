@@ -78,7 +78,15 @@ with app.app_context():
     check(lead.quote_token in body, 'along with her own link, not the generic one')
     check('Scrub baseboards throughout' in body,
           'and the deep-clean checklist she was promised')
-    check('Everything in Standard Cleaning' in body, 'in full, not a summary')
+    # This used to assert the opposite — that the literal line "Everything in
+    # Standard Cleaning" reached the customer — which is the summary, not the
+    # detail. It stands for twelve tasks, and a customer weighing $415 was shown
+    # the cross-reference instead of the work.
+    check('Everything in Standard Cleaning' not in body,
+          'the shorthand a cleaner reads does not go to the customer')
+    check('Vacuum all floors and rugs' in body and 'Mop hard floors' in body,
+          'the standard tasks it stands for are spelled out instead')
+    check('23 tasks' in body, 'and the count is stated, so the price has something to sit against')
     check('Deep Cleaning' in body, 'naming the service in plain English')
 
     print('\n4. Quoting stops the texts written for people we never reached')

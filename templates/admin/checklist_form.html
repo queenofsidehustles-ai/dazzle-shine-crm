@@ -17,8 +17,8 @@
         <label>Service Type</label>
         <select name="service_type">
           <option value="">All services</option>
-          {% for svc in ['standard','deep','moveout','airbnb','apartment','luxury'] %}
-          <option value="{{ svc }}" {{ 'selected' if template and template.service_type == svc }}>{{ svc.title() }}</option>
+          {% for svc, label in service_choices %}
+          <option value="{{ svc }}" {{ 'selected' if (template and template.service_type == svc) or (not template and preselect == svc) }}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>

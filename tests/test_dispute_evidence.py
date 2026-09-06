@@ -127,9 +127,67 @@ with app.app_context():
 
     print('\n9. But every fact survives')
     for fact in ['280 Ballow Dr', '2026-08-05', 'Lauren Diaz', '$1420.00',
-                 'pi_test_evidence', 'Visa ending 8313', 'before1.jpg', 'after2.jpg',
+                 'pi_test_evidence', 'Visa ending 8313',
                  'Payment received', '11.5']:
         check(fact in clean, f'kept: {fact}')
+
+    print('\n9b. The photographs are their own document, and accounted for in this one')
+    # They used to be thumbnails inline. A bank wants the written account and
+    # the pictures as a separate exhibit, and thirty images in the middle of a
+    # narrative makes both harder to read. What must not happen is the written
+    # record going quiet about them — so it states the count and says where
+    # they are.
+    check('separate photographic exhibit' in clean,
+          'the record says the photographs are submitted alongside it')
+    check('2 before' in clean or 'before' in clean, 'with how many were taken')
+    check('photos=1' in clean, 'and a way to reach the exhibit')
+
+    exhibit = c.get(f'/bookings/{b.id}/dispute-evidence?photos=1').get_data(as_text=True)
+    check('Photographic exhibit' in exhibit, 'the exhibit is its own document')
+    for fact in ['before1.jpg', 'after2.jpg']:
+        check(fact in exhibit, f'holding the photographs: {fact}')
+    for fact in ['Test Cleaning Co', 'pi_test_evidence', '280 Ballow Dr']:
+        check(fact in exhibit, f'and identifying itself: {fact}')
+    check('Before the clean' in exhibit and 'After the clean' in exhibit,
+          'captioned before and after')
+    for phrase in ('working copy', 'winnable'):
+        check(phrase not in exhibit, f'with no internal commentary ("{phrase}")')
+
+    print('\n9d. Photographs are found on whichever checklist holds them')
+    # A job gets a new checklist every time its work order is sent. Susan's
+    # booking had three: two empty, and the third carrying ten before and nine
+    # after shots. The page read .first(), found the empty one, and stated in a
+    # document prepared for a bank that no photographs were recorded.
+    from models import JobChecklist as _JC
+    extra = Booking(service_type='standard', name='Resent Twice', address='9 Elm',
+                    price=200, status='completed', preferred_date='2026-08-05',
+                    stripe_payment_intent='pi_resent')
+    db.session.add(extra); db.session.commit()
+    db.session.add_all([
+        _JC(booking_id=extra.id, template_name='first send', token='t-a', items='[]'),
+        _JC(booking_id=extra.id, template_name='second send', token='t-b', items='[]'),
+        _JC(booking_id=extra.id, template_name='the worked one', token='t-c', items='[]',
+            before_photos='["https://img/real-before.jpg"]',
+            after_photos='["https://img/real-after.jpg"]',
+            photos_submitted_at=datetime(2026, 8, 5, 18, 0)),
+    ])
+    db.session.commit()
+    page = c.get(f'/bookings/{extra.id}/dispute-evidence?clean=1').get_data(as_text=True)
+    check('separate photographic exhibit' in page,
+          'the record finds the photographs on the third checklist')
+    check('No photographs were recorded' not in page,
+          'and no longer claims there were none')
+    ex = c.get(f'/bookings/{extra.id}/dispute-evidence?photos=1').get_data(as_text=True)
+    check('real-before.jpg' in ex and 'real-after.jpg' in ex, 'the exhibit shows them')
+    check(ex.count('real-before.jpg') == 1, 'each photograph appears once, not per checklist')
+
+    print('\n9c. The printed page is not cut off')
+    # .main-wrap carries a left margin the width of the sidebar. Hiding the
+    # sidebar does not remove it, so every page printed shifted right and the
+    # right-hand edge fell off the paper — invisible on screen, wrong on paper.
+    check('.main-wrap { margin-left: 0 !important' in clean,
+          'the sidebar offset is cleared for print')
+    check('@page' in clean, 'and the page has margins of its own')
 
     print('\n10. The terms are in the clean copy, stated plainly')
     check('Service terms' in clean, 'a terms section is included')

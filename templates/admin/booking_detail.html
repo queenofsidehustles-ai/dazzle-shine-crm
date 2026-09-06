@@ -954,20 +954,80 @@
     </div>
     {% endif %}
 
+    <!-- On hold / bring it back -->
+    {# A customer who needs to move a cleaning but has no new date in mind used
+       to leave two choices, both wrong: leave it confirmed and the morning-of
+       cron charges her card and sends a cleaner to an empty house, or cancel it
+       and sever her deposit from the work. #}
+    {% if booking.is_held %}
+    <div class="card" style="margin-top:18px;border:1px solid var(--amber-line);background:var(--amber-soft)">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--amber-deep);text-transform:uppercase;letter-spacing:0.12em">⏸️ On hold</h2>
+      <p style="font-size:0.86rem;color:var(--amber-deep);margin:0 0 4px">
+        Paused {{ booking.held_at.strftime('%b %-d, %Y') if booking.held_at else '' }} —
+        <strong>{{ booking.days_on_hold }} day{{ '' if booking.days_on_hold == 1 else 's' }}</strong> waiting for a date.
+      </p>
+      {% if booking.hold_note %}
+      <p style="font-size:0.84rem;color:var(--muted);margin:0 0 4px">“{{ booking.hold_note }}”</p>
+      {% endif %}
+      <p style="font-size:0.82rem;color:var(--muted);margin:0 0 12px">
+        Nothing is charged, no reminders go out, and no cleaner is expected.
+        {% if collected > 0 %}Her <strong>${{ '%.2f' % collected }}</strong> is still held against this job.{% endif %}
+      </p>
+      <form method="POST" action="{{ url_for('bookings.resume', booking_id=booking.id) }}">
+        <label class="dl" style="display:block;margin-bottom:5px">The date she's picked</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input type="date" name="preferred_date" required
+                 style="padding:9px 11px;border:1px solid var(--amber-line);border-radius:8px;flex:1;min-width:150px" />
+          <input type="text" name="preferred_time" placeholder="Time (optional)"
+                 value="{{ booking.preferred_time or '' }}"
+                 style="padding:9px 11px;border:1px solid var(--amber-line);border-radius:8px;width:150px" />
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:0.84rem;color:var(--muted);margin:10px 0;cursor:pointer">
+          <input type="checkbox" name="tell_customer" value="1" checked style="width:auto">
+          Email + text her the new confirmation
+        </label>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">▶️ Put it back on for this date</button>
+      </form>
+    </div>
+    {% elif booking.status not in ('completed', 'cancelled') %}
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">⏸️ Put this on hold</h2>
+      <p style="font-size:0.82rem;color:var(--muted);margin:0 0 10px">
+        For a customer who needs to move the clean but hasn't picked a day. It comes
+        off the schedule, her card is never charged, her deposit stays on the job, and
+        {% if booking.assigned_cleaner or booking.crew %}your cleaner is texted not to go{% else %}nobody is sent{% endif %}.
+        She gets an email saying her money is safe.
+      </p>
+      <form method="POST" action="{{ url_for('bookings.hold', booking_id=booking.id) }}"
+            onsubmit="return confirm('Put this job on hold? The customer and any assigned cleaner will be told.')">
+        <input type="text" name="hold_note" maxlength="200"
+               placeholder="What she said — e.g. work trip, closing delayed"
+               style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;margin-bottom:9px" />
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">⏸️ Hold it until she's ready</button>
+      </form>
+    </div>
+    {% endif %}
+
     <!-- Balance Collection Card -->
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">💳 Payment</h2>
 
-      {% if booking.paid_at %}
+      {# "Paid" is now a question about money, not a flag: the price can go up
+         after a job settles — a three-bed that turns out to be a four-bed — and
+         a booking that took $390 against a $482 price is not paid, however many
+         payment records it carries. #}
+      {% if settled %}
       {# One paid banner, holding the amount, the date, and the way to correct
          the date — the date decides which month this income lands in on the P&L. #}
       <div style="background:var(--good-soft);color:var(--good);padding:12px 14px;border-radius:9px;margin-bottom:10px">
         <div style="font-weight:700">
-          ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % (booking.price or 0) }}
+          ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % collected }}
         </div>
         <div style="font-size:0.82rem;margin-top:3px">
-          Received <strong>{{ booking.paid_at.strftime('%b %-d, %Y') }}</strong> — counts as {{ booking.paid_at.strftime('%B') }} income.
+          Received <strong>{{ booking.paid_at.strftime('%b %-d, %Y') if booking.paid_at else '—' }}</strong>
+          {%- if booking.paid_at %} — counts as {{ booking.paid_at.strftime('%B') }} income.{% endif %}
         </div>
+        {% if booking.paid_at %}
         <details style="margin-top:7px">
           <summary style="cursor:pointer;font-size:0.78rem">✎ Wrong date? Fix it</summary>
           <p style="font-size:0.76rem;margin:6px 0;color:var(--good)">
@@ -981,6 +1041,8 @@
             <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.8rem">Save date</button>
           </form>
         </details>
+        {% endif %}
+        {% include 'admin/_fix_collected.html' %}
       </div>
       {# Everything invoice-shaped lives in the unpaid branch below, which is
          correct for chasing money and wrong for proving it was paid. Customers
@@ -997,6 +1059,25 @@
             <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
          class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">💸 Correct price &amp; notify customer</a>
       {% else %}
+      {# Money has been taken and money is still owed. Usually the deposit; but
+         also a job settled in full and then re-scoped upwards, which used to
+         claim to be paid while the difference sat uncollectable. #}
+      {% if collected > 0 %}
+      <div style="background:var(--amber-soft);color:var(--amber-deep);padding:12px 14px;border-radius:9px;margin-bottom:10px">
+        <div style="font-weight:700">
+          ⚠️ Part paid — ${{ '%.2f' % collected }} of ${{ '%.2f' % (booking.price or 0) }} received
+        </div>
+        <div style="font-size:0.82rem;margin-top:3px">
+          {% if booking.paid_at %}
+            Paid {{ booking.paid_at.strftime('%b %-d, %Y') }}{% if booking.price and collected < booking.price %},
+            before the price changed{% endif %}. <strong>${{ '%.2f' % due }}</strong> is still owed.
+          {% else %}
+            <strong>${{ '%.2f' % due }}</strong> is still owed.
+          {% endif %}
+        </div>
+        {% include 'admin/_fix_collected.html' %}
+      </div>
+      {% endif %}
       <div class="detail-row"><span class="dl">Amount due</span><span class="dv" style="font-size:1.2rem">${{ '%.2f' % due }}</span></div>
 
       <!-- Take payment on-site -->
@@ -1111,8 +1192,14 @@
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Balance Collection <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.78rem">(saved-card auto-charge)</span></h2>
       <div class="detail-row"><span class="dl">Total Price</span><span class="dv">${{ '%.2f' % (booking.price or 0) }}</span></div>
-      <div class="detail-row"><span class="dl">Deposit Paid</span><span class="dv">$50.00 {% if booking.deposit_paid %}<span style="color:var(--good)">✓</span>{% endif %}</span></div>
-      <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:var(--ink)">${{ '%.2f' % due }}</span></div>
+      {# The deposit this booking actually paid. This row printed a flat $50.00
+         whatever had happened — including on bookings that paid a different
+         deposit, and on bookings that had paid none at all. #}
+      <div class="detail-row"><span class="dl">Deposit Paid</span><span class="dv">
+        {% if booking.deposit_paid %}${{ '%.2f' % (booking.deposit_amount_paid or deposit_amount) }} <span style="color:var(--good)">✓</span>{% else %}—{% endif %}
+      </span></div>
+      <div class="detail-row"><span class="dl">Received in total</span><span class="dv">${{ '%.2f' % collected }}</span></div>
+      <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:{{ 'var(--amber-deep)' if due > 0 else 'var(--ink)' }}">${{ '%.2f' % due }}</span></div>
 
       {% if booking.deposit_paid and not booking.paid_at %}
       {# For a customer asking for proof they paid the deposit. Deposits taken
@@ -1133,7 +1220,18 @@
       </p>
       {% endif %}
 
-      {% if booking.balance_collected %}
+      {# Gated on what is owed, not on the balance_collected flag. The flag
+         records that a balance was once collected, which stays true after a
+         price rise makes it no longer the whole balance — so a job needing $92
+         showed "Balance collected ✓" and offered no way to take the money. #}
+      {% if booking.is_held %}
+      {# She has been told in writing that nothing will be charged while she
+         decides on a date. A button that would do it anyway does not belong on
+         the page. #}
+      <div style="background:var(--amber-soft);color:var(--amber-deep);padding:11px 14px;border-radius:9px;font-size:0.88rem;font-weight:600;margin-top:10px">
+        ⏸️ On hold — nothing will be charged. Put it back on the calendar with a date first.
+      </div>
+      {% elif due <= 0 %}
       <div style="background:var(--good-soft);color:var(--good);padding:11px 14px;border-radius:9px;font-weight:700;font-size:0.9rem;margin-top:10px">
         Balance collected ✓
       </div>

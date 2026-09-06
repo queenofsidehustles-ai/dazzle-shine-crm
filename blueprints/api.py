@@ -857,7 +857,25 @@ def _send_confirmation(booking: Booking):
     time_text = booking.preferred_time or 'Flexible'
     extras_text = f'<p><strong>Add-ons:</strong> {booking.extras}</p>' if booking.extras else ''
 
+    # What the money buys, spelled out. The template names the service and the
+    # price; a customer reading it has no way to know whether that includes the
+    # inside of the oven. Appended rather than required in the template, because
+    # every running instance already has a copy of this email and a variable
+    # added to today's default would never appear in one she had edited.
+    import quoting
+    items = quoting.booking_checklist(booking)
+    checklist = ''
+    if items:
+        lines = '\n'.join(f'  •  {i}' for i in items)
+        checklist = (f"What's included in your {booking.service_label.lower()} "
+                     f"— {len(items)} tasks:\n\n{lines}")
+
+    from blueprints.payments import amount_due
+    from pricing import get_deposit
     from notifications import send_triggered_email
+    # Worked out, not read off a column that may never have been written and a
+    # constant that stopped being true when the deposit became a setting.
+    balance = amount_due(booking)
     send_triggered_email(
         trigger='booking_confirmed',
         to_email=booking.email,
@@ -871,19 +889,23 @@ def _send_confirmation(booking: Booking):
             'booking_date': date_text,
             'booking_time': time_text,
             'address': f'{booking.address}, {booking.city} {booking.zip_code}',
-            'price': f'{booking.price:.2f}',
-            'deposit': '50.00',
-            'balance': f'{booking.balance_due:.2f}',
+            'price': f'{(booking.price or 0):.2f}',
+            'deposit': f'{float(booking.deposit_amount_paid or get_deposit()):.2f}',
+            'balance': f'{balance:.2f}',
             'notes': booking.notes or '',
-        }
+            'checklist': checklist,
+        },
+        append_text=checklist,
+        append_unless='{{checklist}}',
     )
 
     # SMS to customer
     send_sms(
         booking.phone,
         f"Hi {booking.name.split()[0]}! Your {branding.biz_name()} cleaning is confirmed for {date_text}. "
-        f"Deposit received. Balance due: ${booking.balance_due:.2f}. "
-        f"Questions? {branding.phone_line('Call ')} Reply STOP to opt out.",
+        f"Deposit received. Balance due: ${balance:.2f}. "
+        + (f"The full list of all {len(items)} things we'll do is in your email. " if items else "")
+        + f"Questions? {branding.phone_line('Call ')} Reply STOP to opt out.",
     )
 
     # Notification to owner
@@ -904,7 +926,7 @@ def _send_confirmation(booking: Booking):
   {extras_text}
   <p><strong>Date:</strong> {date_text} &nbsp; <strong>Time:</strong> {time_text}</p>
   <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
-  <p><strong>Total:</strong> ${booking.price:.2f} &nbsp; <strong>Balance due:</strong> ${booking.balance_due:.2f}</p>
+  <p><strong>Total:</strong> ${(booking.price or 0):.2f} &nbsp; <strong>Balance due:</strong> ${balance:.2f}</p>
   <p><strong>Notes:</strong> {booking.notes or '—'}</p>
 </div>""",
     )

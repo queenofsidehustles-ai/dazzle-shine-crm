@@ -117,8 +117,12 @@
           <div class="meta">{{ b.service_label }}{% if b.invoice_due_date %} · due {{ b.invoice_due_date }}{% endif %}</div>
         </div>
         <div style="text-align:right">
-          <div class="price">${{ '%.2f'|format(amount_due(b) if not b.paid_at else b.price or 0) }}</div>
-          {% if b.paid_at %}
+          {# Settled means nothing is owed on it now — not that a payment was
+             once taken. An invoice whose job was re-scoped upwards afterwards
+             still has a balance, and telling the customer it is paid is how she
+             finds out about it from a phone call instead of from here. #}
+          <div class="price">${{ '%.2f'|format(b.price or 0 if settled(b) else amount_due(b)) }}</div>
+          {% if settled(b) %}
             <span class="pill pill-paid">Paid</span>
           {% else %}
             <a class="link" href="/invoice/{{ b.pay_token }}">View &amp; pay →</a>
@@ -141,7 +145,8 @@
           </div>
           <div style="text-align:right">
             <div class="price">${{ '%.0f'|format(b.price or 0) }}</div>
-            {% if b.paid_at %}<span class="pill pill-paid">Paid</span>{% endif %}
+            {% if settled(b) %}<span class="pill pill-paid">Paid</span>
+            {% elif amount_due(b) > 0 %}<span class="pill pill-due">${{ '%.2f'|format(amount_due(b)) }} due</span>{% endif %}
           </div>
         </div>
         {% endfor %}

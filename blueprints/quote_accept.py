@@ -25,6 +25,9 @@ def view(token):
         checklist=quoting.checklist_for(lead),
         deposit=_deposit(),
         balance=max(0.0, (lead.quoted_price or 0) - _deposit()),
+        # The same wording the quote email carries, from the same place, so the
+        # page and the email can't come to promise different numbers of visits.
+        scope_note=quoting.scope_note(lead),
         already=lead.status == 'converted',
     )
 

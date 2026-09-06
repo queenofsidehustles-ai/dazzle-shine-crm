@@ -55,10 +55,34 @@ SERVICE_WORDS = {
     'luxury': 'luxury',
 }
 
+# The three post-construction services all say "post" and "construction", so one
+# word cannot separate them — it takes the word that distinguishes the rung.
+# Checked in order and first match wins, which is why "final" is tried before
+# "clean": the middle rung is called "Clean + Final Phase" and says both.
+#
+# The bare ('post',) at the end is the catch-all. Somebody writing "Everything in
+# Post-Construction Cleaning" means the detail clean, and resolving that to the
+# base list is right — and far better than the alternative, which is a reference
+# nothing matches, left on the page as one line where twenty should be.
+SERVICE_PHRASES = (
+    (('post', 'debris'), 'postcon_full'),
+    (('post', 'full'),   'postcon_full'),
+    (('post', 'final'),  'postcon_final'),
+    (('post', 'detail'), 'postcon_clean'),
+    (('post',),          'postcon_clean'),
+)
+
 
 def service_for(phrase):
     """Which service a phrase like 'the Standard Cleaning' points at, or None."""
     words = re.split(r'[^a-z]+', (phrase or '').lower())
+    # Phrases first: a post-construction reference also contains no single word
+    # from SERVICE_WORDS, but "Post-Construction Clean + Final Phase" must not be
+    # allowed to fall through to a looser rule later.
+    present = set(words)
+    for needed, service in SERVICE_PHRASES:
+        if all(w in present for w in needed):
+            return service
     for w in words:
         if w in SERVICE_WORDS:
             return SERVICE_WORDS[w]

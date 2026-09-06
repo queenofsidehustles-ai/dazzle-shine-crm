@@ -12,6 +12,12 @@
   <a href="{{ url_for('bookings.index', status='confirmed') }}" class="filter-tab {{ 'active' if status_filter == 'confirmed' }}">Confirmed ({{ counts.confirmed }})</a>
   <a href="{{ url_for('bookings.index', status='completed') }}" class="filter-tab {{ 'active' if status_filter == 'completed' }}">Completed ({{ counts.completed }})</a>
   <a href="{{ url_for('bookings.index', status='cancelled') }}" class="filter-tab {{ 'active' if status_filter == 'cancelled' }}">Cancelled ({{ counts.cancelled }})</a>
+  {# Held jobs need somewhere to be looked at. Each one is a customer waiting to
+     name a date, usually with a deposit against it, and a deposit nobody is
+     looking at is the one that gets forgotten. #}
+  {% if counts.on_hold %}
+  <a href="{{ url_for('bookings.index', status='on_hold') }}" class="filter-tab {{ 'active' if status_filter == 'on_hold' }}">⏸️ On hold ({{ counts.on_hold }})</a>
+  {% endif %}
 </div>
 
 <div class="card">
@@ -56,7 +62,10 @@
           <td style="color:var(--muted)">{{ b.preferred_date or '—' }}</td>
           <td style="color:var(--muted)">{{ b.preferred_time or '—' }}</td>
           <td>
-            <span class="status status-{{ b.status }}">{{ b.status }}</span>
+            <span class="status status-{{ b.status }}">{{ b.status_label }}</span>
+            {% if b.is_held %}
+            <br><span style="display:inline-block;margin-top:4px;color:var(--amber-deep);font-size:0.72rem;font-weight:700;white-space:nowrap">waiting {{ b.days_on_hold }} day{{ '' if b.days_on_hold == 1 else 's' }} for a date</span>
+            {% endif %}
             {# Was: only flagged when a cleaner had DECLINED. A job nobody was
                ever offered looked identical to a covered one, so the jobs most
                likely to be forgotten were the ones this said least about. #}

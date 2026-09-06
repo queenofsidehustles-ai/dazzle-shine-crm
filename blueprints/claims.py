@@ -69,7 +69,9 @@ def jobs_for(staff, on_date, exclude_id=None):
     q = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
         db.or_(db.func.lower(Booking.assigned_cleaner) == (staff.name or '').lower(),
                BookingCrew.staff_id == staff.id),
-        Booking.status != 'cancelled',
+        # A held job does not occupy her day, so it must not block her from
+        # being given another one on it.
+        Booking.status.notin_(Booking.OFF_SCHEDULE),
         Booking.preferred_date == on_date,
     )
     if exclude_id:

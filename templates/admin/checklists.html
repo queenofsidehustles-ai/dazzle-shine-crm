@@ -36,9 +36,9 @@
     Quick-start: Create a template for each service type. When you send a work order from a booking, the right checklist is attached automatically.
   </p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-    {% for svc in ['standard','deep','moveout','airbnb','apartment','luxury'] %}
+    {% for svc, label in service_choices %}
     <a href="{{ url_for('workorders.new_template', service_type=svc) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.82rem">
-      + {{ svc.title() }} template
+      + {{ label }} template
     </a>
     {% endfor %}
   </div>

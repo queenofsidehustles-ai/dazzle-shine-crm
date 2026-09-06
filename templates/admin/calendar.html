@@ -43,14 +43,16 @@
           {% for b in day_bookings %}
           {# Completed and cancelled jobs stay put — dragging them would rewrite
              history that's already been worked and paid. #}
-          {% set movable = b.status not in ('completed', 'cancelled') %}
+          {% set movable = b.status not in ('completed', 'cancelled', 'on_hold') %}
           <a href="{{ url_for('bookings.detail', booking_id=b.id) }}"
              {% if movable %}draggable="true" data-id="{{ b.id }}"{% endif %}
-             class="jobchip s-{{ b.status }}{{ ' unassigned' if b.needs_cleaner }}"
-             title="{{ b.name }} — {{ b.service_label }}{% if b.needs_cleaner %} · NOBODY ASSIGNED{% else %} · {{ b.crew_label }}{% endif %}{% if movable %} · drag to move it{% endif %}">
+             class="jobchip s-{{ b.status }}{{ ' unassigned' if b.needs_cleaner and not b.is_held }}"
+             title="{{ b.name }} — {{ b.service_label }}{% if b.is_held %} · ON HOLD, waiting {{ b.days_on_hold }} day{{ '' if b.days_on_hold == 1 else 's' }} for a new date{% elif b.needs_cleaner %} · NOBODY ASSIGNED{% else %} · {{ b.crew_label }}{% endif %}{% if movable %} · drag to move it{% endif %}">
             {# A border alone was too quiet for the one thing on this screen
-               that means somebody may not turn up. #}
-            {% if b.needs_cleaner %}⚠️ {% endif %}{{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
+               that means somebody may not turn up. A held job is not that: it
+               keeps its square so the day still shows what was displaced, and
+               is struck through so nobody reads it as work that is happening. #}
+            {% if b.is_held %}⏸️ {% elif b.needs_cleaner %}⚠️ {% endif %}{{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
           </a>
           {% endfor %}
         </div>
@@ -61,7 +63,7 @@
 
   <div class="cal-legend">
     {% for label, cls in [('Pending','s-pending'), ('Confirmed','s-confirmed'),
-                          ('Completed','s-completed')] %}
+                          ('Completed','s-completed'), ('On hold','s-on_hold')] %}
     <span><span class="sw jobchip {{ cls }}"></span>{{ label }}</span>
     {% endfor %}
     <span><span class="sw" style="background:var(--surface);border-color:var(--warn)"></span>Nobody assigned</span>

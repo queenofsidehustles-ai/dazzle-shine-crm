@@ -99,53 +99,114 @@ def stripe_customer_id_for(booking):
     return customer.id
 
 
-def amount_due(booking):
-    """What the customer still owes: total minus the deposit they actually paid.
+def collected(booking):
+    """Money actually received against this booking's price, tips excluded.
 
-    Credits what was charged on the day, not what the deposit happens to be
-    now. Those were the same number while the deposit was a constant; they stop
-    being the same the moment the owner changes the setting, and then every
-    booking that paid $50 would be credited the new figure and collect the
-    difference too little.
+    Recorded as an amount on the booking, because a flag saying "paid" is only
+    true against the price on the day it was set. When a scope correction raises
+    the price afterwards, an amount stays a fact and a flag becomes a lie.
 
-    Bookings taken before that was recorded have nothing to read, so they fall
-    back to the deposit in force -- which for those is the right answer, because
-    it has not changed since they were taken."""
+    NULL means the booking predates the column, so fall back to what those rows
+    do record, in order of how much it tells us:
+
+      * settled — paid_at is set, so the whole price was taken. That is right for
+        every booking whose price has not been touched since, and wrong only for
+        one that has: for those the figure is the *new* price, and nobody can
+        recover the old one from the row. That is what the Payment card's
+        "money actually received" correction is for (bookings.fix_amount_collected),
+        and why this fallback is never written into the column as if it were a
+        fact of its own.
+      * a deposit and no more — credit what was charged on the day, not what the
+        deposit happens to be now. Those were the same number while the deposit
+        was a constant, and stopped being the same the moment it became a
+        setting the owner can change: crediting today's figure would collect the
+        difference too little on every booking that paid the old one. Bookings
+        older than that column fall back to the deposit in force, which for them
+        is right, because it has not moved since they were taken.
+      * nothing.
+    """
+    if booking.amount_collected is not None:
+        return round(float(booking.amount_collected), 2)
     if booking.paid_at:
-        return 0.0
+        return round(float(booking.price or 0), 2)
     if booking.deposit_paid:
         paid = booking.deposit_amount_paid
         if paid is None:
             from pricing import get_deposit
             paid = get_deposit()
-    else:
-        paid = 0
-    return round(max(0.0, (booking.price or 0) - paid), 2)
+        return round(float(paid), 2)
+    return 0.0
+
+
+def amount_due(booking):
+    """What the customer still owes: the price less what has actually been paid.
+
+    This used to answer $0.00 for anything carrying a paid_at, whatever the
+    price said. So raising the price on a settled booking — the ordinary
+    consequence of a scope change, a three-bed that turns out to be a four-bed —
+    produced a job the CRM called paid in full and short-changed the business by
+    the difference, with no route anywhere in the system to collect it."""
+    return round(max(0.0, (booking.price or 0) - collected(booking)), 2)
+
+
+def is_settled(booking):
+    """Paid in full: money has been taken, and none is still owed.
+
+    Both halves matter. Without the first, a $0 booking reads as settled; without
+    the second, a booking whose price has risen since goes on claiming to be."""
+    return collected(booking) > 0 and amount_due(booking) <= 0
+
+
+def sync_balance(booking, commit=False):
+    """Bring the stored balance columns back in line with the numbers.
+
+    balance_due and balance_collected are denormalised copies that several
+    queries and the charge button read. Nothing recomputed them when a price
+    moved, so a re-scoped job kept insisting the balance had been collected
+    while $92 of it had not. Call this anywhere the price or the money changes."""
+    booking.balance_due = amount_due(booking)
+    booking.balance_collected = is_settled(booking)
+    if commit:
+        db.session.commit()
+    return booking.balance_due
 
 
 def mark_paid(booking, method='card', when=None, notify=True):
-    """Flag a booking as paid in full and notify. Idempotent-ish.
+    """Record a booking as settled in full and notify. Idempotent-ish.
 
     `when` is the day the money actually arrived. Revenue is counted by this
     date, so recording a cash payment days after the fact would otherwise book
     the income in the wrong month. Card payments happen now by definition.
+
+    Every caller reaches here having taken whatever was outstanding — the pay
+    page, the saved-card charge, auto-pay, and the owner recording cash — so
+    what is written is that the price has now been collected in full. Written as
+    the amount rather than a flag: if the price rises later, the difference
+    shows up as owed instead of vanishing.
 
     notify=False records the payment without emailing the customer. That matters
     when a payment has already been receipted some other way, or on a booking
     that has turned contentious — a second unexpected receipt can restart a
     conversation the owner has good reason not to reopen. The books are updated
     either way; only the customer's inbox is spared."""
+    # What this payment was, before the booking is updated to say it arrived.
+    # The receipt has to quote the money that just moved: a customer settling a
+    # $92 shortfall told "we've received your payment of $482.00" will assume
+    # she has been charged the whole job twice.
+    paying = amount_due(booking)
     if not booking.paid_at:
         booking.paid_at = when or datetime.utcnow()
     booking.paid_method = method
+    booking.amount_collected = round(float(booking.price or 0), 2)
     booking.balance_collected = True
+    booking.balance_due = 0
     booking.deposit_paid = True
     if booking.status in ('pending', None):
         booking.status = 'confirmed'
     db.session.commit()
     if notify:
-        _send_receipt(booking, method)
-        _alert_owner_paid(booking, method)
+        _send_receipt(booking, method, paying)
+        _alert_owner_paid(booking, method, paying)
 
 
 def mark_deposit_paid(booking, req=None, amount_cents=None):
@@ -166,6 +227,10 @@ def mark_deposit_paid(booking, req=None, amount_cents=None):
 
     amount_cents is what Stripe actually took, when the caller knows it. A
     receipt should quote the charge, not what we meant to charge."""
+    # Read before writing. collected() falls back to the deposit fields when the
+    # running total is NULL, so a total worked out after they are set would
+    # count this deposit as already received and then add it again.
+    already = collected(booking)
     booking.deposit_paid = True
     if not booking.deposit_paid_at:
         booking.deposit_paid_at = datetime.utcnow()
@@ -178,8 +243,21 @@ def mark_deposit_paid(booking, req=None, amount_cents=None):
         from pricing import get_deposit
         booking.deposit_amount_paid = (round((amount_cents or 0) / 100, 2)
                                        or float(get_deposit()))
+        # And count it towards what has been received. Inside this guard on
+        # purpose: the browser and the webhook both land here for the same $50,
+        # and a running total that added it twice would report a job as paid
+        # that is still half owed.
+        #
+        # Not on a job already settled in full, though. Stripe's webhook for the
+        # deposit can arrive after the balance has been paid — that is the whole
+        # reason this function is written to be called more than once — and by
+        # then the $50 is already inside the total. Adding it again would book
+        # fifty dollars of income that nobody ever paid.
+        if not booking.paid_at:
+            booking.amount_collected = round(already + float(booking.deposit_amount_paid), 2)
     if booking.status in ('pending', None):
         booking.status = 'confirmed'
+    sync_balance(booking)
     db.session.commit()
 
     # Paying is how a customer accepts the terms, so snapshot them — but only
@@ -304,12 +382,22 @@ def _send_deposit_receipt(booking, amount):
         return False, str(e)
 
 
-def _send_receipt(booking, method):
+def _send_receipt(booking, method, amount=None):
+    """Receipt for a payment. `amount` is what this payment was, which is the
+    whole price on an ordinary job and only the shortfall on one that had
+    already paid against a lower price."""
     if not booking.email:
         return
     from notifications import send_email
     first = (booking.name or 'there').split()[0]
     how = 'card' if method == 'card' else method
+    total = round(float(booking.price or 0), 2)
+    if amount is None or round(amount, 2) >= total:
+        amount = total
+        settles = ''
+    else:
+        settles = (f' That settles your ${total:,.2f} total for this cleaning '
+                   f'in full — nothing further is owed.')
     try:
         send_email(
             to_email=booking.email, to_name=booking.name,
@@ -317,8 +405,8 @@ def _send_receipt(booking, method):
             html=f"""
 <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1f1333">
   <h2 style="color:#b98a33">Thank you, {first}! ✅</h2>
-  <p>We've received your payment of <strong>${booking.price:.2f}</strong> ({how}) for your
-     {booking.service_label.lower()}. You're all set — thank you for choosing {_biz()}!</p>
+  <p>We've received your payment of <strong>${amount:,.2f}</strong> ({how}) for your
+     {booking.service_label.lower()}.{settles} You're all set — thank you for choosing {_biz()}!</p>
   <p style="color:#9a95ad;font-size:13px;margin-top:20px">{_biz()}{" · " + branding.city_line() if branding.city_line() else ""}</p>
 </div>""",
         )
@@ -326,13 +414,18 @@ def _send_receipt(booking, method):
         pass
 
 
-def _alert_owner_paid(booking, method):
+def _alert_owner_paid(booking, method, amount=None):
     from notifications import send_sms
     phone = BusinessSetting.get('owner_alert_phone') or os.environ.get('OWNER_PHONE')
     if not phone:
         return
+    total = round(float(booking.price or 0), 2)
+    if amount is None or round(amount, 2) >= total:
+        amount, of_total = total, ''
+    else:
+        of_total = f' (the balance of a ${total:,.2f} job)'
     try:
-        send_sms(phone, f"💰 Payment received: {booking.name} paid ${booking.price:.2f} ({method}).")
+        send_sms(phone, f"💰 Payment received: {booking.name} paid ${amount:,.2f}{of_total} ({method}).")
     except Exception:
         pass
 
@@ -348,7 +441,11 @@ def pay_page(token):
                            terms=customer_terms.as_html(),
                            stripe_pk=pk, due=amount_due(booking),
                            cleaner_first=cleaner.split()[0] if cleaner else '',
-                           already_paid=bool(booking.paid_at), biz=_biz())
+                           # Whether there is anything left to pay, not whether a
+                           # payment was once made. A customer sent a link for the
+                           # $92 their re-scoped job went up by used to be shown
+                           # "already paid" and could not hand over the money.
+                           already_paid=is_settled(booking), biz=_biz())
 
 
 def _read_tip(payload):

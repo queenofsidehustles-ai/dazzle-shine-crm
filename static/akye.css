@@ -504,6 +504,11 @@ a.money-cell:hover { background:var(--ground); }
 .status-cancelled  { background:var(--ground);     color:var(--softer);     border-color:var(--line);
                      text-decoration:line-through; }
 .status-in_progress{ background:var(--info-soft);  color:var(--info);       border-color:#cfe0f3; }
+/* A job paused while the customer finds a new date. Struck through like a
+   cancellation, because neither is happening -- but its own colour, because a
+   held job keeps its deposit, its notes and its place in the plan. */
+.status-on_hold    { background:var(--amber-soft); color:var(--amber-deep); border-color:var(--amber-line);
+                     text-decoration:line-through; }
 
 /* The header line inside a card: a title on the left, an action
    on the right, a rule underneath. */
@@ -670,6 +675,8 @@ small.dim, small.muted { font-size:var(--t-xs); }
 .jobchip.s-confirmed { background:var(--info-soft);  color:var(--info); }
 .jobchip.s-completed { background:var(--good-soft);  color:var(--good); }
 .jobchip.s-cancelled { background:var(--ground); color:var(--softer); text-decoration:line-through; }
+.jobchip.s-on_hold   { background:var(--amber-soft); color:var(--amber-deep);
+                       text-decoration:line-through; opacity:.8; }
 /* An unassigned job gets an outline, so it reads as an open slot. */
 .jobchip.unassigned { border-color:var(--warn); }
 

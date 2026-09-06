@@ -143,6 +143,25 @@ class Booking(db.Model):
     tip_payment_intent = db.Column(db.String(100))  # the Stripe charge, when tipped after the job
     balance_due = db.Column(Money)
     balance_collected = db.Column(db.Boolean, default=False)
+    # Money actually received against this job's price. Tips are not part of it —
+    # they are the cleaner's, not payment for the work.
+    #
+    # Everything about payment used to be a flag: deposit_paid, balance_collected,
+    # and paid_at meaning "settled in full". A flag is only true against the price
+    # on the day it was set, and prices change — a scope correction after the job
+    # is booked is routine. Raise the price on a settled booking and every flag
+    # still says paid, amount_due() short-circuits to $0, and the difference can
+    # never be collected: the charge button says "nothing to charge" and the
+    # customer's own pay page refuses the money. The CRM reports a job as paid in
+    # full that is $92 short, and nothing anywhere disagrees.
+    #
+    # So what is stored is the amount, not the verdict. "Paid in full" is then a
+    # question the numbers answer (see payments.amount_due), and it re-answers
+    # itself the moment the price moves.
+    #
+    # NULL on every booking taken before this column existed — payments.collected()
+    # falls back to the best that can be known about those.
+    amount_collected = db.Column(Money)
     pay_token = db.Column(db.String(64))       # unique link for paying the full amount (invoice / on-site)
     paid_at = db.Column(db.DateTime)           # when paid in full (card or manual)
     paid_method = db.Column(db.String(20))     # card, cash, zelle, venmo, other
@@ -209,7 +228,24 @@ class Booking(db.Model):
     open_for_claim = db.Column(db.Boolean, default=False)  # broadcast to team, first to claim wins
     claim_token = db.Column(db.String(64))              # link token for the claim page
     broadcast_at = db.Column(db.DateTime)               # when it was last offered to the team
-    status = db.Column(db.String(20), default='pending')  # pending, confirmed, in_progress, completed, cancelled
+    status = db.Column(db.String(20), default='pending')  # pending, confirmed, in_progress, completed, cancelled, on_hold
+    # A job the customer has asked to postpone without naming a new date.
+    #
+    # There was nowhere to put one. Cancelling it loses the deposit's link to
+    # the work and reads to everybody as "this customer went away"; leaving it
+    # confirmed means the morning-of cron charges her card for a cleaning nobody
+    # is going to do, and texts a cleaner to an address where she is not
+    # expected. So it is a status of its own, and every automation already
+    # selects on an explicit list of statuses — none of which it is in.
+    held_at = db.Column(db.DateTime)          # when it was put on hold
+    hold_note = db.Column(db.String(200))     # what she was told on the phone
+    # What this job was actually promised, as a JSON list, carried from the
+    # quote the customer accepted. A quote can have lines taken off it — "they
+    # said don't do the oven" — and without this the confirmation email would
+    # re-promise the oven from the service list, contradicting the quote she
+    # agreed to. NULL means "whatever the service checklist says", which is
+    # right for a booking that never came through a quote.
+    promised_checklist = db.Column(db.Text)
     price = db.Column(Money)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)               # when marked completed (drives lifecycle emails)
@@ -230,6 +266,9 @@ class Booking(db.Model):
         'airbnb': 'Airbnb / Vacation Rental',
         'apartment': 'Apartment & Condo Cleaning',
         'luxury': 'Luxury Home Cleaning',
+        'postcon_clean': 'Post-Construction — Detail Clean Only',
+        'postcon_final': 'Post-Construction — Clean + Final Phase',
+        'postcon_full': 'Post-Construction — Full Service',
     }
 
     STATUS_COLORS = {
@@ -237,7 +276,39 @@ class Booking(db.Model):
         'confirmed': '#3b82f6',
         'completed': '#10b981',
         'cancelled': '#ef4444',
+        'on_hold': '#8b5cf6',
     }
+
+    STATUS_LABELS = {
+        'pending': 'Pending',
+        'confirmed': 'Confirmed',
+        'in_progress': 'In progress',
+        'completed': 'Completed',
+        'cancelled': 'Cancelled',
+        'on_hold': 'On hold',
+    }
+
+    # Statuses that are not work waiting to happen. "Not cancelled" was the test
+    # for a live job everywhere in the codebase, and a held job passes it while
+    # being exactly as much not-happening as a cancelled one.
+    OFF_SCHEDULE = ('cancelled', 'on_hold')
+
+    @property
+    def status_label(self):
+        return self.STATUS_LABELS.get(self.status, (self.status or 'Pending').replace('_', ' ').title())
+
+    @property
+    def is_held(self):
+        return self.status == 'on_hold'
+
+    @property
+    def days_on_hold(self):
+        """How long this has been sitting. A deposit taken for work nobody has
+        scheduled is somebody's money in limbo, and the only thing that stops it
+        being forgotten is a number that goes up."""
+        if not self.held_at:
+            return 0
+        return max(0, (datetime.utcnow() - self.held_at).days)
 
     @property
     def commissionable_price(self):
@@ -381,7 +452,7 @@ class Booking(db.Model):
 
         A finished or cancelled job needs nobody, and a crew job is covered when
         somebody is actually on it rather than when the row exists."""
-        if self.status in ('completed', 'cancelled'):
+        if self.status in ('completed', 'cancelled', 'on_hold'):
             return False
         if self.crew:
             return not any(c.staff_id for c in self.crew)
@@ -537,6 +608,13 @@ class Lead(db.Model):
     service_type = db.Column(db.String(50))
     bedrooms = db.Column(db.String(10))
     bathrooms = db.Column(db.String(10))
+    # Optional floor area, and the reason it is on a lead at all: bedroom count
+    # describes a house being lived in, not a building site. Two three-bed jobs
+    # can differ by a thousand square feet of floor to vacuum twice, and on
+    # post-construction that is the difference between a day and two. Booking has
+    # carried this since the beginning; a phone quote had nowhere to put it, so
+    # the surcharge the calculator already knew how to apply never got applied.
+    sqft = db.Column(db.Integer)
     extras = db.Column(db.String(200))
     frequency = db.Column(db.String(20), default='one_time')
     address = db.Column(db.String(200))
@@ -577,7 +655,29 @@ class Lead(db.Model):
     discount_code = db.Column(db.String(50))         # a saved code, if she used one
     discount_amount = db.Column(Money, default=0)    # dollars off
     discount_label = db.Column(db.String(80))        # 'Friends & Family' — what to call it
+    # Hauling construction debris away, kept as its own line rather than folded
+    # into the service price. What it costs is dump fees plus loads, and that
+    # swings by hundreds between a tidy remodel and a gut job — a multiplier off
+    # bedrooms cannot know which one it is looking at. On its own line the
+    # customer sees what the disposal actually costs, and a job with more junk
+    # in it than expected is a number to change rather than a loss to absorb.
+    #
+    # NULL means no haul-off was quoted, which is the truth about every quote
+    # made before this existed and about every job where the builder clears
+    # their own site. Zero would claim she quoted the haul-off and charged
+    # nothing for it.
+    debris_fee = db.Column(Money)                    # dollars for the haul-off
+    debris_note = db.Column(db.String(120))          # '2 loads + dump fee' — what it buys
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def has_debris_fee(self):
+        return (self.debris_fee or 0) > 0
+
+    @property
+    def debris_display(self):
+        """What the haul-off line is called on the quote."""
+        return (self.debris_note or '').strip() or 'Construction debris removal'
 
     @property
     def has_discount(self):
@@ -598,6 +698,9 @@ class Lead(db.Model):
         'apartment': 'Apartment & Condo Cleaning', 'luxury': 'Luxury Home Cleaning',
         'commercial': 'Commercial / Janitorial',
         'apartment_turnover': 'Apartment Turnover / Make-Ready',
+        'postcon_clean': 'Post-Construction — Detail Clean Only',
+        'postcon_final': 'Post-Construction — Clean + Final Phase',
+        'postcon_full': 'Post-Construction — Full Service',
     }
 
     # Leads priced at a walkthrough, not from the residential matrix
