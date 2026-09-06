@@ -51,6 +51,15 @@ if not _server_available():
 
 from sqlalchemy import create_engine, text
 
+# The control plane — the list of companies and what they pay — exists only on
+# the branch that has tenancy. On the single-business branch there is no such
+# list, so the checks that cover it have nothing to run against.
+try:
+    import control_plane                                       # noqa: F401
+    HAS_CONTROL_PLANE = True
+except ImportError:
+    HAS_CONTROL_PLANE = False
+
 ADMIN = create_engine(
     PGURL.replace('postgresql://', 'postgresql+psycopg2://', 1),
     isolation_level='AUTOCOMMIT')
@@ -135,7 +144,8 @@ try:
 
     # The platform's own list of who those companies ARE, and what they pay.
     # It lives outside models.py, so nothing in create_all() makes it.
-    run('''
+    if HAS_CONTROL_PLANE:
+      run('''
         import os, sys
         sys.path.insert(0, %r)
         os.environ['DATABASE_URL'] = os.environ['LIVE']
@@ -153,8 +163,10 @@ try:
                     stripe_customer_id='cus_' + slug,
                     subscription_status='active'))
         print('OK')
-    ''' % ROOT, LIVE=LIVE_URL)
-    check(True, 'and the platform knows they exist, and what they pay')
+      ''' % ROOT, LIVE=LIVE_URL)
+      check(True, 'and the platform knows they exist, and what they pay')
+    else:
+        print('  ⏭️  no control plane on this branch — single-business install')
 
     # -----------------------------------------------------------------------
     print('\n2. The backup contains both companies, not just the registry')
@@ -217,11 +229,12 @@ try:
     check("BAKER ['T Hall']" in out,
           'and Baker sees only its own — no leakage across the restore')
 
-    check(counts.get('organizations') == 2,
+    if HAS_CONTROL_PLANE:
+      check(counts.get('organizations') == 2,
           'the company registry restored — without it the tenant data comes '
           'back and nothing knows who owns it')
 
-    out = run('''
+      out = run('''
         import os, sys
         sys.path.insert(0, %r)
         from sqlalchemy import create_engine, text
@@ -236,9 +249,9 @@ try:
         assert [r[1] for r in rows] == ['pro', 'pro'], rows
         assert [r[2] for r in rows] == ['cus_acme', 'cus_baker'], rows
         print('OK')
-    ''' % ROOT, SCRATCH=SCRATCH_URL)
-    check('ORGS' in out,
-          'with the billing state intact — plan and Stripe customer id')
+      ''' % ROOT, SCRATCH=SCRATCH_URL)
+      check('ORGS' in out,
+            'with the billing state intact — plan and Stripe customer id')
 
     # -----------------------------------------------------------------------
     print('\n4. Verify refuses to pass a company backup it cannot really check')
