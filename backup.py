@@ -428,6 +428,9 @@ def restore(path, into_url, quiet=False):
         # the current schema rather than the one it was dumped from.
         known = {PUBLIC: {t.name: t for t in db.metadata.sorted_tables}}
         order = {PUBLIC: list(db.metadata.sorted_tables)}
+        for table in _control_tables(db, url):
+            known[PUBLIC][table.name] = table
+            order[PUBLIC].append(table)
         for schema in header.get('schemas') or [PUBLIC]:
             if schema == PUBLIC:
                 continue
@@ -506,6 +509,30 @@ def restore(path, into_url, quiet=False):
                   f'— not in this version of the app')
     return counts
 
+
+
+def _control_tables(db, url):
+    """The platform's own tables: which companies exist, and what they pay.
+
+    These live outside models.py on purpose — models.py is copied into every
+    company's schema, and the list of all companies must not be (see
+    control_plane.py). The cost is that `db.create_all()` does not make them,
+    so a restore had nowhere to put their rows and dropped the lot: the company
+    registry, every Stripe customer and subscription id, every plan and trial
+    date. The tenant data would come back and nothing would know who owned it
+    or who was paying.
+
+    Absent on the single-business branch, which has no control plane at all —
+    hence the guarded import rather than a hard dependency.
+    """
+    if not url.startswith('postgres'):
+        return []                   # control_metadata is schema-qualified
+    try:
+        import control_plane
+    except ImportError:
+        return []
+    control_plane.ensure_table(db.engine)
+    return list(control_plane.control_metadata.sorted_tables)
 
 
 def _build_schema(db, schema, url, quiet=False):
