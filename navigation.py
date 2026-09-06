@@ -73,14 +73,14 @@ SECTIONS = [
             ('contractors.payroll', 'Payroll', True),
             ('contractors.timesheet', 'Timesheet', True),
             ('money.tax_forms', '1099 & W-9', True),
-            ('commissions.index', 'VA commissions', True),
+            ('commissions.index', 'Sales commissions', True),
         ]),
     ]),
 
     ('Toolkit', [
         ('workorders.templates', '✅', 'Checklists', False, []),
-        ('sops.index', '📖', 'SOP Library', False, []),
-        ('content.index', '✨', 'Content Studio', False, []),
+        ('sops.index', '📖', 'How-to guides', False, []),
+        ('content.index', '✨', 'Social posts', False, []),
         ('email_templates.index', '✉️', 'Templates', False, [
             ('email_templates.index', 'Emails', False),
             ('scripts.index', 'Call scripts & outreach', False),
@@ -242,6 +242,23 @@ def _locked(endpoint, can):
 def _resolve(endpoint):
     """The endpoint whose place in the menu we should be showing."""
     return BELONGS_TO.get(endpoint, endpoint)
+
+
+def title_for(endpoint):
+    """The words on the menu item that leads here.
+
+    The page title used to default to the literal string "Dashboard", so any
+    template that forgot to set one silently claimed to be the dashboard --
+    which is how "Getting started" ended up titled Dashboard. Taking the
+    default from the menu means the worst a forgetful template can do is agree
+    with the link the person clicked.
+    """
+    target = active_item(endpoint)
+    for _group, items in SECTIONS:
+        for ep, _icon, label, _owner, _tabs in items:
+            if ep == target:
+                return label
+    return None
 
 
 def active_item(endpoint):

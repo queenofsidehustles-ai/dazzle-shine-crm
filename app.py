@@ -246,6 +246,7 @@ def create_app():
             tabs, active_tab = navigation.tabs_for(request.endpoint, role, can)
             return {'NAV': navigation.sidebar(role, can),
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
+                    'NAV_TITLE': navigation.title_for(request.endpoint),
                     'NAV_TABS': tabs,
                     'NAV_ACTIVE_TAB': active_tab}
         except Exception:

@@ -25,7 +25,9 @@
       --b-on:     {{ brand_accent_text }};
     }
     body { background:var(--ground); color:var(--ink); }
+    /* Room to scroll the last field out from behind the price bar. */
     .page { max-width:640px; margin:0 auto; padding:0 0 var(--s12); }
+    #bookform { padding-bottom:var(--s10); }
 {% if embed %}
     /* Inside somebody else's page: no ground colour of our own, no sticky
        price bar fighting their scroll, and no bottom gap. */
@@ -103,11 +105,20 @@
 
     /* The price, pinned to the bottom of the screen on a phone. Somebody
        changing a bedroom count wants to see the number move. */
+    /* One row, not four stacked. At full size this bar was 189px of a 664px
+       phone screen -- 28% of it -- and what sat behind it on load was the
+       bathrooms dropdown. A customer could price a house without ever seeing
+       the field and be quoted for the wrong one. The price and the button now
+       share a line, which is enough to clear the form. */
+    .quote {
+      display:flex; align-items:center; gap:var(--s4); flex-wrap:wrap;
+    }
+    .quote .money { flex:1; min-width:7.5rem; }
     .quote {
       position:sticky; bottom:0; z-index:20;
       background:var(--b-dark); color:#fff;
       border-radius:var(--r-lg) var(--r-lg) 0 0;
-      padding:var(--s5); margin:var(--s6) var(--s4) 0;
+      padding:var(--s3) var(--s5); margin:var(--s6) var(--s4) 0;
       box-shadow:0 -8px 32px rgba(22,33,58,.22);
     }
     .quote .label {
@@ -115,21 +126,24 @@
       color:rgba(255,255,255,.6); font-weight:650;
     }
     .quote .total {
-      font-size:2.1rem; font-weight:800; letter-spacing:-.03em;
+      font-size:1.6rem; font-weight:800; letter-spacing:-.03em;
       color:var(--b-accent); line-height:1.1; margin-top:2px;
       font-variant-numeric:tabular-nums;
     }
-    .quote .note { color:rgba(255,255,255,.55); font-size:var(--t-xs); margin-top:var(--s1); }
+    .quote .note {
+      color:rgba(255,255,255,.55); font-size:var(--t-xs);
+      flex-basis:100%; margin-top:var(--s1); order:3; line-height:1.35;
+    }
     /* Classed on purpose. akye.css styles `button[type="submit"]:not([class])`
        as the product's own amber, and an attribute selector outranks a class
        — so an unclassed button here came out in OUR brand colour on THEIR
        booking page. Declaring a class is how a button opts out of that. */
     .quote .book-btn {
-      width:100%; margin-top:var(--s4); padding:var(--s4);
+      flex:0 0 auto; margin:0; padding:var(--s3) var(--s6);
       border:0; border-radius:var(--r-pill); cursor:pointer;
       background:var(--b-accent); color:var(--b-on);
       font-family:inherit; font-size:var(--t-md); font-weight:700;
-      min-height:52px;
+      min-height:48px;
       box-shadow:inset 0 1px 0 rgba(255,255,255,.28), 0 6px 18px rgba(0,0,0,.24);
       transition:filter var(--ease), transform var(--ease);
     }
@@ -280,10 +294,12 @@
   </form>
 
   <div class="quote" id="quote">
-    <div class="label">Your price</div>
-    <div class="total" id="total">—</div>
-    <div class="note" id="note">Choose a service to see the price.</div>
+    <div class="money">
+      <div class="label">Your price</div>
+      <div class="total" id="total">—</div>
+    </div>
     <button type="submit" form="bookform" id="submit" class="book-btn">Book this clean</button>
+    <div class="note" id="note">Choose a service to see the price.</div>
     <div id="formerr"></div>
   </div>
 
