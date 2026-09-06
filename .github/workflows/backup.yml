@@ -155,7 +155,11 @@ jobs:
 
       # Encrypted before it goes anywhere. Decrypt with:
       #   openssl enc -d -aes-256-cbc -pbkdf2 -in FILE.enc -out FILE.json.gz
+      # Runs even when the checks refused the backup. A suspicious file is still
+      # evidence, and it is customer data either way, so it does not sit around
+      # unencrypted while somebody works out what happened.
       - name: Encrypt
+        if: always()
         env:
           PASS: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
@@ -171,23 +175,40 @@ jobs:
           ls -la
 
       - name: Upload the backup
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backup-${{ matrix.key }}-${{ github.run_number }}
           path: backups/*.enc
           retention-days: 30
+          if-no-files-found: ignore
 
       # Row counts only — no customer data — so it can be kept far longer and
       # read by the next run without decrypting anything.
+      #
+      # Uploaded even on a failed run, and this is the important part. The
+      # comparison is "what changed since last time", and the baseline used to
+      # advance only when a run succeeded — so one deliberate change, a company
+      # closed and its schema removed, made every following night compare
+      # against the same stale manifest and fail again. A backup job that is
+      # permanently red is one nobody reads, which is worse than no check.
+      #
+      # Recording what was actually there tonight means the alarm rings once,
+      # for the night something changed, and a database that keeps shrinking
+      # rings again each night it shrinks further. Which is what a change
+      # detector is for.
       - name: Upload the manifest
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backup-manifest-${{ matrix.key }}
           path: backups/*.manifest.json
           retention-days: 90
           overwrite: true
+          if-no-files-found: ignore
 
       - name: Say what happened
+        if: always()
         run: |
           echo "### ${{ matrix.label }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
