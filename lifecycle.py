@@ -338,10 +338,12 @@ def run_lifecycle_emails():
         if s.schedule_reminder_date == today_str or not s.agreement_token:
             continue
         # Crew members who aren't the lead still need tomorrow's reminder.
+        # Held jobs keep the date they were going to be on, so without this a
+        # cleaner gets "you have 1 job tomorrow" for a clean that was called off.
         jobs = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
             db.or_(db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
                    BookingCrew.staff_id == s.id),
-            Booking.status != 'cancelled',
+            Booking.status.notin_(Booking.OFF_SCHEDULE),
             Booking.preferred_date == tomorrow,
         ).distinct().all()
         if not jobs:

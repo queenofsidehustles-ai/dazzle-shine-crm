@@ -26,6 +26,14 @@ def charge_balance(booking) -> tuple:
 
     if not stripe.api_key:
         return False, 'Stripe not configured'
+    # A held job is the one case where money must not move regardless of what is
+    # owed. The customer has been emailed to say nothing will be charged while
+    # she decides on a date, and this is the button that would do it anyway.
+    # Note this is a question about the job's state, not about a past payment —
+    # which is what the refusals removed from here used to be.
+    if booking.status == 'on_hold':
+        return False, ('This job is on hold — put it back on the calendar with a '
+                       'date before charging her.')
     due = sync_balance(booking)        # keep the stored figures honest
     if due <= 0:
         return False, 'This booking is already paid in full'
@@ -81,6 +89,8 @@ def autocharge(booking) -> tuple:
     stripe.api_key = integrations.stripe_secret_key()
     if not stripe.api_key:
         return False, 'Stripe not configured'
+    if booking.status == 'on_hold':
+        return False, 'On hold'
     if booking.paid_at:
         return False, 'Already paid'
 

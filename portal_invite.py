@@ -46,8 +46,10 @@ def _shell(inner, biz):
 def upcoming_visits(client, limit=4):
     """Her next few scheduled cleanings, soonest first."""
     today = date.today().isoformat()
+    # Held visits are excluded: the customer has just been emailed to say the
+    # cleaning is paused, and listing it as one of her next few contradicts that.
     visits = [b for b in client.bookings
-              if b.status != 'cancelled' and (b.preferred_date or '') >= today]
+              if b.status not in b.OFF_SCHEDULE and (b.preferred_date or '') >= today]
     return sorted(visits, key=lambda b: b.preferred_date or '')[:limit]
 
 

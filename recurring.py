@@ -224,9 +224,12 @@ def clear_future(seed):
 def upcoming_count(group):
     from models import Booking
     today = date.today().isoformat()
+    # A held visit is not upcoming. It carries the date it was going to be
+    # on, and counting it tells her a plan is covered by a cleaning nobody has
+    # rescheduled yet.
     return Booking.query.filter(
         Booking.recurring_group == group,
-        Booking.status != 'cancelled',
+        Booking.status.notin_(Booking.OFF_SCHEDULE),
         Booking.preferred_date >= today).count()
 
 

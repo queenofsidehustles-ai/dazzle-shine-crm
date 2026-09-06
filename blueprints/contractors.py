@@ -1075,7 +1075,9 @@ def my_day(token):
     jobs = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
         db.or_(db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
                BookingCrew.staff_id == s.id),
-        Booking.status != 'cancelled',
+        # Nothing held — she has been texted that it is off, and it must not
+        # reappear on her job board as work to turn up for.
+        Booking.status.notin_(Booking.OFF_SCHEDULE),
         Booking.preferred_date >= today.isoformat(),
         Booking.preferred_date <= horizon,
     ).distinct().order_by(Booking.preferred_date, Booking.preferred_time).all()

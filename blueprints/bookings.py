@@ -39,6 +39,7 @@ def index():
         'confirmed': Booking.query.filter_by(status='confirmed').count(),
         'completed': Booking.query.filter_by(status='completed').count(),
         'cancelled': Booking.query.filter_by(status='cancelled').count(),
+        'on_hold': Booking.query.filter_by(status='on_hold').count(),
     }
     return render_template('admin/bookings.html', bookings=bookings, counts=counts,
                            status_filter=status_filter, series=group,
@@ -1250,6 +1251,209 @@ def fix_payment_date(booking_id):
     return back
 
 
+def _staff_for(booking):
+    """The Staff row behind the name on a booking, matched the same way
+    _notify_cleaner matches it — exact full name, then a loose first name."""
+    from models import Staff
+    name = (booking.assigned_cleaner or '').strip()
+    if not name:
+        return None
+    staff = Staff.query.filter(db.func.lower(Staff.name) == name.lower()).first()
+    if not staff:
+        staff = Staff.query.filter(Staff.name.ilike(f'%{name.split()[0]}%')).first()
+    return staff
+
+
+def _tell_crew_held(booking):
+    """Text everyone who was going to work this job that it is off.
+
+    A cleaner who is not told drives to a house where nobody is expecting her.
+    That is the failure this exists to prevent, so it covers the crew as well as
+    a solo assignment, and it says the date it was for — she may be holding two
+    jobs that week and needs to know which one has gone."""
+    from notifications import send_sms
+    when = booking.preferred_date or 'the scheduled date'
+    people, told = [], []
+    solo = _staff_for(booking)
+    if solo:
+        people.append(solo)
+    for c in (booking.crew or []):
+        if c.staff and c.staff not in people:
+            people.append(c.staff)
+    for staff in people:
+        if not staff.phone:
+            continue
+        try:
+            ok, _ = send_sms(
+                staff.phone,
+                f"Change of plan: the {when} clean for {booking.name} is ON HOLD — "
+                f"the customer needs to move it and hasn't picked a new date yet. "
+                f"Please don't go. You'll get the new date as soon as she books it. "
+                f"— {branding.biz_name()}")
+            if ok:
+                told.append(staff.name)
+        except Exception:
+            pass
+    return told
+
+
+def _tell_customer_held(booking):
+    """Put the hold in writing, including that her deposit is still hers.
+
+    The reassurance is the point. Somebody who has paid a deposit and been told
+    on the phone that the date is moving has no record of what happened to her
+    money, and "did I just lose fifty dollars" is the question that gets asked
+    at nine the next morning."""
+    from notifications import send_email, send_sms
+    from blueprints.payments import collected
+    biz = branding.biz_name()
+    first = (booking.name or 'there').split()[0]
+    paid = collected(booking)
+    money = ''
+    sms_money = ''
+    if paid > 0:
+        money = (f'<p style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;'
+                 f'padding:12px 14px;margin:16px 0"><strong>Your ${paid:,.2f} is safe.</strong> '
+                 f"It stays on this booking and comes off the total when we clean — "
+                 f"there is nothing to pay again.</p>")
+        sms_money = f" Your ${paid:,.2f} stays on the booking."
+    sent = False
+    if booking.email:
+        try:
+            ok, _ = send_email(
+                to_email=booking.email, to_name=booking.name,
+                subject=f'Your cleaning is on hold — {biz}',
+                html=f"""
+<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">No problem, {first} — we've paused it</h2>
+  <p>Your {booking.service_label.lower()} is on hold. Nothing is scheduled and
+     nothing will be charged to your card.</p>
+  {money}
+  <p>When you know the day that suits you, just reply to this email or text us
+     and we'll get you back on the calendar. There's no rush and no deadline.</p>
+  <p style="margin-top:18px">Thank you,<br><strong>{biz}</strong></p>
+</div>""")
+            sent = bool(ok)
+        except Exception:
+            pass
+    if booking.phone:
+        try:
+            ok, _ = send_sms(
+                booking.phone,
+                f"Hi {first} — your {biz} cleaning is on hold, nothing scheduled and "
+                f"nothing will be charged.{sms_money} Just reply when you know a day "
+                f"that works and we'll book you back in. Reply STOP to opt out.")
+            sent = sent or bool(ok)
+        except Exception:
+            pass
+    return sent
+
+
+@bookings_bp.route('/<int:booking_id>/hold', methods=['POST'])
+@login_required
+def hold(booking_id):
+    """Park a booking with no new date, without cancelling it.
+
+    A customer rings an hour after booking and needs to move the cleaning, but
+    does not know to when. Neither of the two states that existed fits. Leaving
+    it confirmed means the morning-of cron charges her card for a cleaning
+    nobody is going to do, and texts a cleaner to a house where she is not
+    expected. Cancelling severs the deposit from the work, reads to everybody
+    afterwards as a customer who went away, and loses the job's notes and its
+    place in a plan.
+
+    So it goes on hold: off every automation, money untouched, and waiting for a
+    date. Every automation in the CRM selects on an explicit list of statuses,
+    and none of them contain this one."""
+    b = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    if b.status in ('completed', 'cancelled'):
+        flash(f'That job is {b.status_label.lower()} — there is nothing to put on hold.',
+              'warning')
+        return back
+    if b.is_held:
+        flash('That job is already on hold.', 'info')
+        return back
+
+    was_date = b.preferred_date or 'no date'
+    b.status = 'on_hold'
+    b.held_at = datetime.utcnow()
+    b.hold_note = (request.form.get('hold_note') or '').strip()[:200] or None
+    # Out of the pool as well as off the schedule. A held job left open for
+    # claim would go on being offered to the team every time the broadcast ran.
+    b.open_for_claim = False
+    note = (f'[{date.today().isoformat()}] On hold — was {was_date}.'
+            + (f' {b.hold_note}' if b.hold_note else ''))
+    b.internal_notes = (note + '\n' + (b.internal_notes or '')).strip()
+    db.session.commit()
+
+    told = _tell_crew_held(b)
+    reached = _tell_customer_held(b)
+
+    msg = f'⏸️ On hold. It has come off {was_date} and nothing will be charged.'
+    if told:
+        msg += f' {", ".join(told)} texted not to go.'
+    elif b.assigned_cleaner or b.crew:
+        msg += ' ⚠️ Could not reach the cleaner — no phone on file, so tell her yourself.'
+    msg += (' The customer has been told her money is safe.' if reached
+            else ' ⚠️ Nothing reached the customer — no email or phone on file.')
+    flash(msg, 'success')
+    return back
+
+
+@bookings_bp.route('/<int:booking_id>/resume', methods=['POST'])
+@login_required
+def resume(booking_id):
+    """Bring a held job back with the date the customer has now given."""
+    b = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    if not b.is_held:
+        flash('That job is not on hold.', 'warning')
+        return back
+    when = (request.form.get('preferred_date') or '').strip()
+    try:
+        date.fromisoformat(when[:10])
+    except ValueError:
+        flash('Pick the new date before bringing this job back.', 'error')
+        return back
+
+    was_held = b.days_on_hold
+    b.preferred_date = when[:10]
+    new_time = (request.form.get('preferred_time') or '').strip()
+    if new_time:
+        b.preferred_time = new_time
+    # Back to what it was before, judged by the money rather than remembered:
+    # a job with a deposit against it is confirmed, one without is still pending.
+    b.status = 'confirmed' if (b.deposit_paid or b.paid_at) else 'pending'
+    b.held_at = None
+    b.hold_note = None
+    # The morning-of automations each fire once and stamp themselves. A job that
+    # has moved to a new day has to be able to send them again, or the customer
+    # gets no reminder and the cleaner no morning note for the date that counts.
+    b.reminder_sent_at = None
+    b.morning_note_at = None
+    b.invoice_sent_at = None
+    b.cleaner_response = None
+    note = (f'[{date.today().isoformat()}] Back on for {b.preferred_date} '
+            f'after {was_held} day{"s" if was_held != 1 else ""} on hold.')
+    b.internal_notes = (note + '\n' + (b.internal_notes or '')).strip()
+    db.session.commit()
+
+    msg = f'✅ Back on for {b.preferred_date}.'
+    if request.form.get('tell_customer'):
+        msg += ' ' + _notify_customer(b, confirmation=True).strip()
+    if b.assigned_cleaner or b.crew:
+        try:
+            if _notify_cleaner(b):
+                msg += f' {b.assigned_cleaner} re-notified with the new date.'
+            else:
+                msg += ' ⚠️ Could not re-notify the cleaner — tell her the new date.'
+        except Exception:
+            msg += ' ⚠️ Could not re-notify the cleaner — tell her the new date.'
+    flash(msg, 'success')
+    return back
+
+
 @bookings_bp.route('/<int:booking_id>/amount-collected', methods=['POST'])
 @login_required
 def fix_amount_collected(booking_id):
@@ -2300,6 +2504,24 @@ def confirmation_content(booking):
     price_text = f"${booking.price:.2f}" if booking.price else ''
     addr = ', '.join([p for p in [booking.address, booking.city, booking.zip_code] if p])
 
+    # What they are getting, spelled out. A confirmation that names the service
+    # and the price and nothing else leaves the customer holding a number with
+    # no work attached to it — and it is the document she will look at the
+    # morning of the clean to see whether the oven was included.
+    import quoting
+    items = quoting.booking_checklist(booking)
+    included = ''
+    if items:
+        rows = '\n'.join(
+            f'    <li style="margin:5px 0">{i}</li>' for i in items)
+        included = f"""
+  <div style="background:#fff;border:1px solid #e4dfef;border-radius:10px;padding:16px 18px;margin:16px 0">
+    <p style="margin:0 0 10px;font-weight:700;color:#b98a33">What's included — {len(items)} tasks</p>
+    <ul style="margin:0;padding-left:20px;font-size:0.9rem;line-height:1.6;color:#3f3a52">
+{rows}
+    </ul>
+  </div>"""
+
     subject = f"You're booked with {biz}! ✨"
     html = f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -2312,11 +2534,14 @@ def confirmation_content(booking):
     {f'<p style="margin:4px 0"><strong>Total:</strong> {price_text}</p>' if price_text else ''}
   </div>
   <p style="font-size:0.82rem;color:#9a95ad;background:#f6f5fb;border-radius:8px;padding:10px 12px">💡 Your price is based on an average-size home for this many bedrooms. Larger homes may have a small size adjustment — always confirmed with you first. No surprises!</p>
+{included}
   <p>If anything changes or you have questions, just reply to this email or text us — we're happy to help.</p>
   <p style="margin-top:18px">See you soon!<br><strong>{biz}</strong></p>
 </div>"""
     sms = (f"Hi {first}! ✨ Your {biz} cleaning is booked for {when}."
            + (f" Total {price_text}." if price_text else "")
+           + (f" The full list of all {len(items)} things we'll do is in your email."
+              if items else "")
            + " Reply here with any questions. Reply STOP to opt out.")
     return subject, html, sms
 

@@ -932,6 +932,60 @@
     </div>
     {% endif %}
 
+    <!-- On hold / bring it back -->
+    {# A customer who needs to move a cleaning but has no new date in mind used
+       to leave two choices, both wrong: leave it confirmed and the morning-of
+       cron charges her card and sends a cleaner to an empty house, or cancel it
+       and sever her deposit from the work. #}
+    {% if booking.is_held %}
+    <div class="card" style="margin-top:18px;border:1px solid #c4b5fd;background:#faf8ff">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#5b21b6;text-transform:uppercase;letter-spacing:0.12em">⏸️ On hold</h2>
+      <p style="font-size:0.86rem;color:#5b21b6;margin:0 0 4px">
+        Paused {{ booking.held_at.strftime('%b %-d, %Y') if booking.held_at else '' }} —
+        <strong>{{ booking.days_on_hold }} day{{ '' if booking.days_on_hold == 1 else 's' }}</strong> waiting for a date.
+      </p>
+      {% if booking.hold_note %}
+      <p style="font-size:0.84rem;color:#5f5878;margin:0 0 4px">“{{ booking.hold_note }}”</p>
+      {% endif %}
+      <p style="font-size:0.82rem;color:#6b6580;margin:0 0 12px">
+        Nothing is charged, no reminders go out, and no cleaner is expected.
+        {% if collected > 0 %}Her <strong>${{ '%.2f' % collected }}</strong> is still held against this job.{% endif %}
+      </p>
+      <form method="POST" action="{{ url_for('bookings.resume', booking_id=booking.id) }}">
+        <label class="dl" style="display:block;margin-bottom:5px">The date she's picked</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input type="date" name="preferred_date" required
+                 style="padding:9px 11px;border:1px solid #c4b5fd;border-radius:8px;flex:1;min-width:150px" />
+          <input type="text" name="preferred_time" placeholder="Time (optional)"
+                 value="{{ booking.preferred_time or '' }}"
+                 style="padding:9px 11px;border:1px solid #c4b5fd;border-radius:8px;width:150px" />
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:0.84rem;color:#5f5878;margin:10px 0;cursor:pointer">
+          <input type="checkbox" name="tell_customer" value="1" checked style="width:auto">
+          Email + text her the new confirmation
+        </label>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">▶️ Put it back on for this date</button>
+      </form>
+    </div>
+    {% elif booking.status not in ('completed', 'cancelled') %}
+    <div class="card" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">⏸️ Put this on hold</h2>
+      <p style="font-size:0.82rem;color:#6b6580;margin:0 0 10px">
+        For a customer who needs to move the clean but hasn't picked a day. It comes
+        off the schedule, her card is never charged, her deposit stays on the job, and
+        {% if booking.assigned_cleaner or booking.crew %}your cleaner is texted not to go{% else %}nobody is sent{% endif %}.
+        She gets an email saying her money is safe.
+      </p>
+      <form method="POST" action="{{ url_for('bookings.hold', booking_id=booking.id) }}"
+            onsubmit="return confirm('Put this job on hold? The customer and any assigned cleaner will be told.')">
+        <input type="text" name="hold_note" maxlength="200"
+               placeholder="What she said — e.g. work trip, closing delayed"
+               style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;margin-bottom:9px" />
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">⏸️ Hold it until she's ready</button>
+      </form>
+    </div>
+    {% endif %}
+
     <!-- Balance Collection Card -->
     <div class="card" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">💳 Payment</h2>
@@ -1148,7 +1202,14 @@
          records that a balance was once collected, which stays true after a
          price rise makes it no longer the whole balance — so a job needing $92
          showed "Balance collected ✓" and offered no way to take the money. #}
-      {% if due <= 0 %}
+      {% if booking.is_held %}
+      {# She has been told in writing that nothing will be charged while she
+         decides on a date. A button that would do it anyway does not belong on
+         the page. #}
+      <div style="background:#ede9fe;color:#5b21b6;padding:11px 14px;border-radius:9px;font-size:0.88rem;font-weight:600;margin-top:10px">
+        ⏸️ On hold — nothing will be charged. Put it back on the calendar with a date first.
+      </div>
+      {% elif due <= 0 %}
       <div style="background:#d1fae5;color:#065f46;padding:11px 14px;border-radius:9px;font-weight:700;font-size:0.9rem;margin-top:10px">
         Balance collected ✓
       </div>

@@ -38,22 +38,26 @@
           {% for b in day_bookings %}
           {# Completed and cancelled jobs stay put — dragging them would rewrite
              history that's already been worked and paid. #}
-          {% set movable = b.status not in ('completed', 'cancelled') %}
+          {% set movable = b.status not in ('completed', 'cancelled', 'on_hold') %}
           <a href="{{ url_for('bookings.detail', booking_id=b.id) }}"
              {% if movable %}draggable="true" class="jobchip" data-id="{{ b.id }}"{% endif %}
-             title="{{ b.name }} — {{ b.service_label }}{% if b.needs_cleaner %} · NOBODY ASSIGNED{% endif %}{% if movable %} · drag to move it{% endif %}"
+             title="{{ b.name }} — {{ b.service_label }}{% if b.is_held %} · ON HOLD, waiting {{ b.days_on_hold }} day{{ '' if b.days_on_hold == 1 else 's' }} for a new date{% endif %}{% if b.needs_cleaner and not b.is_held %} · NOBODY ASSIGNED{% endif %}{% if movable %} · drag to move it{% endif %}"
              style="display:block;font-size:0.7rem;padding:2px 5px;border-radius:4px;margin-bottom:2px;
                     text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
                     {% if movable %}cursor:grab;{% endif %}
                     {# A job nobody is going to turn up to is the one thing on
                        this screen worth interrupting for, and it looked exactly
                        like every other chip. #}
-                    {% if b.needs_cleaner %}border:1px solid #c53030;{% endif %}
-                    {% if b.status == 'confirmed' %}background:#dbeafe;color:#1e40af;
+                    {% if b.needs_cleaner and not b.is_held %}border:1px solid #c53030;{% endif %}
+                    {# A held job keeps its old square so the day still shows
+                       what was displaced, struck through so nobody reads it as
+                       work that is happening. #}
+                    {% if b.is_held %}background:#ede9fe;color:#5b21b6;text-decoration:line-through;opacity:0.75;
+                    {% elif b.status == 'confirmed' %}background:#dbeafe;color:#1e40af;
                     {% elif b.status == 'completed' %}background:#d1fae5;color:#065f46;
                     {% elif b.status == 'cancelled' %}background:#fee2e2;color:#991b1b;
                     {% else %}background:#fef3c7;color:#92400e;{% endif %}">
-            {% if b.needs_cleaner %}⚠️ {% endif %}{{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
+            {% if b.is_held %}⏸️ {% elif b.needs_cleaner %}⚠️ {% endif %}{{ b.name.split()[0] }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}
           </a>
           {% endfor %}
         </div>
@@ -68,6 +72,7 @@
       ('Pending',   '#fef3c7', '#f59e0b'),
       ('Confirmed', '#dbeafe', '#3b82f6'),
       ('Completed', '#d1fae5', '#10b981'),
+      ('On hold',   '#ede9fe', '#8b5cf6'),
     ] %}
     <span style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:#5f5878">
       <span style="width:12px;height:12px;border-radius:3px;background:{{ bg }};border:1px solid {{ border }}"></span>

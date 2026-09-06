@@ -349,7 +349,10 @@ def clock_in(token):
     if not checklist.clock_in_at:
         checklist.clock_in_at = datetime.utcnow()
         booking = checklist.booking
-        if booking and booking.status not in ('cancelled', 'completed'):
+        # A held job is not one to start. The work order link still works —
+        # they are emailed and they persist — so without this a stale one could
+        # put a called-off job into progress.
+        if booking and booking.status not in ('cancelled', 'completed', 'on_hold'):
             booking.status = 'in_progress'
         db.session.commit()
     return jsonify({'ok': True, 'clock_in': checklist.clock_in_at.isoformat() + 'Z'})
@@ -453,7 +456,7 @@ def submit_complete(token):
     if booking:
         if checklist.hours_on_site is not None:
             booking.hours_worked = checklist.hours_on_site
-        if booking.status not in ('cancelled',):
+        if booking.status not in ('cancelled', 'on_hold'):
             booking.status = 'completed'
     db.session.commit()
 

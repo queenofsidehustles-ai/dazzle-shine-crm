@@ -228,7 +228,24 @@ class Booking(db.Model):
     open_for_claim = db.Column(db.Boolean, default=False)  # broadcast to team, first to claim wins
     claim_token = db.Column(db.String(64))              # link token for the claim page
     broadcast_at = db.Column(db.DateTime)               # when it was last offered to the team
-    status = db.Column(db.String(20), default='pending')  # pending, confirmed, in_progress, completed, cancelled
+    status = db.Column(db.String(20), default='pending')  # pending, confirmed, in_progress, completed, cancelled, on_hold
+    # A job the customer has asked to postpone without naming a new date.
+    #
+    # There was nowhere to put one. Cancelling it loses the deposit's link to
+    # the work and reads to everybody as "this customer went away"; leaving it
+    # confirmed means the morning-of cron charges her card for a cleaning nobody
+    # is going to do, and texts a cleaner to an address where she is not
+    # expected. So it is a status of its own, and every automation already
+    # selects on an explicit list of statuses — none of which it is in.
+    held_at = db.Column(db.DateTime)          # when it was put on hold
+    hold_note = db.Column(db.String(200))     # what she was told on the phone
+    # What this job was actually promised, as a JSON list, carried from the
+    # quote the customer accepted. A quote can have lines taken off it — "they
+    # said don't do the oven" — and without this the confirmation email would
+    # re-promise the oven from the service list, contradicting the quote she
+    # agreed to. NULL means "whatever the service checklist says", which is
+    # right for a booking that never came through a quote.
+    promised_checklist = db.Column(db.Text)
     price = db.Column(Money)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)               # when marked completed (drives lifecycle emails)
@@ -259,7 +276,39 @@ class Booking(db.Model):
         'confirmed': '#3b82f6',
         'completed': '#10b981',
         'cancelled': '#ef4444',
+        'on_hold': '#8b5cf6',
     }
+
+    STATUS_LABELS = {
+        'pending': 'Pending',
+        'confirmed': 'Confirmed',
+        'in_progress': 'In progress',
+        'completed': 'Completed',
+        'cancelled': 'Cancelled',
+        'on_hold': 'On hold',
+    }
+
+    # Statuses that are not work waiting to happen. "Not cancelled" was the test
+    # for a live job everywhere in the codebase, and a held job passes it while
+    # being exactly as much not-happening as a cancelled one.
+    OFF_SCHEDULE = ('cancelled', 'on_hold')
+
+    @property
+    def status_label(self):
+        return self.STATUS_LABELS.get(self.status, (self.status or 'Pending').replace('_', ' ').title())
+
+    @property
+    def is_held(self):
+        return self.status == 'on_hold'
+
+    @property
+    def days_on_hold(self):
+        """How long this has been sitting. A deposit taken for work nobody has
+        scheduled is somebody's money in limbo, and the only thing that stops it
+        being forgotten is a number that goes up."""
+        if not self.held_at:
+            return 0
+        return max(0, (datetime.utcnow() - self.held_at).days)
 
     @property
     def commissionable_price(self):
@@ -403,7 +452,7 @@ class Booking(db.Model):
 
         A finished or cancelled job needs nobody, and a crew job is covered when
         somebody is actually on it rather than when the row exists."""
-        if self.status in ('completed', 'cancelled'):
+        if self.status in ('completed', 'cancelled', 'on_hold'):
             return False
         if self.crew:
             return not any(c.staff_id for c in self.crew)

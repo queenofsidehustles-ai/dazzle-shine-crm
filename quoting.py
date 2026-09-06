@@ -84,6 +84,23 @@ def checklist_for(lead_or_service):
     return service_checklist(lead.service_type)
 
 
+def booking_checklist(booking):
+    """What this job promised the customer, in full.
+
+    Prefers the list carried over from the quote they accepted, because that is
+    the one with their changes on it. Falls back to the service list for a
+    booking taken any other way — off the website, or keyed in by hand."""
+    saved = (getattr(booking, 'promised_checklist', None) or '').strip()
+    if saved:
+        try:
+            items = json.loads(saved)
+            if isinstance(items, list):
+                return expanded([str(i) for i in items if str(i).strip()])
+        except ValueError:
+            pass          # corrupt somehow — better the service list than none
+    return service_checklist(booking.service_type)
+
+
 def set_checklist(lead, items):
     """Store the chosen lines. An empty choice clears back to the service list
     rather than promising nothing at all — a quote with no description of the
@@ -545,6 +562,11 @@ def accept_quote(lead, preferred_date, preferred_time='', address='', city='',
         # given away simply vanished from the books.
         discount_code=lead.discount_code or '',
         discount_amount=round(float(lead.discount_amount or 0), 2),
+        # What she was actually promised, carried onto the job. A quote can have
+        # lines taken off it, and without this the confirmation email would
+        # rebuild the list from the service default and re-promise the very
+        # thing she was told would not be done.
+        promised_checklist=json.dumps(checklist_for(lead)),
     )
     db.session.add(booking)
 
