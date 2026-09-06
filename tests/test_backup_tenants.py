@@ -335,6 +335,25 @@ try:
           'the business is backed up out of public exactly as it always was')
     drop_db(f'akye_bk_single_{TAG}')
 
+    # -----------------------------------------------------------------------
+    print('\n7. A refused backup still records what it saw')
+    # The checks compare tonight against last night. If the baseline only moved
+    # on a successful run, one deliberate change -- a company closed, its schema
+    # removed -- would make every following night compare against the same stale
+    # manifest and fail again, for ever. A job that is permanently red is one
+    # nobody reads.
+    import re as _re
+    wf = os.path.join(ROOT, '.github', 'workflows', 'backup.yml')
+    y = open(wf).read()
+    man = y[y.index('- name: Upload the manifest'):]
+    check('if: always()' in man[:400],
+          'the manifest is uploaded even when the checks refuse the backup')
+    check('if-no-files-found: ignore' in man[:400],
+          'and a run that failed before writing one does not error on the upload')
+    enc = y[y.index('- name: Encrypt'):]
+    check('if: always()' in enc[:200],
+          'a refused backup is still encrypted — it is customer data either way')
+
 finally:
     drop_db(LIVE)
     drop_db(SCRATCH)
