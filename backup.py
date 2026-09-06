@@ -41,10 +41,22 @@ import os
 import sys
 import tempfile
 
-FORMAT_VERSION = 1
+# Format 2 carries a schema name on every row, so one file can hold the public
+# schema and every tenant's. Format 1 files have no schema on their rows and
+# restore into public, which is exactly where they came from.
+FORMAT_VERSION = 2
 DEFAULT_DIR = os.environ.get('BACKUP_DIR') or os.path.join(
     os.path.dirname(os.path.abspath(__file__)), 'backups')
 DEFAULT_KEEP_DAYS = int(os.environ.get('BACKUP_KEEP_DAYS') or 30)
+
+# The schema a single-business install lives in, and the one Akye keeps its
+# company registry in.
+PUBLIC = 'public'
+
+# Akye gives every company its own PostgreSQL schema, named for its slug behind
+# this prefix. Read out of the database rather than imported from tenancy.py so
+# this file works unchanged on a branch that has no tenancy at all.
+TENANT_PREFIX = 'tenant_'
 
 # Tables whose loss would end the business, as opposed to being annoying. A
 # backup that restores with any of these empty is treated as a failed backup,
@@ -159,6 +171,32 @@ def _safe_url(url):
     return f'{head}@{tail}'
 
 
+def tenant_schemas(engine):
+    """Every company schema in this database, in a stable order.
+
+    Empty for a single-business install and for SQLite, which has no schemas —
+    so everything downstream behaves exactly as it did before Akye existed.
+
+    This is asked of the database rather than of a company registry table on
+    purpose. A schema holding a company's data is a thing to back up whether or
+    not a row somewhere still lists it; the registry is what we would lose.
+    """
+    from sqlalchemy import inspect
+    try:
+        names = inspect(engine).get_schema_names()
+    except Exception:
+        return []                       # SQLite, or a server that will not say
+    return sorted(n for n in names if n.startswith(TENANT_PREFIX))
+
+
+def _reflect(engine, schema):
+    """The tables in one schema, parents before children."""
+    from sqlalchemy import MetaData
+    md = MetaData()
+    md.reflect(bind=engine, schema=None if schema == PUBLIC else schema)
+    return [t for t in md.sorted_tables if t.name not in SKIP_TABLES]
+
+
 def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
     """Dump every table. Returns (path, manifest).
 
@@ -169,7 +207,6 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
     fails outright on the first mismatch, which is a poor reason to have no
     backup. Whatever is actually in there is what gets copied.
     """
-    from sqlalchemy import MetaData
     engine = _read_engine(database_url)
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H-%M-%SZ')
@@ -184,41 +221,65 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
         n += 1
 
     counts = {}
+    tenant_counts = {}
     url = str(engine.url)
     if not quiet:
         print(f'  reading  {_safe_url(url)}')
-    md = MetaData()
-    md.reflect(bind=engine)
+
     # sorted_tables is already in foreign-key order — parents before the rows
     # that point at them. Restoring in this order needs no deferred constraints
     # and no disabling of anything.
-    tables = [t for t in md.sorted_tables if t.name not in SKIP_TABLES]
-    if not tables:
+    #
+    # public first, then a company at a time. Every company gets the same table
+    # set, so this used to look like one schema's worth of work; reading only
+    # the first one is precisely the bug this loop exists to prevent.
+    schemas = [PUBLIC] + tenant_schemas(engine)
+    by_schema = {s: _reflect(engine, s) for s in schemas}
+
+    if not any(by_schema.values()):
         raise BackupFailed(f'no tables found in {_safe_url(url)} — '
                            'is the connection string pointing at the right database?')
+
     with gzip.open(path, 'wt', encoding='utf-8') as fh:
         fh.write(json.dumps({
             'format': FORMAT_VERSION,
             'taken_at': datetime.datetime.utcnow().isoformat(),
-            'tables': [t.name for t in tables],
+            'schemas': schemas,
+            'tables': [t.name for t in by_schema[PUBLIC]],
+            'tenant_tables': {s: [t.name for t in by_schema[s]]
+                              for s in schemas if s != PUBLIC},
             'source': _safe_url(url),
             'release': _release(),
         }) + '\n')
         with engine.connect() as conn:
-            for table in tables:
-                n = 0
-                for row in conn.execute(table.select()).mappings():
-                    fh.write(json.dumps(
-                        {'__table__': table.name, 'row': dict(row)},
-                        cls=_Encoder) + '\n')
-                    n += 1
-                counts[table.name] = n
-                if n and not quiet:
-                    print(f'    {table.name:<28} {n:>7}')
+            for schema in schemas:
+                if schema != PUBLIC:
+                    tenant_counts[schema] = {}
+                    if not quiet:
+                        print(f'    {schema}')
+                for table in by_schema[schema]:
+                    n = 0
+                    for row in conn.execute(table.select()).mappings():
+                        fh.write(json.dumps(
+                            {'__schema__': schema, '__table__': table.name,
+                             'row': dict(row)},
+                            cls=_Encoder) + '\n')
+                        n += 1
+                    if schema == PUBLIC:
+                        counts[table.name] = n
+                    else:
+                        tenant_counts[schema][table.name] = n
+                    if n and not quiet:
+                        pad = '      ' if schema != PUBLIC else '    '
+                        print(f'{pad}{table.name:<28} {n:>7}')
 
     size = os.path.getsize(path)
+    tenant_rows = sum(sum(t.values()) for t in tenant_counts.values())
     manifest = {'path': path, 'bytes': size, 'counts': counts,
-                'total_rows': sum(counts.values()),
+                'tenants': sorted(tenant_counts),
+                'tenant_counts': tenant_counts,
+                'tenant_rows': tenant_rows,
+                'total_rows': sum(counts.values()) + tenant_rows,
                 'taken_at': datetime.datetime.utcnow().isoformat()}
 
     previous = _previous_manifest(out_dir)
@@ -281,8 +342,38 @@ def _sanity_check(manifest, previous=None):
     if manifest['bytes'] < 200:
         out.append(f'file is only {manifest["bytes"]} bytes')
 
+    # Where the business tables live depends on the product: a single-business
+    # install keeps them in public, and Akye keeps a set per company. Either
+    # way they have to be SOMEWHERE, and the check has to be able to run on the
+    # very first backup — comparing against last night cannot notice a table
+    # that has never once been read, which is how a backup of the wrong schema
+    # stays green forever instead of failing the night it is set up.
+    tenants = manifest.get('tenants') or []
+    if tenants:
+        for schema in tenants:
+            have = set(manifest.get('tenant_counts', {}).get(schema, {}))
+            missing = [t for t in CRITICAL_TABLES if t not in have]
+            if missing:
+                out.append(f'{schema} has no {", ".join(missing)} table — '
+                           'is this backup reading the whole schema?')
+    else:
+        have = set(manifest.get('counts', {}))
+        missing = [t for t in CRITICAL_TABLES if t not in have]
+        if missing and have:
+            out.append(f'no {", ".join(missing)} table in this database — '
+                       'if it is a multi-company database, no company schema '
+                       'was found, and the businesses in it are NOT backed up')
+
     if not previous:
         return out                      # first run — nothing to compare against
+
+    # A company that existed last night and has no schema tonight is either a
+    # cancellation somebody did on purpose or a database that is quietly losing
+    # companies. Worth a human either way.
+    gone = set(previous.get('tenants') or []) - set(tenants)
+    if gone:
+        out.append(f'{len(gone)} company schema(s) present last time and gone '
+                   f'now: {", ".join(sorted(gone))}')
 
     before, now = previous.get('total_rows', 0), manifest['total_rows']
     if before > 0 and now == 0:
@@ -325,22 +416,38 @@ def restore(path, into_url, quiet=False):
     from extensions import db
     app = _app(into_url)
     counts = {}
+    header = read_manifest(path)
     with app.app_context():
+        url = str(db.engine.url)
         if not quiet:
-            print(f'  writing  {_safe_url(str(db.engine.url))}')
+            print(f'  writing  {_safe_url(url)}')
         db.create_all()
-        tables = list(db.metadata.sorted_tables)
-        known = {t.name: t for t in tables}
+
+        # One table set per schema in the file. A company's schema is rebuilt
+        # from today's models exactly as public is, so a company restores onto
+        # the current schema rather than the one it was dumped from.
+        known = {PUBLIC: {t.name: t for t in db.metadata.sorted_tables}}
+        order = {PUBLIC: list(db.metadata.sorted_tables)}
+        for schema in header.get('schemas') or [PUBLIC]:
+            if schema == PUBLIC:
+                continue
+            tables = _build_schema(db, schema, url, quiet=quiet)
+            if tables is None:
+                continue
+            known[schema] = {t.name: t for t in tables}
+            order[schema] = tables
+
         dropped_tables, dropped_columns = set(), {}
         with db.engine.begin() as conn:
             # Children first, so nothing is left pointing at a deleted parent.
-            for table in reversed(tables):
-                conn.execute(table.delete())
-            batch, current = [], None
+            for schema in order:
+                for table in reversed(order[schema]):
+                    conn.execute(table.delete())
+            batch, current, current_schema = [], None, PUBLIC
 
             def flush():
                 if batch and current is not None:
-                    conn.execute(known[current].insert(), batch)
+                    conn.execute(known[current_schema][current].insert(), batch)
 
             with gzip.open(path, 'rt', encoding='utf-8') as fh:
                 fh.readline()   # manifest
@@ -350,36 +457,43 @@ def restore(path, into_url, quiet=False):
                         continue
                     rec = json.loads(line)
                     name = rec['__table__']
-                    if name not in known:
+                    # Format 1 files have no schema on their rows. They came
+                    # out of public and that is where they go back.
+                    schema = rec.get('__schema__', PUBLIC)
+                    if schema not in known or name not in known[schema]:
                         # A table that existed when the backup was taken and
                         # does not exist now. Skipped rather than fatal: the
                         # point of a restore is to get the business back, not
                         # to be right about a table nobody uses any more.
-                        dropped_tables.add(name)
+                        dropped_tables.add(name if schema == PUBLIC
+                                           else f'{schema}.{name}')
                         continue
-                    if name != current:
+                    if name != current or schema != current_schema:
                         flush()
-                        batch, current = [], name
+                        batch, current, current_schema = [], name, schema
                     # Same argument one level down. A backup from before a
                     # column was removed still carries it, and a restore that
                     # refused the whole file over one dead column would be a
                     # restore that did not happen.
-                    cols = set(known[name].columns.keys())
+                    cols = set(known[schema][name].columns.keys())
                     row = _revive_row(rec['row'])
                     extra = set(row) - cols
                     if extra:
                         dropped_columns.setdefault(name, set()).update(extra)
                         row = {k: v for k, v in row.items() if k in cols}
                     batch.append(row)
-                    counts[name] = counts.get(name, 0) + 1
+                    key = name if schema == PUBLIC else f'{schema}.{name}'
+                    counts[key] = counts.get(key, 0) + 1
                     if len(batch) >= 500:
-                        conn.execute(known[name].insert(), batch)
+                        conn.execute(known[schema][name].insert(), batch)
                         batch = []
             flush()
-        _fix_sequences(db, conn_url=str(db.engine.url))
+        for schema, tables in order.items():
+            _fix_sequences(db, conn_url=url, tables=tables, schema=schema)
         _stamp_schema()
     if not quiet:
-        print(f'  ✅ restored {sum(counts.values()):,} rows')
+        print(f'  ✅ restored {sum(counts.values()):,} rows'
+              + (f' across {len(order)} schemas' if len(order) > 1 else ''))
         # Said out loud rather than swallowed. Skipping these is the right
         # call, but it is still data in the backup that is not in the restore,
         # and the person running it should hear that from the tool and not
@@ -392,6 +506,27 @@ def restore(path, into_url, quiet=False):
                   f'— not in this version of the app')
     return counts
 
+
+
+def _build_schema(db, schema, url, quiet=False):
+    """Recreate one company's schema from today's models. Tables, in FK order.
+
+    Returns None when the target cannot hold schemas at all — restoring an Akye
+    backup into SQLite gets the registry and says so, rather than failing.
+    """
+    if not url.startswith('postgres'):
+        if not quiet:
+            print(f'  ⚠️  {schema}: target is not PostgreSQL and has no '
+                  f'schemas — this company was NOT restored')
+        return None
+    from sqlalchemy import MetaData, text
+    md = MetaData()
+    for table in db.metadata.sorted_tables:
+        table.to_metadata(md, schema=schema)
+    with db.engine.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+    md.create_all(bind=db.engine)
+    return list(md.sorted_tables)
 
 
 def _stamp_schema():
@@ -410,15 +545,20 @@ def _stamp_schema():
         pass          # a restore that worked must not fail over bookkeeping
 
 
-def _fix_sequences(db, conn_url=''):
+def _fix_sequences(db, conn_url='', tables=None, schema=PUBLIC):
     """Postgres remembers the next id per table in a sequence, and inserting
     explicit ids does not move it. Without this the restore looks perfect and
-    then the first new booking collides with an id that already exists."""
+    then the first new booking collides with an id that already exists.
+
+    Every company schema has its own sequences, so this runs once per schema —
+    fixing only public would leave every company on Akye handing out ids that
+    already exist, which is the same bug multiplied by the customer list."""
     if not conn_url.startswith('postgres'):
         return
     from sqlalchemy import text
+    qualified = f'"{schema}".' if schema != PUBLIC else ''
     with db.engine.begin() as conn:
-        for table in db.metadata.sorted_tables:
+        for table in (db.metadata.sorted_tables if tables is None else tables):
             for col in table.primary_key.columns:
                 if not (col.autoincrement and str(col.type).upper().startswith('INT')):
                     continue
@@ -431,12 +571,12 @@ def _fix_sequences(db, conn_url=''):
                 # against the kind of database it exists to recover.
                 conn.execute(text(
                     'SELECT setval(pg_get_serial_sequence(:t, :c), '
-                    'COALESCE((SELECT MAX("%s") FROM "%s"), 1), true)'
-                    % (col.name, table.name)
-                ), {'t': table.name, 'c': col.name})
+                    'COALESCE((SELECT MAX("%s") FROM %s"%s"), 1), true)'
+                    % (col.name, qualified, table.name)
+                ), {'t': f'{schema}.{table.name}', 'c': col.name})
 
 
-def verify(path, quiet=False):
+def verify(path, quiet=False, scratch_url=None):
     """Restore into a throwaway database and check it came back whole.
 
     This is the whole point of the file. Everything above it produces a
@@ -445,26 +585,48 @@ def verify(path, quiet=False):
     answer is never more than a day old.
     """
     manifest = read_manifest(path)
-    tmp = tempfile.mkdtemp()
-    scratch = os.path.join(tmp, 'verify.db')
-    counts = restore(path, f'sqlite:///{scratch}', quiet=True)
+    tenants = [s for s in (manifest.get('schemas') or []) if s != PUBLIC]
+
+    # SQLite is a fine scratch database for a single business and cannot hold a
+    # multi-company one at all — it has no schemas. Verifying an Akye backup
+    # against it would drop every company and call the difference a failure, so
+    # a real PostgreSQL scratch database is required and its absence is an
+    # error rather than a reason to check less.
+    scratch_url = scratch_url or os.environ.get('BACKUP_VERIFY_URL') or ''
+    if tenants and not scratch_url.startswith('postgres'):
+        raise BackupFailed(
+            f'this backup holds {len(tenants)} company schema(s) and can only '
+            'be verified against PostgreSQL. Set BACKUP_VERIFY_URL to a '
+            'throwaway Postgres database.')
+    if not scratch_url:
+        scratch_url = 'sqlite:///' + os.path.join(tempfile.mkdtemp(), 'verify.db')
+
+    counts = restore(path, scratch_url, quiet=True)
 
     expected = {}
     with gzip.open(path, 'rt', encoding='utf-8') as fh:
         fh.readline()
         for line in fh:
             if line.strip():
-                name = json.loads(line)['__table__']
-                expected[name] = expected.get(name, 0) + 1
+                rec = json.loads(line)
+                schema = rec.get('__schema__', PUBLIC)
+                name = rec['__table__']
+                key = name if schema == PUBLIC else f'{schema}.{name}'
+                expected[key] = expected.get(key, 0) + 1
 
     problems = []
     for name, n in expected.items():
         got = counts.get(name, 0)
         if got != n:
             problems.append(f'{name}: backed up {n}, restored {got}')
-    for name in CRITICAL_TABLES:
-        if expected.get(name, 0) and not counts.get(name, 0):
-            problems.append(f'{name} did not restore at all')
+    # Checked per company, not just in public. On Akye the critical tables are
+    # never in public at all, so a check that only looked there would pass by
+    # looking at nothing.
+    for schema in [PUBLIC] + tenants:
+        for name in CRITICAL_TABLES:
+            key = name if schema == PUBLIC else f'{schema}.{name}'
+            if expected.get(key, 0) and not counts.get(key, 0):
+                problems.append(f'{key} did not restore at all')
 
     if problems:
         raise BackupFailed('restore did not match the backup: ' + '; '.join(problems))
