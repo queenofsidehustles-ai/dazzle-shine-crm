@@ -195,3 +195,19 @@ check('--abbrev-ref' in src and 'line.source' in src,
       'preflight refuses unless the checkout is the branch being released')
 
 print('\n🎉 Release checks passed.')
+
+print('\n The gate runs on the version the customers run')
+# The tests passing means nothing if they passed somewhere production is not.
+# Python 3.12 changed sum() to compensated summation for floats, so ten dimes
+# come to $1.00 there and $0.9999999999999999 on 3.9 -- a suite green on the
+# older one was recording money behaviour production did not have.
+import release as _rel
+check(_rel.PRODUCTION_PYTHON == (3, 12),
+      'the gate knows what the customer image is built on')
+_dockerfile = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), 'docker', 'Dockerfile')
+if os.path.exists(_dockerfile):
+    _v = '.'.join(str(n) for n in _rel.PRODUCTION_PYTHON)
+    check(f'python:{_v}' in open(_dockerfile).read(),
+          f'and it is the same version the Dockerfile builds ({_v})')
+check(hasattr(_rel, 'check_python'), 'and refuses to gate from an older one')

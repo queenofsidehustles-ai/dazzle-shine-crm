@@ -335,6 +335,35 @@ try:
           'the business is backed up out of public exactly as it always was')
     drop_db(f'akye_bk_single_{TAG}')
 
+    # -----------------------------------------------------------------------
+    print('\n7. A refused backup still records what it saw')
+    # The checks compare tonight against last night. If the baseline only moved
+    # on a successful run, one deliberate change -- a company closed, its schema
+    # removed -- would make every following night compare against the same stale
+    # manifest and fail again, for ever. A job that is permanently red is one
+    # nobody reads.
+    import re as _re
+    wf = os.path.join(ROOT, '.github', 'workflows', 'backup.yml')
+    y = open(wf).read()
+    man = y[y.index('- name: Upload the manifest'):]
+    check('if: always()' in man[:400],
+          'the manifest is uploaded even when the checks refuse the backup')
+    check('if-no-files-found: ignore' in man[:400],
+          'and a run that failed before writing one does not error on the upload')
+    enc = y[y.index('- name: Encrypt'):]
+    check('if: always()' in enc[:200],
+          'a refused backup is still encrypted — it is customer data either way')
+
+    # Both halves have to agree. Uploading the manifest from a refused run is
+    # pointless if the next run only ever asks for the last SUCCESSFUL one --
+    # which is how the first attempt at this fix left the job still wedged.
+    fetch = y[y.index("- name: Fetch last night's manifest"):y.index('- name: Back up')]
+    check('--status=success' not in fetch,
+          'the baseline is the newest manifest, not the newest success')
+    check('--status=completed' in fetch, 'so a refused run still sets it')
+    check('--limit 6' in fetch,
+          'walking back a few, since a run that failed early has none to offer')
+
 finally:
     drop_db(LIVE)
     drop_db(SCRATCH)

@@ -137,13 +137,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p backups
-          run_id=$(gh run list --workflow=backup.yml --status=success \
-                     --limit 1 --json databaseId --jq '.[0].databaseId' || true)
-          if [ -n "$run_id" ]; then
-            gh run download "$run_id" --name backup-manifest-${{ matrix.key }} --dir backups || true
-            echo "Comparing against run $run_id"
-          else
-            echo "No previous successful run — first backup, nothing to compare."
+          # The most recent run that actually left a manifest, which is not the
+          # same as the most recent SUCCESSFUL one. A refused backup still
+          # records what it saw -- that is the point of uploading it -- and
+          # asking only for successes meant a deliberate change, like a company
+          # closing, was compared against the same stale night for ever.
+          #
+          # Walks back a few runs because a job that failed before it read
+          # anything has no manifest to offer, and the night before it does.
+          found=""
+          for run_id in $(gh run list --workflow=backup.yml --status=completed \
+                            --limit 6 --json databaseId --jq '.[].databaseId'); do
+            if gh run download "$run_id" --name backup-manifest-${{ matrix.key }} \
+                 --dir backups 2>/dev/null; then
+              echo "Comparing against run $run_id"
+              found="$run_id"
+              break
+            fi
+          done
+          if [ -z "$found" ]; then
+            echo "No earlier manifest — first backup of this database, nothing to compare."
           fi
 
       - name: Back up, and prove it restores
@@ -155,7 +168,11 @@ jobs:
 
       # Encrypted before it goes anywhere. Decrypt with:
       #   openssl enc -d -aes-256-cbc -pbkdf2 -in FILE.enc -out FILE.json.gz
+      # Runs even when the checks refused the backup. A suspicious file is still
+      # evidence, and it is customer data either way, so it does not sit around
+      # unencrypted while somebody works out what happened.
       - name: Encrypt
+        if: always()
         env:
           PASS: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
@@ -171,23 +188,40 @@ jobs:
           ls -la
 
       - name: Upload the backup
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backup-${{ matrix.key }}-${{ github.run_number }}
           path: backups/*.enc
           retention-days: 30
+          if-no-files-found: ignore
 
       # Row counts only — no customer data — so it can be kept far longer and
       # read by the next run without decrypting anything.
+      #
+      # Uploaded even on a failed run, and this is the important part. The
+      # comparison is "what changed since last time", and the baseline used to
+      # advance only when a run succeeded — so one deliberate change, a company
+      # closed and its schema removed, made every following night compare
+      # against the same stale manifest and fail again. A backup job that is
+      # permanently red is one nobody reads, which is worse than no check.
+      #
+      # Recording what was actually there tonight means the alarm rings once,
+      # for the night something changed, and a database that keeps shrinking
+      # rings again each night it shrinks further. Which is what a change
+      # detector is for.
       - name: Upload the manifest
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backup-manifest-${{ matrix.key }}
           path: backups/*.manifest.json
           retention-days: 90
           overwrite: true
+          if-no-files-found: ignore
 
       - name: Say what happened
+        if: always()
         run: |
           echo "### ${{ matrix.label }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
