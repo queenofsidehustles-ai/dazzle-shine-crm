@@ -133,6 +133,29 @@ try:
     ''' % ROOT, LIVE=LIVE_URL)
     check(True, 'two companies, each with its own schema and its own client')
 
+    # The platform's own list of who those companies ARE, and what they pay.
+    # It lives outside models.py, so nothing in create_all() makes it.
+    run('''
+        import os, sys
+        sys.path.insert(0, %r)
+        os.environ['DATABASE_URL'] = os.environ['LIVE']
+        os.environ['SECRET_KEY'] = 'test'
+        from sqlalchemy import create_engine, insert
+        import control_plane
+        e = create_engine(os.environ['LIVE'].replace(
+            'postgresql://', 'postgresql+psycopg2://', 1))
+        control_plane.ensure_table(e)
+        with e.begin() as c:
+            for slug, name in (('acme', 'Acme Cleaning'), ('baker', 'Baker Cleaning')):
+                c.execute(insert(control_plane.organizations).values(
+                    slug=slug, name=name, schema_name='tenant_' + slug,
+                    status='active', plan='pro',
+                    stripe_customer_id='cus_' + slug,
+                    subscription_status='active'))
+        print('OK')
+    ''' % ROOT, LIVE=LIVE_URL)
+    check(True, 'and the platform knows they exist, and what they pay')
+
     # -----------------------------------------------------------------------
     print('\n2. The backup contains both companies, not just the registry')
 
@@ -193,6 +216,29 @@ try:
           'and Acme sees only its own client after the restore')
     check("BAKER ['T Hall']" in out,
           'and Baker sees only its own — no leakage across the restore')
+
+    check(counts.get('organizations') == 2,
+          'the company registry restored — without it the tenant data comes '
+          'back and nothing knows who owns it')
+
+    out = run('''
+        import os, sys
+        sys.path.insert(0, %r)
+        from sqlalchemy import create_engine, text
+        e = create_engine(os.environ['SCRATCH'].replace(
+            'postgresql://', 'postgresql+psycopg2://', 1))
+        with e.connect() as c:
+            rows = list(c.execute(text(
+                'SELECT slug, plan, stripe_customer_id FROM public.organizations '
+                'ORDER BY slug')))
+        print('ORGS', rows)
+        assert [r[0] for r in rows] == ['acme', 'baker'], rows
+        assert [r[1] for r in rows] == ['pro', 'pro'], rows
+        assert [r[2] for r in rows] == ['cus_acme', 'cus_baker'], rows
+        print('OK')
+    ''' % ROOT, SCRATCH=SCRATCH_URL)
+    check('ORGS' in out,
+          'with the billing state intact — plan and Stripe customer id')
 
     # -----------------------------------------------------------------------
     print('\n4. Verify refuses to pass a company backup it cannot really check')
