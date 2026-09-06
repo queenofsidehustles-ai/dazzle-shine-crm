@@ -137,13 +137,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p backups
-          run_id=$(gh run list --workflow=backup.yml --status=success \
-                     --limit 1 --json databaseId --jq '.[0].databaseId' || true)
-          if [ -n "$run_id" ]; then
-            gh run download "$run_id" --name backup-manifest-${{ matrix.key }} --dir backups || true
-            echo "Comparing against run $run_id"
-          else
-            echo "No previous successful run — first backup, nothing to compare."
+          # The most recent run that actually left a manifest, which is not the
+          # same as the most recent SUCCESSFUL one. A refused backup still
+          # records what it saw -- that is the point of uploading it -- and
+          # asking only for successes meant a deliberate change, like a company
+          # closing, was compared against the same stale night for ever.
+          #
+          # Walks back a few runs because a job that failed before it read
+          # anything has no manifest to offer, and the night before it does.
+          found=""
+          for run_id in $(gh run list --workflow=backup.yml --status=completed \
+                            --limit 6 --json databaseId --jq '.[].databaseId'); do
+            if gh run download "$run_id" --name backup-manifest-${{ matrix.key }} \
+                 --dir backups 2>/dev/null; then
+              echo "Comparing against run $run_id"
+              found="$run_id"
+              break
+            fi
+          done
+          if [ -z "$found" ]; then
+            echo "No earlier manifest — first backup of this database, nothing to compare."
           fi
 
       - name: Back up, and prove it restores

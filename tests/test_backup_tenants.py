@@ -354,6 +354,16 @@ try:
     check('if: always()' in enc[:200],
           'a refused backup is still encrypted — it is customer data either way')
 
+    # Both halves have to agree. Uploading the manifest from a refused run is
+    # pointless if the next run only ever asks for the last SUCCESSFUL one --
+    # which is how the first attempt at this fix left the job still wedged.
+    fetch = y[y.index("- name: Fetch last night's manifest"):y.index('- name: Back up')]
+    check('--status=success' not in fetch,
+          'the baseline is the newest manifest, not the newest success')
+    check('--status=completed' in fetch, 'so a refused run still sets it')
+    check('--limit 6' in fetch,
+          'walking back a few, since a run that failed early has none to offer')
+
 finally:
     drop_db(LIVE)
     drop_db(SCRATCH)
