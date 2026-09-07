@@ -911,7 +911,12 @@ class ContractorApplication(db.Model):
     rejection_sent_at = db.Column(db.DateTime)
     # Video interview
     interview_token = db.Column(db.String(64), unique=True)
-    interview_status = db.Column(db.String(20), default='not_sent')  # not_sent, sent, in_progress, completed
+    # not_sent, pending, sent, in_progress, completed.
+    # 'pending' is set when screening passes and means the invite is QUEUED --
+    # applicant-followups sends it. It is not 'sent' and must never be shown as
+    # sent: a hiring screen saying somebody was contacted when they were not is
+    # how a good candidate is left waiting for an email nobody sent.
+    interview_status = db.Column(db.String(20), default='not_sent')
     interview_sent_at = db.Column(db.DateTime)
     interview_completed_at = db.Column(db.DateTime)
     interview_nudge_count = db.Column(db.Integer, default=0)   # auto follow-up nudges sent (0, 1, 2)

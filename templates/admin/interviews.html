@@ -25,6 +25,15 @@
       <div class="value">{{ counts.all }}</div>
       <div class="sub">Interview links sent</div>
     </div>
+    {# Queued, not sent. Shown whenever there are any, because a candidate
+       sitting here is waiting on the automations rather than on us. #}
+    {% if counts.pending %}
+    <div class="stat-card" style="border-left:3px solid var(--warn)">
+      <div class="label">Queued</div>
+      <div class="value" style="color:var(--warn)">{{ counts.pending }}</div>
+      <div class="sub">Passed screening, invite not sent yet</div>
+    </div>
+    {% endif %}
     <div class="stat-card">
       <div class="label">Awaiting</div>
       <div class="value">{{ counts.sent }}</div>
@@ -95,10 +104,19 @@
                              padding:3px 10px;border-radius:999px;font-size:0.8rem;font-weight:600">
                   ⏳ In Progress
                 </span>
-              {% else %}
+              {% elif s == 'sent' %}
                 <span style="background:var(--bg);color:var(--muted);border:1px solid var(--border);
                              padding:3px 10px;border-radius:999px;font-size:0.8rem;font-weight:600">
                   📬 Sent
+                </span>
+              {% else %}
+                {# 'pending', 'not_sent', or anything unrecognised. This branch
+                   used to say "Sent", so a candidate nobody had emailed looked
+                   contacted. An unknown state is not evidence of an email. #}
+                <span style="background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);
+                             padding:3px 10px;border-radius:999px;font-size:0.8rem;font-weight:600"
+                      title="Queued by screening. The applicant-followups automation sends it.">
+                  ⏳ Not sent yet
                 </span>
               {% endif %}
             </td>
