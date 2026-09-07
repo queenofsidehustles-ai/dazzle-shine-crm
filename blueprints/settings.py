@@ -90,6 +90,39 @@ def getting_started():
     return render_template('admin/getting_started.html', p=onboarding.progress())
 
 
+@settings_bp.route('/automations/save', methods=['POST'])
+@owner_required
+def save_automation():
+    """Record what this business wants done on its behalf.
+
+    Kept deliberately small. The jobs read the setting themselves, so this only
+    has to write it down -- nothing here decides whether anything runs.
+    """
+    import automations as _auto
+    job = (request.form.get('job') or '').strip()
+    known = {k for k, _l, _b, _c in _auto.JOBS}
+    if job not in known:
+        flash('That is not one of the automations.', 'error')
+        return redirect(url_for('settings.automations_page'))
+
+    if job == 'charge-balances':
+        mode = (request.form.get('mode') or '').strip()
+        _auto.set_balance_mode(mode)
+        db.session.commit()
+        flash({'auto':  'Balances will be charged on the day.',
+               'ask':   'Balances will show as owed. Nothing will be charged for you.',
+               'never': 'Balances will never be charged from here.'}
+              .get(_auto.balance_mode(), 'Saved.'), 'success')
+    else:
+        on = (request.form.get('on') or '') == '1'
+        _auto.set_enabled(job, on)
+        db.session.commit()
+        label = next((l for k, l, _b, _c in _auto.JOBS if k == job), job)
+        flash(f'{label} is now {"on" if on else "off"}.', 'success')
+
+    return redirect(url_for('settings.automations_page'))
+
+
 @settings_bp.route('/setup/confirm/<key>', methods=['POST'])
 @owner_required
 def setup_confirm(key):
@@ -119,8 +152,19 @@ def automations_page():
     import automations as _auto
     from models import CronRun
     first = CronRun.query.order_by(CronRun.ran_at.asc()).first()
+    # On Akye we run the timetable, so the cron-job.org instructions below are
+    # not this business's job any more -- telling them to set it up is the
+    # self-hosted assumption we just removed. On a single-business install the
+    # owner does run the instance, and the instructions are still right.
+    try:
+        import tenancy
+        managed = tenancy.is_tenant()
+    except Exception:
+        managed = False
     return render_template('admin/automations.html',
                            data=_auto.summary(),
+                           balance_mode=_auto.balance_mode(),
+                           managed=managed,
                            base=branding.crm_base(),
                            tracking_since=(first.ran_at.strftime('%b %-d, %Y')
                                            if first else 'when this page shipped'))

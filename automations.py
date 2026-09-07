@@ -37,6 +37,63 @@ JOBS = [
      'Texts the people who called through Google Ads and never booked.', 'daily'),
 ]
 
+# What a business has decided about each job. Absence means on: the five that
+# send messages are what somebody signed up for, and a new company should not
+# have to switch its reminders on.
+#
+# Balances are the exception and have three answers rather than two, because
+# "off" is two different businesses: one that wants telling when money is owed,
+# and one that collects it in cash and does not want the card touched at all.
+BALANCE_MODES = ('auto', 'ask', 'never')
+BALANCE_DEFAULT = 'ask'
+
+
+def _setting(key, default=''):
+    try:
+        from models import BusinessSetting
+        return (BusinessSetting.get(key) or default).strip()
+    except Exception:
+        # A settings lookup must never be the reason a job does not run. On the
+        # message jobs that means carrying on; on the money one the default is
+        # the cautious answer, so a broken read cannot charge anybody.
+        return default
+
+
+def is_enabled(job):
+    """Has this business turned this job off?
+
+    Checked by the job itself rather than by whatever woke it, so the answer
+    holds however it is triggered -- the nightly run, a run by hand, or anything
+    built later that nobody has thought of yet.
+    """
+    if job == 'charge-balances':
+        return balance_mode() == 'auto'
+    return _setting(f'automation_{job}_off') != '1'
+
+
+def balance_mode():
+    """auto: charge the card on the day.
+       ask:  do not charge; show it as owed so the owner decides.
+       never: do not charge, and do not offer to -- collected outside here.
+
+    Defaults to `ask`. Charging a card cannot be undone, so the default is the
+    one that cannot surprise a customer.
+    """
+    mode = _setting('balance_collection', BALANCE_DEFAULT)
+    return mode if mode in BALANCE_MODES else BALANCE_DEFAULT
+
+
+def set_enabled(job, on):
+    from models import BusinessSetting
+    BusinessSetting.set(f'automation_{job}_off', '' if on else '1')
+
+
+def set_balance_mode(mode):
+    from models import BusinessSetting
+    BusinessSetting.set('balance_collection',
+                        mode if mode in BALANCE_MODES else BALANCE_DEFAULT)
+
+
 # How long without a run before a job is treated as stopped rather than idle.
 STALE_HOURS = {'hourly': 6, 'daily': 36}
 
@@ -141,9 +198,15 @@ def overview():
                 evidence = (f"{n} finished job{'s' if n != 1 else ''} still {'have' if n != 1 else 'has'} "
                             f"an uncollected balance on a saved card.")
 
+        on = is_enabled(key)
+        if not on:
+            # Off on purpose is not the same as broken, and a page that cannot
+            # tell them apart trains people to ignore it.
+            state, evidence = 'off', ''
         out.append({
             'key': key, 'label': label, 'blurb': blurb, 'cadence': cadence,
             'last': last, 'hours': hours, 'state': state, 'evidence': evidence,
+            'on': on,
         })
     return out
 
