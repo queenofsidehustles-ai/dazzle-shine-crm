@@ -1,0 +1,104 @@
+# Run every company's automations, so no company has to run its own.
+#
+# On a single-business CRM the owner sets up their own cron job, which is right:
+# they run the instance, so they run the clock. On Akye they do not run the
+# instance. Asking a cleaning company owner to sign up for cron-job.org and
+# paste six URLs is the self-hosted assumption leaking into a product where we
+# are the host — and in practice the ones who never get round to it quietly send
+# no reminders and charge no balances, and find out from a customer.
+#
+# So it runs here, the way ZenMaid and Jobber do it: one timetable, walking
+# every company. A cleaning company signs up and its automations are already
+# running, because there was never anything for it to switch on.
+#
+# ---------------------------------------------------------------------------
+# Secrets. Settings → Secrets and variables → Actions:
+#
+#   AKYE_DATABASE_URL   Railway → Akye's Postgres → DATABASE_PUBLIC_URL.
+#                       Only to read the list of companies; the jobs themselves
+#                       run inside each company's own app.
+#
+#   REMINDER_API_KEY    The same value the Akye app has in Railway. If these two
+#                       differ every call comes back 403 and it looks exactly
+#                       like nothing running at all, so the script says so by
+#                       name when it sees one.
+# ---------------------------------------------------------------------------
+name: Automations
+
+on:
+  schedule:
+    # Balances are charged at each job's start time, so this has to come round
+    # more often than a day. On the hour, every hour.
+    - cron: '5 * * * *'
+    # Everything else once a day, early enough that a day-before reminder
+    # arrives the evening before rather than the morning of.
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+    inputs:
+      cadence:
+        description: Which timetable to run by hand
+        type: choice
+        options: [hourly, daily]
+        default: daily
+      only:
+        description: A single company slug, for testing. Blank runs all.
+        type: string
+        default: ''
+
+# One at a time. Two runs charging the same balances at once is the failure
+# worth designing out, whatever the endpoints do about it themselves.
+concurrency:
+  group: automations
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # The companies are on Akye, so the code that knows what a company is
+      # comes from Akye's released branch — not from main, which has no tenancy
+      # and no control plane to read.
+      - uses: actions/checkout@v4
+        with:
+          ref: akye-stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Work out which timetable this is
+        id: which
+        run: |
+          if [ -n "${{ inputs.cadence }}" ]; then
+            echo "cadence=${{ inputs.cadence }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "5 * * * *" ]; then
+            echo "cadence=hourly" >> $GITHUB_OUTPUT
+          else
+            echo "cadence=daily" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run them
+        env:
+          AKYE_DATABASE_URL: ${{ secrets.AKYE_DATABASE_URL }}
+          REMINDER_API_KEY: ${{ secrets.REMINDER_API_KEY }}
+          BASE_DOMAIN: akyehq.com
+        run: |
+          python3 scheduler.py --cadence ${{ steps.which.outputs.cadence }} \
+            ${{ inputs.only && format('--only {0}', inputs.only) || '' }} \
+            | tee run.log
+
+      # The whole point of moving this off the customer is that a failure
+      # becomes ours to notice. A red run is the notice.
+      - name: Say what happened
+        if: always()
+        run: |
+          echo "### Automations — ${{ steps.which.outputs.cadence }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -40 run.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(no output)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
