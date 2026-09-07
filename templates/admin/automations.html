@@ -29,13 +29,21 @@
        called" is an instruction you can only follow if you already know what a
        cron service is. Somebody who does not has no next move at all — and
        these are the jobs that text customers and take money. #}
+    {% if managed %}
+    <p style="font-size:0.88rem;color:var(--warn);line-height:1.6;margin:0 0 4px">
+      These run on our timetable, not yours, and they haven't yet. There is
+      nothing for you to set up — if this doesn't clear on its own, tell us.
+    </p>
+    {% else %}
     <p style="font-size:0.88rem;color:var(--warn);line-height:1.6;margin:0 0 4px">
       These jobs don't run on their own. Something outside has to wake them up on a
       timetable, and right now nothing is. Reminders aren't going out and balances
       aren't being charged.
     </p>
+    {% endif %}
   </div>
 
+  {% if not managed %}
   <details class="howto" open>
     <summary>Set this up — free, no card, about 10 minutes</summary>
     <div class="howto-body">
@@ -73,13 +81,15 @@
       </div>
     </div>
   </details>
-  {% endif %}
+  {% endif %}{# not managed #}
+  {% endif %}{# data.all_ok #}
 
   {% for r in data.rows %}
   {% set tone = {'ok':      ('var(--good-soft)', 'var(--good-soft)', 'var(--good)', '✅', 'Running'),
                  'stale':   ('var(--amber-soft)', 'var(--amber-line)', 'var(--amber-deep)', '⚠️', 'Hasn’t run recently'),
                  'failing': ('var(--warn-soft)', 'var(--warn-soft)', 'var(--warn)', '❌', 'Last run failed'),
-                 'never':   ('var(--warn-soft)', 'var(--warn-soft)', 'var(--warn)', '🚫', 'Never run')}[r.state] %}
+                 'never':   ('var(--warn-soft)', 'var(--warn-soft)', 'var(--warn)', '🚫', 'Never run'),
+                 'off':     ('var(--ground)', 'var(--line)', 'var(--softer)', '⏸️', 'Turned off')}[r.state] %}
   <div class="card" style="margin-bottom:12px;border-left:4px solid {{ tone[2] }}">
     <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:240px">
@@ -94,6 +104,44 @@
           </span>
         </div>
         <p style="font-size:0.87rem;color:var(--muted);line-height:1.6;margin:6px 0 0">{{ r.blurb|safe }}</p>
+
+        {% if r.key == 'charge-balances' %}
+        {# Three answers, not two. "Off" is two different businesses: one that
+           wants telling when money is owed, and one that collects it in cash
+           and does not want the card touched at all. #}
+        <form method="POST" action="{{ url_for('settings.save_automation') }}"
+              style="margin-top:12px;display:flex;flex-direction:column;gap:7px">
+          <input type="hidden" name="job" value="charge-balances" />
+          {% for value, title, note in [
+              ('auto',  'Charge the card on the day',
+               'The balance comes off the card they paid the deposit with, at the job’s start time.'),
+              ('ask',   'Tell me it’s due — I’ll decide',
+               'Nothing is charged. The balance shows as owed on the job and you charge it when you want.'),
+              ('never', 'Never charge the card',
+               'You collect the rest in cash or by invoice. The software will not offer to charge it.')] %}
+          <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;
+                        padding:9px 11px;border-radius:9px;
+                        border:1px solid {{ 'var(--amber)' if balance_mode == value else 'var(--line)' }};
+                        background:{{ 'var(--amber-soft)' if balance_mode == value else 'var(--surface)' }}">
+            <input type="radio" name="mode" value="{{ value }}"
+                   {{ 'checked' if balance_mode == value }}
+                   onchange="this.form.submit()" style="margin-top:3px" />
+            <span>
+              <strong style="font-size:0.9rem">{{ title }}</strong>
+              <span style="display:block;font-size:0.82rem;color:var(--muted);line-height:1.5">{{ note }}</span>
+            </span>
+          </label>
+          {% endfor %}
+        </form>
+        {% else %}
+        <form method="POST" action="{{ url_for('settings.save_automation') }}" style="margin-top:10px">
+          <input type="hidden" name="job" value="{{ r.key }}" />
+          <input type="hidden" name="on" value="{{ '0' if r.on else '1' }}" />
+          <button type="submit" class="btn btn-outline btn-sm">
+            {{ 'Turn this off' if r.on else 'Turn this back on' }}
+          </button>
+        </form>
+        {% endif %}
 
         {% if r.last %}
           <p style="font-size:0.82rem;color:var(--softer);margin:8px 0 0">
@@ -128,6 +176,16 @@
   </div>
   {% endfor %}
 
+  {% if managed %}
+  <div style="background:var(--good-soft);border:1px solid var(--good);border-radius:10px;padding:16px 18px;margin-top:18px">
+    <div style="font-weight:700;color:var(--good);margin-bottom:6px">You don't set these up</div>
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--good);margin:0">
+      They run on a timetable we keep, for every business here. Switch any of them
+      off above if you'd rather do that part yourself — nothing else is needed
+      from you, and if one stops running that is ours to notice and fix.
+    </p>
+  </div>
+  {% else %}
   <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:10px;padding:16px 18px;margin-top:18px">
     <div style="font-weight:700;color:var(--info);margin-bottom:6px">How to set these up</div>
     <p style="font-size:0.87rem;line-height:1.65;color:var(--info);margin:0 0 8px">
@@ -147,6 +205,7 @@
       about weeks before any of this existed.
     </p>
   </div>
+  {% endif %}
 
 </div>
 {% endblock %}

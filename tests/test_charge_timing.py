@@ -36,6 +36,14 @@ payment_service.autocharge = lambda b: (CHARGED.append(b.id), (True, ''))[1]
 
 with app.app_context():
     db.create_all()
+
+    # This suite is about WHEN a balance is charged, so it needs a business that
+    # has chosen to have them charged at all. That is no longer the default:
+    # taking the deposit online saves the customer's card, so a business
+    # collecting the rest in cash would otherwise have had it taken anyway.
+    import automations
+    automations.set_balance_mode('auto')
+    db.session.commit()
     BusinessSetting.set('business_name', 'Test Cleaning Co')
     BusinessSetting.set('timezone', 'America/New_York')
     BusinessSetting.set('charge_hour', '9')

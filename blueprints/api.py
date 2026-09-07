@@ -66,6 +66,11 @@ def send_reminders():
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('reminders'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
+
     # The business's own date, not the server's. In the evening a UTC server
     # already believes it is tomorrow, so "tomorrow" would land a day late —
     # the same trap charge-balances was fixed for.
@@ -116,6 +121,11 @@ def charge_balances():
     expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('charge-balances'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
 
     import scheduling
     from payment_service import charge_balance as do_charge
@@ -364,6 +374,11 @@ def send_drips():
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('send-drips'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
+
     from models import Lead
     today = date.today()
     step2 = Lead.query.filter(Lead.drip_step == 1, Lead.status == 'new',
@@ -401,6 +416,11 @@ def lsa_followups():
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('lsa-followups'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
+
     import lsa
     # Re-match first: someone who booked since the last run must drop out before
     # they're texted about not having booked.
@@ -423,6 +443,11 @@ def applicant_followups():
     expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('applicant-followups'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
 
     from models import ContractorApplication
     from blueprints.interviews import send_interview_invite_email
@@ -510,6 +535,12 @@ def lifecycle_emails():
     expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('lifecycle-emails'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
+
     import lifecycle
     counts = lifecycle.run_lifecycle_emails()
     automations.record('lifecycle-emails', items=sum(v for v in counts.values()
