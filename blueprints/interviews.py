@@ -257,9 +257,15 @@ def admin_interviews():
         q = q.filter_by(interview_status=status_filter)
 
     apps = q.all()
+    # 'pending' means screening passed and the invite is queued -- it is sent by
+    # the applicant-followups job, not by the screening. Counting only the three
+    # states after that meant a queued candidate was in the list and in none of
+    # the numbers, while the badge's catch-all called them "Sent". Nobody had
+    # emailed them.
     counts = {s: ContractorApplication.query.filter_by(interview_status=s).count()
-              for s in ('sent', 'in_progress', 'completed')}
-    counts['all'] = sum(counts.values())
+              for s in ('pending', 'sent', 'in_progress', 'completed')}
+    # Sent means sent. A queued invite is not one.
+    counts['all'] = counts['sent'] + counts['in_progress'] + counts['completed']
 
     return render_template('admin/interviews.html',
         apps=apps, counts=counts, status_filter=status_filter)
