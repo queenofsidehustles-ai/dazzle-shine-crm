@@ -58,8 +58,11 @@ def get_config():
 
 @api_bp.route('/reminders', methods=['POST'])
 def send_reminders():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
@@ -106,8 +109,11 @@ def send_reminders():
 
 @api_bp.route('/charge-balances', methods=['POST'])
 def charge_balances():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
@@ -350,8 +356,11 @@ def _send_commercial_alert(lead, company, facility_label, sqft, frequency, messa
 
 @api_bp.route('/send-drips', methods=['POST'])
 def send_drips():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
@@ -384,8 +393,11 @@ def lsa_followups():
     """Advance the text sequence for people who called through Google Ads and
     never booked. Sends only what is due, and re-checks every reason to stop at
     the moment of sending rather than trusting the state it was queued in."""
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
@@ -404,8 +416,11 @@ def lsa_followups():
 
 @api_bp.route('/applicant-followups', methods=['POST'])
 def applicant_followups():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
@@ -488,8 +503,11 @@ def applicant_followups():
 
 @api_bp.route('/lifecycle-emails', methods=['POST'])
 def lifecycle_emails():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     import lifecycle
@@ -511,8 +529,11 @@ def lifecycle_emails():
 
 @api_bp.route('/trial-nudges', methods=['POST'])
 def trial_nudges():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     import trial_nudges as tn
