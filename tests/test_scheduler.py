@@ -20,6 +20,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import scheduler
 
+# Held before any section stubs it out, so the newline check further down can
+# build a real header rather than reassigning a stub to itself.
+REAL_CALL = scheduler.call
+
 failures = []
 
 
@@ -116,7 +120,38 @@ for var, why in [('BASE_DOMAIN', 'no company address could be built'),
         os.environ[var] = keep
 
 
-print('\n7. The workflow runs the branch that knows what a company is')
+print('\n7. A secret with a stray newline still works')
+# What actually happened on the first real run: the key was pasted into GitHub
+# with a trailing newline, and urllib refused the header outright -- "Invalid
+# header value" -- which reads as a bug in the caller rather than a stray
+# keystroke in a settings box. Every job for every company failed on it.
+import scheduler as _s
+seen = {}
+_s.urllib.request.urlopen = lambda req, timeout=None: (_ for _ in ()).throw(
+    AssertionError('should not reach the network'))
+
+
+class _Resp:
+    def read(self, n=None): return b'{"ok": true}'
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+
+def _capture(req, timeout=None):
+    seen['key'] = req.get_header('X-api-key')
+    return _Resp()
+
+
+_s.urllib.request.urlopen = _capture
+os.environ['REMINDER_API_KEY'] = 'key-under-the-mat\n'
+_s.companies = lambda: [{'slug': 'acme', 'status': 'active'}]
+_s.call = REAL_CALL                 # the real one, so the header is really built
+_s.run(['reminders'], quiet=True)
+check(seen.get('key') == 'key-under-the-mat',
+      'the newline is trimmed before it reaches the header')
+os.environ['REMINDER_API_KEY'] = 'key-under-the-mat'
+
+print('\n8. The workflow runs the branch that knows what a company is')
 wf = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                   '.github', 'workflows', 'automations.yml')
 y = open(wf).read()

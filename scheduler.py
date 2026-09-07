@@ -121,7 +121,12 @@ def call(slug, job, base, key):
 
 def run(jobs, only=None, quiet=False):
     base = (os.environ.get('BASE_DOMAIN') or '').strip().lower()
-    key = os.environ.get('REMINDER_API_KEY') or ''
+    # Trimmed, and not only for tidiness: a secret pasted with a trailing
+    # newline makes urllib refuse the header outright -- "Invalid header value"
+    # -- which reads as a bug in the caller rather than a stray keystroke in a
+    # settings box. Whitespace around a secret should never be the difference
+    # between working and not.
+    key = (os.environ.get('REMINDER_API_KEY') or '').strip()
     if not base:
         sys.exit('BASE_DOMAIN is not set — cannot work out any company\'s address.')
     if not key:
