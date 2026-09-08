@@ -98,8 +98,8 @@
 
   <div class="suggest">
     {% for s in ['What is booked tomorrow?', 'How much came in last month?',
-                 'What is owed?', 'Which jobs have nobody on them?',
-                 'Who is on the team?'] %}
+                 'Any new enquiries?', 'How are the commercial leads doing?',
+                 'What is owed?', 'Which jobs have nobody on them?'] %}
     <button type="button" onclick="fill(this.innerText)">{{ s }}</button>
     {% endfor %}
   </div>
@@ -219,6 +219,35 @@
     qs.textContent = q;
     wrap.appendChild(qs);
     wrap.appendChild(document.createTextNode(data.say || ''));
+
+    // A draft is shown in a box you can edit and copy. It is not sent from here
+    // and there is deliberately no button that would.
+    if (data.draft && data.draft.body) {
+      if (data.draft.facts && data.draft.facts.length) {
+        const f = document.createElement('div');
+        f.style.cssText = 'margin-top:10px;font-size:0.8rem;color:var(--softer);line-height:1.5';
+        f.textContent = 'Written from: ' + data.draft.facts.join(' · ');
+        wrap.appendChild(f);
+      }
+      const ta = document.createElement('textarea');
+      ta.style.cssText = 'width:100%;margin-top:10px;padding:12px;border:1px solid var(--line);'
+                       + 'border-radius:10px;font-family:inherit;font-size:0.95rem;'
+                       + 'line-height:1.6;background:var(--surface);color:var(--ink)';
+      ta.rows = Math.min(12, (data.draft.body.split('\n').length + 3));
+      ta.value = data.draft.body;
+      wrap.appendChild(ta);
+
+      const copy = document.createElement('button');
+      copy.type = 'button'; copy.className = 'btn btn-outline btn-sm';
+      copy.style.marginTop = '8px';
+      copy.textContent = 'Copy';
+      copy.onclick = () => {
+        ta.select();
+        try { document.execCommand('copy'); copy.textContent = 'Copied'; } catch (e) {}
+        setTimeout(() => { copy.textContent = 'Copy'; }, 1600);
+      };
+      wrap.appendChild(copy);
+    }
 
     // Something to do comes back as a button, never as an action already taken.
     if (data.confirm) {

@@ -100,9 +100,28 @@ with app.app_context():
 
     print('\n4. It will not send anything')
     SENT.clear()
-    out = assistant.draft_email(about='say sorry we were late', to='rita@x.com')
-    check('draft' in out, 'it drafts')
+    # With a key it writes; without one it says so. Either way nothing leaves.
+    class _Fake:
+        @staticmethod
+        def post(*a, **k):
+            class R:
+                @staticmethod
+                def json():
+                    return {'choices': [{'message': {
+                        'content': 'Hello Rita, sorry we were late today.'}}]}
+            return R()
+    import assistant as _a
+    _real_requests = __import__('requests')
+    sys.modules['requests'] = _Fake
+    try:
+        out = _a.draft_email(about='say sorry we were late', to='Rita',
+                             api_key='pretend')
+    finally:
+        sys.modules['requests'] = _real_requests
+    check(out.get('draft', {}).get('body'), f'it writes a draft: {out.get("draft", {}).get("body")!r}')
     check('do not send' in out['say'], 'and says plainly that it does not send')
+    check('facts' in out['draft'],
+          'showing what it was working from, so the words can be checked')
     check(SENT == [], 'nothing left the building')
 
     print('\n5. Finishing a job is offered, not done')
@@ -129,6 +148,47 @@ with app.app_context():
     writers = [n for n, (_f, d, _a) in assistant.TOOLS.items()
                if 'mark' in d or 'finished' in d]
     check(writers == ['finish_job'], f'exactly one tool touches data: {writers}')
+
+    print('\n7b. It knows about leads, not just jobs')
+    from models import Lead, Prospect, CommercialAccount
+    check('No new enquiries waiting' in assistant.leads_waiting(),
+          'an empty inbox says so')
+    db.session.add(Lead(name='Dana Ruiz', email='dana@x.com', phone='4071112222',
+                        service_type='standard', city='Orlando', status='new',
+                        quoted_price=210.0))
+    db.session.add(Lead(name='Old One', email='old@x.com', phone='4073334444',
+                        service_type='standard', status='contacted'))
+    db.session.commit()
+    said = assistant.leads_waiting()
+    check('Dana Ruiz' in said, f'a new enquiry is surfaced: {said.splitlines()[0]!r}')
+    check('210.00' in said, 'with what they were quoted')
+    check('Old One' not in said, 'somebody already replied to is not still waiting')
+
+    said = assistant.commercial_pipeline()
+    check('Nothing commercial yet' in said, 'and an empty pipeline says so plainly')
+    db.session.add(Prospect(business_name='Palm Ridge Lettings',
+                            category='property_manager', stage='called'))
+    db.session.add(CommercialAccount(business_name='Lakeview Offices',
+                                     contact_name='Sam', email='sam@x.com',
+                                     status='active'))
+    db.session.commit()
+    said = assistant.commercial_pipeline()
+    check('1 account' in said, f'won accounts are counted: {said!r}')
+    check('called' in said, 'and prospects are grouped by where they got to')
+
+    print('\n7c. A draft is written from facts, and still is not sent')
+    SENT.clear()
+    out = assistant.draft_email(about='thank them for the enquiry', to='Dana',
+                                api_key='')
+    check('no writing key' in out['say'], 'with no key it says so rather than guessing')
+    check(SENT == [], 'and nothing was sent')
+    # The facts handed to it come from the database, not from the model's memory.
+    who = assistant._who('Dana')
+    check(who and who['kind'] == 'enquiry', 'it finds an enquiry by name')
+    check(who['quoted'] == 210.0, 'and knows what they were actually quoted')
+    check(assistant._who('Sam')['kind'] in ('commercial', 'customer'),
+          'and finds a commercial contact too')
+    check(assistant._who('nobody at all') is None, 'and does not invent a person')
 
     print('\n8. The page offers; the button acts')
     c = app.test_client()
