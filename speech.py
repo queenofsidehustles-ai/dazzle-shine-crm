@@ -27,15 +27,25 @@ thing to do to your best customer.
 """
 import os
 
-# https://api.openai.com/v1/audio/speech -- checked against the current API
-# reference rather than typed from memory, because the last model name in this
-# codebase was typed from memory and did not exist.
-API_URL = 'https://api.openai.com/v1/audio/speech'
+# Two ways in, and the one already paid for comes first.
+#
+# OpenRouter carries the same model behind an endpoint with the same shape, and
+# there is already a working OpenRouter key in this deployment with a card
+# behind it. Going direct to OpenAI meant a second account, a second card and a
+# second bill for exactly the same voice -- which is a poor trade at any time
+# and a worse one when the card is being declined.
+#
+# Both URLs and the model names were checked against the live services rather
+# than typed from memory. The last model name in this codebase was typed from
+# memory, did not exist, and every question came back "I did not follow that".
+OPENAI_URL = 'https://api.openai.com/v1/audio/speech'
+ROUTER_URL = 'https://openrouter.ai/api/v1/audio/speech'
 
 # gpt-4o-mini-tts takes an `instructions` string, which is the only reason it
 # is here rather than tts-1: the voice can be told how to sound, and the
 # complaint that started this was that it had no personality.
 MODEL = os.environ.get('SPEECH_MODEL', 'gpt-4o-mini-tts')
+ROUTER_MODEL = os.environ.get('SPEECH_MODEL_ROUTER', 'openai/gpt-4o-mini-tts')
 VOICE = os.environ.get('SPEECH_VOICE', 'sage')
 
 # How she is asked to sound. Warm and unhurried, not bright and salesy --
@@ -85,8 +95,24 @@ def _count(chars):
     db.session.commit()
 
 
+def provider():
+    """(url, model, key) for whoever can speak, or None if nobody can.
+
+    A direct OpenAI key wins when one is set, because it is one hop fewer.
+    Otherwise the OpenRouter key that is already answering questions does this
+    job too, and nothing new has to be signed up for.
+    """
+    direct = (os.environ.get('OPENAI_API_KEY') or '').strip()
+    if direct:
+        return OPENAI_URL, MODEL, direct
+    router = (os.environ.get('OPENROUTER_API_KEY') or '').strip()
+    if router:
+        return ROUTER_URL, ROUTER_MODEL, router
+    return None
+
+
 def configured():
-    return bool((os.environ.get('OPENAI_API_KEY') or '').strip())
+    return provider() is not None
 
 
 def say(text):
@@ -99,9 +125,10 @@ def say(text):
     text = (text or '').strip()
     if not text:
         return None
-    key = (os.environ.get('OPENAI_API_KEY') or '').strip()
-    if not key:
+    who = provider()
+    if not who:
         return None
+    url, model, key = who
     if len(text) > MAX_ONE:
         text = text[:MAX_ONE]
     if remaining() < len(text):
@@ -109,15 +136,32 @@ def say(text):
 
     _count(len(text))
     import requests
-    try:
-        r = requests.post(API_URL, timeout=30, headers={
-            'Authorization': f'Bearer {key}',
-            'Content-Type': 'application/json',
-        }, json={'model': MODEL, 'voice': VOICE, 'input': text,
-                 'instructions': MANNER, 'response_format': 'mp3'})
-    except Exception as e:
-        _trouble(f'could not reach the voice service: {type(e).__name__}')
+
+    def attempt(body):
+        try:
+            return requests.post(url, timeout=30, headers={
+                'Authorization': f'Bearer {key}',
+                'Content-Type': 'application/json',
+            }, json=body)
+        except Exception as e:
+            _trouble(f'could not reach the voice service: {type(e).__name__}')
+            return None
+
+    body = {'model': model, 'voice': VOICE, 'input': text,
+            'instructions': MANNER, 'response_format': 'mp3'}
+    r = attempt(body)
+    if r is None:
         return None
+
+    # `instructions` is how the voice is told to sound warm rather than flat,
+    # and it is the newest part of this API. If a provider has not got it yet,
+    # the answer should still be read aloud in a plain voice rather than not at
+    # all -- so a refusal is tried once more without it.
+    if r.status_code == 400 and 'instructions' in body:
+        body.pop('instructions')
+        r = attempt(body)
+        if r is None:
+            return None
 
     # An error comes back as JSON where audio should be. Reading the content
     # type is how we tell the two apart without guessing from the length.

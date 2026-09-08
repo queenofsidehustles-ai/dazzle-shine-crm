@@ -430,12 +430,28 @@ with app.app_context():
     saved_key = os.environ.pop('OPENAI_API_KEY', None)
     try:
         # No key is the normal state, not a fault. It means "browser reads it".
-        check(speech.configured() is False, 'with no key the good voice is off')
+        saved_router = os.environ.pop('OPENROUTER_API_KEY', None)
+        check(speech.configured() is False, 'with no key at all the good voice is off')
         check(speech.say('anything') is None,
               'and asking for it returns nothing to play, not an error')
 
+        # The key that already answers questions also reads them out. Nobody
+        # has to sign up for a second account to be spoken to.
+        os.environ['OPENROUTER_API_KEY'] = 'sk-or-test'
+        url, model, key = speech.provider()
+        check('openrouter.ai' in url and key == 'sk-or-test',
+              'the OpenRouter key already in the deployment can speak')
+        check('/' in model,
+              f'using its own name for the model ({model})')
+
+        # A direct OpenAI key, if one is ever added, is one hop fewer and wins.
         os.environ['OPENAI_API_KEY'] = 'sk-test'
+        url, model, key = speech.provider()
+        check('api.openai.com' in url and key == 'sk-test',
+              'a direct key takes precedence when there is one')
         check(speech.configured() is True, 'with a key it is on')
+        if saved_router is None:
+            os.environ.pop('OPENROUTER_API_KEY', None)
 
         # The allowance is spent before the call, so a request that times out
         # still costs its characters. A bill runs away the other way round.
