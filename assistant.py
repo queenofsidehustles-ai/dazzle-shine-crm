@@ -263,7 +263,10 @@ def draft_email(about='', to='', api_key=None):
         return {'say': 'Who is it to, and what about?'}
 
     person = _who(to)
-    facts = []
+    # Who the business is, always. An introduction is written out of what you
+    # do, not out of what you already know about them, and until now she was
+    # handed only the second kind and told to invent nothing.
+    facts = list(business_profile())
     if person:
         facts.append(f'Their name: {person["name"]}')
         facts.append(f'They are a {person["kind"]}')
@@ -288,12 +291,22 @@ def draft_email(about='', to='', api_key=None):
     import requests
     system = (
         'You write a short, plain business email for a cleaning company owner to '
-        'send. Warm, direct, no marketing language, no exclamation marks, four '
+        'send. Warm, direct, no marketing language, no exclamation marks, five '
         'sentences at most.\n\n'
-        'Use ONLY the facts below. Invent nothing — no prices, no dates, no '
-        'appointment times, no promises that are not stated. If something is '
-        'needed and not here, write [ ] and let the owner fill it in.\n\n'
-        'Facts:\n' + ('\n'.join(facts) if facts else '(none given)') +
+        # The line that mattered, and the one that was wrong. "Invent nothing"
+        # with no facts to hand produced a refusal to write at all -- which is
+        # right for "tell Rita her price" and absurd for an introduction.
+        # The rule is about specifics, not about sentences.
+        'Never state a price, a date, an appointment time, a discount or a '
+        'promise about their property unless it appears in the facts below. '
+        'Where one of those is needed and is not here, write [ ] and let the '
+        'owner fill it in.\n\n'
+        'You may otherwise write normally: introduce the business, say what it '
+        'does, ask for a conversation. Writing an ordinary business email is '
+        'the job — an introduction is not made of database facts, and coming '
+        'back to say you have none is never the right answer.\n\n'
+        'Facts:\n' + ('\n'.join(facts) if facts else
+                       '(nothing on file about them — write an introduction)') +
         '\n\nReply with the email body only. No subject line, no signature.')
     try:
         r = requests.post(API_URL, timeout=25, headers={
@@ -381,6 +394,63 @@ def commercial_pipeline():
     return text
 
 
+def business_profile():
+    """What this business is, in the words somebody would use to describe it.
+
+    Nana knew every number in the books and nothing about the company. That is
+    why "draft an intro email to Harbor Realty Group" produced a refusal: the
+    only facts she was ever handed were facts about the *recipient*, and an
+    introduction is not made of those. It is made of what you do, where, and
+    for whom -- which was sitting in settings the whole time, unread.
+
+    Everything here is real and read from this business's own records. Nothing
+    is inferred, so a blank stays blank rather than becoming a guess.
+    """
+    out = []
+    try:
+        import branding
+        name = branding.biz_name()
+        if name:
+            out.append(f'Business name: {name}')
+        where = branding.city_line()
+        if where:
+            out.append(f'Based in: {where}')
+        site = branding.website()
+        if site:
+            out.append(f'Website: {site}')
+        tel = branding.phone()
+        if tel:
+            out.append(f'Phone: {tel}')
+    except Exception:
+        pass
+
+    # What it actually sells, taken from the work on the books rather than from
+    # a description somebody wrote once and never updated.
+    try:
+        from models import Booking
+        from sqlalchemy import func
+        rows = (db_session().query(Booking.service_type, func.count(Booking.id))
+                .group_by(Booking.service_type).all())
+        kinds = [r[0] for r in sorted(rows, key=lambda r: -r[1]) if r[0]][:5]
+        if kinds:
+            out.append('Services it books most: ' + ', '.join(kinds))
+    except Exception:
+        pass
+
+    try:
+        from models import CommercialAccount, Prospect
+        if CommercialAccount.query.count() or Prospect.query.count():
+            out.append('It does commercial work as well as homes')
+    except Exception:
+        pass
+    return out
+
+
+def db_session():
+    from extensions import db
+    return db.session
+
+
 def _who(name):
     """Find one person by name across the places somebody might mean.
 
@@ -409,6 +479,18 @@ def _who(name):
     if a:
         return {'name': a.contact_name or a.business_name, 'email': a.email,
                 'kind': 'commercial', 'company': a.business_name}
+
+    # Prospects last, and they were missing entirely. This is the commercial
+    # list somebody is actually working -- the companies pulled off the map
+    # that have not been called yet -- so "draft an email to Harbor Realty
+    # Group" looked in three tables, missed the only one it could have been in,
+    # and came back with nothing to write from.
+    from models import Prospect
+    pr = Prospect.query.filter(Prospect.business_name.ilike(like)).first()
+    if pr:
+        return {'name': pr.business_name, 'email': None, 'kind': 'prospect',
+                'company': pr.business_name, 'city': pr.city,
+                'stage': (pr.status or 'not called yet').replace('_', ' ')}
     return None
 
 

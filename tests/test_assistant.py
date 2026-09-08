@@ -11,6 +11,7 @@ than done. Anything that reaches a customer or moves money should be a button a
 person pressed, not a sentence a model understood.
 """
 import os, re, sys, tempfile
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 from datetime import datetime, date, timedelta
 
 TMP = tempfile.mkdtemp()
@@ -565,6 +566,43 @@ with app.app_context():
     ok, said = actions.run('complete_booking', {'booking_id': 999999})
     check(ok is False and 'not here' in said,
           'a job that has gone since it was offered is refused, not invented')
+    print('\n17. She can write to a company she has not spoken to yet')
+    from models import Prospect
+    db.session.add(Prospect(business_name='Harbor Realty Group', city='Tampa',
+                            status='new'))
+    db.session.commit()
+
+    # The commercial list somebody is actually working was the one table _who
+    # did not search, so "draft an email to Harbor Realty Group" found nothing
+    # to write from and came back asking for facts.
+    found = assistant._who('Harbor Realty')
+    check(found is not None, 'a prospect can be found by name')
+    check(found and found['kind'] == 'prospect',
+          'and is known to be a company nobody has called yet')
+
+    # And she knows who *she* is. An introduction is written out of what the
+    # business does, which was sitting in settings unread.
+    from models import BusinessSetting
+    BusinessSetting.set('business_name', 'Kojo Cleaning')
+    BusinessSetting.set('city', 'Tampa')
+    BusinessSetting.set('state', 'FL')
+    db.session.commit()
+    profile = assistant.business_profile()
+    check(any('Kojo Cleaning' in f for f in profile),
+          f'the profile says who the business is ({profile})')
+    check(any('Tampa' in f for f in profile), 'and where it works')
+
+    # The rule that broke it: "use only the facts, invent nothing" with no
+    # facts meant refusing to write. It has to forbid inventing *specifics*,
+    # not forbid writing sentences.
+    src = open(os.path.join(ROOT, 'assistant.py')).read()
+    draft_src = src[src.index('def draft_email'):src.index('def whats_next')]
+    check('Never state a price' in draft_src,
+          'prices, dates and promises still cannot be invented')
+    check('an introduction is not made of database facts' in draft_src,
+          'but writing an ordinary email is now the job, not a refusal')
+    check('Use ONLY the facts below' not in draft_src,
+          'the rule that produced "I have no facts to work with" is gone')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')
