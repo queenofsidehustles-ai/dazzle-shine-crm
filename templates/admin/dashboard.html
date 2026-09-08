@@ -3,6 +3,36 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
+{# Today's list. Only shown once a business is past setup: a company with no
+   customers does not need telling that nobody is waiting on a reply, and the
+   getting-started card is a better use of that space. Everything on it is a
+   real count that disappears when it stops being true, so a quiet day looks
+   quiet rather than inventing something to do. #}
+{% if plan and ONBOARDING and ONBOARDING.complete %}
+<div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber)">
+  <div class="eyebrow" style="margin-bottom:10px">Today</div>
+  {% if plan.nothing %}
+  <p style="margin:0;color:var(--muted);line-height:1.6">{{ plan.say }}</p>
+  {% else %}
+  <div style="display:flex;flex-direction:column;gap:9px">
+    {% for urgency, text, link in plan['items'] %}
+    <a href="{{ link }}" style="display:flex;gap:11px;align-items:baseline;
+              text-decoration:none;color:inherit;line-height:1.55">
+      <span style="flex:0 0 auto;font-size:0.68rem;font-weight:700;letter-spacing:0.09em;
+                   text-transform:uppercase;padding:2px 8px;border-radius:999px;
+                   background:{{ 'var(--warn-soft)' if urgency == 'now' else 'var(--ground)' }};
+                   color:{{ 'var(--warn)' if urgency == 'now' else 'var(--softer)' }};
+                   border:1px solid {{ 'var(--warn)' if urgency == 'now' else 'var(--line)' }}">
+        {{ urgency }}
+      </span>
+      <span>{{ text }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 {# Until a business has a job on the calendar with a cleaner on it, the most
    useful thing this page can do is say what to do next. It disappears by
    itself the moment that happens -- nothing to dismiss, nothing to configure,

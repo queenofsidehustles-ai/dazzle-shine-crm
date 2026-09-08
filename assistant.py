@@ -295,6 +295,12 @@ def draft_email(about='', to='', api_key=None):
     }
 
 
+def whats_next():
+    """What is worth doing today. Counted, not composed -- see daily_plan.py."""
+    import daily_plan
+    return daily_plan.as_text()
+
+
 def leads_waiting():
     """Website enquiries nobody has answered yet.
 
@@ -398,6 +404,7 @@ TOOLS = {
     'unassigned_jobs': (unassigned_jobs, 'jobs with no cleaner assigned', []),
     'finish_job':      (finish_job, 'mark a job finished / completed / done', ['customer']),
     'draft_email':     (draft_email, 'write or draft an email to somebody', ['about', 'to']),
+    'whats_next':      (whats_next, 'what to do today / what needs doing / plan my day', []),
     'leads_waiting':   (leads_waiting, 'new website enquiries waiting for a reply', []),
     'commercial_pipeline': (commercial_pipeline,
                             'how the commercial leads, quotes and accounts stand', []),

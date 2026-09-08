@@ -60,6 +60,15 @@ def version():
     return out
 
 
+def _daily_plan():
+    """The day's list must never be the reason the dashboard fails to load."""
+    try:
+        import daily_plan
+        return daily_plan.summary()
+    except Exception:
+        return {'items': [], 'nothing': False, 'say': None}
+
+
 @admin_bp.route('/')
 @login_required
 def dashboard():
@@ -109,6 +118,7 @@ def dashboard():
 
     return render_template(
         'admin/dashboard.html',
+        plan=_daily_plan(),
         tomorrow_jobs=tomorrow_jobs,
         unassigned_tomorrow=unassigned_tomorrow,
         unassigned_soon=unassigned_soon,
