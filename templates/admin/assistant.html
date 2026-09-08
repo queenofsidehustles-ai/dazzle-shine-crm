@@ -104,9 +104,14 @@
   </div>
 
   <div class="suggest">
-    {% for s in ['What is booked tomorrow?', 'How much came in last month?',
-                 'Any new enquiries?', 'How are the commercial leads doing?',
-                 'What is owed?', 'Which jobs have nobody on them?'] %}
+    {# The last three are the point of the rewrite. Every chip used to be a
+       lookup, so the page taught people she was a search box -- and they asked
+       her search-box questions and found her dull. #}
+    {% for s in ['What should I focus on this week?',
+                 'How do I get more customers this month?',
+                 'Where am I losing money?',
+                 'What is booked tomorrow?', 'How much came in last month?',
+                 'Any new enquiries?', 'What is owed?'] %}
     <button type="button" onclick="fill(this.innerText)">{{ s }}</button>
     {% endfor %}
   </div>

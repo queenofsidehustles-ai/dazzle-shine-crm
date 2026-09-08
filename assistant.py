@@ -54,7 +54,17 @@ NAME = 'Nana'
 # value here was 'anthropic/claude-3.5-haiku', which does not exist -- every call
 # came back an error, the error was swallowed, and every question got the same
 # "I did not follow that". A wrong name looked exactly like a stupid assistant.
+# Two models, because the two jobs are not alike.
+#
+# Working out which of a dozen lookups somebody meant is a cheap, narrow task
+# and a small model is good at it. Working out what a cleaning company in Tampa
+# with nine uncalled prospects should do this week is not, and asking a small
+# model to do it is how you get advice that reads like a fortune cookie.
+#
+# Most questions are lookups and stay cheap. Only the ones that ask her to
+# think cost anything, which is why the split is worth having at all.
 MODEL = os.environ.get('ASSISTANT_MODEL', 'anthropic/claude-haiku-4.5')
+THINK_MODEL = os.environ.get('ASSISTANT_THINK_MODEL', 'openai/gpt-5-mini')
 API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 # A generous month for one company. Enough that nobody sensible hits it, low
@@ -539,8 +549,21 @@ def _prompt():
         'would let somebody answer it properly.\n\n'
         'finish_job and draft_email are actions, not lookups. If the question '
         'asks for one of those, return it alone.\n\n'
-        'Reply with JSON only: {"tools": [{"tool": "<name>", "args": {...}}]}. '
-        'If nothing fits, reply {"tools": []}. No prose, no explanation.')
+        # The second thing the router decides, and the reason answers used to
+        # read flat. "What is owed?" wants a figure read back. "How do I get
+        # more customers?" wants somebody to think, and answering it with a
+        # figure read back is what made her feel like a search box.
+        'Also say what kind of question it is:\n'
+        '  "lookup"  — it wants a fact back: a number, a date, a name, a list.\n'
+        '  "advice"  — it wants thinking: what to do, how to get more work, '
+        'what to focus on, setting a goal, planning a week, marketing ideas, '
+        'why something is happening. Anything where a bare figure would not '
+        'actually answer it.\n\n'
+        'Reply with JSON only: '
+        '{"kind": "lookup|advice", "tools": [{"tool": "<name>", "args": {...}}]}. '
+        'If no lookup fits but they are asking for thinking, that is '
+        '{"kind": "advice", "tools": []} — not nothing. '
+        'No prose, no explanation.')
 
 
 def _month_key():
@@ -601,8 +624,9 @@ TROUBLE = {
 def choose(question, api_key=None):
     """Which lookups the question is asking for.
 
-    Returns (picks, problem), where picks is a list of (name, args) in the
-    order they should be read. `problem` is None when the round trip worked,
+    Returns (picks, kind, problem). `kind` is 'lookup' or 'advice' -- whether
+    the question wants a fact read back or wants somebody to think about it.
+    `picks` is a list of (name, args) in the order they should be read. `problem` is None when the round trip worked,
     whatever the answer was -- so "I did not follow that" is said only when the
     service answered and none of the lookups fit.
 
@@ -613,7 +637,7 @@ def choose(question, api_key=None):
     """
     key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
     if not key:
-        return [], 'not-configured'
+        return [], 'lookup', 'not-configured'
 
     import requests
     try:
@@ -628,40 +652,41 @@ def choose(question, api_key=None):
         })
     except Exception as e:
         _record(f'could not reach the answering service: {type(e).__name__}')
-        return [], 'unreachable'
+        return [], 'lookup', 'unreachable'
 
     try:
         payload = r.json()
     except ValueError:
         _record(f'answering service returned {r.status_code}, not JSON')
-        return [], 'service-error'
+        return [], 'lookup', 'service-error'
 
     # OpenRouter reports a bad model or a spent balance as an error object with
     # a 200, so the status code alone is not enough to tell whether it worked.
     if isinstance(payload.get('error'), dict):
         _record('answering service: ' + str(payload['error'].get('message'))[:200])
-        return [], 'service-error'
+        return [], 'lookup', 'service-error'
     try:
         body = payload['choices'][0]['message']['content']
     except (KeyError, IndexError, TypeError):
         _record(f'unexpected reply from the answering service: {str(payload)[:200]}')
-        return [], 'service-error'
+        return [], 'lookup', 'service-error'
 
     m = re.search(r'\{.*\}', body, re.S)
     if not m:
-        return [], None
+        return [], 'lookup', None
     try:
         picked = json.loads(m.group(0))
     except ValueError:
-        return [], None
+        return [], 'lookup', None
 
     # Accept the old single-tool shape too, so a model that ignores the new
     # instruction still gets an answer rather than a shrug.
+    kind = 'advice' if picked.get('kind') == 'advice' else 'lookup'
     raw = picked.get('tools')
     if raw is None:
         raw = [picked] if picked.get('tool') else []
     if not isinstance(raw, list):
-        return [], None
+        return [], kind, None
 
     out = []
     for item in raw[:MAX_TOOLS]:
@@ -677,8 +702,8 @@ def choose(question, api_key=None):
                 if k in allowed and isinstance(v, str)}
         out.append((name, args))
         if name in ACTION_TOOLS:      # an action travels alone
-            return [(name, args)], None
-    return out, None
+            return [(name, args)], 'lookup', None
+    return out, kind, None
 
 
 # ---------------------------------------------------------------------------
@@ -757,38 +782,101 @@ def _grounded(answer, sources):
     return _numbers(answer) <= nums and _periods(answer) <= pers
 
 
-def _compose(question, facts, api_key=None):
-    """Turn the facts into the answer a person would give. None if it can't."""
+# What she reads before thinking about a broad question. "How do I get more
+# customers" is not answerable from one lookup, and running none is what made
+# her say "I did not follow that" to a perfectly ordinary business question.
+ADVICE_CONTEXT = ('leads_waiting', 'commercial_pipeline', 'unassigned_jobs',
+                  'jobs_this_week', 'money_owed', 'money_made')
+
+
+def _standing_facts(already):
+    """The state of the business, for a question that needs it all."""
+    out = []
+    for name in ADVICE_CONTEXT:
+        if name in already:
+            continue
+        try:
+            fn = TOOLS[name][0]
+            text = fn()
+        except Exception:
+            continue
+        if isinstance(text, dict):
+            text = text.get('say')
+        if text:
+            out.append(text)
+    return out
+
+
+def _compose(question, facts, api_key=None, kind='lookup', profile=None):
+    """Turn the facts into the answer a person would give. None if it can't.
+
+    Two jobs behind one function, and they get different models and different
+    instructions. A lookup wants the figure said back like a person would say
+    it. Advice wants somebody to actually think -- and to think about *this*
+    business, which is why the profile goes in.
+
+    The rule on figures does not change between them. Advice is allowed to have
+    an opinion; it is not allowed to have its own numbers.
+    """
     key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
     if not key:
         return None
-    system = (
-        f'You are {NAME}, the assistant to the owner of a small cleaning '
-        'business. You are talking to them while they are between jobs, so you '
-        'are brief and you sound like a person, not a report.\n\n'
-        'Answer their question using ONLY the facts below. Every figure, name '
-        'and date you write must already appear in them. Do not add up, work '
-        'out, estimate or count anything — if a number is not in the facts, it '
-        'does not go in your answer, and do not number your points either. '
-        'Where the facts do not cover something, say so plainly in a few '
-        'words.\n\n'
-        'If they asked what to do or how to plan, say which thing to do first '
-        'and why it matters — but only about what is in the facts. Never '
-        'suggest sending, texting, emailing or charging anything: you cannot '
-        'do those and neither should you promise them.\n\n'
-        'Three sentences at most. No greeting, no sign-off, no bullet numbers, '
-        'no exclamation marks.\n\n'
-        'Facts:\n' + '\n'.join(f'· {f}' for f in facts))
+
+    if kind == 'advice':
+        system = (
+            f'You are {NAME}, the assistant to the owner of a small cleaning '
+            'business. They are asking you to think, not to look something up. '
+            'Answer like a sharp operations manager who knows this business: '
+            'specific, practical, and about them.\n\n'
+            'THE BUSINESS:\n' + ('\n'.join(profile or []) or '(not set up yet)') +
+            '\n\nHOW IT STANDS TODAY:\n' + '\n'.join(f'· {f}' for f in facts) +
+            '\n\nRules:\n'
+            # The one rule that never moves. Advice may have an opinion; it may
+            # not have its own arithmetic. Everything above was computed by the
+            # application, and every figure written is checked against it.
+            '- Every figure, date and name you write must already appear above. '
+            'Do not add up, work out, estimate, project or count anything. If '
+            'you want to say a number that is not there, leave it out.\n'
+            '- Be concrete. Name the actual prospects, jobs or customers above '
+            'rather than talking about "your leads" in general.\n'
+            '- Say what to do first and why it matters more than the rest.\n'
+            '- You cannot send, text, email or charge anything. Never say you '
+            'will, and never suggest an automation that does it for them.\n'
+            '- If the honest answer is that there is not enough here to advise '
+            'on, say that and say what would help.\n\n'
+            'Six sentences at most. Plain words. No headings, no bullet '
+            'numbers, no exclamation marks, no motivational filler.')
+        model, budget = THINK_MODEL, 600
+    else:
+        system = (
+            f'You are {NAME}, the assistant to the owner of a small cleaning '
+            'business. You are talking to them while they are between jobs, so you '
+            'are brief and you sound like a person, not a report.\n\n'
+            'Answer their question using ONLY the facts below. Every figure, name '
+            'and date you write must already appear in them. Do not add up, work '
+            'out, estimate or count anything — if a number is not in the facts, it '
+            'does not go in your answer, and do not number your points either. '
+            'Where the facts do not cover something, say so plainly in a few '
+            'words.\n\n'
+            'If they asked what to do or how to plan, say which thing to do first '
+            'and why it matters — but only about what is in the facts. Never '
+            'suggest sending, texting, emailing or charging anything: you cannot '
+            'do those and neither should you promise them.\n\n'
+            'Three sentences at most. No greeting, no sign-off, no bullet '
+            'numbers, no exclamation marks.\n\n'
+            'Facts:\n' + '\n'.join(f'· {f}' for f in facts))
+        model, budget = MODEL, 260
+
     import requests
     try:
         r = requests.post(API_URL, timeout=25, headers={
             'Authorization': f'Bearer {key}', 'Content-Type': 'application/json',
-        }, json={'model': MODEL, 'max_tokens': 260,
+        }, json={'model': model, 'max_tokens': budget,
                  'messages': [{'role': 'system', 'content': system},
                               {'role': 'user', 'content': question[:500]}]})
         payload = r.json()
         if isinstance(payload.get('error'), dict):
-            _record('writing: ' + str(payload['error'].get('message'))[:200])
+            _record(f'writing ({model}): ' + str(payload['error'].get('message'))[:200])
             return None
         return (payload['choices'][0]['message']['content'] or '').strip() or None
     except Exception as e:
@@ -817,19 +905,23 @@ def ask(question, api_key=None):
                         f'which is the limit. It starts again next month — '
                         f'everything else in here works as normal.')}
     _count_one()
-    picks, problem = choose(question, api_key=api_key)
+    picks, kind, problem = choose(question, api_key=api_key)
     if problem:
         # Nana never got asked. Saying "I did not follow that" here would blame
         # the owner's wording for something on our side.
         return {'say': TROUBLE[problem]}
-    if not picks:
+    if not picks and kind != 'advice':
         return {'say': f'I did not follow that one. I can tell you what is booked, '
-                       f'what came in, who is owed, who is asking — try '
-                       f'“what is booked tomorrow?” or “how much came in last month?”'}
+                       f'what came in, who is owed, who is asking — or ask me '
+                       f'what to focus on this week and I will think about it.'}
 
     # An action is offered as itself: a button to press or a draft to read.
     # Nothing gets rewritten on the way out.
-    name, args = picks[0]
+    #
+    # An advice question can legitimately match no lookup at all -- "how do I
+    # get more customers" is not one of twelve tables -- so this only applies
+    # when something was picked.
+    name, args = picks[0] if picks else (None, {})
     if name in ACTION_TOOLS:
         fn = TOOLS[name][0]
         try:
@@ -846,14 +938,26 @@ def ask(question, api_key=None):
         if text:
             facts.append(text)
             used.append(name)
+
+    profile = None
+    if kind == 'advice':
+        # A question that wants thinking gets the whole picture, not the one
+        # lookup that happened to match a word in it. This is the difference
+        # between "1 job in the next seven days" and an answer.
+        facts.extend(_standing_facts(used))
+        profile = business_profile()
+
     if not facts:
         return {'say': 'Something went wrong reading that. It has been recorded.'}
 
     plain = '\n'.join(facts)
-    written = _compose(question, facts, api_key=api_key)
-    if written and _grounded(written, facts + [question]):
-        return {'say': written, 'tools': used, 'facts': facts}
+    written = _compose(question, facts, api_key=api_key, kind=kind,
+                       profile=profile)
+    # The check on figures is the same in both modes. Advice is allowed to have
+    # an opinion; it is not allowed to have its own arithmetic.
+    if written and _grounded(written, facts + (profile or []) + [question]):
+        return {'say': written, 'tools': used, 'facts': facts, 'kind': kind}
     if written:
         # It wrote a figure that is not in the books. Nobody sees that figure.
         _record(f'answer dropped, a figure was not in the facts: {written[:160]}')
-    return {'say': plain, 'tools': used, 'facts': facts}
+    return {'say': plain, 'tools': used, 'facts': facts, 'kind': kind}

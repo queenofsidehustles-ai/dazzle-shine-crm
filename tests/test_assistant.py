@@ -97,7 +97,7 @@ with app.app_context():
 
     print('\n3. A wrong guess answers a different question — it cannot invent one')
     # The model returns a tool name. Anything it makes up is dropped.
-    picks, problem = assistant.choose('anything', api_key='')
+    picks, _kind, problem = assistant.choose('anything', api_key='')
     check(not picks, 'with no key it declines rather than guessing')
     for made_up in ('delete_everything', 'charge_all_cards', '', None):
         check(made_up not in assistant.TOOLS,
@@ -319,7 +319,7 @@ with app.app_context():
     # none of them is the sentence that means "your wording confused me".
     saved = os.environ.pop('OPENROUTER_API_KEY', None)
     try:
-        picks, problem = assistant.choose('any new enquiries?')
+        picks, _kind, problem = assistant.choose('any new enquiries?')
         check(problem == 'not-configured',
               'no key is reported as no key, not as a misunderstood question')
     finally:
@@ -362,13 +362,13 @@ with app.app_context():
         # --- routing ---------------------------------------------------------
         _rq.post, _ = _fake('{"tools":[{"tool":"money_owed","args":{}},'
                             '{"tool":"unassigned_jobs","args":{}}]}', 'x')
-        picks, problem = assistant.choose('how are we doing?')
+        picks, _kind, problem = assistant.choose('how are we doing?')
         check(problem is None and [p[0] for p in picks]
               == ['money_owed', 'unassigned_jobs'],
               'one question can pull several lookups')
 
         _rq.post, _ = _fake('{"tool":"money_owed","args":{}}', 'x')
-        picks, _ = assistant.choose('what is owed?')
+        picks, _k, _p = assistant.choose('what is owed?')
         check([p[0] for p in picks] == ['money_owed'],
               'the old single-tool shape still works')
 
@@ -376,14 +376,14 @@ with app.app_context():
         # never blended into a summary with three lookups.
         _rq.post, _ = _fake('{"tools":[{"tool":"money_owed","args":{}},'
                             '{"tool":"finish_job","args":{"customer":"Ama"}}]}', 'x')
-        picks, _ = assistant.choose('mark Ama done')
+        picks, _k, _p = assistant.choose('mark Ama done')
         check([p[0] for p in picks] == ['finish_job'], 'an action travels alone')
 
         _rq.post, _ = _fake('{"tools":[' + ','.join(
             '{"tool":"%s","args":{}}' % t for t in
             ['money_owed', 'team', 'unassigned_jobs', 'jobs_this_week',
              'leads_waiting', 'money_made']) + ']}', 'x')
-        picks, _ = assistant.choose('everything')
+        picks, _k, _p = assistant.choose('everything')
         check(len(picks) <= assistant.MAX_TOOLS,
               f'no more than {assistant.MAX_TOOLS} lookups in one answer')
 
@@ -603,6 +603,75 @@ with app.app_context():
           'but writing an ordinary email is now the job, not a refusal')
     check('Use ONLY the facts below' not in draft_src,
           'the rule that produced "I have no facts to work with" is gone')
+    print('\n18. A question that wants thinking gets thinking, not a lookup')
+    import requests as _rq2
+    _real2 = _rq2.post
+    os.environ['OPENROUTER_API_KEY'] = 'sk-or-v1-test'
+    seen = {}
+
+    class _R2:
+        def __init__(self, p): self._p = p; self.status_code = 200
+        def json(self): return self._p
+
+    def _fake2(route_json, written):
+        calls = {'n': 0}
+        def post(url, **kw):
+            calls['n'] += 1
+            body = kw.get('json') or {}
+            seen[calls['n']] = body.get('model')
+            if calls['n'] == 1:
+                seen['route_len'] = len(body['messages'][0]['content'])
+            else:
+                seen['write_prompt'] = body['messages'][0]['content']
+            return _R2({'choices': [{'message': {
+                'content': route_json if calls['n'] == 1 else written}}]})
+        return post
+
+    try:
+        # "How do I get more customers" fits no lookup. It used to produce
+        # "I did not follow that one", which is how an ordinary business
+        # question got treated as a typo.
+        _rq2.post = _fake2('{"kind":"advice","tools":[]}',
+                           'Call the prospects you have not rung yet — that is '
+                           'the cheapest work in front of you.')
+        out = assistant.ask('how do I get more customers this month?')
+        check('did not follow' not in out['say'],
+              'a question with no matching lookup is no longer a shrug')
+        check(out.get('kind') == 'advice', 'it is handled as advice')
+        check(seen.get(2) == assistant.THINK_MODEL,
+              f'and the thinking model does the writing ({seen.get(2)})')
+        check(seen.get(1) == assistant.MODEL,
+              f'while the cheap model still does the routing ({seen.get(1)})')
+
+        # It thinks about *this* business, not cleaning businesses in general.
+        check('THE BUSINESS' in seen.get('write_prompt', ''),
+              'it is told what the business is')
+        check('HOW IT STANDS TODAY' in seen.get('write_prompt', ''),
+              'and how the business stands right now')
+
+        # The rule that never moves. Advice may have an opinion; it may not
+        # have its own arithmetic.
+        _rq2.post = _fake2('{"kind":"advice","tools":[]}',
+                           'Ring your 47 prospects and you will make $12,000.')
+        out = assistant.ask('what should I focus on?')
+        check('12,000' not in out['say'] and '47' not in out['say'],
+              'a figure it made up is dropped in advice mode too')
+
+        # A plain lookup still takes the cheap model and the short answer.
+        _rq2.post = _fake2('{"kind":"lookup","tools":[{"tool":"money_owed","args":{}}]}',
+                           'x')
+        assistant.ask('what is owed?')
+        check(seen.get(2) == assistant.MODEL,
+              f'a lookup is not sent to the expensive model ({seen.get(2)})')
+    finally:
+        _rq2.post = _real2
+        os.environ.pop('OPENROUTER_API_KEY', None)
+
+    # The page has to teach people she can be asked to think. Every chip used
+    # to be a lookup, so people asked lookups and found her dull.
+    page = open(os.path.join(ROOT, 'templates', 'admin', 'assistant.html')).read()
+    check('What should I focus on this week?' in page,
+          'the first suggestion asks her to think')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')
