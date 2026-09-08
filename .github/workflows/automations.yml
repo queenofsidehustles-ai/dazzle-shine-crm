@@ -27,9 +27,18 @@ name: Automations
 
 on:
   schedule:
-    # Balances are charged at each job's start time, so this has to come round
-    # more often than a day. On the hour, every hour.
-    - cron: '5 * * * *'
+    # OFF until a business can say how it wants balances collected.
+    #
+    # Charging a card is the one automation that cannot be undone, and today no
+    # business is having it done: nothing has been running. Switching this on
+    # would start charging real customers at four live companies that have never
+    # seen it happen and were never asked -- a surprise landing on their
+    # customers, not just on them.
+    #
+    # It comes back when each business has chosen: charge automatically, tell me
+    # it is due, or never touch the card. Until then the hourly run does not
+    # exist.
+    # - cron: '5 * * * *'
     # Everything else once a day, early enough that a day-before reminder
     # arrives the evening before rather than the morning of.
     - cron: '0 22 * * *'
@@ -38,7 +47,10 @@ on:
       cadence:
         description: Which timetable to run by hand
         type: choice
-        options: [hourly, daily]
+        # 'hourly' is charge-balances and is deliberately not offered until the
+        # per-business setting exists. Running it by hand would charge cards at
+        # every company at once.
+        options: [daily]
         default: daily
       only:
         description: A single company slug, for testing. Blank runs all.
