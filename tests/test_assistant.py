@@ -10,7 +10,7 @@ anybody, does not charge a card, and marking a job finished is offered rather
 than done. Anything that reaches a customer or moves money should be a button a
 person pressed, not a sentence a model understood.
 """
-import os, sys, tempfile
+import os, re, sys, tempfile
 from datetime import datetime, date, timedelta
 
 TMP = tempfile.mkdtemp()
@@ -92,8 +92,8 @@ with app.app_context():
 
     print('\n3. A wrong guess answers a different question — it cannot invent one')
     # The model returns a tool name. Anything it makes up is dropped.
-    name, args, problem = assistant.choose('anything', api_key='')
-    check(name is None, 'with no key it declines rather than guessing')
+    picks, problem = assistant.choose('anything', api_key='')
+    check(not picks, 'with no key it declines rather than guessing')
     for made_up in ('delete_everything', 'charge_all_cards', '', None):
         check(made_up not in assistant.TOOLS,
               f'{made_up!r} is not a tool it could pick')
@@ -292,7 +292,7 @@ with app.app_context():
     # none of them is the sentence that means "your wording confused me".
     saved = os.environ.pop('OPENROUTER_API_KEY', None)
     try:
-        name, args, problem = assistant.choose('any new enquiries?')
+        picks, problem = assistant.choose('any new enquiries?')
         check(problem == 'not-configured',
               'no key is reported as no key, not as a misunderstood question')
     finally:
@@ -310,6 +310,116 @@ with app.app_context():
     check(assistant.MODEL != 'anthropic/claude-3.5-haiku',
           'the model name that never existed is not back')
 
+    print('\n13. Nana writes the answer; the books still write the numbers')
+    # The router may now pull several lookups, because "what is my game plan
+    # this week" is not one lookup and pretending it was is what made her dull.
+    import json as _json
+
+    class _Reply:
+        def __init__(self, payload): self._p = payload; self.status_code = 200
+        def json(self): return self._p
+
+    def _fake(route_json, written):
+        """Stand in for OpenRouter: first call routes, second call writes."""
+        calls = {'n': 0}
+        def post(url, **kw):
+            calls['n'] += 1
+            body = route_json if calls['n'] == 1 else written
+            return _Reply({'choices': [{'message': {'content': body}}]})
+        return post, calls
+
+    import requests as _rq
+    _real_post = _rq.post
+    os.environ['OPENROUTER_API_KEY'] = 'sk-or-v1-test'
+    try:
+        # --- routing ---------------------------------------------------------
+        _rq.post, _ = _fake('{"tools":[{"tool":"money_owed","args":{}},'
+                            '{"tool":"unassigned_jobs","args":{}}]}', 'x')
+        picks, problem = assistant.choose('how are we doing?')
+        check(problem is None and [p[0] for p in picks]
+              == ['money_owed', 'unassigned_jobs'],
+              'one question can pull several lookups')
+
+        _rq.post, _ = _fake('{"tool":"money_owed","args":{}}', 'x')
+        picks, _ = assistant.choose('what is owed?')
+        check([p[0] for p in picks] == ['money_owed'],
+              'the old single-tool shape still works')
+
+        # An action changes something or produces something to send. It is
+        # never blended into a summary with three lookups.
+        _rq.post, _ = _fake('{"tools":[{"tool":"money_owed","args":{}},'
+                            '{"tool":"finish_job","args":{"customer":"Ama"}}]}', 'x')
+        picks, _ = assistant.choose('mark Ama done')
+        check([p[0] for p in picks] == ['finish_job'], 'an action travels alone')
+
+        _rq.post, _ = _fake('{"tools":[' + ','.join(
+            '{"tool":"%s","args":{}}' % t for t in
+            ['money_owed', 'team', 'unassigned_jobs', 'jobs_this_week',
+             'leads_waiting', 'money_made']) + ']}', 'x')
+        picks, _ = assistant.choose('everything')
+        check(len(picks) <= assistant.MAX_TOOLS,
+              f'no more than {assistant.MAX_TOOLS} lookups in one answer')
+
+        # --- the guardrail, through the front door ---------------------------
+        # A figure it worked out itself never reaches the page. The owner still
+        # gets an answer -- the computed lines -- rather than an error.
+        _rq.post, calls = _fake('{"tools":[{"tool":"money_owed","args":{}}]}',
+                                'You are owed $99,999.00, so chase it today.')
+        owed_now = assistant.money_owed()
+        out = assistant.ask('what is owed?')
+        check('99,999' not in out['say'] and '99999' not in out['say'],
+              'an invented figure is dropped, not shown')
+        check(out['say'] == owed_now,
+              'and the computed line from the books is shown instead')
+
+        # Her wording, built only from figures that are really in the books.
+        real = re.search(r'\$[\d,]+\.\d\d', owed_now).group(0)
+        _rq.post, _ = _fake('{"tools":[{"tool":"money_owed","args":{}}]}',
+                            f'Chase the {real} — it is money you have earned.')
+        out = assistant.ask('what is owed?')
+        check(out['say'] == f'Chase the {real} — it is money you have earned.',
+              'an answer whose figures check out is shown in her words')
+        check(out.get('facts'), 'and the computed lines come back with it')
+    finally:
+        _rq.post = _real_post
+        os.environ.pop('OPENROUTER_API_KEY', None)
+    print('\n14. What the check on figures does and does not cover')
+    books = ['$450.00 came in this month, across 2 paid jobs.',
+             '1 job in the next seven days. 1 still has nobody assigned.',
+             'Tuesday: Mrs Adjei, 10am.']
+    asked = 'how am I doing this week?'
+
+    def grounded(sentence):
+        return assistant._grounded(sentence, books + [asked])
+
+    # Reads back what is there, in whatever shape a person would say it.
+    check(grounded('You took $450 this month.'),
+          'the same money written a shorter way still passes')
+    check(grounded('Two paid jobs so far.'),
+          'a figure spelled as a word is checked, and passes when it is true')
+    check(grounded('Chase it today — that money is already earned.'),
+          'advice with no figures in it passes')
+    check(grounded('Tuesday is Mrs Adjei at 10am.'),
+          'a name and a day it was actually given pass')
+
+    # Arithmetic is the whole risk. It is not allowed to do any.
+    check(not grounded('You are averaging $225.00 a job.'),
+          'a figure it divided out is blocked')
+    check(not grounded('$450.00 in and $520.00 owed makes $970.00.'),
+          'a figure it added up is blocked')
+    check(not grounded('You made $4500.00 this month.'),
+          'a misplaced decimal point is blocked')
+    check(not grounded('3 jobs are booked next week.'),
+          'a count that is not in the books is blocked')
+    check(not grounded('You are up 15% on last month.'),
+          'a percentage out of nowhere is blocked')
+
+    # A true figure on the wrong month is still wrong, so days and months are
+    # held to the same rule. Names are not -- see _grounded for why.
+    check(not grounded('Revenue was $450.00 in July.'),
+          'a real figure hung on a month nobody mentioned is blocked')
+    check(not grounded('You are booked Friday.'),
+          'a day that is not in the books is blocked')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')

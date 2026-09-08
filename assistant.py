@@ -4,19 +4,26 @@ The owner is in a van between jobs. "How much did I make last month" is three
 taps and a squint at a chart, and "who's on tomorrow" is another screen. This is
 the same answers, asked out loud.
 
-## The model chooses; the code answers
+## The code counts; the model writes; the count is checked
 
 This is the whole design, and it is the reason it can be trusted with money.
 
-A language model is good at working out which question you asked and hopeless at
-being sure of a number. So it never sees a number. It is given a list of
-questions this business can answer and returns the name of one, and then ordinary
-Python reads the database and writes the sentence.
+A language model is good at working out what you meant and at saying it back
+like a person, and hopeless at being sure of a number. So it is never asked for
+one. Ordinary Python reads the database and produces the figures; the model is
+handed those as facts and writes the answer around them.
 
-The worst it can do is pick the wrong question, which you will notice
-immediately, because the answer will be about something else. It cannot state a
-figure that is not in your books, and there is no prompt anybody could type that
-would make it, because the figure never passes through it.
+It was stricter than this once -- the code wrote the sentences too, so a figure
+it had never seen was impossible to say. It was also useless. Asked for a game
+plan for the week it answered "1 job in the next seven days", because the
+nearest of twelve canned lines was everything it had.
+
+So the guarantee moved from "it never sees a number" to "it never gets to keep
+one it made up". Every figure in what it writes must already appear in the facts
+it was given or in the question that was asked. If one does not, the written
+answer is thrown away unread and the plain computed lines are shown instead.
+A wrong figure cannot reach the screen. The worst case is a duller answer than
+intended, which is exactly where this started.
 
 ## Nothing leaves the building
 
@@ -419,15 +426,31 @@ TOOLS = {
 # Choosing which question was asked
 # ---------------------------------------------------------------------------
 
+# Marking a job finished and writing an email are not lookups: one offers a
+# button and the other returns a draft. They stay on their own path, alone.
+ACTION_TOOLS = ('finish_job', 'draft_email')
+
+# How many lookups one question may pull. "What is my plan this week" honestly
+# needs four; past that the answer stops being an answer and becomes a report.
+MAX_TOOLS = 4
+
+
 def _prompt():
     lines = [f'{k}({", ".join(a)}) — {d}' for k, (_f, d, a) in TOOLS.items()]
     return (
-        'You route a question to one of a fixed list of tools. You never answer '
-        'the question yourself and you never state a number, a name or a date: '
-        'the application reads those from its own database.\n\n'
-        'Tools:\n' + '\n'.join(lines) + '\n\n'
-        'Reply with JSON only: {"tool": "<name>", "args": {...}}. '
-        'If nothing fits, reply {"tool": null}. No prose, no explanation.')
+        'You pick which of a fixed list of lookups will answer a small cleaning '
+        'business owner\'s question. You do not answer it yourself: the '
+        'application reads every number, name and date from its own database.\n\n'
+        'Lookups:\n' + '\n'.join(lines) + '\n\n'
+        'Pick every lookup the question needs, most important first. A narrow '
+        'question ("what is owed?") takes one. A broad or planning question '
+        '("what is my game plan this week?", "how is the business doing?") takes '
+        f'several, up to {MAX_TOOLS} — choose the ones whose facts together '
+        'would let somebody answer it properly.\n\n'
+        'finish_job and draft_email are actions, not lookups. If the question '
+        'asks for one of those, return it alone.\n\n'
+        'Reply with JSON only: {"tools": [{"tool": "<name>", "args": {...}}]}. '
+        'If nothing fits, reply {"tools": []}. No prose, no explanation.')
 
 
 def _month_key():
@@ -486,11 +509,12 @@ TROUBLE = {
 
 
 def choose(question, api_key=None):
-    """Which tool the question is asking for.
+    """Which lookups the question is asking for.
 
-    Returns (name, args, problem). `problem` is None when the round trip worked,
+    Returns (picks, problem), where picks is a list of (name, args) in the
+    order they should be read. `problem` is None when the round trip worked,
     whatever the answer was -- so "I did not follow that" is said only when the
-    service answered and none of the tools fit.
+    service answered and none of the lookups fit.
 
     Everything used to collapse into one return and one message. A missing key,
     a model name that does not exist, a network blip and a genuinely odd
@@ -499,7 +523,7 @@ def choose(question, api_key=None):
     """
     key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
     if not key:
-        return None, {}, 'not-configured'
+        return [], 'not-configured'
 
     import requests
     try:
@@ -514,41 +538,186 @@ def choose(question, api_key=None):
         })
     except Exception as e:
         _record(f'could not reach the answering service: {type(e).__name__}')
-        return None, {}, 'unreachable'
+        return [], 'unreachable'
 
     try:
         payload = r.json()
     except ValueError:
         _record(f'answering service returned {r.status_code}, not JSON')
-        return None, {}, 'service-error'
+        return [], 'service-error'
 
     # OpenRouter reports a bad model or a spent balance as an error object with
     # a 200, so the status code alone is not enough to tell whether it worked.
     if isinstance(payload.get('error'), dict):
         _record('answering service: ' + str(payload['error'].get('message'))[:200])
-        return None, {}, 'service-error'
+        return [], 'service-error'
     try:
         body = payload['choices'][0]['message']['content']
     except (KeyError, IndexError, TypeError):
         _record(f'unexpected reply from the answering service: {str(payload)[:200]}')
-        return None, {}, 'service-error'
+        return [], 'service-error'
 
     m = re.search(r'\{.*\}', body, re.S)
     if not m:
-        return None, {}, None
+        return [], None
     try:
         picked = json.loads(m.group(0))
     except ValueError:
-        return None, {}, None
-    name = picked.get('tool')
-    if name not in TOOLS:
-        return None, {}, None
-    # Only the arguments this tool declares. Anything else the model invented is
-    # dropped rather than passed on to a database query.
-    allowed = TOOLS[name][2]
-    args = {k: v for k, v in (picked.get('args') or {}).items()
-            if k in allowed and isinstance(v, str)}
-    return name, args, None
+        return [], None
+
+    # Accept the old single-tool shape too, so a model that ignores the new
+    # instruction still gets an answer rather than a shrug.
+    raw = picked.get('tools')
+    if raw is None:
+        raw = [picked] if picked.get('tool') else []
+    if not isinstance(raw, list):
+        return [], None
+
+    out = []
+    for item in raw[:MAX_TOOLS]:
+        if not isinstance(item, dict):
+            continue
+        name = item.get('tool')
+        if name not in TOOLS or any(name == p[0] for p in out):
+            continue
+        # Only the arguments this tool declares. Anything else the model
+        # invented is dropped rather than passed on to a database query.
+        allowed = TOOLS[name][2]
+        args = {k: v for k, v in (item.get('args') or {}).items()
+                if k in allowed and isinstance(v, str)}
+        out.append((name, args))
+        if name in ACTION_TOOLS:      # an action travels alone
+            return [(name, args)], None
+    return out, None
+
+
+# ---------------------------------------------------------------------------
+# Writing the answer, without letting it write the figures
+#
+# The first version of this file had the code write the sentences as well as
+# read the numbers. That made a figure it had never seen impossible to say --
+# and made Nana useless for any question that was not one of twelve lookups.
+# Asked for a game plan for the week she answered "1 job in the next seven
+# days", because the nearest of twelve canned lines is all she had.
+#
+# So the two jobs are split. The code still reads every number out of the
+# database; the model never calculates, never counts, never estimates. It is
+# handed those facts as text and writes the answer around them.
+#
+# The guarantee that used to come from the model never seeing a number now
+# comes from checking: every figure in what it wrote has to already appear in
+# the facts it was given, or in the question the owner asked. Anything else and
+# the written answer is thrown away and the plain computed lines are shown
+# instead. A wrong number cannot reach the screen; the worst case is a duller
+# answer than intended, which is where we started.
+
+_DIGITS = re.compile(r'\d[\d,]*(?:\.\d+)?')
+
+# "two jobs" has to be checked as hard as "2 jobs", or the check is decoration.
+_WORD_NUMBERS = {
+    'no': '0', 'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
+    'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9',
+    'ten': '10', 'eleven': '11', 'twelve': '12',
+}
+
+
+def _canon(tok):
+    """$1,450.00 and 1450 are the same figure and must compare equal."""
+    t = tok.replace(',', '').lstrip('$')
+    if '.' in t:
+        t = t.rstrip('0').rstrip('.')
+    t = t.lstrip('0') or '0'
+    return t
+
+
+def _numbers(text):
+    found = {_canon(m) for m in _DIGITS.findall(text or '')}
+    for word, digit in _WORD_NUMBERS.items():
+        if re.search(rf'\b{word}\b', (text or ''), re.I):
+            found.add(digit)
+    return found
+
+
+# A true figure hung on the wrong month is still a lie: "$450.00 came in in
+# July" passes a check that only looks at digits. Months and weekdays are a
+# closed set, so they can be held to the same rule as the numbers.
+_PERIODS = ('january february march april may june july august september '
+            'october november december monday tuesday wednesday thursday '
+            'friday saturday sunday').split()
+
+
+def _periods(text):
+    low = (text or '').lower()
+    return {w for w in _PERIODS if re.search(rf'\b{w}', low)}
+
+
+def _grounded(answer, sources):
+    """True when every figure and date in `answer` came from somewhere real.
+
+    Names are not checked. A closed set can be checked exactly and an open one
+    cannot, and a rule that guesses at proper nouns would throw away good
+    answers for saying "Chase". A wrong name is also visible to the person
+    reading -- they know their own customers -- in the way a wrong number is
+    not, which is the whole reason numbers get the hard rule.
+    """
+    nums, pers = set(), set()
+    for src in sources:
+        nums |= _numbers(src)
+        pers |= _periods(src)
+    return _numbers(answer) <= nums and _periods(answer) <= pers
+
+
+def _compose(question, facts, api_key=None):
+    """Turn the facts into the answer a person would give. None if it can't."""
+    key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+    if not key:
+        return None
+    system = (
+        f'You are {NAME}, the assistant to the owner of a small cleaning '
+        'business. You are talking to them while they are between jobs, so you '
+        'are brief and you sound like a person, not a report.\n\n'
+        'Answer their question using ONLY the facts below. Every figure, name '
+        'and date you write must already appear in them. Do not add up, work '
+        'out, estimate or count anything — if a number is not in the facts, it '
+        'does not go in your answer, and do not number your points either. '
+        'Where the facts do not cover something, say so plainly in a few '
+        'words.\n\n'
+        'If they asked what to do or how to plan, say which thing to do first '
+        'and why it matters — but only about what is in the facts. Never '
+        'suggest sending, texting, emailing or charging anything: you cannot '
+        'do those and neither should you promise them.\n\n'
+        'Three sentences at most. No greeting, no sign-off, no bullet numbers, '
+        'no exclamation marks.\n\n'
+        'Facts:\n' + '\n'.join(f'· {f}' for f in facts))
+    import requests
+    try:
+        r = requests.post(API_URL, timeout=25, headers={
+            'Authorization': f'Bearer {key}', 'Content-Type': 'application/json',
+        }, json={'model': MODEL, 'max_tokens': 260,
+                 'messages': [{'role': 'system', 'content': system},
+                              {'role': 'user', 'content': question[:500]}]})
+        payload = r.json()
+        if isinstance(payload.get('error'), dict):
+            _record('writing: ' + str(payload['error'].get('message'))[:200])
+            return None
+        return (payload['choices'][0]['message']['content'] or '').strip() or None
+    except Exception as e:
+        _record(f'could not write the answer: {type(e).__name__}')
+        return None
+
+
+def _run(name, args):
+    """One lookup. Its own text, or None if it could not be read."""
+    fn = TOOLS[name][0]
+    try:
+        out = fn(**args)
+    except TypeError:
+        out = fn()
+    except Exception:
+        return None
+    if isinstance(out, dict):
+        return out.get('say')
+    return out
 
 
 def ask(question, api_key=None):
@@ -558,20 +727,43 @@ def ask(question, api_key=None):
                         f'which is the limit. It starts again next month — '
                         f'everything else in here works as normal.')}
     _count_one()
-    name, args, problem = choose(question, api_key=api_key)
+    picks, problem = choose(question, api_key=api_key)
     if problem:
         # Nana never got asked. Saying "I did not follow that" here would blame
         # the owner's wording for something on our side.
         return {'say': TROUBLE[problem]}
-    if not name:
+    if not picks:
         return {'say': f'I did not follow that one. I can tell you what is booked, '
                        f'what came in, who is owed, who is asking — try '
                        f'“what is booked tomorrow?” or “how much came in last month?”'}
-    fn = TOOLS[name][0]
-    try:
-        out = fn(**args)
-    except TypeError:
-        out = fn()
-    except Exception:
+
+    # An action is offered as itself: a button to press or a draft to read.
+    # Nothing gets rewritten on the way out.
+    name, args = picks[0]
+    if name in ACTION_TOOLS:
+        fn = TOOLS[name][0]
+        try:
+            out = fn(**args)
+        except TypeError:
+            out = fn()
+        except Exception:
+            return {'say': 'Something went wrong reading that. It has been recorded.'}
+        return out if isinstance(out, dict) else {'say': out, 'tool': name}
+
+    facts, used = [], []
+    for name, args in picks:
+        text = _run(name, args)
+        if text:
+            facts.append(text)
+            used.append(name)
+    if not facts:
         return {'say': 'Something went wrong reading that. It has been recorded.'}
-    return out if isinstance(out, dict) else {'say': out, 'tool': name}
+
+    plain = '\n'.join(facts)
+    written = _compose(question, facts, api_key=api_key)
+    if written and _grounded(written, facts + [question]):
+        return {'say': written, 'tools': used, 'facts': facts}
+    if written:
+        # It wrote a figure that is not in the books. Nobody sees that figure.
+        _record(f'answer dropped, a figure was not in the facts: {written[:160]}')
+    return {'say': plain, 'tools': used, 'facts': facts}
