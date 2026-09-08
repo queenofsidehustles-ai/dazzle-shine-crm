@@ -231,6 +231,30 @@ with app.app_context():
     BusinessSetting.set(_a._month_key(), '0')
     db.session.commit()
 
+    print('\n9b. She is not free')
+    # Every question costs real money to answer, every month, forever. That is
+    # the same argument SMS is zero on Solo for, and the only two limits in
+    # entitlements.py that are about cash rather than product design.
+    import entitlements, navigation
+    check('assistant' in entitlements.PLANS['pro']['features'],
+          'Pro can ask')
+    check('assistant' not in entitlements.PLANS['solo']['features'],
+          'the free plan cannot')
+    check(entitlements.PLANS['scale']['features'] is None,
+          'and Scale gets everything, as ever')
+    check(navigation.MIN_PLAN.get('assistant.page') == 'assistant',
+          'the menu draws it as a paid page rather than hiding it')
+    check(entitlements.FEATURE_LABELS.get('assistant'),
+          'and the upsell has a name for it, not a code word')
+
+    # Every way in, not just the page. A route left ungated is the way round.
+    import blueprints.assistant_routes as _ar
+    import inspect
+    for fn in ('page', 'ask', 'confirm'):
+        src = inspect.getsource(getattr(_ar, fn))
+        check("requires_plan('assistant')" in src or '@requires_plan' in src,
+              f'/{fn} is behind the plan too')
+
     print('\n10. It can be asked out loud, and answer out loud')
     page = c.get('/ask').get_data(as_text=True)
     check('SpeechRecognition' in page, 'the browser does the listening')

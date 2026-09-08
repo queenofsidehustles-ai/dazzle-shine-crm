@@ -77,6 +77,11 @@ PLANS = {
             'sops', 'automations', 'recurring', 'reports', 'job_economics',
             'discounts', 'card_payments', 'booking_widget', 'templates',
             'invoices', 'team_logins',
+            # Every question Nana answers costs us money to answer. It is the
+            # second thing here that is about cash rather than product design,
+            # and like SMS it is zero on Solo for the same reason: a real bill,
+            # every month, for somebody who has never paid anything.
+            'assistant',
         },
     },
     'scale': {
@@ -109,6 +114,7 @@ FEATURE_LABELS = {
     'crew_pay': 'Per-job crew pay',
     'payroll': 'Payroll',
     'tax_forms': '1099s and W-9s',
+    'assistant': 'Asking Nana',
     'hiring': 'The hiring funnel',
     'interviews': 'Video interviews',
     'sops': 'SOP library',

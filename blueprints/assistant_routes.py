@@ -12,6 +12,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 
 import assistant
 from auth import login_required, owner_required
+from entitlements import requires_plan
 from extensions import db
 
 assistant_bp = Blueprint('assistant', __name__)
@@ -24,6 +25,7 @@ ACTIONS = ('complete_booking',)
 @assistant_bp.route('/ask')
 @login_required
 @owner_required
+@requires_plan('assistant')
 def page():
     return render_template('admin/assistant.html',
                            name=assistant.NAME,
@@ -35,6 +37,7 @@ def page():
 @assistant_bp.route('/ask', methods=['POST'])
 @login_required
 @owner_required
+@requires_plan('assistant')
 def ask():
     question = (request.form.get('q') or request.json.get('q', '') if request.is_json
                 else request.form.get('q') or '')
@@ -49,6 +52,7 @@ def ask():
 @assistant_bp.route('/ask/confirm', methods=['POST'])
 @login_required
 @owner_required
+@requires_plan('assistant')
 def confirm():
     """Do the thing a person just pressed. Never reached by the model."""
     action = (request.form.get('action') or '').strip()
