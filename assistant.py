@@ -225,13 +225,166 @@ def finish_job(customer=''):
     }
 
 
-def draft_email(about='', to=''):
-    """Write words. Sending stays a button somebody presses."""
+def draft_email(about='', to='', api_key=None):
+    """Write the words. Sending stays a button somebody presses.
+
+    The only place a model writes prose here rather than picking a question, so
+    it is the only place it could state something untrue. Two things hold it:
+    it is handed the facts rather than asked to recall them, and it is told to
+    use no others -- no prices, no dates, nothing it was not given. And the
+    facts it was given come back with the draft, so the person approving can see
+    what it was working from rather than trusting the paragraph.
+
+    It still does not send. A draft somebody read and sent is a different thing
+    from an email that left on its own.
+    """
+    about = (about or '').strip()
+    to = (to or '').strip()
+    if not about and not to:
+        return {'say': 'Who is it to, and what about?'}
+
+    person = _who(to)
+    facts = []
+    if person:
+        facts.append(f'Their name: {person["name"]}')
+        facts.append(f'They are a {person["kind"]}')
+        if person.get('company'):
+            facts.append(f'Company: {person["company"]}')
+        if person.get('service'):
+            facts.append(f'They asked about: {person["service"]}')
+        if person.get('quoted') is not None:
+            facts.append(f'They were quoted: {_money(person["quoted"])}')
+        if person.get('city'):
+            facts.append(f'City: {person["city"]}')
+    try:
+        import branding
+        facts.append(f'Your business: {branding.business_name()}')
+    except Exception:
+        pass
+
+    key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+    if not key:
+        return {'say': 'I cannot write it — no writing key is set up on this account.'}
+
+    import requests
+    system = (
+        'You write a short, plain business email for a cleaning company owner to '
+        'send. Warm, direct, no marketing language, no exclamation marks, four '
+        'sentences at most.\n\n'
+        'Use ONLY the facts below. Invent nothing — no prices, no dates, no '
+        'appointment times, no promises that are not stated. If something is '
+        'needed and not here, write [ ] and let the owner fill it in.\n\n'
+        'Facts:\n' + ('\n'.join(facts) if facts else '(none given)') +
+        '\n\nReply with the email body only. No subject line, no signature.')
+    try:
+        r = requests.post(API_URL, timeout=25, headers={
+            'Authorization': f'Bearer {key}', 'Content-Type': 'application/json',
+        }, json={'model': MODEL, 'max_tokens': 320,
+                 'messages': [{'role': 'system', 'content': system},
+                              {'role': 'user', 'content': about[:400]}]})
+        body = r.json()['choices'][0]['message']['content'].strip()
+    except Exception:
+        return {'say': 'Could not write it just then. Try again.'}
+
+    who = person['name'] if person else (to or 'them')
     return {
-        'say': ('I can draft it, but I do not send email. Open the customer and '
-                'use Message — the draft goes in the box and you send it.'),
-        'draft': {'to': (to or '').strip(), 'about': (about or '').strip()},
+        'say': f'A draft for {who}. Read it before it goes anywhere — '
+               f'I do not send email.',
+        'draft': {'to': (person or {}).get('email') or to,
+                  'body': body, 'facts': facts},
     }
+
+
+def leads_waiting():
+    """Website enquiries nobody has answered yet.
+
+    The one thing on this list that goes off if you leave it: somebody asked for
+    a price and is currently deciding whether you are the sort of company that
+    replies.
+    """
+    from models import Lead
+    rows = Lead.query.filter(Lead.status == 'new').order_by(
+        Lead.id.desc()).limit(10).all()
+    if not rows:
+        waiting = Lead.query.filter(Lead.status == 'contacted').count()
+        if waiting:
+            return (f'No new enquiries. {waiting} you have already replied to and '
+                    f'not heard back from.')
+        return 'No new enquiries waiting.'
+    lines = []
+    for l in rows:
+        price = f' — quoted {_money(float(l.quoted_price))}' if l.quoted_price else ''
+        where = f' · {l.city}' if l.city else ''
+        lines.append(f'· {l.name}{where}{price}')
+    n = Lead.query.filter(Lead.status == 'new').count()
+    head = f'{n} enquir{"y" if n == 1 else "ies"} waiting for a reply'
+    return head + ':\n' + '\n'.join(lines)
+
+
+def commercial_pipeline():
+    """Where the commercial work stands: prospects, quotes out, accounts won."""
+    from models import Prospect, CommercialQuote, CommercialAccount
+    won = CommercialAccount.query.filter(
+        CommercialAccount.status == 'active').count()
+    quotes = CommercialQuote.query.filter(
+        CommercialQuote.status.in_(['sent', 'pending'])).count()
+
+    by_stage = {}
+    for p in Prospect.query.all():
+        key = (p.stage or p.status or 'not called yet').replace('_', ' ')
+        by_stage[key] = by_stage.get(key, 0) + 1
+
+    if not (won or quotes or by_stage):
+        return ('Nothing commercial yet. Commercial → Find leads pulls property '
+                'managers and offices near you.')
+
+    out = []
+    if won:
+        out.append(f'{won} account{"s" if won != 1 else ""} won and active')
+    if quotes:
+        out.append(f'{quotes} quote{"s" if quotes != 1 else ""} out and unanswered')
+    for stage, n in sorted(by_stage.items(), key=lambda kv: -kv[1]):
+        out.append(f'{n} {stage}')
+
+    due = Prospect.query.filter(
+        Prospect.next_action_date.isnot(None),
+        Prospect.next_action_date <= _today().isoformat()).count()
+    text = 'Commercial: ' + ', '.join(out) + '.'
+    if due:
+        text += (f'\n{due} {"is" if due == 1 else "are"} due a call back today '
+                 f'or earlier.')
+    return text
+
+
+def _who(name):
+    """Find one person by name across the places somebody might mean.
+
+    Leads, customers and commercial contacts are different tables and the person
+    asking does not think of them that way.
+    """
+    from models import Lead, Client, CommercialAccount
+    q = (name or '').strip()
+    if not q:
+        return None
+    like = f'%{q}%'
+    c = Client.query.filter(Client.name.ilike(like)).first()
+    if c:
+        return {'name': c.name, 'email': c.email, 'kind': 'customer'}
+    l = Lead.query.filter(Lead.name.ilike(like)).order_by(Lead.id.desc()).first()
+    if l:
+        return {'name': l.name, 'email': l.email, 'kind': 'enquiry',
+                'quoted': float(l.quoted_price) if l.quoted_price else None,
+                'service': l.service_type, 'city': l.city}
+    # By the company OR the person. Somebody asking about "Sam" means the
+    # contact; somebody asking about "Lakeview" means the account. Searching
+    # only the business name found neither half the time.
+    a = CommercialAccount.query.filter(
+        (CommercialAccount.business_name.ilike(like))
+        | (CommercialAccount.contact_name.ilike(like))).first()
+    if a:
+        return {'name': a.contact_name or a.business_name, 'email': a.email,
+                'kind': 'commercial', 'company': a.business_name}
+    return None
 
 
 # name -> (function, what it is for, argument names)
@@ -244,7 +397,10 @@ TOOLS = {
     'team':            (team, 'who is on the team', []),
     'unassigned_jobs': (unassigned_jobs, 'jobs with no cleaner assigned', []),
     'finish_job':      (finish_job, 'mark a job finished / completed / done', ['customer']),
-    'draft_email':     (draft_email, 'write an email to somebody', ['about', 'to']),
+    'draft_email':     (draft_email, 'write or draft an email to somebody', ['about', 'to']),
+    'leads_waiting':   (leads_waiting, 'new website enquiries waiting for a reply', []),
+    'commercial_pipeline': (commercial_pipeline,
+                            'how the commercial leads, quotes and accounts stand', []),
 }
 
 
