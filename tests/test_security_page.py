@@ -97,9 +97,11 @@ print('\n5. It is not dressed as a legal undertaking')
 # uses a different shell -- and if it ever inherits that banner, the claim and
 # the disclaimer would be fighting each other on the same page.
 check('not yet been reviewed by a lawyer' not in page,
-      'no draft banner: this is a description, not an undertaking')
-check('not yet been reviewed by a lawyer' in body('/terms'),
-      'while /terms still carries its banner, unchanged')
+      'no draft banner here either')
+# /terms carried a draft banner until a lawyer reviewed it on 8 September 2026.
+# Neither page should ever call itself a draft again.
+check('not yet been reviewed by a lawyer' not in body('/terms'),
+      'and /terms no longer calls itself a draft either')
 
 
 print('\n6. Sign-in still refuses to say whether a company exists')

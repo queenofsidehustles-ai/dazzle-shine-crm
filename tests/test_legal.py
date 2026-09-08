@@ -59,8 +59,12 @@ for path, title in [('/terms', 'Terms of Service'),
                     ('/subprocessors', 'Who we share data with')]:
     body = page(path)
     check(title in body, f'{path} is the {title}')
-    check('not yet been reviewed by a lawyer' in body,
-          f'{path} says plainly that it is a draft')
+    # The draft banner is gone: these were reviewed by a lawyer on 8 September
+    # 2026. This assertion held it in place until that happened, which is what
+    # it was for, and it now checks the opposite so the banner cannot come back
+    # by accident on a page somebody is relying on.
+    check('not yet been reviewed by a lawyer' not in body,
+          f'{path} no longer calls itself a draft')
 
 print('\n2. Not a payroll provider — stated, not implied')
 terms = page('/terms')

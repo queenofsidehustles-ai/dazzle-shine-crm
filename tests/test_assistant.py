@@ -272,6 +272,15 @@ with app.app_context():
     check('driving' in page.lower(),
           'and the page says not to do this while driving')
 
+    print('\n11. She is described by what she will not do')
+    # The customer here has been burned by software acting on its own, so the
+    # reassuring half of the pitch is the half about restraint. It also has to
+    # stay true: if she ever does send, this wording has to change first.
+    check('cannot make a number up' in page,
+          'the page says answers come from the records')
+    check('never sends one' in page, 'and that she does not send email')
+    check('Nothing leaves without you' in page, 'and that nothing leaves without you')
+
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')
