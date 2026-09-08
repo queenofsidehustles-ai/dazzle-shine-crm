@@ -43,7 +43,11 @@ from datetime import date, timedelta
 NAME = 'Nana'
 
 # Where the answering happens. Only used to pick a tool -- never to state a fact.
-MODEL = os.environ.get('ASSISTANT_MODEL', 'anthropic/claude-3.5-haiku')
+# Checked against OpenRouter's own model list, not typed from memory. The first
+# value here was 'anthropic/claude-3.5-haiku', which does not exist -- every call
+# came back an error, the error was swallowed, and every question got the same
+# "I did not follow that". A wrong name looked exactly like a stupid assistant.
+MODEL = os.environ.get('ASSISTANT_MODEL', 'anthropic/claude-haiku-4.5')
 API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 # A generous month for one company. Enough that nobody sensible hits it, low
@@ -455,11 +459,48 @@ def _count_one():
     db.session.commit()
 
 
+def _record(detail):
+    """Put the real reason somewhere a person can read it.
+
+    The owner should never see this text -- they get a plain sentence. But when
+    Nana stops working, the reason has to exist somewhere other than nowhere.
+    """
+    try:
+        import errors
+        errors.capture(RuntimeError(f'{NAME}: {detail}'), path='/ask', method='POST')
+    except Exception:
+        pass
+
+
+# What the owner is told, by what actually went wrong. Never the same sentence
+# twice: each one points at a different thing to go and fix.
+TROUBLE = {
+    'not-configured': (f'{NAME} is not switched on yet. Add an OpenRouter key in '
+                       f'Settings and she will start answering.'),
+    'unreachable': (f'I could not reach {NAME} just then — that is the connection, '
+                    f'not your question. Try again in a moment.'),
+    'service-error': (f'{NAME} is having trouble on her end. It has been recorded '
+                      f'and it is not something you have done. Everything else in '
+                      f'here works as normal.'),
+}
+
+
 def choose(question, api_key=None):
-    """Which tool the question is asking for. Returns (name, args) or (None, {})."""
+    """Which tool the question is asking for.
+
+    Returns (name, args, problem). `problem` is None when the round trip worked,
+    whatever the answer was -- so "I did not follow that" is said only when the
+    service answered and none of the tools fit.
+
+    Everything used to collapse into one return and one message. A missing key,
+    a model name that does not exist, a network blip and a genuinely odd
+    question all produced "I did not follow that", which is how a typo in a
+    model name spent an evening looking like a stupid assistant.
+    """
     key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
     if not key:
-        return None, {}
+        return None, {}, 'not-configured'
+
     import requests
     try:
         r = requests.post(API_URL, timeout=20, headers={
@@ -471,25 +512,43 @@ def choose(question, api_key=None):
             'messages': [{'role': 'system', 'content': _prompt()},
                          {'role': 'user', 'content': question[:500]}],
         })
-        body = r.json()['choices'][0]['message']['content']
-    except Exception:
-        return None, {}
+    except Exception as e:
+        _record(f'could not reach the answering service: {type(e).__name__}')
+        return None, {}, 'unreachable'
+
+    try:
+        payload = r.json()
+    except ValueError:
+        _record(f'answering service returned {r.status_code}, not JSON')
+        return None, {}, 'service-error'
+
+    # OpenRouter reports a bad model or a spent balance as an error object with
+    # a 200, so the status code alone is not enough to tell whether it worked.
+    if isinstance(payload.get('error'), dict):
+        _record('answering service: ' + str(payload['error'].get('message'))[:200])
+        return None, {}, 'service-error'
+    try:
+        body = payload['choices'][0]['message']['content']
+    except (KeyError, IndexError, TypeError):
+        _record(f'unexpected reply from the answering service: {str(payload)[:200]}')
+        return None, {}, 'service-error'
+
     m = re.search(r'\{.*\}', body, re.S)
     if not m:
-        return None, {}
+        return None, {}, None
     try:
         picked = json.loads(m.group(0))
     except ValueError:
-        return None, {}
+        return None, {}, None
     name = picked.get('tool')
     if name not in TOOLS:
-        return None, {}
+        return None, {}, None
     # Only the arguments this tool declares. Anything else the model invented is
     # dropped rather than passed on to a database query.
     allowed = TOOLS[name][2]
     args = {k: v for k, v in (picked.get('args') or {}).items()
             if k in allowed and isinstance(v, str)}
-    return name, args
+    return name, args, None
 
 
 def ask(question, api_key=None):
@@ -499,10 +558,15 @@ def ask(question, api_key=None):
                         f'which is the limit. It starts again next month — '
                         f'everything else in here works as normal.')}
     _count_one()
-    name, args = choose(question, api_key=api_key)
+    name, args, problem = choose(question, api_key=api_key)
+    if problem:
+        # Nana never got asked. Saying "I did not follow that" here would blame
+        # the owner's wording for something on our side.
+        return {'say': TROUBLE[problem]}
     if not name:
-        return {'say': f'I did not follow that. Try “what is booked tomorrow?” '
-                       f'or “how much came in last month?”'}
+        return {'say': f'I did not follow that one. I can tell you what is booked, '
+                       f'what came in, who is owed, who is asking — try '
+                       f'“what is booked tomorrow?” or “how much came in last month?”'}
     fn = TOOLS[name][0]
     try:
         out = fn(**args)

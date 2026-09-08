@@ -92,7 +92,7 @@ with app.app_context():
 
     print('\n3. A wrong guess answers a different question — it cannot invent one')
     # The model returns a tool name. Anything it makes up is dropped.
-    name, args = assistant.choose('anything', api_key='')
+    name, args, problem = assistant.choose('anything', api_key='')
     check(name is None, 'with no key it declines rather than guessing')
     for made_up in ('delete_everything', 'charge_all_cards', '', None):
         check(made_up not in assistant.TOOLS,
@@ -280,6 +280,35 @@ with app.app_context():
           'the page says answers come from the records')
     check('never sends one' in page, 'and that she does not send email')
     check('Nothing leaves without you' in page, 'and that nothing leaves without you')
+
+    print('\n12. A fault of ours is never dressed up as a fault of theirs')
+    # This shipped broken. The model name in MODEL did not exist, so every
+    # single call errored, the error was caught and dropped, and every question
+    # -- including the suggestion chips on our own page -- came back "I did not
+    # follow that". An owner reading that concludes the assistant is stupid and
+    # stops using it. The fault was ours and it read as theirs.
+    #
+    # So: each way the round trip can fail says a different, true thing, and
+    # none of them is the sentence that means "your wording confused me".
+    saved = os.environ.pop('OPENROUTER_API_KEY', None)
+    try:
+        name, args, problem = assistant.choose('any new enquiries?')
+        check(problem == 'not-configured',
+              'no key is reported as no key, not as a misunderstood question')
+    finally:
+        if saved is not None:
+            os.environ['OPENROUTER_API_KEY'] = saved
+
+    check(len(set(assistant.TROUBLE.values())) == len(assistant.TROUBLE),
+          'no two failures give the owner the same sentence')
+    for reason, sentence in assistant.TROUBLE.items():
+        check('did not follow' not in sentence,
+              f'{reason} does not blame the owner for asking badly')
+
+    # And the model has to be one that exists. There is no way to check the
+    # catalogue offline, but the name that broke it is known and must not return.
+    check(assistant.MODEL != 'anthropic/claude-3.5-haiku',
+          'the model name that never existed is not back')
 
 print()
 if failures:

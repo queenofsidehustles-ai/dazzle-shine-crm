@@ -174,13 +174,45 @@
     rec.start();
   }
 
+  // Every device ships several voices and picks the worst one by default -- the
+  // flat robot everybody recognises. The good ones are already installed, they
+  // just have to be asked for by name.
+  const NICE_VOICES = ['Samantha', 'Ava', 'Allison', 'Serena', 'Karen', 'Moira',
+                       'Google UK English Female', 'Google US English',
+                       'Microsoft Aria', 'Microsoft Jenny', 'Zira'];
+  let chosenVoice = null;
+
+  function pickVoice() {
+    if (!canSpeak) return;
+    const all = speechSynthesis.getVoices();
+    if (!all.length) return;                 // not loaded yet; the event re-runs this
+    const english = all.filter(v => (v.lang || '').toLowerCase().startsWith('en'));
+    const pool = english.length ? english : all;
+    for (const want of NICE_VOICES) {
+      const hit = pool.find(v => (v.name || '').indexOf(want) === 0);
+      if (hit) { chosenVoice = hit; return; }
+    }
+    // Nothing known by name: a downloaded voice still beats the built-in one.
+    chosenVoice = pool.find(v => v.localService === false) || pool[0] || null;
+  }
+
+  if (canSpeak) {
+    pickVoice();
+    speechSynthesis.onvoiceschanged = pickVoice;   // Chrome fills the list late
+  }
+
   function sayOutLoud(text) {
     if (!canSpeak || !document.getElementById('speak').checked || !text) return;
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = document.documentElement.lang || 'en-US';
-      u.rate = 1.02;
+      if (!chosenVoice) pickVoice();
+      if (chosenVoice) { u.voice = chosenVoice; u.lang = chosenVoice.lang; }
+      else { u.lang = document.documentElement.lang || 'en-US'; }
+      // Slightly under the default pace, and off the floor of the pitch range.
+      // Read aloud at 1.0/1.0 a money figure lands like a train announcement.
+      u.rate = 0.97;
+      u.pitch = 1.06;
       speechSynthesis.speak(u);
     } catch (e) {}
   }
