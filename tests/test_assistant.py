@@ -171,6 +171,23 @@ with app.app_context():
     BusinessSetting.set(_a._month_key(), '0')
     db.session.commit()
 
+    print('\n10. It can be asked out loud, and answer out loud')
+    page = c.get('/ask').get_data(as_text=True)
+    check('SpeechRecognition' in page, 'the browser does the listening')
+    check('webkitSpeechRecognition' in page, 'including on Safari and Chrome')
+    check('speechSynthesis' in page, 'and reads the answer back')
+    # No service, no key, no audio leaving this server -- the browser's own
+    # engine does both halves. Anything that cannot gets the typing box.
+    check('id="mic" hidden' in page,
+          'the microphone starts hidden and is only shown if it will work')
+    check('nana-speak' in page, 'and whether to read answers aloud is remembered')
+    check('isFinal' in page,
+          'it waits for the end of the sentence — half a question is not a question')
+    check('not-allowed' in page,
+          'a blocked microphone says so rather than looking broken')
+    check('driving' in page.lower(),
+          'and the page says not to do this while driving')
+
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')
