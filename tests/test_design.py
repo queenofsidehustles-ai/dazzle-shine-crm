@@ -77,6 +77,22 @@ for p in templates():
 check(not offenders, f'no CSS variable in a non-CSS attribute ({offenders[:3]})')
 
 
+print('\n2b. Every token the stylesheet uses is a token it defines')
+# A var() naming something that does not exist resolves to nothing, and the
+# property silently does not apply. That is how the setup meter shipped with a
+# progress bar that never filled: it asked for --gold, this palette has
+# --amber, and nothing anywhere said so. It looked fine in code review and
+# wrong on screen.
+css_text = CSS.read_text()
+# Several are declared side by side on one line (--s1: 4px;  --s2: 8px;),
+# so this looks for every declaration, not the first on each line.
+defined = set(re.findall(r'(--[a-z0-9-]+)\s*:', css_text))
+# Only uses with no fallback matter -- var(--x, #ccc) still paints something.
+used_bare = set(re.findall(r'var\(\s*(--[a-z0-9-]+)\s*\)', css_text))
+missing = sorted(used_bare - defined)
+check(not missing,
+      f'no rule asks for a colour that was never defined ({missing})')
+
 print('\n3. No token is handed to a canvas or a chart')
 # This is the one that nearly shipped: `backgroundColor: 'var(--amber)'` in a
 # Chart.js dataset draws nothing. Resolve it with getComputedStyle first.

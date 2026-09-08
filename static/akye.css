@@ -167,7 +167,7 @@ a  { color: var(--amber-deep); }
    the page tokens are tuned for ink on a light ground and go muddy against
    this one. Disappears for good once the last setup step is ticked. */
 .setup-meter { display: block; margin: 0 var(--s5) var(--s4); padding: var(--s3) var(--s4);
-               border-radius: var(--r-md); text-decoration: none;
+               border-radius: var(--r); text-decoration: none;
                background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); }
 .setup-meter:hover { background: rgba(255,255,255,.11); }
 .setup-line { display: flex; align-items: baseline; justify-content: space-between;
@@ -178,7 +178,7 @@ a  { color: var(--amber-deep); }
 .setup-track { display: block; height: 5px; margin: 7px 0 0; overflow: hidden;
                border-radius: var(--r-pill); background: rgba(255,255,255,.14); }
 .setup-fill { display: block; height: 100%; border-radius: inherit;
-              background: var(--gold); transition: width .4s ease; }
+              background: var(--amber); transition: width .4s ease; }
 .setup-next { display: block; margin-top: 7px; font-size: var(--t-xs); line-height: 1.35;
               color: rgba(255,255,255,.55); }
 
@@ -187,7 +187,7 @@ a  { color: var(--amber-deep); }
    unfinished job, not a problem. */
 .setup-nudge { display: flex; align-items: center; gap: var(--s5); flex-wrap: wrap;
                margin: 0 0 var(--s5); padding: var(--s4) var(--s5);
-               border-radius: var(--r-md); background: var(--amber-soft);
+               border-radius: var(--r); background: var(--amber-soft);
                border: 1px solid var(--amber-line); }
 .setup-nudge-body { flex: 1 1 280px; font-size: var(--t-sm); line-height: 1.5;
                     color: var(--muted); }
