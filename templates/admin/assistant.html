@@ -328,20 +328,28 @@
     }
 
     // Something to do comes back as a button, never as an action already taken.
-    if (data.confirm) {
+    // The form carries a token and nothing else: what runs is read back from
+    // what was written down when it was offered, so it cannot differ from the
+    // sentence above the button.
+    if (data.confirm && data.confirm.token) {
       const f = document.createElement('form');
       f.method = 'POST';
       f.action = '{{ url_for("assistant.confirm") }}';
-      for (const [k, v] of Object.entries(data.confirm)) {
-        if (k === 'label') continue;
-        const i = document.createElement('input');
-        i.type = 'hidden'; i.name = k; i.value = v;
-        f.appendChild(i);
-      }
+      const i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'token'; i.value = data.confirm.token;
+      f.appendChild(i);
       const b = document.createElement('button');
       b.type = 'submit'; b.className = 'btn';
       b.textContent = data.confirm.label || 'Do it';
       f.appendChild(b);
+      // Whether it can be walked back, said before the press rather than
+      // discovered after it. The code decides this, not the model.
+      if (data.confirm.reversible === false) {
+        const n = document.createElement('span');
+        n.className = 'confirm-note';
+        n.textContent = 'This cannot be undone.';
+        f.appendChild(n);
+      }
       wrap.appendChild(f);
     }
 

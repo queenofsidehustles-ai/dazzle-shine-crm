@@ -131,7 +131,15 @@ with app.app_context():
     print('\n5. Finishing a job is offered, not done')
     out = assistant.finish_job(customer='Owes Money')
     check('confirm' in out, 'it comes back as something to confirm')
-    check(out['confirm']['action'] == 'complete_booking', 'naming the action')
+    # The page is handed a token and nothing else. It does not learn the
+    # action, or the job id, so it cannot post back a different one -- what
+    # runs is read from what was written down when the offer was made.
+    check(set(out['confirm']) <= {'token', 'label', 'reversible'},
+          f'the page carries a token, not the deed ({sorted(out["confirm"])})')
+    check(out['confirm']['token'], 'and the token is real')
+    import proposals as _pr
+    _act, _pay, _row = _pr.take(out['confirm']['token'])
+    check(_act == 'complete_booking', 'which stands for finishing that job')
     b = Booking.query.filter_by(name='Owes Money').first()
     check(b.status == 'confirmed', 'and the job is untouched until somebody presses it')
 
@@ -204,23 +212,37 @@ with app.app_context():
     # A confirmation only does what is on a fixed list -- not "whatever the
     # model named", which is how a new tool would quietly become a new power.
     import blueprints.assistant_routes as ar
-    check(ar.ACTIONS == ('complete_booking',), f'one allowed action: {ar.ACTIONS}')
-    r = c.post('/ask/confirm', data={'action': 'charge_everything'},
-               follow_redirects=True)
-    check(r.status_code == 200, 'an action not on the list is refused, not run')
+    check(set(ar.ACTIONS) == {'complete_booking'},
+          f'one allowed action: {sorted(ar.ACTIONS)}')
 
     b = Booking.query.filter_by(name='Owes Money').first()
-    check(b.status == 'confirmed', 'and nothing happened to the job')
-    c.post('/ask/confirm', data={'action': 'complete_booking', 'booking_id': b.id},
-           follow_redirects=True)
+    check(b.status == 'confirmed', 'the job starts unfinished')
+
+    # Naming the deed in the form does nothing at all. This is the property the
+    # whole gate exists for: the route takes a token that stands for something
+    # already written down, so a page cannot ask for work nobody offered.
+    r = c.post('/ask/confirm',
+               data={'action': 'complete_booking', 'booking_id': b.id},
+               follow_redirects=True)
+    check(r.status_code == 200, 'posting the deed itself is refused, not run')
     db.session.expire_all()
-    b = Booking.query.get(b.id)
-    check(b.status == 'completed', 'the real one, pressed by a person, does work')
+    check(db.session.get(Booking, b.id).status == 'confirmed',
+          'and the job is untouched by it')
+    r = c.post('/ask/confirm', data={'token': 'made-up'}, follow_redirects=True)
+    check(db.session.get(Booking, b.id).status == 'confirmed',
+          'an invented token does nothing either')
+
+    # The real route: ask, get an offer, press it.
+    offer = assistant.finish_job(customer='Owes Money')
+    tok = offer['confirm']['token']
+    c.post('/ask/confirm', data={'token': tok}, follow_redirects=True)
+    db.session.expire_all()
+    check(db.session.get(Booking, b.id).status == 'completed',
+          'the real one, pressed by a person, does work')
 
     # Pressing it twice should say so rather than pretend.
-    r = c.post('/ask/confirm', data={'action': 'complete_booking', 'booking_id': b.id},
-               follow_redirects=True)
-    check(b'already completed' in r.data, 'and a second press says it is already done')
+    r = c.post('/ask/confirm', data={'token': tok}, follow_redirects=True)
+    check(b'already done' in r.data, 'and a second press says it is already done')
 
     print('\n9. It cannot run away with somebody else\'s bill')
     import assistant as _a
@@ -486,6 +508,63 @@ with app.app_context():
         os.environ.pop('OPENAI_API_KEY', None)
         if saved_key is not None:
             os.environ['OPENAI_API_KEY'] = saved_key
+    print('\n16. Nothing is done except what a person read and approved')
+    import proposals, actions
+    from models import AssistantProposal
+
+    # An offer is written down before it is shown, and the page is handed a
+    # token. Nothing about what to do travels through the browser.
+    tok = proposals.offer('complete_booking', {'booking_id': 4321},
+                          summary='Mark Ama on Tuesday as finished?',
+                          label='Mark Ama finished', reversible=True)
+    check(isinstance(tok, str) and len(tok) > 20, 'an offer returns a token')
+    row = AssistantProposal.query.filter_by(token=tok).first()
+    check(row is not None and row.action == 'complete_booking',
+          'and the action is stored, not carried by the page')
+    check('Mark Ama on Tuesday' in row.summary,
+          'along with the exact sentence the person read')
+
+    # Spent on use. A double-tap, a refresh or a replayed request does the
+    # work once, which is the difference between an assistant and an accident.
+    a, pay, r = proposals.take(tok)
+    check(a == 'complete_booking' and pay == {'booking_id': 4321},
+          'approving it gives back exactly what was offered')
+    a2, _pay2, _r2 = proposals.take(tok)
+    check(a2 is None, 'and the same token cannot be spent twice')
+    check(proposals.why_not(tok) == 'already-done',
+          'with a reason a person can act on, not just a refusal')
+
+    # Offers go stale. An assistant that will still act on something you
+    # glanced at yesterday is not one anybody should trust with a business.
+    from datetime import datetime as _dt, timedelta as _td
+    old_tok = proposals.offer('complete_booking', {'booking_id': 1})
+    old_row = AssistantProposal.query.filter_by(token=old_tok).first()
+    old_row.created_at = _dt.utcnow() - _td(minutes=proposals.TTL_MINUTES + 1)
+    _dbcommit()
+    check(proposals.take(old_tok)[0] is None, 'a stale offer will not run')
+    check(proposals.why_not(old_tok) == 'stale',
+          'and says it is stale rather than that it never existed')
+
+    # A token nobody issued does nothing at all.
+    check(proposals.take('not-a-real-token')[0] is None,
+          'an invented token does nothing')
+    check(proposals.take('')[0] is None, 'and neither does an empty one')
+
+    # The model picks a name from a list. It cannot name its way into a
+    # capability that does not exist, and every real one runs through one gate.
+    check(actions.run('delete_everything', {})[0] is False,
+          'an action that is not on the list does not run')
+    check(actions.run('charge_all_cards', {})[0] is False,
+          'however plausible the name sounds')
+    for _name, _entry in actions.ACTIONS.items():
+        check(callable(_entry[0]) and isinstance(_entry[2], bool),
+              f'{_name} has a handler and says whether it can be undone')
+
+    # A handler re-checks the world. The payload was true when it was written;
+    # between the offer and the button the job can be finished by somebody else.
+    ok, said = actions.run('complete_booking', {'booking_id': 999999})
+    check(ok is False and 'not here' in said,
+          'a job that has gone since it was offered is refused, not invented')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')

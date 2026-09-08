@@ -19,9 +19,10 @@ from extensions import db
 
 assistant_bp = Blueprint('assistant', __name__)
 
-# Everything a confirmation is allowed to do. Not "whatever the model named" --
-# a fixed list, checked here, so a new tool cannot quietly become a new power.
-ACTIONS = ('complete_booking',)
+# The allowlist lives in actions.py, next to the code that runs each one.
+# Two lists in two files drift, and the way this one drifts is that something
+# becomes runnable before anybody decided it should be.
+from actions import ACTIONS  # noqa: F401  (imported for callers and tests)
 
 
 @assistant_bp.route('/ask')
@@ -57,30 +58,32 @@ def ask():
 @owner_required
 @requires_plan('assistant')
 def confirm():
-    """Do the thing a person just pressed. Never reached by the model."""
-    action = (request.form.get('action') or '').strip()
-    if action not in ACTIONS:
-        flash('That is not something to confirm.', 'error')
+    """Do the thing a person just pressed. Never reached by the model.
+
+    The page posts a token and nothing else. What runs is read back out of the
+    proposal that was written down when it was offered, so it is the same thing
+    that was on screen -- not whatever the form happened to contain.
+    """
+    import actions
+    import proposals
+
+    token = (request.form.get('token') or '').strip()
+    action, payload, row = proposals.take(token)
+    if not action:
+        # Three different situations, and the person in front of it can act on
+        # the difference. "That did not work" is the sentence that makes people
+        # stop trusting software.
+        flash({
+            'already-done': 'That one is already done.',
+            'stale': 'That offer is too old to act on now — ask me again and '
+                     'I will check it against how things stand.',
+        }.get(proposals.why_not(token),
+              'That is not something to confirm any more.'), 'error')
         return redirect(url_for('assistant.page'))
 
-    if action == 'complete_booking':
-        from models import Booking
-        try:
-            booking_id = int(request.form.get('booking_id') or 0)
-        except ValueError:
-            booking_id = 0
-        b = Booking.query.get(booking_id)
-        if not b:
-            flash('That job is not here any more.', 'error')
-        elif b.status not in ('confirmed', 'pending'):
-            # Already finished, cancelled or on hold. Saying so is better than
-            # silently doing nothing, and better than doing it anyway.
-            flash(f'{b.name} is already {b.status.replace("_", " ")}.', 'error')
-        else:
-            b.status = 'completed'
-            db.session.commit()
-            flash(f'{b.name} marked finished. Open the job to undo it.', 'success')
-
+    ok, said = actions.run(action, payload)
+    proposals.record(row, ('done: ' if ok else 'refused: ') + said)
+    flash(said, 'success' if ok else 'error')
     return redirect(url_for('assistant.page'))
 
 

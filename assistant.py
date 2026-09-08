@@ -228,11 +228,19 @@ def finish_job(customer=''):
                                    f'{_fmt_day(date.fromisoformat(b.preferred_date))}'
                                    for b in rows)}
     b = rows[0]
+    day = _fmt_day(date.fromisoformat(b.preferred_date))
+    summary = f'Mark {b.name} on {day} as finished?'
+    # Written down before it is offered, so what runs is what was on screen.
+    # The page never carries the job id; it carries a token that stands for
+    # this whole sentence. See proposals.py.
+    import proposals
+    token = proposals.offer(
+        'complete_booking', {'booking_id': b.id}, summary=summary,
+        label=f'Mark {b.name} finished', reversible=True)
     return {
-        'say': (f'Mark {b.name} on '
-                f'{_fmt_day(date.fromisoformat(b.preferred_date))} as finished?'),
-        'confirm': {'action': 'complete_booking', 'booking_id': b.id,
-                    'label': f'Mark {b.name} finished'},
+        'say': summary,
+        'confirm': {'token': token, 'label': f'Mark {b.name} finished',
+                    'reversible': True},
     }
 
 

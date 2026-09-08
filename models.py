@@ -2045,3 +2045,39 @@ class EntitlementDenial(db.Model):
     plan = db.Column(db.String(20))                  # the plan they were on when blocked
     path = db.Column(db.String(200))                 # where they hit it
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class AssistantProposal(db.Model):
+    """Something Nana offered to do, and whether a person said yes.
+
+    The whole safety of an assistant that acts rests on one question: is the
+    thing being executed the same thing the person read and approved? If the
+    browser posts back what to do, the answer is "probably" -- the page could
+    send a different job id, or a different address, than the one on screen.
+
+    So nothing is posted back but a token. The proposal itself -- the action,
+    the exact arguments, the sentence the person read -- is written here first
+    and only read from here. What runs is what was offered, by construction
+    rather than by trust.
+
+    It is also the record afterwards. Once something can send an email on a
+    business's behalf, "who approved this, and what did it say at the time"
+    stops being a nicety and becomes the first question anybody asks.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    action = db.Column(db.String(50), nullable=False)
+    # The arguments, as JSON. Written by the code that offers, never by the
+    # model: it picks the action and the code decides what the action means.
+    payload = db.Column(db.Text, nullable=False, default='{}')
+    # What the person actually read before they pressed the button. Kept
+    # verbatim so the record is of the decision, not of a reconstruction.
+    summary = db.Column(db.Text, nullable=False, default='')
+    label = db.Column(db.String(120), nullable=False, default='Confirm')
+    # Whether it can be taken back afterwards. Changes what the button says,
+    # and it is the code that says so, not the model.
+    reversible = db.Column(db.Boolean, nullable=False, default=True)
+    asked_by = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    used_at = db.Column(db.DateTime)
+    outcome = db.Column(db.Text)

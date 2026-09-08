@@ -157,6 +157,11 @@ a  { color: var(--amber-deep); }
 }
 .sidebar nav .nav-sec:first-of-type { padding-top: var(--s2); }
 
+/* Said next to the button, not after the press: whether the thing on offer
+   can be walked back. Quiet rather than alarming -- most of what Nana offers
+   is undoable, so this only appears where it is genuinely true. */
+.confirm-note { margin-left: var(--s3); font-size: var(--t-xs); color: var(--softer); }
+
 /* The setup meter, under the wordmark. Sits on the dark sidebar, so it takes
    its colours from white at low opacity like every other control up here --
    the page tokens are tuned for ink on a light ground and go muddy against
