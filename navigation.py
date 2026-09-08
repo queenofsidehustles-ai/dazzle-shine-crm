@@ -174,6 +174,7 @@ BELONGS_TO = {
 # never has a reason to pay for it. What is gated below is what appears once
 # they start succeeding — a crew to pay, people to hire, margins to check.
 MIN_PLAN = {
+    'assistant.page': 'assistant',
     'money.pnl': 'reports',
     'admin.reports': 'reports',
     'money.expenses': 'reports',
