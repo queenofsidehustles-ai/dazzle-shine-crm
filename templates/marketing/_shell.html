@@ -82,7 +82,8 @@
     }
 
     nav { margin-left:auto; display:flex; gap:22px; align-items:center; }
-    nav a { color:var(--muted); text-decoration:none; font-weight:550; font-size:.94rem; }
+    nav a { color:var(--muted); text-decoration:none; font-weight:550; font-size:.94rem;
+            white-space:nowrap; }
     nav a:hover { color:var(--ink); }
 
     /* A button lit from above: brighter along the top edge, deeper at the
@@ -177,7 +178,16 @@
       h1 { font-size:2.15rem; }
       h2 { font-size:1.5rem; }
       section { padding:40px 0; }
-      nav a:not(.btn){ display:none; }
+      /* Pricing is reachable from inside the page and from the footer.
+         Signing in was not: hiding every non-button link took the only door
+         back in for somebody who has already paid and is on their phone. */
+      .wide-only { display:none; }
+      header .wrap { gap:12px; }
+      nav { gap:15px; }
+      /* A thumb is not a mouse pointer: the text is 24px tall, so the link
+         gets padded out to something you can actually hit while walking. */
+      nav a:not(.btn) { padding:11px 0; }
+      .btn { padding:11px 18px; font-size:.9rem; }
     }
     @media (prefers-reduced-motion:reduce){
       .card, .btn { transition:none; }
@@ -193,10 +203,10 @@
          beats leaving every visitor to guess -- and the meaning is the story. #}
       <a class="brand" href="/">
         <span class="logo">{{ PRODUCT }}<span>.</span></span>
-        <span class="say">ah-CHEH · “good morning”</span>
+        <span class="say">ah-CHEH<span class="wide-only"> · “good morning”</span></span>
       </a>
       <nav>
-        <a href="{{ url_for('marketing.pricing') }}">Pricing</a>
+        <a class="wide-only" href="{{ url_for('marketing.pricing') }}">Pricing</a>
         <a href="/login">Sign in</a>
         {# The door being shut is not a reason to have no call to action. It
            is a reason to have a different one — otherwise every visitor who
@@ -215,6 +225,7 @@
   <footer>
     <div class="wrap">
       <strong>{{ PRODUCT }}</strong> — {{ TAGLINE }}<br />
+      <span style="color:var(--softer)">ah-CHEH · “good morning”</span><br />
       <span style="display:inline-block;margin-top:8px">
         <a href="{{ url_for('marketing.pricing') }}">Pricing</a> ·
         <a href="{{ url_for('marketing.security') }}">Security</a> ·

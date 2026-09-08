@@ -159,4 +159,30 @@ check('SIGNUP PAGE: 404' in r.stdout, 'and the signup page itself is gone')
 check('ROOT STATUS: 200' in r.stdout,
       'while the landing page still explains what the product is')
 
+print('\n9. Somebody who already pays can get back in from a phone')
+# The header hid every non-button link under 760px. On a phone that left one
+# control -- "Get early access" -- so an existing customer standing in a
+# doorway had no way back into their own CRM. It was on the desktop site the
+# whole time, which is exactly why it went unnoticed.
+shell = open(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), 'templates', 'marketing', '_shell.html')).read()
+mobile = shell.split('@media (max-width:760px){')[1].split('}')[0] \
+    if '@media (max-width:760px){' in shell else ''
+check('@media (max-width:760px){' in shell, 'there is still a phone-sized layout')
+check('nav a:not(.btn){ display:none; }' not in shell,
+      'the phone layout no longer hides every link that is not the button')
+
+header = shell.split('<header>')[1].split('</header>')[0]
+login = [ln for ln in header.split('\n') if '/login' in ln]
+check(len(login) == 1, 'the header has a sign-in link')
+check('wide-only' not in login[0],
+      'and it is not one of the things a narrow screen drops')
+
+# The name is unfamiliar on purpose, so how it sounds stays on every screen.
+# Only the meaning steps aside on a phone, and it lands in the footer.
+check('ah-CHEH<span class="wide-only">' in shell,
+      'the pronunciation itself survives on a phone')
+footer = shell.split('<footer>')[1]
+check('good morning' in footer,
+      'and what the name means is in the footer, where there is room')
 print('\n\n✅ All marketing tests passed.\n')
