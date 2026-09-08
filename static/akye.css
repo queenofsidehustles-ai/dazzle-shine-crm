@@ -157,6 +157,17 @@ a  { color: var(--amber-deep); }
 }
 .sidebar nav .nav-sec:first-of-type { padding-top: var(--s2); }
 
+/* The head of a draft: who it goes to and what it says it is about. Shown
+   because an email you approve without seeing its subject line is an email you
+   did not really read. */
+.draft-head { margin-top: var(--s3); padding: var(--s3) var(--s4);
+              border: 1px solid var(--line); border-radius: var(--r);
+              background: var(--ground); font-size: var(--t-sm);
+              line-height: 1.7; color: var(--ink); }
+.draft-head span { display: inline-block; min-width: 62px; color: var(--softer);
+                   font-size: var(--t-xs); text-transform: uppercase;
+                   letter-spacing: .08em; font-weight: 650; }
+
 /* Said next to the button, not after the press: whether the thing on offer
    can be walked back. Quiet rather than alarming -- most of what Nana offers
    is undoable, so this only appears where it is genuinely true. */

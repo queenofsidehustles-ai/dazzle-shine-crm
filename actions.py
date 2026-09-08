@@ -42,6 +42,32 @@ def complete_booking(payload):
     return True, f'{b.name} marked finished. Open the job to undo it.'
 
 
+def send_prospect_email(payload):
+    """Send the outreach email that was on screen, to the prospect named on it.
+
+    This one leaves the building, which is why the whole gate exists. The words
+    approved are the words stored with the offer -- not something the page
+    posted back -- so what arrives is what was read.
+
+    Irreversible by nature: an email cannot be recalled. That is why the button
+    says so, and why this is one prospect at a time rather than a list.
+    """
+    from extensions import db
+    from models import Prospect
+    import prospecting
+
+    try:
+        pid = int(payload.get('prospect_id') or 0)
+    except (TypeError, ValueError):
+        return False, 'That business is not here any more.'
+    p = db.session.get(Prospect, pid)
+    if not p:
+        return False, 'That business is not here any more.'
+
+    return prospecting.send_outreach(
+        p, payload.get('subject'), payload.get('body'), to=payload.get('to'))
+
+
 # name -> (handler, what it is, can it be taken back afterwards)
 #
 # The third value is the code's judgement, never the model's. It decides how
@@ -49,6 +75,10 @@ def complete_booking(payload):
 # are doing something they can walk back.
 ACTIONS = {
     'complete_booking': (complete_booking, 'Mark a job finished', True),
+    # False, and it matters: an email cannot be recalled. The page says so
+    # above the button because the code says so here.
+    'send_prospect_email': (send_prospect_email,
+                            'Send an outreach email to one prospect', False),
 }
 
 

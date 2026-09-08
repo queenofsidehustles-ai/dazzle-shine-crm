@@ -25,19 +25,29 @@ answer is thrown away unread and the plain computed lines are shown instead.
 A wrong figure cannot reach the screen. The worst case is a duller answer than
 intended, which is exactly where this started.
 
-## Nothing leaves the building
+## Nothing leaves without a person pressing a button
 
-Every tool here reads. The one exception is marking a job finished, which is
-this business's own record of its own work, is visible on the job, and can be
-undone.
+Every tool here reads. Two things change something, and both of them are
+offered rather than done: marking a job finished, and sending one outreach
+email to one commercial prospect.
 
-It does not send email, does not text anybody, and does not charge a card --
-whatever is typed. Those either reach a customer or move money, and something
-that cannot be taken back should be a button a person pressed, not a sentence a
-model understood.
+That second one used to be impossible on purpose, and the rule it broke was
+"she never sends". What replaced it is narrower and, I think, better: she never
+sends *unapproved*. The words are written down before they are shown, the page
+carries a token rather than the message, and what leaves is what was read --
+by construction, not by trust. See proposals.py.
 
-Drafting is different from sending: `draft_email` writes words for you to read,
-and the sending stays where it always was.
+It is one prospect at a time, never a list, and the button says it cannot be
+undone, because an email cannot be recalled.
+
+It still does not text anybody and does not charge a card. Those are not next.
+Money moving is worth a screen with the numbers on it, not a sentence a model
+understood, and a wrong charge costs a customer's trust in *them* rather than
+in us.
+
+Outreach also goes out on the commercial sender identity, never the one a
+booking confirmation depends on. The mail that can be marked as spam must not
+share a reputation with the mail that has to arrive.
 """
 import json
 import os
@@ -288,6 +298,15 @@ def draft_email(about='', to='', api_key=None):
             facts.append(f'They were quoted: {_money(person["quoted"])}')
         if person.get('city'):
             facts.append(f'City: {person["city"]}')
+        if person.get('category'):
+            facts.append(f'Kind of business: {person["category"]}')
+        if person.get('stage'):
+            facts.append(f'Where they stand: {person["stage"]}')
+        if person.get('notes'):
+            # The dated call log. This is what makes a follow-up sound like
+            # somebody was listening rather than like a form letter.
+            facts.append('Notes from calls so far (newest first):\n'
+                         + str(person['notes'])[:900])
     try:
         import branding
         facts.append(f'Your business: {branding.business_name()}')
@@ -317,7 +336,8 @@ def draft_email(about='', to='', api_key=None):
         'back to say you have none is never the right answer.\n\n'
         'Facts:\n' + ('\n'.join(facts) if facts else
                        '(nothing on file about them — write an introduction)') +
-        '\n\nReply with the email body only. No subject line, no signature.')
+        '\n\nReply with a subject line on the first line, prefixed exactly '
+        '"Subject: ", then a blank line, then the email body. No signature.')
     try:
         r = requests.post(API_URL, timeout=25, headers={
             'Authorization': f'Bearer {key}', 'Content-Type': 'application/json',
@@ -328,13 +348,43 @@ def draft_email(about='', to='', api_key=None):
     except Exception:
         return {'say': 'Could not write it just then. Try again.'}
 
+    # Split the subject back off. If the model ignored the instruction the
+    # body is still the body -- a missing subject is not worth losing a draft.
+    subject = ''
+    m = re.match(r'\s*Subject:\s*(.+?)\n(.*)', body, re.S)
+    if m:
+        subject, body = m.group(1).strip(), m.group(2).strip()
+
     who = person['name'] if person else (to or 'them')
-    return {
-        'say': f'A draft for {who}. Read it before it goes anywhere — '
-               f'I do not send email.',
-        'draft': {'to': (person or {}).get('email') or to,
+    out = {
+        'draft': {'to': (person or {}).get('email') or to, 'subject': subject,
                   'body': body, 'facts': facts},
     }
+
+    # A prospect with an address on file can be sent to from here. Everybody
+    # else still gets words to copy: those addresses belong to customers, and
+    # customer email goes out on the identity that has to keep arriving.
+    if (person and person.get('kind') == 'prospect'
+            and person.get('email') and subject and body):
+        import proposals
+        summary = (f'Send this to {person["email"]} at '
+                   f'{person.get("company") or who}?')
+        token = proposals.offer(
+            'send_prospect_email',
+            {'prospect_id': person['prospect_id'], 'to': person['email'],
+             'subject': subject, 'body': body},
+            summary=summary, label=f'Send to {person["email"]}',
+            reversible=False)
+        out['say'] = (f'A draft for {person.get("company") or who}. Read every '
+                      f'word — pressing send puts it in their inbox and it '
+                      f'cannot be taken back.')
+        out['confirm'] = {'token': token,
+                          'label': f'Send to {person["email"]}',
+                          'reversible': False}
+    else:
+        out['say'] = (f'A draft for {who}. Read it before it goes anywhere — '
+                      f'I do not send this one.')
+    return out
 
 
 def whats_next():
@@ -498,9 +548,11 @@ def _who(name):
     from models import Prospect
     pr = Prospect.query.filter(Prospect.business_name.ilike(like)).first()
     if pr:
-        return {'name': pr.business_name, 'email': None, 'kind': 'prospect',
-                'company': pr.business_name, 'city': pr.city,
-                'stage': (pr.status or 'not called yet').replace('_', ' ')}
+        return {'name': pr.contact_name or pr.business_name, 'email': pr.email,
+                'kind': 'prospect', 'company': pr.business_name, 'city': pr.city,
+                'stage': (pr.status or 'not called yet').replace('_', ' '),
+                'prospect_id': pr.id, 'notes': pr.notes,
+                'category': (pr.category or '').replace('_', ' ')}
     return None
 
 

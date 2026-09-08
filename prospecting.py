@@ -120,3 +120,65 @@ def due_counts(prospects):
 def due_sort_key(p):
     """Overdue first, oldest first; unscheduled live ones last."""
     return (p.next_action_date or '9999-99-99', p.business_name or '')
+
+
+def note_entry(prospect, header):
+    """One dated line above the existing notes."""
+    from scheduling import local_now
+    stamp = local_now().strftime('[%b %d] ')
+    return (stamp + header + '\n\n' + (prospect.notes or '')).strip()
+
+
+def send_outreach(prospect, subject, body, to=None):
+    """Send one outreach email to one prospect and record it as a touch.
+
+    Lifted out of the route so the assistant can use the same code rather than
+    a second copy of it. Two implementations of "send an email to a prospect"
+    is how one of them quietly stops logging the touch, or stops setting the
+    follow-up, and nobody notices until a month of outreach has no trail.
+
+    Returns (ok, sentence). Commits either way: a failed send still needs the
+    address saved, or the next attempt asks for it again.
+    """
+    from datetime import datetime
+    from html import escape
+
+    from extensions import db
+    import brands
+    from notifications import send_email
+
+    to = (to or prospect.email or '').strip()
+    subject = (subject or '').strip()
+    body = (body or '').strip()
+    if not to:
+        return False, ('No email address for this business yet — ask for one '
+                       'on the call.')
+    if not subject or not body:
+        return False, 'The email needs a subject and a body.'
+
+    prospect.email = to
+    # The commercial identity, not the residential one. Outreach and a
+    # customer's booking confirmation should not share a sender reputation:
+    # the mail that can be marked as spam is not the mail that has to arrive.
+    from_name, from_email, reply_to = brands.send_identity(brands.COMMERCIAL)
+    html = ('<div style="font-family:Inter,Arial,sans-serif;font-size:15px;'
+            'line-height:1.65;color:#1f1333;white-space:pre-wrap">'
+            + escape(body) + '</div>')
+    ok, detail = send_email(to, prospect.contact_name or prospect.business_name,
+                            subject, html, from_name=from_name,
+                            from_email=from_email, reply_to=reply_to)
+
+    if ok:
+        prospect.last_emailed_at = datetime.utcnow()
+        prospect.notes = note_entry(prospect, f'Emailed — {subject}')
+        if prospect.stage in (None, 'new'):
+            prospect.stage = 'working'
+        # An email is a touch like any other: it earns a follow-up date, or it
+        # is just another thing sent into a void.
+        prospect.next_action = 'Follow up on the email'
+        prospect.next_action_date = _plus(4)
+        db.session.commit()
+        return True, f'Sent to {to}. Follow up {prospect.next_action_date}.'
+
+    db.session.commit()
+    return False, f'Could not send: {detail}'

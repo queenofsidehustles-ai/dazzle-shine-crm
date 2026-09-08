@@ -22,7 +22,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import notifications
 SENT = []
 notifications.send_sms = lambda *a, **k: (SENT.append('sms'), (True, 'stub'))[1]
-notifications.send_email = lambda *a, **k: (SENT.append('email'), (True, 'stub'))[1]
+notifications.send_email = lambda to=None, *a, **k: (
+    SENT.append(('email', to)), (True, 'stub'))[1]
 
 from app import create_app
 from extensions import db
@@ -103,7 +104,7 @@ with app.app_context():
         check(made_up not in assistant.TOOLS,
               f'{made_up!r} is not a tool it could pick')
 
-    print('\n4. It will not send anything')
+    print('\n4. A draft for a customer is still only words')
     SENT.clear()
     # With a key it writes; without one it says so. Either way nothing leaves.
     class _Fake:
@@ -124,7 +125,8 @@ with app.app_context():
     finally:
         sys.modules['requests'] = _real_requests
     check(out.get('draft', {}).get('body'), f'it writes a draft: {out.get("draft", {}).get("body")!r}')
-    check('do not send' in out['say'], 'and says plainly that it does not send')
+    check('do not send' in out['say'],
+          'and says plainly that this one does not send')
     check('facts' in out['draft'],
           'showing what it was working from, so the words can be checked')
     check(SENT == [], 'nothing left the building')
@@ -213,8 +215,8 @@ with app.app_context():
     # A confirmation only does what is on a fixed list -- not "whatever the
     # model named", which is how a new tool would quietly become a new power.
     import blueprints.assistant_routes as ar
-    check(set(ar.ACTIONS) == {'complete_booking'},
-          f'one allowed action: {sorted(ar.ACTIONS)}')
+    check(set(ar.ACTIONS) == {'complete_booking', 'send_prospect_email'},
+          f'a short, fixed list of actions: {sorted(ar.ACTIONS)}')
 
     b = Booking.query.filter_by(name='Owes Money').first()
     check(b.status == 'confirmed', 'the job starts unfinished')
@@ -305,8 +307,20 @@ with app.app_context():
     # stay true: if she ever does send, this wording has to change first.
     check('cannot make a number up' in page,
           'the page says answers come from the records')
-    check('never sends one' in page, 'and that she does not send email')
-    check('Nothing leaves without you' in page, 'and that nothing leaves without you')
+    # She can send now, to one prospect, after a press. The page has to say
+    # exactly that -- the old copy promised she never sends at all, and a
+    # promise the software no longer keeps is worse than no promise.
+    check('Nothing leaves without you' in page,
+          'the page still promises nothing leaves without you')
+    # The copy wraps across lines in the template, so compare on the words
+    # rather than on how the file happens to be formatted.
+    flat = ' '.join(page.split())
+    check('one outreach email to one commercial prospect' in flat,
+          'and says precisely what she can send')
+    check('read every word and pressed send' in flat,
+          'and that it takes reading it and pressing send')
+    check('never texts anybody and never charges a card' in page,
+          'and what she still cannot do at all')
 
     print('\n12. A fault of ours is never dressed up as a fault of theirs')
     # This shipped broken. The model name in MODEL did not exist, so every
@@ -672,6 +686,69 @@ with app.app_context():
     page = open(os.path.join(ROOT, 'templates', 'admin', 'assistant.html')).read()
     check('What should I focus on this week?' in page,
           'the first suggestion asks her to think')
+    print('\n19. A drafted email can be sent, and only by pressing send')
+    import proposals as _pr2, actions as _ac2, prospecting as _psg
+    from models import Prospect as _P
+
+    pr = _P(business_name='Harborside Property Co', city='Tampa',
+            email='dana@lakeview.test', contact_name='Dana', status='callback',
+            category='property_manager',
+            notes='[Sep 05] Spoke to Dana — wants a quote for 3 buildings.')
+    db.session.add(pr)
+    db.session.commit()
+
+    # She now reads the call log, which is the difference between a follow-up
+    # and a form letter.
+    found = assistant._who('Harborside')
+    check(found and found.get('prospect_id') == pr.id,
+          'the prospect is found with its id')
+    check(found and 'dana@lakeview.test' == found.get('email'),
+          'and the address asked for on the call')
+    check(found and 'three buildings' not in (found.get('notes') or '')
+          and 'Dana' in (found.get('notes') or ''),
+          'and the notes from the calls so far')
+
+    # Nothing is sent by drafting. The offer is written down; the send only
+    # happens when somebody presses the button.
+    SENT.clear()
+    token = _pr2.offer('send_prospect_email',
+                       {'prospect_id': pr.id, 'to': pr.email,
+                        'subject': 'Quote for your three buildings',
+                        'body': 'Hello Dana, following up on our call.'},
+                       summary='Send this to dana@lakeview.test?',
+                       label='Send to dana@lakeview.test', reversible=False)
+    check(SENT == [], 'writing the offer sends nothing')
+
+    was_stage, was_next = pr.stage, pr.next_action
+    act, pay, row = _pr2.take(token)
+    ok, said = _ac2.run(act, pay)
+    check(ok, f'pressing send does send it ({said})')
+    check(len(SENT) == 1, 'exactly one email left the building')
+    check(SENT[0] == ('email', 'dana@lakeview.test'),
+          f'to the address that was on screen ({SENT[0]})')
+
+    # The whole reason for sharing one implementation with the call screen: an
+    # email is a touch, and a touch that schedules nothing is a thing sent
+    # into a void.
+    db.session.refresh(pr)
+    check(pr.last_emailed_at is not None, 'the touch is recorded on the prospect')
+    check('Emailed — Quote for your three buildings' in (pr.notes or ''),
+          'the subject goes into the dated call log')
+    check(pr.next_action == 'Follow up on the email' and pr.next_action_date,
+          f'and a follow-up is scheduled ({pr.next_action_date})')
+
+    # It cannot be sent twice, and the page is told it cannot be taken back.
+    SENT.clear()
+    act2, _p2, _r2 = _pr2.take(token)
+    check(act2 is None and SENT == [], 'the same offer cannot be sent again')
+    check(_ac2.ACTIONS['send_prospect_email'][2] is False,
+          'sending is marked as something that cannot be undone')
+
+    # Outreach goes out on the commercial identity, never the one a customer's
+    # booking confirmation depends on.
+    src = open(os.path.join(ROOT, 'prospecting.py')).read()
+    check('brands.COMMERCIAL' in src,
+          'outreach uses the commercial sender, not the residential one')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')

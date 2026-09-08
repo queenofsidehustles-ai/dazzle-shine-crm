@@ -73,8 +73,10 @@
     cannot make a number up.
   </p>
   <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:8px 0 0">
-    She will write your emails. She never sends one. Nothing leaves without you:
-    if something needs doing, she offers and you press the button.
+    She writes your emails. Nothing leaves without you: she can send one
+    outreach email to one commercial prospect, and only after you have read
+    every word and pressed send. Everything else she writes is yours to copy.
+    She never texts anybody and never charges a card.
   </p>
   <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:6px 0 0">
     Tap the microphone and ask out loud — hands full, phone on the seat. Tick
@@ -239,6 +241,12 @@
                                          : '· your device\u2019s voice';
   }
 
+  function esc(t) {
+    const d = document.createElement('div');
+    d.textContent = t == null ? '' : String(t);
+    return d.innerHTML;
+  }
+
   function sayOutLoud(text) {
     if (!document.getElementById('speak').checked || !text) return;
     if (!REAL_VOICE) { noteVoice('device'); if (canSpeak) browserVoice(text); return; }
@@ -311,6 +319,23 @@
         f.style.cssText = 'margin-top:10px;font-size:0.8rem;color:var(--softer);line-height:1.5';
         f.textContent = 'Written from: ' + data.draft.facts.join(' · ');
         wrap.appendChild(f);
+      }
+      // Recipient and subject, shown as plainly as the body. You cannot
+      // approve an email whose subject line you were never told.
+      if (data.draft.to || data.draft.subject) {
+        const h = document.createElement('div');
+        h.className = 'draft-head';
+        if (data.draft.to) {
+          const r = document.createElement('div');
+          r.innerHTML = '<span>To</span> ' + esc(data.draft.to);
+          h.appendChild(r);
+        }
+        if (data.draft.subject) {
+          const sj = document.createElement('div');
+          sj.innerHTML = '<span>Subject</span> ' + esc(data.draft.subject);
+          h.appendChild(sj);
+        }
+        wrap.appendChild(h);
       }
       const ta = document.createElement('textarea');
       ta.style.cssText = 'width:100%;margin-top:10px;padding:12px;border:1px solid var(--line);'
