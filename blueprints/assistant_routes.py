@@ -8,9 +8,11 @@ actions from a fixed list.
 That gap is the safety. A model cannot reach `confirm` -- it produces the
 suggestion, a person produces the click.
 """
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import (Blueprint, render_template, request, jsonify, redirect,
+                   url_for, flash, Response)
 
 import assistant
+import speech
 from auth import login_required, owner_required
 from entitlements import requires_plan
 from extensions import db
@@ -31,7 +33,8 @@ def page():
                            name=assistant.NAME,
                            configured=bool(assistant.os.environ.get('OPENROUTER_API_KEY')),
                            left=assistant.remaining(),
-                           limit=assistant.MONTHLY_LIMIT)
+                           limit=assistant.MONTHLY_LIMIT,
+                           real_voice=speech.configured())
 
 
 @assistant_bp.route('/ask', methods=['POST'])
@@ -79,3 +82,26 @@ def confirm():
             flash(f'{b.name} marked finished. Open the job to undo it.', 'success')
 
     return redirect(url_for('assistant.page'))
+
+
+@assistant_bp.route('/ask/voice', methods=['POST'])
+@login_required
+@owner_required
+@requires_plan('assistant')
+def voice():
+    """Audio for a sentence Nana just said, or 204 meaning 'read it yourself'.
+
+    204 is the ordinary answer, not a failure: no key, allowance spent, service
+    down. The page hears it and uses the browser voice, and the owner is told
+    nothing, because there is nothing they could do about any of it.
+
+    Only text is accepted, and it is spoken as given. Nothing here reads the
+    database, so the worst a bad request can do is spend some of this month's
+    characters saying something silly back to the person who typed it.
+    """
+    text = (request.get_json(silent=True) or {}).get('text') or ''
+    audio = speech.say(text)
+    if not audio:
+        return ('', 204)
+    return Response(audio, mimetype='audio/mpeg',
+                    headers={'Cache-Control': 'no-store'})

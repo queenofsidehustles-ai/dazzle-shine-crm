@@ -121,10 +121,13 @@
   // why the button starts hidden and is only revealed when it will work.
   const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
   const canSpeak = 'speechSynthesis' in window;
+  const REAL_VOICE = {{ 'true' if real_voice else 'false' }};
   let rec = null, listening = false;
 
   if (Rec) { document.getElementById('mic').hidden = false; }
-  if (canSpeak) {
+  // The toggle is worth showing if either voice can do the job. A browser
+  // without speechSynthesis can still play an mp3 the server sends back.
+  if (canSpeak || REAL_VOICE) {
     const row = document.getElementById('voicerow');
     row.hidden = false;
     try {
@@ -202,8 +205,8 @@
     speechSynthesis.onvoiceschanged = pickVoice;   // Chrome fills the list late
   }
 
-  function sayOutLoud(text) {
-    if (!canSpeak || !document.getElementById('speak').checked || !text) return;
+  // The browser voice. Kept as the floor, never the first choice.
+  function browserVoice(text) {
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
@@ -216,6 +219,30 @@
       u.pitch = 1.06;
       speechSynthesis.speak(u);
     } catch (e) {}
+  }
+
+  let player = null;
+
+  function sayOutLoud(text) {
+    if (!document.getElementById('speak').checked || !text) return;
+    if (!REAL_VOICE) { if (canSpeak) browserVoice(text); return; }
+    // Ask for the good voice. A 204 means "you read it" -- no key, allowance
+    // spent, service down. None of those are the owner's problem to hear
+    // about, so nothing is said and the browser picks it up.
+    fetch('{{ url_for("assistant.voice") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    }).then(function (r) {
+      if (r.status !== 200) throw new Error('read it yourself');
+      return r.blob();
+    }).then(function (b) {
+      if (player) { player.pause(); URL.revokeObjectURL(player.src); }
+      player = new Audio(URL.createObjectURL(b));
+      player.play().catch(function () { if (canSpeak) browserVoice(text); });
+    }).catch(function () {
+      if (canSpeak) browserVoice(text);
+    });
   }
 
   function fill(t) { document.getElementById('q').value = t; document.getElementById('q').focus(); }

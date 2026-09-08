@@ -32,6 +32,10 @@ app = create_app()
 failures = []
 
 
+def _dbcommit():
+    db.session.commit()
+
+
 def check(cond, m):
     if cond:
         print(f'  ✅ {m}')
@@ -420,6 +424,52 @@ with app.app_context():
           'a real figure hung on a month nobody mentioned is blocked')
     check(not grounded('You are booked Friday.'),
           'a day that is not in the books is blocked')
+    print('\n15. The voice cannot run up a bill, and never goes silent')
+    import speech
+
+    saved_key = os.environ.pop('OPENAI_API_KEY', None)
+    try:
+        # No key is the normal state, not a fault. It means "browser reads it".
+        check(speech.configured() is False, 'with no key the good voice is off')
+        check(speech.say('anything') is None,
+              'and asking for it returns nothing to play, not an error')
+
+        os.environ['OPENAI_API_KEY'] = 'sk-test'
+        check(speech.configured() is True, 'with a key it is on')
+
+        # The allowance is spent before the call, so a request that times out
+        # still costs its characters. A bill runs away the other way round.
+        start = speech.used_this_month()
+        speech._count(500)
+        check(speech.used_this_month() == start + 500,
+              'characters are counted against this month')
+
+        # Past the cap it stops paying and falls back. It does not stop
+        # speaking, and it does not tell anybody -- the browser picks it up.
+        from models import BusinessSetting
+        BusinessSetting.set(speech._month_key(), str(speech.CAP_CHARS))
+        _dbcommit()
+        check(speech.remaining() == 0, 'the month can be used up')
+        before = speech.used_this_month()
+        check(speech.say('hello there') is None,
+              'and past it nothing is bought')
+        check(speech.used_this_month() == before,
+              'and nothing more is charged for either')
+
+        # One answer can never be a large bill on its own.
+        BusinessSetting.set(speech._month_key(), '0')
+        _dbcommit()
+        check(speech.MAX_ONE <= 1200,
+              f'one answer is capped at {speech.MAX_ONE} characters')
+        check(speech.CAP_CHARS <= 60000,
+              f'and a company at {speech.CAP_CHARS} characters a month, '
+              f'which is about 90 cents')
+    finally:
+        BusinessSetting.set(speech._month_key(), '0')
+        _dbcommit()
+        os.environ.pop('OPENAI_API_KEY', None)
+        if saved_key is not None:
+            os.environ['OPENAI_API_KEY'] = saved_key
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')
