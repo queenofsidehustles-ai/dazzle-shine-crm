@@ -157,6 +157,43 @@ a  { color: var(--amber-deep); }
 }
 .sidebar nav .nav-sec:first-of-type { padding-top: var(--s2); }
 
+/* The setup meter, under the wordmark. Sits on the dark sidebar, so it takes
+   its colours from white at low opacity like every other control up here --
+   the page tokens are tuned for ink on a light ground and go muddy against
+   this one. Disappears for good once the last setup step is ticked. */
+.setup-meter { display: block; margin: 0 var(--s5) var(--s4); padding: var(--s3) var(--s4);
+               border-radius: var(--r-md); text-decoration: none;
+               background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); }
+.setup-meter:hover { background: rgba(255,255,255,.11); }
+.setup-line { display: flex; align-items: baseline; justify-content: space-between;
+              font-size: var(--t-xs); font-weight: 650; letter-spacing: .02em;
+              color: rgba(255,255,255,.82); }
+.setup-count { font-variant-numeric: tabular-nums; font-weight: 600;
+               color: rgba(255,255,255,.58); }
+.setup-track { display: block; height: 5px; margin: 7px 0 0; overflow: hidden;
+               border-radius: var(--r-pill); background: rgba(255,255,255,.14); }
+.setup-fill { display: block; height: 100%; border-radius: inherit;
+              background: var(--gold); transition: width .4s ease; }
+.setup-next { display: block; margin-top: 7px; font-size: var(--t-xs); line-height: 1.35;
+              color: rgba(255,255,255,.55); }
+
+/* The once-a-day reminder, on the light content ground rather than the
+   sidebar, so it uses the page tokens. Warm rather than alarming: this is an
+   unfinished job, not a problem. */
+.setup-nudge { display: flex; align-items: center; gap: var(--s5); flex-wrap: wrap;
+               margin: 0 0 var(--s5); padding: var(--s4) var(--s5);
+               border-radius: var(--r-md); background: var(--amber-soft);
+               border: 1px solid var(--amber-line); }
+.setup-nudge-body { flex: 1 1 280px; font-size: var(--t-sm); line-height: 1.5;
+                    color: var(--muted); }
+.setup-nudge-body strong { color: var(--ink); }
+.setup-nudge-acts { display: flex; align-items: center; gap: var(--s3); margin-left: auto; }
+.setup-nudge .btn-quiet { background: none; border: none; cursor: pointer;
+                          font-family: inherit; font-size: var(--t-sm); font-weight: 600;
+                          color: var(--softer); padding: var(--s2) 4px; }
+.setup-nudge .btn-quiet:hover { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .setup-fill { transition: none; } }
+
 .sidebar-footer { padding: var(--s4) var(--s5); border-top: 1px solid rgba(255,255,255,.08); }
 .sidebar-footer a { color: rgba(255,255,255,.5); text-decoration: none;
                     font-size: var(--t-sm); font-weight: 500; }

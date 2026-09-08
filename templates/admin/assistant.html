@@ -97,6 +97,10 @@
       <input type="checkbox" id="speak" onchange="rememberSpeak()" />
       Read answers out loud
     </label>
+    {# Which voice actually spoke. The fallback is deliberately silent to the
+       owner mid-job, but silent to everybody meant nobody could tell the good
+       voice had stopped working -- including the person who built it. #}
+    <span id="voicenote" style="color:var(--softer);font-size:0.78rem"></span>
   </div>
 
   <div class="suggest">
@@ -223,9 +227,16 @@
 
   let player = null;
 
+  function noteVoice(which) {
+    const el = document.getElementById('voicenote');
+    if (!el) return;
+    el.textContent = which === 'natural' ? '· natural voice'
+                                         : '· your device\u2019s voice';
+  }
+
   function sayOutLoud(text) {
     if (!document.getElementById('speak').checked || !text) return;
-    if (!REAL_VOICE) { if (canSpeak) browserVoice(text); return; }
+    if (!REAL_VOICE) { noteVoice('device'); if (canSpeak) browserVoice(text); return; }
     // Ask for the good voice. A 204 means "you read it" -- no key, allowance
     // spent, service down. None of those are the owner's problem to hear
     // about, so nothing is said and the browser picks it up.
@@ -235,12 +246,17 @@
       body: JSON.stringify({ text: text })
     }).then(function (r) {
       if (r.status !== 200) throw new Error('read it yourself');
+      noteVoice('natural');
       return r.blob();
     }).then(function (b) {
       if (player) { player.pause(); URL.revokeObjectURL(player.src); }
       player = new Audio(URL.createObjectURL(b));
-      player.play().catch(function () { if (canSpeak) browserVoice(text); });
+      player.play().catch(function () {
+        noteVoice('device');
+        if (canSpeak) browserVoice(text);
+      });
     }).catch(function () {
+      noteVoice('device');
       if (canSpeak) browserVoice(text);
     });
   }

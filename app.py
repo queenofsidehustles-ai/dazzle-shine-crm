@@ -257,14 +257,27 @@ def create_app():
                     setup_done = BusinessSetting.get('setup_complete') == '1'
             except Exception:
                 pass
+            # How far through setup, for the meter and the reminder. Only
+            # worked out for an owner who has not finished -- an established
+            # business pays nothing for a question it answered months ago.
+            setup = None
+            if not setup_done and session.get('role') == 'owner':
+                try:
+                    import onboarding
+                    setup = onboarding.progress()
+                except Exception:
+                    setup = None
+
             return {'NAV': navigation.sidebar(role, can, setup_done),
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
                     'NAV_TITLE': navigation.title_for(request.endpoint),
                     'NAV_TABS': tabs,
-                    'NAV_ACTIVE_TAB': active_tab}
+                    'NAV_ACTIVE_TAB': active_tab,
+                    'SETUP': setup}
         except Exception:
             # A broken menu must never take a working page down with it.
-            return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [], 'NAV_ACTIVE_TAB': None}
+            return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [],
+                    'NAV_ACTIVE_TAB': None, 'SETUP': None}
 
     @app.context_processor
     def inject_trial():

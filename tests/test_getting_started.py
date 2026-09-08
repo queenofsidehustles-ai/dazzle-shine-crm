@@ -189,4 +189,30 @@ with app.app_context():
         m.Booking = real
 check(ok, 'a page still renders when the progress check cannot run')
 
+print('\nSetup progress is visible from every screen, not just the setup page')
+# A beta tester asked for this: they could not tell how much was left, and a
+# job that looks endless is the one that gets abandoned. The numbers already
+# existed in onboarding.progress() -- they were just only ever shown on the
+# one page somebody had to go looking for.
+shell = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates', 'base_admin.html')).read()
+check('SETUP and not SETUP.complete' in shell,
+      'the meter is drawn only while there is setup left to do')
+check('SETUP.percent' in shell and 'SETUP.done' in shell,
+      'and shows how far along they are')
+check('SETUP.next' in shell, 'and names the one thing to do next')
+
+# Dismissible, and only once a day. A reminder that cannot be put away is an
+# obstacle, and it annoys the person who has already decided to do it later.
+check("request.endpoint != 'admin.dashboard'" in shell,
+      'the reminder stays off the dashboard, which already carries the full card')
+check('hideNudge' in shell, 'the daily reminder can be dismissed')
+check("'setup-nudge-' + new Date()" in shell,
+      'and is keyed by the date, so it returns tomorrow rather than never')
+
+# The cost question: an established business must not recompute its onboarding
+# on every page load for the rest of its life.
+appsrc = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app.py')).read()
+check('if not setup_done and session.get(\'role\') == \'owner\'' in appsrc,
+      'progress is only worked out for an owner who has not finished')
+
 print('\n\n✅ All getting-started tests passed.\n')

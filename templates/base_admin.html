@@ -35,6 +35,7 @@
       .brand-lens { padding:3px 9px; }
       .brand-lens select { max-width:116px; font-size:var(--t-xs); }
     }
+
   </style>
 
   <!-- The Scripts and SOPs pages were written against Alpine (x-data / x-show)
@@ -49,6 +50,20 @@
       <span class="script">{{ BIZ }}</span>
       <span class="sub">Back Office</span>
     </div>
+    {# How far through setup, on every screen rather than only on the page
+       about setup. Somebody who cannot see how much is left assumes it is a
+       lot, and a job half done that looks endless is the one that gets
+       abandoned. Disappears for good once the last step is ticked. #}
+    {% if SETUP and not SETUP.complete %}
+    <a href="{{ url_for('settings.getting_started') }}" class="setup-meter">
+      <span class="setup-line">
+        <span>Setting up</span>
+        <span class="setup-count">{{ SETUP.done }} of {{ SETUP.total }}</span>
+      </span>
+      <span class="setup-track"><span class="setup-fill" style="width:{{ SETUP.percent }}%"></span></span>
+      {% if SETUP.next %}<span class="setup-next">Next: {{ SETUP.next.title }}</span>{% endif %}
+    </a>
+    {% endif %}
     <nav>
       {# Drawn from navigation.py — one line per page there, no active-state
          expressions here. See that file before adding a menu entry. #}
@@ -115,6 +130,47 @@
           <div class="flash flash-{{ category }}">{{ msg }}</div>
         {% endfor %}
       {% endwith %}
+      {# One reminder a day, naming the single next step and nothing else.
+         Not on the dashboard: that page already carries the full getting-started
+         card, and two amber boxes saying the same sentence one above the other
+         reads as a bug rather than as encouragement. The gap this closes is
+         every other screen, where there was nothing at all.
+         Dismissible on purpose: a prompt you cannot put away stops being a
+         nudge and becomes an obstacle, and the person it annoys most is the
+         one who has decided to do it later today anyway. It comes back
+         tomorrow, and it stops for good when setup is finished. #}
+      {% if SETUP and not SETUP.complete and SETUP.next
+            and request.endpoint != 'admin.dashboard' %}
+      <div class="setup-nudge" id="setupnudge" hidden>
+        <div class="setup-nudge-body">
+          <strong>You are {{ SETUP.percent }}% set up.</strong>
+          Next: {{ SETUP.next.title }}. {{ SETUP.next.why }}
+        </div>
+        <div class="setup-nudge-acts">
+          <a class="btn-primary" href="{{ SETUP.next.link }}">{{ SETUP.next.cta }}</a>
+          <button type="button" class="btn-quiet" onclick="hideNudge()">Later</button>
+        </div>
+      </div>
+      <script>
+        // Once a day, not once a page. Keyed by date so it returns tomorrow
+        // without ever nagging twice in one sitting.
+        (function () {
+          var el = document.getElementById('setupnudge');
+          if (!el) return;
+          var key = 'setup-nudge-' + new Date().toISOString().slice(0, 10);
+          try { if (localStorage.getItem(key) === '1') return; } catch (e) {}
+          el.hidden = false;
+        })();
+        function hideNudge() {
+          var el = document.getElementById('setupnudge');
+          if (el) el.hidden = true;
+          try {
+            localStorage.setItem(
+              'setup-nudge-' + new Date().toISOString().slice(0, 10), '1');
+          } catch (e) {}
+        }
+      </script>
+      {% endif %}
       {# Where they are in the trial. Always a countdown of some kind: one
          clock says "you have not begun", the other says "you are running
          out", and a state with neither is how a trial becomes something
