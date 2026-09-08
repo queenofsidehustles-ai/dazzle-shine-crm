@@ -24,6 +24,7 @@ from blueprints.discounts import discounts_bp
 from blueprints.contractors import contractors_bp
 from blueprints.scripts import scripts_bp
 from blueprints.sops import sops_bp
+from blueprints.assistant_routes import assistant_bp
 from blueprints.email_templates import email_templates_bp
 from blueprints.interviews import interviews_bp
 from blueprints.pricing_public import pricing_public_bp
@@ -213,6 +214,7 @@ def create_app():
     app.register_blueprint(contractors_bp)
     app.register_blueprint(scripts_bp)
     app.register_blueprint(sops_bp)
+    app.register_blueprint(assistant_bp)
     app.register_blueprint(email_templates_bp)
     app.register_blueprint(interviews_bp)
     app.register_blueprint(pricing_public_bp)

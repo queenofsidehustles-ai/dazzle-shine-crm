@@ -23,6 +23,8 @@ inventing another active-state expression.
 SECTIONS = [
     ('Dashboard', [
         ('admin.dashboard', '🏠', 'Dashboard', False, []),
+        # Second, because the thing you do most often should be near the top.
+        ('assistant.page', '💬', 'Ask Nana', True, []),
     ]),
 
     ('Jobs & Schedule', [
