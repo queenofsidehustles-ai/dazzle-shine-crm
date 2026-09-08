@@ -13,6 +13,28 @@
   .ask-box input:focus { outline:none; border-color:var(--amber); box-shadow:var(--ring); }
   .ask-box button { flex:0 0 auto; padding:0 22px; min-height:52px; }
 
+  /* Big, because it is pressed with a thumb by somebody whose other hand is
+     full. Hidden entirely when the browser cannot hear -- a dead microphone
+     button is worse than none. */
+  #mic {
+    flex:0 0 auto; width:56px; min-height:52px; padding:0;
+    border:1px solid var(--line); border-radius:var(--r);
+    background:var(--surface); cursor:pointer; font-size:1.3rem; line-height:1;
+  }
+  #mic[hidden] { display:none; }
+  #mic.listening {
+    background:var(--warn-soft); border-color:var(--warn); color:var(--warn);
+    animation:pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.55 } }
+  @media (prefers-reduced-motion: reduce) { #mic.listening { animation:none } }
+
+  .voice-row {
+    display:flex; align-items:center; gap:8px; margin-top:10px;
+    font-size:0.85rem; color:var(--muted);
+  }
+  .heard { color:var(--softer); font-size:0.85rem; margin-top:8px; min-height:1.2em; }
+
   /* Answers stack newest-first: the one you just asked for is the one you want
      to read, and scrolling to find it defeats the point of asking. */
   .said {
@@ -51,12 +73,28 @@
     It never sends an email, texts anybody, or charges a card. If something needs
     doing, it offers and you press the button.
   </p>
+  <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:6px 0 0">
+    Tap the microphone and ask out loud — hands full, phone on the seat. Tick
+    <em>read answers out loud</em> and you never have to look at it.
+    <strong>Not while you are driving</strong>: pull over, or wait.
+  </p>
 
   <form class="ask-box" id="askform" onsubmit="return askIt(event)">
     <input id="q" name="q" autocomplete="off" autofocus
            placeholder="How much came in last month?" aria-label="Ask {{ name }}" />
+    <button type="button" id="mic" hidden aria-label="Ask out loud"
+            onclick="listen()">🎙️</button>
     <button type="submit" class="btn">Ask</button>
   </form>
+
+  <div class="heard" id="heard"></div>
+
+  <div class="voice-row" id="voicerow" hidden>
+    <label style="display:flex;align-items:center;gap:7px;cursor:pointer">
+      <input type="checkbox" id="speak" onchange="rememberSpeak()" />
+      Read answers out loud
+    </label>
+  </div>
 
   <div class="suggest">
     {% for s in ['What is booked tomorrow?', 'How much came in last month?',
@@ -74,6 +112,77 @@
 </div>
 
 <script>
+  // Speech recognition is the browser's, not ours: no service to sign up to,
+  // nothing to pay for, and the audio never reaches this server. Chrome and
+  // Safari have it; anything else gets the typing box it always had, which is
+  // why the button starts hidden and is only revealed when it will work.
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const canSpeak = 'speechSynthesis' in window;
+  let rec = null, listening = false;
+
+  if (Rec) { document.getElementById('mic').hidden = false; }
+  if (canSpeak) {
+    const row = document.getElementById('voicerow');
+    row.hidden = false;
+    try {
+      document.getElementById('speak').checked =
+        localStorage.getItem('nana-speak') === '1';
+    } catch (e) {}
+  }
+
+  function rememberSpeak() {
+    try {
+      localStorage.setItem('nana-speak',
+        document.getElementById('speak').checked ? '1' : '0');
+    } catch (e) {}
+  }
+
+  function listen() {
+    if (!Rec) return;
+    const mic = document.getElementById('mic');
+    const heard = document.getElementById('heard');
+    if (listening) { rec && rec.stop(); return; }
+
+    rec = new Rec();
+    rec.lang = document.documentElement.lang || 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+
+    rec.onstart = () => { listening = true; mic.classList.add('listening');
+                          heard.textContent = 'Listening…'; };
+    rec.onerror = (e) => {
+      heard.textContent = e.error === 'not-allowed'
+        ? 'Microphone is blocked for this site — allow it in your browser settings.'
+        : 'Did not catch that.';
+    };
+    rec.onend = () => { listening = false; mic.classList.remove('listening'); };
+
+    rec.onresult = (e) => {
+      let said = '';
+      for (const r of e.results) said += r[0].transcript;
+      document.getElementById('q').value = said;
+      heard.textContent = said;
+      // Only once it has stopped changing. Submitting on a partial result asks
+      // half a question.
+      if (e.results[e.results.length - 1].isFinal) {
+        heard.textContent = '';
+        document.getElementById('askform').requestSubmit();
+      }
+    };
+    rec.start();
+  }
+
+  function sayOutLoud(text) {
+    if (!canSpeak || !document.getElementById('speak').checked || !text) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = document.documentElement.lang || 'en-US';
+      u.rate = 1.02;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
   function fill(t) { document.getElementById('q').value = t; document.getElementById('q').focus(); }
 
   async function askIt(e) {
@@ -128,6 +237,10 @@
       f.appendChild(b);
       wrap.appendChild(f);
     }
+
+    // The other half of hands-free. Reading the screen defeats the point of
+    // having asked out loud.
+    sayOutLoud(data.say || '');
     return false;
   }
 </script>
