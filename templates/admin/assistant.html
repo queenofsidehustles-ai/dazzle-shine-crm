@@ -1,0 +1,134 @@
+{% extends "base_admin.html" %}
+{% block title %}Ask {{ name }} — {{ BIZ }}{% endblock %}
+
+{% block content %}
+<style>
+  .ask-wrap { max-width:680px; }
+  .ask-box { display:flex; gap:10px; align-items:stretch; margin:14px 0 6px; }
+  .ask-box input {
+    flex:1; min-width:0; padding:14px 16px; font-size:1.02rem; font-family:inherit;
+    border:1px solid var(--line); border-radius:var(--r); background:var(--surface);
+    color:var(--ink);
+  }
+  .ask-box input:focus { outline:none; border-color:var(--amber); box-shadow:var(--ring); }
+  .ask-box button { flex:0 0 auto; padding:0 22px; min-height:52px; }
+
+  /* Answers stack newest-first: the one you just asked for is the one you want
+     to read, and scrolling to find it defeats the point of asking. */
+  .said {
+    background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--amber);
+    border-radius:var(--r); padding:14px 16px; margin-top:12px;
+    white-space:pre-wrap; line-height:1.6; font-size:0.97rem;
+  }
+  .said .q { color:var(--softer); font-size:0.82rem; display:block; margin-bottom:6px; }
+  .said form { margin-top:12px; }
+  .suggest { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .suggest button {
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--r-pill);
+    padding:7px 14px; font-size:0.85rem; font-family:inherit; color:var(--muted);
+    cursor:pointer;
+  }
+  .suggest button:hover { border-color:var(--amber); color:var(--ink); }
+</style>
+
+<div class="ask-wrap">
+
+  {% if not configured %}
+  <div class="card" style="border-left:3px solid var(--amber-deep);margin-bottom:16px">
+    <strong>{{ name }} is not switched on yet.</strong>
+    <p style="color:var(--muted);font-size:0.9rem;margin:6px 0 0;line-height:1.6">
+      Everything else in here works as normal. Ask your account manager to turn
+      it on and this page starts answering.
+    </p>
+  </div>
+  {% endif %}
+
+  <p style="color:var(--muted);line-height:1.65;margin:0">
+    Ask about your own business in your own words — what came in, what is booked,
+    who is on tomorrow. {{ name }} reads your books and tells you what is in them.
+  </p>
+  <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:8px 0 0">
+    It never sends an email, texts anybody, or charges a card. If something needs
+    doing, it offers and you press the button.
+  </p>
+
+  <form class="ask-box" id="askform" onsubmit="return askIt(event)">
+    <input id="q" name="q" autocomplete="off" autofocus
+           placeholder="How much came in last month?" aria-label="Ask {{ name }}" />
+    <button type="submit" class="btn">Ask</button>
+  </form>
+
+  <div class="suggest">
+    {% for s in ['What is booked tomorrow?', 'How much came in last month?',
+                 'What is owed?', 'Which jobs have nobody on them?',
+                 'Who is on the team?'] %}
+    <button type="button" onclick="fill(this.innerText)">{{ s }}</button>
+    {% endfor %}
+  </div>
+
+  <div id="answers"></div>
+
+  <p style="color:var(--softer);font-size:0.8rem;margin-top:22px">
+    {{ left }} of {{ limit }} questions left this month.
+  </p>
+</div>
+
+<script>
+  function fill(t) { document.getElementById('q').value = t; document.getElementById('q').focus(); }
+
+  async function askIt(e) {
+    e.preventDefault();
+    const box = document.getElementById('q');
+    const q = box.value.trim();
+    if (!q) return false;
+    box.value = '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'said';
+    wrap.innerHTML = '<span class="q"></span>…';
+    wrap.querySelector('.q').textContent = q;
+    const answers = document.getElementById('answers');
+    answers.prepend(wrap);
+
+    let data;
+    try {
+      const r = await fetch('{{ url_for("assistant.ask") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'q=' + encodeURIComponent(q),
+      });
+      data = await r.json();
+    } catch (err) {
+      data = { say: 'Could not reach it just then. Try again.' };
+    }
+
+    // Text as text, never as markup: the answer carries customer names and
+    // addresses straight out of the database.
+    wrap.textContent = '';
+    const qs = document.createElement('span');
+    qs.className = 'q';
+    qs.textContent = q;
+    wrap.appendChild(qs);
+    wrap.appendChild(document.createTextNode(data.say || ''));
+
+    // Something to do comes back as a button, never as an action already taken.
+    if (data.confirm) {
+      const f = document.createElement('form');
+      f.method = 'POST';
+      f.action = '{{ url_for("assistant.confirm") }}';
+      for (const [k, v] of Object.entries(data.confirm)) {
+        if (k === 'label') continue;
+        const i = document.createElement('input');
+        i.type = 'hidden'; i.name = k; i.value = v;
+        f.appendChild(i);
+      }
+      const b = document.createElement('button');
+      b.type = 'submit'; b.className = 'btn';
+      b.textContent = data.confirm.label || 'Do it';
+      f.appendChild(b);
+      wrap.appendChild(f);
+    }
+    return false;
+  }
+</script>
+{% endblock %}

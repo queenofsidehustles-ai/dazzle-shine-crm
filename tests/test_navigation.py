@@ -39,7 +39,11 @@ with app.app_context():
 
     print('\n2. The menu is shorter than it was')
     owner_items = sum(len(s['items']) for s in navigation.sidebar('owner'))
-    check(owner_items <= 17, f'{owner_items} sidebar links for the owner, down from 31')
+    # 31 was the old flat menu. The ceiling is here to stop it creeping back,
+    # not to freeze the number: it moved to 18 when Ask Nana was added, which
+    # was a deliberate decision and had to be argued for. Raising this line
+    # should always feel like that.
+    check(owner_items <= 18, f'{owner_items} sidebar links for the owner, down from 31')
 
     print('\n3. Nothing the sidebar used to reach was dropped')
     # The full set of pages the old sidebar linked to, written out so that

@@ -1,4 +1,4 @@
-"""Kye answers from the books, and cannot be talked into anything else.
+"""Nana answers from the books, and cannot be talked into anything else.
 
 The design this suite exists to hold: the model picks which question was asked
 and nothing else. Every figure, name and date is read from the database and
@@ -129,6 +129,47 @@ with app.app_context():
     writers = [n for n, (_f, d, _a) in assistant.TOOLS.items()
                if 'mark' in d or 'finished' in d]
     check(writers == ['finish_job'], f'exactly one tool touches data: {writers}')
+
+    print('\n8. The page offers; the button acts')
+    c = app.test_client()
+    with c.session_transaction() as sess:
+        sess['logged_in'] = True
+        sess['role'] = 'owner'
+    check(c.get('/ask').status_code == 200, 'the page loads')
+
+    # A confirmation only does what is on a fixed list -- not "whatever the
+    # model named", which is how a new tool would quietly become a new power.
+    import blueprints.assistant_routes as ar
+    check(ar.ACTIONS == ('complete_booking',), f'one allowed action: {ar.ACTIONS}')
+    r = c.post('/ask/confirm', data={'action': 'charge_everything'},
+               follow_redirects=True)
+    check(r.status_code == 200, 'an action not on the list is refused, not run')
+
+    b = Booking.query.filter_by(name='Owes Money').first()
+    check(b.status == 'confirmed', 'and nothing happened to the job')
+    c.post('/ask/confirm', data={'action': 'complete_booking', 'booking_id': b.id},
+           follow_redirects=True)
+    db.session.expire_all()
+    b = Booking.query.get(b.id)
+    check(b.status == 'completed', 'the real one, pressed by a person, does work')
+
+    # Pressing it twice should say so rather than pretend.
+    r = c.post('/ask/confirm', data={'action': 'complete_booking', 'booking_id': b.id},
+               follow_redirects=True)
+    check(b'already completed' in r.data, 'and a second press says it is already done')
+
+    print('\n9. It cannot run away with somebody else\'s bill')
+    import assistant as _a
+    from models import BusinessSetting
+    check(_a.remaining() == _a.MONTHLY_LIMIT - _a.used_this_month(),
+          f'{_a.remaining()} of {_a.MONTHLY_LIMIT} left this month')
+    BusinessSetting.set(_a._month_key(), str(_a.MONTHLY_LIMIT))
+    db.session.commit()
+    out = _a.ask('how much did I make')
+    check('limit' in out['say'], 'at the limit it stops and says why')
+    check('works as normal' in out['say'], 'and says the rest of the CRM is fine')
+    BusinessSetting.set(_a._month_key(), '0')
+    db.session.commit()
 
 print()
 if failures:

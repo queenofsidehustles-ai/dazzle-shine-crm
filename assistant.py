@@ -1,4 +1,4 @@
-"""Kye — ask the business a question in your own words.
+"""Nana — ask the business a question in your own words.
 
 The owner is in a van between jobs. "How much did I make last month" is three
 taps and a squint at a chart, and "who's on tomorrow" is another screen. This is
@@ -37,8 +37,10 @@ import os
 import re
 from datetime import date, timedelta
 
-# What it is called. One constant so the name is a decision, not a rewrite.
-NAME = 'Kye'
+# What it is called. Akan for an elder -- the person you take a question to,
+# which is the job. One constant, so the name stays a decision rather than a
+# rewrite.
+NAME = 'Nana'
 
 # Where the answering happens. Only used to pick a tool -- never to state a fact.
 MODEL = os.environ.get('ASSISTANT_MODEL', 'anthropic/claude-3.5-haiku')
@@ -261,6 +263,35 @@ def _prompt():
         'If nothing fits, reply {"tool": null}. No prose, no explanation.')
 
 
+def _month_key():
+    from datetime import date as _d
+    return f'assistant_used_{_d.today():%Y-%m}'
+
+
+def used_this_month():
+    from models import BusinessSetting
+    try:
+        return int(BusinessSetting.get(_month_key()) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def remaining():
+    return max(0, MONTHLY_LIMIT - used_this_month())
+
+
+def _count_one():
+    """One more question asked. Written before the call, not after.
+
+    Counting after would mean a call that timed out cost money and counted for
+    nothing, which is the direction that lets a bill run away quietly.
+    """
+    from models import BusinessSetting
+    from extensions import db
+    BusinessSetting.set(_month_key(), str(used_this_month() + 1))
+    db.session.commit()
+
+
 def choose(question, api_key=None):
     """Which tool the question is asking for. Returns (name, args) or (None, {})."""
     key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
@@ -300,6 +331,11 @@ def choose(question, api_key=None):
 
 def ask(question, api_key=None):
     """The whole round trip. Returns a dict the page can render."""
+    if remaining() <= 0:
+        return {'say': (f'{NAME} has answered {MONTHLY_LIMIT} questions this month, '
+                        f'which is the limit. It starts again next month — '
+                        f'everything else in here works as normal.')}
+    _count_one()
     name, args = choose(question, api_key=api_key)
     if not name:
         return {'say': f'I did not follow that. Try “what is booked tomorrow?” '
