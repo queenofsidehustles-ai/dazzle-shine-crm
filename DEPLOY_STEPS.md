@@ -78,7 +78,11 @@ customers. Different accounts, different money. Do not mix them up.
 7. Price: `79.00`, currency **USD**.
 8. Under it, choose **Recurring**, and set the billing period to **Monthly**.
 9. Click **Add product** to save.
-10. Do steps 5–9 again, but name it `Scale` and price it `149.00`.
+10. Do steps 5–9 again, but name it `Scale` and price it `249.00`.
+    This must match `entitlements.py`, which is what the software
+    actually charges. It said `149.00` here for a while; following it
+    would have set up every Scale customer $100/month short, and the
+    first sign would have been money that never arrived.
 
 Now collect three things. Keep them in a note on your computer — not in a
 message to me.

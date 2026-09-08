@@ -291,4 +291,19 @@ check('BILLING IN MODELS: False' in out,
 with admin.connect() as c:
     c.execute(text(f'DROP DATABASE IF EXISTS {DB}'))
 
+
+print('\nThe setup instructions charge what the software charges')
+# DEPLOY_STEPS.md told the reader to price Scale at $149 while entitlements.py
+# charged $249. Nobody reads a setup doc twice: it is followed once, in Stripe,
+# on the day real cards are switched on, and a wrong number there is $100 a
+# month per customer that simply never arrives.
+import os as _os
+import entitlements
+_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+_steps = open(_os.path.join(_root, 'DEPLOY_STEPS.md')).read()
+for _plan in ('pro', 'scale'):
+    _price = entitlements.PLANS[_plan]['price']
+    check(f'`{_price}.00`' in _steps,
+          f'the Stripe steps price {_plan} at ${_price}, which is what is charged')
+
 print('\n\n✅ All billing tests passed.\n')
