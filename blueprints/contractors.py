@@ -1700,6 +1700,34 @@ def pay_statement(staff_id):
 
 # ── Public application form ────────────────────────────────────────────────────
 
+def _company_answers(form):
+    """The company half of the application, or nothing at all.
+
+    Blank stays blank rather than becoming an empty string: a column full of
+    '' is a column nobody can ask "is this set?" about.
+    """
+    if form.get('applicant_kind') != 'company':
+        return {'applicant_kind': 'individual'}
+
+    def txt(name, limit):
+        return (form.get(name, '') or '').strip()[:limit] or None
+
+    return {
+        'applicant_kind': 'company',
+        'company_name': txt('company_name', 200),
+        'ein': txt('ein', 20),
+        'crew_size': txt('crew_size', 20),
+        'service_areas': txt('service_areas', 300),
+        'has_liability_insurance': 'has_liability_insurance' in form,
+        'insurance_carrier': txt('insurance_carrier', 120),
+        'insurance_expires': txt('insurance_expires', 10),
+        'workers_comp': txt('workers_comp', 20),
+        'workers_comp_expires': txt('workers_comp_expires', 10),
+        'business_license': txt('business_license', 120),
+        'crew_checks_agreed': 'crew_checks_agreed' in form,
+    }
+
+
 @contractors_bp.route('/apply', methods=['GET', 'POST'])
 def apply():
     if request.method == 'POST':
@@ -1745,6 +1773,11 @@ def apply():
             background_check_consent='background_check_consent' in request.form,
             agrees_to_ic_terms='agrees_to_ic_terms' in request.form,
             why_interested=request.form.get('why_interested', '').strip(),
+            # A company answers a different set of questions. Read only when
+            # they said they were one -- both halves of the form are posted, so
+            # somebody who switched from company to individual halfway would
+            # otherwise leave stray answers on an individual's application.
+            **_company_answers(request.form),
             bgcheck_existing_link=request.form.get('bgcheck_existing_link', '').strip(),
             status='new',
         )
@@ -1776,19 +1809,35 @@ def apply():
         reject_reasons_en = []
         reject_reasons_es = []
 
-        exp = (a.years_experience or '').strip().lower()
-        if not exp or exp in ('no experience', 'none', ''):
-            reject_reasons_en.append("Prior cleaning experience is required for all contractors.")
-            reject_reasons_es.append("Se requiere experiencia previa en limpieza para todos los contratistas.")
+        # These two are the right questions for a person and the wrong ones for
+        # a company. Asking a firm with four cleaners and two vans how many
+        # years *they* have been cleaning, and auto-rejecting the answer, is
+        # how a real subcontractor gets turned away by a form. A company is
+        # read by a human instead -- there is paperwork to check either way.
+        if a.applicant_kind != 'company':
+            exp = (a.years_experience or '').strip().lower()
+            if not exp or exp in ('no experience', 'none', ''):
+                reject_reasons_en.append("Prior cleaning experience is required for all contractors.")
+                reject_reasons_es.append("Se requiere experiencia previa en limpieza para todos los contratistas.")
 
-        if not a.has_transportation:
-            reject_reasons_en.append("Reliable personal transportation is required.")
-            reject_reasons_es.append("Se requiere transporte personal confiable.")
+            if not a.has_transportation:
+                reject_reasons_en.append("Reliable personal transportation is required.")
+                reject_reasons_es.append("Se requiere transporte personal confiable.")
 
         if reject_reasons_en:
             a.status = 'rejected'
             db.session.commit()
             _send_auto_rejection(a, reject_reasons_en, reject_reasons_es)
+        elif a.applicant_kind == 'company':
+            # No automated interview invite. The video interview asks somebody
+            # about their own cleaning; a company needs its certificates read
+            # by a person, and the insurance is the part that has to be checked
+            # before anybody is sent to a customer's house.
+            a.status = 'reviewing'
+            a.admin_notes = ((a.admin_notes + '\n') if a.admin_notes else '') + (
+                'Applied as a company. Check the certificate of insurance and '
+                'workers\' compensation before sending them anywhere.')
+            db.session.commit()
         else:
             # Passed — schedule interview invite after 10-minute delay
             a.interview_status = 'pending'

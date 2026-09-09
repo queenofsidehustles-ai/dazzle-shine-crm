@@ -73,8 +73,112 @@
         </div>
       </div>
 
-      <!-- Experience -->
+      <!-- Who is applying. Asked first, because it decides which of the two
+           sets of questions below is worth their time. A company with its own
+           LLC and its own crew was being asked how many years they had been
+           cleaning, and auto-rejected on the answer. -->
       <div class="card">
+        <h2 class="t" data-en="Are you applying as yourself, or as a company?"
+            data-es="¿Aplica como persona o como empresa?">Are you applying as yourself, or as a company?</h2>
+        <div class="check-list">
+          <label class="check-item">
+            <input type="radio" name="applicant_kind" value="individual" checked
+                   onchange="showKind()" />
+            <span class="t" data-en="Just me — I clean myself"
+                  data-es="Solo yo — yo limpio">Just me — I clean myself</span>
+          </label>
+          <label class="check-item">
+            <input type="radio" name="applicant_kind" value="company"
+                   onchange="showKind()" />
+            <span class="t" data-en="My company — we have our own cleaners"
+                  data-es="Mi empresa — tenemos nuestros propios limpiadores">My company — we have our own cleaners</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- The company half. Different questions, and the ones with dates on
+           them are the point: a certificate collected once and never checked
+           again is worse than none, because you believe you are covered. -->
+      <div class="card" id="company-only" hidden>
+        <h2 class="t" data-en="About your company" data-es="Sobre su empresa">About your company</h2>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="t" data-en="Company name" data-es="Nombre de la empresa">Company name</label>
+            <input type="text" name="company_name" placeholder="Your company name" />
+          </div>
+          <div class="form-group">
+            <label class="t" data-en="EIN (tax ID)" data-es="EIN (ID fiscal)">EIN (tax ID)</label>
+            <input type="text" name="ein" placeholder="12-3456789" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="t" data-en="How many cleaners do you have?"
+                   data-es="¿Cuántos limpiadores tiene?">How many cleaners do you have?</label>
+            <input type="text" name="crew_size" placeholder="4" />
+          </div>
+          <div class="form-group">
+            <label class="t" data-en="Areas you cover" data-es="Áreas que cubre">Areas you cover</label>
+            <input type="text" name="service_areas" placeholder="The towns you cover" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="check-item">
+            <input type="checkbox" name="has_liability_insurance" />
+            <span class="t" data-en="We carry general liability insurance"
+                  data-es="Tenemos seguro de responsabilidad civil">We carry general liability insurance</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="t" data-en="Insurance company" data-es="Compañía de seguros">Insurance company</label>
+            <input type="text" name="insurance_carrier" placeholder="Who it is with" />
+          </div>
+          <div class="form-group">
+            <label class="t" data-en="Policy expires" data-es="La póliza vence">Policy expires</label>
+            <input type="date" name="insurance_expires" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="t" data-en="Workers' compensation"
+                   data-es="Compensación de trabajadores">Workers' compensation</label>
+            <select name="workers_comp">
+              <option value="">Choose one…</option>
+              <option value="yes">We carry it</option>
+              <option value="exempt">We are exempt in our state</option>
+              <option value="no">We do not have it</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="t" data-en="Expires" data-es="Vence">Expires</label>
+            <input type="date" name="workers_comp_expires" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="t" data-en="Business licence number (if your city needs one)"
+                 data-es="Número de licencia comercial (si su ciudad la requiere)">Business licence number (if your city needs one)</label>
+          <input type="text" name="business_license" />
+        </div>
+
+        <div class="form-group">
+          <label class="check-item">
+            <input type="checkbox" name="crew_checks_agreed" />
+            <span class="t"
+                  data-en="Our cleaners will pass a background check before entering a customer's home"
+                  data-es="Nuestros limpiadores pasarán una verificación de antecedentes antes de entrar a la casa de un cliente">Our cleaners will pass a background check before entering a customer's home</span>
+          </label>
+          {# Said plainly, because companies assume it is waived for them. The
+             customer does not know the person in their kitchen works for a
+             subcontractor -- if something goes missing it is our name on it. #}
+        </div>
+      </div>
+
+      <!-- Experience -->
+      <div class="card" id="individual-only">
         <h2 class="t" data-en="Experience" data-es="Experiencia">Experience</h2>
         <div class="form-group">
           <label class="t" data-en="Years of Cleaning Experience" data-es="Años de Experiencia en Limpieza">Years of Cleaning Experience</label>
@@ -271,5 +375,20 @@ function setLang(lang) {
   }
 }
 </script>
+  <script>
+    // Show the half that applies to whoever is filling it in. Both halves
+    // stay in the form and the server reads only what fits the kind, so a
+    // company that changes its mind halfway does not leave stray answers on
+    // an individual's application.
+    function showKind() {
+      var el = document.querySelector('input[name=applicant_kind]:checked');
+      var company = el && el.value === 'company';
+      var c = document.getElementById('company-only');
+      var i = document.getElementById('individual-only');
+      if (c) c.hidden = !company;
+      if (i) i.hidden = company;
+    }
+    showKind();
+  </script>
 </body>
 </html>

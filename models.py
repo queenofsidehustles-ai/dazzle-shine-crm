@@ -883,6 +883,37 @@ class ContractorApplication(db.Model):
     has_references = db.Column(db.Boolean, default=False)
     background_check_consent = db.Column(db.Boolean, default=False)
     agrees_to_ic_terms = db.Column(db.Boolean, default=False)
+
+    # ── Applying as a company rather than as a person ──────────────────────
+    #
+    # A cleaning company with its own LLC, its own crew and its own insurance
+    # is not a hire, it is a vendor, and almost none of the questions above
+    # mean anything to it. Asking somebody with four cleaners whether they
+    # have their own transport, and auto-rejecting them when they say the
+    # wrong thing, is how a real subcontractor gets turned away by a form.
+    applicant_kind = db.Column(db.String(20), default='individual')  # individual / company
+    company_name = db.Column(db.String(200))
+    ein = db.Column(db.String(20))
+    crew_size = db.Column(db.String(20))
+    service_areas = db.Column(db.String(300))
+
+    # The paperwork that actually matters, and the dates it stops being true.
+    # A certificate collected in March and never looked at again is worse than
+    # none, because you believe you are covered.
+    has_liability_insurance = db.Column(db.Boolean, default=False)
+    insurance_carrier = db.Column(db.String(120))
+    insurance_expires = db.Column(db.String(10))          # YYYY-MM-DD
+    # Workers' comp, or a state exemption. If a subcontractor's cleaner is hurt
+    # in your customer's house and the company carries neither, the claim can
+    # land on you -- which is the whole reason vendor onboarding exists.
+    workers_comp = db.Column(db.String(20))               # yes / exempt / no
+    workers_comp_expires = db.Column(db.String(10))
+    business_license = db.Column(db.String(120))
+    w9_received = db.Column(db.Boolean, default=False)
+    # Their cleaners still get checked. The customer does not know or care that
+    # the person in their kitchen works for a subcontractor -- if something goes
+    # missing it is your name on it.
+    crew_checks_agreed = db.Column(db.Boolean, default=False)
     why_interested = db.Column(db.Text)
     source = db.Column(db.String(50), default='Website')  # Indeed, Facebook, Website, etc.
     language = db.Column(db.String(5), default='en')      # preferred language: 'en' or 'es'
