@@ -327,4 +327,47 @@ with app.app_context():
     check('Accepted' in row.detail,
           'and the wording says accepted, which is all a 2xx from Resend means')
 
+    print('\nOne quote carries both prices')
+    # A caller asking what a deep clean costs is really asking two things: what it
+    # takes to get the place right, and what it takes to keep it that way. Sent as
+    # two emails on two days, the customer compares two numbers out of context and
+    # the second email is the one nobody opens.
+    from werkzeug.datastructures import MultiDict
+    lead, err = quoting.handle_quote_form(MultiDict({
+        'name': 'Denise Carter', 'email': 'denise@x.test', 'phone': '4075551234',
+        'service_type': 'deep', 'bedrooms': '3', 'bathrooms': '2',
+        'price': '385', 'recurring_price': '140', 'recurring_frequency': 'biweekly'}))
+    check(err is None, 'a quote with a recurring price saves')
+    check(float(lead.quoted_price) == 385.0, 'the first clean is what she typed')
+    check(float(lead.recurring_price) == 140.0 and lead.recurring_frequency == 'biweekly',
+          'and so is what it costs to keep it clean')
+    check(quoting.recurring_line(lead) == '$140.00 every two weeks after that',
+          f'said the way somebody would say it ({quoting.recurring_line(lead)})')
+
+    # Both halves or neither. A price with no cadence says nothing a customer can
+    # act on; a cadence with no price is a promise to send a second email.
+    half, _ = quoting.handle_quote_form(MultiDict({
+        'name': 'Half Quote', 'email': 'half@x.test', 'phone': '4075550000',
+        'service_type': 'deep', 'price': '300', 'recurring_price': '140'}))
+    check(half.recurring_price is None, 'a price with no cadence is not kept')
+    check(quoting.recurring_line(half) == '', 'and nothing is shown for it')
+
+    # Plenty of jobs really are one-offs, and those quotes must look exactly as
+    # they did before.
+    one, _ = quoting.handle_quote_form(MultiDict({
+        'name': 'One Off', 'email': 'once@x.test', 'phone': '4075550001',
+        'service_type': 'deep', 'price': '300'}))
+    check(one.recurring_price is None and quoting.recurring_line(one) == '',
+          'a one-off quote is unchanged')
+
+    # The page and the email say it from the same function, so they cannot come to
+    # promise different money.
+    qa = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'blueprints', 'quote_accept.py')).read()
+    check('quoting.recurring_line(lead)' in qa,
+          'the customer page uses the same sentence as the email')
+    qsrc = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'quoting.py')).read()
+    check(qsrc.count('def recurring_line') == 1, 'which exists in exactly one place')
+
+
+
     print('\nAll quote-email checks passed.')
