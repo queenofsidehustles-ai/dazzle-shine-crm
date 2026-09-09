@@ -398,6 +398,95 @@ def lsa_followups():
     return jsonify({'ok': True, **result})
 
 
+@api_bp.route('/insurance-expiry', methods=['POST'])
+def insurance_expiry():
+    """Tell the business before a subcontractor's cover runs out.
+
+    Only the business is told. Chasing a renewal is a relationship, and a
+    company that renewed last week does not want an automated demand from
+    software -- so this produces a list somebody reads, not a mailshot.
+
+    Silent when there is nothing to say. An email every morning saying
+    "nothing expiring" is how the one that matters stops being read.
+    """
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides, same as the others: a key pasted with a trailing
+    # newline is not a different key, and a 403 is indistinguishable from a
+    # scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    if not automations.is_enabled('insurance-expiry'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
+
+    import compliance
+    rows = compliance.expiring()
+    gaps = compliance.missing()
+    if not rows and not gaps:
+        automations.record('insurance-expiry', items=0)
+        return jsonify({'ok': True, 'expiring': 0, 'missing': 0})
+
+    sent = _mail_expiry(rows, gaps)
+    automations.record('insurance-expiry', items=len(rows))
+    return jsonify({'ok': True, 'expiring': len(rows), 'missing': len(gaps),
+                    'emailed': sent})
+
+
+def _mail_expiry(rows, gaps):
+    """One email, worst first. Returns whether it went."""
+    from html import escape
+    import branding
+    import compliance
+    from notifications import send_email
+
+    to = (branding.owner_email() or '').strip()
+    # The default when a business has never set its own address. Sending there
+    # is the same as not sending, and this is the warning least worth losing
+    # quietly -- it is about somebody entering a customer's house uninsured.
+    if not to or to.endswith('@example.com'):
+        try:
+            import errors
+            errors.capture(
+                RuntimeError('subcontractor cover is expiring and this business '
+                             'has no owner email set, so nobody was told'),
+                path='/api/insurance-expiry', method='POST')
+        except Exception:
+            pass
+        return False
+
+    urgent = [r for r in rows if r['band'] in ('expired', 'urgent')]
+    lines = ''.join(
+        f'<li style="margin-bottom:7px">{escape(compliance.sentence(r))}</li>'
+        for r in rows)
+    gap_lines = ''.join(
+        f'<li style="margin-bottom:7px">{escape(g["company"])} — nothing on '
+        f'file for {escape(" or ".join(g["missing"]))}.</li>' for g in gaps)
+
+    # The subject carries the worst of it, because that is all that gets read
+    # on a phone before somebody decides whether to open it.
+    if any(r['band'] == 'expired' for r in rows):
+        subject = 'A subcontractor is working uninsured'
+    elif urgent:
+        subject = 'A subcontractor&rsquo;s insurance runs out this week'
+    else:
+        subject = 'Subcontractor paperwork to renew'
+
+    body = (
+        '<div style="font-family:Inter,Arial,sans-serif;font-size:15px;'
+        'line-height:1.6;color:#1f1333">'
+        + (f'<ul style="padding-left:18px">{lines}</ul>' if lines else '')
+        + (f'<p style="color:#777;font-size:13px">And nobody has ever checked '
+           f'these:</p><ul style="padding-left:18px;color:#777;font-size:13px">'
+           f'{gap_lines}</ul>' if gap_lines else '')
+        + '<p style="color:#777;font-size:13px">Nobody has been emailed about '
+          'this except you.</p></div>')
+
+    ok, _detail = send_email(to, branding.biz_name(),
+                             subject.replace('&rsquo;', '\u2019'), body)
+    return bool(ok)
+
+
 # ── Applicant interview follow-ups (cron — run once daily) ────────────────────
 # Re-sends the bilingual video interview link every 2 days to applicants who
 # haven't responded (up to 2 extra nudges), then marks them "No Response".

@@ -302,9 +302,15 @@ def applications():
         'no_response': ContractorApplication.query.filter_by(status='no_response').count(),
     }
     apply_url = url_for('contractors.apply', _external=True)
+    # Certificates that have run out or are about to. On the page as well as in
+    # the nightly email: this is the one where being told and missing it costs
+    # somebody a claim, and an email nobody opened is not being told.
+    import compliance
     return render_template('admin/applications.html', apps=apps,
                            counts=counts, status_filter=status_filter,
-                           apply_url=apply_url, sources=SOURCES)
+                           apply_url=apply_url, sources=SOURCES,
+                           expiring=compliance.expiring(),
+                           expiry_line=compliance.sentence)
 
 
 @contractors_bp.route('/applications/merge-duplicates', methods=['POST'])
