@@ -1,0 +1,64 @@
+{# A question box for somebody who is not a customer yet.
+
+   The people this is for have no account and no reason to trust an email
+   address they found in a footer. A box on the page they are already reading
+   is the difference between a question asked and a visitor gone. #}
+<button type="button" id="askOpen" class="ask-open" onclick="askToggle(true)">
+  Ask a question
+</button>
+
+<div class="ask-sheet" id="askSheet" hidden role="dialog" aria-modal="true"
+     aria-label="Ask a question">
+  <div class="ask-head">
+    <strong>Ask us anything</strong>
+    <button type="button" class="ask-x" onclick="askToggle(false)" aria-label="Close">×</button>
+  </div>
+  <p class="ask-note">A real person reads these. We usually reply within one business day.</p>
+  <textarea id="askBody" rows="3" placeholder="What would you like to know?"></textarea>
+  <input type="text" id="askName" placeholder="Your name (optional)">
+  <input type="email" id="askEmail" placeholder="Email to reply to" required>
+  {# Never shown to a person. A robot fills every field it finds. #}
+  <input type="text" id="askCompany" class="ask-trap" tabindex="-1" autocomplete="off"
+         aria-hidden="true">
+  <div class="ask-row">
+    <span class="ask-note" id="askSaid"></span>
+    <button type="button" class="btn" id="askGo" onclick="askSend()">Send</button>
+  </div>
+</div>
+
+<script>
+  function askToggle(open) {
+    document.getElementById('askSheet').hidden = !open;
+    document.getElementById('askOpen').hidden = open;
+    if (open) document.getElementById('askBody').focus();
+  }
+  function askSend() {
+    var said = document.getElementById('askSaid');
+    var body = document.getElementById('askBody').value.trim();
+    var email = document.getElementById('askEmail').value.trim();
+    if (!body || email.indexOf('@') < 0) {
+      said.textContent = 'A question and an email to reply to, please.';
+      return;
+    }
+    var go = document.getElementById('askGo');
+    go.disabled = true; said.textContent = 'Sending…';
+    fetch('{{ url_for("console.public_question") }}', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        body: body, email: email,
+        name: document.getElementById('askName').value.trim(),
+        company: document.getElementById('askCompany').value,
+        page: location.pathname
+      })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      said.textContent = d.say; go.disabled = false;
+      if (d.ok) {
+        document.getElementById('askBody').value = '';
+        setTimeout(function () { askToggle(false); said.textContent = ''; }, 2200);
+      }
+    }).catch(function () {
+      said.textContent = 'That did not send. Try once more.';
+      go.disabled = false;
+    });
+  }
+</script>

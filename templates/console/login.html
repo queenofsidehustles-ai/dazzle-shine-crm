@@ -1,0 +1,23 @@
+{% extends "console/_shell.html" %}
+{% block title %}Sign in{% endblock %}
+{% block body %}
+<div style="max-width:360px;margin:12vh auto">
+  <h1 style="font-size:1.35rem;margin-bottom:var(--s2)">{{ PRODUCT }} console</h1>
+  <p style="color:var(--muted);font-size:var(--t-sm);margin-bottom:var(--s5)">
+    Every company, every report. Not the same account as a cleaning company's own login.
+  </p>
+  <form method="post">
+    <label style="display:block;margin-bottom:var(--s3)">
+      <span style="display:block;font-size:var(--t-xs);color:var(--softer);margin-bottom:4px">Email</span>
+      <input type="email" name="email" required autofocus autocomplete="username"
+             style="width:100%">
+    </label>
+    <label style="display:block;margin-bottom:var(--s5)">
+      <span style="display:block;font-size:var(--t-xs);color:var(--softer);margin-bottom:4px">Password</span>
+      <input type="password" name="password" required autocomplete="current-password"
+             style="width:100%">
+    </label>
+    <button type="submit" class="btn btn-primary" style="width:100%">Sign in</button>
+  </form>
+</div>
+{% endblock %}

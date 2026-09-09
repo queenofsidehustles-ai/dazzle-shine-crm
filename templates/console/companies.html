@@ -1,0 +1,39 @@
+{% extends "console/_shell.html" %}
+{% block title %}Companies{% endblock %}
+{% block body %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Companies ({{ rows|length }})</h2>
+{% if rows %}
+<table class="con">
+  <tr><th>Address</th><th>Name</th><th>Plan</th><th>Status</th><th>Since</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="https://{{ r.slug }}.{{ PRODUCT_DOMAIN }}" target="_blank">{{ r.slug }}</a></td>
+    <td>{{ r.name }}</td>
+    <td>{{ r.plan or 'solo' }}</td>
+    <td>{{ r.subscription_status or r.status }}</td>
+    <td>{{ r.created_at.strftime('%d %b %Y') if r.created_at }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="con-empty">No companies yet.</div>
+{% endif %}
+
+<h2 style="font-size:1.05rem;margin:var(--s6) 0 var(--s3)">
+  Asked for early access ({{ leads|length }})</h2>
+{% if leads %}
+<table class="con">
+  <tr><th>When</th><th>Name</th><th>Company</th><th>Email</th><th>Cleaners</th></tr>
+  {% for l in leads %}
+  <tr>
+    <td>{{ l.created_at.strftime('%d %b') if l.created_at }}</td>
+    <td>{{ l.name }}</td><td>{{ l.company }}</td>
+    <td><a href="mailto:{{ l.email }}">{{ l.email }}</a></td>
+    <td>{{ l.cleaners }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="con-empty">Nobody has asked yet.</div>
+{% endif %}
+{% endblock %}

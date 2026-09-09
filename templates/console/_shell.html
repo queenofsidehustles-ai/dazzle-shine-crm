@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Console{% endblock %} — {{ PRODUCT }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}">
+<style>
+  /* Deliberately plain. This is a back room, not a shopfront: it should load
+     fast on a phone in a car park and never compete with the product for
+     attention. */
+  body { background: var(--ground); }
+  .con-wrap { max-width: 980px; margin: 0 auto; padding: var(--s5); }
+  .con-bar { display: flex; align-items: center; gap: var(--s5); flex-wrap: wrap;
+             padding: var(--s4) 0 var(--s5); }
+  .con-bar .name { font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+  .con-bar a { color: var(--muted); text-decoration: none; font-weight: 600;
+               font-size: var(--t-sm); }
+  .con-bar a:hover, .con-bar a.on { color: var(--ink); }
+  .con-bar .right { margin-left: auto; display: flex; gap: var(--s4);
+                    align-items: center; font-size: var(--t-xs); color: var(--softer); }
+  .pill { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 5px;
+          border-radius: var(--r-pill); background: var(--amber); color: #fff;
+          font-size: var(--t-xs); font-weight: 700; }
+  .con-item { background: var(--surface); border: 1px solid var(--line);
+              border-radius: var(--r); padding: var(--s4); margin-bottom: var(--s3); }
+  .con-item.done { opacity: .55; }
+  .con-meta { font-size: var(--t-xs); color: var(--softer); margin-top: var(--s2);
+              line-height: 1.6; }
+  .con-body { white-space: pre-wrap; line-height: 1.55; color: var(--ink); }
+  .con-tag { display: inline-block; padding: 2px 9px; border-radius: var(--r-pill);
+             font-size: var(--t-xs); font-weight: 700; text-transform: uppercase;
+             letter-spacing: .05em; margin-right: var(--s2); }
+  .con-tag.issue { background: var(--warn-soft); color: var(--warn); }
+  .con-tag.confusing { background: var(--amber-soft); color: var(--amber-deep); }
+  .con-tag.idea { background: var(--info-soft); color: var(--info); }
+  .con-tag.praise { background: var(--good-soft); color: var(--good); }
+  .con-shot { display: block; margin-top: var(--s3); max-width: 420px;
+              border: 1px solid var(--line); border-radius: var(--r); }
+  .con-empty { color: var(--softer); padding: var(--s6) 0; text-align: center; }
+  table.con { width: 100%; border-collapse: collapse; background: var(--surface);
+              border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+  table.con th, table.con td { text-align: left; padding: var(--s3) var(--s4);
+                               border-bottom: 1px solid var(--line-soft);
+                               font-size: var(--t-sm); }
+  table.con th { font-size: var(--t-xs); text-transform: uppercase;
+                 letter-spacing: .06em; color: var(--softer); }
+</style>
+</head><body>
+<div class="con-wrap">
+  {% if me %}
+  <div class="con-bar">
+    <span class="name">{{ PRODUCT }} console</span>
+    <a href="{{ url_for('console.inbox') }}"
+       class="{{ 'on' if request.endpoint == 'console.inbox' }}">Reports{% if counts and counts.feedback %}<span class="pill">{{ counts.feedback }}</span>{% endif %}</a>
+    <a href="{{ url_for('console.companies') }}"
+       class="{{ 'on' if request.endpoint == 'console.companies' }}">Companies</a>
+    <a href="{{ url_for('console.people') }}"
+       class="{{ 'on' if request.endpoint == 'console.people' }}">People</a>
+    <span class="right">
+      {{ me.name or me.email }}
+      <a href="{{ url_for('console.logout') }}">Sign out</a>
+    </span>
+  </div>
+  {% endif %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, msg in messages %}
+      <div class="flash flash-{{ category }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</div>
+</body></html>

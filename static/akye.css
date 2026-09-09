@@ -165,6 +165,37 @@ a  { color: var(--amber-deep); }
    speech recognition, and Stop showed while nothing was speaking. */
 [hidden] { display: none !important; }
 
+/* The question box on the public site. Bottom-right here, unlike the
+   in-product feedback button: nothing else sits in that corner of the
+   marketing pages, and it is where a visitor expects to find help. */
+.ask-open { position: fixed; right: var(--s5); bottom: var(--s5); z-index: 60;
+            padding: 11px 18px; border-radius: var(--r-pill);
+            border: 1px solid var(--amber-line); background: var(--surface);
+            color: var(--amber-deep); font-family: inherit; font-size: var(--t-sm);
+            font-weight: 700; cursor: pointer; box-shadow: var(--shadow); }
+.ask-open:hover { background: var(--amber-soft); }
+.ask-sheet { position: fixed; right: var(--s5); bottom: var(--s5); z-index: 61;
+             width: min(360px, calc(100vw - var(--s8))); padding: var(--s5);
+             background: var(--surface); border: 1px solid var(--line);
+             border-radius: var(--r-lg); box-shadow: var(--shadow-lg); }
+.ask-head { display: flex; align-items: center; justify-content: space-between; }
+.ask-x { background: none; border: 0; font-size: 1.4rem; line-height: 1;
+         color: var(--softer); cursor: pointer; }
+.ask-note { font-size: var(--t-xs); color: var(--softer); line-height: 1.5; }
+.ask-sheet textarea, .ask-sheet input { width: 100%; margin-top: var(--s3);
+             padding: var(--s3); font-family: inherit; font-size: var(--t-sm);
+             border: 1px solid var(--line); border-radius: var(--r);
+             background: var(--surface); color: var(--ink); }
+.ask-row { display: flex; align-items: center; justify-content: space-between;
+           gap: var(--s3); margin-top: var(--s4); }
+/* Off-screen rather than display:none -- a robot skips what is not rendered. */
+.ask-trap { position: absolute !important; left: -9999px !important;
+            width: 1px !important; height: 1px !important; }
+@media (max-width: 700px) {
+  .ask-open { right: var(--s3); bottom: var(--s3); }
+  .ask-sheet { right: var(--s3); left: var(--s3); bottom: var(--s3); width: auto; }
+}
+
 /* Beta feedback, on every screen.
    Bottom-left rather than bottom-right: the right corner is where browser
    extensions and chat widgets sit, and a button nobody can hit is not on

@@ -135,6 +135,47 @@ feedback = Table(
 )
 
 
+# Who can see across every company: you, and whoever you bring in.
+#
+# Its own accounts, separate from any company's owner login, because this is a
+# different job with a different blast radius. A cleaning company's owner can
+# see their own business; somebody here can see all of them, so the two must
+# never be the same credential.
+console_users = Table(
+    'console_users', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('email', String(200), unique=True, index=True),
+    Column('name', String(120)),
+    Column('password_hash', String(255)),
+    # 'owner' can add and remove people. 'staff' can read and triage.
+    # An assistant does not need the power to grant somebody else access.
+    Column('role', String(20), default='staff'),
+    Column('active', Boolean, default=True),
+    Column('created_at', DateTime, default=datetime.utcnow),
+    Column('last_login_at', DateTime),
+    # Wrong passwords in a row, and when to stop refusing. A console that can
+    # see every company's data is worth guessing at, and nothing here rate
+    # limited anything before.
+    Column('failed', Integer, default=0),
+    Column('locked_until', DateTime),
+)
+
+
+# Questions from the public site -- people who are not customers yet and have
+# no account to file feedback from.
+support_requests = Table(
+    'support_requests', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('name', String(120)),
+    Column('email', String(200), index=True),
+    Column('body', Text),
+    Column('page', String(300)),
+    Column('user_agent', String(300)),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
+    Column('answered_at', DateTime),
+)
+
+
 def ensure_columns(engine):
     """Add any column this code expects and the table does not have.
 
@@ -179,7 +220,8 @@ def ensure_columns(engine):
 def ensure_table(engine):
     """Create the control-plane table if it is not there. Safe to call always."""
     control_metadata.create_all(
-        engine, tables=[organizations, product_leads, feedback])
+        engine, tables=[organizations, product_leads, feedback,
+                        console_users, support_requests])
     ensure_columns(engine)
 
 
@@ -355,3 +397,125 @@ def unread_feedback(engine):
         return conn.execute(
             select(func.count()).select_from(feedback)
             .where(feedback.c.read_at.is_(None))).scalar() or 0
+
+
+# --------------------------------------------------------------------------
+# Console accounts
+#
+# Passwords are hashed with the same method the CRM's own users use. Failed
+# attempts are counted and the account stops answering for a while, because
+# this login can see every company in the product and nothing here was rate
+# limited before.
+
+LOCK_AFTER = 6
+LOCK_MINUTES = 15
+
+
+def console_user(engine, email):
+    with engine.connect() as conn:
+        row = conn.execute(select(console_users).where(
+            console_users.c.email == (email or '').strip().lower())).mappings().first()
+    return dict(row) if row else None
+
+
+def console_users_all(engine):
+    with engine.connect() as conn:
+        rows = conn.execute(select(console_users).order_by(
+            console_users.c.created_at)).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def add_console_user(engine, email, name, password, role='staff'):
+    from werkzeug.security import generate_password_hash
+    email = (email or '').strip().lower()
+    with engine.begin() as conn:
+        conn.execute(insert(console_users).values(
+            email=email, name=name, role=role,
+            password_hash=generate_password_hash(password, method='pbkdf2:sha256'),
+            active=True))
+    return console_user(engine, email)
+
+
+def set_console_password(engine, email, password):
+    from werkzeug.security import generate_password_hash
+    with engine.begin() as conn:
+        conn.execute(update(console_users)
+                     .where(console_users.c.email == (email or '').strip().lower())
+                     .values(password_hash=generate_password_hash(
+                         password, method='pbkdf2:sha256'),
+                         failed=0, locked_until=None))
+
+
+def set_console_active(engine, email, active):
+    with engine.begin() as conn:
+        conn.execute(update(console_users)
+                     .where(console_users.c.email == (email or '').strip().lower())
+                     .values(active=bool(active)))
+
+
+def check_console_login(engine, email, password):
+    """(user, why-not). Never says which half was wrong.
+
+    "No such account" and "wrong password" told apart is how somebody learns
+    which addresses are real, and this list is small enough to be worth
+    guessing at.
+    """
+    from datetime import timedelta
+    from werkzeug.security import check_password_hash
+    row = console_user(engine, email)
+    if not row or not row.get('active'):
+        return None, 'no'
+    locked = row.get('locked_until')
+    if locked and locked > datetime.utcnow():
+        return None, 'locked'
+    if not row.get('password_hash') or not check_password_hash(
+            row['password_hash'], password or ''):
+        failed = (row.get('failed') or 0) + 1
+        values = {'failed': failed}
+        if failed >= LOCK_AFTER:
+            values['locked_until'] = datetime.utcnow() + timedelta(minutes=LOCK_MINUTES)
+            values['failed'] = 0
+        with engine.begin() as conn:
+            conn.execute(update(console_users)
+                         .where(console_users.c.id == row['id']).values(**values))
+        return None, 'locked' if 'locked_until' in values else 'no'
+
+    with engine.begin() as conn:
+        conn.execute(update(console_users).where(console_users.c.id == row['id'])
+                     .values(failed=0, locked_until=None,
+                             last_login_at=datetime.utcnow()))
+    return row, None
+
+
+# --------------------------------------------------------------------------
+# Questions from the public site
+
+
+def add_support_request(engine, **fields):
+    allowed = {c.name for c in support_requests.columns} - {'id', 'created_at',
+                                                            'answered_at'}
+    row = {k: v for k, v in fields.items() if k in allowed}
+    with engine.begin() as conn:
+        conn.execute(insert(support_requests).values(**row))
+
+
+def all_support_requests(engine, limit=200):
+    with engine.connect() as conn:
+        rows = conn.execute(select(support_requests).order_by(
+            support_requests.c.created_at.desc()).limit(limit)).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def mark_support_answered(engine, request_id):
+    with engine.begin() as conn:
+        conn.execute(update(support_requests)
+                     .where(support_requests.c.id == request_id)
+                     .values(answered_at=datetime.utcnow()))
+
+
+def unanswered_support(engine):
+    from sqlalchemy import func
+    with engine.connect() as conn:
+        return conn.execute(
+            select(func.count()).select_from(support_requests)
+            .where(support_requests.c.answered_at.is_(None))).scalar() or 0

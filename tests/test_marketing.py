@@ -214,8 +214,10 @@ check("toDataURL('image/jpeg', 0.7)" in widget,
 cp = open(_o.path.join(_r, 'control_plane.py')).read()
 check("'feedback', control_metadata" in cp,
       'it is stored in the control plane, not in a tenant schema')
-check('tables=[organizations, product_leads, feedback]' in cp,
-      'and the table is created with the others')
+# By name rather than by the whole list, which grows. Anchored on the real
+# call, not the first mention of create_all -- which is in a docstring.
+_call = cp.split('control_metadata.create_all')[1][:220]
+check('feedback' in _call, 'and the table is created with the others')
 
 # A note that arrives beats a note refused for being too big.
 fb = open(_o.path.join(_r, 'blueprints', 'feedback.py')).read()

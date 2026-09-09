@@ -1,0 +1,45 @@
+{% extends "console/_shell.html" %}
+{% block title %}People{% endblock %}
+{% block body %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Who can see this</h2>
+<table class="con">
+  <tr><th>Email</th><th>Name</th><th>Role</th><th>Last in</th><th></th></tr>
+  {% for r in rows %}
+  <tr style="{{ 'opacity:.5' if not r.active }}">
+    <td>{{ r.email }}</td>
+    <td>{{ r.name or '—' }}</td>
+    <td>{{ r.role }}</td>
+    <td>{{ r.last_login_at.strftime('%d %b, %H:%M') if r.last_login_at else 'never' }}</td>
+    <td>
+      {% if me.role == 'owner' and r.active and r.email != me.email %}
+      <form method="post" action="{{ url_for('console.turn_off', email=r.email) }}">
+        <button class="btn btn-outline btn-sm" type="submit">Switch off</button>
+      </form>
+      {% elif not r.active %}off{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if me.role == 'owner' %}
+<h2 style="font-size:1.05rem;margin:var(--s6) 0 var(--s3)">Add somebody</h2>
+<form method="post" action="{{ url_for('console.add_person') }}"
+      style="background:var(--surface);border:1px solid var(--line);
+             border-radius:var(--r);padding:var(--s4);max-width:520px">
+  <input type="email" name="email" placeholder="their email" required
+         style="width:100%;margin-bottom:var(--s3)">
+  <input type="text" name="name" placeholder="their name"
+         style="width:100%;margin-bottom:var(--s3)">
+  <input type="password" name="password" placeholder="a password, 12 characters or more"
+         required minlength="12" style="width:100%;margin-bottom:var(--s3)">
+  <label style="display:block;font-size:var(--t-sm);color:var(--muted);margin-bottom:var(--s3)">
+    <input type="checkbox" name="role" value="owner"> Let them add and remove people too
+  </label>
+  <button class="btn btn-primary btn-sm" type="submit">Add</button>
+  <p style="font-size:var(--t-xs);color:var(--softer);margin-top:var(--s3);line-height:1.5">
+    Tell them the password yourself. It is not emailed — an emailed password
+    sits in two inboxes forever.
+  </p>
+</form>
+{% endif %}
+{% endblock %}

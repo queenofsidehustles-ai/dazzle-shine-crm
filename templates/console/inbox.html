@@ -1,0 +1,63 @@
+{% extends "console/_shell.html" %}
+{% block title %}Reports{% endblock %}
+{% block body %}
+
+{% if support %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">
+  Questions from the website
+  {% if counts.support %}<span class="pill">{{ counts.support }}</span>{% endif %}
+</h2>
+{% for r in support %}
+<div class="con-item{{ ' done' if r.answered_at }}">
+  <div class="con-body">{{ r.body }}</div>
+  <div class="con-meta">
+    <strong>{{ r.name or 'no name given' }}</strong> · {{ r.email }} ·
+    {{ r.created_at.strftime('%d %b, %H:%M') if r.created_at }}
+    {% if r.page %} · from {{ r.page }}{% endif %}
+  </div>
+  {% if not r.answered_at %}
+  <form method="post" action="{{ url_for('console.support_done', request_id=r.id) }}"
+        style="margin-top:var(--s3)">
+    <a class="btn btn-outline btn-sm" href="mailto:{{ r.email }}?subject=Re: your question about {{ PRODUCT }}">Reply</a>
+    <button class="btn btn-outline btn-sm" type="submit">Mark answered</button>
+  </form>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+<h2 style="font-size:1.05rem;margin:var(--s6) 0 var(--s3)">From inside the product</h2>
+{% if not rows %}
+<div class="con-empty">Nothing yet. The feedback button is on every page of every company.</div>
+{% endif %}
+{% for r in rows %}
+<div class="con-item{{ ' done' if r.read_at }}">
+  <span class="con-tag {{ r.kind }}">{{ r.kind }}</span>
+  <div class="con-body" style="margin-top:var(--s2)">{{ r.body }}</div>
+  {% if r.shot_type %}
+  {# Loaded only when asked for. A page of full-size screenshots on a phone in
+     a car park is a page nobody waits for. #}
+  <a href="{{ url_for('console.shot', feedback_id=r.id) }}" target="_blank">
+    <img class="con-shot" loading="lazy"
+         src="{{ url_for('console.shot', feedback_id=r.id) }}"
+         alt="Screenshot from {{ r.org_slug or 'a tester' }}">
+  </a>
+  {% endif %}
+  <div class="con-meta">
+    <strong>{{ r.org_slug or 'unknown company' }}</strong> ·
+    {{ r.user_name or 'somebody' }} ({{ r.user_role or '—' }}) ·
+    {{ r.created_at.strftime('%d %b, %H:%M') if r.created_at }}<br>
+    {# The three things a report is useless without, and the three a tester
+       never remembers to include. #}
+    {{ r.page or '—' }} · {{ r.endpoint or '—' }} · {{ r.release or 'unknown release' }}
+    {% if r.viewport %} · {{ r.viewport }}{% endif %}
+  </div>
+  {% if not r.read_at %}
+  <form method="post" action="{{ url_for('console.mark_done', feedback_id=r.id) }}"
+        style="margin-top:var(--s3)">
+    <button class="btn btn-outline btn-sm" type="submit">Mark done</button>
+  </form>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}
