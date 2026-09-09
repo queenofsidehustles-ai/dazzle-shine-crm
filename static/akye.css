@@ -157,6 +157,25 @@ a  { color: var(--amber-deep); }
 }
 .sidebar nav .nav-sec:first-of-type { padding-top: var(--s2); }
 
+/* Semantic colours for a stat card, so the dashboard can say what a number
+   means without hex literals scattered through the template. Same roles the
+   money strip used; the strip stays for pages that want one dense row. */
+.stat-card.pos  .value { color: var(--good); }
+.stat-card.neg  .value { color: var(--warn); }
+.stat-card.warn .value { color: var(--amber-deep); }
+.stat-card.info .value { color: var(--info); }
+.stat-card.owed .value { color: var(--amber-deep); }
+.stat-card.hero { background: var(--amber-soft); border-color: var(--amber-line); }
+.stat-card.hero .value { color: var(--amber-deep); }
+.stat-card.hero .label { color: var(--amber-deep); }
+a.stat-card { text-decoration: none; color: inherit; display: block; }
+a.stat-card:hover { border-color: var(--amber-line); }
+
+/* An empty day, said in one line. It used to be a panel with an icon and a
+   button, which gave the least interesting thing on the page the most room. */
+.day-none { color: var(--muted); font-size: var(--t-sm); padding: var(--s2) 0; }
+.day-none a { color: var(--amber-deep); font-weight: 650; margin-left: var(--s2); }
+
 /* Choosing a voice. Only shown when the device offers more than one, because
    a menu with a single entry is a decision nobody gets to make. */
 .voice-pick { font-family: inherit; font-size: var(--t-xs); color: var(--muted);

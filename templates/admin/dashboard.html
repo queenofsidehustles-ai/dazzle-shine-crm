@@ -118,6 +118,65 @@
 </div>
 {% endif %}
 
+{# ── The numbers ───────────────────────────────────────────────────────────
+   Above the day's list rather than below it. This sat under Today and
+   Tomorrow, so on a quiet morning the first thing on the page was a large
+   panel saying nothing was booked -- and the figures, which are true every
+   day, were somewhere below the fold.
+
+   Cards rather than one joined strip: four boxes with air between them read
+   as four separate facts, which is what they are. #}
+{% if money %}
+<div class="stat-grid">
+  <a href="{{ url_for('money.pnl') }}" class="stat-card pos">
+    <div class="label">Money in — {{ this_month }}</div>
+    <div class="value">${{ '%.2f' % money.revenue }}</div>
+    <div class="sub">{{ money.jobs_paid }} job{{ 's' if money.jobs_paid != 1 }} paid</div>
+  </a>
+  <a href="{{ url_for('money.expenses') }}" class="stat-card neg">
+    <div class="label">Money out — {{ this_month }}</div>
+    <div class="value">${{ '%.2f' % money.total_out }}</div>
+    <div class="sub">pay, fees &amp; expenses</div>
+  </a>
+  <a href="{{ url_for('money.pnl') }}" class="stat-card hero">
+    <div class="label">Kept — {{ this_month }}</div>
+    <div class="value"{% if money.net_profit < 0 %} style="color:var(--warn)"{% endif %}>${{ '%.2f' % money.net_profit }}</div>
+    <div class="sub">{{ '%.1f' % money.margin }}% margin</div>
+  </a>
+  <div class="stat-card owed">
+    <div class="label">Still owed to you</div>
+    <div class="value">${{ '%.2f' % money.unpaid_outstanding }}</div>
+    <div class="sub">booked or done, not paid</div>
+  </div>
+</div>
+{% endif %}
+
+{# The four counts were being computed and passed to this page and then not
+   drawn at all. They answer "how much work is in the building", which the
+   money figures do not. #}
+<div class="stat-grid">
+  <a href="{{ url_for('bookings.index', status='pending') }}" class="stat-card warn">
+    <div class="label">Pending</div>
+    <div class="value">{{ pending }}</div>
+    <div class="sub">need confirming</div>
+  </a>
+  <a href="{{ url_for('bookings.index', status='confirmed') }}" class="stat-card info">
+    <div class="label">Confirmed</div>
+    <div class="value">{{ confirmed }}</div>
+    <div class="sub">upcoming jobs</div>
+  </a>
+  <a href="{{ url_for('bookings.index', status='completed') }}" class="stat-card pos">
+    <div class="label">Completed</div>
+    <div class="value">{{ completed }}</div>
+    <div class="sub">all time</div>
+  </a>
+  <a href="{{ url_for('bookings.clients') }}" class="stat-card">
+    <div class="label">Clients</div>
+    <div class="value">{{ total_clients }}</div>
+    <div class="sub">in your database</div>
+  </a>
+</div>
+
 {# ── Today ─────────────────────────────────────────────────────────────── #}
 <div class="card" style="margin-bottom:var(--s6)">
   <div class="section-header">
@@ -143,10 +202,11 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="empty compact">
-    <span class="icon">🗓</span>
-    <p>Nothing booked today.</p>
-    <a href="{{ url_for('bookings.new') }}" class="btn btn-primary btn-sm">Book a job</a>
+  {# One line, not a panel. An empty day is the least interesting thing on
+     the page and it was taking the most room on it. #}
+  <div class="day-none">
+    Nothing booked today.
+    <a href="{{ url_for('bookings.new') }}">Book a job</a>
   </div>
   {% endif %}
 </div>
@@ -176,35 +236,6 @@
       </span>
     </a>
     {% endfor %}
-  </div>
-</div>
-{% endif %}
-
-{# ── The money, as context ─────────────────────────────────────────────────
-   Cash basis: what actually landed and what is actually gone. Deliberately
-   one strip rather than four cards -- it matters, but it is not the thing
-   you open this page to do.                                              #}
-{% if money %}
-<div class="money-strip">
-  <a href="{{ url_for('money.pnl') }}" class="money-cell pos">
-    <div class="label">In · {{ this_month }}</div>
-    <div class="value">${{ '%.2f' % money.revenue }}</div>
-    <div class="sub">{{ money.jobs_paid }} job{{ 's' if money.jobs_paid != 1 }} paid</div>
-  </a>
-  <a href="{{ url_for('money.expenses') }}" class="money-cell neg">
-    <div class="label">Out · {{ this_month }}</div>
-    <div class="value">${{ '%.2f' % money.total_out }}</div>
-    <div class="sub">pay, fees &amp; expenses</div>
-  </a>
-  <a href="{{ url_for('money.pnl') }}" class="money-cell hero">
-    <div class="label">Kept</div>
-    <div class="value" {% if money.net_profit < 0 %}style="color:var(--warn)"{% endif %}>${{ '%.2f' % money.net_profit }}</div>
-    <div class="sub">{{ '%.1f' % money.margin }}% margin</div>
-  </a>
-  <div class="money-cell">
-    <div class="label">Owed to you</div>
-    <div class="value">${{ '%.2f' % money.unpaid_outstanding }}</div>
-    <div class="sub">booked or done, not paid</div>
   </div>
 </div>
 {% endif %}

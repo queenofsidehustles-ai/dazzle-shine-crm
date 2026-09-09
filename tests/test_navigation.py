@@ -121,4 +121,29 @@ with app.app_context():
     check('section-tabs' in html, 'the tab bar is on a section page')
     check('sidebarScroll' in html, 'and the sidebar remembers where it was scrolled to')
 
+print('\nThe dashboard leads with the numbers')
+# The figures sat below Today and Tomorrow, so on a quiet morning the first
+# thing on the page was a large panel saying nothing was booked -- and the
+# numbers, which are true every day, were below the fold.
+import os as _os
+_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+dash = open(_os.path.join(_root, 'templates', 'admin', 'dashboard.html')).read()
+money_at = dash.index("Money in —")
+today_at = dash.index("<h2>Today</h2>")
+check(money_at < today_at, 'the money is above the day list, not below it')
+
+# Cards, not one joined strip: four boxes with air between them read as four
+# separate facts, which is what they are.
+check(dash.count('class="stat-card') >= 8,
+      'eight cards — four money, four counts')
+check('money-strip' not in dash, 'the joined strip is gone from this page')
+
+# These four were computed, passed to the page, and then never drawn.
+for label in ('Pending', 'Confirmed', 'Completed', 'Clients'):
+    check(f'>{label}<' in dash, f'{label} is shown again')
+
+# An empty day is the least interesting thing on the page and was taking the
+# most room on it.
+check('day-none' in dash, 'an empty day is one line, not a panel')
+
 print('\n🎉 Navigation checks passed.')
