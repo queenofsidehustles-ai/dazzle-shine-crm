@@ -1,11 +1,16 @@
 """Create the first console account, from a terminal.
 
+This is also the only way back if an owner is ever locked out, which is why
+nobody can switch an owner off from inside the console. A terminal with the
+production database URL is the one place the founder can be certain of being
+the only person standing.
+
 Only the first one needs this. After that people are added from the People
 page by somebody who is already an owner -- which is the point of the console
 existing at all, since the whole problem was that everything cross-company
 required a terminal and a production database URL.
 
-    python3 console_admin.py add you@example.com "Your Name" --owner
+    python3 console_admin.py add you@example.com "Your Name" --role owner
     python3 console_admin.py password you@example.com
     python3 console_admin.py list
 
@@ -25,8 +30,11 @@ def main():
     ap.add_argument('action', choices=['add', 'password', 'list', 'off'])
     ap.add_argument('email', nargs='?')
     ap.add_argument('name', nargs='?', default='')
-    ap.add_argument('--owner', action='store_true',
-                    help='can add and remove other people')
+    ap.add_argument('--role', default='helper',
+                    choices=['owner', 'manager', 'helper'],
+                    help='owner: everything, and cannot be switched off from '
+                         'the console. manager: everything except touching an '
+                         'owner or another manager. helper: read and triage.')
     args = ap.parse_args()
 
     engine = provisioning._engine()
@@ -69,8 +77,7 @@ def main():
                   f'Use "password" to change it.')
             return 1
         control_plane.add_console_user(
-            engine, args.email, args.name, pw,
-            role='owner' if args.owner else 'staff')
+            engine, args.email, args.name, pw, role=args.role)
         print(f'\n  {args.email} can sign in at /console.\n')
     else:
         control_plane.set_console_password(engine, args.email, pw)

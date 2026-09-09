@@ -44,13 +44,16 @@ check("session.pop(SESSION_KEY, None)" in src,
       'so access removed mid-session ends the session')
 
 print('\n2. A helper cannot let somebody else in')
-check('def owner_only' in src, 'there is an owner-only gate')
-for route in ('add_person', 'turn_off'):
+check('def can_manage' in src, 'there is a gate on changing who has access')
+for route in ('add_person', 'turn_off', 'turn_on'):
     seg = src[src.index(f'def {route}') - 260:src.index(f'def {route}')]
-    check('@owner_only' in seg, f'{route} is behind it')
-# And the check is on the request, not on what the page chose to draw.
-check("(getattr(request, 'console_user', {}) or {}).get('role') != 'owner'" in src,
+    check('@can_manage' in seg, f'{route} is behind it')
+# The gate reads the signed-in account, never the form -- a hidden button is
+# a courtesy, and the route is asked again by anybody who posts straight at it.
+check("(getattr(request, 'console_user', {}) or {}).get('role')" in src,
       'the gate reads the account, not the form')
+check('control_plane.may_act_on(me[\'role\'], target[\'role\'])' in src,
+      'and each target is checked by rank as well as by the gate')
 
 print('\n3. A wrong password says nothing useful')
 cp = open(os.path.join(ROOT, 'control_plane.py')).read()
@@ -90,6 +93,50 @@ check('ask-trap' in ask and "data.get('company')" in src,
 check('reply_to=email' in src,
       'replying to the notification goes to them, not to us')
 
+print('\n6. You can act on somebody below you, never beside you or above you')
+import control_plane as _cp
+
+# The rule the owner asked for, stated once and applied everywhere: a second
+# pair of hands doing eighty per cent of the work must not be able to remove
+# the person who granted them the access.
+check(not _cp.may_act_on('manager', 'owner'),
+      'a manager cannot touch the owner')
+check(not _cp.may_act_on('manager', 'manager'),
+      'nor another manager — beside you counts as not below you')
+check(_cp.may_act_on('manager', 'helper'),
+      'but can bring in and remove helpers, which is the work')
+check(not _cp.may_act_on('helper', 'helper') and not _cp.may_act_on('helper', 'owner'),
+      'a helper acts on nobody at all')
+check(_cp.may_act_on('owner', 'manager') and _cp.may_act_on('owner', 'helper'),
+      'the owner can act on everybody below')
+check(not _cp.may_act_on('owner', 'owner'),
+      'and not on another owner, so nobody switches an owner off from here')
+
+# You cannot hand out your own level. Only the owner appoints a manager.
+check(not _cp.may_grant('manager', 'manager'), 'a manager cannot appoint a manager')
+check(not _cp.may_grant('manager', 'owner'), 'and certainly not an owner')
+check(_cp.may_grant('manager', 'helper'), 'a manager can appoint a helper')
+check(_cp.may_grant('owner', 'manager'), 'only the owner appoints a manager')
+check(not _cp.may_grant('owner', 'owner'), 'and even an owner cannot mint an owner here')
+
+# Somebody with no role at all is below everybody, not above.
+check(_cp.rank('') == 0 and not _cp.may_act_on('', 'helper'),
+      'an unknown role can do nothing')
+# The first version of this called a helper "staff". Those rows still exist.
+check(_cp.rank('staff') == _cp.rank('helper'),
+      'accounts made under the old name still rank as helpers')
+
+print('\n7. Every action is written down')
+check('def log_console' in cp, 'there is a record')
+for what in ("'signed in'", "'added'", "'switched off'", "'refused'",
+             "'marked done'"):
+    check(what in src, f'it records {what}')
+# A refused attempt is the most interesting line in it: it is the only way to
+# see somebody trying something they were not allowed to do.
+check("'refused'" in src, 'including attempts that were turned down')
+log_page = open(os.path.join(ROOT, 'templates', 'console', 'log.html')).read()
+check('Everybody with access can read this' in log_page,
+      'and everybody can read it, not only the owner')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')

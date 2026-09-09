@@ -56,11 +56,18 @@ def console_required(f):
     return wrapper
 
 
-def owner_only(f):
+def can_manage(f):
+    """Anybody who is allowed to bring somebody else in at all.
+
+    Which is not the same as being allowed to act on any particular person --
+    that is checked per target, because the whole point of the ranks is that a
+    manager can remove a helper and cannot remove the owner.
+    """
     @functools.wraps(f)
     def wrapper(*a, **kw):
-        if (getattr(request, 'console_user', {}) or {}).get('role') != 'owner':
-            flash('Only an owner can do that.', 'error')
+        role = (getattr(request, 'console_user', {}) or {}).get('role')
+        if control_plane.rank(role) < control_plane.rank('manager'):
+            flash('You are not able to change who has access.', 'error')
             return redirect(url_for('console.people'))
         return f(*a, **kw)
     return wrapper
@@ -76,6 +83,7 @@ def login():
             engine, email, request.form.get('password') or '')
         if user:
             session[SESSION_KEY] = user['email']
+            control_plane.log_console(engine, user['email'], 'signed in')
             nxt = request.args.get('next') or url_for('console.inbox')
             return redirect(nxt if nxt.startswith('/console') else url_for('console.inbox'))
         # One message for both "no such account" and "wrong password". Telling
@@ -107,14 +115,20 @@ def inbox():
 @console_bp.route('/feedback/<int:feedback_id>/done', methods=['POST'])
 @console_required
 def mark_done(feedback_id):
-    control_plane.mark_feedback_read(_engine(), feedback_id)
+    engine = _engine()
+    control_plane.mark_feedback_read(engine, feedback_id)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'marked done', f'report #{feedback_id}')
     return redirect(url_for('console.inbox'))
 
 
 @console_bp.route('/support/<int:request_id>/done', methods=['POST'])
 @console_required
 def support_done(request_id):
-    control_plane.mark_support_answered(_engine(), request_id)
+    engine = _engine()
+    control_plane.mark_support_answered(engine, request_id)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'marked answered', f'question #{request_id}')
     return redirect(url_for('console.inbox'))
 
 
@@ -138,46 +152,121 @@ def companies():
                            me=request.console_user, counts=_counts(engine))
 
 
+# What each level means, in the words somebody choosing would use.
+ROLE_MEANS = {
+    'owner': 'everything, and cannot be switched off from here',
+    'manager': 'everything except touching you or another manager',
+    'helper': 'read the reports and mark them done',
+}
+
+
 @console_bp.route('/people')
 @console_required
 def people():
     engine = _engine()
-    return render_template('console/people.html',
-                           rows=control_plane.console_users_all(engine),
-                           me=request.console_user, counts=_counts(engine))
+    me = request.console_user
+    return render_template(
+        'console/people.html',
+        rows=control_plane.console_users_all(engine),
+        # The same rule the routes enforce, so the page only draws buttons
+        # that would work. It is a courtesy, not the permission.
+        can_act=lambda role: control_plane.may_act_on(me['role'], role),
+        grantable=[r for r in control_plane.ROLES
+                   if control_plane.may_grant(me['role'], r)],
+        ROLE_MEANS=ROLE_MEANS,
+        me=me, counts=_counts(engine))
 
 
 @console_bp.route('/people/add', methods=['POST'])
 @console_required
-@owner_only
+@can_manage
 def add_person():
     engine = _engine()
+    me = request.console_user
     email = (request.form.get('email') or '').strip().lower()
     name = (request.form.get('name') or '').strip()
     password = request.form.get('password') or ''
-    role = 'owner' if request.form.get('role') == 'owner' else 'staff'
+    role = (request.form.get('role') or 'helper').strip().lower()
+
+    # You cannot hand out your own level, only something under it. So a
+    # manager brings in helpers and only the owner appoints a manager.
+    if not control_plane.may_grant(me['role'], role):
+        flash(f'You cannot give somebody {role} access.', 'error')
+        return redirect(url_for('console.people'))
     if not email or len(password) < 12:
         flash('An email and a password of at least 12 characters.', 'error')
         return redirect(url_for('console.people'))
     if control_plane.console_user(engine, email):
         flash('That email is already on the list.', 'error')
         return redirect(url_for('console.people'))
+
     control_plane.add_console_user(engine, email, name, password, role)
-    flash(f'{email} can sign in now. Tell them the password yourself — '
-          f'it is not emailed.', 'success')
+    control_plane.log_console(engine, me['email'], 'added', email,
+                              f'as {role}')
+    flash(f'{email} can sign in now as {role}. Tell them the password '
+          f'yourself — it is not emailed.', 'success')
     return redirect(url_for('console.people'))
 
 
 @console_bp.route('/people/<path:email>/off', methods=['POST'])
 @console_required
-@owner_only
+@can_manage
 def turn_off(email):
-    if email == request.console_user['email']:
+    engine = _engine()
+    me = request.console_user
+    target = control_plane.console_user(engine, email)
+
+    if not target:
+        flash('Nobody by that email.', 'error')
+    elif email == me['email']:
         flash('You cannot switch off your own access.', 'error')
+    elif not control_plane.may_act_on(me['role'], target['role']):
+        # The rule the owner asked for, and it is the same rule for everybody:
+        # you may act on somebody below you, never beside you or above you. So
+        # a manager cannot switch off the owner or another manager, and no
+        # amount of console access reaches the person who granted it.
+        flash(f'You cannot change access for somebody who is '
+              f'{target["role"]}.', 'error')
+        article = 'an' if target['role'][0] in 'aeiou' else 'a'
+        control_plane.log_console(engine, me['email'], 'refused', email,
+                                  f'tried to switch off {article} {target["role"]}')
     else:
-        control_plane.set_console_active(_engine(), email, False)
+        control_plane.set_console_active(engine, email, False)
+        control_plane.log_console(engine, me['email'], 'switched off', email,
+                                  f'was {target["role"]}')
         flash(f'{email} can no longer sign in.', 'success')
     return redirect(url_for('console.people'))
+
+
+@console_bp.route('/people/<path:email>/on', methods=['POST'])
+@console_required
+@can_manage
+def turn_on(email):
+    """Put somebody back. Same rule, so a manager cannot restore an owner."""
+    engine = _engine()
+    me = request.console_user
+    target = control_plane.console_user(engine, email)
+    if not target:
+        flash('Nobody by that email.', 'error')
+    elif not control_plane.may_act_on(me['role'], target['role']):
+        flash(f'You cannot change access for somebody who is '
+              f'{target["role"]}.', 'error')
+    else:
+        control_plane.set_console_active(engine, email, True)
+        control_plane.log_console(engine, me['email'], 'switched on', email)
+        flash(f'{email} can sign in again.', 'success')
+    return redirect(url_for('console.people'))
+
+
+@console_bp.route('/log')
+@console_required
+def log():
+    """Who did what. Everybody with access can read it, including helpers --
+    a record only the boss can see is a record the boss has to be asked for."""
+    engine = _engine()
+    return render_template('console/log.html',
+                           rows=control_plane.console_log_all(engine),
+                           me=request.console_user, counts=_counts(engine))
 
 
 def _counts(engine):

@@ -55,6 +55,8 @@
        class="{{ 'on' if request.endpoint == 'console.companies' }}">Companies</a>
     <a href="{{ url_for('console.people') }}"
        class="{{ 'on' if request.endpoint == 'console.people' }}">People</a>
+    <a href="{{ url_for('console.log') }}"
+       class="{{ 'on' if request.endpoint == 'console.log' }}">Record</a>
     <span class="right">
       {{ me.name or me.email }}
       <a href="{{ url_for('console.logout') }}">Sign out</a>

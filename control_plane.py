@@ -147,9 +147,15 @@ console_users = Table(
     Column('email', String(200), unique=True, index=True),
     Column('name', String(120)),
     Column('password_hash', String(255)),
-    # 'owner' can add and remove people. 'staff' can read and triage.
-    # An assistant does not need the power to grant somebody else access.
-    Column('role', String(20), default='staff'),
+    # owner > manager > helper, and the rule is the same everywhere: you can
+    # only act on somebody below you. Never beside you, never above you.
+    #
+    # That is what makes a second full-time pair of hands safe. A manager does
+    # nearly everything -- reads and triages every report, sees every company,
+    # brings in and removes helpers -- and cannot touch the owner or another
+    # manager. Only the owner appoints a manager, and nobody can switch the
+    # owner off through the console at all.
+    Column('role', String(20), default='helper'),
     Column('active', Boolean, default=True),
     Column('created_at', DateTime, default=datetime.utcnow),
     Column('last_login_at', DateTime),
@@ -158,6 +164,23 @@ console_users = Table(
     # limited anything before.
     Column('failed', Integer, default=0),
     Column('locked_until', DateTime),
+)
+
+
+# What was done in the console, and by whom.
+#
+# One person needs no record. Two people need one immediately: "who marked
+# that done" and "who switched that off" are the first questions asked the
+# moment access is shared, and a system that only keeps the outcome cannot
+# answer either.
+console_log = Table(
+    'console_log', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('actor', String(200), index=True),
+    Column('action', String(40)),
+    Column('target', String(200)),
+    Column('detail', String(400)),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
 )
 
 
@@ -221,7 +244,7 @@ def ensure_table(engine):
     """Create the control-plane table if it is not there. Safe to call always."""
     control_metadata.create_all(
         engine, tables=[organizations, product_leads, feedback,
-                        console_users, support_requests])
+                        console_users, support_requests, console_log])
     ensure_columns(engine)
 
 
@@ -410,6 +433,37 @@ def unread_feedback(engine):
 LOCK_AFTER = 6
 LOCK_MINUTES = 15
 
+# owner > manager > helper. One rule follows from the order and covers every
+# case: you may only act on somebody strictly below you, and may only hand out
+# a role strictly below your own.
+#
+#   owner   — everything, and cannot be switched off through the console by
+#             anybody, including another owner. Recovery is console_admin.py
+#             from a terminal, which is the one place the founder can be sure
+#             of being the only person standing.
+#   manager — the eighty per cent: reads and triages every report, sees every
+#             company, brings in and removes helpers. Cannot touch an owner or
+#             another manager, and cannot appoint a manager.
+#   helper  — reads and triages. Grants nobody anything.
+RANK = {'owner': 3, 'manager': 2, 'helper': 1,
+        # What the first version of this called them.
+        'staff': 1}
+ROLES = ('owner', 'manager', 'helper')
+
+
+def rank(role):
+    return RANK.get((role or '').strip().lower(), 0)
+
+
+def may_act_on(actor_role, target_role):
+    """Strictly below. Not beside, not above."""
+    return rank(actor_role) > rank(target_role)
+
+
+def may_grant(actor_role, new_role):
+    """You cannot hand out your own level, only something under it."""
+    return new_role in ROLES and rank(actor_role) > rank(new_role)
+
 
 def console_user(engine, email):
     with engine.connect() as conn:
@@ -519,3 +573,33 @@ def unanswered_support(engine):
         return conn.execute(
             select(func.count()).select_from(support_requests)
             .where(support_requests.c.answered_at.is_(None))).scalar() or 0
+
+
+# --------------------------------------------------------------------------
+# What was done, and by whom
+
+
+def log_console(engine, actor, action, target=None, detail=None):
+    """Write one line. Never raises -- a lost log line must not lose the work."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(console_log).values(
+                actor=(actor or '')[:200], action=(action or '')[:40],
+                target=(target or '')[:200] or None,
+                detail=(detail or '')[:400] or None))
+    except Exception:
+        pass
+
+
+def console_log_all(engine, limit=300):
+    with engine.connect() as conn:
+        rows = conn.execute(select(console_log).order_by(
+            console_log.c.created_at.desc()).limit(limit)).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def set_console_role(engine, email, role):
+    with engine.begin() as conn:
+        conn.execute(update(console_users)
+                     .where(console_users.c.email == (email or '').strip().lower())
+                     .values(role=role))

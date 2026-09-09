@@ -2,6 +2,12 @@
 {% block title %}People{% endblock %}
 {% block body %}
 <h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Who can see this</h2>
+<p style="color:var(--muted);font-size:var(--t-sm);line-height:1.6;margin:0 0 var(--s4);max-width:640px">
+  One rule, everywhere: you can act on somebody below you, never beside you or
+  above you. So a manager brings in and removes helpers, and cannot touch
+  another manager or the owner. Nobody can switch the owner off from here at
+  all — that takes a terminal.
+</p>
 <table class="con">
   <tr><th>Email</th><th>Name</th><th>Role</th><th>Last in</th><th></th></tr>
   {% for r in rows %}
@@ -11,17 +17,25 @@
     <td>{{ r.role }}</td>
     <td>{{ r.last_login_at.strftime('%d %b, %H:%M') if r.last_login_at else 'never' }}</td>
     <td>
-      {% if me.role == 'owner' and r.active and r.email != me.email %}
-      <form method="post" action="{{ url_for('console.turn_off', email=r.email) }}">
-        <button class="btn btn-outline btn-sm" type="submit">Switch off</button>
-      </form>
+      {# Only shown where it would work. The route checks the same rule again,
+         because a hidden button is a courtesy and not a permission. #}
+      {% if r.email != me.email and can_act(r.role) %}
+        {% if r.active %}
+        <form method="post" action="{{ url_for('console.turn_off', email=r.email) }}">
+          <button class="btn btn-outline btn-sm" type="submit">Switch off</button>
+        </form>
+        {% else %}
+        <form method="post" action="{{ url_for('console.turn_on', email=r.email) }}">
+          <button class="btn btn-outline btn-sm" type="submit">Switch back on</button>
+        </form>
+        {% endif %}
       {% elif not r.active %}off{% endif %}
     </td>
   </tr>
   {% endfor %}
 </table>
 
-{% if me.role == 'owner' %}
+{% if grantable %}
 <h2 style="font-size:1.05rem;margin:var(--s6) 0 var(--s3)">Add somebody</h2>
 <form method="post" action="{{ url_for('console.add_person') }}"
       style="background:var(--surface);border:1px solid var(--line);
@@ -32,9 +46,12 @@
          style="width:100%;margin-bottom:var(--s3)">
   <input type="password" name="password" placeholder="a password, 12 characters or more"
          required minlength="12" style="width:100%;margin-bottom:var(--s3)">
-  <label style="display:block;font-size:var(--t-sm);color:var(--muted);margin-bottom:var(--s3)">
-    <input type="checkbox" name="role" value="owner"> Let them add and remove people too
-  </label>
+  <label style="display:block;font-size:var(--t-xs);color:var(--softer);margin-bottom:4px">What they can do</label>
+  <select name="role" style="width:100%;margin-bottom:var(--s3)">
+    {% for r in grantable %}
+    <option value="{{ r }}">{{ r }} — {{ ROLE_MEANS[r] }}</option>
+    {% endfor %}
+  </select>
   <button class="btn btn-primary btn-sm" type="submit">Add</button>
   <p style="font-size:var(--t-xs);color:var(--softer);margin-top:var(--s3);line-height:1.5">
     Tell them the password yourself. It is not emailed — an emailed password
