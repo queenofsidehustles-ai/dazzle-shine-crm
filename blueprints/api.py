@@ -417,7 +417,12 @@ def insurance_expiry():
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
-    if not automations.is_enabled('insurance-expiry'):
+    # The per-business on/off switch exists on the multi-company product and
+    # not on a single-business CRM, where the owner runs their own clock and
+    # switching a job off means not calling it. Missing means on, so one line
+    # is correct on both.
+    switch = getattr(automations, 'is_enabled', None)
+    if switch and not switch('insurance-expiry'):
         return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
 
     import compliance
