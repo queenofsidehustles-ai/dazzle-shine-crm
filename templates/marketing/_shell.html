@@ -81,10 +81,17 @@
       letter-spacing:.06em; margin-top:3px;
     }
 
-    nav { margin-left:auto; display:flex; gap:22px; align-items:center; }
-    nav a { color:var(--muted); text-decoration:none; font-weight:550; font-size:.94rem;
-            white-space:nowrap; }
-    nav a:hover { color:var(--ink); }
+    /* Scoped, like the link rule below it. A bare `nav` selector also caught
+       the guide's table of contents, which is correctly a <nav> too, and laid
+       it out as a flex row -- the label ended up beside the list instead of
+       above it, and the whole page ran off the side of a phone. */
+    header nav { margin-left:auto; display:flex; gap:22px; align-items:center; }
+    /* Scoped to the header. A bare `nav a` rule also caught the table of
+       contents on the guide, where refusing to wrap pushed the whole page
+       sideways on a phone -- which is where most of that page is read. */
+    header nav a { color:var(--muted); text-decoration:none; font-weight:550;
+                   font-size:.94rem; white-space:nowrap; }
+    header nav a:hover { color:var(--ink); }
 
     /* A button lit from above: brighter along the top edge, deeper at the
        bottom, with a hairline of white inside the top rim. That is what makes
@@ -206,6 +213,7 @@
         <span class="say">ah-CHEH<span class="wide-only"> · “good morning”</span></span>
       </a>
       <nav>
+        <a class="wide-only" href="{{ url_for('marketing.guide') }}">Start a business</a>
         <a class="wide-only" href="{{ url_for('marketing.pricing') }}">Pricing</a>
         <a href="/login">Sign in</a>
         {# The door being shut is not a reason to have no call to action. It
@@ -227,6 +235,7 @@
       <strong>{{ PRODUCT }}</strong> — {{ TAGLINE }}<br />
       <span style="color:var(--softer)">ah-CHEH · “good morning”</span><br />
       <span style="display:inline-block;margin-top:8px">
+        <a href="{{ url_for('marketing.guide') }}">How to start a cleaning business</a> ·
         <a href="{{ url_for('marketing.pricing') }}">Pricing</a> ·
         <a href="{{ url_for('marketing.security') }}">Security</a> ·
         <a href="{{ url_for('marketing.terms') }}">Terms</a> ·

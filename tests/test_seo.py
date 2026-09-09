@@ -169,4 +169,58 @@ for path in ('/robots.txt', '/sitemap.xml'):
 if failures:
     print(f'\n\n❌ {len(failures)} SEO check(s) failed.\n')
     sys.exit(1)
+print('\nThe guide people arrive on before they want software')
+import json as _json
+r = c.get('/how-to-start-a-cleaning-business', headers=PRODUCT)
+check(r.status_code == 200, 'the guide loads')
+page = r.data.decode()
+
+# The address is the search itself. Somebody scanning results reads the URL
+# as well as the title, and /guide tells nobody anything.
+check('how-to-start-a-cleaning-business' in
+      c.get('/sitemap.xml', headers=PRODUCT).data.decode(),
+      'and is in the sitemap, so it can be found at all')
+
+# Nationwide on purpose: rules differ everywhere and a page that names one
+# state is wrong for forty-nine others.
+for state in ('Florida', 'California', 'Texas', 'New York'):
+    check(state not in page, f'it does not claim to know the rules in {state}')
+check('differ by state' in page or 'differ by state and city' in page,
+      'it says plainly that the rules differ by state')
+check('not legal, tax or insurance advice' in page,
+      'and that this is not legal, tax or insurance advice')
+
+# The question that costs new owners the most money.
+check('1099' in page and 'W-2' in page,
+      'contractors versus employees is covered')
+check('misclassif' in page.lower(), 'including what happens if it is got wrong')
+
+# Written to be found. A heading matching a real search does more than a
+# keyword pushed into a paragraph.
+check('<h1>How to Start a Cleaning Business</h1>' in page, 'one h1, and it is the question')
+check(page.count('<h2') >= 10, 'a heading for each step somebody might search for')
+words = len(re.sub(r'<[^>]+>', ' ', page).split())
+check(words > 1500, f'and enough of an answer to be worth ranking ({words} words)')
+
+# Handed to search engines as data, so the questions can be answered in the
+# results themselves.
+ld = re.search(r'<script type="application/ld\+json">\s*(.*?)\s*</script>', page, re.S)
+check(ld is not None, 'there is structured data')
+data = _json.loads(ld.group(1))
+check(isinstance(data, dict), 'which is real JSON, not a string containing JSON')
+kinds = [n.get('@type') for n in data.get('@graph', [])]
+check('FAQPage' in kinds and 'Article' in kinds, f'describing the page and its questions ({kinds})')
+faq = [n for n in data['@graph'] if n['@type'] == 'FAQPage'][0]
+check(len(faq['mainEntity']) >= 6, 'with the questions in it')
+# Built from the same list the page renders, so the two cannot drift.
+import guide as _g
+check(len(faq['mainEntity']) == len(_g.FAQS),
+      'and exactly the questions the page shows')
+
+# The shell's bare `nav` rules caught this page's table of contents, laid it
+# out as a flex row and ran the whole thing off the side of a phone.
+shell = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates', 'marketing', '_shell.html')).read()
+check('header nav {' in shell and '\n    nav {' not in shell,
+      'the header nav rules are scoped to the header')
+
 print('\n\n✅ The site can be found, shared and understood.\n')

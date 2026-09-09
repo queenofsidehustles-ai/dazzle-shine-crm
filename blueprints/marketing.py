@@ -198,6 +198,18 @@ def workspace():
                            signups_open=signups_open())
 
 
+@marketing_bp.route('/how-to-start-a-cleaning-business')
+def guide():
+    """The long answer to the question this product's buyers ask first.
+
+    A URL that is the search itself, because a person scanning results reads
+    the address as well as the title, and /guide tells nobody anything.
+    """
+    _require_product_site()
+    import guide as guide_content
+    return render_template('marketing/guide.html', g=guide_content)
+
+
 @marketing_bp.route('/robots.txt')
 def robots():
     """What a crawler may look at.
@@ -233,6 +245,9 @@ def sitemap():
     pages = [
         ('/', '1.0'),
         (url_for('marketing.pricing'), '0.9'),
+        # Ranked with pricing on purpose: it is the page most strangers will
+        # arrive on, months before they are looking for software at all.
+        (url_for('marketing.guide'), '0.9'),
         (url_for('marketing.security'), '0.5'),
         (url_for('marketing.terms'), '0.3'),
         (url_for('marketing.privacy'), '0.3'),
