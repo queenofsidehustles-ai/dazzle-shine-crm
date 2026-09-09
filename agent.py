@@ -123,10 +123,34 @@ def run(question, history=None, api_key=None):
     messages.append({'role': 'user', 'content': question[:1000]})
 
     tools = tool_schema()
-    # Everything the tools actually returned. What she writes is checked
-    # against this, so a figure she invented cannot reach the screen.
-    seen = list(profile)
+    # What the tools actually returned. The business profile is checked
+    # against too -- her own phone number is a real fact -- but it is kept
+    # apart, because it is context she reads and never something to show.
+    seen = []
     proposal = None
+
+    def ask_again(bad_line):
+        """One more go, told exactly what was wrong with the last one."""
+        try:
+            r2 = requests.post(assistant.API_URL, timeout=45, headers={
+                'Authorization': f'Bearer {key}',
+                'Content-Type': 'application/json'},
+                json={'model': assistant.THINK_MODEL, 'max_tokens': 2000,
+                      'reasoning': {'effort': 'low'},
+                      'messages': messages + [{
+                          'role': 'user',
+                          'content': (
+                              'This sentence states a figure about my business '
+                              'that no tool gave you: "' + bad_line + '". Say '
+                              'the same thing again without it. Either leave '
+                              'the number out, or make plain that it is a '
+                              'target rather than something from my books. '
+                              'Everything else in your answer was fine — keep '
+                              'it.')}]})
+            p2 = r2.json()
+            return (p2['choices'][0]['message'].get('content') or '').strip()
+        except Exception:
+            return ''
 
     for step in range(MAX_STEPS):
         body = {
@@ -163,7 +187,8 @@ def run(question, history=None, api_key=None):
                     f'agent said nothing at step {step} '
                     f'(finish_reason={choice.get("finish_reason")})')
                 return {'say': assistant.TROUBLE['service-error']}
-            return _finish(said, seen, question, proposal)
+            return _finish(said, seen + profile, question, proposal,
+                           retry=ask_again)
 
         # She asked for something. Run it, hand back the result, go round again.
         messages.append(msg)
@@ -181,9 +206,8 @@ def run(question, history=None, api_key=None):
             })
 
     # Out of steps. Say what was found rather than nothing at all.
-    return _finish('\n'.join(seen[len(profile):]) or
-                   'I could not get to the bottom of that one.',
-                   seen, question, proposal)
+    return _finish(_plain(seen) or 'I could not get to the bottom of that one.',
+                   seen + profile, question, proposal)
 
 
 def _decode(call):
@@ -230,6 +254,16 @@ HEDGES = ('typical', 'usually', 'usual', 'most ', 'many ', 'around', 'roughly',
           'industry', 'in most', 'a rough', 'ballpark', 'somewhere between',
           'range', 'rule of thumb', 'per hour', 'benchmark')
 
+# A plan is made of numbers that are not facts. "Aim for three contracts" and
+# "call five of them this week" are things to do, not claims about the books,
+# and blocking them is what turned every game plan back into a wall of
+# figures. A target can be wrong without anybody being misled.
+GOALS = ('aim ', 'target', 'goal', 'try to', 'try for', 'go after', 'push for',
+         'would need', 'you could', 'you should', 'consider', 'if you', 'plan to',
+         'next step', 'this week', 'focus on', 'start with', 'book ', 'call ',
+         'reach out', 'follow up', 'add ', 'set a', 'shoot for', 'work toward',
+         'that would', 'each ', 'per week', 'per day', 'a week', 'a day')
+
 
 def _sentences(text):
     import re
@@ -255,16 +289,78 @@ def _figures_ok(said, sources):
         low = line.lower()
         if any(h in low for h in HEDGES):
             continue
+        if any(g in low for g in GOALS):
+            continue
         return False
     return True
 
 
-def _finish(said, seen, question, proposal):
-    """Check the figures, then hand it over."""
-    if not _figures_ok(said, seen + [question]):
-        assistant._record(f'agent answer dropped, a figure was not in the '
-                          f'tools: {said[:160]}')
-        said = '\n'.join(seen) or 'I could not find that.'
+def _unbacked(said, sources):
+    """The first sentence that states a figure nobody computed."""
+    for line in _sentences(said):
+        if assistant._grounded(line, sources):
+            continue
+        low = line.lower()
+        if any(h in low for h in HEDGES) or any(g in low for g in GOALS):
+            continue
+        return line.strip()
+    return ''
+
+
+def _finish(said, seen, question, proposal, retry=None):
+    """Check the figures, then hand it over.
+
+    When one does not check out the answer is not thrown away any more. She is
+    told which sentence was the problem and asked once for the same answer
+    without it -- because the old behaviour was to fall back to printing the
+    raw context, and the raw context includes the business profile she is
+    given to read. An owner asking for a game plan got her own phone number
+    read back at her, which is worse than any wrong figure would have been.
+    """
+    sources = seen + [question]
+    if _figures_ok(said, sources):
+        return _wrap(said, proposal)
+
+    bad = _unbacked(said, sources)
+    assistant._record(f'agent figure not in the tools: {bad[:160]}')
+    if retry:
+        fixed = retry(bad)
+        if fixed and _figures_ok(fixed, sources):
+            return _wrap(fixed, proposal)
+        if fixed:
+            assistant._record('agent could not restate it without the figure')
+
+    # Still not right. Say what is certain, and never the profile -- that is
+    # context for her, not an answer for anybody.
+    facts = _plain(seen)
+    if facts:
+        return _wrap('Here is what I can tell you for certain:\n' + facts,
+                     proposal)
+    return _wrap('I could not put that together just now. Ask me again, or '
+                 'ask me for one piece of it at a time.', proposal)
+
+
+def _plain(seen):
+    """The tool results, once each, with nothing internal in them."""
+    out, done = [], set()
+    for line in seen:
+        line = (line or '').strip()
+        # Repeats happen when she calls the same tool twice in a loop, and a
+        # thing said twice reads as a fault whatever else is right.
+        if not line or line in done or _is_profile(line):
+            continue
+        done.add(line)
+        out.append(line)
+    return '\n'.join(out)
+
+
+def _is_profile(line):
+    return line.startswith(('Business name:', 'Based in:', 'Website:',
+                            'Phone:', 'Services it books most:',
+                            'It does commercial work'))
+
+
+def _wrap(said, proposal):
     out = {'say': said}
     if proposal:
         out.update(proposal)

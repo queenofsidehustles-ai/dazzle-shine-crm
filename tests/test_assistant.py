@@ -744,6 +744,56 @@ with app.app_context():
     check('Start over' in page, 'which the page offers as Start over')
     check('function goodOnes' in page,
           'the voice list is trimmed to the few worth choosing between')
+    print('\n24. A rejected figure does not turn into a wall of context')
+    import agent as _ag
+
+    # What shipped: when a figure did not check out, the answer was replaced
+    # with everything the model had been given -- which starts with the
+    # business profile. An owner asking for a game plan to grow commercial
+    # revenue got her own phone number read back at her. That is worse than
+    # any wrong figure would have been.
+    PROFILE = ['Business name: Kojo', 'Based in: orlanda, FL',
+               'Phone: 4436310058', 'It does commercial work as well as homes']
+    RESULTS = ['$450.00 came in this month, across 2 paid jobs.',
+               '5 are due a call back today or earlier.']
+    shown = _ag._plain(RESULTS + PROFILE + RESULTS)
+    for leak in ('Business name', 'Phone:', 'Based in'):
+        check(leak not in shown, f'the fallback never shows {leak}')
+    check(shown.count('$450.00') == 1,
+          'and says a thing once, however many times a tool was called')
+
+    # A plan is made of numbers that are not facts. Blocking those is what
+    # turned every game plan back into the wall of figures it was meant to
+    # replace.
+    src = RESULTS + PROFILE + ['game plan for commercial this month']
+    for line in ('Call all 5 of the prospects due a callback this week.',
+                 'Aim for 3 new commercial contracts this month.',
+                 'You would need about 8 calls to get 2 walkthroughs.'):
+        check(_ag._figures_ok(line, src), f'a target is allowed: {line[:44]}')
+    for line in ('You made $9,900 this month.', 'Your margin is 62%.'):
+        check(not _ag._figures_ok(line, src),
+              f'a claim about the books is not: {line}')
+
+    # Rejected once, she is told what was wrong and asked again rather than
+    # having the whole answer thrown away.
+    tried = {}
+    def _retry(bad):
+        tried['bad'] = bad
+        return 'Aim for 3 new contracts this month — that is the target.'
+    out = _ag._finish('Your commercial revenue is $3,200.', RESULTS,
+                      'how do I grow commercial?', None, retry=_retry)
+    check('$3,200' in (tried.get('bad') or ''),
+          'she is told which sentence was the problem')
+    check('Aim for 3 new contracts' in out['say'],
+          'and the corrected answer is what gets shown')
+
+    # If the second go is no better, say so plainly rather than dumping.
+    out = _ag._finish('Your margin is 62%.', RESULTS, 'how am I doing?', None,
+                      retry=lambda bad: 'Your margin is 62%.')
+    check('62%' not in out['say'], 'a figure that survives two goes is dropped')
+    check('for certain' in out['say'] and '$450.00' in out['say'],
+          'and what is certain is offered instead')
+    check('Phone:' not in out['say'], 'still without the profile')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')
