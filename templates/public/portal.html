@@ -41,6 +41,7 @@
     .secure{text-align:center;color:var(--softer);font-size:0.78rem;margin-top:12px}
     .empty{color:var(--softer);font-size:0.9rem;padding:6px 0}
     a.link{color:var(--gold-deep);font-weight:600;text-decoration:none;font-size:0.88rem;white-space:nowrap}
+    .who { font-size: .82rem; color: var(--good); margin-top: 4px; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -90,6 +91,15 @@
           <div>
             <div class="svc">{{ b.service_label }}</div>
             <div class="meta">{{ b.preferred_date or 'Date flexible' }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</div>
+            {# Somebody is being let into a house. Being told a name beforehand
+               is the difference between an appointment and a stranger. Said
+               only when it is actually settled -- "we will let you know" is
+               better than a name that changes on the morning. #}
+            {% if b.crew_label %}
+            <div class="who">👤 {{ b.crew_label }} is coming</div>
+            {% elif b.assigned_cleaner %}
+            <div class="who">👤 {{ b.assigned_cleaner }} is coming</div>
+            {% endif %}
           </div>
           <div style="text-align:right">
             <div class="price">${{ '%.0f'|format(amount_due(b)) }}</div>
@@ -103,6 +113,61 @@
         {% endfor %}
       {% else %}
         <p class="empty">No upcoming cleanings scheduled. 🫧</p>
+      {% endif %}
+    </div>
+
+    <!-- ── Quotes waiting on them ──────────────────────────────
+         Only ever reachable from the one email they went out in, which is
+         where a quote goes to expire unanswered. -->
+    {% if quotes %}
+    <div class="card">
+      <h2>📄 Waiting on you</h2>
+      {% for q in quotes %}
+      <div class="row">
+        <div>
+          <div class="svc">{{ q.what }}</div>
+          <div class="meta">
+            {% if q.sent %}Sent {{ q.sent.strftime('%d %b') }}{% else %}Quote{% endif %}
+          </div>
+        </div>
+        <div style="text-align:right">
+          {% if q.price %}<div class="price">${{ '%.0f'|format(q.price) }}{% if q.per %} <span style="font-size:.7em;font-weight:500">{{ q.per }}</span>{% endif %}</div>{% endif %}
+          {% if q.link %}
+          <a class="btn" style="padding:7px 14px;margin-top:6px" href="{{ q.link }}">Read it</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- ── Ask for more work ───────────────────────────────────
+         A customer who wants another clean should not have to telephone
+         somebody who is up a ladder. It becomes an enquiry rather than a
+         booking: choosing a date is not the same as that date being free. -->
+    <div class="card">
+      <h2>🧹 Need another clean?</h2>
+      {% if session.get('portal_asked_' ~ client.id) %}
+        <p class="empty">Thanks — we have your request and will come back to you.</p>
+      {% else %}
+        <form method="post" action="{{ url_for('portal.request_work', token=token) }}">
+          <label style="display:block;margin-bottom:10px">
+            <span class="meta">What do you need?</span>
+            <input type="text" name="what" required
+                   placeholder="A deep clean before we host at Christmas"
+                   style="width:100%;padding:11px;margin-top:5px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:.95rem">
+          </label>
+          <label style="display:block;margin-bottom:12px">
+            <span class="meta">When suits you? (optional)</span>
+            <input type="text" name="when" placeholder="Any weekday morning"
+                   style="width:100%;padding:11px;margin-top:5px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:.95rem">
+          </label>
+          <button type="submit" class="btn" style="padding:9px 18px">Send it over</button>
+          <p class="meta" style="margin-top:9px">
+            We will check the calendar and come back to you — nothing is booked
+            until we confirm it.
+          </p>
+        </form>
       {% endif %}
     </div>
 
