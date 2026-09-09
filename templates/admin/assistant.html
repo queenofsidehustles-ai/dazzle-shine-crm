@@ -103,6 +103,14 @@
        owner mid-job, but silent to everybody meant nobody could tell the good
        voice had stopped working -- including the person who built it. #}
     <span id="voicenote" style="color:var(--softer);font-size:0.78rem"></span>
+    {# Stopping it matters more than starting it. An answer read out in the
+       wrong moment -- a customer walks in, somebody picks up the phone -- has
+       to be stoppable without closing the page. #}
+    <button type="button" id="hush" class="btn btn-outline btn-sm" hidden
+            onclick="hush()">Stop</button>
+    {# Which voice, when the device has more than one worth choosing between. #}
+    <select id="voicepick" class="voice-pick" hidden onchange="rememberVoice()"
+            aria-label="Voice"></select>
   </div>
 
   <div class="suggest">
@@ -197,18 +205,76 @@
                        'Microsoft Aria', 'Microsoft Jenny', 'Zira'];
   let chosenVoice = null;
 
+  function englishVoices() {
+    const all = speechSynthesis.getVoices();
+    const english = all.filter(v => (v.lang || '').toLowerCase().startsWith('en'));
+    return english.length ? english : all;
+  }
+
   function pickVoice() {
     if (!canSpeak) return;
-    const all = speechSynthesis.getVoices();
-    if (!all.length) return;                 // not loaded yet; the event re-runs this
-    const english = all.filter(v => (v.lang || '').toLowerCase().startsWith('en'));
-    const pool = english.length ? english : all;
+    const pool = englishVoices();
+    if (!pool.length) return;                // not loaded yet; the event re-runs this
+
+    // A voice chosen here before wins over anything we would guess.
+    let saved = null;
+    try { saved = localStorage.getItem('nana-voice'); } catch (e) {}
+    if (saved) {
+      const mine = pool.find(v => v.name === saved);
+      if (mine) { chosenVoice = mine; fillVoicePicker(pool); return; }
+    }
+
     for (const want of NICE_VOICES) {
       const hit = pool.find(v => (v.name || '').indexOf(want) === 0);
-      if (hit) { chosenVoice = hit; return; }
+      if (hit) { chosenVoice = hit; fillVoicePicker(pool); return; }
     }
     // Nothing known by name: a downloaded voice still beats the built-in one.
     chosenVoice = pool.find(v => v.localService === false) || pool[0] || null;
+    fillVoicePicker(pool);
+  }
+
+  function fillVoicePicker(pool) {
+    const sel = document.getElementById('voicepick');
+    if (!sel || pool.length < 2) return;     // no choice is not a choice
+    if (sel.options.length === pool.length) { sel.hidden = false; return; }
+    sel.innerHTML = '';
+    for (const v of pool) {
+      const o = document.createElement('option');
+      o.value = v.name;
+      o.textContent = v.name;
+      if (chosenVoice && v.name === chosenVoice.name) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.hidden = false;
+  }
+
+  function rememberVoice() {
+    const sel = document.getElementById('voicepick');
+    const pool = englishVoices();
+    const picked = pool.find(v => v.name === sel.value);
+    if (!picked) return;
+    chosenVoice = picked;
+    try { localStorage.setItem('nana-voice', picked.name); } catch (e) {}
+    // Say the name in the voice, so choosing one is a decision you can hear.
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('This is how I sound.');
+      u.voice = picked; u.lang = picked.lang; u.rate = 0.97; u.pitch = 1.06;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  function hush() {
+    // Both kinds of voice, because either one might be mid-sentence.
+    try { speechSynthesis.cancel(); } catch (e) {}
+    if (player) { try { player.pause(); } catch (e) {} }
+    const b = document.getElementById('hush');
+    if (b) b.hidden = true;
+  }
+
+  function showHush(on) {
+    const b = document.getElementById('hush');
+    if (b) b.hidden = !on;
   }
 
   if (canSpeak) {
@@ -228,6 +294,9 @@
       // Read aloud at 1.0/1.0 a money figure lands like a train announcement.
       u.rate = 0.97;
       u.pitch = 1.06;
+      u.onstart = function () { showHush(true); };
+      u.onend = function () { showHush(false); };
+      u.onerror = function () { showHush(false); };
       speechSynthesis.speak(u);
     } catch (e) {}
   }
@@ -264,6 +333,9 @@
     }).then(function (b) {
       if (player) { player.pause(); URL.revokeObjectURL(player.src); }
       player = new Audio(URL.createObjectURL(b));
+      player.onplay = function () { showHush(true); };
+      player.onended = function () { showHush(false); };
+      player.onpause = function () { showHush(false); };
       player.play().catch(function () {
         noteVoice('device');
         if (canSpeak) browserVoice(text);
@@ -285,7 +357,12 @@
 
     const wrap = document.createElement('div');
     wrap.className = 'said';
-    wrap.innerHTML = '<span class="q"></span>…';
+    // Three dots that actually move. A still ellipsis is indistinguishable
+    // from a page that did nothing, and a question that takes a few seconds to
+    // think about looks broken without it.
+    wrap.innerHTML = '<span class="q"></span>'
+                   + '<span class="thinking" aria-label="Thinking">'
+                   + '<i></i><i></i><i></i></span>';
     wrap.querySelector('.q').textContent = q;
     const answers = document.getElementById('answers');
     answers.prepend(wrap);

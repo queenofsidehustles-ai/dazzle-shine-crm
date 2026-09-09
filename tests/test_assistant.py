@@ -475,15 +475,17 @@ with app.app_context():
         # The key that already answers questions also reads them out. Nobody
         # has to sign up for a second account to be spoken to.
         os.environ['OPENROUTER_API_KEY'] = 'sk-or-test'
-        url, model, key = speech.provider()
+        url, models, key = speech.provider()
         check('openrouter.ai' in url and key == 'sk-or-test',
               'the OpenRouter key already in the deployment can speak')
-        check('/' in model,
-              f'using its own name for the model ({model})')
+        # More than one candidate, because the first name I picked was not
+        # served and that took the whole feature down silently.
+        check(len(models) > 1 and all('/' in m for m in models),
+              f'with several models to try, by their own names ({models})')
 
         # A direct OpenAI key, if one is ever added, is one hop fewer and wins.
         os.environ['OPENAI_API_KEY'] = 'sk-test'
-        url, model, key = speech.provider()
+        url, models, key = speech.provider()
         check('api.openai.com' in url and key == 'sk-test',
               'a direct key takes precedence when there is one')
         check(speech.configured() is True, 'with a key it is on')
@@ -749,6 +751,48 @@ with app.app_context():
     src = open(os.path.join(ROOT, 'prospecting.py')).read()
     check('brands.COMMERCIAL' in src,
           'outreach uses the commercial sender, not the residential one')
+    print('\n20. The page shows it is working, and can be told to stop')
+    page = open(os.path.join(ROOT, 'templates', 'admin', 'assistant.html')).read()
+    css = open(os.path.join(ROOT, 'static', 'akye.css')).read()
+
+    # A still ellipsis is indistinguishable from a page that did nothing, and
+    # an advice question takes a few seconds to come back.
+    check('class="thinking"' in page, 'a question shows something moving')
+    check('@keyframes nana-think' in css, 'and it actually animates')
+    check('prefers-reduced-motion' in css, 'unless the device asked it not to')
+
+    # Stopping matters more than starting: a customer walks in while an answer
+    # about their bill is being read aloud.
+    check('function hush()' in page, 'speech can be stopped')
+    check('speechSynthesis.cancel()' in page and 'player.pause()' in page,
+          'and both kinds of voice are stopped, not just one')
+    check('showHush(true)' in page, 'the stop button appears when speech starts')
+
+    # Which voice, when the device has more than one worth choosing between.
+    check("localStorage.setItem('nana-voice'" in page, 'a chosen voice is remembered')
+    check('pool.length < 2' in page,
+          'and no menu is offered when there is nothing to choose between')
+
+    print('\n21. A model that thinks before it writes is given room to')
+    src = open(os.path.join(ROOT, 'assistant.py')).read()
+    # gpt-5-mini spends tokens reasoning out of the same budget. At 600 it
+    # spent the lot and returned an empty message, so every piece of advice
+    # fell back to the raw fact list -- the exact wall of numbers this mode
+    # was built to replace.
+    check('THINK_MODEL, 2000' in src, 'the thinking budget covers thinking')
+    check("'reasoning': {'effort': 'low'}" in src,
+          'and it is told to think briefly rather than at length')
+    check('returned nothing to say' in src,
+          'an empty answer is recorded rather than silently falling back')
+
+    # And the voice tries more than one name, because being wrong about one
+    # should cost a retry, not the feature.
+    sp = open(os.path.join(ROOT, 'speech.py')).read()
+    check('ROUTER_MODELS' in sp and sp.count(',') > 0,
+          'the voice has more than one model to try')
+    check('_remember(model)' in sp, 'and remembers the one that answers')
+    check('no voice model answered' in sp,
+          'and says so somewhere a person can read when none do')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')

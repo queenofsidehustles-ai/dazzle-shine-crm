@@ -898,7 +898,12 @@ def _compose(question, facts, api_key=None, kind='lookup', profile=None):
             'on, say that and say what would help.\n\n'
             'Six sentences at most. Plain words. No headings, no bullet '
             'numbers, no exclamation marks, no motivational filler.')
-        model, budget = THINK_MODEL, 600
+        # gpt-5-mini reasons before it writes, and those tokens come out of the
+        # same budget. At 600 it spent the lot thinking and returned an empty
+        # message, _compose saw nothing, and every advice answer fell back to
+        # the raw computed lines -- which is exactly the flat wall of facts
+        # this mode existed to replace.
+        model, budget = THINK_MODEL, 2000
     else:
         system = (
             f'You are {NAME}, the assistant to the owner of a small cleaning '
@@ -923,14 +928,27 @@ def _compose(question, facts, api_key=None, kind='lookup', profile=None):
     try:
         r = requests.post(API_URL, timeout=25, headers={
             'Authorization': f'Bearer {key}', 'Content-Type': 'application/json',
-        }, json={'model': model, 'max_tokens': budget,
-                 'messages': [{'role': 'system', 'content': system},
-                              {'role': 'user', 'content': question[:500]}]})
+        }, json=dict({'model': model, 'max_tokens': budget,
+                      'messages': [{'role': 'system', 'content': system},
+                                   {'role': 'user', 'content': question[:500]}]},
+                     # Think a little, not at length. The answer is six
+                     # sentences of practical advice; a model left to reason
+                     # freely spends the budget and says nothing.
+                     **({'reasoning': {'effort': 'low'}}
+                        if kind == 'advice' else {})))
         payload = r.json()
         if isinstance(payload.get('error'), dict):
             _record(f'writing ({model}): ' + str(payload['error'].get('message'))[:200])
             return None
-        return (payload['choices'][0]['message']['content'] or '').strip() or None
+        said = (payload['choices'][0]['message']['content'] or '').strip()
+        if not said:
+            # Silent until now, and it is the failure that made every piece of
+            # advice come back as the raw fact list.
+            fin = (payload.get('choices') or [{}])[0].get('finish_reason')
+            _record(f'{model} returned nothing to say (finish_reason={fin}, '
+                    f'budget={budget})')
+            return None
+        return said
     except Exception as e:
         _record(f'could not write the answer: {type(e).__name__}')
         return None

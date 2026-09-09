@@ -45,15 +45,25 @@ ROUTER_URL = 'https://openrouter.ai/api/v1/audio/speech'
 # is here rather than tts-1: the voice can be told how to sound, and the
 # complaint that started this was that it had no personality.
 MODEL = os.environ.get('SPEECH_MODEL', 'gpt-4o-mini-tts')
-ROUTER_MODEL = os.environ.get('SPEECH_MODEL_ROUTER', 'openai/gpt-4o-mini-tts')
-VOICE = os.environ.get('SPEECH_VOICE', 'sage')
 
-# How she is asked to sound. Warm and unhurried, not bright and salesy --
-# she is mostly reading out money, some of it bad news.
-MANNER = (os.environ.get('SPEECH_MANNER') or
-          'Warm, calm and unhurried, like a trusted assistant talking to '
-          'someone they know well. Natural pace, gentle downward intonation '
-          'at the end of sentences. Never bright, chirpy or salesy.')
+# Which voice models to try through OpenRouter, best first.
+#
+# The first version named one model and nothing else. It was not served, every
+# request failed, the page fell back to the device voice exactly as designed --
+# and because that fallback is deliberately silent, it looked like the natural
+# voice simply sounded bad. I had checked that a web page existed for that
+# model, which is not the same as the API serving it.
+#
+# So it tries them in order and remembers the one that answers. Being wrong
+# about any single name now costs a retry rather than the whole feature.
+ROUTER_MODELS = [m.strip() for m in (
+    os.environ.get('SPEECH_MODELS_ROUTER')
+    or 'openai/gpt-4o-mini-tts,deepgram/aura-2,microsoft/mai-voice-2,'
+       'hexgrad/kokoro-82m,mistralai/voxtral-mini-tts-2603'
+).split(',') if m.strip()]
+
+# Which one last worked, so the failures are paid for once rather than nightly.
+WORKING_KEY = 'speech_model_working'
 
 # 60,000 characters is about 300 answers of the length Nana actually gives,
 # which is the most she will answer in a month anyway. At $15 per million
@@ -96,19 +106,42 @@ def _count(chars):
 
 
 def provider():
-    """(url, model, key) for whoever can speak, or None if nobody can.
+    """(url, models, key) for whoever can speak, or None if nobody can.
 
-    A direct OpenAI key wins when one is set, because it is one hop fewer.
-    Otherwise the OpenRouter key that is already answering questions does this
-    job too, and nothing new has to be signed up for.
+    A direct OpenAI key wins when one is set, because it is one hop fewer and
+    the model name there is certain. Otherwise the OpenRouter key that is
+    already answering questions does this job too, and nothing new has to be
+    signed up for.
     """
     direct = (os.environ.get('OPENAI_API_KEY') or '').strip()
     if direct:
-        return OPENAI_URL, MODEL, direct
+        return OPENAI_URL, [MODEL], direct
     router = (os.environ.get('OPENROUTER_API_KEY') or '').strip()
     if router:
-        return ROUTER_URL, ROUTER_MODEL, router
+        known = _remembered()
+        ordered = ([known] + [m for m in ROUTER_MODELS if m != known]
+                   if known else list(ROUTER_MODELS))
+        return ROUTER_URL, ordered, router
     return None
+
+
+def _remembered():
+    from models import BusinessSetting
+    try:
+        return (BusinessSetting.get(WORKING_KEY) or '').strip() or None
+    except Exception:
+        return None
+
+
+def _remember(model):
+    from extensions import db
+    from models import BusinessSetting
+    try:
+        if _remembered() != model:
+            BusinessSetting.set(WORKING_KEY, model)
+            db.session.commit()
+    except Exception:
+        pass
 
 
 def configured():
@@ -128,7 +161,7 @@ def say(text):
     who = provider()
     if not who:
         return None
-    url, model, key = who
+    url, models, key = who
     if len(text) > MAX_ONE:
         text = text[:MAX_ONE]
     if remaining() < len(text):
@@ -137,39 +170,54 @@ def say(text):
     _count(len(text))
     import requests
 
-    def attempt(body):
+    tried = []
+    for model in models:
+        body = {'model': model, 'input': text, 'response_format': 'mp3'}
+        # Voice names and the `instructions` string are OpenAI's. Sending them
+        # to a provider that has never heard of them is a refusal, so they go
+        # only where they mean something.
+        if model.endswith('gpt-4o-mini-tts') or url == OPENAI_URL:
+            body['voice'] = VOICE
+            body['instructions'] = MANNER
+        audio, why = _attempt(requests, url, key, body)
+        if audio:
+            _remember(model)
+            return audio
+        tried.append(f'{model}: {why}')
+
+    # Nobody could speak. The page reads it with the device voice and says so;
+    # this is the only place the actual reason exists.
+    _trouble('no voice model answered — ' + ' | '.join(tried)[:600])
+    return None
+
+
+def _attempt(requests, url, key, body):
+    """(audio, why-not) for one model."""
+    try:
+        r = requests.post(url, timeout=30, headers={
+            'Authorization': f'Bearer {key}',
+            'Content-Type': 'application/json',
+        }, json=body)
+    except Exception as e:
+        return None, type(e).__name__
+
+    if r.status_code == 200 and 'audio' in (r.headers.get('Content-Type') or ''):
+        return r.content, None
+
+    # `instructions` is the newest part of this API. A refusal is worth one
+    # more try without it before giving up on the model entirely.
+    if r.status_code == 400 and 'instructions' in body:
+        body = {k: v for k, v in body.items() if k != 'instructions'}
         try:
-            return requests.post(url, timeout=30, headers={
+            r = requests.post(url, timeout=30, headers={
                 'Authorization': f'Bearer {key}',
                 'Content-Type': 'application/json',
             }, json=body)
         except Exception as e:
-            _trouble(f'could not reach the voice service: {type(e).__name__}')
-            return None
-
-    body = {'model': model, 'voice': VOICE, 'input': text,
-            'instructions': MANNER, 'response_format': 'mp3'}
-    r = attempt(body)
-    if r is None:
-        return None
-
-    # `instructions` is how the voice is told to sound warm rather than flat,
-    # and it is the newest part of this API. If a provider has not got it yet,
-    # the answer should still be read aloud in a plain voice rather than not at
-    # all -- so a refusal is tried once more without it.
-    if r.status_code == 400 and 'instructions' in body:
-        body.pop('instructions')
-        r = attempt(body)
-        if r is None:
-            return None
-
-    # An error comes back as JSON where audio should be. Reading the content
-    # type is how we tell the two apart without guessing from the length.
-    if r.status_code != 200 or 'audio' not in (r.headers.get('Content-Type') or ''):
-        detail = r.text[:200] if r.status_code != 200 else 'no audio in the reply'
-        _trouble(f'voice service said {r.status_code}: {detail}')
-        return None
-    return r.content
+            return None, type(e).__name__
+        if r.status_code == 200 and 'audio' in (r.headers.get('Content-Type') or ''):
+            return r.content, None
+    return None, f'{r.status_code} {r.text[:120]}'
 
 
 def _trouble(detail):
