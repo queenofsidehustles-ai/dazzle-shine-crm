@@ -157,6 +157,66 @@ a  { color: var(--amber-deep); }
 }
 .sidebar nav .nav-sec:first-of-type { padding-top: var(--s2); }
 
+/* `hidden` has to actually hide.
+   The attribute's default rule is display:none at the very bottom of the
+   cascade, so any class that sets a display -- .btn is inline-flex -- silently
+   beats it. Thirteen places in this app toggle el.hidden, and the ones on a
+   .btn were never hidden at all: the microphone showed on browsers with no
+   speech recognition, and Stop showed while nothing was speaking. */
+[hidden] { display: none !important; }
+
+/* Beta feedback, on every screen.
+   Bottom-left rather than bottom-right: the right corner is where browser
+   extensions and chat widgets sit, and a button nobody can hit is not on
+   every page in any useful sense. */
+.fb-open { position: fixed; left: var(--s5); bottom: var(--s5); z-index: 60;
+           display: inline-flex; align-items: center; gap: 6px;
+           padding: 10px 16px; border-radius: var(--r-pill);
+           border: 1px solid var(--line); background: var(--surface);
+           color: var(--muted); font-family: inherit; font-size: var(--t-sm);
+           font-weight: 650; cursor: pointer; box-shadow: var(--shadow); }
+.fb-open:hover { color: var(--ink); border-color: var(--amber-line); }
+
+.fb-sheet { position: fixed; left: var(--s5); bottom: var(--s5); z-index: 61;
+            width: min(380px, calc(100vw - var(--s8)));
+            max-height: calc(100vh - var(--s10));
+            overflow-y: auto; padding: var(--s5);
+            background: var(--surface); border: 1px solid var(--line);
+            border-radius: var(--r-lg); box-shadow: var(--shadow-lg); }
+.fb-head { display: flex; align-items: center; justify-content: space-between;
+           margin-bottom: var(--s3); }
+.fb-x { background: none; border: 0; font-size: 1.4rem; line-height: 1;
+        color: var(--softer); cursor: pointer; padding: 0 4px; }
+.fb-x:hover { color: var(--ink); }
+
+.fb-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--s3); }
+.fb-kind { padding: 5px 11px; border-radius: var(--r-pill);
+           border: 1px solid var(--line); background: var(--surface);
+           color: var(--muted); font-family: inherit; font-size: var(--t-xs);
+           font-weight: 600; cursor: pointer; }
+.fb-kind.on { background: var(--amber-soft); border-color: var(--amber-line);
+              color: var(--amber-deep); }
+
+.fb-sheet textarea { width: 100%; padding: var(--s3); font-family: inherit;
+                     font-size: var(--t-sm); line-height: 1.55;
+                     border: 1px solid var(--line); border-radius: var(--r);
+                     background: var(--surface); color: var(--ink); resize: vertical; }
+.fb-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2);
+          margin-top: var(--s3); }
+.fb-send { justify-content: space-between; }
+.fb-file { cursor: pointer; }
+.fb-note { font-size: var(--t-xs); color: var(--softer); }
+.fb-small { margin-top: var(--s3); line-height: 1.5; }
+.fb-preview { display: block; margin-top: var(--s3); max-width: 100%;
+              border: 1px solid var(--line); border-radius: var(--r); }
+.fb-kind.listening, .btn.listening { border-color: var(--warn); color: var(--warn); }
+
+@media (max-width: 700px) {
+  .fb-open { left: var(--s3); bottom: var(--s3); padding: 9px 14px; }
+  .fb-sheet { left: var(--s3); right: var(--s3); bottom: var(--s3);
+              width: auto; }
+}
+
 /* Semantic colours for a stat card, so the dashboard can say what a number
    means without hex literals scattered through the template. Same roles the
    money strip used; the strip stays for pages that want one dense row. */

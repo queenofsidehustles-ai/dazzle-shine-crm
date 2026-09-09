@@ -93,6 +93,15 @@ missing = sorted(used_bare - defined)
 check(not missing,
       f'no rule asks for a colour that was never defined ({missing})')
 
+print('\n2c. Hiding something actually hides it')
+# The `hidden` attribute is styled by a browser default at the very bottom of
+# the cascade, so any class that sets a display beats it. .btn is inline-flex,
+# and every .btn in this app that gets toggled with el.hidden was therefore
+# never hidden: the microphone showed where speech recognition does not exist,
+# and Stop showed while nothing was speaking.
+check('[hidden] { display: none !important; }' in css_text,
+      'the stylesheet forces hidden to win over any display rule')
+
 print('\n3. No token is handed to a canvas or a chart')
 # This is the one that nearly shipped: `backgroundColor: 'var(--amber)'` in a
 # Chart.js dataset draws nothing. Resolve it with getComputedStyle first.

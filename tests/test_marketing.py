@@ -185,4 +185,40 @@ check('ah-CHEH<span class="wide-only">' in shell,
 footer = shell.split('<footer>')[1]
 check('good morning' in footer,
       'and what the name means is in the footer, where there is room')
+print('\nFeedback can be sent from any page, by anybody logged in')
+import os as _o
+_r = _o.path.dirname(_o.path.dirname(_o.path.abspath(__file__)))
+shell = open(_o.path.join(_r, 'templates', 'base_admin.html')).read()
+widget = open(_o.path.join(_r, 'templates', '_feedback.html')).read()
+
+# On every screen. A tester who has to go and find somewhere to report a
+# problem mostly does not, and the ones who do send "it broke".
+check("include '_feedback.html'" in shell, 'the widget is in the shell, not on one page')
+check("session.get('logged_in')" in shell, 'and only for somebody signed in')
+
+# Captured, not asked for. "It broke" from somebody who cannot remember which
+# page is the most common and least useful thing a beta tester sends.
+for field in ('page:', 'endpoint:', 'viewport:'):
+    check(field in widget, f'the report carries {field.strip(":")} by itself')
+check('release=_release()' in open(_o.path.join(_r, 'blueprints', 'feedback.py')).read(),
+      'and the release it was running')
+
+# Said out loud or photographed, not only typed.
+check('SpeechRecognition' in widget, 'it can be spoken instead of typed')
+check("accept=\"image/*\"" in widget, 'and a screenshot can be attached')
+check("toDataURL('image/jpeg', 0.7)" in widget,
+      'shrunk in the browser, because a phone photo of a screen is megabytes')
+
+# One place to read it all. Feedback inside each company's own database means
+# logging into every company to find out what the beta said.
+cp = open(_o.path.join(_r, 'control_plane.py')).read()
+check("'feedback', control_metadata" in cp,
+      'it is stored in the control plane, not in a tenant schema')
+check('tables=[organizations, product_leads, feedback]' in cp,
+      'and the table is created with the others')
+
+# A note that arrives beats a note refused for being too big.
+fb = open(_o.path.join(_r, 'blueprints', 'feedback.py')).read()
+check('shot, shot_type = None, None' in fb and 'MAX_SHOT_BYTES' in fb,
+      'an oversized screenshot loses the picture, not the words')
 print('\n\n✅ All marketing tests passed.\n')

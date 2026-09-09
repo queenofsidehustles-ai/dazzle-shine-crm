@@ -1,0 +1,169 @@
+{# The beta feedback button, on every screen.
+
+   Somebody who has to stop, find an email address and remember which page
+   they were on mostly does not bother -- and the ones who do send "it broke".
+   So it is here, it takes a picture and a voice note, and the page, the
+   release and the browser are captured rather than asked for. #}
+<button type="button" id="fbOpen" class="fb-open" onclick="fbToggle(true)"
+        aria-label="Send feedback">
+  <span aria-hidden="true">💬</span> Feedback
+</button>
+
+<div class="fb-sheet" id="fbSheet" hidden role="dialog" aria-modal="true"
+     aria-label="Send feedback">
+  <div class="fb-head">
+    <strong>What happened?</strong>
+    <button type="button" class="fb-x" onclick="fbToggle(false)"
+            aria-label="Close">×</button>
+  </div>
+
+  <div class="fb-kinds" id="fbKinds">
+    {% for key, label in [('issue', 'Something broke'), ('confusing', 'Confusing'),
+                          ('idea', 'Idea'), ('praise', 'This is good')] %}
+    <button type="button" data-kind="{{ key }}"
+            class="fb-kind{{ ' on' if key == 'issue' }}"
+            onclick="fbKind(this)">{{ label }}</button>
+    {% endfor %}
+  </div>
+
+  <textarea id="fbBody" rows="4" placeholder="Type it, or press the microphone and say it."></textarea>
+
+  <div class="fb-row">
+    <button type="button" id="fbMic" class="btn btn-outline btn-sm" hidden
+            onclick="fbListen()">🎤 Say it</button>
+    <label class="btn btn-outline btn-sm fb-file">
+      📷 Add a screenshot
+      <input type="file" id="fbShot" accept="image/*" onchange="fbPicked(this)" hidden>
+    </label>
+    <span id="fbShotName" class="fb-note"></span>
+  </div>
+
+  <img id="fbPreview" class="fb-preview" hidden alt="Your screenshot">
+
+  <div class="fb-row fb-send">
+    <span class="fb-note" id="fbSaid"></span>
+    <button type="button" class="btn btn-primary btn-sm" id="fbGo"
+            onclick="fbSend()">Send</button>
+  </div>
+  <p class="fb-note fb-small">
+    Sent with the page you are on and which version you are running, so nobody
+    has to remember. Nothing else from this screen is included unless you
+    attach a picture of it.
+  </p>
+</div>
+
+<script>
+  var fbKindValue = 'issue';
+  var fbShotData = null;
+
+  function fbToggle(open) {
+    document.getElementById('fbSheet').hidden = !open;
+    document.getElementById('fbOpen').hidden = open;
+    if (open) document.getElementById('fbBody').focus();
+  }
+
+  function fbKind(btn) {
+    fbKindValue = btn.getAttribute('data-kind');
+    var all = document.querySelectorAll('#fbKinds .fb-kind');
+    for (var i = 0; i < all.length; i++) all[i].classList.remove('on');
+    btn.classList.add('on');
+  }
+
+  // Shrunk here rather than on the server. A phone photograph of a screen is
+  // several megabytes; the useful part of it survives 1400px and quality 0.7,
+  // and what does not shrink does not arrive on a slow connection in a van.
+  function fbPicked(input) {
+    var f = input.files && input.files[0];
+    if (!f) return;
+    document.getElementById('fbShotName').textContent = 'Shrinking…';
+    var img = new Image();
+    img.onload = function () {
+      var scale = Math.min(1, 1400 / Math.max(img.width, img.height));
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      try {
+        fbShotData = c.toDataURL('image/jpeg', 0.7);
+      } catch (e) {
+        fbShotData = null;
+      }
+      var kb = fbShotData ? Math.round(fbShotData.length * 0.75 / 1024) : 0;
+      document.getElementById('fbShotName').textContent =
+        fbShotData ? 'Screenshot attached (' + kb + ' KB)' : 'Could not read that image.';
+      var prev = document.getElementById('fbPreview');
+      if (fbShotData) { prev.src = fbShotData; prev.hidden = false; }
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = function () {
+      document.getElementById('fbShotName').textContent = 'Could not read that image.';
+    };
+    img.src = URL.createObjectURL(f);
+  }
+
+  // Same speech recognition the assistant uses. Hidden where the browser does
+  // not have it, rather than offered and then failing.
+  (function () {
+    var Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (Rec) document.getElementById('fbMic').hidden = false;
+  })();
+
+  function fbListen() {
+    var Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Rec) return;
+    var btn = document.getElementById('fbMic');
+    var rec = new Rec();
+    rec.lang = document.documentElement.lang || 'en-US';
+    rec.interimResults = false;
+    btn.textContent = '● Listening';
+    btn.classList.add('listening');
+    rec.onresult = function (e) {
+      var said = e.results[0][0].transcript;
+      var box = document.getElementById('fbBody');
+      box.value = (box.value ? box.value.trim() + ' ' : '') + said;
+    };
+    rec.onerror = function () {
+      document.getElementById('fbSaid').textContent =
+        'Could not hear that — you can type it instead.';
+    };
+    rec.onend = function () {
+      btn.textContent = '🎤 Say it';
+      btn.classList.remove('listening');
+    };
+    try { rec.start(); } catch (e) { rec.onend(); }
+  }
+
+  function fbSend() {
+    var body = document.getElementById('fbBody').value.trim();
+    var said = document.getElementById('fbSaid');
+    if (!body) { said.textContent = 'Tell me what happened first.'; return; }
+    var go = document.getElementById('fbGo');
+    go.disabled = true;
+    said.textContent = 'Sending…';
+    fetch('{{ url_for("feedback.send") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: fbKindValue,
+        body: body,
+        shot: fbShotData,
+        page: location.pathname + location.search,
+        endpoint: '{{ request.endpoint or "" }}',
+        viewport: window.innerWidth + 'x' + window.innerHeight
+      })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      said.textContent = d.say || 'Sent.';
+      go.disabled = false;
+      if (d.ok) {
+        document.getElementById('fbBody').value = '';
+        fbShotData = null;
+        document.getElementById('fbPreview').hidden = true;
+        document.getElementById('fbShotName').textContent = '';
+        setTimeout(function () { fbToggle(false); said.textContent = ''; }, 1400);
+      }
+    }).catch(function () {
+      said.textContent = 'That did not go through. Try once more.';
+      go.disabled = false;
+    });
+  }
+</script>

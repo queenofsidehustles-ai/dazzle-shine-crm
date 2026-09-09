@@ -16,6 +16,7 @@ business running today never touches it.
 from datetime import datetime
 
 from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
+                        LargeBinary, Text,
                         Table, select, insert, update, text)
 
 # Its own MetaData: these tables must never be created inside a tenant schema,
@@ -99,6 +100,41 @@ product_leads = Table(
 )
 
 
+# Beta feedback, from any page of any company's CRM.
+#
+# In the control plane rather than in a tenant schema, for one reason: the
+# whole point is to read it in one place. Feedback filed inside each company's
+# own database would mean logging into every company to find out what the beta
+# said, which is how feedback stops being read.
+feedback = Table(
+    'feedback', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('org_slug', String(80), index=True),
+    Column('user_name', String(120)),
+    Column('user_role', String(30)),
+    # What they wrote or said. `kind` is their own label for it, so a bug and
+    # a wish can be told apart without reading all of them.
+    Column('kind', String(20), default='issue'),
+    Column('body', Text),
+    # Where they were and what they were running, captured rather than asked
+    # for. "It broke" from somebody who cannot remember which page is the most
+    # common and least useful thing a beta tester sends.
+    Column('page', String(300)),
+    Column('endpoint', String(120)),
+    Column('release', String(60)),
+    Column('user_agent', String(300)),
+    Column('viewport', String(20)),
+    # The screenshot, in the row. Railway's filesystem does not survive a
+    # deploy and there is no object store configured, so a handful of
+    # downscaled JPEGs in Postgres is the honest option at beta size. The
+    # client shrinks them before they are sent; see the widget.
+    Column('shot', LargeBinary),
+    Column('shot_type', String(40)),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
+    Column('read_at', DateTime),
+)
+
+
 def ensure_columns(engine):
     """Add any column this code expects and the table does not have.
 
@@ -142,7 +178,8 @@ def ensure_columns(engine):
 
 def ensure_table(engine):
     """Create the control-plane table if it is not there. Safe to call always."""
-    control_metadata.create_all(engine, tables=[organizations, product_leads])
+    control_metadata.create_all(
+        engine, tables=[organizations, product_leads, feedback])
     ensure_columns(engine)
 
 
@@ -265,3 +302,56 @@ def all_leads(engine):
     except Exception:
         return []
 
+
+
+# --------------------------------------------------------------------------
+# Feedback
+
+
+def add_feedback(engine, **fields):
+    """Record one piece of beta feedback. Returns its id."""
+    allowed = {c.name for c in feedback.columns} - {'id', 'created_at', 'read_at'}
+    row = {k: v for k, v in fields.items() if k in allowed}
+    with engine.begin() as conn:
+        res = conn.execute(insert(feedback).values(**row))
+    try:
+        return res.inserted_primary_key[0]
+    except Exception:
+        return None
+
+
+def all_feedback(engine, limit=200):
+    """Newest first, without the screenshots -- those are fetched one at a time."""
+    cols = [c for c in feedback.columns if c.name != 'shot']
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(*cols).order_by(feedback.c.created_at.desc()).limit(limit)
+        ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def feedback_shot(engine, feedback_id):
+    """(bytes, content-type) for one screenshot, or (None, None)."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(feedback.c.shot, feedback.c.shot_type)
+            .where(feedback.c.id == feedback_id)
+        ).first()
+    if not row or not row[0]:
+        return None, None
+    return row[0], (row[1] or 'image/jpeg')
+
+
+def mark_feedback_read(engine, feedback_id):
+    with engine.begin() as conn:
+        conn.execute(update(feedback)
+                     .where(feedback.c.id == feedback_id)
+                     .values(read_at=datetime.utcnow()))
+
+
+def unread_feedback(engine):
+    from sqlalchemy import func
+    with engine.connect() as conn:
+        return conn.execute(
+            select(func.count()).select_from(feedback)
+            .where(feedback.c.read_at.is_(None))).scalar() or 0

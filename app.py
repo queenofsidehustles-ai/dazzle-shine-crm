@@ -9,6 +9,7 @@ except Exception:
 from flask import Flask
 from extensions import db
 from blueprints.admin import admin_bp
+from blueprints.feedback import feedback_bp
 from blueprints.bookings import bookings_bp
 from blueprints.api import api_bp
 from blueprints.settings import settings_bp
@@ -198,6 +199,7 @@ def create_app():
     # it is paying for by editing its own records.
     import billing
     billing.install(app)
+    app.register_blueprint(feedback_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(bookings_bp)
     app.register_blueprint(api_bp)
