@@ -135,6 +135,32 @@
     </p>
   </div>
 
+  <!-- What it costs to keep it clean afterwards. Optional: plenty of jobs are
+       genuinely one-offs, and an empty box leaves the quote exactly as it was. -->
+  <div style="margin-top:18px;padding:14px;background:#f4f8f5;border-radius:10px">
+    <label class="dl" style="display:block;margin-bottom:5px">
+      And then keep it clean — every visit after the first <span style="font-weight:500;color:#9a95ad">(optional)</span>
+    </label>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <input name="recurring_price" type="number" step="0.01" min="0"
+             value="{{ '%.2f'|format(existing.recurring_price) if existing and existing.recurring_price else '' }}"
+             placeholder="Price per visit"
+             style="flex:1 1 150px;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
+      <select name="recurring_frequency"
+              style="flex:1 1 150px;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:1rem">
+        {% set rf = existing.recurring_frequency if existing else '' %}
+        <option value="">How often…</option>
+        <option value="weekly"   {{ 'selected' if rf == 'weekly' }}>Weekly</option>
+        <option value="biweekly" {{ 'selected' if rf == 'biweekly' }}>Every two weeks</option>
+        <option value="monthly"  {{ 'selected' if rf == 'monthly' }}>Monthly</option>
+      </select>
+    </div>
+    <p style="font-size:0.82rem;color:#9a95ad;margin-top:7px">
+      Fill this in and the quote shows both: what the first clean costs, and
+      what it costs to keep it that way. Leave it blank for a one-off.
+    </p>
+  </div>
+
   <div style="margin-top:18px;padding:14px;background:#faf9fd;border-radius:10px">
     <label class="dl" style="display:block;margin-bottom:5px">Cleaning price you quoted them</label>
     <input name="price" id="q-price" type="number" step="0.01" min="0"

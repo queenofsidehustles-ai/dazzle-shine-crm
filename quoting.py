@@ -307,6 +307,22 @@ def handle_quote_form(form, lsa_lead=None):
     lead.debris_fee = debris if debris > 0 else None
     lead.debris_note = (form.get('debris_note') or '').strip()[:120] or None
 
+    # And what it costs to keep it clean. Both halves or neither: a price with
+    # no cadence says nothing a customer can act on, and a cadence with no
+    # price is a promise to send a second email.
+    rec_price = (form.get('recurring_price') or '').strip()
+    rec_freq = (form.get('recurring_frequency') or '').strip()
+    try:
+        rec_price = round(float(rec_price), 2) if rec_price else None
+    except ValueError:
+        rec_price = None
+    if rec_price and rec_freq in ('weekly', 'biweekly', 'monthly'):
+        lead.recurring_price = rec_price
+        lead.recurring_frequency = rec_freq
+    else:
+        lead.recurring_price = None
+        lead.recurring_frequency = None
+
     # What she ticked, plus anything she typed in that they asked for on the
     # phone. Both are optional; leaving it all alone means the standard list.
     chosen = list(form.getlist('checklist'))
@@ -335,6 +351,19 @@ def link_lsa_caller(lead, lsa_lead=None):
     if rows:
         db.session.commit()
     return len(rows)
+
+
+EVERY = {'weekly': 'every week', 'biweekly': 'every two weeks',
+         'monthly': 'every month'}
+
+
+def recurring_line(lead):
+    """'$140 every two weeks after that', or nothing at all."""
+    price = getattr(lead, 'recurring_price', None)
+    freq = getattr(lead, 'recurring_frequency', None)
+    if not price or freq not in EVERY:
+        return ''
+    return f'${price:,.2f} {EVERY[freq]} after that'
 
 
 def price_breakdown(lead):
@@ -429,7 +458,18 @@ def send_quote(lead):
     discount_line = price_breakdown(lead)
     terms = scope_note(lead)
 
-    appended = '\n\n'.join(p for p in (discount_line, checklist, terms) if p)
+    # Both halves of the answer, in the order somebody asks them: what it costs
+    # to get the place right, then what it costs to keep it that way. Directly
+    # under the price rather than at the bottom -- the whole point is that they
+    # are read together.
+    keep = recurring_line(lead)
+    if keep:
+        keep = (f'Keeping it clean: {keep}. That is the price for every visit '
+                f'after the first one — no contract, change or stop it whenever '
+                f'you like.')
+
+    appended = '\n\n'.join(
+        p for p in (discount_line, keep, checklist, terms) if p)
 
     ok = send_triggered_email(
         trigger='lead_quote',

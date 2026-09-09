@@ -28,6 +28,9 @@ def view(token):
         # The same wording the quote email carries, from the same place, so the
         # page and the email can't come to promise different numbers of visits.
         scope_note=quoting.scope_note(lead),
+        # Same sentence as the email, from the same function, so the page and
+        # the email can never quote different recurring prices.
+        keep_line=quoting.recurring_line(lead),
         already=lead.status == 'converted',
     )
 

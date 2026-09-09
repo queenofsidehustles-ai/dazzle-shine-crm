@@ -617,6 +617,12 @@ class Lead(db.Model):
     sqft = db.Column(db.Integer)
     extras = db.Column(db.String(200))
     frequency = db.Column(db.String(20), default='one_time')
+    # The second half of a quote: what it costs to keep the place clean
+    # after the first one. Quoting the deep clean and the ongoing visits in
+    # two separate emails made a customer compare two numbers on two
+    # different days, and the second email is the one nobody opens.
+    recurring_price = db.Column(Money)
+    recurring_frequency = db.Column(db.String(20))   # weekly / biweekly / monthly
     address = db.Column(db.String(200))
     city = db.Column(db.String(50))
     zip_code = db.Column(db.String(10))

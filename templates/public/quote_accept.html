@@ -24,6 +24,14 @@
     .price-banner{background:var(--purple);border-radius:10px;padding:18px 20px;text-align:center;margin-bottom:20px}
     .price-banner .lbl{color:rgba(255,255,255,0.55);font-size:0.72rem;letter-spacing:0.14em;text-transform:uppercase}
     .price-banner .amt{color:var(--gold);font-size:2.4rem;font-weight:700;line-height:1.1}
+    .keep-banner{border:1px solid var(--line,#e4e0ee);border-radius:10px;
+                 padding:14px 18px;text-align:center;margin:-10px 0 20px;
+                 background:#f6f9f7}
+    .keep-banner .lbl{color:#6b7590;font-size:0.72rem;letter-spacing:0.14em;
+                      text-transform:uppercase;font-weight:700}
+    .keep-banner .amt{color:#1f1333;font-size:1.3rem;font-weight:700;
+                      line-height:1.3;margin-top:3px}
+    .keep-banner .note{display:block;color:#8a86a0;font-size:0.78rem;margin-top:4px}
     .price-banner .note{color:rgba(255,255,255,0.55);font-size:0.78rem;margin-top:4px}
     .summary{background:#faf9fd;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:20px}
     .summary .row{display:flex;justify-content:space-between;padding:5px 0;font-size:0.92rem}
@@ -90,6 +98,19 @@
         {% endif %}
         <span class="note">${{ '%.0f'|format(deposit) }} deposit to book · ${{ '%.2f'|format(balance) }} on the day</span>
       </div>
+
+      {# The second half of the answer, and the reason this is one quote rather
+         than two emails. Right under the first price so they are read
+         together: a deep clean looks expensive alone and sensible next to what
+         it costs to keep. #}
+      {% if keep_line %}
+      <div class="keep-banner">
+        <span class="lbl">Then keep it clean</span>
+        <div class="amt">{{ keep_line }}</div>
+        <span class="note">Every visit after the first. No contract — change
+          it or stop whenever you like.</span>
+      </div>
+      {% endif %}
 
       <div class="summary">
         <div class="row"><span class="k">Service</span><span class="v">{{ lead.service_label }}</span></div>
