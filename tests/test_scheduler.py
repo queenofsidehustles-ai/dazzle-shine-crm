@@ -40,10 +40,17 @@ print('\n1. It runs what the Automations page says runs')
 # and leave a job nobody is calling.
 import automations
 check(set(scheduler.all_jobs()) == {k for k, _l, _b, _c in automations.JOBS},
-      f'all six jobs, from one list ({len(scheduler.all_jobs())})')
+      f'every job, from one list ({len(scheduler.all_jobs())})')
 check(scheduler.jobs_for('hourly') == ['charge-balances'],
       'balances are the hourly one — they are charged at each job\'s start time')
-check(len(scheduler.jobs_for('daily')) == 5, 'the other five are daily')
+# Counted from the list rather than written down, so adding a job does not
+# fail a test for the wrong reason -- what matters is that every job has a
+# cadence and lands in exactly one of the two runs.
+_daily = set(scheduler.jobs_for('daily'))
+_hourly = set(scheduler.jobs_for('hourly'))
+check(_daily | _hourly == set(scheduler.all_jobs()),
+      f'every job is in one of the two runs ({len(_daily)} daily, {len(_hourly)} hourly)')
+check(not (_daily & _hourly), 'and none is in both')
 check(set(scheduler.jobs_for('hourly')) | set(scheduler.jobs_for('daily'))
       == set(scheduler.all_jobs()),
       'and every job is on one timetable or the other, none forgotten')

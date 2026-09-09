@@ -35,6 +35,12 @@ JOBS = [
      'Chases candidates who started an application and stalled.', 'daily'),
     ('lsa-followups', 'Google Ads follow-ups',
      'Texts the people who called through Google Ads and never booked.', 'daily'),
+    # Only does anything for a business using subcontractors. Harmless and
+    # silent for everybody else, which is why it is on by default: the ones
+    # who need it are exactly the ones who will not think to switch it on.
+    ('insurance-expiry', 'Subcontractor insurance',
+     'Warns you before a subcontractor&rsquo;s insurance or workers&rsquo; '
+     'compensation runs out.', 'daily'),
 ]
 
 # What a business has decided about each job. Absence means on: the five that

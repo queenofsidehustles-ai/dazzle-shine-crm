@@ -9,6 +9,22 @@
 {% endblock %}
 
 {% block content %}
+{# Certificates that have run out, or are about to. Above everything, because
+   sending somebody to a customer's house on lapsed insurance is the one
+   mistake on this page that costs real money. #}
+{% if expiring %}
+<div class="card" style="border-color:var(--warn);margin-bottom:var(--s5)">
+  <div class="eyebrow" style="color:var(--warn)">Subcontractor cover</div>
+  <ul style="margin:var(--s3) 0 0;padding-left:18px;line-height:1.7">
+    {% for r in expiring %}
+    <li style="color:{{ 'var(--warn)' if r.band == 'expired' else 'var(--ink)' }}">
+      <a href="{{ url_for('contractors.application_detail', app_id=r.id) }}"
+         style="color:inherit">{{ expiry_line(r) }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 
 <!-- Quick Add Applicant Panel -->
 <div id="quick-add" style="display:none;margin-bottom:20px">
