@@ -9,7 +9,7 @@ That gap is the safety. A model cannot reach `confirm` -- it produces the
 suggestion, a person produces the click.
 """
 from flask import (Blueprint, render_template, request, jsonify, redirect,
-                   url_for, flash, Response)
+                   url_for, flash, session, Response)
 
 import assistant
 import speech
@@ -48,9 +48,33 @@ def ask():
     question = (question or '').strip()
     if not question:
         return jsonify({'say': f'Ask {assistant.NAME} something.'})
-    out = assistant.ask(question)
+    # The last few turns, so "those companies" and "what about last month?"
+    # mean something. In the session rather than the database: a conversation
+    # belongs to the person having it, and it should end when they leave.
+    history = session.get('nana_history') or []
+    out = assistant.ask(question, history=history)
+
+    said = out.get('say') or ''
+    history = (history + [{'role': 'user', 'content': question[:1000]},
+                          {'role': 'assistant', 'content': said[:2000]}])
+    # Trimmed hard. A session cookie is small, and a conversation nobody has
+    # pruned becomes a bill nobody expected.
+    import agent
+    session['nana_history'] = history[-(agent.MEMORY_TURNS * 2):]
+
     out['left'] = assistant.remaining()
     return jsonify(out)
+
+
+@assistant_bp.route('/ask/forget', methods=['POST'])
+@login_required
+@owner_required
+@requires_plan('assistant')
+def forget():
+    """Start again. Every assistant needs a way to stop it going round in
+    circles on something it has misunderstood."""
+    session.pop('nana_history', None)
+    return jsonify({'ok': True})
 
 
 @assistant_bp.route('/ask/confirm', methods=['POST'])

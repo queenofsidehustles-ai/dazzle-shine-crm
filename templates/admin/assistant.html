@@ -108,6 +108,11 @@
        to be stoppable without closing the page. #}
     <button type="button" id="hush" class="btn btn-outline btn-sm" hidden
             onclick="hush()">Stop</button>
+    {# She remembers the last few turns now, so there has to be a way to make
+       her stop remembering. Every assistant needs one: without it a wrong
+       assumption follows you for the rest of the session. #}
+    <button type="button" class="btn btn-outline btn-sm" onclick="forget()">
+      Start over</button>
     {# Which voice, when the device has more than one worth choosing between. #}
     <select id="voicepick" class="voice-pick" hidden onchange="rememberVoice()"
             aria-label="Voice"></select>
@@ -233,8 +238,25 @@
     fillVoicePicker(pool);
   }
 
-  function fillVoicePicker(pool) {
+  // Only the ones worth choosing between. A device lists dozens of voices,
+  // most of them the same engine at different qualities, and offering all of
+  // them is a chore rather than a choice.
+  function goodOnes(pool) {
+    const named = [];
+    for (const want of NICE_VOICES) {
+      const hit = pool.find(v => (v.name || '').indexOf(want) === 0);
+      if (hit && named.indexOf(hit) < 0) named.push(hit);
+      if (named.length >= 4) break;
+    }
+    if (named.length >= 2) return named;
+    // Nothing recognised: the downloaded voices, which beat the built-in ones.
+    const network = pool.filter(v => v.localService === false).slice(0, 4);
+    return network.length >= 2 ? network : pool.slice(0, 4);
+  }
+
+  function fillVoicePicker(all) {
     const sel = document.getElementById('voicepick');
+    const pool = goodOnes(all);
     if (!sel || pool.length < 2) return;     // no choice is not a choice
     if (sel.options.length === pool.length) { sel.hidden = false; return; }
     sel.innerHTML = '';
@@ -262,6 +284,13 @@
       u.voice = picked; u.lang = picked.lang; u.rate = 0.97; u.pitch = 1.06;
       speechSynthesis.speak(u);
     } catch (e) {}
+  }
+
+  function forget() {
+    fetch('{{ url_for("assistant.forget") }}', { method: 'POST' })
+      .then(function () {
+        document.getElementById('answers').innerHTML = '';
+      }).catch(function () {});
   }
 
   function hush() {

@@ -10,7 +10,7 @@ anybody, does not charge a card, and marking a job finished is offered rather
 than done. Anything that reaches a customer or moves money should be a button a
 person pressed, not a sentence a model understood.
 """
-import os, re, sys, tempfile
+import json, os, re, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 from datetime import datetime, date, timedelta
 
@@ -351,79 +351,19 @@ with app.app_context():
     check(assistant.MODEL != 'anthropic/claude-3.5-haiku',
           'the model name that never existed is not back')
 
-    print('\n13. Nana writes the answer; the books still write the numbers')
-    # The router may now pull several lookups, because "what is my game plan
-    # this week" is not one lookup and pretending it was is what made her dull.
-    import json as _json
-
-    class _Reply:
-        def __init__(self, payload): self._p = payload; self.status_code = 200
-        def json(self): return self._p
-
-    def _fake(route_json, written):
-        """Stand in for OpenRouter: first call routes, second call writes."""
-        calls = {'n': 0}
-        def post(url, **kw):
-            calls['n'] += 1
-            body = route_json if calls['n'] == 1 else written
-            return _Reply({'choices': [{'message': {'content': body}}]})
-        return post, calls
-
-    import requests as _rq
-    _real_post = _rq.post
-    os.environ['OPENROUTER_API_KEY'] = 'sk-or-v1-test'
+    print('\n13. The routing shapes that came before the loop')
+    # She used to pick tools in one pass and never see the results. That is
+    # gone -- section 22 covers what replaced it -- but choose() is still how
+    # a failure to reach the service is reported, and that must keep working.
+    saved_key = os.environ.pop('OPENROUTER_API_KEY', None)
     try:
-        # --- routing ---------------------------------------------------------
-        _rq.post, _ = _fake('{"tools":[{"tool":"money_owed","args":{}},'
-                            '{"tool":"unassigned_jobs","args":{}}]}', 'x')
-        picks, _kind, problem = assistant.choose('how are we doing?')
-        check(problem is None and [p[0] for p in picks]
-              == ['money_owed', 'unassigned_jobs'],
-              'one question can pull several lookups')
-
-        _rq.post, _ = _fake('{"tool":"money_owed","args":{}}', 'x')
-        picks, _k, _p = assistant.choose('what is owed?')
-        check([p[0] for p in picks] == ['money_owed'],
-              'the old single-tool shape still works')
-
-        # An action changes something or produces something to send. It is
-        # never blended into a summary with three lookups.
-        _rq.post, _ = _fake('{"tools":[{"tool":"money_owed","args":{}},'
-                            '{"tool":"finish_job","args":{"customer":"Ama"}}]}', 'x')
-        picks, _k, _p = assistant.choose('mark Ama done')
-        check([p[0] for p in picks] == ['finish_job'], 'an action travels alone')
-
-        _rq.post, _ = _fake('{"tools":[' + ','.join(
-            '{"tool":"%s","args":{}}' % t for t in
-            ['money_owed', 'team', 'unassigned_jobs', 'jobs_this_week',
-             'leads_waiting', 'money_made']) + ']}', 'x')
-        picks, _k, _p = assistant.choose('everything')
-        check(len(picks) <= assistant.MAX_TOOLS,
-              f'no more than {assistant.MAX_TOOLS} lookups in one answer')
-
-        # --- the guardrail, through the front door ---------------------------
-        # A figure it worked out itself never reaches the page. The owner still
-        # gets an answer -- the computed lines -- rather than an error.
-        _rq.post, calls = _fake('{"tools":[{"tool":"money_owed","args":{}}]}',
-                                'You are owed $99,999.00, so chase it today.')
-        owed_now = assistant.money_owed()
-        out = assistant.ask('what is owed?')
-        check('99,999' not in out['say'] and '99999' not in out['say'],
-              'an invented figure is dropped, not shown')
-        check(out['say'] == owed_now,
-              'and the computed line from the books is shown instead')
-
-        # Her wording, built only from figures that are really in the books.
-        real = re.search(r'\$[\d,]+\.\d\d', owed_now).group(0)
-        _rq.post, _ = _fake('{"tools":[{"tool":"money_owed","args":{}}]}',
-                            f'Chase the {real} — it is money you have earned.')
-        out = assistant.ask('what is owed?')
-        check(out['say'] == f'Chase the {real} — it is money you have earned.',
-              'an answer whose figures check out is shown in her words')
-        check(out.get('facts'), 'and the computed lines come back with it')
+        picks, kind, problem = assistant.choose('anything')
+        check(problem == 'not-configured' and not picks,
+              'with no key it says so rather than guessing')
     finally:
-        _rq.post = _real_post
-        os.environ.pop('OPENROUTER_API_KEY', None)
+        if saved_key is not None:
+            os.environ['OPENROUTER_API_KEY'] = saved_key
+
     print('\n14. What the check on figures does and does not cover')
     books = ['$450.00 came in this month, across 2 paid jobs.',
              '1 job in the next seven days. 1 still has nobody assigned.',
@@ -619,75 +559,6 @@ with app.app_context():
           'but writing an ordinary email is now the job, not a refusal')
     check('Use ONLY the facts below' not in draft_src,
           'the rule that produced "I have no facts to work with" is gone')
-    print('\n18. A question that wants thinking gets thinking, not a lookup')
-    import requests as _rq2
-    _real2 = _rq2.post
-    os.environ['OPENROUTER_API_KEY'] = 'sk-or-v1-test'
-    seen = {}
-
-    class _R2:
-        def __init__(self, p): self._p = p; self.status_code = 200
-        def json(self): return self._p
-
-    def _fake2(route_json, written):
-        calls = {'n': 0}
-        def post(url, **kw):
-            calls['n'] += 1
-            body = kw.get('json') or {}
-            seen[calls['n']] = body.get('model')
-            if calls['n'] == 1:
-                seen['route_len'] = len(body['messages'][0]['content'])
-            else:
-                seen['write_prompt'] = body['messages'][0]['content']
-            return _R2({'choices': [{'message': {
-                'content': route_json if calls['n'] == 1 else written}}]})
-        return post
-
-    try:
-        # "How do I get more customers" fits no lookup. It used to produce
-        # "I did not follow that one", which is how an ordinary business
-        # question got treated as a typo.
-        _rq2.post = _fake2('{"kind":"advice","tools":[]}',
-                           'Call the prospects you have not rung yet — that is '
-                           'the cheapest work in front of you.')
-        out = assistant.ask('how do I get more customers this month?')
-        check('did not follow' not in out['say'],
-              'a question with no matching lookup is no longer a shrug')
-        check(out.get('kind') == 'advice', 'it is handled as advice')
-        check(seen.get(2) == assistant.THINK_MODEL,
-              f'and the thinking model does the writing ({seen.get(2)})')
-        check(seen.get(1) == assistant.MODEL,
-              f'while the cheap model still does the routing ({seen.get(1)})')
-
-        # It thinks about *this* business, not cleaning businesses in general.
-        check('THE BUSINESS' in seen.get('write_prompt', ''),
-              'it is told what the business is')
-        check('HOW IT STANDS TODAY' in seen.get('write_prompt', ''),
-              'and how the business stands right now')
-
-        # The rule that never moves. Advice may have an opinion; it may not
-        # have its own arithmetic.
-        _rq2.post = _fake2('{"kind":"advice","tools":[]}',
-                           'Ring your 47 prospects and you will make $12,000.')
-        out = assistant.ask('what should I focus on?')
-        check('12,000' not in out['say'] and '47' not in out['say'],
-              'a figure it made up is dropped in advice mode too')
-
-        # A plain lookup still takes the cheap model and the short answer.
-        _rq2.post = _fake2('{"kind":"lookup","tools":[{"tool":"money_owed","args":{}}]}',
-                           'x')
-        assistant.ask('what is owed?')
-        check(seen.get(2) == assistant.MODEL,
-              f'a lookup is not sent to the expensive model ({seen.get(2)})')
-    finally:
-        _rq2.post = _real2
-        os.environ.pop('OPENROUTER_API_KEY', None)
-
-    # The page has to teach people she can be asked to think. Every chip used
-    # to be a lookup, so people asked lookups and found her dull.
-    page = open(os.path.join(ROOT, 'templates', 'admin', 'assistant.html')).read()
-    check('What should I focus on this week?' in page,
-          'the first suggestion asks her to think')
     print('\n19. A drafted email can be sent, and only by pressing send')
     import proposals as _pr2, actions as _ac2, prospecting as _psg
     from models import Prospect as _P
@@ -793,6 +664,86 @@ with app.app_context():
     check('_remember(model)' in sp, 'and remembers the one that answers')
     check('no voice model answered' in sp,
           'and says so somewhere a person can read when none do')
+    print('\n22. She thinks in more than one step now')
+    import agent, requests as _rq3
+    _real3 = _rq3.post
+    os.environ['OPENROUTER_API_KEY'] = 'sk-or-v1-test'
+
+    class _R3:
+        def __init__(self, p): self._p = p; self.status_code = 200
+        def json(self): return self._p
+
+    def _tool_call(name, args=None):
+        return {'choices': [{'message': {'role': 'assistant', 'content': None,
+                'tool_calls': [{'id': 'c1', 'type': 'function', 'function': {
+                    'name': name, 'arguments': json.dumps(args or {})}}]},
+                'finish_reason': 'tool_calls'}]}
+
+    def _final(text):
+        return {'choices': [{'message': {'role': 'assistant', 'content': text},
+                             'finish_reason': 'stop'}]}
+
+    try:
+        # The whole point: look something up, see the answer, look up something
+        # else, then reply. The old Nana got exactly one pass and could never
+        # react to what she found.
+        steps = {'n': 0}
+        sent = []
+        def post(url, **kw):
+            steps['n'] += 1
+            sent.append(kw.get('json') or {})
+            if steps['n'] == 1:
+                return _R3(_tool_call('money_owed'))
+            if steps['n'] == 2:
+                return _R3(_tool_call('unassigned_jobs'))
+            return _R3(_final('Chase the money owed first — it is already earned.'))
+        _rq3.post = post
+        out = assistant.ask('what should I chase first?')
+        check(steps['n'] == 3, f'she took several turns, not one ({steps["n"]})')
+        check(out['say'].startswith('Chase the money owed'),
+              'and answered in her own words at the end')
+        # Each result went back to her before she decided again.
+        roles = [m['role'] for m in sent[-1]['messages']]
+        check('tool' in roles, 'the tool results were handed back to her')
+        check(sent[0].get('tools'), 'and she was offered the tools to begin with')
+
+        # General knowledge is allowed now. This was the gag.
+        _rq3.post = lambda url, **kw: _R3(_final(
+            'Most companies charge around $150 to $250 for a move-out clean, '
+            'so you are not far off.'))
+        out = assistant.ask('what should I charge for a move-out?')
+        check('150' in out['say'],
+              'she can answer a question her database cannot')
+
+        # And the rule that did not change.
+        _rq3.post = lambda url, **kw: _R3(_final('You made $9,900 this month.'))
+        out = assistant.ask('how much did I make?')
+        check('9,900' not in out['say'],
+              'a figure about their books that no tool produced is still dropped')
+
+        # An action still comes back as a button, not as something done.
+        # A fresh job: earlier tests finished the other ones.
+        job('Nadia Owusu', today - timedelta(days=1), 210.0)
+        SENT.clear()
+        _rq3.post = lambda url, **kw: _R3(_tool_call('finish_job', {'customer': 'Nadia'}))
+        out = assistant.ask('mark Nadia finished')
+        check('confirm' in out and out['confirm'].get('token'),
+              'an action is still offered as a token to press')
+    finally:
+        _rq3.post = _real3
+        os.environ.pop('OPENROUTER_API_KEY', None)
+
+    print('\n23. A conversation, and a way to end it')
+    check(agent.MEMORY_TURNS >= 4, 'she carries several turns of context')
+    routes = open(os.path.join(ROOT, 'blueprints', 'assistant_routes.py')).read()
+    check("session.get('nana_history')" in routes, 'the last turns are remembered')
+    check('MEMORY_TURNS * 2' in routes, 'and trimmed, so a long session is not a long bill')
+    check("session.pop('nana_history'" in routes,
+          'and there is a way to make her forget')
+    page = open(os.path.join(ROOT, 'templates', 'admin', 'assistant.html')).read()
+    check('Start over' in page, 'which the page offers as Start over')
+    check('function goodOnes' in page,
+          'the voice list is trimmed to the few worth choosing between')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')

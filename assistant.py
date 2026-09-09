@@ -968,66 +968,17 @@ def _run(name, args):
     return out
 
 
-def ask(question, api_key=None):
-    """The whole round trip. Returns a dict the page can render."""
+def ask(question, api_key=None, history=None):
+    """The whole round trip. Returns a dict the page can render.
+
+    The work is in agent.py now. What is left here is the part that has to be
+    true whatever she is thinking about: the monthly limit, and counting the
+    question before it is asked rather than after.
+    """
     if remaining() <= 0:
         return {'say': (f'{NAME} has answered {MONTHLY_LIMIT} questions this month, '
                         f'which is the limit. It starts again next month — '
                         f'everything else in here works as normal.')}
     _count_one()
-    picks, kind, problem = choose(question, api_key=api_key)
-    if problem:
-        # Nana never got asked. Saying "I did not follow that" here would blame
-        # the owner's wording for something on our side.
-        return {'say': TROUBLE[problem]}
-    if not picks and kind != 'advice':
-        return {'say': f'I did not follow that one. I can tell you what is booked, '
-                       f'what came in, who is owed, who is asking — or ask me '
-                       f'what to focus on this week and I will think about it.'}
-
-    # An action is offered as itself: a button to press or a draft to read.
-    # Nothing gets rewritten on the way out.
-    #
-    # An advice question can legitimately match no lookup at all -- "how do I
-    # get more customers" is not one of twelve tables -- so this only applies
-    # when something was picked.
-    name, args = picks[0] if picks else (None, {})
-    if name in ACTION_TOOLS:
-        fn = TOOLS[name][0]
-        try:
-            out = fn(**args)
-        except TypeError:
-            out = fn()
-        except Exception:
-            return {'say': 'Something went wrong reading that. It has been recorded.'}
-        return out if isinstance(out, dict) else {'say': out, 'tool': name}
-
-    facts, used = [], []
-    for name, args in picks:
-        text = _run(name, args)
-        if text:
-            facts.append(text)
-            used.append(name)
-
-    profile = None
-    if kind == 'advice':
-        # A question that wants thinking gets the whole picture, not the one
-        # lookup that happened to match a word in it. This is the difference
-        # between "1 job in the next seven days" and an answer.
-        facts.extend(_standing_facts(used))
-        profile = business_profile()
-
-    if not facts:
-        return {'say': 'Something went wrong reading that. It has been recorded.'}
-
-    plain = '\n'.join(facts)
-    written = _compose(question, facts, api_key=api_key, kind=kind,
-                       profile=profile)
-    # The check on figures is the same in both modes. Advice is allowed to have
-    # an opinion; it is not allowed to have its own arithmetic.
-    if written and _grounded(written, facts + (profile or []) + [question]):
-        return {'say': written, 'tools': used, 'facts': facts, 'kind': kind}
-    if written:
-        # It wrote a figure that is not in the books. Nobody sees that figure.
-        _record(f'answer dropped, a figure was not in the facts: {written[:160]}')
-    return {'say': plain, 'tools': used, 'facts': facts, 'kind': kind}
+    import agent
+    return agent.run(question, history=history, api_key=api_key)
