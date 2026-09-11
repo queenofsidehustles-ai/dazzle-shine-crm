@@ -167,6 +167,9 @@ def login():
             ok, info = authenticate(username, request.form.get('password', ''))
             security.record_login(username, ok)
             if ok:
+                # Drop every value carried by the anonymous session before it
+                # becomes an authenticated owner/team session.
+                session.clear()
                 session.permanent = True
                 session['logged_in'] = True
                 session['role'] = info['role']
