@@ -41,6 +41,27 @@ def pretty_phone(p):
     return f"({d[0:3]}) {d[3:6]}-{d[6:10]}" if len(d) == 10 else (p or '')
 
 
+def _twilio_request_valid():
+    """Verify that an inbound SMS POST was signed by this tenant's Twilio.
+
+    Local development remains usable without credentials. A deployed instance
+    fails closed: no token means no trusted webhook, and a missing or forged
+    signature can never create a customer message or alter an opt-out state.
+    """
+    token = integrations.twilio_auth_token()
+    if not token:
+        import security
+        return not security._is_production()
+    signature = request.headers.get('X-Twilio-Signature', '')
+    if not signature:
+        return False
+    try:
+        from twilio.request_validator import RequestValidator
+        return RequestValidator(token).validate(request.url, request.form, signature)
+    except Exception:
+        return False
+
+
 @messages_bp.route('/sent')
 @login_required
 def sent_log():
@@ -449,6 +470,9 @@ def _stop_lsa_sequence(phone10, reason):
 # ── Twilio webhook: an inbound text landed on the business number ───────────
 @messages_bp.route('/incoming', methods=['POST'])
 def incoming():
+    if not _twilio_request_valid():
+        return Response('Invalid Twilio signature.', status=403, mimetype='text/plain')
+
     from_num = request.form.get('From', '')
     body = (request.form.get('Body') or '').strip()
     sid = request.form.get('MessageSid')

@@ -110,9 +110,11 @@ check(r.status_code in (301, 302),
       'while the owner, elsewhere, signs in perfectly normally')
 
 print('\n7. A forwarded address cannot be forged to dodge the throttle')
-with app.test_request_context('/', headers={'X-Forwarded-For': '1.2.3.4, 5.6.7.8'}):
-    check(security.client_ip() == '1.2.3.4',
-          'only the first entry in X-Forwarded-For is trusted')
+with app.test_request_context(
+        '/', environ_base={'REMOTE_ADDR': '203.0.113.7'},
+        headers={'X-Forwarded-For': '1.2.3.4, 5.6.7.8'}):
+    check(security.client_ip() == '203.0.113.7',
+          'caller-supplied X-Forwarded-For entries are ignored')
 
 print('\n8. Forms posted from another website are refused')
 clear_attempts()
