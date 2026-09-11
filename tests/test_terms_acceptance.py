@@ -29,6 +29,10 @@ class _PI:
     id, status = 'pi_terms', 'succeeded'
     payment_method = 'pm_x'
     client_secret = 'cs_x'
+    amount = amount_received = 5000
+    currency = 'usd'
+    metadata = {'booking_id': '1', 'deposit_token': 'dep-tok',
+                'kind': 'deposit', 'expected_amount_cents': '5000'}
     @staticmethod
     def create(**kw): return _PI()
     @staticmethod
@@ -46,7 +50,8 @@ with app.app_context():
     print('\n1. The deposit page now shows what they are agreeing to')
     b = Booking(service_type='deep', name='A Customer', email='c@example.com',
                 phone='4070000000', address='1 St', price=1420,
-                deposit_token='dep-tok', status='pending', preferred_date='2026-08-05')
+                deposit_token='dep-tok', stripe_payment_intent='pi_terms',
+                status='pending', preferred_date='2026-08-05')
     db.session.add(b); db.session.commit()
     page = _html.unescape(pub.get('/pay-deposit/dep-tok').get_data(as_text=True))
     check('Service &amp; payment terms' in page or 'Service & payment terms' in page,
