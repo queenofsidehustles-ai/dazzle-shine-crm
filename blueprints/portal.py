@@ -148,6 +148,11 @@ def save_card(token):
         return jsonify({'ok': False, 'error': 'Missing card details'}), 400
     try:
         pm = stripe.PaymentMethod.retrieve(pm_id)
+        if getattr(pm, 'customer', None) != client.stripe_customer_id:
+            return jsonify({'ok': False,
+                            'error': 'That card does not belong to this customer'}), 400
+        if not getattr(pm, 'card', None):
+            return jsonify({'ok': False, 'error': 'A card payment method is required'}), 400
         brand = (pm.card.brand if pm.card else '') or ''
         last4 = (pm.card.last4 if pm.card else '') or ''
     except stripe.error.StripeError as e:

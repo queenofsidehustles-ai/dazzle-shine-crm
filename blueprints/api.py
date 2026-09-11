@@ -762,6 +762,8 @@ def create_payment_intent():
             customer=customer.id,
             setup_future_usage='off_session',  # saves the card for future off-session charges
             metadata={
+                'kind': 'booking_deposit',
+                'expected_amount_cents': str(int(round(get_deposit() * 100))),
                 'service_type': data.get('service_type', ''),
                 'total_price': str(total),
                 'balance_due': str(round(total - get_deposit(), 2)),
@@ -831,6 +833,43 @@ def create_booking():
         frequency=data.get('frequency', 'one_time'),
     )
     total = quote['client_price']
+
+    # A browser does not get to declare that money moved. If it supplies a
+    # PaymentIntent, bind that exact succeeded charge to this exact booking and
+    # derive Stripe identifiers from Stripe itself. One charge creates at most
+    # one booking.
+    pi_id = (data.get('payment_intent_id') or '').strip()
+    verified_pi = None
+    if pi_id:
+        stripe.api_key = integrations.stripe_secret_key()
+        if not stripe.api_key:
+            db.session.rollback()
+            return add_cors(jsonify({'ok': False, 'error': 'Payments not configured'}), origin), 500
+        if Booking.query.filter_by(stripe_payment_intent=pi_id).first():
+            db.session.rollback()
+            return add_cors(jsonify({'ok': False, 'error': 'Payment already used'}), origin), 409
+        try:
+            verified_pi = stripe.PaymentIntent.retrieve(pi_id)
+        except stripe.error.StripeError as exc:
+            db.session.rollback()
+            return add_cors(jsonify({'ok': False, 'error': str(exc)}), origin), 400
+        meta = getattr(verified_pi, 'metadata', None) or {}
+        received = (getattr(verified_pi, 'amount_received', None)
+                    or getattr(verified_pi, 'amount', None))
+        valid = (
+            getattr(verified_pi, 'status', None) == 'succeeded'
+            and (getattr(verified_pi, 'currency', '') or '').lower() == 'usd'
+            and meta.get('kind') == 'booking_deposit'
+            and int(received or 0) == int(round(get_deposit() * 100))
+            and (meta.get('customer_email') or '').strip().lower()
+                == data['email'].strip().lower()
+            and meta.get('service_type') == data.get('service_type', '')
+            and abs(float(meta.get('total_price') or -1) - float(total)) < 0.01
+        )
+        if not valid:
+            db.session.rollback()
+            return add_cors(jsonify({'ok': False,
+                                     'error': 'Payment does not match this booking'}), origin), 400
     # A promo code and a recurring discount are two different giveaways and
     # both belong in the total. Only the code was ever recorded, so a weekly
     # customer booking through the website reported none of the 15% they were
@@ -854,16 +893,16 @@ def create_booking():
         city=data.get('city', '').strip(),
         zip_code=data.get('zip_code', '').strip(),
         notes=data.get('notes', '').strip(),
-        stripe_payment_intent=data.get('payment_intent_id', ''),
-        stripe_customer_id=data.get('stripe_customer_id', ''),
-        stripe_payment_method_id=data.get('stripe_payment_method_id', ''),
+        stripe_payment_intent=pi_id,
+        stripe_customer_id=(getattr(verified_pi, 'customer', '') or '') if verified_pi else '',
+        stripe_payment_method_id=(getattr(verified_pi, 'payment_method', '') or '') if verified_pi else '',
         discount_code=data.get('discount_code', ''),
         discount_amount=given_away,
-        deposit_paid=True if data.get('payment_intent_id') else False,
+        deposit_paid=bool(verified_pi),
         deposit_token=secrets.token_urlsafe(32),
         price=total,
         balance_due=round(total - get_deposit(), 2),
-        status='confirmed' if data.get('payment_intent_id') else 'pending',
+        status='confirmed' if verified_pi else 'pending',
     )
     db.session.add(booking)
     db.session.commit()
@@ -873,7 +912,9 @@ def create_booking():
         # Going through mark_deposit_paid also stamps the booking as notified,
         # so the webhook for this same payment doesn't send it all a second time.
         from blueprints.payments import mark_deposit_paid
-        mark_deposit_paid(booking)
+        mark_deposit_paid(booking,
+                          amount_cents=(getattr(verified_pi, 'amount_received', None)
+                                        or getattr(verified_pi, 'amount', None)))
     else:
         # Tentative booking → ask for the deposit to confirm
         _send_deposit_request(booking)
