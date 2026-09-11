@@ -1,6 +1,8 @@
 import json
+import os
 import secrets
 from datetime import datetime
+from urllib.parse import urlparse
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from auth import login_required
 from models import Booking, ChecklistTemplate, JobChecklist, Staff, BookingRating
@@ -10,6 +12,27 @@ import branding
 from money_format import usd
 
 workorders_bp = Blueprint('workorders', __name__, url_prefix='/workorders')
+
+MAX_JOB_PHOTOS_PER_PHASE = 20
+
+
+def trusted_job_photo_url(url):
+    """Only retain images uploaded to this deployment's Cloudinary account."""
+    cloud_name = (os.environ.get('CLOUDINARY_CLOUD_NAME') or '').strip()
+    if not cloud_name or not url or len(url) > 2048:
+        return False
+    try:
+        parsed = urlparse(url)
+    except (TypeError, ValueError):
+        return False
+    return (
+        parsed.scheme == 'https'
+        and parsed.hostname == 'res.cloudinary.com'
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.port is None
+        and parsed.path.startswith(f'/{cloud_name}/image/upload/')
+    )
 
 
 def service_choices():
@@ -290,11 +313,13 @@ def send_workorder(booking_id):
 
 @workorders_bp.route('/checklist/<token>')
 def view_checklist(token):
-    import os
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
+    cloud_name = (os.environ.get('CLOUDINARY_CLOUD_NAME') or '').strip()
+    upload_preset = (os.environ.get('CLOUDINARY_UPLOAD_PRESET') or '').strip()
     return render_template('public/checklist.html', checklist=checklist,
-        cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk'),
-        upload_preset=os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews'),
+        cloud_name=cloud_name,
+        upload_preset=upload_preset,
+        photo_upload_ready=bool(cloud_name and upload_preset),
     )
 
 
@@ -425,13 +450,20 @@ def add_photo(token):
     url = (data.get('url') or '').strip()
     if phase not in ('before', 'after') or not url:
         return jsonify({'ok': False, 'error': 'Missing phase or url'}), 400
+    if not trusted_job_photo_url(url):
+        return jsonify({'ok': False, 'error': 'Photo did not come from the configured upload account.'}), 400
     if phase == 'before':
         photos = checklist.get_before_photos()
-        photos.append(url)
-        checklist.before_photos = json.dumps(photos)
     else:
         photos = checklist.get_after_photos()
-        photos.append(url)
+    if url in photos:
+        return jsonify({'ok': True})
+    if len(photos) >= MAX_JOB_PHOTOS_PER_PHASE:
+        return jsonify({'ok': False, 'error': 'Photo limit reached for this job phase.'}), 400
+    photos.append(url)
+    if phase == 'before':
+        checklist.before_photos = json.dumps(photos)
+    else:
         checklist.after_photos = json.dumps(photos)
     db.session.commit()
     return jsonify({'ok': True})

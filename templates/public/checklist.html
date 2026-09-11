@@ -307,6 +307,7 @@
     const TOTAL = {{ checklist.get_items()|length }};
     const CLOUD_NAME = {{ cloud_name | tojson }};
     const UPLOAD_PRESET = {{ upload_preset | tojson }};
+    const PHOTO_UPLOAD_READY = {{ photo_upload_ready | tojson }};
 
     // ── Server state (drives resume) ──────────────────────────────────────────
     const S = {
@@ -467,6 +468,11 @@
     }
     async function uploadPhoto(input, phase) {
       if (!input.files || !input.files[0]) return;
+      if (!PHOTO_UPLOAD_READY) {
+        const err = $('photo-err');
+        err.textContent = 'Photo uploads are temporarily unavailable. Please contact the office.';
+        err.style.display = 'block'; input.value = ''; return;
+      }
       const file = input.files[0];
       $('uploading').style.display = 'block';
       $('photo-err').style.display = 'none';
@@ -476,10 +482,12 @@
         const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: fd });
         const cloud = await res.json();
         if (!cloud.secure_url) throw new Error(cloud.error?.message || 'Upload failed');
-        await fetch('/workorders/checklist/' + TOKEN + '/add-photo', {
+        const saved = await fetch('/workorders/checklist/' + TOKEN + '/add-photo', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phase, url: cloud.secure_url }),
         });
+        const result = await saved.json();
+        if (!saved.ok || !result.ok) throw new Error(result.error || 'Could not save photo');
         if (phase === 'before') beforePhotos.push(cloud.secure_url); else afterPhotos.push(cloud.secure_url);
         render();
       } catch (e) {
