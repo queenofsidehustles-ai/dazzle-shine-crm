@@ -7,6 +7,7 @@ from models import Booking, ChecklistTemplate, JobChecklist, Staff, BookingRatin
 from extensions import db
 from notifications import send_email, send_sms
 import branding
+from money_format import usd
 
 workorders_bp = Blueprint('workorders', __name__, url_prefix='/workorders')
 
@@ -235,8 +236,9 @@ def _send_workorder_to(booking, checklist, cleaner):
         sms_crew = f" Team job with {who}."
     # A set amount always wins over the automatic percentage — say it plainly.
     if row and row.pay_amount is not None:
-        crew_pay_html = f'<p><strong>Your pay for this job:</strong> ${row.pay_amount:.2f}</p>'
-        sms_crew += f" Your pay: ${row.pay_amount:.0f}."
+        pay_text = usd(row.pay_amount)
+        crew_pay_html = f'<p><strong>Your pay for this job:</strong> {pay_text}</p>'
+        sms_crew += f" Your pay: {pay_text}."
 
     checklist_url = url_for('workorders.view_checklist', token=checklist.token, _external=True, _scheme='https')
     sop_url = url_for('sops.library', _external=True, _scheme='https')

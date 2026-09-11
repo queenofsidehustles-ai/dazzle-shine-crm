@@ -43,6 +43,8 @@ from blueprints.team import team_bp, availability_bp
 
 def create_app():
     app = Flask(__name__)
+    from money_format import usd
+    app.jinja_env.filters['usd'] = usd
 
     # Trust Railway's proxy so url_for(_external=True) builds https:// links
     # (Stripe live mode rejects http return URLs, and email links should be secure).
