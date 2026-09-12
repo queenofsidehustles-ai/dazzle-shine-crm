@@ -102,6 +102,27 @@ def _slug_lock(engine, slug):
             conn.execute(text('SELECT pg_advisory_unlock(hashtext(:key))'), {'key': key})
 
 
+def _ensure_control_plane(engine):
+    """Create/repair public control-plane tables without first-boot DDL races.
+
+    SQLAlchemy's create_all(checkfirst=True) is not atomic across workers: two
+    requests can both observe a missing table and then collide creating the
+    same PostgreSQL relation/type. Serialize only this initialization step with
+    one database-wide advisory lock. Established deployments pay essentially
+    nothing because ensure_table becomes a quick check while the lock is held.
+    """
+    if engine.dialect.name != 'postgresql':
+        control_plane.ensure_table(engine)
+        return
+    key = 'akye:control-plane-init'
+    with engine.connect() as conn:
+        conn.execute(text('SELECT pg_advisory_lock(hashtext(:key))'), {'key': key})
+        try:
+            control_plane.ensure_table(engine)
+        finally:
+            conn.execute(text('SELECT pg_advisory_unlock(hashtext(:key))'), {'key': key})
+
+
 def _seed_strict(app, schema):
     """Apply every required starter seed and fail the signup if any seed fails.
 
@@ -131,7 +152,7 @@ def check_slug():
                       if slug not in tenancy.RESERVED_SLUGS
                       else 'That address is reserved.'})
     engine = _engine()
-    control_plane.ensure_table(engine)
+    _ensure_control_plane(engine)
     if control_plane.find(engine, slug):
         return jsonify({'ok': False, 'reason': 'Already taken.'})
     return jsonify({'ok': True, 'host': f'{slug}.{os.environ["BASE_DOMAIN"]}'})
@@ -150,11 +171,6 @@ def signup():
         password = request.form.get('password') or ''
         slug = form['slug'].lower() or suggest_slug(form['business'])
 
-        # _validate touches the database — it creates the control-plane table
-        # if it is missing and looks the slug up. Outside a guard, any problem
-        # there returned the generic "something went wrong" page instead of
-        # the signup form, which tells somebody trying to give us money
-        # nothing at all and leaves no message on screen to report.
         try:
             error = _validate(form, slug, password)
         except Exception as e:
@@ -162,7 +178,7 @@ def signup():
             try:
                 errors.capture(e, path='/signup', method='POST')
             except Exception:
-                pass                      # never let the reporting be the fault
+                pass
             print(f'  ❌ signup validation failed: {type(e).__name__}: {e}')
             return render_template(
                 'admin/signup.html', form=form, slug=slug, base=base,
@@ -179,9 +195,6 @@ def signup():
                 'admin/signup.html', form=form, slug=slug, base=base,
                 error=f'"{slug}" was just taken. Please choose another address.')
         except Exception as e:
-            # _create_everything owns cleanup while it still owns the per-slug
-            # advisory lock. Cleaning up here, after releasing that lock, could
-            # delete a tenant created by a competing request.
             print(f'  ❌ signup failed for {slug!r}: {type(e).__name__}: {e}')
             import traceback; traceback.print_exc()
             try:
@@ -195,8 +208,6 @@ def signup():
                       'again. If it happens twice, tell us so we can investigate.')
 
         _tell_us(slug, form, base)
-
-        # Over to their own address, where the session belongs.
         scheme = 'http' if base.startswith('localhost') else 'https'
         return redirect(f'{scheme}://{slug}.{base}/welcome/{token}')
 
@@ -205,22 +216,7 @@ def signup():
 
 
 def _tell_us(slug, form, base):
-    """Email whoever runs the product that somebody just signed up.
-
-    A company signing up is the most important thing that happens on this
-    deployment, and until now it happened in silence — the row appeared in a
-    table nobody was watching. Somebody could sign up at eleven at night, hit
-    something broken, and be gone before anyone knew they had arrived.
-
-    It is also the honest end-to-end test of the product's email: same key,
-    same from-address, same path as a trial reminder. If this arrives, they
-    all will.
-
-    Never raises. A company has already been created and paid for with a
-    password by this point — failing to send a notification must not undo any
-    of that, or show them an error about our mail when nothing of theirs is
-    wrong.
-    """
+    """Email whoever runs the product that somebody just signed up."""
     try:
         import notifications
         import product
@@ -264,31 +260,22 @@ def _validate(form, slug, password):
         return ('Pick a web address of 3–40 lower-case letters, numbers or '
                 'hyphens — and not a reserved word like "www" or "admin".')
     engine = _engine()
-    control_plane.ensure_table(engine)
+    _ensure_control_plane(engine)
     if control_plane.find(engine, slug):
         return f'"{slug}" is already taken. Try another.'
     return None
 
 
 def _create_everything(slug, form, password):
-    """Build one tenant completely, under a cross-worker per-slug lock.
-
-    The availability check before this function is only user feedback. The check
-    inside the advisory lock is the security/integrity boundary: only one
-    request may create a particular schema, and cleanup may remove only the
-    resources created by that same locked attempt.
-    """
+    """Build one tenant completely, under a cross-worker per-slug lock."""
     engine = _engine()
     schema = tenancy.schema_for(slug)
 
     with _slug_lock(engine, slug):
-        control_plane.ensure_table(engine)
+        _ensure_control_plane(engine)
         if control_plane.find(engine, slug):
             raise SlugTaken(slug)
         if provisioning.schema_exists(engine, schema):
-            # An unregistered schema is an orphan from a prior abnormal failure.
-            # Never adopt or overwrite it automatically: it may contain data that
-            # needs operator inspection.
             raise RuntimeError(
                 f'unregistered tenant schema {schema!r} already exists; '
                 'refusing to overwrite it')
@@ -345,12 +332,7 @@ def _create_everything(slug, form, password):
 
 
 def _cleanup(slug):
-    """Legacy/manual cleanup helper; never used by the signup exception path.
-
-    Signup cleanup must happen inside _create_everything while its advisory lock
-    is still held. Keeping this helper for operator/tests avoids changing callers,
-    but it refuses to delete a registered tenant.
-    """
+    """Legacy/manual cleanup helper; never used by the signup exception path."""
     engine = _engine()
     schema = tenancy.schema_for(slug)
     with _slug_lock(engine, slug):
@@ -362,11 +344,7 @@ def _cleanup(slug):
 
 @signup_bp.route('/welcome/<token>')
 def welcome(token):
-    """Spend the signup token and start the session, on the company's own host.
-
-    Lives here rather than on the signup domain because a session cookie is
-    scoped to the host that sets it, and this is the host it needs to work on.
-    """
+    """Spend the signup token and start the session, on the company's own host."""
     if not tenancy.is_tenant():
         return redirect(url_for('signup.signup') if signups_open() else '/')
 
