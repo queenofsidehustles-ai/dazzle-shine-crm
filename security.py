@@ -45,17 +45,51 @@ from urllib.parse import urlparse
 
 from flask import request, session, g
 
-# Requests that are not a browser form and must never be origin-checked.
-#
-# /api/*            cron jobs and the Stripe webhook. Called by machines that
-#                   send no Origin, and already guarded — the cron routes by
-#                   REMINDER_API_KEY, the webhook by Stripe's signature.
-# /messages/incoming Twilio delivering an inbound text from a customer.
-CSRF_EXEMPT_PREFIXES = ('/api/', '/messages/incoming')
+# State-changing requests bypass origin checking only when they are explicitly
+# designed to be called by an external browser/site or by a signed/authenticated
+# machine. Never exempt the whole /api namespace: doing that would silently make
+# every future authenticated API mutation CSRF-exempt.
+CSRF_EXEMPT_PATHS = frozenset({
+    # Public website API. These routes are intentionally unauthenticated and
+    # have their own CORS / payment integrity controls where applicable.
+    '/api/quote',
+    '/api/commercial-lead',
+    '/api/apply',
+    '/api/validate-code',
+    '/api/price',
+    '/api/create-payment-intent',
+    '/api/booking',
+
+    # Machine-to-machine routes. Cron routes require X-Api-Key; Stripe and
+    # Twilio routes verify their provider signatures in their handlers.
+    '/api/reminders',
+    '/api/charge-balances',
+    '/api/send-drips',
+    '/api/lsa-followups',
+    '/api/insurance-expiry',
+    '/api/applicant-followups',
+    '/api/lifecycle-emails',
+    '/api/stripe-webhook',
+    '/messages/incoming',
+})
+
+# REMINDER_API_KEY is a bearer secret. Every cron route must reject the legacy
+# ?api_key= transport because URLs routinely escape into proxy/access logs,
+# monitoring traces, screenshots, browser history and support artifacts.
+QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
+    '/api/reminders',
+    '/api/charge-balances',
+    '/api/send-drips',
+    '/api/lsa-followups',
+    '/api/insurance-expiry',
+    '/api/applicant-followups',
+    '/api/lifecycle-emails',
+})
 
 # Failed logins allowed from one address before it is asked to wait.
 MAX_FAILED_LOGINS = 10
 LOCKOUT_WINDOW = timedelta(minutes=15)
+_WEAK_SECRETS = {'', 'dev-secret-change-me', 'insecure-dev-key', 'changeme'}
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +108,21 @@ def harden_session(app):
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=14)
 
 
+def validate_secret(app):
+    """Refuse a production boot with a guessable session-signing secret.
+
+    A forged Flask session is an owner login because authorization is stored in
+    the signed cookie. Local development may keep the convenient fallback, but
+    a deployed business must provide a unique, high-entropy value.
+    """
+    secret = str(app.config.get('SECRET_KEY') or '')
+    if _is_production() and (secret.lower() in _WEAK_SECRETS or len(secret) < 32):
+        raise RuntimeError(
+            'Production requires SECRET_KEY with at least 32 characters; '
+            'the development fallback cannot sign owner sessions.'
+        )
+
+
 def _is_production():
     if (os.environ.get('FLASK_ENV') or '').lower() == 'development':
         return False
@@ -84,8 +133,16 @@ def _is_production():
 
 
 # ---------------------------------------------------------------------------
-# Where a request claims to come from
+# Request credentials and origin
 # ---------------------------------------------------------------------------
+
+def reject_query_credentials():
+    """Refuse cron bearer secrets supplied in the URL query string."""
+    if request.path in QUERY_SECRET_FORBIDDEN_PATHS and 'api_key' in request.args:
+        from flask import abort
+        abort(403, description='API credentials must be sent in X-Api-Key.')
+    return None
+
 
 def _same_site(url, host):
     """True when `url` belongs to the host serving this request."""
@@ -108,7 +165,7 @@ def check_request_origin():
     if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
         return None
     path = request.path or ''
-    if any(path.startswith(p) for p in CSRF_EXEMPT_PREFIXES):
+    if path in CSRF_EXEMPT_PATHS:
         return None
 
     host = request.host
@@ -143,14 +200,13 @@ def _record_rejected_origin(header, value, path):
 # ---------------------------------------------------------------------------
 
 def client_ip():
-    """The caller's address, honouring Railway's proxy header.
+    """The caller address already resolved by the app's trusted-proxy layer.
 
-    Only the FIRST entry in X-Forwarded-For is meaningful; the rest can be
-    written by the caller, so trusting the last one would let anybody claim to
-    be a fresh address on every attempt and never be throttled at all."""
-    fwd = request.headers.get('X-Forwarded-For', '')
-    if fwd:
-        return fwd.split(',')[0].strip()[:45]
+    Reading X-Forwarded-For here would trust caller-controlled entries and let
+    an attacker choose a fresh address for every password guess. ProxyFix is
+    configured for exactly one Railway hop and writes the resolved client onto
+    ``remote_addr`` before this function runs.
+    """
     return (request.remote_addr or 'unknown')[:45]
 
 
@@ -211,5 +267,7 @@ def prune_login_attempts(days=30):
 
 def install(app):
     """Wire everything into the application."""
+    validate_secret(app)
     harden_session(app)
+    app.before_request(reject_query_credentials)
     app.before_request(check_request_origin)
