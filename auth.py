@@ -13,16 +13,26 @@ def login_required(f):
     return decorated
 
 
+def is_owner_session():
+    """True only for an authenticated session explicitly marked as owner.
+
+    Authorization fails closed. A stale signed session created before roles
+    existed must not gain owner authority merely because its role field is
+    missing.
+    """
+    return bool(session.get('logged_in')) and session.get('role') == 'owner'
+
+
 def owner_required(f):
-    """Guards the money pages (payroll, contractor pay, reports, settings) so
-    only an Owner can open them — even by typing the URL directly.
-    Legacy sessions (logged in before roles existed) default to 'owner', since
-    the single shared login was always the owner."""
+    """Guard owner-only pages such as payroll, reports and settings.
+
+    Missing or unknown roles are denied rather than interpreted as owner.
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get('logged_in'):
             return redirect(url_for('admin.login'))
-        if session.get('role', 'owner') != 'owner':
+        if not is_owner_session():
             flash('That area is owner-only.', 'error')
             return redirect(url_for('admin.dashboard'))
         return f(*args, **kwargs)
