@@ -53,6 +53,15 @@ from flask import request, session, g
 # /messages/incoming Twilio delivering an inbound text from a customer.
 CSRF_EXEMPT_PREFIXES = ('/api/', '/messages/incoming')
 
+# Cron credentials are bearer secrets. They must travel in a header, never in
+# a URL, because URLs routinely escape into proxy/access logs, browser history,
+# monitoring traces, screenshots and support artifacts. These two endpoints are
+# the only cron routes currently authenticated with REMINDER_API_KEY.
+QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
+    '/api/reminders',
+    '/api/charge-balances',
+})
+
 # Failed logins allowed from one address before it is asked to wait.
 MAX_FAILED_LOGINS = 10
 LOCKOUT_WINDOW = timedelta(minutes=15)
@@ -100,8 +109,22 @@ def _is_production():
 
 
 # ---------------------------------------------------------------------------
-# Where a request claims to come from
+# Request credentials and origin
 # ---------------------------------------------------------------------------
+
+def reject_query_credentials():
+    """Refuse cron bearer secrets supplied in the URL query string.
+
+    The cron endpoints historically accepted ``?api_key=...`` as a convenience.
+    That turns a credential into log/history data. The scheduler already sends
+    ``X-Api-Key``, so query-string authentication is now explicitly denied even
+    while older route code is being retired.
+    """
+    if request.path in QUERY_SECRET_FORBIDDEN_PATHS and 'api_key' in request.args:
+        from flask import abort
+        abort(403, description='API credentials must be sent in X-Api-Key.')
+    return None
+
 
 def _same_site(url, host):
     """True when `url` belongs to the host serving this request."""
@@ -228,4 +251,5 @@ def install(app):
     """Wire everything into the application."""
     validate_secret(app)
     harden_session(app)
+    app.before_request(reject_query_credentials)
     app.before_request(check_request_origin)
