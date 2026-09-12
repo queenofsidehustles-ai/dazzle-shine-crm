@@ -45,13 +45,33 @@ from urllib.parse import urlparse
 
 from flask import request, session, g
 
-# Requests that are not a browser form and must never be origin-checked.
-#
-# /api/*            cron jobs and the Stripe webhook. Called by machines that
-#                   send no Origin, and already guarded — the cron routes by
-#                   REMINDER_API_KEY, the webhook by Stripe's signature.
-# /messages/incoming Twilio delivering an inbound text from a customer.
-CSRF_EXEMPT_PREFIXES = ('/api/', '/messages/incoming')
+# State-changing requests bypass origin checking only when they are explicitly
+# designed to be called by an external browser/site or by a signed/authenticated
+# machine. Never exempt the whole /api namespace: doing that would silently make
+# every future authenticated API mutation CSRF-exempt.
+CSRF_EXEMPT_PATHS = frozenset({
+    # Public website API. These routes are intentionally unauthenticated and
+    # have their own CORS / payment integrity controls where applicable.
+    '/api/quote',
+    '/api/commercial-lead',
+    '/api/apply',
+    '/api/validate-code',
+    '/api/price',
+    '/api/create-payment-intent',
+    '/api/booking',
+
+    # Machine-to-machine routes. Cron routes require X-Api-Key; Stripe and
+    # Twilio routes verify their provider signatures in their handlers.
+    '/api/reminders',
+    '/api/charge-balances',
+    '/api/send-drips',
+    '/api/lsa-followups',
+    '/api/insurance-expiry',
+    '/api/applicant-followups',
+    '/api/lifecycle-emails',
+    '/api/stripe-webhook',
+    '/messages/incoming',
+})
 
 # Cron credentials are bearer secrets. They must travel in a header, never in
 # a URL, because URLs routinely escape into proxy/access logs, browser history,
@@ -147,7 +167,7 @@ def check_request_origin():
     if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
         return None
     path = request.path or ''
-    if any(path.startswith(p) for p in CSRF_EXEMPT_PREFIXES):
+    if path in CSRF_EXEMPT_PATHS:
         return None
 
     host = request.host
