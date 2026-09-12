@@ -125,7 +125,7 @@ def test_same_slug_concurrency_has_one_winner(monkeypatch, postgres_url):
                 '/signup', data=_form('raceco', email),
                 headers={'Host': 'akye.test'})
             responses.append((response.status_code, response.data))
-        except Exception as exc:  # surface thread failures to the test process
+        except Exception as exc:
             failures.append(exc)
 
     threads = [
@@ -166,12 +166,16 @@ def test_required_seed_failure_leaves_no_tenant(monkeypatch, postgres_url):
     signup._tell_us = lambda *args, **kwargs: None
     import app as app_module
 
+    # Build the app before injecting the provisioning-only failure. create_app()
+    # has its own legacy/bootstrap seeding path; patching before app creation
+    # would test startup, not the tenant factory boundary we care about here.
+    app = app_module.create_app()
+
     def fail_seed():
         raise RuntimeError('forced starter-template failure')
 
     monkeypatch.setattr(app_module, '_seed_checklists', fail_seed)
 
-    app = app_module.create_app()
     response = app.test_client().post(
         '/signup', data=_form('seedfail', 'owner@seedfail.test'),
         headers={'Host': 'akye.test'})
