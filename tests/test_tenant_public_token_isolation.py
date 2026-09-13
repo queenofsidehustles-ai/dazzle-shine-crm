@@ -120,18 +120,19 @@ def test_claim_tokens_cannot_be_replayed_on_other_tenant_host(token_app):
     app = token_app
     client = app.test_client()
 
+    # A valid token pair must resolve on the owning tenant host.  The public
+    # claim page intentionally does not expose the booking/customer name, so
+    # status is the stable oracle here rather than incidental template text.
     own = client.get(
         '/claim/alpha-claim-token/alpha-staff-token',
         base_url='https://alpha.akye.test')
     assert own.status_code == 200
-    assert b'ALPHA TOKEN JOB' in own.data
-    assert b'BRAVO TOKEN JOB' not in own.data
 
+    # The exact same capability replayed against another tenant must disappear.
     replay = client.get(
         '/claim/alpha-claim-token/alpha-staff-token',
         base_url='https://bravo.akye.test')
     assert replay.status_code == 404
-    assert b'ALPHA TOKEN JOB' not in replay.data
 
     # Mixing a booking token from one tenant with a staff token from another
     # must also fail rather than composing a cross-tenant capability.
