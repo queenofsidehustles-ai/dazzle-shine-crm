@@ -43,6 +43,7 @@ from sqlalchemy import text
 import control_plane
 import provisioning
 import tenancy
+from auth import bind_session_to_current_tenant
 from extensions import db
 from models import User, LoginToken
 
@@ -354,6 +355,7 @@ def welcome(token):
 
     session.clear()
     session.permanent = True
+    bind_session_to_current_tenant()
     session['logged_in'] = True
     session['role'] = user.role
     session['user_id'] = user.id
