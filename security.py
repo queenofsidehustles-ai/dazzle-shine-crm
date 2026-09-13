@@ -97,7 +97,12 @@ LOCKOUT_WINDOW = timedelta(minutes=15)
 _WEAK_SECRETS = {'', 'dev-secret-change-me', 'insecure-dev-key', 'changeme'}
 
 
+# ---------------------------------------------------------------------------
+# Session cookie
+# ---------------------------------------------------------------------------
+
 def harden_session(app):
+    """Decide the cookie settings instead of inheriting Flask's defaults."""
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = _is_production()
@@ -105,6 +110,7 @@ def harden_session(app):
 
 
 def validate_secret(app):
+    """Refuse a production boot with a guessable session-signing secret."""
     secret = str(app.config.get('SECRET_KEY') or '')
     if _is_production() and (secret.lower() in _WEAK_SECRETS or len(secret) < 32):
         raise RuntimeError(
@@ -121,7 +127,12 @@ def _is_production():
                 or (os.environ.get('CRM_BASE') or '').startswith('https://'))
 
 
+# ---------------------------------------------------------------------------
+# Request credentials and origin
+# ---------------------------------------------------------------------------
+
 def reject_query_credentials():
+    """Refuse cron bearer secrets supplied in the URL query string."""
     if request.path in QUERY_SECRET_FORBIDDEN_PATHS and 'api_key' in request.args:
         from flask import abort
         abort(403, description='API credentials must be sent in X-Api-Key.')
@@ -129,7 +140,14 @@ def reject_query_credentials():
 
 
 def require_tenant_for_cron():
-    """Never run a tenant cron job against Akye's public schema."""
+    """Never run a tenant cron job against Akye's public schema.
+
+    In the hosted multi-tenant product the hostname is the authority selecting
+    the tenant schema. A valid cron bearer secret on the product apex, a malformed
+    deep hostname, or any other host that does not resolve to a tenant must not
+    be allowed to execute a tenant automation against ``public``. Single-business
+    installations have no BASE_DOMAIN and retain their historical behavior.
+    """
     if request.path not in CRON_PATHS:
         return None
     if not (os.environ.get('BASE_DOMAIN') or '').strip():
@@ -141,6 +159,7 @@ def require_tenant_for_cron():
 
 
 def _same_site(url, host):
+    """True when `url` belongs to the host serving this request."""
     if not url:
         return None
     try:
@@ -153,11 +172,13 @@ def _same_site(url, host):
 
 
 def check_request_origin():
+    """Refuse a state-changing request that says it came from somewhere else."""
     if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
         return None
     path = request.path or ''
     if path in CSRF_EXEMPT_PATHS:
         return None
+
     host = request.host
     for header in ('Origin', 'Referer'):
         value = request.headers.get(header)
@@ -184,11 +205,17 @@ def _record_rejected_origin(header, value, path):
         pass
 
 
+# ---------------------------------------------------------------------------
+# Login throttling
+# ---------------------------------------------------------------------------
+
 def client_ip():
+    """The caller address already resolved by the app's trusted-proxy layer."""
     return (request.remote_addr or 'unknown')[:45]
 
 
 def login_blocked():
+    """(blocked, minutes_left) for the address making this request."""
     try:
         from models import LoginAttempt
         since = datetime.utcnow() - LOCKOUT_WINDOW
@@ -208,6 +235,7 @@ def login_blocked():
 
 
 def record_login(username, ok):
+    """Write down an attempt. Never the password."""
     try:
         from models import LoginAttempt
         from extensions import db
@@ -226,6 +254,7 @@ def record_login(username, ok):
 
 
 def prune_login_attempts(days=30):
+    """Old attempts are noise. Called from the nightly cron."""
     try:
         from models import LoginAttempt
         from extensions import db
@@ -238,6 +267,7 @@ def prune_login_attempts(days=30):
 
 
 def install(app):
+    """Wire everything into the application."""
     validate_secret(app)
     harden_session(app)
     app.before_request(reject_query_credentials)
