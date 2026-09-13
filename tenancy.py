@@ -47,11 +47,20 @@ class use_tenant:
 
     def __enter__(self):
         self._token = _current.set(self.schema)
-        _apply_to_open_connections()
+        try:
+            _apply_to_open_connections()
+        except Exception:
+            # __exit__ is never called when __enter__ raises. Without this
+            # rollback, one failed tenant switch contaminates the context for
+            # everything that runs later in the same worker/task.
+            _current.reset(self._token)
+            self._token = None
+            raise
         return self
 
     def __exit__(self, *exc):
         _current.reset(self._token)
+        self._token = None
         _apply_to_open_connections()
         return False
 
