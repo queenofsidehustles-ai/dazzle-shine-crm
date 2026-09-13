@@ -86,6 +86,11 @@ QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
     '/api/lifecycle-emails',
 })
 
+# The same seven machine routes are tenant-scoped operations in Akye. Keeping
+# this alias explicit makes the host boundary auditable without duplicating the
+# list and risking one route being added to one protection but not the other.
+CRON_PATHS = QUERY_SECRET_FORBIDDEN_PATHS
+
 # Failed logins allowed from one address before it is asked to wait.
 MAX_FAILED_LOGINS = 10
 LOCKOUT_WINDOW = timedelta(minutes=15)
@@ -98,23 +103,14 @@ _WEAK_SECRETS = {'', 'dev-secret-change-me', 'insecure-dev-key', 'changeme'}
 
 def harden_session(app):
     """Decide the cookie settings instead of inheriting Flask's defaults."""
-    app.config['SESSION_COOKIE_HTTPONLY'] = True      # JavaScript cannot read it
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'     # not sent on cross-site POST
-    # HTTPS-only in production. Not locally, or the cookie would never be set
-    # over http://127.0.0.1 and nobody could log in to test anything.
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = _is_production()
-    # A shared laptop in an office should not stay logged in forever. Long
-    # enough that an owner is not signing in every morning.
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=14)
 
 
 def validate_secret(app):
-    """Refuse a production boot with a guessable session-signing secret.
-
-    A forged Flask session is an owner login because authorization is stored in
-    the signed cookie. Local development may keep the convenient fallback, but
-    a deployed business must provide a unique, high-entropy value.
-    """
+    """Refuse a production boot with a guessable session-signing secret."""
     secret = str(app.config.get('SECRET_KEY') or '')
     if _is_production() and (secret.lower() in _WEAK_SECRETS or len(secret) < 32):
         raise RuntimeError(
@@ -126,7 +122,6 @@ def validate_secret(app):
 def _is_production():
     if (os.environ.get('FLASK_ENV') or '').lower() == 'development':
         return False
-    # Railway sets this on every deployment; its absence means a laptop.
     return bool(os.environ.get('RAILWAY_ENVIRONMENT')
                 or os.environ.get('RAILWAY_PROJECT_ID')
                 or (os.environ.get('CRM_BASE') or '').startswith('https://'))
@@ -144,10 +139,29 @@ def reject_query_credentials():
     return None
 
 
+def require_tenant_for_cron():
+    """Never run a tenant cron job against Akye's public schema.
+
+    In the hosted multi-tenant product the hostname is the authority selecting
+    the tenant schema. A valid cron bearer secret on the product apex, a malformed
+    deep hostname, or any other host that does not resolve to a tenant must not
+    be allowed to execute a tenant automation against ``public``. Single-business
+    installations have no BASE_DOMAIN and retain their historical behavior.
+    """
+    if request.path not in CRON_PATHS:
+        return None
+    if not (os.environ.get('BASE_DOMAIN') or '').strip():
+        return None
+    if not getattr(g, 'tenant_slug', None):
+        from flask import abort
+        abort(404)
+    return None
+
+
 def _same_site(url, host):
     """True when `url` belongs to the host serving this request."""
     if not url:
-        return None                      # nothing to check
+        return None
     try:
         parsed = urlparse(url)
     except Exception:
@@ -158,10 +172,7 @@ def _same_site(url, host):
 
 
 def check_request_origin():
-    """Refuse a state-changing request that says it came from somewhere else.
-
-    Registered as a before_request. Returns None to allow.
-    """
+    """Refuse a state-changing request that says it came from somewhere else."""
     if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
         return None
     path = request.path or ''
@@ -173,14 +184,13 @@ def check_request_origin():
         value = request.headers.get(header)
         verdict = _same_site(value, host)
         if verdict is None:
-            continue                     # header absent — try the next one
+            continue
         if verdict:
-            return None                  # it came from us
-        # Present and pointing elsewhere. That is the attack.
+            return None
         _record_rejected_origin(header, value, path)
         from flask import abort
         abort(403, description='This form was submitted from another site.')
-    return None                          # neither header present — allow
+    return None
 
 
 def _record_rejected_origin(header, value, path):
@@ -200,13 +210,7 @@ def _record_rejected_origin(header, value, path):
 # ---------------------------------------------------------------------------
 
 def client_ip():
-    """The caller address already resolved by the app's trusted-proxy layer.
-
-    Reading X-Forwarded-For here would trust caller-controlled entries and let
-    an attacker choose a fresh address for every password guess. ProxyFix is
-    configured for exactly one Railway hop and writes the resolved client onto
-    ``remote_addr`` before this function runs.
-    """
+    """The caller address already resolved by the app's trusted-proxy layer."""
     return (request.remote_addr or 'unknown')[:45]
 
 
@@ -227,14 +231,11 @@ def login_blocked():
         left = max(1, int((unlock - datetime.utcnow()).total_seconds() // 60) + 1)
         return True, left
     except Exception:
-        # A throttle that cannot read its own table must not become the reason
-        # an owner cannot log in to her own business.
         return False, 0
 
 
 def record_login(username, ok):
-    """Write down an attempt. Never the password, and never enough of the
-    username to be worth stealing on its own."""
+    """Write down an attempt. Never the password."""
     try:
         from models import LoginAttempt
         from extensions import db
@@ -270,4 +271,5 @@ def install(app):
     validate_secret(app)
     harden_session(app)
     app.before_request(reject_query_credentials)
+    app.before_request(require_tenant_for_cron)
     app.before_request(check_request_origin)
