@@ -61,7 +61,7 @@ CSRF_EXEMPT_PATHS = frozenset({
     '/api/booking',
 
     # Machine-to-machine routes. Cron routes require X-Api-Key; Stripe and
-    # Twilio routes verify their provider signatures in their handlers.
+    # Twilio routes verify their provider signatures in their handlers / guards.
     '/api/reminders',
     '/api/charge-balances',
     '/api/send-drips',
@@ -90,6 +90,15 @@ QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
 # this alias explicit makes the host boundary auditable without duplicating the
 # list and risking one route being added to one protection but not the other.
 CRON_PATHS = QUERY_SECRET_FORBIDDEN_PATHS
+
+# Provider callbacks are also tenant-scoped because each business can store its
+# own Stripe/Twilio credentials. In hosted Akye the tenant subdomain is therefore
+# part of the callback authority; the apex/public schema is never a safe target.
+PROVIDER_WEBHOOK_PATHS = frozenset({
+    '/api/stripe-webhook',
+    '/messages/incoming',
+})
+TENANT_MACHINE_PATHS = CRON_PATHS | PROVIDER_WEBHOOK_PATHS
 
 # Failed logins allowed from one address before it is asked to wait.
 MAX_FAILED_LOGINS = 10
@@ -128,7 +137,7 @@ def _is_production():
 
 
 # ---------------------------------------------------------------------------
-# Request credentials and origin
+# Request credentials, machine boundaries, and origin
 # ---------------------------------------------------------------------------
 
 def reject_query_credentials():
@@ -139,22 +148,54 @@ def reject_query_credentials():
     return None
 
 
-def require_tenant_for_cron():
-    """Never run a tenant cron job against Akye's public schema.
+def require_tenant_for_machine_route():
+    """Never run a tenant machine request against Akye's public schema.
 
     In the hosted multi-tenant product the hostname is the authority selecting
-    the tenant schema. A valid cron bearer secret on the product apex, a malformed
-    deep hostname, or any other host that does not resolve to a tenant must not
-    be allowed to execute a tenant automation against ``public``. Single-business
-    installations have no BASE_DOMAIN and retain their historical behavior.
+    the tenant schema. A valid cron bearer secret or provider signature on the
+    product apex, a malformed deep hostname, or any other host that does not
+    resolve to a tenant must not execute tenant work against ``public``.
+    Single-business installations have no BASE_DOMAIN and retain their historical
+    host behavior (provider signatures still apply).
     """
-    if request.path not in CRON_PATHS:
+    if request.path not in TENANT_MACHINE_PATHS:
         return None
     if not (os.environ.get('BASE_DOMAIN') or '').strip():
         return None
     if not getattr(g, 'tenant_slug', None):
         from flask import abort
         abort(404)
+    return None
+
+
+def validate_twilio_webhook():
+    """Authenticate Twilio before any inbound SMS can touch tenant data.
+
+    The previous /messages/incoming route trusted form fields from any caller.
+    In hosted Akye that meant anyone who could reach a tenant subdomain could
+    manufacture an inbound text, opt a real phone number out, stop LSA followups,
+    create inbox records and trigger owner alerts. Twilio signs the exact callback
+    URL plus form parameters; validate that signature with this tenant's own auth
+    token and fail closed when either the token or signature is absent/invalid.
+    """
+    if request.path != '/messages/incoming':
+        return None
+
+    import integrations
+    token = (integrations.twilio_auth_token() or '').strip()
+    signature = (request.headers.get('X-Twilio-Signature') or '').strip()
+    if not token or not signature:
+        from flask import abort
+        abort(403)
+
+    try:
+        from twilio.request_validator import RequestValidator
+        valid = RequestValidator(token).validate(request.url, request.form, signature)
+    except Exception:
+        valid = False
+    if not valid:
+        from flask import abort
+        abort(403)
     return None
 
 
@@ -271,5 +312,6 @@ def install(app):
     validate_secret(app)
     harden_session(app)
     app.before_request(reject_query_credentials)
-    app.before_request(require_tenant_for_cron)
+    app.before_request(require_tenant_for_machine_route)
+    app.before_request(validate_twilio_webhook)
     app.before_request(check_request_origin)
