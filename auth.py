@@ -122,10 +122,15 @@ def authenticate(username, password):
     if user and user.check_password(password or ''):
         user.last_login = datetime.utcnow()
         db.session.commit()
+        # Authentication happens after app.before_request resolved the host.
+        # Stamp that tenant into the signed session before the login route marks
+        # it logged in, so the cookie cannot later be replayed on another host.
+        bind_session_to_current_tenant()
         return True, {'user_id': user.id, 'role': user.role, 'name': user.name}
     if env_login_configured():
         if (username == os.environ.get('ADMIN_USER', '').strip()
                 and password == (os.environ.get('ADMIN_PASS') or '')):
+            bind_session_to_current_tenant()
             return True, {'user_id': None, 'role': 'owner', 'name': 'Owner'}
     return False, None
 
