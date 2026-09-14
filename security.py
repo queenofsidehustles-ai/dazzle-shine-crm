@@ -137,7 +137,7 @@ def _is_production():
 
 
 # ---------------------------------------------------------------------------
-# Request credentials, machine boundaries, and origin
+# Request credentials, machine boundaries, payment integrity, and origin
 # ---------------------------------------------------------------------------
 
 def reject_query_credentials():
@@ -165,6 +165,78 @@ def require_tenant_for_machine_route():
     if not getattr(g, 'tenant_slug', None):
         from flask import abort
         abort(404)
+    return None
+
+
+def validate_booking_payment_intent():
+    """Never let browser-supplied Stripe identifiers manufacture a paid booking.
+
+    ``/api/booking`` is intentionally public, so the browser is an untrusted
+    claimant. If it says a deposit was already paid, verify that claim directly
+    with this tenant's Stripe account before the route can create a Client or
+    Booking row. Pending bookings without a PaymentIntent remain allowed.
+    """
+    if request.path != '/api/booking' or request.method != 'POST':
+        return None
+
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    payment_intent_id = (data.get('payment_intent_id') or '').strip()
+    if not payment_intent_id:
+        return None
+
+    claimed_customer = (data.get('stripe_customer_id') or '').strip()
+    if not claimed_customer:
+        from flask import abort
+        abort(400, description='Paid booking requires its Stripe customer.')
+
+    import integrations
+    import stripe
+
+    secret = (integrations.stripe_secret_key() or '').strip()
+    if not secret:
+        from flask import abort
+        abort(400, description='Payments are not configured.')
+    stripe.api_key = secret
+
+    try:
+        intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+    except Exception:
+        from flask import abort
+        abort(400, description='Payment could not be verified.')
+
+    def field(name, default=None):
+        if isinstance(intent, dict):
+            return intent.get(name, default)
+        return getattr(intent, name, default)
+
+    expected_cents = int(round(float(__import__('pricing').get_deposit()) * 100))
+    received = field('amount_received')
+    if received is None:
+        received = field('amount')
+
+    verified = (
+        str(field('id') or '') == payment_intent_id
+        and field('status') == 'succeeded'
+        and str(field('currency') or '').lower() == 'usd'
+        and int(received or 0) == expected_cents
+        and str(field('customer') or '') == claimed_customer
+    )
+
+    claimed_method = (data.get('stripe_payment_method_id') or '').strip()
+    actual_method = str(field('payment_method') or '')
+    if claimed_method and claimed_method != actual_method:
+        verified = False
+
+    if not verified:
+        from flask import abort
+        abort(400, description='Payment does not match this booking deposit.')
+
+    # A succeeded PaymentIntent is a single piece of money, not a reusable
+    # bearer token. Refuse a second booking in this tenant with the same intent.
+    from models import Booking
+    if Booking.query.filter_by(stripe_payment_intent=payment_intent_id).first():
+        from flask import abort
+        abort(400, description='Payment has already been used for a booking.')
     return None
 
 
@@ -313,5 +385,6 @@ def install(app):
     harden_session(app)
     app.before_request(reject_query_credentials)
     app.before_request(require_tenant_for_machine_route)
+    app.before_request(validate_booking_payment_intent)
     app.before_request(validate_twilio_webhook)
     app.before_request(check_request_origin)
