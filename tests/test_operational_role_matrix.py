@@ -3,6 +3,7 @@ from flask import Flask, session
 
 import rbac
 from auth import login_required
+from navigation import sidebar
 
 
 def _app(endpoint, method='GET'):
@@ -24,6 +25,32 @@ def _status(role, endpoint, method='GET'):
         sess['logged_in'] = True
         sess['role'] = role
     return client.open('/protected', method=method).status_code
+
+
+def _nav_endpoints(role):
+    app = Flask(__name__)
+    app.secret_key = 'iam-navigation-test-secret'
+    with app.test_request_context('/'):
+        session['logged_in'] = True
+        session['role'] = role
+        return {
+            item['endpoint']
+            for section in sidebar(role=role)
+            for item in section['items']
+        }
+
+
+def _nav_tabs(role, endpoint):
+    app = Flask(__name__)
+    app.secret_key = 'iam-navigation-test-secret'
+    with app.test_request_context('/'):
+        session['logged_in'] = True
+        session['role'] = role
+        for section in sidebar(role=role):
+            for item in section['items']:
+                if item['endpoint'] == endpoint:
+                    return {tab['endpoint'] for tab in item['tabs']}
+    return set()
 
 
 @pytest.mark.parametrize('role', ['owner', 'admin', 'dispatcher'])
@@ -108,3 +135,53 @@ def test_pay_hiring_and_commercial_surfaces_remain_owner_only(endpoint, method):
     assert _status('owner', endpoint, method) == 200
     assert _status('admin', endpoint, method) == 403
     assert _status('dispatcher', endpoint, method) == 403
+
+
+@pytest.mark.parametrize('role', ['admin', 'dispatcher'])
+def test_operational_navigation_matches_server_grants(role):
+    endpoints = _nav_endpoints(role)
+    assert {'admin.dashboard', 'bookings.index', 'bookings.calendar',
+            'bookings.clients', 'messages.inbox', 'leads.index'} <= endpoints
+    assert 'money.pnl' not in endpoints
+    assert 'settings.business' not in endpoints
+    assert 'places_finder.dashboard' not in endpoints
+    assert 'contractors.team' not in endpoints
+    assert 'contractors.applications' not in endpoints
+    assert 'workorders.templates' not in endpoints
+
+
+def test_dispatcher_cannot_see_message_template_tab_but_admin_can():
+    assert 'messages.templates' not in _nav_tabs('dispatcher', 'messages.inbox')
+    assert 'messages.templates' in _nav_tabs('admin', 'messages.inbox')
+
+
+@pytest.mark.parametrize('role', ['limited', 'team'])
+def test_limited_navigation_contains_only_explicit_read_workspace(role):
+    endpoints = _nav_endpoints(role)
+    assert {'admin.dashboard', 'bookings.index', 'bookings.calendar',
+            'bookings.clients'} <= endpoints
+    assert 'messages.inbox' not in endpoints
+    assert 'leads.index' not in endpoints
+    assert 'money.pnl' not in endpoints
+    assert 'settings.business' not in endpoints
+    assert 'contractors.team' not in endpoints
+
+
+def test_cleaner_has_no_back_office_navigation_without_explicit_get_grant():
+    assert _nav_endpoints('cleaner') == set()
+
+
+def test_request_session_role_cannot_be_elevated_by_navigation_argument():
+    app = Flask(__name__)
+    app.secret_key = 'iam-navigation-test-secret'
+    with app.test_request_context('/'):
+        session['logged_in'] = True
+        session['role'] = 'dispatcher'
+        endpoints = {
+            item['endpoint']
+            for section in sidebar(role='owner')
+            for item in section['items']
+        }
+    assert 'money.pnl' not in endpoints
+    assert 'settings.business' not in endpoints
+    assert 'messages.inbox' in endpoints
