@@ -65,6 +65,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest
 
+      - name: PAY-01 exact money display
+        id: pay01
+        continue-on-error: true
+        run: |
+          python -m pytest -q tests/test_money_display_consistency.py --tb=short
+
       - name: PAY-02 payment integrity
         id: pay02
         continue-on-error: true
@@ -117,7 +123,8 @@ jobs:
           echo "- SHA: ${{ steps.candidate.outputs.candidate_sha }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Branch/ref: ${{ github.ref }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Live funds authorized: false" >> "$GITHUB_STEP_SUMMARY"
-          echo "- PAY-02: ${{ steps.pay02.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- PAY-01 exact money display: ${{ steps.pay01.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- PAY-02 payment integrity: ${{ steps.pay02.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tenant HTTP/session: ${{ steps.tenant_http.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- PostgreSQL tenancy/pool: ${{ steps.tenant_pg.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Scheduler/security/provider: ${{ steps.security.outcome }}" >> "$GITHUB_STEP_SUMMARY"
@@ -127,6 +134,7 @@ jobs:
         run: |
           failed=0
           for result in \
+            "${{ steps.pay01.outcome }}" \
             "${{ steps.pay02.outcome }}" \
             "${{ steps.tenant_http.outcome }}" \
             "${{ steps.tenant_pg.outcome }}" \
