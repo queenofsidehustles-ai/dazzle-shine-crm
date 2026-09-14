@@ -57,6 +57,11 @@ def login_required(f):
             return redirect(url_for('admin.login'))
         if not session_matches_current_tenant():
             return _reject_wrong_tenant_session()
+        # Route authentication and route authorization are separate boundaries.
+        # rbac only acts on endpoints deliberately classified in its matrix;
+        # unknown roles/permissions fail closed for those protected actions.
+        import rbac
+        rbac.enforce_current_request()
         return f(*args, **kwargs)
     return decorated
 
