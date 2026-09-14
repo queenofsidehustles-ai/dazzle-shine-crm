@@ -115,6 +115,7 @@ jobs:
             tests/test_csrf_api_boundary.py \
             tests/test_role_fail_closed.py \
             tests/test_signup_provisioning_safety.py \
+            tests/test_forwarded_host_tenant_boundary.py \
             --tb=short
 
       - name: Candidate summary
@@ -128,7 +129,7 @@ jobs:
           echo "- PAY-02 payment integrity: ${{ steps.pay02.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tenant HTTP/session/documents: ${{ steps.tenant_http.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- PostgreSQL tenancy/pool: ${{ steps.tenant_pg.outcome }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Scheduler/security/provider: ${{ steps.security.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Scheduler/security/provider/host: ${{ steps.security.outcome }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce launch gates
         if: always()
