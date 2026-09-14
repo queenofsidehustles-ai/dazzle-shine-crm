@@ -5,6 +5,7 @@ public token links (claim links and work-order checklists). Those tokens must
 remain scoped to the host-selected tenant schema, and malformed multi-label
 subdomains must never alias a real tenant.
 """
+import json
 import os
 
 import pytest
@@ -31,6 +32,20 @@ def _postgres_admin_url():
     return None
 
 
+def _fake_private_ref(tenant_slug, checklist_id, phase):
+    import private_media
+    return private_media._encode({
+        'v': 1,
+        'tenant': tenant_slug,
+        'kind': 'job-photo',
+        'scope': f'{checklist_id}:{phase}',
+        'public_id': f'akye-private/{tenant_slug}/job-photo/fake-{checklist_id}-{phase}',
+        'version': 1,
+        'format': 'jpg',
+        'resource_type': 'image',
+    })
+
+
 @pytest.fixture(scope='module')
 def token_app():
     admin_url = _postgres_admin_url()
@@ -48,6 +63,7 @@ def token_app():
     os.environ['SECRET_KEY'] = 'tenant-public-token-secret'
     os.environ['BASE_DOMAIN'] = 'akye.test'
     os.environ['SIGNUPS_OPEN'] = '0'
+    os.environ['CLOUDINARY_API_SECRET'] = 'tenant-public-media-signing-secret'
     os.environ.pop('ADMIN_USER', None)
     os.environ.pop('ADMIN_PASS', None)
 
@@ -78,9 +94,18 @@ def token_app():
                           is_active=True)
             db.session.add_all([booking, staff])
             db.session.flush()
-            db.session.add(JobChecklist(
+            checklist = JobChecklist(
                 booking_id=booking.id, template_name='Alpha checklist', items='[]',
-                token='alpha-checklist-token'))
+                token='alpha-checklist-token')
+            db.session.add(checklist)
+            db.session.flush()
+            checklist.before_photos = json.dumps([
+                _fake_private_ref('alpha', checklist.id, 'before'),
+                'https://res.cloudinary.com/public-legacy/raw.jpg',
+            ])
+            checklist.after_photos = json.dumps([
+                _fake_private_ref('alpha', checklist.id, 'after'),
+            ])
             db.session.commit()
             db.session.remove()
 
@@ -94,9 +119,17 @@ def token_app():
                           is_active=True)
             db.session.add_all([booking, staff])
             db.session.flush()
-            db.session.add(JobChecklist(
+            checklist = JobChecklist(
                 booking_id=booking.id, template_name='Bravo checklist', items='[]',
-                token='bravo-checklist-token'))
+                token='bravo-checklist-token')
+            db.session.add(checklist)
+            db.session.flush()
+            checklist.before_photos = json.dumps([
+                _fake_private_ref('bravo', checklist.id, 'before'),
+            ])
+            checklist.after_photos = json.dumps([
+                _fake_private_ref('bravo', checklist.id, 'after'),
+            ])
             db.session.commit()
             db.session.remove()
 
@@ -160,6 +193,45 @@ def test_workorder_checklist_token_is_host_scoped(token_app):
         '/workorders/checklist/bravo-checklist-token',
         base_url='https://alpha.akye.test')
     assert reverse.status_code == 404
+
+
+def test_checklist_page_exposes_only_akye_photo_routes(token_app):
+    client = token_app.test_client()
+    response = client.get(
+        '/workorders/checklist/alpha-checklist-token',
+        base_url='https://alpha.akye.test')
+    assert response.status_code == 200
+    assert b'https://res.cloudinary.com/public-legacy/raw.jpg' not in response.data
+    assert b'api.cloudinary.com' not in response.data
+    assert b'/workorders/checklist/alpha-checklist-token/photo/before/0' in response.data
+    assert b'/workorders/checklist/alpha-checklist-token/photo/after/0' in response.data
+
+
+def test_checklist_photo_route_requires_exact_token_phase_and_index(token_app, monkeypatch):
+    import private_media
+    monkeypatch.setattr(
+        private_media, 'fetch_image',
+        lambda ref, **kwargs: (b'private-image', 'image/jpeg'))
+
+    client = token_app.test_client()
+    own = client.get(
+        '/workorders/checklist/alpha-checklist-token/photo/before/0',
+        base_url='https://alpha.akye.test')
+    assert own.status_code == 200
+    assert own.data == b'private-image'
+    assert own.headers['Cache-Control'] == 'private, no-store'
+    assert own.headers['Pragma'] == 'no-cache'
+    assert own.headers['X-Content-Type-Options'] == 'nosniff'
+
+    assert client.get(
+        '/workorders/checklist/alpha-checklist-token/photo/after/1',
+        base_url='https://alpha.akye.test').status_code == 404
+    assert client.get(
+        '/workorders/checklist/alpha-checklist-token/photo/before/99',
+        base_url='https://alpha.akye.test').status_code == 404
+    assert client.get(
+        '/workorders/checklist/alpha-checklist-token/photo/before/0',
+        base_url='https://bravo.akye.test').status_code == 404
 
 
 def test_multi_label_subdomain_does_not_alias_a_real_tenant(token_app):
