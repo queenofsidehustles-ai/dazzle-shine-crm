@@ -41,7 +41,7 @@
 <!-- Add an expense -->
 <div class="card" style="margin-bottom:18px">
   <div class="section-header"><h2>➕ Log an expense</h2></div>
-  <form method="POST" action="{{ url_for('money.add_expense') }}" id="expForm">
+  <form method="POST" enctype="multipart/form-data" action="{{ url_for('money.add_expense') }}" id="expForm">
     {{ period_fields() }}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
       <div class="form-group" style="margin:0">
@@ -96,14 +96,13 @@
       <input type="text" name="note" placeholder="What this was for — helps at tax time" />
     </div>
 
-    <!-- Receipt photo -->
+    <!-- Receipt photo: sent to Akye, never directly to the storage provider. -->
     <div style="background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:12px 13px;margin-bottom:12px">
       <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:7px">
         📷 Receipt photo <span style="font-weight:400;color:var(--softer)">(optional, but worth it if you're ever audited)</span>
       </label>
-      <input type="file" accept="image/*" id="receiptFile" style="font-size:0.85rem" />
-      <input type="hidden" name="receipt_url" id="receiptUrl" />
-      <div id="receiptStatus" style="font-size:0.8rem;color:var(--softer);margin-top:6px"></div>
+      <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" name="receipt_file" id="receiptFile" style="font-size:0.85rem" />
+      <div id="receiptStatus" style="font-size:0.8rem;color:var(--softer);margin-top:6px">Receipt images are stored privately and are only served back through your authenticated Akye account.</div>
     </div>
 
     <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Log this expense</button>
@@ -130,7 +129,7 @@
             {{ e.note or '' }}
             {% if e.is_mileage %}<span style="color:var(--muted)">{{ '%g' % e.miles }} mi @ ${{ '%.2f' % e.rate_per_mile }}</span>{% endif %}
           </td>
-          <td>{% if e.receipt_url %}<a href="{{ e.receipt_url }}" target="_blank" title="View receipt">📷</a>{% else %}<span style="color:var(--info-soft)">—</span>{% endif %}</td>
+          <td>{% if e.receipt_url %}<a href="{{ url_for('money.expense_receipt', expense_id=e.id) }}" target="_blank" rel="noopener" title="View receipt">📷</a>{% else %}<span style="color:var(--info-soft)">—</span>{% endif %}</td>
           <td style="font-weight:700;color:var(--warn);white-space:nowrap">−${{ '%.2f' % (e.amount or 0) }}</td>
           <td style="text-align:right">
             <form method="POST" action="{{ url_for('money.delete_expense', expense_id=e.id) }}" style="display:inline"
@@ -253,32 +252,5 @@
   milesInput.addEventListener('input', calcMiles);
   rateInput.addEventListener('input', calcMiles);
   syncMode();
-
-  // Receipt straight to Cloudinary, same unsigned upload the job photos use.
-  const CLOUD_NAME = {{ cloud_name | tojson }};
-  const UPLOAD_PRESET = {{ upload_preset | tojson }};
-  const fileInput = document.getElementById('receiptFile');
-  const urlInput = document.getElementById('receiptUrl');
-  const status = document.getElementById('receiptStatus');
-
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files[0];
-    if (!file) return;
-    status.textContent = 'Uploading receipt…';
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('upload_preset', UPLOAD_PRESET);
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-                              { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!data.secure_url) throw new Error(data.error?.message || 'upload failed');
-      urlInput.value = data.secure_url;
-      status.innerHTML = '✅ Receipt attached — <a href="' + data.secure_url + '" target="_blank">view</a>';
-    } catch (err) {
-      // The expense still saves without the photo; don't block her on this.
-      status.textContent = "Couldn't upload that photo — the expense will still save without it.";
-    }
-  });
 </script>
 {% endblock %}
