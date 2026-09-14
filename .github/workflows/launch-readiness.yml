@@ -145,7 +145,11 @@ jobs:
       - name: Role fail closed
         id: role_fail
         continue-on-error: true
-        run: python -m pytest -q tests/test_role_fail_closed.py --tb=short
+        run: |
+          python -m pytest -q \
+            tests/test_role_fail_closed.py \
+            tests/test_operational_role_matrix.py \
+            --tb=short
 
       - name: Signup provisioning safety
         id: signup
