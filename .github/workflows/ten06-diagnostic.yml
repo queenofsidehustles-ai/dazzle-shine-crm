@@ -1,0 +1,118 @@
+name: TEN-06 Diagnostic
+
+on:
+  push:
+    branches:
+      - akye-launch-readiness/cohort-30
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  aggregate:
+    name: TEN-06 aggregate suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+      - name: Run full lifecycle file
+        run: python -m pytest -vv tests/test_tenant_lifecycle_boundary.py --tb=short
+
+  case:
+    name: TEN-06 case — ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: active
+            nodeid: tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session
+          - name: suspended
+            nodeid: tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session
+          - name: reactivated
+            nodeid: tests/test_tenant_lifecycle_boundary.py::test_reactivation_restores_workspace_but_not_stale_pre_suspension_login
+          - name: closed-unknown
+            nodeid: tests/test_tenant_lifecycle_boundary.py::test_missing_closed_or_unknown_tenant_is_not_resolvable
+          - name: control-plane-error
+            nodeid: tests/test_tenant_lifecycle_boundary.py::test_control_plane_read_failure_is_503_not_implicit_access
+          - name: schema-mismatch
+            nodeid: tests/test_tenant_lifecycle_boundary.py::test_active_tenant_with_mismatched_schema_assignment_fails_closed
+          - name: schema-missing
+            nodeid: tests/test_tenant_lifecycle_boundary.py::test_active_tenant_with_missing_schema_assignment_fails_closed
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+      - name: Run lifecycle case
+        run: python -m pytest -vv "${{ matrix.nodeid }}" --tb=short
+
+  prefix:
+    name: TEN-06 prefix — ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: first-2
+            nodes: >-
+              tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session
+              tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session
+          - name: first-3
+            nodes: >-
+              tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session
+              tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session
+              tests/test_tenant_lifecycle_boundary.py::test_reactivation_restores_workspace_but_not_stale_pre_suspension_login
+          - name: first-4
+            nodes: >-
+              tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session
+              tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session
+              tests/test_tenant_lifecycle_boundary.py::test_reactivation_restores_workspace_but_not_stale_pre_suspension_login
+              tests/test_tenant_lifecycle_boundary.py::test_missing_closed_or_unknown_tenant_is_not_resolvable
+          - name: first-5
+            nodes: >-
+              tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session
+              tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session
+              tests/test_tenant_lifecycle_boundary.py::test_reactivation_restores_workspace_but_not_stale_pre_suspension_login
+              tests/test_tenant_lifecycle_boundary.py::test_missing_closed_or_unknown_tenant_is_not_resolvable
+              tests/test_tenant_lifecycle_boundary.py::test_control_plane_read_failure_is_503_not_implicit_access
+          - name: first-6
+            nodes: >-
+              tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session
+              tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session
+              tests/test_tenant_lifecycle_boundary.py::test_reactivation_restores_workspace_but_not_stale_pre_suspension_login
+              tests/test_tenant_lifecycle_boundary.py::test_missing_closed_or_unknown_tenant_is_not_resolvable
+              tests/test_tenant_lifecycle_boundary.py::test_control_plane_read_failure_is_503_not_implicit_access
+              tests/test_tenant_lifecycle_boundary.py::test_active_tenant_with_mismatched_schema_assignment_fails_closed
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+      - name: Run lifecycle prefix
+        shell: bash
+        run: python -m pytest -vv ${{ matrix.nodes }} --tb=short
