@@ -110,20 +110,45 @@ jobs:
             tests/test_tenant_search_path_fail_closed.py \
             --tb=short
 
-      - name: Scheduler, cron, provider and security boundaries
-        id: security
+      - name: Tenant scheduler isolation
+        id: sched_iso
         continue-on-error: true
-        run: |
-          python -m pytest -q \
-            tests/test_tenant_scheduler_isolation.py \
-            tests/test_cron_tenant_host_boundary.py \
-            tests/test_provider_webhook_boundary.py \
-            tests/test_cron_secret_transport.py \
-            tests/test_csrf_api_boundary.py \
-            tests/test_role_fail_closed.py \
-            tests/test_signup_provisioning_safety.py \
-            tests/test_forwarded_host_tenant_boundary.py \
-            --tb=short
+        run: python -m pytest -q tests/test_tenant_scheduler_isolation.py --tb=short
+
+      - name: Cron tenant host boundary
+        id: cron_host
+        continue-on-error: true
+        run: python -m pytest -q tests/test_cron_tenant_host_boundary.py --tb=short
+
+      - name: Provider webhook boundary
+        id: provider_webhook
+        continue-on-error: true
+        run: python -m pytest -q tests/test_provider_webhook_boundary.py --tb=short
+
+      - name: Cron secret transport
+        id: cron_secret
+        continue-on-error: true
+        run: python -m pytest -q tests/test_cron_secret_transport.py --tb=short
+
+      - name: CSRF API boundary
+        id: csrf_api
+        continue-on-error: true
+        run: python -m pytest -q tests/test_csrf_api_boundary.py --tb=short
+
+      - name: Role fail closed
+        id: role_fail
+        continue-on-error: true
+        run: python -m pytest -q tests/test_role_fail_closed.py --tb=short
+
+      - name: Signup provisioning safety
+        id: signup
+        continue-on-error: true
+        run: python -m pytest -q tests/test_signup_provisioning_safety.py --tb=short
+
+      - name: Forwarded host tenant boundary
+        id: forwarded_host
+        continue-on-error: true
+        run: python -m pytest -q tests/test_forwarded_host_tenant_boundary.py --tb=short
 
       - name: Candidate summary
         if: always()
@@ -136,37 +161,51 @@ jobs:
           echo "- PAY-02 payment integrity: ${{ steps.pay02.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tenant HTTP/session/documents/exports/media: ${{ steps.tenant_http.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- PostgreSQL tenancy/pool: ${{ steps.tenant_pg.outcome }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Scheduler/security/provider/host: ${{ steps.security.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tenant scheduler isolation: ${{ steps.sched_iso.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Cron tenant host boundary: ${{ steps.cron_host.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Provider webhook boundary: ${{ steps.provider_webhook.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Cron secret transport: ${{ steps.cron_secret.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- CSRF API boundary: ${{ steps.csrf_api.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Role fail closed: ${{ steps.role_fail.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Signup provisioning safety: ${{ steps.signup.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Forwarded host tenant boundary: ${{ steps.forwarded_host.outcome }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Diagnose PAY-01 gate failure
         if: always() && steps.pay01.outcome != 'success'
-        run: |
-          echo "PAY-01 gate outcome: ${{ steps.pay01.outcome }}"
-          exit 1
-
+        run: exit 1
       - name: Diagnose PAY-02 gate failure
         if: always() && steps.pay02.outcome != 'success'
-        run: |
-          echo "PAY-02 gate outcome: ${{ steps.pay02.outcome }}"
-          exit 1
-
+        run: exit 1
       - name: Diagnose tenant HTTP/media gate failure
         if: always() && steps.tenant_http.outcome != 'success'
-        run: |
-          echo "Tenant HTTP/media gate outcome: ${{ steps.tenant_http.outcome }}"
-          exit 1
-
+        run: exit 1
       - name: Diagnose PostgreSQL tenancy gate failure
         if: always() && steps.tenant_pg.outcome != 'success'
-        run: |
-          echo "PostgreSQL tenancy gate outcome: ${{ steps.tenant_pg.outcome }}"
-          exit 1
-
-      - name: Diagnose scheduler/security gate failure
-        if: always() && steps.security.outcome != 'success'
-        run: |
-          echo "Scheduler/security gate outcome: ${{ steps.security.outcome }}"
-          exit 1
+        run: exit 1
+      - name: Diagnose tenant scheduler isolation failure
+        if: always() && steps.sched_iso.outcome != 'success'
+        run: exit 1
+      - name: Diagnose cron tenant host boundary failure
+        if: always() && steps.cron_host.outcome != 'success'
+        run: exit 1
+      - name: Diagnose provider webhook boundary failure
+        if: always() && steps.provider_webhook.outcome != 'success'
+        run: exit 1
+      - name: Diagnose cron secret transport failure
+        if: always() && steps.cron_secret.outcome != 'success'
+        run: exit 1
+      - name: Diagnose CSRF API boundary failure
+        if: always() && steps.csrf_api.outcome != 'success'
+        run: exit 1
+      - name: Diagnose role fail closed failure
+        if: always() && steps.role_fail.outcome != 'success'
+        run: exit 1
+      - name: Diagnose signup provisioning safety failure
+        if: always() && steps.signup.outcome != 'success'
+        run: exit 1
+      - name: Diagnose forwarded host tenant boundary failure
+        if: always() && steps.forwarded_host.outcome != 'success'
+        run: exit 1
 
       - name: Enforce launch gates
         if: always()
@@ -177,7 +216,14 @@ jobs:
             "${{ steps.pay02.outcome }}" \
             "${{ steps.tenant_http.outcome }}" \
             "${{ steps.tenant_pg.outcome }}" \
-            "${{ steps.security.outcome }}"; do
+            "${{ steps.sched_iso.outcome }}" \
+            "${{ steps.cron_host.outcome }}" \
+            "${{ steps.provider_webhook.outcome }}" \
+            "${{ steps.cron_secret.outcome }}" \
+            "${{ steps.csrf_api.outcome }}" \
+            "${{ steps.role_fail.outcome }}" \
+            "${{ steps.signup.outcome }}" \
+            "${{ steps.forwarded_host.outcome }}"; do
             if [ "$result" != "success" ]; then
               failed=1
             fi
