@@ -212,6 +212,34 @@ def _is_owner(role):
     return True
 
 
+def _effective_role(role):
+    """Use the authenticated session role in request context.
+
+    A caller-supplied role is presentation data, not authority. Outside a
+    request context the old no-role navigation tests get the least-privileged
+    back-office view instead of pretending to be owner.
+    """
+    try:
+        from flask import has_request_context, session
+        if has_request_context():
+            return session.get('role')
+    except Exception:
+        return None
+    return role if role is not None else 'limited'
+
+
+def _role_can_open(endpoint, role, owner_only=False):
+    """Whether this role may GET the page represented by a menu link."""
+    if _is_owner(role):
+        return True
+    if owner_only:
+        return False
+    import rbac
+    effective = _effective_role(role)
+    permission = rbac.required_permission(endpoint, 'GET')
+    return bool(permission and rbac.has_permission(effective, permission))
+
+
 def feature_for(endpoint):
     """The plan feature a page needs, or None if it is on every plan."""
     return MIN_PLAN.get(_resolve(endpoint))
@@ -222,12 +250,12 @@ def _always_allowed(_feature):
 
 
 def sidebar(role=None, can=None, setup_done=True):
-    """The menu to draw, already filtered to what this person may see.
+    """The menu to draw, already filtered to plan and IAM access.
 
     `can(feature)` decides plan access. A page their plan does not include is
-    marked `locked` and still drawn — see entitlements.py for why. Role is
-    different: an owner-only page is genuinely removed for a team member,
-    because that is a permission and not an upsell.
+    marked `locked` and still drawn — see entitlements.py for why. IAM is
+    different: a route the role cannot open is removed completely so the menu
+    cannot advertise an action the server will reject.
     """
     can = can or _always_allowed
     out = []
@@ -239,7 +267,7 @@ def sidebar(role=None, can=None, setup_done=True):
     for heading, items in SECTIONS:
         visible = []
         for ep, icon, label, owner_only, tabs in items:
-            if not (_is_owner(role) or not owner_only):
+            if not _role_can_open(ep, role, owner_only):
                 continue
             if ep == promote and heading != 'Dashboard':
                 continue                      # drawn at the top instead
@@ -248,12 +276,12 @@ def sidebar(role=None, can=None, setup_done=True):
                 'locked': _locked(ep, can),
                 'tabs': [{'endpoint': t[0], 'label': t[1],
                           'locked': _locked(t[0], can)}
-                         for t in tabs if _is_owner(role) or not t[2]],
+                         for t in tabs if _role_can_open(t[0], role, t[2])],
             })
         if heading == 'Dashboard' and promote:
             for _h, its in SECTIONS:
                 for it in its:
-                    if it[0] == promote:
+                    if it[0] == promote and _role_can_open(it[0], role, it[3]):
                         visible.append({
                             'endpoint': it[0], 'icon': it[1], 'label': it[2],
                             'locked': _locked(it[0], can), 'tabs': [],
@@ -315,6 +343,6 @@ def tabs_for(endpoint, role=None, can=None):
             if target == ep or any(target == t[0] for t in tabs):
                 allowed = [{'endpoint': t[0], 'label': t[1],
                             'locked': _locked(t[0], can)}
-                           for t in tabs if _is_owner(role) or not t[2]]
+                           for t in tabs if _role_can_open(t[0], role, t[2])]
                 return (allowed if len(allowed) > 1 else []), target
     return [], target
