@@ -201,7 +201,7 @@ MIN_PLAN = {
 
 
 def _is_owner(role):
-    return (role or 'owner') == 'owner'
+    return role == 'owner'
 
 
 def feature_for(endpoint):
@@ -213,7 +213,7 @@ def _always_allowed(_feature):
     return True
 
 
-def sidebar(role='owner', can=None, setup_done=True):
+def sidebar(role=None, can=None, setup_done=True):
     """The menu to draw, already filtered to what this person may see.
 
     `can(feature)` decides plan access. A page their plan does not include is
@@ -292,7 +292,7 @@ def active_item(endpoint):
     return None
 
 
-def tabs_for(endpoint, role='owner', can=None):
+def tabs_for(endpoint, role=None, can=None):
     """(tabs, active_endpoint) for the page being viewed.
 
     Empty when the page's section has only one page in it — a lone tab is just
