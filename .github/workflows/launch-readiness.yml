@@ -96,6 +96,7 @@ jobs:
             tests/test_tenant_secure_document_isolation.py \
             tests/test_tenant_export_isolation.py \
             tests/test_private_media_boundary.py \
+            tests/test_private_receipt_boundary.py \
             --tb=short
 
       - name: PostgreSQL tenant and pool isolation
