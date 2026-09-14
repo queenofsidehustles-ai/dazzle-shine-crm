@@ -69,7 +69,10 @@ jobs:
         id: pay01
         continue-on-error: true
         run: |
-          python -m pytest -q tests/test_money_display_consistency.py --tb=short
+          python -m pytest -q \
+            tests/test_money_display_consistency.py \
+            tests/test_workorder_money_display.py \
+            --tb=short
 
       - name: PAY-02 payment integrity
         id: pay02
