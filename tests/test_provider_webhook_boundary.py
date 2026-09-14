@@ -1,9 +1,9 @@
 """TEN-07: provider webhooks must be authenticated and tenant-host scoped.
 
-Stripe already verifies its provider signature in the route handler. Twilio's
-inbound-SMS route historically did not, so a caller could forge From/Body fields
-and mutate inbox/opt-out/follow-up state. In hosted Akye both provider callbacks
-must also resolve to a tenant host before they can touch a schema.
+Stripe verifies its provider signature in the billing route handler. Twilio's
+inbound-SMS route is authenticated here by security.validate_twilio_webhook.
+In hosted Akye both provider callbacks must also resolve to a tenant host before
+they can touch a schema.
 
 Tenant lifecycle authorization is covered independently. These webhook-boundary
 unit tests deliberately stub that control-plane decision so a minimal Flask app
@@ -51,7 +51,7 @@ def _app(monkeypatch, base_domain='akye.test'):
 
     security.install(app)
 
-    app.add_url_rule('/api/stripe-webhook', endpoint='stripe_hook',
+    app.add_url_rule('/api/stripe/webhook', endpoint='stripe_hook',
                      view_func=lambda: ('ok', 200), methods=['POST'])
     app.add_url_rule('/messages/incoming', endpoint='twilio_hook',
                      view_func=lambda: ('ok', 200), methods=['POST'])
@@ -65,11 +65,16 @@ def _twilio_headers(url, form, token='tenant-twilio-auth-token'):
 
 def test_stripe_webhook_requires_resolved_tenant_host_in_akye(monkeypatch):
     client = _app(monkeypatch).test_client()
-    assert client.post('/api/stripe-webhook', base_url='https://akye.test').status_code == 404
-    assert client.post('/api/stripe-webhook',
+    assert client.post('/api/stripe/webhook', base_url='https://akye.test').status_code == 404
+    assert client.post('/api/stripe/webhook',
                        base_url='https://alpha.attacker.akye.test').status_code == 404
-    assert client.post('/api/stripe-webhook',
+    assert client.post('/api/stripe/webhook',
                        base_url='https://alpha.akye.test').status_code == 200
+
+
+def test_stale_stripe_webhook_alias_is_not_a_provider_boundary():
+    assert '/api/stripe-webhook' not in security.PROVIDER_WEBHOOK_PATHS
+    assert '/api/stripe/webhook' in security.PROVIDER_WEBHOOK_PATHS
 
 
 def test_twilio_webhook_requires_resolved_tenant_host_before_signature_check(monkeypatch):
@@ -109,8 +114,6 @@ def test_twilio_signature_is_bound_to_callback_host(monkeypatch):
     form = {'From': '+13015550123', 'Body': 'hello', 'MessageSid': 'SM123'}
     alpha_url = 'https://alpha.akye.test/messages/incoming'
 
-    # A signature generated for Alpha must not authenticate the same form after
-    # replaying it at Bravo. Twilio signs the callback URL as well as the form.
     response = client.post('/messages/incoming', base_url='https://bravo.akye.test',
                            data=form, headers=_twilio_headers(alpha_url, form))
     assert response.status_code == 403
