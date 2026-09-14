@@ -1,9 +1,10 @@
 """Private media boundary for tenant-sensitive receipts and job photos.
 
 Cloudinary HTTPS URLs are not authorization. This module uploads sensitive
-images as ``authenticated`` Cloudinary assets and stores only an opaque Akye
-reference. Callers must supply the current tenant and, for public-token flows,
-the exact object scope before a reference can be resolved.
+images as ``authenticated`` Cloudinary assets and stores only an opaque,
+HMAC-authenticated Akye reference. Callers must supply the current tenant and,
+for public-token flows, the exact object scope before a reference can be
+resolved.
 
 The signed Cloudinary delivery URL is used only server-to-server and is never
 returned to the browser. If Cloudinary signing credentials are unavailable,
@@ -12,6 +13,8 @@ operations fail closed.
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import io
 import json
 import os
@@ -38,6 +41,13 @@ def is_ready() -> bool:
     ))
 
 
+def _signing_key() -> bytes:
+    secret = (os.environ.get("CLOUDINARY_API_SECRET") or "").strip()
+    if not secret:
+        raise RuntimeError("Private media signing is not configured")
+    return secret.encode("utf-8")
+
+
 def _configure():
     if not is_ready():
         raise RuntimeError("Private media storage is not configured")
@@ -50,37 +60,58 @@ def _configure():
     )
 
 
+def _b64encode(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _b64decode(token: str) -> bytes:
+    token += "=" * (-len(token) % 4)
+    return base64.urlsafe_b64decode(token.encode("ascii"))
+
+
 def _encode(payload: dict[str, Any]) -> str:
     raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    token = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
-    return _PREFIX + token
+    signature = hmac.new(_signing_key(), raw, hashlib.sha256).digest()
+    return _PREFIX + _b64encode(raw) + "." + _b64encode(signature)
 
 
 def parse_ref(ref: str, *, tenant_slug: str, kind: str | None = None,
               scope_id: int | str | None = None) -> dict[str, Any] | None:
     """Return a validated reference payload, or ``None`` on any mismatch.
 
-    Tenant and optional object scope are authorization inputs, not metadata for
-    display. A reference copied from another tenant or checklist therefore does
-    not become usable merely because the opaque string is known.
+    The reference is authenticated before any tenant, kind, scope or asset
+    metadata is trusted. A copied or edited token therefore cannot make Akye
+    sign delivery for a different Cloudinary authenticated asset.
     """
     if not isinstance(ref, str) or not ref.startswith(_PREFIX):
         return None
     try:
         token = ref[len(_PREFIX):]
-        token += "=" * (-len(token) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(token.encode("ascii")))
+        encoded_payload, encoded_signature = token.split(".", 1)
+        raw = _b64decode(encoded_payload)
+        supplied_signature = _b64decode(encoded_signature)
+        expected_signature = hmac.new(_signing_key(), raw, hashlib.sha256).digest()
+        if not hmac.compare_digest(supplied_signature, expected_signature):
+            return None
+        payload = json.loads(raw)
     except Exception:
         return None
+
     if payload.get("v") != 1 or payload.get("tenant") != tenant_slug:
         return None
     if kind is not None and payload.get("kind") != kind:
         return None
     if scope_id is not None and str(payload.get("scope")) != str(scope_id):
         return None
+
     required = ("public_id", "version", "format", "resource_type")
     if any(not payload.get(k) for k in required):
         return None
+
+    expected_folder = f"akye-private/{tenant_slug}/{payload.get('kind')}/"
+    if not str(payload["public_id"]).startswith(expected_folder):
+        return None
+
     return payload
 
 
