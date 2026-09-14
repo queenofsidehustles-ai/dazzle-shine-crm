@@ -168,12 +168,68 @@ def _authoritative_request_host(fallback):
         return fallback
 
 
+def _enforce_request_lifecycle(slug):
+    """Authorize a hosted tenant against the public control plane.
+
+    Hostname resolution says which schema a request *would* target. The control
+    plane decides whether that company is currently allowed to use it. This is
+    deliberately enforced before ``g.tenant_slug`` and the tenant search_path
+    are installed, so a suspended/closed company cannot reach authenticated
+    pages, public token links, cron routes, or provider callbacks.
+
+    Suspension also clears a presented Flask session. Re-enabling a company
+    therefore restores the tenant but not stale pre-suspension authentication;
+    the owner/team must sign in again.
+    """
+    try:
+        from flask import has_request_context, session
+        if not has_request_context():
+            return
+
+        import control_plane
+        from extensions import db
+        org = control_plane.find(db.engine, slug)
+        if not org:
+            session.clear()
+            from werkzeug.exceptions import NotFound
+            raise NotFound()
+
+        status = (org.get('status') or '').strip().lower()
+        if status == 'active':
+            return
+
+        session.clear()
+        if status == 'suspended':
+            from werkzeug.exceptions import Locked
+            raise Locked(description='This workspace is temporarily suspended.')
+
+        # Closed and unknown lifecycle values fail indistinguishably from a
+        # nonexistent tenant. Unknown values are denied rather than implicitly
+        # becoming active if the control plane is malformed or upgraded badly.
+        from werkzeug.exceptions import NotFound
+        raise NotFound()
+    except Exception as exc:
+        # Preserve deliberate HTTP lifecycle decisions. Any control-plane read
+        # failure is an availability problem, never permission to fall through
+        # into a tenant schema.
+        from werkzeug.exceptions import HTTPException, ServiceUnavailable
+        if isinstance(exc, HTTPException):
+            raise
+        raise ServiceUnavailable(
+            description='Tenant lifecycle could not be verified.') from exc
+
+
 def resolve(host, base_domain=None):
     """(slug, schema) for a hostname. (None, 'public') for the host site.
 
     During a Flask request, tenant selection is bound to the original Host
-    header before ProxyFix can rewrite it from X-Forwarded-Host.
+    header before ProxyFix can rewrite it from X-Forwarded-Host. Hosted tenant
+    requests must also be active in the public control plane before their
+    schema is selected.
     """
     host = _authoritative_request_host(host)
     slug = slug_from_host(host, base_domain)
-    return (slug, schema_for(slug)) if slug else (None, PUBLIC)
+    if not slug:
+        return None, PUBLIC
+    _enforce_request_lifecycle(slug)
+    return slug, schema_for(slug)
