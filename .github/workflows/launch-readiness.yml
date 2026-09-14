@@ -66,6 +66,8 @@ jobs:
           python -m pip install -r requirements.txt pytest
 
       - name: PAY-02 payment integrity
+        id: pay02
+        continue-on-error: true
         run: |
           python -m pytest -q \
             tests/test_booking_payment_intent_integrity.py \
@@ -74,6 +76,8 @@ jobs:
             --tb=short
 
       - name: Tenant session and object isolation
+        id: tenant_http
+        continue-on-error: true
         run: |
           python -m pytest -q \
             tests/test_tenant_session_and_object_isolation.py \
@@ -82,6 +86,8 @@ jobs:
             --tb=short
 
       - name: PostgreSQL tenant and pool isolation
+        id: tenant_pg
+        continue-on-error: true
         run: |
           python -m pytest -q \
             tests/test_tenancy_cohort_30.py \
@@ -91,6 +97,8 @@ jobs:
             --tb=short
 
       - name: Scheduler, cron, provider and security boundaries
+        id: security
+        continue-on-error: true
         run: |
           python -m pytest -q \
             tests/test_tenant_scheduler_isolation.py \
@@ -109,3 +117,26 @@ jobs:
           echo "- SHA: ${{ steps.candidate.outputs.candidate_sha }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Branch/ref: ${{ github.ref }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Live funds authorized: false" >> "$GITHUB_STEP_SUMMARY"
+          echo "- PAY-02: ${{ steps.pay02.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tenant HTTP/session: ${{ steps.tenant_http.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- PostgreSQL tenancy/pool: ${{ steps.tenant_pg.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Scheduler/security/provider: ${{ steps.security.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce launch gates
+        if: always()
+        run: |
+          failed=0
+          for result in \
+            "${{ steps.pay02.outcome }}" \
+            "${{ steps.tenant_http.outcome }}" \
+            "${{ steps.tenant_pg.outcome }}" \
+            "${{ steps.security.outcome }}"; do
+            if [ "$result" != "success" ]; then
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "One or more launch-readiness gates failed."
+            exit 1
+          fi
+          echo "All configured launch-readiness gates passed."
