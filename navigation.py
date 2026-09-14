@@ -201,7 +201,15 @@ MIN_PLAN = {
 
 
 def _is_owner(role):
-    return role == 'owner'
+    if role != 'owner':
+        return False
+    try:
+        from flask import has_request_context, session
+        if has_request_context():
+            return session.get('role') == 'owner'
+    except Exception:
+        return False
+    return True
 
 
 def feature_for(endpoint):
