@@ -146,7 +146,34 @@ def slug_from_host(host, base_domain=None):
     return candidate if valid_slug(candidate) else None
 
 
+def _authoritative_request_host(fallback):
+    """Return the client-facing Host header that entered the WSGI app.
+
+    Werkzeug ProxyFix preserves pre-proxy-rewrite values under
+    ``werkzeug.proxy_fix.orig``. Akye may trust forwarded scheme/client data for
+    link generation and logging, but tenant identity is a security boundary and
+    must never be selected by a visitor-controlled X-Forwarded-Host value.
+
+    Outside a request context (scheduler/tests/helpers), keep the explicit host
+    supplied by the caller.
+    """
+    try:
+        from flask import has_request_context, request
+        if not has_request_context():
+            return fallback
+        original = request.environ.get('werkzeug.proxy_fix.orig') or {}
+        return original.get('HTTP_HOST') or fallback
+    except Exception:
+        # Host resolution must remain deterministic even in non-Flask callers.
+        return fallback
+
+
 def resolve(host, base_domain=None):
-    """(slug, schema) for a hostname. (None, 'public') for the host site."""
+    """(slug, schema) for a hostname. (None, 'public') for the host site.
+
+    During a Flask request, tenant selection is bound to the original Host
+    header before ProxyFix can rewrite it from X-Forwarded-Host.
+    """
+    host = _authoritative_request_host(host)
     slug = slug_from_host(host, base_domain)
     return (slug, schema_for(slug)) if slug else (None, PUBLIC)
