@@ -1,0 +1,111 @@
+name: Launch Readiness
+
+on:
+  push:
+    branches:
+      - akye-launch-readiness/cohort-30
+  pull_request:
+    branches:
+      - akye-stable
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: launch-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  critical-gates:
+    name: Critical launch gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: akye_test
+          POSTGRES_PASSWORD: akye_test
+          POSTGRES_DB: akye_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U akye_test -d akye_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      TEST_POSTGRES_URL: postgresql://akye_test:akye_test@localhost:5432/akye_test
+      SECRET_KEY: launch-readiness-ci-secret-key-at-least-32-characters
+      FLASK_ENV: development
+
+    steps:
+      - name: Checkout exact candidate revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Record candidate SHA
+        run: |
+          echo "candidate_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "Testing candidate $(git rev-parse HEAD)"
+        id: candidate
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: PAY-02 payment integrity
+        run: |
+          python -m pytest -q \
+            tests/test_booking_payment_intent_integrity.py \
+            tests/test_payment_confirmation_integrity.py \
+            tests/test_stripe_webhook_tenant_isolation.py \
+            --tb=short
+
+      - name: Tenant session and object isolation
+        run: |
+          python -m pytest -q \
+            tests/test_tenant_session_and_object_isolation.py \
+            tests/test_tenant_http_object_isolation.py \
+            tests/test_tenant_public_token_isolation.py \
+            --tb=short
+
+      - name: PostgreSQL tenant and pool isolation
+        run: |
+          python -m pytest -q \
+            tests/test_tenancy_cohort_30.py \
+            tests/test_tenant_pool_reuse_postgres.py \
+            tests/test_tenant_context_restoration.py \
+            tests/test_tenant_search_path_fail_closed.py \
+            --tb=short
+
+      - name: Scheduler, cron, provider and security boundaries
+        run: |
+          python -m pytest -q \
+            tests/test_tenant_scheduler_isolation.py \
+            tests/test_cron_tenant_host_boundary.py \
+            tests/test_provider_webhook_boundary.py \
+            tests/test_cron_secret_transport.py \
+            tests/test_csrf_api_boundary.py \
+            tests/test_role_fail_closed.py \
+            tests/test_signup_provisioning_safety.py \
+            --tb=short
+
+      - name: Candidate summary
+        if: always()
+        run: |
+          echo "## Launch-readiness candidate" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA: ${{ steps.candidate.outputs.candidate_sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch/ref: ${{ github.ref }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Live funds authorized: false" >> "$GITHUB_STEP_SUMMARY"
