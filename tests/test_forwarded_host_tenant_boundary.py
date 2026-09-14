@@ -5,6 +5,10 @@ uses Werkzeug ProxyFix with x_host=1 so reverse-proxy host information can be
 applied. Tenant selection must nevertheless remain bound to the original Host
 header that entered the WSGI app; X-Forwarded-Host must not switch a company or
 demote a company request to the public schema.
+
+Tenant lifecycle authorization is covered independently. These host-boundary
+unit tests deliberately stub that control-plane decision so a minimal Flask app
+can exercise only authoritative-host selection without needing a database.
 """
 
 from flask import Flask, g, request
@@ -13,7 +17,11 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import tenancy
 
 
-def _app():
+def _app(monkeypatch):
+    # Isolate the TEN-08 host-selection boundary from TEN-06 lifecycle checks.
+    # Production tenancy.resolve() still enforces lifecycle before schema access.
+    monkeypatch.setattr(tenancy, '_enforce_request_lifecycle', lambda slug: None)
+
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'forwarded-host-test-secret'
     # Match create_app() exactly. The protection belongs in tenant resolution,
@@ -33,8 +41,8 @@ def _app():
     return app
 
 
-def test_forwarded_host_cannot_switch_tenant():
-    client = _app().test_client()
+def test_forwarded_host_cannot_switch_tenant(monkeypatch):
+    client = _app(monkeypatch).test_client()
     response = client.get(
         '/probe',
         base_url='https://alpha.akye.test',
@@ -47,8 +55,8 @@ def test_forwarded_host_cannot_switch_tenant():
     }
 
 
-def test_forwarded_host_cannot_demote_tenant_to_public():
-    client = _app().test_client()
+def test_forwarded_host_cannot_demote_tenant_to_public(monkeypatch):
+    client = _app(monkeypatch).test_client()
     response = client.get(
         '/probe',
         base_url='https://alpha.akye.test',
