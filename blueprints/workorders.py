@@ -236,7 +236,7 @@ def _send_workorder_to(booking, checklist, cleaner):
     # A set amount always wins over the automatic percentage — say it plainly.
     if row and row.pay_amount is not None:
         crew_pay_html = f'<p><strong>Your pay for this job:</strong> ${row.pay_amount:.2f}</p>'
-        sms_crew += f" Your pay: ${row.pay_amount:.0f}."
+        sms_crew += f" Your pay: ${row.pay_amount:.2f}."
 
     checklist_url = url_for('workorders.view_checklist', token=checklist.token, _external=True, _scheme='https')
     sop_url = url_for('sops.library', _external=True, _scheme='https')
