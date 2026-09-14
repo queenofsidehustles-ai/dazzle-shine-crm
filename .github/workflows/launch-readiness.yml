@@ -138,6 +138,36 @@ jobs:
           echo "- PostgreSQL tenancy/pool: ${{ steps.tenant_pg.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Scheduler/security/provider/host: ${{ steps.security.outcome }}" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Diagnose PAY-01 gate failure
+        if: always() && steps.pay01.outcome != 'success'
+        run: |
+          echo "PAY-01 gate outcome: ${{ steps.pay01.outcome }}"
+          exit 1
+
+      - name: Diagnose PAY-02 gate failure
+        if: always() && steps.pay02.outcome != 'success'
+        run: |
+          echo "PAY-02 gate outcome: ${{ steps.pay02.outcome }}"
+          exit 1
+
+      - name: Diagnose tenant HTTP/media gate failure
+        if: always() && steps.tenant_http.outcome != 'success'
+        run: |
+          echo "Tenant HTTP/media gate outcome: ${{ steps.tenant_http.outcome }}"
+          exit 1
+
+      - name: Diagnose PostgreSQL tenancy gate failure
+        if: always() && steps.tenant_pg.outcome != 'success'
+        run: |
+          echo "PostgreSQL tenancy gate outcome: ${{ steps.tenant_pg.outcome }}"
+          exit 1
+
+      - name: Diagnose scheduler/security gate failure
+        if: always() && steps.security.outcome != 'success'
+        run: |
+          echo "Scheduler/security gate outcome: ${{ steps.security.outcome }}"
+          exit 1
+
       - name: Enforce launch gates
         if: always()
         run: |
