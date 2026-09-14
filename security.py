@@ -1,57 +1,20 @@
 """The locks on the front door.
 
-Three gaps, none of them on fire, all of them worth closing before another
-company's customer list is in here:
-
-**Anyone could guess at the login as fast as the server would answer.** No
-delay, no lockout, no record. A single owner password protecting a business's
-entire customer list, addresses and payroll, with unlimited attempts at it.
-
-**The session cookie was running on defaults nobody chose.** Not marked
-HTTPS-only, no SameSite policy, no expiry.
-
-**Nothing checked that a form submission came from this site.** A logged-in
-owner who opened a malicious page could have had it act as her — create a
-booking, change a price, delete an expense — because the browser would have
-sent her session cookie along with the request.
-
-## About the CSRF approach
-
-The textbook fix is a hidden token in every form. That means touching every
-template in the application, and a missed one is a form that stops working —
-in a live business, mid-week.
-
-This does two cheaper things that together cover the same attack:
-
-1. **SameSite=Lax on the session cookie.** The browser refuses to send the
-   session at all on a cross-site POST, so the forged request arrives logged
-   out and does nothing.
-2. **Origin checking.** Browsers are required to send an `Origin` header on
-   cross-origin POSTs. If one arrives claiming to come from somewhere else,
-   it is refused.
-
-Mismatched origin is rejected; *absent* origin is allowed, because some
-privacy tools strip these headers from ordinary same-site requests and
-breaking a real cleaner's checklist submission is worse than the residual
-risk. A browser cannot be made to omit `Origin` on a genuine cross-site POST,
-which is the case that matters.
-
-Token-based CSRF is still the fuller answer and is worth doing when the
-templates are next touched anyway.
+Security boundaries shared by the tenant CRM: session hardening, login
+throttling, origin/CSRF checks, machine-route host authority, provider callback
+authentication, and public booking payment integrity.
 """
+import hashlib
+import hmac
+import json
 import os
+import secrets
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
-from flask import request, session, g
+from flask import current_app, g, request, session
 
-# State-changing requests bypass origin checking only when they are explicitly
-# designed to be called by an external browser/site or by a signed/authenticated
-# machine. Never exempt the whole /api namespace: doing that would silently make
-# every future authenticated API mutation CSRF-exempt.
 CSRF_EXEMPT_PATHS = frozenset({
-    # Public website API. These routes are intentionally unauthenticated and
-    # have their own CORS / payment integrity controls where applicable.
     '/api/quote',
     '/api/commercial-lead',
     '/api/apply',
@@ -59,9 +22,6 @@ CSRF_EXEMPT_PATHS = frozenset({
     '/api/price',
     '/api/create-payment-intent',
     '/api/booking',
-
-    # Machine-to-machine routes. Cron routes require X-Api-Key; Stripe and
-    # Twilio routes verify their provider signatures in their handlers / guards.
     '/api/reminders',
     '/api/charge-balances',
     '/api/send-drips',
@@ -73,9 +33,6 @@ CSRF_EXEMPT_PATHS = frozenset({
     '/messages/incoming',
 })
 
-# REMINDER_API_KEY is a bearer secret. Every cron route must reject the legacy
-# ?api_key= transport because URLs routinely escape into proxy/access logs,
-# monitoring traces, screenshots, browser history and support artifacts.
 QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
     '/api/reminders',
     '/api/charge-balances',
@@ -85,33 +42,25 @@ QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
     '/api/applicant-followups',
     '/api/lifecycle-emails',
 })
-
-# The same seven machine routes are tenant-scoped operations in Akye. Keeping
-# this alias explicit makes the host boundary auditable without duplicating the
-# list and risking one route being added to one protection but not the other.
 CRON_PATHS = QUERY_SECRET_FORBIDDEN_PATHS
-
-# Provider callbacks are also tenant-scoped because each business can store its
-# own Stripe/Twilio credentials. In hosted Akye the tenant subdomain is therefore
-# part of the callback authority; the apex/public schema is never a safe target.
 PROVIDER_WEBHOOK_PATHS = frozenset({
     '/api/stripe/webhook',
     '/messages/incoming',
 })
 TENANT_MACHINE_PATHS = CRON_PATHS | PROVIDER_WEBHOOK_PATHS
 
-# Failed logins allowed from one address before it is asked to wait.
+BOOKING_PAYMENT_PURPOSE = 'booking_deposit'
+BOOKING_PAYMENT_META_TENANT = 'akye_tenant'
+BOOKING_PAYMENT_META_PURPOSE = 'akye_purpose'
+BOOKING_PAYMENT_META_CHECKOUT = 'akye_checkout'
+SINGLE_BUSINESS_PAYMENT_TENANT = '__single_business__'
+
 MAX_FAILED_LOGINS = 10
 LOCKOUT_WINDOW = timedelta(minutes=15)
 _WEAK_SECRETS = {'', 'dev-secret-change-me', 'insecure-dev-key', 'changeme'}
 
 
-# ---------------------------------------------------------------------------
-# Session cookie
-# ---------------------------------------------------------------------------
-
 def harden_session(app):
-    """Decide the cookie settings instead of inheriting Flask's defaults."""
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = _is_production()
@@ -119,7 +68,6 @@ def harden_session(app):
 
 
 def validate_secret(app):
-    """Refuse a production boot with a guessable session-signing secret."""
     secret = str(app.config.get('SECRET_KEY') or '')
     if _is_production() and (secret.lower() in _WEAK_SECRETS or len(secret) < 32):
         raise RuntimeError(
@@ -136,12 +84,7 @@ def _is_production():
                 or (os.environ.get('CRM_BASE') or '').startswith('https://'))
 
 
-# ---------------------------------------------------------------------------
-# Request credentials, machine boundaries, payment integrity, and origin
-# ---------------------------------------------------------------------------
-
 def reject_query_credentials():
-    """Refuse cron bearer secrets supplied in the URL query string."""
     if request.path in QUERY_SECRET_FORBIDDEN_PATHS and 'api_key' in request.args:
         from flask import abort
         abort(403, description='API credentials must be sent in X-Api-Key.')
@@ -149,15 +92,6 @@ def reject_query_credentials():
 
 
 def require_tenant_for_machine_route():
-    """Never run a tenant machine request against Akye's public schema.
-
-    In the hosted multi-tenant product the hostname is the authority selecting
-    the tenant schema. A valid cron bearer secret or provider signature on the
-    product apex, a malformed deep hostname, or any other host that does not
-    resolve to a tenant must not execute tenant work against ``public``.
-    Single-business installations have no BASE_DOMAIN and retain their historical
-    host behavior (provider signatures still apply).
-    """
     if request.path not in TENANT_MACHINE_PATHS:
         return None
     if not (os.environ.get('BASE_DOMAIN') or '').strip():
@@ -168,13 +102,115 @@ def require_tenant_for_machine_route():
     return None
 
 
-def validate_booking_payment_intent():
-    """Never let browser-supplied Stripe identifiers manufacture a paid booking.
+def _booking_payment_tenant_key():
+    """Stable authority written into Stripe metadata for this checkout."""
+    slug = str(getattr(g, 'tenant_slug', None) or '').strip().lower()
+    if slug:
+        return slug
+    if (os.environ.get('BASE_DOMAIN') or '').strip():
+        return None
+    return SINGLE_BUSINESS_PAYMENT_TENANT
 
-    ``/api/booking`` is intentionally public, so the browser is an untrusted
-    claimant. If it says a deposit was already paid, verify that claim directly
-    with this tenant's Stripe account before the route can create a Client or
-    Booking row. Pending bookings without a PaymentIntent remain allowed.
+
+def require_tenant_for_payment_creation():
+    """Do not create a hosted PaymentIntent outside an actual tenant host."""
+    if request.path != '/api/create-payment-intent' or request.method != 'POST':
+        return None
+    if _booking_payment_tenant_key() is None:
+        from flask import abort
+        abort(404)
+    return None
+
+
+def _checkout_signature(payment_intent_id, tenant, nonce):
+    key = str(current_app.config.get('SECRET_KEY') or '').encode('utf-8')
+    message = '|'.join((tenant, BOOKING_PAYMENT_PURPOSE,
+                        payment_intent_id, nonce)).encode('utf-8')
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def _new_checkout_binding(payment_intent_id, tenant, nonce=None):
+    nonce = nonce or secrets.token_urlsafe(24)
+    return nonce + '.' + _checkout_signature(payment_intent_id, tenant, nonce)
+
+
+def _checkout_binding_valid(binding, payment_intent_id, tenant):
+    try:
+        nonce, supplied = str(binding or '').split('.', 1)
+    except ValueError:
+        return False
+    if len(nonce) < 20 or not supplied:
+        return False
+    expected = _checkout_signature(payment_intent_id, tenant, nonce)
+    return hmac.compare_digest(supplied, expected)
+
+
+def _replace_json_response(response, payload, status):
+    """Fail closed while preserving CORS headers already attached by the route."""
+    response.set_data(json.dumps(payload))
+    response.status_code = status
+    response.content_type = 'application/json'
+    return response
+
+
+def bind_created_booking_payment(response):
+    """Stamp a new public-booking PaymentIntent before its secret leaves Akye.
+
+    The API route predates multi-tenancy and creates Stripe objects directly.
+    An after-request guard lets security bind the resulting intent without a
+    risky rewrite of that large route module. The client secret contains the
+    PaymentIntent id; before the response is returned we add authenticated
+    metadata covering tenant, purpose and a unique signed checkout nonce.
+    """
+    if request.path != '/api/create-payment-intent' or request.method != 'POST':
+        return response
+    if response.status_code < 200 or response.status_code >= 300:
+        return response
+
+    tenant = _booking_payment_tenant_key()
+    data = response.get_json(silent=True) or {}
+    client_secret = str(data.get('client_secret') or '')
+    payment_intent_id = client_secret.split('_secret_', 1)[0] if '_secret_' in client_secret else ''
+    if not tenant or not payment_intent_id.startswith('pi_'):
+        return _replace_json_response(
+            response,
+            {'ok': False, 'error': 'Payment checkout could not be securely bound.'},
+            502,
+        )
+
+    binding = _new_checkout_binding(payment_intent_id, tenant)
+    try:
+        import integrations
+        import stripe
+        secret = (integrations.stripe_secret_key() or '').strip()
+        if not secret:
+            raise RuntimeError('Stripe is not configured')
+        stripe.api_key = secret
+        stripe.PaymentIntent.modify(
+            payment_intent_id,
+            metadata={
+                BOOKING_PAYMENT_META_TENANT: tenant,
+                BOOKING_PAYMENT_META_PURPOSE: BOOKING_PAYMENT_PURPOSE,
+                BOOKING_PAYMENT_META_CHECKOUT: binding,
+            },
+        )
+    except Exception:
+        return _replace_json_response(
+            response,
+            {'ok': False, 'error': 'Payment checkout could not be securely bound.'},
+            502,
+        )
+    return response
+
+
+def validate_booking_payment_intent():
+    """Verify a browser's paid-booking claim directly with Stripe.
+
+    A succeeded intent must be the exact deposit amount/customer and must carry
+    Akye's signed tenant/purpose/checkout binding. This closes the shared-Stripe
+    fallback-account replay gap: a PaymentIntent minted for tenant A or another
+    payment purpose cannot be presented on tenant B's public booking endpoint.
+    Pending bookings without a PaymentIntent remain allowed.
     """
     if request.path != '/api/booking' or request.method != 'POST':
         return None
@@ -188,6 +224,11 @@ def validate_booking_payment_intent():
     if not claimed_customer:
         from flask import abort
         abort(400, description='Paid booking requires its Stripe customer.')
+
+    tenant = _booking_payment_tenant_key()
+    if tenant is None:
+        from flask import abort
+        abort(404)
 
     import integrations
     import stripe
@@ -209,6 +250,13 @@ def validate_booking_payment_intent():
             return intent.get(name, default)
         return getattr(intent, name, default)
 
+    metadata = field('metadata', {}) or {}
+
+    def meta(name):
+        if isinstance(metadata, dict):
+            return metadata.get(name)
+        return getattr(metadata, name, None)
+
     expected_cents = int(round(float(__import__('pricing').get_deposit()) * 100))
     received = field('amount_received')
     if received is None:
@@ -220,6 +268,10 @@ def validate_booking_payment_intent():
         and str(field('currency') or '').lower() == 'usd'
         and int(received or 0) == expected_cents
         and str(field('customer') or '') == claimed_customer
+        and str(meta(BOOKING_PAYMENT_META_TENANT) or '').lower() == tenant
+        and meta(BOOKING_PAYMENT_META_PURPOSE) == BOOKING_PAYMENT_PURPOSE
+        and _checkout_binding_valid(meta(BOOKING_PAYMENT_META_CHECKOUT),
+                                    payment_intent_id, tenant)
     )
 
     claimed_method = (data.get('stripe_payment_method_id') or '').strip()
@@ -231,8 +283,6 @@ def validate_booking_payment_intent():
         from flask import abort
         abort(400, description='Payment does not match this booking deposit.')
 
-    # A succeeded PaymentIntent is a single piece of money, not a reusable
-    # bearer token. Refuse a second booking in this tenant with the same intent.
     from models import Booking
     if Booking.query.filter_by(stripe_payment_intent=payment_intent_id).first():
         from flask import abort
@@ -241,15 +291,6 @@ def validate_booking_payment_intent():
 
 
 def validate_twilio_webhook():
-    """Authenticate Twilio before any inbound SMS can touch tenant data.
-
-    The previous /messages/incoming route trusted form fields from any caller.
-    In hosted Akye that meant anyone who could reach a tenant subdomain could
-    manufacture an inbound text, opt a real phone number out, stop LSA followups,
-    create inbox records and trigger owner alerts. Twilio signs the exact callback
-    URL plus form parameters; validate that signature with this tenant's own auth
-    token and fail closed when either the token or signature is absent/invalid.
-    """
     if request.path != '/messages/incoming':
         return None
 
@@ -272,7 +313,6 @@ def validate_twilio_webhook():
 
 
 def _same_site(url, host):
-    """True when `url` belongs to the host serving this request."""
     if not url:
         return None
     try:
@@ -285,7 +325,6 @@ def _same_site(url, host):
 
 
 def check_request_origin():
-    """Refuse a state-changing request that says it came from somewhere else."""
     if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
         return None
     path = request.path or ''
@@ -318,17 +357,11 @@ def _record_rejected_origin(header, value, path):
         pass
 
 
-# ---------------------------------------------------------------------------
-# Login throttling
-# ---------------------------------------------------------------------------
-
 def client_ip():
-    """The caller address already resolved by the app's trusted-proxy layer."""
     return (request.remote_addr or 'unknown')[:45]
 
 
 def login_blocked():
-    """(blocked, minutes_left) for the address making this request."""
     try:
         from models import LoginAttempt
         since = datetime.utcnow() - LOCKOUT_WINDOW
@@ -348,7 +381,6 @@ def login_blocked():
 
 
 def record_login(username, ok):
-    """Write down an attempt. Never the password."""
     try:
         from models import LoginAttempt
         from extensions import db
@@ -367,7 +399,6 @@ def record_login(username, ok):
 
 
 def prune_login_attempts(days=30):
-    """Old attempts are noise. Called from the nightly cron."""
     try:
         from models import LoginAttempt
         from extensions import db
@@ -380,11 +411,12 @@ def prune_login_attempts(days=30):
 
 
 def install(app):
-    """Wire everything into the application."""
     validate_secret(app)
     harden_session(app)
     app.before_request(reject_query_credentials)
     app.before_request(require_tenant_for_machine_route)
+    app.before_request(require_tenant_for_payment_creation)
     app.before_request(validate_booking_payment_intent)
     app.before_request(validate_twilio_webhook)
     app.before_request(check_request_origin)
+    app.after_request(bind_created_booking_payment)
