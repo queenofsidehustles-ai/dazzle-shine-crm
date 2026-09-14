@@ -9,6 +9,9 @@ import extensions
 import tenancy
 
 
+TENANT_BASE_URL = 'https://alpha.akye.test'
+
+
 def _app(monkeypatch, state):
     engine = object()
     monkeypatch.setattr(extensions, 'db', SimpleNamespace(engine=engine))
@@ -43,7 +46,10 @@ def _app(monkeypatch, state):
 
 
 def _authenticated(client):
-    with client.session_transaction() as sess:
+    # Flask's test cookie jar is host-scoped. Authenticate on the same tenant
+    # host used by the lifecycle request so these tests exercise a session that
+    # is actually presented to, and can be cleared by, the tenant boundary.
+    with client.session_transaction(base_url=TENANT_BASE_URL) as sess:
         sess['user_id'] = 41
         sess['role'] = 'owner'
         sess['tenant_slug'] = 'alpha'
@@ -64,7 +70,7 @@ def test_active_tenant_resolves_to_control_plane_schema_and_keeps_session(monkey
     client = _app(monkeypatch, state).test_client()
     _authenticated(client)
 
-    response = client.get('/', base_url='https://alpha.akye.test')
+    response = client.get('/', base_url=TENANT_BASE_URL)
 
     assert response.status_code == 200
     assert response.get_json()['tenant'] == ['alpha', 'tenant_alpha']
@@ -77,10 +83,10 @@ def test_suspension_denies_access_and_clears_presented_session(monkeypatch):
     client = _app(monkeypatch, state).test_client()
     _authenticated(client)
 
-    response = client.get('/', base_url='https://alpha.akye.test')
+    response = client.get('/', base_url=TENANT_BASE_URL)
 
     assert response.status_code == 423
-    with client.session_transaction() as sess:
+    with client.session_transaction(base_url=TENANT_BASE_URL) as sess:
         assert 'user_id' not in sess
         assert 'role' not in sess
         assert 'tenant_slug' not in sess
@@ -91,11 +97,11 @@ def test_reactivation_restores_workspace_but_not_stale_pre_suspension_login(monk
     client = _app(monkeypatch, state).test_client()
     _authenticated(client)
 
-    suspended = client.get('/', base_url='https://alpha.akye.test')
+    suspended = client.get('/', base_url=TENANT_BASE_URL)
     assert suspended.status_code == 423
 
     state['org'] = _active_org(status='active')
-    reenabled = client.get('/', base_url='https://alpha.akye.test')
+    reenabled = client.get('/', base_url=TENANT_BASE_URL)
 
     assert reenabled.status_code == 200
     assert reenabled.get_json()['tenant'] == ['alpha', 'tenant_alpha']
@@ -114,10 +120,10 @@ def test_missing_closed_or_unknown_tenant_is_not_resolvable(monkeypatch, org):
     client = _app(monkeypatch, state).test_client()
     _authenticated(client)
 
-    response = client.get('/', base_url='https://alpha.akye.test')
+    response = client.get('/', base_url=TENANT_BASE_URL)
 
     assert response.status_code == 404
-    with client.session_transaction() as sess:
+    with client.session_transaction(base_url=TENANT_BASE_URL) as sess:
         assert 'user_id' not in sess
 
 
@@ -126,7 +132,7 @@ def test_control_plane_read_failure_is_503_not_implicit_access(monkeypatch):
     client = _app(monkeypatch, state).test_client()
     _authenticated(client)
 
-    response = client.get('/', base_url='https://alpha.akye.test')
+    response = client.get('/', base_url=TENANT_BASE_URL)
 
     assert response.status_code == 503
 
@@ -136,10 +142,10 @@ def test_active_tenant_with_mismatched_schema_assignment_fails_closed(monkeypatc
     client = _app(monkeypatch, state).test_client()
     _authenticated(client)
 
-    response = client.get('/', base_url='https://alpha.akye.test')
+    response = client.get('/', base_url=TENANT_BASE_URL)
 
     assert response.status_code == 503
-    with client.session_transaction() as sess:
+    with client.session_transaction(base_url=TENANT_BASE_URL) as sess:
         assert 'user_id' not in sess
         assert 'role' not in sess
         assert 'tenant_slug' not in sess
@@ -149,6 +155,6 @@ def test_active_tenant_with_missing_schema_assignment_fails_closed(monkeypatch):
     state = {'org': _active_org(schema_name=None)}
     client = _app(monkeypatch, state).test_client()
 
-    response = client.get('/', base_url='https://alpha.akye.test')
+    response = client.get('/', base_url=TENANT_BASE_URL)
 
     assert response.status_code == 503
