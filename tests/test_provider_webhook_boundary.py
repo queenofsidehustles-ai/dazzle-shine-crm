@@ -4,6 +4,10 @@ Stripe already verifies its provider signature in the route handler. Twilio's
 inbound-SMS route historically did not, so a caller could forge From/Body fields
 and mutate inbox/opt-out/follow-up state. In hosted Akye both provider callbacks
 must also resolve to a tenant host before they can touch a schema.
+
+Tenant lifecycle authorization is covered independently. These webhook-boundary
+unit tests deliberately stub that control-plane decision so a minimal Flask app
+can exercise only host and provider-signature behavior without needing a database.
 """
 import os
 
@@ -25,7 +29,11 @@ def _restore_env():
         os.environ.update(original)
 
 
-def _app(base_domain='akye.test'):
+def _app(monkeypatch, base_domain='akye.test'):
+    # Isolate the TEN-07 provider/host boundary from TEN-06 lifecycle checks.
+    # Production tenancy.resolve() still enforces lifecycle before schema access.
+    monkeypatch.setattr(tenancy, '_enforce_request_lifecycle', lambda slug: None)
+
     if base_domain is None:
         os.environ.pop('BASE_DOMAIN', None)
     else:
@@ -55,8 +63,8 @@ def _twilio_headers(url, form, token='tenant-twilio-auth-token'):
     return {'X-Twilio-Signature': signature}
 
 
-def test_stripe_webhook_requires_resolved_tenant_host_in_akye():
-    client = _app().test_client()
+def test_stripe_webhook_requires_resolved_tenant_host_in_akye(monkeypatch):
+    client = _app(monkeypatch).test_client()
     assert client.post('/api/stripe-webhook', base_url='https://akye.test').status_code == 404
     assert client.post('/api/stripe-webhook',
                        base_url='https://alpha.attacker.akye.test').status_code == 404
@@ -64,8 +72,8 @@ def test_stripe_webhook_requires_resolved_tenant_host_in_akye():
                        base_url='https://alpha.akye.test').status_code == 200
 
 
-def test_twilio_webhook_requires_resolved_tenant_host_before_signature_check():
-    client = _app().test_client()
+def test_twilio_webhook_requires_resolved_tenant_host_before_signature_check(monkeypatch):
+    client = _app(monkeypatch).test_client()
     form = {'From': '+13015550123', 'Body': 'hello', 'MessageSid': 'SM123'}
     apex_url = 'https://akye.test/messages/incoming'
     deep_url = 'https://alpha.attacker.akye.test/messages/incoming'
@@ -76,8 +84,8 @@ def test_twilio_webhook_requires_resolved_tenant_host_before_signature_check():
                        data=form, headers=_twilio_headers(deep_url, form)).status_code == 404
 
 
-def test_twilio_webhook_rejects_missing_or_invalid_signature_on_tenant_host():
-    client = _app().test_client()
+def test_twilio_webhook_rejects_missing_or_invalid_signature_on_tenant_host(monkeypatch):
+    client = _app(monkeypatch).test_client()
     form = {'From': '+13015550123', 'Body': 'hello', 'MessageSid': 'SM123'}
 
     missing = client.post('/messages/incoming', base_url='https://alpha.akye.test', data=form)
@@ -87,8 +95,8 @@ def test_twilio_webhook_rejects_missing_or_invalid_signature_on_tenant_host():
     assert invalid.status_code == 403
 
 
-def test_twilio_webhook_accepts_exact_valid_signature_on_tenant_host():
-    client = _app().test_client()
+def test_twilio_webhook_accepts_exact_valid_signature_on_tenant_host(monkeypatch):
+    client = _app(monkeypatch).test_client()
     form = {'From': '+13015550123', 'Body': 'hello', 'MessageSid': 'SM123'}
     url = 'https://alpha.akye.test/messages/incoming'
     response = client.post('/messages/incoming', base_url='https://alpha.akye.test',
@@ -96,8 +104,8 @@ def test_twilio_webhook_accepts_exact_valid_signature_on_tenant_host():
     assert response.status_code == 200
 
 
-def test_twilio_signature_is_bound_to_callback_host():
-    client = _app().test_client()
+def test_twilio_signature_is_bound_to_callback_host(monkeypatch):
+    client = _app(monkeypatch).test_client()
     form = {'From': '+13015550123', 'Body': 'hello', 'MessageSid': 'SM123'}
     alpha_url = 'https://alpha.akye.test/messages/incoming'
 
@@ -108,8 +116,8 @@ def test_twilio_signature_is_bound_to_callback_host():
     assert response.status_code == 403
 
 
-def test_single_business_webhook_keeps_legacy_host_but_still_requires_signature():
-    client = _app(base_domain=None).test_client()
+def test_single_business_webhook_keeps_legacy_host_but_still_requires_signature(monkeypatch):
+    client = _app(monkeypatch, base_domain=None).test_client()
     form = {'From': '+13015550123', 'Body': 'hello', 'MessageSid': 'SM123'}
     url = 'https://legacy.example.com/messages/incoming'
 
