@@ -48,5 +48,6 @@ def test_workorder_crew_pay_preserves_cents(monkeypatch):
     assert len(emails) == 1
     assert len(texts) == 1
     assert '$64.50' in emails[0]['html']
-    assert '$64.50' in texts[0][1]
-    assert 'Your pay: $64.' not in texts[0][1]
+    sms = texts[0][1]
+    assert 'Your pay: $64.50. Checklist:' in sms
+    assert 'Your pay: $64. Checklist:' not in sms
