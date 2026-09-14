@@ -141,6 +141,66 @@ jobs:
         continue-on-error: true
         run: python -m pytest -vv tests/test_tenant_lifecycle_boundary.py::test_active_tenant_with_missing_schema_assignment_fails_closed --tb=short
 
+      - name: TEN-06 prefix 2 — active then suspension
+        if: always() && steps.tenant_lifecycle.outcome != 'success'
+        id: ten06_prefix2
+        continue-on-error: true
+        run: |
+          python -m pytest -q \
+            tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session \
+            tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session \
+            --tb=short
+
+      - name: TEN-06 prefix 3 — through reactivation
+        if: always() && steps.tenant_lifecycle.outcome != 'success'
+        id: ten06_prefix3
+        continue-on-error: true
+        run: |
+          python -m pytest -q \
+            tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session \
+            tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session \
+            tests/test_tenant_lifecycle_boundary.py::test_reactivation_restores_workspace_but_not_stale_pre_suspension_login \
+            --tb=short
+
+      - name: TEN-06 prefix 4 — through closed and unknown states
+        if: always() && steps.tenant_lifecycle.outcome != 'success'
+        id: ten06_prefix4
+        continue-on-error: true
+        run: |
+          python -m pytest -q \
+            tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session \
+            tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session \
+            tests/test_tenant_lifecycle_boundary.py::test_reactivation_restores_workspace_but_not_stale_pre_suspension_login \
+            tests/test_tenant_lifecycle_boundary.py::test_missing_closed_or_unknown_tenant_is_not_resolvable \
+            --tb=short
+
+      - name: TEN-06 prefix 5 — through control-plane failure
+        if: always() && steps.tenant_lifecycle.outcome != 'success'
+        id: ten06_prefix5
+        continue-on-error: true
+        run: |
+          python -m pytest -q \
+            tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session \
+            tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session \
+            tests/test_tenant_lifecycle_boundary.py::test_reactivation_restores_workspace_but_not_stale_pre_suspension_login \
+            tests/test_tenant_lifecycle_boundary.py::test_missing_closed_or_unknown_tenant_is_not_resolvable \
+            tests/test_tenant_lifecycle_boundary.py::test_control_plane_read_failure_is_503_not_implicit_access \
+            --tb=short
+
+      - name: TEN-06 prefix 6 — through mismatched schema
+        if: always() && steps.tenant_lifecycle.outcome != 'success'
+        id: ten06_prefix6
+        continue-on-error: true
+        run: |
+          python -m pytest -q \
+            tests/test_tenant_lifecycle_boundary.py::test_active_tenant_resolves_to_control_plane_schema_and_keeps_session \
+            tests/test_tenant_lifecycle_boundary.py::test_suspension_denies_access_and_clears_presented_session \
+            tests/test_tenant_lifecycle_boundary.py::test_reactivation_restores_workspace_but_not_stale_pre_suspension_login \
+            tests/test_tenant_lifecycle_boundary.py::test_missing_closed_or_unknown_tenant_is_not_resolvable \
+            tests/test_tenant_lifecycle_boundary.py::test_control_plane_read_failure_is_503_not_implicit_access \
+            tests/test_tenant_lifecycle_boundary.py::test_active_tenant_with_mismatched_schema_assignment_fails_closed \
+            --tb=short
+
       - name: PostgreSQL tenant and pool isolation
         id: tenant_pg
         continue-on-error: true
