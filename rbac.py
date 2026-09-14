@@ -29,16 +29,22 @@ ROLE_PERMISSIONS = {
     'owner': frozenset({
         'booking.read', 'booking.create', 'booking.manage',
         'dispatch.manage', 'customer.communicate',
+        'lead.read', 'lead.manage',
+        'messages.read', 'messages.send', 'messages.templates.manage',
         'pay.manage', 'finance.manage', 'users.manage', 'settings.manage',
         'assigned_work.use',
     }),
     'admin': frozenset({
         'booking.read', 'booking.create', 'booking.manage',
         'dispatch.manage', 'customer.communicate', 'assigned_work.use',
+        'lead.read', 'lead.manage',
+        'messages.read', 'messages.send', 'messages.templates.manage',
     }),
     'dispatcher': frozenset({
         'booking.read', 'booking.create', 'dispatch.manage',
         'customer.communicate',
+        'lead.read', 'lead.manage',
+        'messages.read', 'messages.send',
     }),
     'cleaner': frozenset({'assigned_work.use'}),
     'limited': frozenset({'booking.read'}),
@@ -73,6 +79,24 @@ ENDPOINT_PERMISSIONS = {
     ('bookings.log_ad_cost', 'POST'): 'finance.manage',
     ('bookings.re_rate', 'POST'): 'pay.manage',
     ('bookings.use_clocked_pay', 'POST'): 'pay.manage',
+
+    ('leads.index', 'GET'): 'lead.read',
+    ('leads.detail', 'GET'): 'lead.read',
+    ('leads.new_quote', 'GET'): 'lead.manage',
+    ('leads.new_quote', 'POST'): 'lead.manage',
+    ('leads.checklist_json', 'GET'): 'lead.manage',
+    ('leads.detail', 'POST'): 'lead.manage',
+    ('leads.convert', 'POST'): 'lead.manage',
+
+    ('messages.sent_log', 'GET'): 'messages.read',
+    ('messages.inbox', 'GET'): 'messages.read',
+    ('messages.thread', 'GET'): 'messages.read',
+    ('messages.fill_template', 'GET'): 'messages.send',
+    ('messages.toggle_lang', 'POST'): 'messages.send',
+    ('messages.send', 'POST'): 'messages.send',
+    ('messages.templates', 'GET'): 'messages.templates.manage',
+    ('messages.templates', 'POST'): 'messages.templates.manage',
+    ('messages.delete_template', 'POST'): 'messages.templates.manage',
 }
 
 
