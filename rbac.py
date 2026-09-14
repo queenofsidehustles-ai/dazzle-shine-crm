@@ -31,6 +31,7 @@ ROLE_PERMISSIONS = {
         'dispatch.manage', 'customer.communicate',
         'lead.read', 'lead.manage',
         'messages.read', 'messages.send', 'messages.templates.manage',
+        'checklist.manage',
         'pay.manage', 'finance.manage', 'users.manage', 'settings.manage',
         'assigned_work.use',
     }),
@@ -39,6 +40,7 @@ ROLE_PERMISSIONS = {
         'dispatch.manage', 'customer.communicate', 'assigned_work.use',
         'lead.read', 'lead.manage',
         'messages.read', 'messages.send', 'messages.templates.manage',
+        'checklist.manage',
     }),
     'dispatcher': frozenset({
         'booking.read', 'booking.create', 'dispatch.manage',
@@ -97,6 +99,14 @@ ENDPOINT_PERMISSIONS = {
     ('messages.templates', 'GET'): 'messages.templates.manage',
     ('messages.templates', 'POST'): 'messages.templates.manage',
     ('messages.delete_template', 'POST'): 'messages.templates.manage',
+
+    ('workorders.templates', 'GET'): 'checklist.manage',
+    ('workorders.new_template', 'GET'): 'checklist.manage',
+    ('workorders.new_template', 'POST'): 'checklist.manage',
+    ('workorders.edit_template', 'GET'): 'checklist.manage',
+    ('workorders.edit_template', 'POST'): 'checklist.manage',
+    ('workorders.delete_template', 'POST'): 'checklist.manage',
+    ('workorders.send_workorder', 'POST'): 'dispatch.manage',
 }
 
 
