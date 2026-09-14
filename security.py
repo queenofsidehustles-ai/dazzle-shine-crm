@@ -69,7 +69,7 @@ CSRF_EXEMPT_PATHS = frozenset({
     '/api/insurance-expiry',
     '/api/applicant-followups',
     '/api/lifecycle-emails',
-    '/api/stripe-webhook',
+    '/api/stripe/webhook',
     '/messages/incoming',
 })
 
@@ -95,7 +95,7 @@ CRON_PATHS = QUERY_SECRET_FORBIDDEN_PATHS
 # own Stripe/Twilio credentials. In hosted Akye the tenant subdomain is therefore
 # part of the callback authority; the apex/public schema is never a safe target.
 PROVIDER_WEBHOOK_PATHS = frozenset({
-    '/api/stripe-webhook',
+    '/api/stripe/webhook',
     '/messages/incoming',
 })
 TENANT_MACHINE_PATHS = CRON_PATHS | PROVIDER_WEBHOOK_PATHS
