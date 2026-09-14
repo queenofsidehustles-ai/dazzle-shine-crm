@@ -21,6 +21,7 @@ import os
 from typing import Any
 
 import requests
+from werkzeug.exceptions import Conflict
 
 _PREFIX = "akye-media:v1:"
 _MAX_BYTES = 10 * 1024 * 1024
@@ -115,6 +116,31 @@ def parse_ref(ref: str, *, tenant_slug: str, kind: str | None = None,
     return payload
 
 
+def _assert_job_photo_mutable(kind: str, scope_id: int | str | None) -> None:
+    """Reject checklist evidence mutation after the cleaner submits the photo set.
+
+    Job-photo scopes are created by the work-order route as ``<checklist>:<phase>``.
+    The tenant schema has already been selected from the trusted request host, so
+    this lookup is tenant-local. The check deliberately runs before file bytes
+    are read or Cloudinary is configured, ensuring a stale public checklist token
+    cannot add evidence after review/payment state has begun.
+    """
+    if kind != "job-photo":
+        return
+
+    scope = "" if scope_id is None else str(scope_id)
+    checklist_id, separator, phase = scope.partition(":")
+    if not separator or phase not in ("before", "after") or not checklist_id.isdigit():
+        raise ValueError("Invalid job-photo scope")
+
+    from models import JobChecklist
+    checklist = JobChecklist.query.get(int(checklist_id))
+    if checklist is None:
+        raise ValueError("Checklist scope not found")
+    if checklist.photos_submitted_at:
+        raise Conflict(description="Submitted checklist photo evidence is immutable")
+
+
 def upload_image(file_storage, *, tenant_slug: str, kind: str,
                  scope_id: int | str | None = None) -> str:
     """Upload one image as a Cloudinary authenticated asset and return its ref."""
@@ -122,6 +148,8 @@ def upload_image(file_storage, *, tenant_slug: str, kind: str,
         raise ValueError("tenant_slug and kind are required")
     if file_storage is None or not getattr(file_storage, "filename", ""):
         raise ValueError("Choose an image first")
+
+    _assert_job_photo_mutable(kind, scope_id)
 
     raw = file_storage.read()
     if not raw:
