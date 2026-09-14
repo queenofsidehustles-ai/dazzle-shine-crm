@@ -10,6 +10,21 @@ from flask import abort, request, session
 CANONICAL_ROLES = frozenset({'owner', 'admin', 'dispatcher', 'cleaner', 'limited'})
 LEGACY_ROLE_MAP = {'team': 'limited'}
 
+ROLE_LABELS = {
+    'owner': 'Owner',
+    'admin': 'Admin',
+    'dispatcher': 'Dispatcher',
+    'cleaner': 'Cleaner',
+    'limited': 'Limited',
+}
+ROLE_OPTIONS = (
+    ('limited', 'Limited — booking read only'),
+    ('cleaner', 'Cleaner — assigned work only'),
+    ('dispatcher', 'Dispatcher — bookings and scheduling'),
+    ('admin', 'Admin — operations, no finance/pay'),
+    ('owner', 'Owner — full access'),
+)
+
 # Permission names are intentionally action-oriented. Route classification stays
 # exact so new endpoints do not inherit authority accidentally.
 ROLE_PERMISSIONS = {
@@ -39,27 +54,18 @@ ROLE_PERMISSIONS = {
 # lead fee, pay-driving hours, assignment and status together. Payment/pay
 # actions remain owner-only until those routes are split and audited separately.
 ENDPOINT_PERMISSIONS = {
-    # Read-only booking operations.
     ('bookings.index', 'GET'): 'booking.read',
     ('bookings.calendar', 'GET'): 'booking.read',
     ('bookings.detail', 'GET'): 'booking.read',
     ('bookings.confirmation_preview', 'GET'): 'booking.read',
-
-    # Create booking. Admin and dispatcher may create work; cleaner/limited may not.
     ('bookings.new', 'GET'): 'booking.create',
     ('bookings.new', 'POST'): 'booking.create',
     ('bookings.price_preview', 'GET'): 'booking.create',
-
-    # Dispatch/scheduling actions that do not deliberately edit money.
     ('bookings.reschedule', 'POST'): 'dispatch.manage',
     ('bookings.notify_moved', 'POST'): 'dispatch.manage',
     ('bookings.broadcast', 'POST'): 'dispatch.manage',
     ('bookings.send_crew', 'POST'): 'dispatch.manage',
-
-    # Customer communications driven by an existing booking.
     ('bookings.send_confirmation', 'POST'): 'customer.communicate',
-
-    # Mixed/high-risk financial and pay mutations.
     ('bookings.detail', 'POST'): 'pay.manage',
     ('bookings.correct_price', 'GET'): 'pay.manage',
     ('bookings.correct_price', 'POST'): 'pay.manage',
@@ -78,6 +84,12 @@ def canonical_role(role):
     value = (role or '').strip().lower()
     value = LEGACY_ROLE_MAP.get(value, value)
     return value if value in CANONICAL_ROLES else None
+
+
+def role_label(role):
+    """Human label for a stored role; unknown values are visibly invalid."""
+    canonical = canonical_role(role)
+    return ROLE_LABELS.get(canonical, 'Unknown role')
 
 
 def has_permission(role, permission):
