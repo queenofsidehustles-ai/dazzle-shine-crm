@@ -2,6 +2,7 @@ import pytest
 from flask import Flask, session
 
 from auth import is_owner_session, owner_required
+from navigation import sidebar, tabs_for
 
 
 @pytest.fixture
@@ -75,3 +76,36 @@ def test_explicit_owner_can_open_owner_route(app):
 
     assert response.status_code == 200
     assert response.data == b"owner"
+
+
+def _sidebar_endpoints(role=None):
+    return {
+        item["endpoint"]
+        for section in sidebar(role=role)
+        for item in section["items"]
+    }
+
+
+def test_missing_role_does_not_receive_owner_only_navigation():
+    endpoints = _sidebar_endpoints()
+
+    assert "admin.dashboard" in endpoints
+    assert "bookings.index" in endpoints
+    assert "assistant.page" not in endpoints
+    assert "money.pnl" not in endpoints
+    assert "settings.business" not in endpoints
+
+
+def test_explicit_owner_receives_owner_only_navigation():
+    endpoints = _sidebar_endpoints("owner")
+
+    assert "assistant.page" in endpoints
+    assert "money.pnl" in endpoints
+    assert "settings.business" in endpoints
+
+
+def test_missing_role_does_not_receive_owner_only_tabs():
+    tabs, active = tabs_for("settings.business")
+
+    assert active == "settings.business"
+    assert tabs == []
