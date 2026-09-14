@@ -194,6 +194,17 @@ def _enforce_request_lifecycle(slug):
             from werkzeug.exceptions import NotFound
             raise NotFound()
 
+        expected_schema = schema_for(slug)
+        assigned_schema = (org.get('schema_name') or '').strip()
+        if assigned_schema != expected_schema:
+            # An active status is not enough. The control plane is the authority
+            # assigning a company to its schema, so disagreement with the host-
+            # derived schema is a containment failure, never permission to guess.
+            session.clear()
+            from werkzeug.exceptions import ServiceUnavailable
+            raise ServiceUnavailable(
+                description='Tenant schema assignment could not be verified.')
+
         status = (org.get('status') or '').strip().lower()
         if status == 'active':
             return
