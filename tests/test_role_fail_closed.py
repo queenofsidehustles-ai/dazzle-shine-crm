@@ -109,3 +109,29 @@ def test_missing_role_does_not_receive_owner_only_tabs():
 
     assert active == "settings.business"
     assert tabs == []
+
+
+def test_owner_argument_cannot_elevate_missing_request_session_role(app):
+    with app.test_request_context("/"):
+        session["logged_in"] = True
+        # Mirrors app.py's legacy presentation fallback, which can still pass
+        # role="owner" when an old session has no role claim.
+        endpoints = _sidebar_endpoints("owner")
+        tabs, active = tabs_for("settings.business", "owner")
+
+    assert "assistant.page" not in endpoints
+    assert "money.pnl" not in endpoints
+    assert "settings.business" not in endpoints
+    assert active == "settings.business"
+    assert tabs == []
+
+
+def test_owner_argument_requires_matching_owner_request_session(app):
+    with app.test_request_context("/"):
+        session["logged_in"] = True
+        session["role"] = "owner"
+        endpoints = _sidebar_endpoints("owner")
+
+    assert "assistant.page" in endpoints
+    assert "money.pnl" in endpoints
+    assert "settings.business" in endpoints
