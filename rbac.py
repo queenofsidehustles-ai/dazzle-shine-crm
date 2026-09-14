@@ -25,8 +25,6 @@ ROLE_OPTIONS = (
     ('owner', 'Owner — full access'),
 )
 
-# Permission names are intentionally action-oriented. Route classification stays
-# exact so new endpoints do not inherit authority accidentally.
 ROLE_PERMISSIONS = {
     'owner': frozenset({
         'booking.read', 'booking.create', 'booking.manage',
@@ -46,15 +44,11 @@ ROLE_PERMISSIONS = {
     'limited': frozenset({'booking.read'}),
 }
 
-# Exact endpoint/method rules. Unlisted endpoints retain their existing route
-# decorators until deliberately classified; this prevents an incomplete matrix
-# from accidentally granting access.
-#
-# The mixed booking-detail POST stays owner-only because it can alter price,
-# lead fee, pay-driving hours, assignment and status together. Payment/pay
-# actions remain owner-only until those routes are split and audited separately.
 ENDPOINT_PERMISSIONS = {
+    ('admin.dashboard', 'GET'): 'booking.read',
     ('bookings.index', 'GET'): 'booking.read',
+    ('bookings.clients', 'GET'): 'booking.read',
+    ('bookings.client_detail', 'GET'): 'booking.read',
     ('bookings.calendar', 'GET'): 'booking.read',
     ('bookings.detail', 'GET'): 'booking.read',
     ('bookings.confirmation_preview', 'GET'): 'booking.read',
@@ -66,6 +60,9 @@ ENDPOINT_PERMISSIONS = {
     ('bookings.broadcast', 'POST'): 'dispatch.manage',
     ('bookings.send_crew', 'POST'): 'dispatch.manage',
     ('bookings.send_confirmation', 'POST'): 'customer.communicate',
+    ('bookings.email_customer', 'GET'): 'customer.communicate',
+    ('bookings.email_customer', 'POST'): 'customer.communicate',
+    ('bookings.rebuild_clients', 'POST'): 'booking.manage',
     ('bookings.detail', 'POST'): 'pay.manage',
     ('bookings.correct_price', 'GET'): 'pay.manage',
     ('bookings.correct_price', 'POST'): 'pay.manage',
@@ -107,10 +104,17 @@ def required_permission(endpoint=None, method=None):
 
 
 def enforce_current_request():
-    """Enforce any IAM rule registered for the current authenticated route."""
-    permission = required_permission()
-    if permission is None:
+    """Enforce IAM for every authenticated back-office route.
+
+    Owner keeps full legacy access. Every other role is fail-closed unless the
+    endpoint/method is explicitly classified above. This prevents a newly added
+    route from silently becoming available to every authenticated account.
+    """
+    role = canonical_role(session.get('role'))
+    if role == 'owner':
         return None
-    if not has_permission(session.get('role'), permission):
+
+    permission = required_permission()
+    if permission is None or not has_permission(role, permission):
         abort(403, description='Your account is not permitted to perform this action.')
     return None

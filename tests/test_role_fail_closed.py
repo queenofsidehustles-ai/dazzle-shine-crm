@@ -24,16 +24,8 @@ def app():
     def owner_only():
         return "owner"
 
-    app.add_url_rule(
-        "/admin/login",
-        endpoint="admin.login",
-        view_func=lambda: "login",
-    )
-    app.add_url_rule(
-        "/admin/dashboard",
-        endpoint="admin.dashboard",
-        view_func=lambda: "dashboard",
-    )
+    app.add_url_rule("/admin/login", endpoint="admin.login", view_func=lambda: "login")
+    app.add_url_rule("/admin/dashboard", endpoint="admin.dashboard", view_func=lambda: "dashboard")
     return app
 
 
@@ -73,11 +65,7 @@ def test_explicit_owner_can_open_owner_route(app):
 
 
 def _sidebar_endpoints(role=None):
-    return {
-        item["endpoint"]
-        for section in sidebar(role=role)
-        for item in section["items"]
-    }
+    return {item["endpoint"] for section in sidebar(role=role) for item in section["items"]}
 
 
 def test_missing_role_does_not_receive_owner_only_navigation():
@@ -127,20 +115,13 @@ def test_owner_argument_requires_matching_owner_request_session(app):
 @pytest.mark.parametrize(
     ("role", "permission", "allowed"),
     [
-        ("owner", "pay.manage", True),
-        ("admin", "pay.manage", False),
-        ("dispatcher", "pay.manage", False),
-        ("cleaner", "pay.manage", False),
-        ("limited", "pay.manage", False),
-        ("team", "pay.manage", False),
-        (None, "pay.manage", False),
-        ("unknown", "pay.manage", False),
-        ("owner", "missing.permission", False),
-        ("admin", "booking.manage", True),
-        ("dispatcher", "booking.manage", False),
-        ("cleaner", "booking.manage", False),
-        ("limited", "booking.manage", False),
-        ("team", "booking.manage", False),
+        ("owner", "pay.manage", True), ("admin", "pay.manage", False),
+        ("dispatcher", "pay.manage", False), ("cleaner", "pay.manage", False),
+        ("limited", "pay.manage", False), ("team", "pay.manage", False),
+        (None, "pay.manage", False), ("unknown", "pay.manage", False),
+        ("owner", "missing.permission", False), ("admin", "booking.manage", True),
+        ("dispatcher", "booking.manage", False), ("cleaner", "booking.manage", False),
+        ("limited", "booking.manage", False), ("team", "booking.manage", False),
         ("cleaner", "assigned_work.use", True),
     ],
 )
@@ -173,7 +154,10 @@ def test_booking_role_matrix(role, read, create, dispatch, communicate, pay, fin
 @pytest.mark.parametrize(
     ("endpoint", "method", "permission"),
     [
+        ("admin.dashboard", "GET", "booking.read"),
         ("bookings.index", "GET", "booking.read"),
+        ("bookings.clients", "GET", "booking.read"),
+        ("bookings.client_detail", "GET", "booking.read"),
         ("bookings.calendar", "GET", "booking.read"),
         ("bookings.detail", "GET", "booking.read"),
         ("bookings.new", "GET", "booking.create"),
@@ -182,6 +166,7 @@ def test_booking_role_matrix(role, read, create, dispatch, communicate, pay, fin
         ("bookings.broadcast", "POST", "dispatch.manage"),
         ("bookings.send_crew", "POST", "dispatch.manage"),
         ("bookings.send_confirmation", "POST", "customer.communicate"),
+        ("bookings.email_customer", "POST", "customer.communicate"),
         ("bookings.detail", "POST", "pay.manage"),
         ("bookings.correct_price", "POST", "pay.manage"),
         ("bookings.notify_pay", "POST", "pay.manage"),
@@ -199,28 +184,32 @@ def test_legacy_team_role_is_least_privileged():
     assert rbac.canonical_role(None) is None
 
 
+def test_role_options_expose_only_canonical_roles():
+    option_roles = [role for role, _label in rbac.ROLE_OPTIONS]
+    assert option_roles == ["limited", "cleaner", "dispatcher", "admin", "owner"]
+    assert set(option_roles) == set(rbac.CANONICAL_ROLES)
+
+
+@pytest.mark.parametrize(("stored", "label"), [
+    ("owner", "Owner"), ("admin", "Admin"), ("dispatcher", "Dispatcher"),
+    ("cleaner", "Cleaner"), ("limited", "Limited"), ("team", "Limited"),
+    ("bogus", "Unknown role"),
+])
+def test_role_labels_are_explicit_and_legacy_team_is_not_elevated(stored, label):
+    assert rbac.role_label(stored) == label
+
+
 def _rbac_app(endpoint="bookings.detail", methods=("POST",)):
     test_app = Flask(__name__)
     test_app.secret_key = "rbac-test-secret"
-    test_app.add_url_rule(
-        "/admin/login", endpoint="admin.login", view_func=lambda: "login"
-    )
-
+    test_app.add_url_rule("/admin/login", endpoint="admin.login", view_func=lambda: "login")
     def protected():
         return "allowed"
-
-    test_app.add_url_rule(
-        "/protected",
-        endpoint=endpoint,
-        view_func=login_required(protected),
-        methods=list(methods),
-    )
+    test_app.add_url_rule("/protected", endpoint=endpoint, view_func=login_required(protected), methods=list(methods))
     return test_app
 
 
-@pytest.mark.parametrize(
-    "role", ["admin", "dispatcher", "cleaner", "limited", "team", "unknown", None]
-)
+@pytest.mark.parametrize("role", ["admin", "dispatcher", "cleaner", "limited", "team", "unknown", None])
 def test_sensitive_booking_mutation_is_owner_only(role):
     test_app = _rbac_app()
     client = test_app.test_client()
@@ -239,9 +228,7 @@ def test_owner_can_reach_sensitive_booking_mutation():
     with client.session_transaction() as sess:
         sess["logged_in"] = True
         sess["role"] = "owner"
-    response = client.post("/protected")
-    assert response.status_code == 200
-    assert response.data == b"allowed"
+    assert client.post("/protected").status_code == 200
 
 
 @pytest.mark.parametrize("role", ["owner", "admin", "dispatcher"])
@@ -282,7 +269,6 @@ def test_limited_roles_can_read_but_cannot_create_booking(role):
         sess["logged_in"] = True
         sess["role"] = role
     assert read_client.get("/protected").status_code == 200
-
     create_app = _rbac_app("bookings.new", ("POST",))
     create_client = create_app.test_client()
     with create_client.session_transaction() as sess:
@@ -298,3 +284,61 @@ def test_cleaner_cannot_open_back_office_booking_index():
         sess["logged_in"] = True
         sess["role"] = "cleaner"
     assert client.get("/protected").status_code == 403
+
+
+@pytest.mark.parametrize("role", ["admin", "dispatcher", "cleaner", "limited", "team", "unknown"])
+def test_unclassified_authenticated_route_fails_closed_for_non_owner(role):
+    test_app = _rbac_app("example.unclassified", ("GET",))
+    client = test_app.test_client()
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["role"] = role
+    assert client.get("/protected").status_code == 403
+
+
+def test_unclassified_authenticated_route_remains_available_to_owner():
+    test_app = _rbac_app("example.unclassified", ("GET",))
+    client = test_app.test_client()
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["role"] = "owner"
+    assert client.get("/protected").status_code == 200
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "dispatcher", "limited", "team"])
+def test_workspace_dashboard_is_explicitly_readable_by_back_office_roles(role):
+    test_app = _rbac_app("admin.dashboard", ("GET",))
+    client = test_app.test_client()
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["role"] = role
+    assert client.get("/protected").status_code == 200
+
+
+def test_cleaner_cannot_open_back_office_dashboard():
+    test_app = _rbac_app("admin.dashboard", ("GET",))
+    client = test_app.test_client()
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["role"] = "cleaner"
+    assert client.get("/protected").status_code == 403
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "dispatcher"])
+def test_customer_email_is_operational_role_action(role):
+    test_app = _rbac_app("bookings.email_customer", ("POST",))
+    client = test_app.test_client()
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["role"] = role
+    assert client.post("/protected").status_code == 200
+
+
+@pytest.mark.parametrize("role", ["cleaner", "limited", "team", "unknown"])
+def test_customer_email_is_denied_to_non_operational_roles(role):
+    test_app = _rbac_app("bookings.email_customer", ("POST",))
+    client = test_app.test_client()
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["role"] = role
+    assert client.post("/protected").status_code == 403
