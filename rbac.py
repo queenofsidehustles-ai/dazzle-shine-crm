@@ -10,35 +10,63 @@ from flask import abort, request, session
 CANONICAL_ROLES = frozenset({'owner', 'admin', 'dispatcher', 'cleaner', 'limited'})
 LEGACY_ROLE_MAP = {'team': 'limited'}
 
-# Keep capabilities intentionally coarse until each route has been split along
-# real authority boundaries. In particular, money/pay mutation is owner-only;
-# an operational admin or dispatcher does not gain financial authority merely
-# because a route currently mixes scheduling and price fields in one form.
+# Permission names are intentionally action-oriented. Route classification stays
+# exact so new endpoints do not inherit authority accidentally.
 ROLE_PERMISSIONS = {
     'owner': frozenset({
-        'booking.manage', 'dispatch.manage', 'pay.manage', 'finance.manage',
-        'users.manage', 'settings.manage', 'assigned_work.use',
+        'booking.read', 'booking.create', 'booking.manage',
+        'dispatch.manage', 'customer.communicate',
+        'pay.manage', 'finance.manage', 'users.manage', 'settings.manage',
+        'assigned_work.use',
     }),
     'admin': frozenset({
-        'booking.manage', 'dispatch.manage', 'assigned_work.use',
+        'booking.read', 'booking.create', 'booking.manage',
+        'dispatch.manage', 'customer.communicate', 'assigned_work.use',
     }),
     'dispatcher': frozenset({
-        'booking.manage', 'dispatch.manage',
+        'booking.read', 'booking.create', 'dispatch.manage',
+        'customer.communicate',
     }),
     'cleaner': frozenset({'assigned_work.use'}),
-    'limited': frozenset(),
+    'limited': frozenset({'booking.read'}),
 }
 
-# Exact endpoint/method rules for the first high-risk IAM slice. Unlisted
-# endpoints retain their existing route decorators until they are deliberately
-# classified; this prevents an incomplete matrix from accidentally granting
-# access. The dangerous mixed booking-detail POST stays owner-only because it
-# can alter price, lead fee, pay-driving hours, assignment and status together.
+# Exact endpoint/method rules. Unlisted endpoints retain their existing route
+# decorators until deliberately classified; this prevents an incomplete matrix
+# from accidentally granting access.
+#
+# The mixed booking-detail POST stays owner-only because it can alter price,
+# lead fee, pay-driving hours, assignment and status together. Payment/pay
+# actions remain owner-only until those routes are split and audited separately.
 ENDPOINT_PERMISSIONS = {
+    # Read-only booking operations.
+    ('bookings.index', 'GET'): 'booking.read',
+    ('bookings.calendar', 'GET'): 'booking.read',
+    ('bookings.detail', 'GET'): 'booking.read',
+    ('bookings.confirmation_preview', 'GET'): 'booking.read',
+
+    # Create booking. Admin and dispatcher may create work; cleaner/limited may not.
+    ('bookings.new', 'GET'): 'booking.create',
+    ('bookings.new', 'POST'): 'booking.create',
+    ('bookings.price_preview', 'GET'): 'booking.create',
+
+    # Dispatch/scheduling actions that do not deliberately edit money.
+    ('bookings.reschedule', 'POST'): 'dispatch.manage',
+    ('bookings.notify_moved', 'POST'): 'dispatch.manage',
+    ('bookings.broadcast', 'POST'): 'dispatch.manage',
+    ('bookings.send_crew', 'POST'): 'dispatch.manage',
+
+    # Customer communications driven by an existing booking.
+    ('bookings.send_confirmation', 'POST'): 'customer.communicate',
+
+    # Mixed/high-risk financial and pay mutations.
     ('bookings.detail', 'POST'): 'pay.manage',
     ('bookings.correct_price', 'GET'): 'pay.manage',
     ('bookings.correct_price', 'POST'): 'pay.manage',
+    ('bookings.notify_pay', 'POST'): 'pay.manage',
     ('bookings.save_crew', 'POST'): 'pay.manage',
+    ('bookings.send_payment_link_route', 'POST'): 'finance.manage',
+    ('bookings.resend_deposit_receipt', 'POST'): 'finance.manage',
     ('bookings.log_ad_cost', 'POST'): 'finance.manage',
     ('bookings.re_rate', 'POST'): 'pay.manage',
     ('bookings.use_clocked_pay', 'POST'): 'pay.manage',
