@@ -147,7 +147,10 @@ def test_operational_navigation_matches_server_grants(role):
     assert 'places_finder.dashboard' not in endpoints
     assert 'contractors.team' not in endpoints
     assert 'contractors.applications' not in endpoints
-    assert 'workorders.templates' not in endpoints
+    if role == 'admin':
+        assert 'workorders.templates' in endpoints
+    else:
+        assert 'workorders.templates' not in endpoints
 
 
 def test_dispatcher_cannot_see_message_template_tab_but_admin_can():
@@ -165,6 +168,7 @@ def test_limited_navigation_contains_only_explicit_read_workspace(role):
     assert 'money.pnl' not in endpoints
     assert 'settings.business' not in endpoints
     assert 'contractors.team' not in endpoints
+    assert 'workorders.templates' not in endpoints
 
 
 def test_cleaner_has_no_back_office_navigation_without_explicit_get_grant():
@@ -185,3 +189,35 @@ def test_request_session_role_cannot_be_elevated_by_navigation_argument():
     assert 'money.pnl' not in endpoints
     assert 'settings.business' not in endpoints
     assert 'messages.inbox' in endpoints
+
+
+@pytest.mark.parametrize('role', ['owner', 'admin'])
+def test_owner_and_admin_can_manage_checklist_templates(role):
+    assert _status(role, 'workorders.templates') == 200
+    assert _status(role, 'workorders.new_template') == 200
+    assert _status(role, 'workorders.new_template', 'POST') == 200
+    assert _status(role, 'workorders.edit_template', 'POST') == 200
+    assert _status(role, 'workorders.delete_template', 'POST') == 200
+
+
+@pytest.mark.parametrize('role', ['dispatcher', 'cleaner', 'limited', 'team', 'unknown'])
+def test_non_admin_roles_cannot_manage_checklist_templates(role):
+    assert _status(role, 'workorders.templates') == 403
+    assert _status(role, 'workorders.edit_template', 'POST') == 403
+
+
+@pytest.mark.parametrize('role', ['owner', 'admin', 'dispatcher'])
+def test_dispatch_roles_can_send_existing_workorder(role):
+    assert _status(role, 'workorders.send_workorder', 'POST') == 200
+
+
+@pytest.mark.parametrize('role', ['cleaner', 'limited', 'team', 'unknown'])
+def test_non_dispatch_roles_cannot_send_workorder(role):
+    assert _status(role, 'workorders.send_workorder', 'POST') == 403
+
+
+def test_invoice_back_office_list_remains_owner_only():
+    assert rbac.required_permission('invoices.index', 'GET') is None
+    assert _status('owner', 'invoices.index') == 200
+    assert _status('admin', 'invoices.index') == 403
+    assert _status('dispatcher', 'invoices.index') == 403
