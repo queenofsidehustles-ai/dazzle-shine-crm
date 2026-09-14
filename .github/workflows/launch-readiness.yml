@@ -85,7 +85,7 @@ jobs:
             tests/test_stripe_webhook_tenant_isolation.py \
             --tb=short
 
-      - name: Tenant session, object and document isolation
+      - name: Tenant session, object, document and export isolation
         id: tenant_http
         continue-on-error: true
         run: |
@@ -94,6 +94,7 @@ jobs:
             tests/test_tenant_http_object_isolation.py \
             tests/test_tenant_public_token_isolation.py \
             tests/test_tenant_secure_document_isolation.py \
+            tests/test_tenant_export_isolation.py \
             --tb=short
 
       - name: PostgreSQL tenant and pool isolation
@@ -131,7 +132,7 @@ jobs:
           echo "- Live funds authorized: false" >> "$GITHUB_STEP_SUMMARY"
           echo "- PAY-01 exact money display: ${{ steps.pay01.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- PAY-02 payment integrity: ${{ steps.pay02.outcome }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Tenant HTTP/session/documents: ${{ steps.tenant_http.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tenant HTTP/session/documents/exports: ${{ steps.tenant_http.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- PostgreSQL tenancy/pool: ${{ steps.tenant_pg.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Scheduler/security/provider/host: ${{ steps.security.outcome }}" >> "$GITHUB_STEP_SUMMARY"
 
