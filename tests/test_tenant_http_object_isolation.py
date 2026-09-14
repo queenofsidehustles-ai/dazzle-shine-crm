@@ -118,6 +118,10 @@ def _authenticated_client(app, slug=A):
         sess['role'] = 'owner'
         sess['user_id'] = 1
         sess['user_name'] = 'Boundary Tester'
+        # Hosted Akye sessions are deliberately tenant-bound.  These HTTP
+        # object-isolation tests need a valid session for the source tenant so
+        # they exercise object lookup, not the login redirect guard.
+        sess['tenant_slug'] = slug
     return client, base
 
 
