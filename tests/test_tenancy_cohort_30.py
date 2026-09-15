@@ -204,3 +204,37 @@ def test_public_context_cannot_reach_any_tenant_canary(cohort):
             rows = []
 
     assert not any((name or '').startswith('TENANT-') for name in rows)
+
+
+def test_one_tenant_can_be_contained_and_recovered_without_affecting_cohort(cohort):
+    """Incident containment must isolate one business, not take down the cohort."""
+    app, test_url = cohort
+    import control_plane
+
+    engine = create_engine(test_url)
+    target = SLUGS[0]
+    neighbor = SLUGS[1]
+    try:
+        control_plane.set_status(engine, target, 'suspended')
+
+        blocked = app.test_client().get('/', base_url=f'https://{target}.akye.test')
+        unaffected = app.test_client().get('/', base_url=f'https://{neighbor}.akye.test')
+        assert blocked.status_code == 423
+        assert unaffected.status_code != 423
+        assert unaffected.status_code < 500
+
+        # Recovery is a control-plane state change, not a schema copy/drop. The
+        # tenant's data remains in place while access is contained.
+        control_plane.set_status(engine, target, 'active')
+        recovered = app.test_client().get('/', base_url=f'https://{target}.akye.test')
+        assert recovered.status_code != 423
+        assert recovered.status_code < 500
+
+        with engine.connect() as conn:
+            count = conn.execute(text(
+                f'SELECT count(*) FROM "tenant_{target}".client'
+            )).scalar()
+        assert count == 1
+    finally:
+        control_plane.set_status(engine, target, 'active')
+        engine.dispose()
