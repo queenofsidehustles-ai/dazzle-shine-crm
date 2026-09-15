@@ -138,17 +138,22 @@ def required_permission(endpoint=None, method=None):
 
 
 def enforce_current_request():
-    """Enforce IAM for every authenticated back-office route.
+    """Enforce IAM on routes deliberately classified in the central matrix.
 
-    Owner keeps full legacy access. Every other role is fail-closed unless the
-    endpoint/method is explicitly classified above. This prevents a newly added
-    route from silently becoming available to every authenticated account.
+    ``login_required`` is the authentication boundary used by a large legacy
+    route surface. Unclassified routes retain their existing authorization
+    contract (including ``owner_required`` and route-local checks); treating
+    absence from this incremental matrix as an implicit deny would lock every
+    non-owner out of unrelated product surfaces. Once an endpoint/method is
+    classified here, however, unknown roles and missing permissions fail closed.
     """
     role = canonical_role(session.get('role'))
     if role == 'owner':
         return None
 
     permission = required_permission()
-    if permission is None or not has_permission(role, permission):
+    if permission is None:
+        return None
+    if not has_permission(role, permission):
         abort(403, description='Your account is not permitted to perform this action.')
     return None
