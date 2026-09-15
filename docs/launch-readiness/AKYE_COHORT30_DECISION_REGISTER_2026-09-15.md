@@ -21,29 +21,29 @@ This register records material remediation decisions made while continuing launc
 | DR-009 | Preserve profitability and efficiency optimizations behind security, privacy, accounting integrity, tenant isolation, auditability, and reversible operations. Prefer self-service defaults, explicit state transitions, bounded automation, and measurable support reduction. | Reduces operating cost and dispute/liability exposure without creating hidden customer or security risk. | Review against cohort metrics after the 3–5 tenant stage. |
 | DR-010 | Do not interpret a grouped `continue-on-error` gate as product failure until the failing subtest is identified. Preserve the red aggregate, but distinguish workflow-manifest, test-harness, and implementation failures before changing runtime code. | Prevents unnecessary production-code changes and permission/security regressions while keeping release evidence fail-closed. | Revisit when exact failing assertions are available. |
 | DR-011 | Reuse existing tenant export, dispute-evidence, onboarding, and Playwright surfaces instead of creating parallel implementations. Extend only proven gaps. | Duplicate implementations increase support cost, regression surface, inconsistent semantics, and future maintenance burden. | Revisit only if existing surface cannot satisfy a documented launch requirement. |
+| DR-012 | Treat exact-head CI as authoritative over prior grouped-failure assumptions. When a newer exact-head Launch Readiness run is GREEN, close the prior PAY-02/tenant-HTTP grouped blocker rather than modifying runtime code to solve a superseded failure. | Avoids unnecessary security/payment changes and preserves the evidence-first rule. | Reopen only on a later exact-head regression or a new falsification finding. |
 
 ## Current evidence
 
 - The registered-tenant `destroy` operator path has been routed through lifecycle closure; permanent purge remains retention-gated and separate.
-- Privacy lifecycle falsification is GREEN on exact head `374a3c9028486ef76a29f24845d1240f4158ad88` (run `34980516037`).
-- Launch Readiness run `34980516029` on exact head `374a3c9028486ef76a29f24845d1240f4158ad88` completed FAILURE.
-- On that exact-head run, PostgreSQL tenant/pool isolation, concurrent 30-tenant pool isolation, PostgreSQL backup/restore containment, tenant scheduler isolation, cron tenant-host boundary, provider webhook boundary, cron secret transport, CSRF boundary, role/session fail-closed behavior, signup provisioning safety, and forwarded-host tenant boundary all passed.
-- The remaining grouped failing outcomes are PAY-02 and tenant session/object/document/export/media isolation; the fail-closed final aggregator correctly withheld readiness.
-- The current workflow references existing repository tests for both groups; the earlier stale-path defect has therefore been corrected. The next action is to isolate the exact failing subtests/assertions before modifying application code.
+- Privacy lifecycle falsification is GREEN on exact head `45769f361aa15668cf5b97092bf74e6751ee4615` (run `34992676766`).
+- Launch Readiness is GREEN on exact head `45769f361aa15668cf5b97092bf74e6751ee4615` (run `34992676186`).
+- The exact-head Launch Readiness job completed all critical launch-gate steps successfully, including PAY-01, PAY-02, tenant HTTP/object/document/export/media isolation, lifecycle, PostgreSQL tenant/pool isolation, concurrent 30-tenant isolation, backup/restore containment, scheduler isolation, cron/provider boundaries, CSRF, role/session fail-closed behavior, signup provisioning safety, forwarded-host isolation, and the final fail-closed aggregator.
+- The earlier PAY-02 and tenant HTTP/media grouped blocker is therefore closed by newer exact-head evidence; no runtime-code relaxation is warranted.
+- The workflow references current repository tests for payment integrity and tenant HTTP/media boundaries.
 - Repository inspection confirms `tests/test_tenant_export_isolation.py`, `tests/test_dispute_evidence.py`, `templates/admin/dispute_evidence.html`, `onboarding.py`, `templates/admin/getting_started.html`, and Playwright suites already exist. These workstreams will be extended rather than duplicated.
 - Current private media is authenticated image storage under tenant-bounded `akye-private/{tenant_slug}/{kind}` paths; lifecycle purge remains bounded to the resource type actually stored.
 - No Production activation, merge, live-funds authorization, permission broadening, credential mutation, or customer-data deletion was performed.
 
 ## Active autonomous queue
 
-1. Isolate exact PAY-02 and tenant HTTP/media failing subtests/assertions on head `374a3c9...`; remediate implementation or harness defects without weakening boundaries.
-2. Complete restore anti-resurrection evidence; tenant export isolation already exists and should be extended only if a concrete portability gap is proven.
-3. Falsify mobile/accessibility Golden Journeys using the existing Playwright infrastructure and correct launch-blocking defects.
-4. Extend existing onboarding behavior into measurable low-support activation milestones rather than adding another setup implementation.
-5. Add cohort control/support instrumentation only where existing operational/dispute surfaces leave measurable gaps.
-6. Falsify provider degraded modes and realistic 30-tenant application workload beyond database-context isolation.
-7. Prove operational backup/recovery evidence and capture profitability/support-cost instrumentation.
-8. Assemble immutable release evidence and recommend, but do not perform, the first 3–5 design-partner release decision.
+1. Complete restore anti-resurrection evidence; tenant export isolation already exists and should be extended only if a concrete portability gap is proven.
+2. Falsify mobile/accessibility Golden Journeys using the existing Playwright infrastructure and correct launch-blocking defects.
+3. Extend existing onboarding behavior into measurable low-support activation milestones rather than adding another setup implementation.
+4. Add cohort control/support instrumentation only where existing operational/dispute surfaces leave measurable gaps.
+5. Falsify provider degraded modes and realistic 30-tenant application workload beyond database-context isolation.
+6. Prove operational backup/recovery evidence and capture profitability/support-cost instrumentation.
+7. Assemble immutable release evidence and recommend, but do not perform, the first 3–5 design-partner release decision.
 
 ## Discussion queue
 
