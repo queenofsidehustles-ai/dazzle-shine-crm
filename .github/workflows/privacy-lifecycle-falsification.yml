@@ -1,0 +1,46 @@
+name: Privacy lifecycle falsification
+
+on:
+  push:
+    branches:
+      - akye-launch-readiness/cohort-30
+  workflow_dispatch:
+
+concurrency:
+  group: privacy-lifecycle-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Policy contract
+        run: python -m pytest -q tests/test_data_lifecycle_policy.py --tb=short
+      - name: No destructive retention bypass
+        run: python -m pytest -q tests/test_tenant_data_lifecycle_no_bypass.py --tb=short
+      - name: Tenant-bounded private media purge
+        run: python -m pytest -q tests/test_tenant_data_lifecycle_media.py --tb=short
+      - name: PostgreSQL retention and purge falsification
+        run: python -m pytest -q tests/test_tenant_data_lifecycle_postgres.py --tb=short
