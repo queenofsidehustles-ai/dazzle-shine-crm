@@ -173,11 +173,11 @@ jobs:
         run: python -m pytest -vv tests/test_money_display_consistency.py tests/test_workorder_money_display.py tests/test_my_day_money_display.py --tb=long
 
       - name: Diagnose PAY-02 gate failure
-        if: always() && steps.pay02.outcome != 'success'
+        if: always() && steps.pay02.outcome == 'failure'
         run: python -m pytest -vv tests/test_booking_payment_intent_integrity.py tests/test_payment_integrity.py tests/test_payment_redelivery.py tests/test_payment_state_regressions.py tests/test_payment_attempt_isolation.py --tb=long
 
       - name: Diagnose tenant HTTP/media gate failure
-        if: always() && steps.tenant_http.outcome != 'success'
+        if: always() && steps.tenant_http.outcome == 'failure'
         run: python -m pytest -vv tests/test_tenant_session_binding.py tests/test_tenant_direct_object_isolation.py tests/test_tenant_documents.py tests/test_tenant_export_isolation.py tests/test_tenant_private_media.py tests/test_private_media_signature.py tests/test_private_job_photo_contract.py tests/test_job_photo_immutability.py --tb=long
 
       - name: Diagnose tenant lifecycle gate failure
@@ -219,7 +219,7 @@ jobs:
         run: python -m pytest -vv tests/test_csrf_api_boundary.py --tb=long
 
       - name: Diagnose role/session fail closed failure
-        if: always() && steps.role_fail.outcome != 'success'
+        if: always() && steps.role_fail.outcome == 'failure'
         run: python -m pytest -vv tests/test_role_fail_closed.py tests/test_operational_role_matrix.py tests/test_session_invalidation.py --tb=long
 
       - name: Diagnose signup provisioning safety failure
