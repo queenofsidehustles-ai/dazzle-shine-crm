@@ -1,4 +1,6 @@
 import os
+import hashlib
+import hmac
 from functools import wraps
 from datetime import datetime
 from flask import session, redirect, url_for, flash, g
@@ -44,8 +46,43 @@ def session_matches_current_tenant():
     return bool(slug) and session.get('tenant_slug') == slug
 
 
+def _auth_fingerprint(password_hash):
+    """Opaque session binding to the credential version, never the hash itself."""
+    return hashlib.sha256((password_hash or '').encode('utf-8')).hexdigest()
+
+
+def session_matches_current_user():
+    """Revalidate tenant-local account state on every authenticated request.
+
+    A signed Flask cookie can otherwise outlive a database change.  Disabling
+    or deleting an account, changing its role, or resetting its password must
+    revoke an already-issued session immediately rather than waiting for cookie
+    expiry.  The deployment-wide legacy owner has no User row and is allowed
+    only in single-business mode, where env_login_configured() already guards
+    that credential separately.
+    """
+    user_id = session.get('user_id')
+    if user_id is None:
+        return not _hosted_multitenant() and session.get('role') == 'owner'
+
+    from models import User
+    user = User.query.get(user_id)
+    if not user or not user.active:
+        return False
+
+    import rbac
+    stored_role = rbac.canonical_role(user.role)
+    session_role = rbac.canonical_role(session.get('role'))
+    if not stored_role or stored_role != session_role:
+        return False
+
+    expected = _auth_fingerprint(user.password_hash)
+    presented = session.get('auth_fingerprint') or ''
+    return bool(presented) and hmac.compare_digest(expected, presented)
+
+
 def _reject_wrong_tenant_session():
-    """Discard only the cookie presented to the wrong host and require login."""
+    """Discard an invalid, stale, or wrong-tenant cookie and require login."""
     session.clear()
     return redirect(url_for('admin.login'))
 
@@ -56,6 +93,8 @@ def login_required(f):
         if not session.get('logged_in'):
             return redirect(url_for('admin.login'))
         if not session_matches_current_tenant():
+            return _reject_wrong_tenant_session()
+        if not session_matches_current_user():
             return _reject_wrong_tenant_session()
         # Route authentication and route authorization are separate boundaries.
         # rbac only acts on endpoints deliberately classified in its matrix;
@@ -73,7 +112,9 @@ def is_owner_session():
     tenant binding existed must not gain owner authority merely because fields
     are missing.
     """
-    return session_matches_current_tenant() and session.get('role') == 'owner'
+    return (session_matches_current_tenant()
+            and session_matches_current_user()
+            and session.get('role') == 'owner')
 
 
 def owner_required(f):
@@ -83,6 +124,8 @@ def owner_required(f):
         if not session.get('logged_in'):
             return redirect(url_for('admin.login'))
         if not session_matches_current_tenant():
+            return _reject_wrong_tenant_session()
+        if not session_matches_current_user():
             return _reject_wrong_tenant_session()
         if not is_owner_session():
             flash('That area is owner-only.', 'error')
@@ -131,6 +174,9 @@ def authenticate(username, password):
         # Stamp that tenant into the signed session before the login route marks
         # it logged in, so the cookie cannot later be replayed on another host.
         bind_session_to_current_tenant()
+        # Bind this cookie to the current credential version. A later password
+        # reset changes password_hash, making every older cookie invalid.
+        session['auth_fingerprint'] = _auth_fingerprint(user.password_hash)
         return True, {'user_id': user.id, 'role': user.role, 'name': user.name}
     if env_login_configured():
         if (username == os.environ.get('ADMIN_USER', '').strip()
