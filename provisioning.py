@@ -70,9 +70,6 @@ def migrate_schema(engine, schema):
     cfg.set_main_option('script_location',
                         os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                      'migrations'))
-    # Alembic reads the connection from env.py; point it at this schema, and
-    # give it its own version table inside the schema so each company records
-    # its own position rather than sharing one.
     cfg.attributes['tenant_schema'] = schema
     with tenancy.use_tenant(schema):
         command.upgrade(cfg, 'head')
@@ -109,15 +106,12 @@ def migrate_all(quiet=False):
     Returns (moved, failed) for the log.
     """
     if not (os.environ.get('BASE_DOMAIN') or '').strip():
-        return [], []                       # single business: nothing to do
+        return [], []
 
     engine = _engine()
     try:
         orgs = control_plane.all_orgs(engine)
     except Exception as e:
-        # On the very first boot the control plane has not been created yet,
-        # and on SQLite it does not exist at all. Neither is worth shouting
-        # about; anything else is.
         if 'no such table' not in str(e) and 'does not exist' not in str(e):
             print(f'  ⚠️  could not read the company list: {e}')
         return [], []
@@ -204,15 +198,14 @@ def main():
     lg = sub.add_parser('leads', help='everybody who asked for early access')
     lg.add_argument('--csv', action='store_true', help='output as CSV to paste into a sheet')
 
-    tm = sub.add_parser('testmail',
-                        help="prove the product can actually send an email")
+    tm = sub.add_parser('testmail', help="prove the product can actually send an email")
     tm.add_argument('to', help='where to send it — your own inbox')
 
     n = sub.add_parser('nudges', help='send the trial emails that are due today')
     n.add_argument('--dry-run', action='store_true',
                    help='send nothing; print exactly what a real run would do')
 
-    d = sub.add_parser('destroy', help='remove a company and ALL of its data')
+    d = sub.add_parser('destroy', help='close a company and start its 30-day retention period')
     d.add_argument('slug')
     d.add_argument('--yes', action='store_true')
 
@@ -266,10 +259,6 @@ def main():
             print()
         print('  Add --csv to paste this into a spreadsheet.\n')
     elif args.action == 'testmail':
-        # The same lesson as the backups: a thing nobody has tested is not a
-        # working thing, it is an assumption with a config value attached. The
-        # two emails this proves out — trial reminders and crash alerts — both
-        # fail invisibly, because nobody notices an email that never came.
         import notifications
         import product
         st = product.mail_status()
@@ -308,9 +297,6 @@ def main():
         try:
             control_plane.ensure_table(engine)
         except Exception:
-            # No control plane means this is one cleaning company and not the
-            # hosted product. There are no trials to nudge, and saying so is
-            # better than a page of SQLAlchemy.
             print('\n  This deployment has no control plane — it is a single '
                   'business,\n  not the hosted product. Nothing to nudge.\n')
             return 0
@@ -334,22 +320,22 @@ def main():
             print('\n  Nothing was sent. Drop --dry-run to send it.')
         print()
     elif args.action == 'destroy':
+        import tenant_data_lifecycle
         org = control_plane.find(engine, args.slug)
         if not org:
             print(f'  No company called {args.slug!r}.')
             return 1
-        print(f'\n  This DELETES every booking, cleaner, customer and payment '
-              f'record belonging to {org["name"]}.')
-        print('  It cannot be undone from here. Take a backup first.\n')
+        print(f'\n  This CLOSES {org["name"]} immediately and starts the approved '
+              '30-day retention period.')
+        print('  Customer access is revoked now; permanent purge is a separate '
+              'post-retention operation.\n')
         if not args.yes:
-            if input(f'  Type {args.slug} to confirm: ').strip() != args.slug:
+            if input(f'  Type {args.slug} to confirm closure: ').strip() != args.slug:
                 print('  Nothing was changed.\n')
                 return 1
-        drop_schema(engine, org['schema_name'])
-        with engine.begin() as conn:
-            conn.execute(text('DELETE FROM public.organizations WHERE slug = :s'),
-                         {'s': args.slug})
-        print(f'  {org["name"]} removed.\n')
+        state = tenant_data_lifecycle.close_tenant(engine, args.slug)
+        print(f'  {org["name"]} closed. Retained until '
+              f'{state["eligible_at"].isoformat()}.\n')
     return 0
 
 
