@@ -81,6 +81,26 @@ def lifecycle_state(engine, slug):
     return {**org, 'eligible_at': eligible_at}
 
 
+def purge_eligible(engine, slug, *, now=None):
+    """Return whether permanent purge is allowed *now* without mutating data.
+
+    This is the operator/CLI preflight only. ``purge_tenant`` independently
+    re-checks the same conditions under its destructive transaction, so a
+    successful preflight can never bypass the retention or lifecycle boundary.
+    Already-purged tombstones return False because there is nothing left for an
+    operator to destroy.
+    """
+    now = now or datetime.utcnow()
+    state = lifecycle_state(engine, slug)
+    if not state or state.get('purged_at'):
+        return False
+    if state.get('status') != 'closed' or not state.get('closed_at'):
+        return False
+    if state.get('schema_name') != tenancy.schema_for(slug):
+        return False
+    return now >= state['eligible_at']
+
+
 def _delete_private_media(slug):
     """Delete only authenticated Cloudinary assets under this tenant's prefix.
 
