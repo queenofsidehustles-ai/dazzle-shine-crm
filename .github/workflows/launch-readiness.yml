@@ -68,10 +68,12 @@ jobs:
         run: |
           python -m pytest -q \
             tests/test_booking_payment_intent_integrity.py \
-            tests/test_payment_integrity.py \
-            tests/test_payment_redelivery.py \
-            tests/test_payment_state_regressions.py \
-            tests/test_payment_attempt_isolation.py \
+            tests/test_payment_confirmation_integrity.py \
+            tests/test_charge.py \
+            tests/test_charge_timing.py \
+            tests/test_paid_receipt.py \
+            tests/test_price_raised_after_paid.py \
+            tests/test_stripe_webhook_tenant_isolation.py \
             --tb=short
 
       - name: Tenant session, object, document, export and media isolation
@@ -79,12 +81,12 @@ jobs:
         continue-on-error: true
         run: |
           python -m pytest -q \
-            tests/test_tenant_session_binding.py \
-            tests/test_tenant_direct_object_isolation.py \
-            tests/test_tenant_documents.py \
+            tests/test_tenant_session_and_object_isolation.py \
+            tests/test_tenant_http_object_isolation.py \
+            tests/test_tenant_secure_document_isolation.py \
             tests/test_tenant_export_isolation.py \
-            tests/test_tenant_private_media.py \
-            tests/test_private_media_signature.py \
+            tests/test_private_media_boundary.py \
+            tests/test_private_receipt_boundary.py \
             tests/test_private_job_photo_contract.py \
             tests/test_job_photo_immutability.py \
             --tb=short
@@ -174,11 +176,11 @@ jobs:
 
       - name: Diagnose PAY-02 gate failure
         if: always() && steps.pay02.outcome == 'failure'
-        run: python -m pytest -vv tests/test_booking_payment_intent_integrity.py tests/test_payment_integrity.py tests/test_payment_redelivery.py tests/test_payment_state_regressions.py tests/test_payment_attempt_isolation.py --tb=long
+        run: python -m pytest -vv tests/test_booking_payment_intent_integrity.py tests/test_payment_confirmation_integrity.py tests/test_charge.py tests/test_charge_timing.py tests/test_paid_receipt.py tests/test_price_raised_after_paid.py tests/test_stripe_webhook_tenant_isolation.py --tb=long
 
       - name: Diagnose tenant HTTP/media gate failure
         if: always() && steps.tenant_http.outcome == 'failure'
-        run: python -m pytest -vv tests/test_tenant_session_binding.py tests/test_tenant_direct_object_isolation.py tests/test_tenant_documents.py tests/test_tenant_export_isolation.py tests/test_tenant_private_media.py tests/test_private_media_signature.py tests/test_private_job_photo_contract.py tests/test_job_photo_immutability.py --tb=long
+        run: python -m pytest -vv tests/test_tenant_session_and_object_isolation.py tests/test_tenant_http_object_isolation.py tests/test_tenant_secure_document_isolation.py tests/test_tenant_export_isolation.py tests/test_private_media_boundary.py tests/test_private_receipt_boundary.py tests/test_private_job_photo_contract.py tests/test_job_photo_immutability.py --tb=long
 
       - name: Diagnose tenant lifecycle gate failure
         if: always() && steps.tenant_lifecycle.outcome != 'success'
