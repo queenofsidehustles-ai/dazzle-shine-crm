@@ -105,6 +105,11 @@ jobs:
             tests/test_tenant_search_path_fail_closed.py \
             --tb=short
 
+      - name: Concurrent 30-tenant pool isolation
+        id: cohort_concurrency
+        continue-on-error: true
+        run: python -m pytest -q tests/test_cohort_concurrency_postgres.py --tb=short
+
       - name: PostgreSQL backup and restore containment
         id: backup_restore
         continue-on-error: true
@@ -183,6 +188,10 @@ jobs:
         if: always() && steps.tenant_pg.outcome != 'success'
         run: python -m pytest -vv tests/test_tenancy_cohort_30.py tests/test_tenant_pool_reuse_postgres.py tests/test_tenant_context_restoration.py tests/test_tenant_search_path_fail_closed.py --tb=long
 
+      - name: Diagnose concurrent cohort isolation failure
+        if: always() && steps.cohort_concurrency.outcome != 'success'
+        run: python -m pytest -vv tests/test_cohort_concurrency_postgres.py --tb=long
+
       - name: Diagnose PostgreSQL backup/restore containment failure
         if: always() && steps.backup_restore.outcome != 'success'
         env:
@@ -229,6 +238,7 @@ jobs:
           test "${{ steps.tenant_http.outcome }}" = success
           test "${{ steps.tenant_lifecycle.outcome }}" = success
           test "${{ steps.tenant_pg.outcome }}" = success
+          test "${{ steps.cohort_concurrency.outcome }}" = success
           test "${{ steps.backup_restore.outcome }}" = success
           test "${{ steps.sched_iso.outcome }}" = success
           test "${{ steps.cron_host.outcome }}" = success
