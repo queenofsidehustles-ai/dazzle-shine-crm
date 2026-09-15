@@ -117,6 +117,13 @@ jobs:
             tests/test_tenant_search_path_fail_closed.py \
             --tb=short
 
+      - name: PostgreSQL backup and restore containment
+        id: backup_restore
+        continue-on-error: true
+        env:
+          PGURL: ${{ env.TEST_POSTGRES_URL }}
+        run: python tests/test_backup_tenants.py
+
       - name: Tenant scheduler isolation
         id: sched_iso
         continue-on-error: true
@@ -173,6 +180,7 @@ jobs:
           echo "- Tenant HTTP/session/documents/exports/media: ${{ steps.tenant_http.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tenant lifecycle boundary: ${{ steps.tenant_lifecycle.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- PostgreSQL tenancy/pool: ${{ steps.tenant_pg.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- PostgreSQL backup/restore containment: ${{ steps.backup_restore.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tenant scheduler isolation: ${{ steps.sched_iso.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Cron tenant host boundary: ${{ steps.cron_host.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Provider webhook boundary: ${{ steps.provider_webhook.outcome }}" >> "$GITHUB_STEP_SUMMARY"
@@ -196,6 +204,9 @@ jobs:
         run: exit 1
       - name: Diagnose PostgreSQL tenancy gate failure
         if: always() && steps.tenant_pg.outcome != 'success'
+        run: exit 1
+      - name: Diagnose PostgreSQL backup/restore containment failure
+        if: always() && steps.backup_restore.outcome != 'success'
         run: exit 1
       - name: Diagnose tenant scheduler isolation failure
         if: always() && steps.sched_iso.outcome != 'success'
@@ -232,6 +243,7 @@ jobs:
             "${{ steps.tenant_http.outcome }}" \
             "${{ steps.tenant_lifecycle.outcome }}" \
             "${{ steps.tenant_pg.outcome }}" \
+            "${{ steps.backup_restore.outcome }}" \
             "${{ steps.sched_iso.outcome }}" \
             "${{ steps.cron_host.outcome }}" \
             "${{ steps.provider_webhook.outcome }}" \
