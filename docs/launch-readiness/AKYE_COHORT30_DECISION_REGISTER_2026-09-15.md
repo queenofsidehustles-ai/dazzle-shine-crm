@@ -22,6 +22,8 @@ This register records material remediation decisions made while continuing launc
 | DR-010 | Do not interpret a grouped `continue-on-error` gate as product failure until the failing subtest is identified. Preserve the red aggregate, but distinguish workflow-manifest, test-harness, and implementation failures before changing runtime code. | Prevents unnecessary production-code changes and permission/security regressions while keeping release evidence fail-closed. | Revisit when exact failing assertions are available. |
 | DR-011 | Reuse existing tenant export, dispute-evidence, onboarding, and Playwright surfaces instead of creating parallel implementations. Extend only proven gaps. | Duplicate implementations increase support cost, regression surface, inconsistent semantics, and future maintenance burden. | Revisit only if existing surface cannot satisfy a documented launch requirement. |
 | DR-012 | Treat exact-head CI as authoritative over prior grouped-failure assumptions. When a newer exact-head Launch Readiness run is GREEN, close the prior PAY-02/tenant-HTTP grouped blocker rather than modifying runtime code to solve a superseded failure. | Avoids unnecessary security/payment changes and preserves the evidence-first rule. | Reopen only on a later exact-head regression or a new falsification finding. |
+| DR-013 | Close restore anti-resurrection as an implementation/falsification backlog item because the PostgreSQL lifecycle suite already proves restored closed tenants are detected for re-purge and remain non-reactivated. Keep operational backup execution as a separate P1 requiring real backup-run/RPO evidence. | Prevents duplicate recovery code while avoiding the unsafe inference that code-level restore tests prove the scheduled backup is operational. | Reopen only if restore/lifecycle tests regress or operational rehearsal contradicts the invariant. |
+| DR-014 | Treat mobile/accessibility as a distinct launch-evidence gap: existing Playwright suites exercise functional flows but currently contain no dedicated accessibility assertions or viewport matrix. Extend the existing Playwright surface rather than adding a second browser framework. | Reuses proven infrastructure, minimizes maintenance cost, and prevents functional desktop tests from being misrepresented as accessibility/mobile evidence. | Revisit after Golden Journey evidence is executable and reviewed. |
 
 ## Current evidence
 
@@ -32,21 +34,23 @@ This register records material remediation decisions made while continuing launc
 - The earlier PAY-02 and tenant HTTP/media grouped blocker is therefore closed by newer exact-head evidence; no runtime-code relaxation is warranted.
 - The workflow references current repository tests for payment integrity and tenant HTTP/media boundaries.
 - Repository inspection confirms `tests/test_tenant_export_isolation.py`, `tests/test_dispute_evidence.py`, `templates/admin/dispute_evidence.html`, `onboarding.py`, `templates/admin/getting_started.html`, and Playwright suites already exist. These workstreams will be extended rather than duplicated.
+- Restore anti-resurrection is already covered by the PostgreSQL lifecycle falsification: restoration of a retention-period backup recreates the schema while the organization remains closed, the restored tenant is identified as requiring re-purge, and re-purge is safe/idempotent. This is implementation evidence, not operational backup-run evidence.
+- Existing Playwright configuration deliberately separates local write-flow tests from production read-only tests and serializes shared-database browser work. Existing `e2e.spec.js` covers functional login/navigation and public/admin surfaces but does not establish a mobile viewport matrix or accessibility assertions.
 - Current private media is authenticated image storage under tenant-bounded `akye-private/{tenant_slug}/{kind}` paths; lifecycle purge remains bounded to the resource type actually stored.
 - No Production activation, merge, live-funds authorization, permission broadening, credential mutation, or customer-data deletion was performed.
 
 ## Active autonomous queue
 
-1. Complete restore anti-resurrection evidence; tenant export isolation already exists and should be extended only if a concrete portability gap is proven.
-2. Falsify mobile/accessibility Golden Journeys using the existing Playwright infrastructure and correct launch-blocking defects.
+1. Build executable mobile/accessibility Golden Journey evidence on the existing Playwright surface and correct only launch-blocking defects demonstrated by that evidence.
+2. Prove operational backup execution separately from code-level restore containment: latest successful Akye backup, encryption/artifact evidence, backup age within RPO, and scratch-restore rehearsal before external admission.
 3. Extend existing onboarding behavior into measurable low-support activation milestones rather than adding another setup implementation.
 4. Add cohort control/support instrumentation only where existing operational/dispute surfaces leave measurable gaps.
 5. Falsify provider degraded modes and realistic 30-tenant application workload beyond database-context isolation.
-6. Prove operational backup/recovery evidence and capture profitability/support-cost instrumentation.
+6. Capture profitability/support-cost instrumentation without weakening security, privacy, accounting integrity, tenant isolation, or auditability.
 7. Assemble immutable release evidence and recommend, but do not perform, the first 3–5 design-partner release decision.
 
 ## Discussion queue
 
 1. Review final operator closure/purge UX after exact-head lifecycle evidence remains green.
 2. Review the first 3–5 design-partner admission criteria after the integrated candidate is green.
-3. Review final rollback/containment evidence before any cohort invitation or merge decision.
+3. Review final rollback/containment and operational backup evidence before any cohort invitation or merge decision.
