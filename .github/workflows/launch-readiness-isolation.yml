@@ -8,7 +8,7 @@ on:
 
 jobs:
   isolate:
-    name: Isolate PAY-02 and tenant HTTP/media
+    name: Isolate launch-critical payment, tenancy, media and lifecycle
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact candidate revision
@@ -23,49 +23,43 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # These are release gates. Do not use continue-on-error here: a green
+      # workflow must mean every listed launch-critical falsification passed.
       - name: PAY-02 booking payment intent integrity
-        continue-on-error: true
         run: python -m pytest -q tests/test_booking_payment_intent_integrity.py --tb=short
       - name: PAY-02 payment confirmation integrity
-        continue-on-error: true
         run: python -m pytest -q tests/test_payment_confirmation_integrity.py --tb=short
       - name: PAY-02 charge
-        continue-on-error: true
         run: python -m pytest -q tests/test_charge.py --tb=short
       - name: PAY-02 charge timing
-        continue-on-error: true
         run: python -m pytest -q tests/test_charge_timing.py --tb=short
       - name: PAY-02 paid receipt
-        continue-on-error: true
         run: python -m pytest -q tests/test_paid_receipt.py --tb=short
       - name: PAY-02 price raised after paid
-        continue-on-error: true
         run: python -m pytest -q tests/test_price_raised_after_paid.py --tb=short
       - name: PAY-02 Stripe webhook tenant isolation
-        continue-on-error: true
         run: python -m pytest -q tests/test_stripe_webhook_tenant_isolation.py --tb=short
 
       - name: TEN session and object isolation
-        continue-on-error: true
         run: python -m pytest -q tests/test_tenant_session_and_object_isolation.py --tb=short
       - name: TEN HTTP object isolation
-        continue-on-error: true
         run: python -m pytest -q tests/test_tenant_http_object_isolation.py --tb=short
       - name: TEN secure document isolation
-        continue-on-error: true
         run: python -m pytest -q tests/test_tenant_secure_document_isolation.py --tb=short
       - name: TEN export isolation
-        continue-on-error: true
         run: python -m pytest -q tests/test_tenant_export_isolation.py --tb=short
       - name: TEN private media boundary
-        continue-on-error: true
         run: python -m pytest -q tests/test_private_media_boundary.py --tb=short
       - name: TEN private receipt boundary
-        continue-on-error: true
         run: python -m pytest -q tests/test_private_receipt_boundary.py --tb=short
       - name: TEN private job photo contract
-        continue-on-error: true
         run: python -m pytest -q tests/test_private_job_photo_contract.py --tb=short
       - name: TEN job photo immutability
-        continue-on-error: true
         run: python -m pytest -q tests/test_job_photo_immutability.py --tb=short
+
+      - name: LIFE tenant lifecycle boundary
+        run: python -m pytest -q tests/test_tenant_lifecycle_boundary.py --tb=short
+      - name: LIFE tenant lifecycle CLI contract
+        run: python -m pytest -q tests/test_tenant_lifecycle_cli_contract.py --tb=short
+      - name: RECOVERY lifecycle containment contract
+        run: python -m pytest -q tests/test_backup_lifecycle_containment_contract.py --tb=short
