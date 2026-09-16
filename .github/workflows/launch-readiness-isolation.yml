@@ -37,7 +37,7 @@ jobs:
       - name: PAY-02 charge timing
         run: python tests/test_charge_timing.py
       - name: PAY-02 paid receipt
-        run: python -m pytest -q tests/test_paid_receipt.py --tb=short
+        run: python tests/test_paid_receipt.py
       - name: PAY-02 price raised after paid
         run: python -m pytest -q tests/test_price_raised_after_paid.py --tb=short
       - name: PAY-02 Stripe webhook tenant isolation
