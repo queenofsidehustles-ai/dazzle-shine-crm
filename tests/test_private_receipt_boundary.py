@@ -42,7 +42,11 @@ def _owner(client):
     with client.session_transaction() as sess:
         sess['logged_in'] = True
         sess['role'] = 'owner'
-        sess['user_id'] = 1
+        # This fixture deliberately exercises the stable single-business
+        # deployment shape. Its owner is the deployment credential and has no
+        # tenant-local User row; using a fabricated user_id would now be
+        # correctly rejected by per-request session revalidation.
+        sess['user_id'] = None
         sess['user_name'] = 'Receipt Boundary Tester'
 
 
