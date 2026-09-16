@@ -12,7 +12,7 @@ import provisioning
 import tenant_data_lifecycle as lifecycle
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description='Manage registered tenant lifecycle safely.')
     sub = parser.add_subparsers(dest='action', required=True)
 
@@ -24,7 +24,7 @@ def main():
     purge.add_argument('slug')
     purge.add_argument('--yes', action='store_true')
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     engine = provisioning._engine()
     org = control_plane.find(engine, args.slug)
     if not org:
