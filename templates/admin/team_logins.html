@@ -7,9 +7,10 @@
 <div class="card" style="margin-bottom:18px">
   <h3 style="margin:0 0 4px">➕ Create a login</h3>
   <p style="color:var(--softer);font-size:0.85rem;margin:0 0 14px">
-    Give a VA or new hire their own username and password.
-    <strong>Team</strong> members see everything except money (payroll, contractor pay,
-    reports, settings). <strong>Owner</strong> sees it all.
+    Choose the least privilege this person needs. <strong>Owner</strong> is the only role with
+    finance/pay authority; <strong>Admin</strong> and <strong>Dispatcher</strong> run operations,
+    <strong>Cleaner</strong> is limited to assigned-work flows, and <strong>Limited</strong> is
+    booking read-only.
   </p>
   <form method="POST" action="{{ url_for('team_logins.add') }}"
         style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
@@ -28,11 +29,12 @@
       <input type="text" name="password" placeholder="at least 6 characters" required
              style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
     </div>
-    <div style="min-width:120px">
+    <div style="min-width:220px">
       <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Role</label>
       <select name="role" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
-        <option value="team" selected>👤 Team (no money)</option>
-        <option value="owner">👑 Owner (full access)</option>
+        {% for value, label in role_options %}
+        <option value="{{ value }}" {% if value == 'limited' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
       </select>
     </div>
     <button type="submit" class="btn" style="padding:11px 22px">Create login</button>
@@ -50,7 +52,7 @@
         <tr>
           <td><strong>{{ u.name }}</strong></td>
           <td>{{ u.username }}</td>
-          <td>{{ u.role_label }}</td>
+          <td>{{ role_label(u.role) }}</td>
           <td>
             {% if u.active %}<span class="status status-completed">Active</span>
             {% else %}<span class="status status-cancelled">Disabled</span>{% endif %}

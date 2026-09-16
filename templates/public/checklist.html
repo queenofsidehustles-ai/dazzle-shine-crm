@@ -305,8 +305,6 @@
   <script>
     const TOKEN = '{{ checklist.token }}';
     const TOTAL = {{ checklist.get_items()|length }};
-    const CLOUD_NAME = {{ cloud_name | tojson }};
-    const UPLOAD_PRESET = {{ upload_preset | tojson }};
 
     // ── Server state (drives resume) ──────────────────────────────────────────
     const S = {
@@ -323,8 +321,8 @@
     let chosenStars = S.rating || 0;
 
     let completed = new Set({{ checklist.get_completed() | list | tojson }});
-    let beforePhotos = {{ checklist.get_before_photos() | tojson }};
-    let afterPhotos = {{ checklist.get_after_photos() | tojson }};
+    let beforePhotos = {{ before_photo_urls | tojson }};
+    let afterPhotos = {{ after_photo_urls | tojson }};
 
     const $ = id => document.getElementById(id);
 
@@ -458,7 +456,10 @@
       list.forEach(url => {
         const div = document.createElement('div');
         div.className = 'photo-thumb';
-        div.innerHTML = '<img src="' + url + '" />';
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = phase + ' job photo';
+        div.appendChild(img);
         grid.insertBefore(div, addBtn);
       });
       const tag = $(phase + '-tag');
@@ -472,15 +473,14 @@
       $('photo-err').style.display = 'none';
       try {
         const fd = new FormData();
-        fd.append('file', file); fd.append('upload_preset', UPLOAD_PRESET);
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: fd });
-        const cloud = await res.json();
-        if (!cloud.secure_url) throw new Error(cloud.error?.message || 'Upload failed');
-        await fetch('/workorders/checklist/' + TOKEN + '/add-photo', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phase, url: cloud.secure_url }),
+        fd.append('photo', file);
+        fd.append('phase', phase);
+        const res = await fetch('/workorders/checklist/' + TOKEN + '/add-photo', {
+          method: 'POST', body: fd,
         });
-        if (phase === 'before') beforePhotos.push(cloud.secure_url); else afterPhotos.push(cloud.secure_url);
+        const data = await res.json();
+        if (!res.ok || !data.ok || !data.url) throw new Error(data.error || 'Upload failed');
+        if (phase === 'before') beforePhotos.push(data.url); else afterPhotos.push(data.url);
         render();
       } catch (e) {
         const err = $('photo-err');

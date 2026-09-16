@@ -8,10 +8,11 @@ import io
 import os
 from datetime import date, datetime
 
-from flask import (Blueprint, Response, flash, redirect, render_template,
+from flask import (Blueprint, Response, abort, flash, g, redirect, render_template,
                    request, url_for)
 
 import finance
+import private_media
 import stripe_fees
 from entitlements import requires_plan
 from auth import owner_required
@@ -31,9 +32,14 @@ VALID_CATEGORIES = {k for k, _l, _g, _s in EXPENSE_CATEGORIES}
 TAX_FORM_THRESHOLD = 600.0
 
 
-def _cloudinary():
-    return (os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk'),
-            os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews'))
+def _media_tenant_slug():
+    """Trusted media namespace for this request.
+
+    Hosted Akye requests are bound to g.tenant_slug by app.before_request.  The
+    stable single-business deployment has no tenant subdomain, so it gets one
+    explicit non-host-derived namespace rather than trusting a form field.
+    """
+    return getattr(g, 'tenant_slug', None) or 'single-business'
 
 
 def _period_from_request():
@@ -73,6 +79,30 @@ def _amount_from_form(form):
     return round(amount, 2), None, None
 
 
+def _reject_client_receipt_reference():
+    """Raw provider URLs and client-manufactured refs are never storage input."""
+    if request.form.get('receipt_url'):
+        abort(400)
+
+
+def _attach_receipt(expense):
+    """Upload an optional receipt server-side and bind it to this expense ID."""
+    upload = request.files.get('receipt_file')
+    if upload is None or not getattr(upload, 'filename', ''):
+        return False
+    try:
+        expense.receipt_url = private_media.upload_image(
+            upload,
+            tenant_slug=_media_tenant_slug(),
+            kind='expense-receipt',
+            scope_id=expense.id,
+        )
+        return True
+    except (ValueError, RuntimeError) as exc:
+        flash(f'Receipt was not attached: {exc}', 'warning')
+        return False
+
+
 # ── Expense ledger ──────────────────────────────────────────────────────────
 @money_bp.route('/expenses')
 @owner_required
@@ -82,12 +112,10 @@ def expenses():
     start, end, label = finance.period_bounds(kind, year, month)
     rows = finance.expenses_between(start, end)
     total = round(sum(e.amount or 0 for e in rows), 2)
-    cloud_name, preset = _cloudinary()
     return render_template('admin/expenses.html',
         expenses=rows, total=total, period_label=label,
         kind=kind, year=year, month=month, today=date.today().isoformat(),
         categories=EXPENSE_CATEGORIES, mileage_rate=IRS_MILEAGE_RATE,
-        cloud_name=cloud_name, upload_preset=preset,
         recurring=RecurringExpense.query.order_by(RecurringExpense.active.desc(),
                                                   RecurringExpense.vendor).all())
 
@@ -95,6 +123,7 @@ def expenses():
 @money_bp.route('/expenses/add', methods=['POST'])
 @owner_required
 def add_expense():
+    _reject_client_receipt_reference()
     back = redirect(url_for('money.expenses', period=request.form.get('kind', 'month'),
                             year=request.form.get('year'), month=request.form.get('month')))
     category = request.form.get('category', '')
@@ -117,9 +146,13 @@ def add_expense():
         vendor=(request.form.get('vendor') or '').strip() or None,
         note=(request.form.get('note') or '').strip() or None,
         method=request.form.get('method') or None,
-        receipt_url=(request.form.get('receipt_url') or '').strip() or None,
+        receipt_url=None,
     )
     db.session.add(e)
+    # Scope the private media reference to the authoritative DB object, so the
+    # browser never chooses or submits the object scope itself.
+    db.session.flush()
+    _attach_receipt(e)
     db.session.commit()
     what = f'{miles:g} miles' if miles else f'${amount:.2f}'
     flash(f'Logged {what} — {e.category_label}.', 'success')
@@ -129,6 +162,7 @@ def add_expense():
 @money_bp.route('/expenses/<int:expense_id>/edit', methods=['POST'])
 @owner_required
 def edit_expense(expense_id):
+    _reject_client_receipt_reference()
     e = Expense.query.get_or_404(expense_id)
     back = redirect(url_for('money.expenses', period=request.form.get('kind', 'month'),
                             year=request.form.get('year'), month=request.form.get('month')))
@@ -146,11 +180,34 @@ def edit_expense(expense_id):
     e.vendor = (request.form.get('vendor') or '').strip() or None
     e.note = (request.form.get('note') or '').strip() or None
     e.method = request.form.get('method') or None
-    if request.form.get('receipt_url'):
-        e.receipt_url = request.form['receipt_url'].strip()
+    _attach_receipt(e)
     db.session.commit()
     flash('Expense updated.', 'success')
     return back
+
+
+@money_bp.route('/expenses/<int:expense_id>/receipt')
+@owner_required
+def expense_receipt(expense_id):
+    """Return only the receipt stored on this tenant's authoritative Expense."""
+    e = Expense.query.get_or_404(expense_id)
+    if not private_media.is_private_ref(e.receipt_url):
+        abort(404)
+    fetched = private_media.fetch_image(
+        e.receipt_url,
+        tenant_slug=_media_tenant_slug(),
+        kind='expense-receipt',
+        scope_id=e.id,
+    )
+    if not fetched:
+        abort(404)
+    body, content_type = fetched
+    response = Response(body, mimetype=content_type)
+    response.headers['Cache-Control'] = 'private, no-store, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Content-Disposition'] = 'inline'
+    return response
 
 
 @money_bp.route('/expenses/<int:expense_id>/delete', methods=['POST'])

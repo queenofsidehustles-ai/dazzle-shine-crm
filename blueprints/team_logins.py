@@ -1,11 +1,10 @@
-"""Team Logins — owner-only management of who can sign into the CRM.
-Create a login for a VA or future hire, set their role (Owner sees money,
-Team does not), reset passwords, disable, or remove."""
+"""Team Logins — owner-only management of tenant CRM accounts."""
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from entitlements import requires_plan
 from auth import owner_required
 from extensions import db
 from models import User
+import rbac
 
 team_logins_bp = Blueprint('team_logins', __name__, url_prefix='/logins')
 
@@ -15,7 +14,12 @@ team_logins_bp = Blueprint('team_logins', __name__, url_prefix='/logins')
 @requires_plan('team_logins')
 def index():
     users = User.query.order_by(User.active.desc(), User.name).all()
-    return render_template('admin/team_logins.html', users=users)
+    return render_template(
+        'admin/team_logins.html',
+        users=users,
+        role_options=rbac.ROLE_OPTIONS,
+        role_label=rbac.role_label,
+    )
 
 
 @team_logins_bp.route('/add', methods=['POST'])
@@ -24,9 +28,10 @@ def add():
     name = (request.form.get('name') or '').strip()
     username = (request.form.get('username') or '').strip().lower()
     password = request.form.get('password') or ''
-    role = request.form.get('role', 'team')
-    if role not in ('owner', 'team'):
-        role = 'team'
+    role = rbac.canonical_role(request.form.get('role'))
+    if not role:
+        flash('Choose a valid account role.', 'error')
+        return redirect(url_for('team_logins.index'))
     if not name or not username or not password:
         flash('Please fill in name, username, and password.', 'error')
         return redirect(url_for('team_logins.index'))
@@ -40,7 +45,7 @@ def add():
     u.set_password(password)
     db.session.add(u)
     db.session.commit()
-    flash(f'Login created for {name}. ✅', 'success')
+    flash(f'Login created for {name} as {rbac.role_label(role)}. ✅', 'success')
     return redirect(url_for('team_logins.index'))
 
 

@@ -189,6 +189,8 @@ def mark_paid(booking, method='card', when=None, notify=True):
     that has turned contentious — a second unexpected receipt can restart a
     conversation the owner has good reason not to reopen. The books are updated
     either way; only the customer's inbox is spared."""
+    if is_settled(booking):
+        return False
     # What this payment was, before the booking is updated to say it arrived.
     # The receipt has to quote the money that just moved: a customer settling a
     # $92 shortfall told "we've received your payment of $482.00" will assume
@@ -207,6 +209,47 @@ def mark_paid(booking, method='card', when=None, notify=True):
     if notify:
         _send_receipt(booking, method, paying)
         _alert_owner_paid(booking, method, paying)
+    return True
+
+
+def verify_intent_for_booking(booking, pi_id, kind):
+    """Retrieve and bind a successful Stripe intent to this booking and amount."""
+    if not pi_id:
+        return None, 'Missing payment confirmation.'
+    if booking.stripe_payment_intent != pi_id:
+        return None, 'This payment does not belong to this booking.'
+    stripe.api_key = integrations.stripe_secret_key()
+    if not stripe.api_key:
+        return None, 'Payments are not configured.'
+    try:
+        pi = stripe.PaymentIntent.retrieve(pi_id)
+    except stripe.error.StripeError as exc:
+        return None, str(exc)
+    if getattr(pi, 'status', None) != 'succeeded':
+        return None, 'Payment not completed.'
+    metadata = getattr(pi, 'metadata', None) or {}
+    if str(metadata.get('booking_id') or '') != str(booking.id):
+        return None, 'Payment booking reference does not match.'
+    token_key = 'pay_token' if kind == 'full_payment' else 'deposit_token'
+    expected_token = booking.pay_token if kind == 'full_payment' else booking.deposit_token
+    if metadata.get(token_key) != expected_token:
+        return None, 'Payment link reference does not match.'
+    recorded_kind = metadata.get('kind')
+    if recorded_kind and recorded_kind != kind:
+        return None, 'Payment type does not match.'
+    received = getattr(pi, 'amount_received', None) or getattr(pi, 'amount', None)
+    expected = metadata.get('expected_amount_cents')
+    try:
+        expected = int(expected)
+    except (TypeError, ValueError):
+        tip = float(metadata.get('tip') or 0) if kind == 'full_payment' else 0
+        base = amount_due(booking) if kind == 'full_payment' else get_deposit()
+        expected = int(round((base + tip) * 100))
+    if received is None or int(received) != expected:
+        return None, 'Payment amount does not match.'
+    if (getattr(pi, 'currency', '') or '').lower() != 'usd':
+        return None, 'Payment currency does not match.'
+    return pi, None
 
 
 def mark_deposit_paid(booking, req=None, amount_cents=None):
@@ -476,7 +519,8 @@ def create_intent(token):
             amount=int(round((due + tip) * 100)), currency='usd', customer=customer_id,
             metadata={'booking_id': str(booking.id), 'pay_token': token,
                       'kind': 'full_payment', 'customer_name': booking.name or '',
-                      'tip': f'{tip:.2f}'},
+                      'tip': f'{tip:.2f}',
+                      'expected_amount_cents': str(int(round((due + tip) * 100)))},
         )
         # The tip is deliberately NOT written here. This runs when the customer
         # opens the payment form, before any card is charged -- and if they
@@ -525,18 +569,12 @@ def confirm(token):
     booking = Booking.query.filter_by(pay_token=token).first_or_404()
     data = request.get_json(silent=True) or {}
     pi_id = (data.get('payment_intent_id') or '').strip()
-    stripe.api_key = integrations.stripe_secret_key()
-    if pi_id and stripe.api_key:
-        try:
-            pi = stripe.PaymentIntent.retrieve(pi_id)
-            if pi.status != 'succeeded':
-                return jsonify({'ok': False, 'error': 'Payment not completed'}), 400
-            booking.stripe_payment_intent = pi_id
-            if pi.payment_method:
-                booking.stripe_payment_method_id = pi.payment_method
-            record_tip_from_intent(booking, pi)
-        except stripe.error.StripeError as e:
-            return jsonify({'ok': False, 'error': str(e)}), 400
+    pi, error = verify_intent_for_booking(booking, pi_id, 'full_payment')
+    if error:
+        return jsonify({'ok': False, 'error': error}), 400
+    if pi.payment_method:
+        booking.stripe_payment_method_id = pi.payment_method
+    record_tip_from_intent(booking, pi)
     import customer_terms
     customer_terms.record_acceptance(booking, request)
     mark_paid(booking, method='card')
