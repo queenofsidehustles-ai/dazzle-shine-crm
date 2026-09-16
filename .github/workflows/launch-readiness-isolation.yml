@@ -33,7 +33,7 @@ jobs:
       - name: PAY-02 payment confirmation integrity
         run: python tests/test_payment_confirmation_integrity.py
       - name: PAY-02 charge
-        run: python -m pytest -q tests/test_charge.py --tb=short
+        run: python tests/test_charge.py
       - name: PAY-02 charge timing
         run: python -m pytest -q tests/test_charge_timing.py --tb=short
       - name: PAY-02 paid receipt
