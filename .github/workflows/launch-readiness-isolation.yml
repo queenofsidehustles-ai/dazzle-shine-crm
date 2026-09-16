@@ -25,10 +25,13 @@ jobs:
 
       # These are release gates. Do not use continue-on-error here: a green
       # workflow must mean every listed launch-critical falsification passed.
+      # Some legacy integrity files are executable assertion scripts rather
+      # than pytest-collected test functions; run those directly so a clean
+      # assertion pass is success rather than pytest exit-code 5 (no tests).
       - name: PAY-02 booking payment intent integrity
         run: python -m pytest -q tests/test_booking_payment_intent_integrity.py --tb=short
       - name: PAY-02 payment confirmation integrity
-        run: python -m pytest -q tests/test_payment_confirmation_integrity.py --tb=short
+        run: python tests/test_payment_confirmation_integrity.py
       - name: PAY-02 charge
         run: python -m pytest -q tests/test_charge.py --tb=short
       - name: PAY-02 charge timing
