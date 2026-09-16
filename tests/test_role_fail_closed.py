@@ -286,13 +286,24 @@ def test_cleaner_cannot_open_back_office_booking_index():
     assert client.get("/protected").status_code == 403
 
 
-@pytest.mark.parametrize("role", ["admin", "dispatcher", "cleaner", "limited", "team", "unknown"])
-def test_unclassified_authenticated_route_fails_closed_for_non_owner(role):
+@pytest.mark.parametrize("role", ["owner", "admin", "dispatcher", "cleaner", "limited", "team"])
+def test_unclassified_authenticated_route_preserves_route_local_authority(role):
     test_app = _rbac_app("example.unclassified", ("GET",))
     client = test_app.test_client()
     with client.session_transaction() as sess:
         sess["logged_in"] = True
         sess["role"] = role
+    assert client.get("/protected").status_code == 200
+
+
+@pytest.mark.parametrize("role", ["unknown", None])
+def test_unclassified_route_still_rejects_unknown_or_missing_role(role):
+    test_app = _rbac_app("example.unclassified", ("GET",))
+    client = test_app.test_client()
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        if role is not None:
+            sess["role"] = role
     assert client.get("/protected").status_code == 403
 
 
