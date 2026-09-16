@@ -35,7 +35,7 @@ jobs:
       - name: PAY-02 charge
         run: python tests/test_charge.py
       - name: PAY-02 charge timing
-        run: python -m pytest -q tests/test_charge_timing.py --tb=short
+        run: python tests/test_charge_timing.py
       - name: PAY-02 paid receipt
         run: python -m pytest -q tests/test_paid_receipt.py --tb=short
       - name: PAY-02 price raised after paid
