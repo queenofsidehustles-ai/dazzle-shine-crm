@@ -39,7 +39,7 @@ jobs:
       - name: PAY-02 paid receipt
         run: python tests/test_paid_receipt.py
       - name: PAY-02 price raised after paid
-        run: python -m pytest -q tests/test_price_raised_after_paid.py --tb=short
+        run: python tests/test_price_raised_after_paid.py
       - name: PAY-02 Stripe webhook tenant isolation
         run: python -m pytest -q tests/test_stripe_webhook_tenant_isolation.py --tb=short
 
