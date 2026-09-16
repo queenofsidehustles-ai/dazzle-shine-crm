@@ -1,5 +1,11 @@
+from types import SimpleNamespace
+
 import tenant_data_lifecycle as lifecycle
 import tenant_lifecycle_cli as cli
+
+
+def _registered_org(slug):
+    return SimpleNamespace(slug=slug)
 
 
 def test_purge_cli_preflight_contract_exists():
@@ -11,6 +17,8 @@ def test_purge_cli_preflight_contract_exists():
 def test_purge_cli_checks_eligibility_before_destructive_call(monkeypatch, capsys):
     calls = []
 
+    monkeypatch.setattr(cli, 'get_engine', lambda: object())
+    monkeypatch.setattr(cli.control_plane, 'find', lambda engine, slug: _registered_org(slug))
     monkeypatch.setattr(lifecycle, 'purge_eligible', lambda slug: False)
     monkeypatch.setattr(
         lifecycle,
@@ -30,6 +38,8 @@ def test_purge_cli_checks_eligibility_before_destructive_call(monkeypatch, capsy
 def test_purge_cli_requires_explicit_confirmation(monkeypatch):
     calls = []
 
+    monkeypatch.setattr(cli, 'get_engine', lambda: object())
+    monkeypatch.setattr(cli.control_plane, 'find', lambda engine, slug: _registered_org(slug))
     monkeypatch.setattr(lifecycle, 'purge_eligible', lambda slug: True)
     monkeypatch.setattr(lifecycle, 'purge_tenant', lambda slug: calls.append(slug))
     monkeypatch.setattr('builtins.input', lambda prompt='': 'NO')
