@@ -109,6 +109,30 @@ ENDPOINT_PERMISSIONS = {
     ('workorders.send_workorder', 'POST'): 'dispatch.manage',
 }
 
+# Endpoints that stay owner-only by default rather than by a granted
+# permission: nobody has asked for admin/dispatcher/cleaner/limited to reach
+# these yet, and money (commercial, invoices), hiring/pay (staff) and a
+# destructive or PII-adjacent action (deleting a lead, re-requesting someone's
+# background check) are exactly the surfaces where "unclassified defers to
+# route-local authority" is the wrong default. Deliberately not entered into
+# ENDPOINT_PERMISSIONS: that table grants a permission a role can hold, and no
+# non-owner role holds one for any of these — a dedicated set says so directly
+# rather than by omission, and keeps `required_permission` honest about there
+# being no permission-based grant here at all.
+OWNER_ONLY_ENDPOINTS = frozenset({
+    ('leads.delete', 'POST'),
+    ('messages.request_bgcheck', 'POST'),
+    ('staff.index', 'GET'),
+    ('staff.edit', 'POST'),
+    ('commercial.index', 'GET'),
+    ('commercial.detail', 'POST'),
+    ('commercial.mark_first_paid', 'POST'),
+    ('quotes.index', 'GET'),
+    ('quotes.new', 'POST'),
+    ('quotes.send_quote', 'POST'),
+    ('invoices.index', 'GET'),
+})
+
 
 def canonical_role(role):
     """Return a supported role or None. Legacy team is least-privileged."""
@@ -144,12 +168,23 @@ def enforce_current_request():
     route surface. Unclassified routes retain their existing authorization
     contract (including ``owner_required`` and route-local checks); treating
     absence from this incremental matrix as an implicit deny would lock every
-    non-owner out of unrelated product surfaces. Once an endpoint/method is
-    classified here, however, unknown roles and missing permissions fail closed.
+    non-owner out of unrelated product surfaces. A recognised role is
+    therefore deferred to that route-local authority for anything not in
+    either ``ENDPOINT_PERMISSIONS`` or ``OWNER_ONLY_ENDPOINTS``.
+
+    A missing or unrecognised role is never deferred, classified or not:
+    there is no route-local authority to defer to when the session itself
+    does not name one of the five roles this application knows, so that
+    case fails closed here rather than falling through as an implicit
+    allow.
     """
     role = canonical_role(session.get('role'))
     if role == 'owner':
         return None
+    if role is None:
+        abort(403, description='Your account is not permitted to perform this action.')
+    if (request.endpoint, (request.method or '').upper()) in OWNER_ONLY_ENDPOINTS:
+        abort(403, description='Your account is not permitted to perform this action.')
 
     permission = required_permission()
     if permission is None:

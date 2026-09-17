@@ -2,7 +2,7 @@
 the booking's existing pay flow. See invoicing.py for the engine."""
 from flask import Blueprint, render_template, request
 from entitlements import requires_plan
-from auth import login_required
+from auth import owner_required
 from models import Booking, BusinessSetting
 import invoicing
 import branding
@@ -21,7 +21,7 @@ def _biz():
 
 
 @invoices_bp.route('/invoices/')
-@login_required
+@owner_required
 @requires_plan('invoices')
 def index():
     from blueprints.payments import amount_due
