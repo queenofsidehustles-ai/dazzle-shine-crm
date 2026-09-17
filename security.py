@@ -43,8 +43,22 @@ QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
     '/api/lifecycle-emails',
 })
 CRON_PATHS = QUERY_SECRET_FORBIDDEN_PATHS
+# Tenant-scoped provider webhooks only. Each company connects its own Twilio
+# number, so /messages/incoming needs a resolved tenant host before it can even
+# know which company's auth token to validate the signature against.
+#
+# /api/stripe/webhook is deliberately NOT here. It is Akye's own platform
+# subscription billing -- one Stripe account, one STRIPE_PLATFORM_WEBHOOK_SECRET,
+# billing every company for its Akye plan (see billing.stripe_key(): "The
+# product's own Stripe account -- not a customer's"). Stripe is configured with
+# exactly one endpoint, https://<BASE_DOMAIN>/api/stripe/webhook (DEPLOY_STEPS.md,
+# LAUNCH_RUNBOOK.md), and billing.apply_event() resolves the company from the
+# event payload itself against the control plane -- never from the request host.
+# Gating it behind a resolved tenant host does not add a security property (the
+# signature check is what authenticates it, per SECURITY.md); it makes the
+# documented endpoint URL permanently unreachable, since the platform's own
+# subscription webhook has no tenant to resolve.
 PROVIDER_WEBHOOK_PATHS = frozenset({
-    '/api/stripe/webhook',
     '/messages/incoming',
 })
 TENANT_MACHINE_PATHS = CRON_PATHS | PROVIDER_WEBHOOK_PATHS

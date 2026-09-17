@@ -63,18 +63,26 @@ def _twilio_headers(url, form, token='tenant-twilio-auth-token'):
     return {'X-Twilio-Signature': signature}
 
 
-def test_stripe_webhook_requires_resolved_tenant_host_in_akye(monkeypatch):
+def test_stripe_platform_webhook_is_reachable_at_the_documented_platform_host(monkeypatch):
+    """/api/stripe/webhook is Akye's own platform subscription billing -- one
+    Stripe account, one webhook secret, billed against every company from the
+    event payload rather than the request host (billing.apply_event()). Stripe
+    is configured with exactly one endpoint, the bare BASE_DOMAIN
+    (DEPLOY_STEPS.md, LAUNCH_RUNBOOK.md), so it must not require a resolved
+    tenant host the way a genuinely per-tenant provider callback does -- that
+    would make the documented endpoint permanently unreachable.
+    """
     client = _app(monkeypatch).test_client()
-    assert client.post('/api/stripe/webhook', base_url='https://akye.test').status_code == 404
-    assert client.post('/api/stripe/webhook',
-                       base_url='https://alpha.attacker.akye.test').status_code == 404
+    assert client.post('/api/stripe/webhook', base_url='https://akye.test').status_code == 200
+    # Reachable from a tenant host too -- it does not consult the host at all,
+    # only the payload -- but that is incidental, not the security boundary.
     assert client.post('/api/stripe/webhook',
                        base_url='https://alpha.akye.test').status_code == 200
 
 
 def test_stale_stripe_webhook_alias_is_not_a_provider_boundary():
     assert '/api/stripe-webhook' not in security.PROVIDER_WEBHOOK_PATHS
-    assert '/api/stripe/webhook' in security.PROVIDER_WEBHOOK_PATHS
+    assert '/api/stripe/webhook' not in security.PROVIDER_WEBHOOK_PATHS
 
 
 def test_twilio_webhook_requires_resolved_tenant_host_before_signature_check(monkeypatch):
