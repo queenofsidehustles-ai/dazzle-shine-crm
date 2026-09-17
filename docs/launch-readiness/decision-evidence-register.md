@@ -156,6 +156,54 @@ Implication: preserves usable critical journeys for field/mobile users and
 reduces avoidable onboarding/support friction while P0/P1 backend gates remain
 fail-closed.
 
+### CI-SCHEDULE-01 — the automatic nightly backup drill does not exercise the
+candidate branch
+
+Status: OPEN — platform limitation, not a code defect. No production change
+made. Blocks closing Priority 3 of the launch-readiness plan.
+
+`.github/workflows/backup.yml` on `akye-launch-readiness/cohort-30` correctly
+points the `akye` matrix job's checkout at
+`ref: akye-launch-readiness/cohort-30` (fixed alongside RECOVERY-03, so the
+drill restores through this branch's `backup.py`, not `akye-stable`'s).
+Verified directly: a manual `workflow_dispatch` run against this branch
+(`35218489753`, head `0bfb11717689cf31c0e36452402545aa970375cb`) checked out
+the candidate branch, ran `python3 backup.py --dir backups --verify` — the
+same call path RECOVERY-03 is wired into — and both the `akye` and `dazzle`
+matrix jobs completed successfully end to end (checkout → backup → restore
+→ RECOVERY-03 lifecycle check → encrypt → upload), proving the mechanism
+works when dispatched against candidate code.
+
+However, GitHub Actions resolves a `schedule`-triggered run's workflow
+*definition* — not just its checkout targets — from the repository's default
+branch (`main`), regardless of any `ref:` fields inside the job/matrix body.
+`main`'s own copy of `backup.yml` (verified directly, SHA
+`4c61c6f93b84155e2287c693c9f5652b584a815f`) still pins the `akye` matrix job
+to `ref: akye-stable` and predates the RECOVERY-03 targeting fix. The two most
+recent scheduled runs (#27, #28) both show `head_branch: main`, confirming
+this in practice. Net effect: the automatic 08:00 UTC nightly drill does not
+run against this candidate branch and does not exercise the RECOVERY-03 fix
+at all — only an explicit manual `workflow_dispatch` with `ref:
+akye-launch-readiness/cohort-30` does, and only for that one run.
+
+This is a GitHub Actions platform behavior interacting with the explicit
+constraint against merging this branch into `main`/stable/release. The only
+change that would make the *automatic* schedule exercise candidate code is
+editing `main`'s copy of `backup.yml` directly — out of scope for this branch
+and requiring separate authorization, since it touches the default/production
+branch rather than this launch-readiness candidate. It would not need to
+merge any application code: only the `ref: akye-stable` value in one matrix
+entry of one workflow file would change, remains trivially reversible, and
+changes nothing about routing, funds, secrets, or permissions. Flagging for
+an explicit go/no-go decision rather than acting unilaterally on the default
+branch.
+
+Interim workaround available now, without touching `main`: run
+`workflow_dispatch` manually against `akye-launch-readiness/cohort-30`
+whenever the candidate branch's recovery path needs re-verification during
+remediation (as done for `35218489753`). This does not close the gap in the
+*automatic* nightly signal.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
