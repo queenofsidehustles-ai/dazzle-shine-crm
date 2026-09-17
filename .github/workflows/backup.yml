@@ -66,7 +66,14 @@ jobs:
             secret: BACKUP_DATABASE_URL
           - key: akye
             label: Akye — every cleaning company on the platform
-            ref: akye-stable
+            # Pinned to the launch-readiness candidate, not akye-stable, while
+            # Akye is in remediation: a scheduled run always resolves this
+            # workflow's own definition from main (checkout refs elsewhere in
+            # the job do not change that), so this is the only way the nightly
+            # drill exercises recovery fixes landing on the candidate branch
+            # before release. Point this back at akye-stable once the
+            # candidate branch ships or stops being the authoritative copy.
+            ref: akye-launch-readiness/cohort-30
             secret: BACKUP_AKYE_DATABASE_URL
 
     name: ${{ matrix.key }}
