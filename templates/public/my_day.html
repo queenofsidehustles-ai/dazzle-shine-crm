@@ -162,7 +162,7 @@
     <div class="job {{ 'is-today' if day == today }}">
       <div class="job-top">
         <span class="job-time">{{ b.preferred_time or t('Time TBD') }}</span>
-        <span class="job-pay">${{ '%.0f'|format(b.pay_for(s)) }}<small>{{ t('YOU EARN') }}</small></span>
+        <span class="job-pay">${{ '%.2f'|format(b.pay_for(s)) }}<small>{{ t('YOU EARN') }}</small></span>
       </div>
       <div class="job-client">{{ b.name }}</div>
       <div class="job-svc">{{ b.service_label }} · {{ b.bedrooms or '?' }} bd / {{ b.bathrooms or '?' }} ba</div>

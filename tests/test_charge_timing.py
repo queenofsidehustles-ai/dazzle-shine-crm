@@ -128,7 +128,7 @@ with app.app_context():
 
     CHARGED.clear()
     c = app.test_client()
-    res = c.post('/api/charge-balances?api_key=cron-key')
+    res = c.post('/api/charge-balances', headers={'X-Api-Key': 'cron-key'})
     body = res.get_json()
     check(res.status_code == 200, 'the cron runs')
     check(due.id in CHARGED, 'the job whose time has passed was charged')

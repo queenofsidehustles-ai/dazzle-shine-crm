@@ -73,6 +73,17 @@ organizations = Table(
     # second copy of "9 days left" is the one that gets the sender marked as
     # spam.
     Column('nudges_sent', String(200)),
+
+    # ── Lifecycle ──────────────────────────────────────────────────────────
+    # Owned by tenant_data_lifecycle.py, declared here for the same reason the
+    # billing columns above are: this is the one Table object every reader of
+    # `organizations` — including create_all() on a fresh database and
+    # backup.py's restore, which inserts through this object's declared
+    # columns rather than the live database's actual ones — has to agree with.
+    # tenant_data_lifecycle.ensure_columns() remains the ALTER TABLE backfill
+    # for a database that already has this table without them.
+    Column('closed_at', DateTime),
+    Column('purged_at', DateTime),
 )
 
 
@@ -200,7 +211,7 @@ support_requests = Table(
 
 
 def ensure_columns(engine):
-    """Add any column this code expects and the table does not have.
+    """Add any column this Table object declares that the live table does not have.
 
     `create_all` creates missing tables. It does not touch a table that
     already exists, so a column added to `organizations` after a deployment
@@ -210,6 +221,12 @@ def ensure_columns(engine):
     Per-company schemas have alembic for this. The control plane sits outside
     it by design, so it needs its own small version: additive only, one column
     at a time, and silent when there is nothing to do.
+
+    Derived from `organizations`'s own declared columns rather than a
+    separately hand-maintained list — a hand-maintained list is exactly how
+    `suspended_at`, `closed_at` and `purged_at` were each independently
+    missed here before, one at a time, as the Table object grew and this
+    function did not.
     """
     from sqlalchemy import inspect as sa_inspect
     try:
@@ -217,27 +234,22 @@ def ensure_columns(engine):
             'organizations', schema='public')}
     except Exception:
         return                      # table is not there yet; create_all will make it
-    ddl = {
-        'plan': 'VARCHAR(20)',
-        'subscription_status': 'VARCHAR(30)',
-        'stripe_customer_id': 'VARCHAR(80)',
-        'stripe_subscription_id': 'VARCHAR(80)',
-        'trial_ends_at': 'TIMESTAMP',
-        'current_period_end': 'TIMESTAMP',
-        'grandfathered': 'BOOLEAN',
-        'activated_at': 'TIMESTAMP',
-        'nudges_sent': 'VARCHAR(200)',
-    }
-    for name, sqltype in ddl.items():
-        if name in have:
+    for column in organizations.columns:
+        if column.name == 'id' or column.name in have:
             continue
+        # Deliberately just the type: no NOT NULL, UNIQUE or DEFAULT here even
+        # when the column declares them. This runs against a table that may
+        # already hold rows, and retrofitting a constraint onto existing data
+        # is a different, non-additive operation this function must not do
+        # silently at boot.
+        sqltype = column.type.compile(dialect=engine.dialect)
         try:
             with engine.begin() as conn:
                 conn.execute(text(
-                    f'ALTER TABLE public.organizations ADD COLUMN {name} {sqltype}'))
-            print(f'  ✅ control plane: added organizations.{name}')
+                    f'ALTER TABLE public.organizations ADD COLUMN {column.name} {sqltype}'))
+            print(f'  ✅ control plane: added organizations.{column.name}')
         except Exception as e:
-            print(f'  ⚠️  could not add organizations.{name}: {e}')
+            print(f'  ⚠️  could not add organizations.{column.name}: {e}')
 
 
 def ensure_table(engine):

@@ -3,7 +3,7 @@ first one showing through — not in a page, not in a link, not in an email."""
 import os, sys, tempfile, re
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/wl.db'
-os.environ['SECRET_KEY'] = 'test'
+os.environ['SECRET_KEY'] = 'test-secret-key-not-for-production-use'
 os.environ['CRM_BASE'] = 'https://sparkle-pros.up.railway.app'
 os.environ['STRIPE_SECRET_KEY'] = 'sk_test_fake'
 for stale in ('FROM_EMAIL', 'OWNER_EMAIL', 'NOTIFY_EMAIL', 'BUSINESS_NAME'):

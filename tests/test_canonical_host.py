@@ -14,7 +14,7 @@ the site and the other host redirects to it, keeping the path.
 import os, sys, tempfile
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/canon.db'
-os.environ['SECRET_KEY'] = 'test'
+os.environ['SECRET_KEY'] = 'test-secret-key-not-for-production-use'
 os.environ['BASE_DOMAIN'] = 'akyehq.com'
 # Exactly the misconfiguration that caused this: the apex, which 404s on paths.
 os.environ['CRM_BASE'] = 'https://akyehq.com'

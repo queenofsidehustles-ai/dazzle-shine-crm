@@ -14,6 +14,11 @@ cloudinary==1.40.0
 cryptography>=42.0.0
 tzdata
 
+# Launch-readiness CI executes the regression suite with python -m pytest.
+# Keep the runner dependency explicit so a clean environment cannot silently
+# skip every substantive gate because pytest happened to be absent.
+pytest==8.4.2
+
 # Pinned explicitly although nothing here imports them: they arrive through
 # twilio, requests and flask, and the versions those resolve to on their own
 # still carry published vulnerabilities. A transitive dependency is no less

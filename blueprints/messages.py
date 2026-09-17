@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response, jsonify)
 from entitlements import requires_plan
-from auth import login_required
+from auth import login_required, owner_required
 from extensions import db
 from models import (Message, Staff, ContractorApplication, BusinessSetting,
                     MessageTemplate, OutboundLog, Client, Booking)
@@ -408,7 +408,7 @@ def send(phone):
 
 # ── One-tap: ask an applicant to re-upload their background check ────────────
 @messages_bp.route('/thread/<phone>/request-bgcheck', methods=['POST'])
-@login_required
+@owner_required
 def request_bgcheck(phone):
     phone10 = norm_phone(phone)
     contact = resolve_contact(phone10)

@@ -59,6 +59,8 @@ def create_deposit_intent(token):
             metadata={
                 'booking_id': str(booking.id),
                 'deposit_token': token,
+                'kind': 'deposit',
+                'expected_amount_cents': str(int(round(get_deposit() * 100))),
                 'customer_name': booking.name or '',
                 'customer_email': booking.email or '',
             },
@@ -76,23 +78,13 @@ def confirm_deposit(token):
     data = request.get_json(silent=True) or {}
     pi_id = (data.get('payment_intent_id') or '').strip()
 
-    # Verify the payment actually succeeded before marking paid
-    amount_cents = None
-    stripe.api_key = integrations.stripe_secret_key()
-    if pi_id and stripe.api_key:
-        try:
-            pi = stripe.PaymentIntent.retrieve(pi_id)
-            if pi.status != 'succeeded':
-                return jsonify({'ok': False, 'error': 'Payment not completed'}), 400
-            booking.stripe_payment_intent = pi_id
-            if pi.payment_method:
-                booking.stripe_payment_method_id = pi.payment_method
-            # Read defensively. This figure only sharpens the wording of a
-            # receipt, and it must never be the reason the route that records
-            # the payment and the agreed terms falls over.
-            amount_cents = getattr(pi, 'amount_received', None) or getattr(pi, 'amount', None)
-        except stripe.error.StripeError as e:
-            return jsonify({'ok': False, 'error': str(e)}), 400
+    from blueprints.payments import verify_intent_for_booking
+    pi, error = verify_intent_for_booking(booking, pi_id, 'deposit')
+    if error:
+        return jsonify({'ok': False, 'error': error}), 400
+    if pi.payment_method:
+        booking.stripe_payment_method_id = pi.payment_method
+    amount_cents = getattr(pi, 'amount_received', None) or getattr(pi, 'amount', None)
 
     # Deliberately not guarded on deposit_paid: Stripe's webhook may well have
     # set that flag before this request arrived, and skipping on that basis is

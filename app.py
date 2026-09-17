@@ -468,6 +468,20 @@ def create_app():
             provisioning.migrate_all()
         except Exception as _e:
             print(f'  ⚠️  company schemas not migrated: {_e}')
+
+        # The control plane's own additive columns (closed_at, purged_at).
+        # control_plane.find() selects them unconditionally, so an existing
+        # deployment's `public.organizations` — created before those columns
+        # existed — must be backfilled before any tenant request runs, not
+        # merely by the CLI paths that happened to call ensure_table()
+        # already. Never fatal: this deployment may have no control plane at
+        # all (a single-business instance) or run on SQLite, neither of
+        # which is an error.
+        try:
+            import control_plane
+            control_plane.ensure_table(db.engine)
+        except Exception as _e:
+            print(f'  ⚠️  control plane not migrated: {_e}')
         db.create_all()
         _migrate_db()
         _seed_checklists()

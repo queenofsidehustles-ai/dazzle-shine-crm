@@ -162,8 +162,15 @@ print('\n8. The workflow runs the branch that knows what a company is')
 wf = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                   '.github', 'workflows', 'automations.yml')
 y = open(wf).read()
-check('ref: akye-stable' in y,
-      'checks out akye-stable — main has no tenancy and no company list')
+# A schedule fires from the default branch's copy of the workflow file
+# regardless of any ref: named in the job body, so a hardcoded ref here would
+# not even protect a scheduled run -- it would only ever affect a manual
+# workflow_dispatch, and there it should run the release that triggered it,
+# not a second, implicit one. See commit 200251e.
+check('ref: akye-stable' not in y,
+      'does not hardcode a checkout ref — a run uses the release that triggered it')
+check('git rev-parse HEAD' in y,
+      'records the exact revision it ran, for launch-gate provenance')
 check('cron:' in y and "'5 * * * *'" in y, 'hourly for balances')
 check("'0 22 * * *'" in y, 'and daily for the rest, the evening before')
 check('concurrency:' in y, 'one at a time, so balances cannot be charged twice')

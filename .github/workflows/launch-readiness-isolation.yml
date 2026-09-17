@@ -1,0 +1,82 @@
+name: Launch Readiness Isolation
+
+on:
+  push:
+    branches:
+      - akye-launch-readiness/cohort-30
+  workflow_dispatch:
+
+jobs:
+  isolate:
+    name: Isolate launch-critical payment, tenancy, media and lifecycle
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - name: Checkout exact candidate revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # These are release gates. Do not use continue-on-error here: a green
+      # workflow must mean every listed launch-critical falsification passed.
+      # PostgreSQL is mandatory here so tenant isolation cannot pass by skip.
+      - name: PAY-02 booking payment intent integrity
+        run: python -m pytest -q tests/test_booking_payment_intent_integrity.py --tb=short
+      - name: PAY-02 payment confirmation integrity
+        run: python tests/test_payment_confirmation_integrity.py
+      - name: PAY-02 charge
+        run: python tests/test_charge.py
+      - name: PAY-02 charge timing
+        run: python tests/test_charge_timing.py
+      - name: PAY-02 paid receipt
+        run: python tests/test_paid_receipt.py
+      - name: PAY-02 price raised after paid
+        run: python tests/test_price_raised_after_paid.py
+      - name: PAY-02 Stripe webhook tenant isolation
+        run: python -m pytest -q tests/test_stripe_webhook_tenant_isolation.py --tb=short
+
+      - name: TEN session and object isolation
+        run: python -m pytest -q tests/test_tenant_session_and_object_isolation.py --tb=short
+      - name: TEN HTTP object isolation
+        run: python -m pytest -q tests/test_tenant_http_object_isolation.py --tb=short
+      - name: TEN secure document isolation
+        run: python -m pytest -q tests/test_tenant_secure_document_isolation.py --tb=short
+      - name: TEN export isolation
+        run: python -m pytest -q tests/test_tenant_export_isolation.py --tb=short
+      - name: TEN private media boundary
+        run: python -m pytest -q tests/test_private_media_boundary.py --tb=short
+      - name: TEN private receipt boundary
+        run: python -m pytest -q tests/test_private_receipt_boundary.py --tb=short
+      - name: TEN private job photo contract
+        run: python -m pytest -q tests/test_private_job_photo_contract.py --tb=short
+      - name: TEN job photo immutability
+        run: python -m pytest -q tests/test_job_photo_immutability.py --tb=short
+
+      - name: LIFE tenant lifecycle boundary
+        run: python -m pytest -q tests/test_tenant_lifecycle_boundary.py --tb=short
+      - name: LIFE tenant lifecycle CLI contract
+        run: python -m pytest -q tests/test_tenant_lifecycle_cli_contract.py --tb=short
+      - name: RECOVERY lifecycle containment contract
+        run: python -m pytest -q tests/test_backup_lifecycle_containment_contract.py --tb=short

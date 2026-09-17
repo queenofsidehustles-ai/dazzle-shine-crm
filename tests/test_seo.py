@@ -20,7 +20,7 @@ import os, sys, tempfile, json, re
 
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/seo.db'
-os.environ['SECRET_KEY'] = 'test'
+os.environ['SECRET_KEY'] = 'test-secret-key-not-for-production-use'
 os.environ['BASE_DOMAIN'] = 'akye.test'
 os.environ['CRM_BASE'] = 'https://www.akye.test'
 # Which host the public site is advertised and served under. This used to be
