@@ -6,6 +6,7 @@ and Akye's signed tenant + purpose + checkout-instance metadata before a booking
 can be marked paid.
 """
 import os
+import sys
 import tempfile
 from types import SimpleNamespace
 
@@ -14,6 +15,7 @@ os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/booking-payment-integrity.db'
 os.environ['SECRET_KEY'] = 'booking-payment-integrity-test'
 os.environ['FLASK_ENV'] = 'development'
 os.environ.pop('BASE_DOMAIN', None)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
 from extensions import db
