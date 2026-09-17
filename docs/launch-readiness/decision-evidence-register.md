@@ -656,6 +656,82 @@ in full; its remaining section-11 failure reproduced and traced to the
 exact line (`session_matches_current_user()`'s `user_id is None` branch)
 before being left open.
 
+### RELEASE-GATE-01-TRIAGE — final closure: all remaining items fixed
+
+Status: DONE at `6bb7ccb47800b918b101727a9b2171a0f9b71be8`. Every item
+tracked in RELEASE-GATE-01-TRIAGE is now resolved. Test-only; no
+production code changed in any of the three fixes below.
+
+**`test_legal.py` section 11** (deferred above as needing more than the
+other five files): `BASE_DOMAIN` is set in this file, making it a hosted
+deployment where `login_required()` binds every session to a resolved
+tenant (`session_matches_current_tenant()`) and revalidates it against a
+live `User` row (`session_matches_current_user()`). The hand-built admin
+session (`role='owner'`, no `user_id`) predates both checks — the
+FIXTURE-01 pattern again. Fixed by provisioning a real company via
+`control_plane.create()` (now usable on SQLite via the
+schema_translate_map/`ensure_table()` fix already applied earlier in this
+file) and a real owner `User`, then signing the session with `user_id`,
+`tenant_slug` and `auth_fingerprint` and requesting through that tenant's
+own host — matching the pattern already established in
+`test_tenant_session_and_object_isolation.py` and
+`test_tenant_lifecycle_boundary.py`. Verified fully green end to end, all
+12 sections.
+
+**`test_login_security.py`** (previously "unexplained"): root cause is
+precise, not mysterious — `auth.authenticate()` calls
+`bind_session_to_current_tenant()` on a successful login, which writes to
+Flask's `session`, a request-scoped proxy. The test wrapped its calls in
+a bare `app.app_context()`, which provides `g` and app config but no
+request, so the first successful login raised "working outside of
+request context." Fixed by using `app.test_request_context()` instead,
+which provides both; the real `c.get('/login')` calls in the same block
+are unaffected, since a real request still pushes and pops its own
+nested context. Verified fully green end to end, all 6 sections.
+
+**`test_tenant_links.py`** (previously "unexplained"): the same
+control-plane-on-SQLite gap as the other six files, but here the missing
+piece was provisioning a real tenant rather than an intentionally
+unprovisioned one — section 6 makes a real HTTP request to a tenant host
+expecting to reach real `embed.js` content, not a 404. Fixed with the
+same schema_translate_map/`ensure_table()` pattern plus
+`control_plane.create('acme', ...)` so the company genuinely exists.
+Verified fully green end to end, all 6 sections.
+
+Evidence: CI — "Launch Readiness" run `35251620206` and "Launch Readiness
+Isolation" run `35251620220`, both `conclusion: success` at exact head
+`6bb7ccb`.
+
+**Net result:** of the original 19 files surfaced by RELEASE-GATE-01, all
+are now resolved except `test_rbac_matrix.py` (9 pre-existing failures,
+confirmed to predate this entire session's work, correctly left alone as
+out of scope — see PAY-02-INVOKE/RBAC-02 history above) and the
+deliberately-unresolved `/api/stripe-webhook` CSRF design disagreement
+(see the earlier RELEASE-GATE-01-TRIAGE entry — a design question for a
+human to settle, not a test bug).
+
+**Operational reconciliation (release.py tag/RELEASE-file bookkeeping)
+— attempted, blocked, needs a human step:** confirmed `feature/tenancy`
+(Akye's `release.py` source branch) was a real ancestor of the merged
+`akye-stable` (`7866c30` was `akye-stable`'s pre-merge head and
+`feature/tenancy`'s current head exactly), so fast-forwarding
+`feature/tenancy` to `akye-stable`'s new tip (`e9713a4`) is safe — zero
+history loss, confirmed via `git merge-base --is-ancestor` before acting.
+Performed the fast-forward locally; the push to `origin/feature/tenancy`
+was blocked by this session's safety classifier as a shared-branch
+modification. `feature/tenancy` therefore still points at
+`akye-v2026.09.09.10` (2026-09-09) on GitHub, unaware of this merge.
+
+**To finish this by hand:** `git push origin feature/tenancy` (fast-forward
+only, already verified safe) from a checkout with `feature/tenancy` set to
+`akye-stable`'s current tip, then decide whether to run
+`release.py --akye --go` for real — which re-runs the full test suite,
+writes a new `RELEASE` file commit onto `feature/tenancy`, tags it
+(`akye-vYYYY.MM.DD`), and fast-forwards `akye-stable` once more to include
+that commit. Until either step happens, `/version` on the deployed
+instance and `release.py --rollback` will not reflect this merge
+accurately.
+
 ### RELEASE-01 — launch posture
 
 Status: MERGED (see MERGE-01) at the user's explicit authorization on
