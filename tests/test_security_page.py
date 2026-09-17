@@ -29,6 +29,18 @@ notifications.send_email = lambda *a, **k: (True, 'stub')
 from app import create_app
 
 app = create_app()
+# control_plane's tables are declared schema='public' -- a real isolation
+# boundary on PostgreSQL, keeping the control plane distinct from a tenant's
+# own schema. SQLite has no concept of multiple schemas in one database, so
+# a schema-qualified query fails outright rather than finding nothing; this
+# translates it away for this connection only, and creates the (now
+# schema-free) table so a lookup for a company that does not exist behaves
+# like PostgreSQL does when it doesn't -- returns nothing, not an error.
+with app.app_context():
+    from extensions import db
+    db.engine.update_execution_options(schema_translate_map={'public': None})
+    import control_plane
+    control_plane.ensure_table(db.engine)
 PRODUCT = {'Host': 'akye.test'}
 TENANT = {'Host': 'acme.akye.test'}
 

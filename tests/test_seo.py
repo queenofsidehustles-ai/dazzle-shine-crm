@@ -39,6 +39,18 @@ from app import create_app
 import entitlements
 
 app = create_app()
+# control_plane's tables are declared schema='public' -- a real isolation
+# boundary on PostgreSQL, keeping the control plane distinct from a tenant's
+# own schema. SQLite has no concept of multiple schemas in one database, so
+# a schema-qualified query fails outright rather than finding nothing; this
+# translates it away for this connection only, and creates the (now
+# schema-free) table so a lookup for a company that does not exist behaves
+# like PostgreSQL does when it doesn't -- returns nothing, not an error.
+with app.app_context():
+    from extensions import db
+    db.engine.update_execution_options(schema_translate_map={'public': None})
+    import control_plane
+    control_plane.ensure_table(db.engine)
 c = app.test_client()
 # The host the site is really served on. Requesting the bare apex here would
 # now be answered with a 301 to this one, which is the point of setting it.

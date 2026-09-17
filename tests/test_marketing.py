@@ -32,6 +32,18 @@ import product
 import entitlements
 
 app = create_app()
+# control_plane's tables are declared schema='public' -- a real isolation
+# boundary on PostgreSQL, keeping the control plane distinct from a tenant's
+# own schema. SQLite has no concept of multiple schemas in one database, so
+# a schema-qualified query fails outright rather than finding nothing; this
+# translates it away for this connection only, and creates the (now
+# schema-free) table so a lookup for a company that does not exist behaves
+# like PostgreSQL does when it doesn't -- returns nothing, not an error.
+with app.app_context():
+    from extensions import db
+    db.engine.update_execution_options(schema_translate_map={'public': None})
+    import control_plane
+    control_plane.ensure_table(db.engine)
 
 
 def check(cond, m):
@@ -86,9 +98,13 @@ check(str(solo['jobs_per_month']).encode() in r.data,
       f'and {solo["jobs_per_month"]} jobs, which is what it allows')
 
 print('\n4. None of it appears on a cleaning company\'s own CRM')
-# The thing that would undo the white-label work.
+# The thing that would undo the white-label work. TENANT_HOST's slug is
+# never provisioned in this test, and tenancy._enforce_request_lifecycle()
+# now checks the control plane before any route runs -- an unknown company
+# 404s everywhere, root included, rather than implying it might exist by
+# redirecting to a login page. Consistent with /home and /pricing below.
 r = c.get('/', headers=TENANT_HOST)
-check(r.status_code in (301, 302), 'a company subdomain redirects to their CRM, not the marketing site')
+check(r.status_code == 404, 'a company subdomain does not serve the marketing site')
 for path in ('/home', '/pricing'):
     r = c.get(path, headers=TENANT_HOST)
     check(r.status_code == 404, f'{path} does not exist on a company subdomain')
