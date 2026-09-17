@@ -65,7 +65,7 @@ def boundary():
     import tenancy
     from app import create_app
     from extensions import db
-    from models import Staff
+    from models import Staff, User
 
     provisioning.provision(A, 'Docs A Cleaning', quiet=True)
     provisioning.provision(B, 'Docs B Cleaning', quiet=True)
@@ -75,13 +75,27 @@ def boundary():
 
     with app.app_context():
         with tenancy.use_tenant(A):
-            db.session.add(Staff(id=8101, name='A Cleaner', email='a@example.test',
-                                 agreement_token='token-a', is_active=True))
+            owner_a = User(id=8401, name='Docs A Owner',
+                           username='docs-a-owner@example.test',
+                           role='owner', active=True)
+            owner_a.set_password('docs-a-password-123')
+            db.session.add_all([
+                owner_a,
+                Staff(id=8101, name='A Cleaner', email='a@example.test',
+                     agreement_token='token-a', is_active=True),
+            ])
             db.session.commit()
             db.session.remove()
         with tenancy.use_tenant(B):
-            db.session.add(Staff(id=8201, name='B Cleaner', email='b@example.test',
-                                 agreement_token='token-b', is_active=True))
+            owner_b = User(id=8402, name='Docs B Owner',
+                           username='docs-b-owner@example.test',
+                           role='owner', active=True)
+            owner_b.set_password('docs-b-password-123')
+            db.session.add_all([
+                owner_b,
+                Staff(id=8201, name='B Cleaner', email='b@example.test',
+                     agreement_token='token-b', is_active=True),
+            ])
             db.session.commit()
             db.session.remove()
 
@@ -101,14 +115,27 @@ def boundary():
         os.environ.update(original_env)
 
 
+_OWNER_ID = {A: 8401, B: 8402}
+
+
 def _owner(app, slug):
+    import tenancy
+    from auth import _auth_fingerprint
+    from models import User
+
+    user_id = _OWNER_ID[slug]
+    with app.app_context():
+        with tenancy.use_tenant(slug):
+            fingerprint = _auth_fingerprint(User.query.get(user_id).password_hash)
+
     client = app.test_client()
     base = f'https://{slug}.akye.test'
     with client.session_transaction(base_url=base) as sess:
         sess['logged_in'] = True
         sess['role'] = 'owner'
-        sess['user_id'] = 1
+        sess['user_id'] = user_id
         sess['user_name'] = 'Document Boundary Tester'
+        sess['auth_fingerprint'] = fingerprint
         sess['tenant_slug'] = slug
     return client, base
 

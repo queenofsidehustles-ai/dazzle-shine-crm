@@ -54,7 +54,7 @@ def boundary():
     import tenancy
     from app import create_app
     from extensions import db
-    from models import Expense
+    from models import Expense, User
 
     provisioning.provision(A, 'Export A Cleaning', quiet=True)
     provisioning.provision(B, 'Export B Cleaning', quiet=True)
@@ -63,12 +63,26 @@ def boundary():
 
     with app.app_context():
         with tenancy.use_tenant(A):
-            db.session.add(Expense(id=7701, date='2026-09-14', category='supplies', amount=64.50,
-                                   vendor='ALPHA-ONLY-VENDOR', note='ALPHA-EXPORT-CANARY', method='card'))
+            owner_a = User(id=7401, name='Export A Owner',
+                           username='export-a-owner@example.test',
+                           role='owner', active=True)
+            owner_a.set_password('export-a-password-123')
+            db.session.add_all([
+                owner_a,
+                Expense(id=7701, date='2026-09-14', category='supplies', amount=64.50,
+                       vendor='ALPHA-ONLY-VENDOR', note='ALPHA-EXPORT-CANARY', method='card'),
+            ])
             db.session.commit(); db.session.remove()
         with tenancy.use_tenant(B):
-            db.session.add(Expense(id=7701, date='2026-09-14', category='supplies', amount=64.50,
-                                   vendor='BRAVO-ONLY-VENDOR', note='BRAVO-EXPORT-CANARY', method='card'))
+            owner_b = User(id=7402, name='Export B Owner',
+                           username='export-b-owner@example.test',
+                           role='owner', active=True)
+            owner_b.set_password('export-b-password-123')
+            db.session.add_all([
+                owner_b,
+                Expense(id=7701, date='2026-09-14', category='supplies', amount=64.50,
+                       vendor='BRAVO-ONLY-VENDOR', note='BRAVO-EXPORT-CANARY', method='card'),
+            ])
             db.session.commit(); db.session.remove()
     try:
         yield app
@@ -84,14 +98,27 @@ def boundary():
         os.environ.clear(); os.environ.update(original_env)
 
 
+_OWNER_ID = {A: 7401, B: 7402}
+
+
 def _owner(app, slug):
+    import tenancy
+    from auth import _auth_fingerprint
+    from models import User
+
+    user_id = _OWNER_ID[slug]
+    with app.app_context():
+        with tenancy.use_tenant(slug):
+            fingerprint = _auth_fingerprint(User.query.get(user_id).password_hash)
+
     client = app.test_client()
     base = f'https://{slug}.akye.test'
     with client.session_transaction(base_url=base) as sess:
         sess['logged_in'] = True
         sess['role'] = 'owner'
-        sess['user_id'] = 1
+        sess['user_id'] = user_id
         sess['user_name'] = 'Export Boundary Tester'
+        sess['auth_fingerprint'] = fingerprint
         sess['tenant_slug'] = slug
     return client, base
 

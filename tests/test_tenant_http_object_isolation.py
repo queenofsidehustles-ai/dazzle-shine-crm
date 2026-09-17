@@ -66,7 +66,7 @@ def boundary():
     import tenancy
     from app import create_app
     from extensions import db
-    from models import Booking, Client, Staff
+    from models import Booking, Client, Staff, User
 
     provisioning.provision(A, 'Object A Cleaning', quiet=True)
     provisioning.provision(B, 'Object B Cleaning', quiet=True)
@@ -76,9 +76,18 @@ def boundary():
 
     # Deliberately non-overlapping high IDs.  If tenant A ever resolves an ID
     # globally instead of inside its own schema, these are easy to recognize.
+    # Each tenant also gets a real owner User: an authenticated client here
+    # has to carry the same credential-version binding a genuine login would
+    # (see auth.session_matches_current_user), not a session that merely
+    # names a user_id nothing in the schema actually has.
     with app.app_context():
         with tenancy.use_tenant(A):
+            owner_a = User(id=9401, name='Object A Owner',
+                           username='object-a-owner@example.test',
+                           role='owner', active=True)
+            owner_a.set_password('object-a-password-123')
             db.session.add_all([
+                owner_a,
                 Booking(id=9101, service_type='standard', name='A-BOOKING', price=101),
                 Staff(id=9201, name='A-STAFF', is_active=True),
                 Client(id=9301, name='A-CLIENT', email='a@example.test'),
@@ -86,7 +95,12 @@ def boundary():
             db.session.commit()
             db.session.remove()
         with tenancy.use_tenant(B):
+            owner_b = User(id=9402, name='Object B Owner',
+                           username='object-b-owner@example.test',
+                           role='owner', active=True)
+            owner_b.set_password('object-b-password-123')
             db.session.add_all([
+                owner_b,
                 Booking(id=9102, service_type='standard', name='B-BOOKING', price=202),
                 Staff(id=9202, name='B-STAFF', is_active=True),
                 Client(id=9302, name='B-CLIENT', email='b@example.test'),
@@ -110,14 +124,27 @@ def boundary():
         os.environ.update(original_env)
 
 
+_OWNER_ID = {A: 9401, B: 9402}
+
+
 def _authenticated_client(app, slug=A):
+    import tenancy
+    from auth import _auth_fingerprint
+    from models import User
+
+    user_id = _OWNER_ID[slug]
+    with app.app_context():
+        with tenancy.use_tenant(slug):
+            fingerprint = _auth_fingerprint(User.query.get(user_id).password_hash)
+
     client = app.test_client()
     base = f'https://{slug}.akye.test'
     with client.session_transaction(base_url=base) as sess:
         sess['logged_in'] = True
         sess['role'] = 'owner'
-        sess['user_id'] = 1
+        sess['user_id'] = user_id
         sess['user_name'] = 'Boundary Tester'
+        sess['auth_fingerprint'] = fingerprint
         # Hosted Akye sessions are deliberately tenant-bound.  These HTTP
         # object-isolation tests need a valid session for the source tenant so
         # they exercise object lookup, not the login redirect guard.

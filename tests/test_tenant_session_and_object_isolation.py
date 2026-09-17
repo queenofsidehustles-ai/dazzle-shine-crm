@@ -119,12 +119,23 @@ def tenant_app():
 
 
 def _session_cookie(app, slug, user_id, name):
-    """Create exactly the signed cookie a successful tenant login would issue."""
+    """Create exactly the signed cookie a successful tenant login would issue.
+
+    Login also binds the cookie to the credential version of the account that
+    issued it (``auth.authenticate``'s ``auth_fingerprint``), so a
+    hand-assembled cookie has to carry the same binding or
+    ``session_matches_current_user`` rejects it as stale before the test ever
+    reaches the cross-tenant replay it means to exercise.
+    """
     from flask import g, session
-    from auth import bind_session_to_current_tenant
+    from auth import bind_session_to_current_tenant, _auth_fingerprint
+    import tenancy
+    from models import User
 
     with app.test_request_context('/', base_url=f'https://{slug}.akye.test'):
         g.tenant_slug = slug
+        with tenancy.use_tenant(slug):
+            user = User.query.get(user_id)
         session.clear()
         session.permanent = True
         bind_session_to_current_tenant()
@@ -132,6 +143,7 @@ def _session_cookie(app, slug, user_id, name):
         session['role'] = 'owner'
         session['user_id'] = user_id
         session['user_name'] = name
+        session['auth_fingerprint'] = _auth_fingerprint(user.password_hash)
         serializer = app.session_interface.get_signing_serializer(app)
         return serializer.dumps(dict(session))
 
