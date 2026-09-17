@@ -422,6 +422,83 @@ Akye-multi-tenancy-specific, so triaging all 19 is a separate, unbounded
 piece of work outside this session's scope — flagged for the user's team
 to prioritize, or for an explicit follow-up request.
 
+### RELEASE-GATE-01-TRIAGE — the 19 script-style failures surfaced by
+RELEASE-GATE-01, resolved
+
+Status: 8 of 19 fully fixed at `1ffb4ec`, root cause identified for 6 more,
+5 remain genuinely open and untriaged (one — `test_rbac_matrix.py` — was
+already known and reported before this session's work, out of scope; four
+are new and unexplained). Test-only; no production change.
+
+**Fully fixed (8 files, `1ffb4ec`):** `test_canonical_host.py`,
+`test_confirm_request.py`, `test_portal_invite.py` (this one root cause
+only — see below), `test_tip_after_job.py`, `test_upsell_pricing.py`,
+`test_whitelabel.py`, `test_whitelabel_existing.py`,
+`test_booking_payment_intent_integrity.py`. Two distinct root causes:
+
+- Seven set a realistic `https://` `CRM_BASE` alongside a 4-character
+  placeholder `SECRET_KEY` — a combination that predates
+  `security.validate_secret()`'s production-detection heuristic
+  (`CRM_BASE.startswith('https://')` is one of its signals) and now
+  correctly refuses to start with a guessable secret rather than silently
+  signing owner sessions with one. Bumped each to a 32+ character
+  placeholder, matching how the rest of the suite already does it.
+- `test_booking_payment_intent_integrity.py` was a distinct, unrelated bug:
+  no `sys.path.insert`, so it only ever worked when pytest's own import
+  machinery found it — which is how both CI and `release.py`'s new
+  pytest-style routing already run it, so this was invisible until run as
+  a bare script. Added the missing line.
+
+**Root cause identified, not yet fixed (6 files sharing one cause):**
+`test_seo.py` (remaining piece after its `SECRET_KEY` fix),
+`test_first_run.py`, `test_early_access.py`, `test_legal.py`,
+`test_marketing.py`, `test_security_page.py`. All use SQLite
+(`DATABASE_URL=sqlite:///...`) and set `BASE_DOMAIN`, then make a request
+to a fake `*.<BASE_DOMAIN>` host to assert that company/marketing/legal
+content does not leak onto a tenant subdomain. `tenancy._enforce_request_lifecycle()`
+now unconditionally calls `control_plane.find()` for any resolved slug —
+and `control_plane.find()` queries the schema-qualified `public.organizations`
+table, a PostgreSQL-only construct. On SQLite this raises
+`OperationalError: no such table: public.organizations`, caught by
+`_enforce_request_lifecycle`'s generic exception handler and reported as
+503 ("Tenant lifecycle could not be verified") instead of the 404/redirect
+these tests expect from "no such company." Confirmed by direct
+reproduction, not just log reading. Not a production defect — production
+always runs PostgreSQL — but a real architectural mismatch between an
+older single-business-era test style (SQLite, for speed) and control-plane
+enforcement added later in the tenant-lifecycle hardening work. Fixing it
+requires a judgment call (move affected tests to real PostgreSQL, teach
+`control_plane`/`_enforce_request_lifecycle` to degrade gracefully on a
+non-PostgreSQL dialect, or adjust each test's expected status) — deferred
+rather than decided unilaterally.
+
+**Genuinely distinct, unexplained (4 files, need individual investigation):**
+- `test_login_security.py`: `auth.authenticate()` now calls
+  `bind_session_to_current_tenant()`, which writes to Flask's `session` —
+  requiring an active request context. This test calls `authenticate()`
+  directly outside one. Likely another old-test-vs-newer-hardening
+  collision (session-tenant binding), but not confirmed to the same
+  standard as the SQLite pattern above.
+- `test_security.py`: "only the first entry in X-Forwarded-For is
+  trusted" — `security.client_ip()` returns something other than the
+  expected `1.2.3.4`. Not yet root-caused. Worth flagging as
+  security-relevant rather than assumed benign.
+- `test_lsa_followup.py`: "the number is on the do-not-text list" — a
+  `SmsOptOut` record expected after a STOP reply is not found. Not yet
+  root-caused. Worth flagging as compliance-relevant (STOP handling)
+  rather than assumed benign.
+- `test_tenant_links.py`: "the embed script frames that company's own
+  booking page" fails on one of six sections; the other five (including
+  the security-relevant ones — a link built with no request in flight, and
+  the request host winning inside one) pass. Not yet root-caused.
+
+Evidence: each fix in the "fully fixed" group re-run individually to exit
+0; `test_whitelabel.py` and `test_whitelabel_existing.py` additionally
+confirmed to complete their full assertion sequence, not just their first
+previously-failing check. The four unexplained files and the six
+SQLite-pattern files were run to capture their exact tracebacks/assertions
+(recorded above) but not further diagnosed or fixed.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
