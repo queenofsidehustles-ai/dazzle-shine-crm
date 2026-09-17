@@ -159,8 +159,7 @@ fail-closed.
 ### CI-SCHEDULE-01 — the automatic nightly backup drill does not exercise the
 candidate branch
 
-Status: OPEN — platform limitation, not a code defect. No production change
-made. Blocks closing Priority 3 of the launch-readiness plan.
+Status: RESOLVED at `main@d4afe5a` (workflow-only change, user-authorized).
 
 `.github/workflows/backup.yml` on `akye-launch-readiness/cohort-30` correctly
 points the `akye` matrix job's checkout at
@@ -187,22 +186,24 @@ at all — only an explicit manual `workflow_dispatch` with `ref:
 akye-launch-readiness/cohort-30` does, and only for that one run.
 
 This is a GitHub Actions platform behavior interacting with the explicit
-constraint against merging this branch into `main`/stable/release. The only
-change that would make the *automatic* schedule exercise candidate code is
-editing `main`'s copy of `backup.yml` directly — out of scope for this branch
-and requiring separate authorization, since it touches the default/production
-branch rather than this launch-readiness candidate. It would not need to
-merge any application code: only the `ref: akye-stable` value in one matrix
-entry of one workflow file would change, remains trivially reversible, and
-changes nothing about routing, funds, secrets, or permissions. Flagging for
-an explicit go/no-go decision rather than acting unilaterally on the default
-branch.
+constraint against merging this branch into `main`/stable/release. Flagged
+for an explicit go/no-go decision rather than acted on unilaterally, since
+the only fix touches the default/production branch: user authorized a
+narrow, workflow-only edit to `main`'s `backup.yml` — only the `ref:
+akye-stable` value in the `akye` matrix entry, changed to `ref:
+akye-launch-readiness/cohort-30`, with a comment explaining why and a note to
+revert once the candidate branch ships or stops being authoritative. No
+application code, funds, secrets, or permissions touched; the candidate
+branch itself is not merged. Pushed directly to `main` at `d4afe5a`
+("Point nightly backup's akye job at the launch-readiness candidate, not
+akye-stable").
 
-Interim workaround available now, without touching `main`: run
-`workflow_dispatch` manually against `akye-launch-readiness/cohort-30`
-whenever the candidate branch's recovery path needs re-verification during
-remediation (as done for `35218489753`). This does not close the gap in the
-*automatic* nightly signal.
+Net effect: the next scheduled 08:00 UTC run (and any future one, until
+reverted) will resolve its workflow definition from this updated `main`
+copy, checkout the candidate branch for the `akye` job, and exercise
+RECOVERY-03 automatically. The mechanism itself was already proven correct
+via the manual `workflow_dispatch` run (`35218489753`) before this change
+was made.
 
 ### RELEASE-01 — launch posture
 
