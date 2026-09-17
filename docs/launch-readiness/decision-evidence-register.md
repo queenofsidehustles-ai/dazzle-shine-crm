@@ -205,6 +205,94 @@ RECOVERY-03 automatically. The mechanism itself was already proven correct
 via the manual `workflow_dispatch` run (`35218489753`) before this change
 was made.
 
+### POOL-01 — connection-leak and noisy-neighbor falsification for the 30-tenant
+cohort
+
+Status: IMPLEMENTED AND VERIFIED at `a9c30923e133f0d4a28c412b12f1e638136af8b7`
+(test-only; no production code changed).
+
+The existing cohort-concurrency suite proved `search_path` never bleeds across
+pooled connections under 30-tenant concurrent load, but never asserted the
+pool's own connection accounting, and never modeled one tenant exhausting
+shared pool capacity — both explicitly asked for by the launch-readiness
+plan's Priority 4. Four new tests added to
+`tests/test_cohort_concurrency_postgres.py`, all against real PostgreSQL:
+
+- `test_no_connection_leak_after_concurrent_cohort_load` — `pool.checkedout()`
+  returns to 0 after 600 concurrent reads across 30 tenants.
+- `test_no_connection_leak_when_half_of_concurrent_reads_fail` — same, with
+  half of all reads forced to raise mid-transaction, exercising the error
+  path specifically.
+- `test_noisy_neighbor_queues_without_cross_tenant_bleed` — one tenant
+  holding every connection in a 2-connection pool makes a neighbor queue,
+  not read the wrong tenant's row, once a connection frees.
+- `test_noisy_neighbor_pool_exhaustion_fails_loudly_not_with_stale_tenant_data`
+  — a neighbor that cannot wait long enough gets a clean `TimeoutError`,
+  never a connection still pointed at someone else's schema.
+
+Falsified by hand before committing, both probes reverted before the real
+commit: widening the exhaustion test's `pool_timeout` past the noisy
+tenant's hold time reproduced `Failed: DID NOT RAISE`; separately, injecting
+a real unreturned connection (kept alive outside the pool rather than
+relying on GC) on the forced-failure path reliably drove the shared pool
+into cascading 30-second-per-checkout stalls under the existing 200-read
+workload — confirming a genuine leak here is not just an assertion failure
+but the exact platform-wide degradation these tests exist to catch.
+
+Production carries no explicit pool sizing (`SQLALCHEMY_ENGINE_OPTIONS` is
+unset), so it runs on SQLAlchemy's unconfigured default (`pool_size=5`,
+`max_overflow=10` — 15 total) shared across every company on the platform.
+Worth a deliberate sizing decision as tenant count grows, but out of scope
+here: this round adds falsifying tests, not a production config change.
+
+Evidence: CI `Concurrent 30-tenant pool isolation` step green in "Launch
+Readiness" run `35220858874` at exact head `a9c3092`, immediately following
+the local real-PostgreSQL run (6/6 passed) and the hand-falsification above.
+
+### SCHED-01 — stale scheduler-workflow test contradicted the deliberate
+triggering-ref fix
+
+Status: RESOLVED at `fde4a12954845e0ecffe9ecd371e20df0d2122bd` (test-only;
+no production code changed).
+
+While investigating scheduler/background cross-talk (also Priority 4),
+found `tests/test_scheduler.py` asserting `automations.yml` hardcodes
+`ref: akye-stable`, directly contradicted by
+`tests/test_tenant_scheduler_isolation.py`'s own
+`test_automation_workflow_uses_triggering_revision_not_hardcoded_branch`,
+which asserts the opposite. Running `tests/test_scheduler.py` directly
+confirmed it currently exits 1 on this one check.
+
+Root cause: commit `200251e` ("Run automation workflow from triggering
+release ref") deliberately removed the hardcoded ref on this branch for the
+same reason as CI-SCHEDULE-01 — a hardcoded ref does not protect a
+*scheduled* run at all (GitHub always resolves that from the default
+branch's copy of the file, regardless), so it only matters for
+`workflow_dispatch`, where it should run the release that triggered it
+rather than an implicit second one. `tests/test_scheduler.py` was never
+updated to match.
+
+Confirmed safe before touching anything: `main`'s own copy of
+`automations.yml` is unchanged and still correctly pinned to
+`ref: akye-stable`, so the real nightly automations run (schedule-triggered,
+sourced from `main`) was never affected — this was purely a same-file test
+left stale on the candidate branch, not a live incident. Also confirmed
+`.github/workflows/lsa-followups.yml` (Google Ads follow-ups) has no
+checkout step at all — it calls the production CRM's own HTTP endpoint
+directly — so it carries none of this risk class.
+
+Not wired into any CI gate (`launch-readiness.yml` never references
+`test_scheduler.py`), so this was silent, stale test debt rather than a live
+red signal. Updated the assertion to match the current, deliberate,
+now-consistent invariant.
+
+Evidence: `python tests/test_scheduler.py` — exit 0 locally (was exit 1, one
+check failing); `tests/test_tenant_scheduler_isolation.py` — 4/4 passing,
+unaffected. CI run `35221110963` ("Launch Readiness") and `35221110933`
+("Launch Readiness Isolation") at exact head `fde4a12` were in progress at
+the time of this entry — not yet confirmed; see the round report for their
+resolved status.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
