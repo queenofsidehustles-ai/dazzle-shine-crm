@@ -339,9 +339,10 @@ checkout → subscribe → fail → recover → cancel lifecycle.
 No regressions: `test_cron_tenant_host_boundary.py`, `test_csrf_api_boundary.py`
 (38/38 combined with the above), `test_stripe_webhook_tenant_isolation.py`
 (the separate, genuinely tenant-scoped Stripe Connect webhook — unaffected).
-CI run `35222604585` ("Launch Readiness") at exact head `837b514` was in
-progress at the time of this entry — see the round report for its resolved
-status.
+CI: "Launch Readiness" run `35222604585` and "Launch Readiness Isolation"
+run `35222604465`, both `conclusion: success` at exact head `837b514`,
+including the `Provider webhook boundary` step; reconfirmed green on both
+workflows at head `fcbb7dc` after this entry's own commit.
 
 Liability/profitability implication: this was the most consequential
 finding of the launch-readiness effort so far — unfixed, it would have made
