@@ -28,13 +28,29 @@ silently re-exposing data for a closed or previously purged customer, reducing
 privacy, contractual, support, and remediation exposure without adding deletion
 automation or normal request-path overhead.
 
-### CI-EVIDENCE-03 — skipped isolation tests are not PASS evidence
+### CI-EVIDENCE-03 — PostgreSQL isolation must be substantive
 
-Status: OPEN.
+Status: INFRASTRUCTURE REMEDIATION COMMITTED; EXACT-HEAD ISOLATION RESULT STILL
+UNRESOLVED.
 
-PostgreSQL-dependent isolation tests that skip because infrastructure is absent
-must not be counted as substantive launch proof. The 30-tenant PostgreSQL-backed
-lane remains authoritative.
+Commit `521602290468216bec7c34fce1a414adffab3839` provisions PostgreSQL 16 for the
+launch-isolation lane and supplies `TEST_POSTGRES_URL`, removing the known
+architecture in which PostgreSQL-dependent tests could skip for lack of a test
+server. Do not call the 30-tenant boundary PASS until the exact-head isolation
+job and its PostgreSQL-dependent steps are inspectable and successful.
+
+### MOBILE-A11Y-01 — critical mobile/accessibility journeys
+
+Status: PASS at `521602290468216bec7c34fce1a414adffab3839`.
+
+Exact-head Actions run `35169115356`, job `105036705976`, completed successfully.
+The job checked out and verified the exact candidate revision, started a
+disposable CRM, installed Chromium, and completed the mobile/accessibility
+golden journeys. The failure-log step was skipped because the journey passed.
+
+Implication: preserves usable critical journeys for field/mobile users and
+reduces avoidable onboarding/support friction while P0/P1 backend gates remain
+fail-closed.
 
 ### RELEASE-01 — launch posture
 
