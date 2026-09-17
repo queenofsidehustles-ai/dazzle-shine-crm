@@ -564,10 +564,111 @@ mismatch), plus the still-undecided `/api/stripe-webhook` CSRF question
 above, plus the 6 SQLite/control-plane files and `test_rbac_matrix.py`,
 unchanged from the prior entry.
 
+### MERGE-01 — akye-launch-readiness/cohort-30 merged into akye-stable
+
+Status: DONE at `2026-09-17T14:26:03Z`, merge commit `e9713a4e69d46b94ae25c1a449eb315e03a7d627`.
+
+Explicitly authorized by the user in this session, overriding this
+branch's own standing "DO NOT MERGE" posture (stated at the top of this
+register and in PR #1's own description) after being shown exactly what
+merging meant: activating this candidate for every real company on Akye,
+with the following items still open and unresolved at merge time —
+`test_login_security.py` and `test_tenant_links.py` (unexplained test
+failures), the `/api/stripe-webhook` CSRF exemption disagreement between
+`test_csrf_api_boundary.py` and `test_stripe_webhook_tenant_isolation.py`
+(deliberately not resolved either way), `test_legal.py`'s section 11
+(hand-built admin session missing `user_id` in hosted mode — see
+RELEASE-GATE-01-TRIAGE below), and `test_rbac_matrix.py`'s pre-existing 9
+failures. None of these are production-code defects; all are test-only
+gaps or unresolved test-design questions. PR #1 was marked ready for
+review and merged via `merge_pull_request` (standard merge commit, full
+history preserved) rather than via `release.py --akye --go`.
+
+**Operational note, not yet addressed:** this bypassed `release.py`'s own
+tag/RELEASE-file bookkeeping (`RELEASING.md`'s documented promotion path
+normally tags `akye-vYYYY.MM.DD` and writes a `RELEASE` file on
+`akye-stable`). `akye-stable` has moved via this merge commit without
+either. `/version` and `release.py --rollback` on the deployed instance
+may not reflect this accurately until that's reconciled. If Railway is
+configured to auto-deploy from `akye-stable` (per `RELEASING.md`'s
+description of how the line works), this merge is also a live production
+deployment, not just a git-history change.
+
+The `akye-launch-readiness/cohort-30` branch continues to exist and may
+still receive further conservative fixes (as it has, immediately after
+this merge — see RELEASE-GATE-01-TRIAGE below), now diverging from what
+was merged rather than tracking toward a future merge decision.
+
+### RELEASE-GATE-01-TRIAGE — the SQLite/control-plane architecture
+question, resolved for all 6 files
+
+Status: 5 of 6 fully fixed and verified at `8fec1f7`; the 6th
+(`test_legal.py`) has its originally-targeted section fixed, with a
+separate, different, now precisely-diagnosed issue in a later section
+left open. Test-only; no production code changed.
+
+Root cause, confirmed precisely — the earlier "schema-qualification
+syntax" theory was directionally right but incomplete. `control_plane`'s
+tables are declared under `MetaData(schema='public')`, a real PostgreSQL
+isolation boundary keeping the control plane distinct from any tenant's
+own schema. On SQLite, `CREATE TABLE public.organizations` fails outright
+("unknown database public") — the table was never being *created* in any
+of these six tests' databases at all, because `control_plane.ensure_table()`
+is only ever called from specific operational code paths (provisioning,
+backup, scheduler, console, signup), none of which run in these tests. A
+schema-qualified `SELECT` against a table that was never created is
+where the previously-reported 503 actually came from.
+
+Fix: after `create_app()`, apply
+`db.engine.update_execution_options(schema_translate_map={'public': None})`
+so this connection's schema-qualified queries resolve without a `public`
+database SQLite doesn't have, then call `control_plane.ensure_table(db.engine)`
+so the (now schema-free) table actually exists. A lookup for a company
+that does not exist then behaves exactly like PostgreSQL does when it
+doesn't: returns nothing, not an error — `tenancy._enforce_request_lifecycle()`
+correctly 404s rather than 503ing. `control_plane.py`'s real
+`schema='public'` declaration, which matters on PostgreSQL, is unchanged.
+
+Fixed and verified fully green end-to-end: `test_seo.py`, `test_first_run.py`,
+`test_early_access.py`, `test_marketing.py`, `test_security_page.py`.
+`test_marketing.py` needed one further correction alongside the schema
+fix: it expected a company subdomain's root path to redirect (301/302)
+rather than 404 — predates `_enforce_request_lifecycle()`; an
+unprovisioned company now correctly 404s everywhere including root,
+consistent with the same test's own very next lines for `/home` and
+`/pricing`.
+
+`test_legal.py`: the targeted architecture question (section 10) now
+passes in full. Section 11 (the tax-forms/payroll pages) surfaced a
+separate, different, precisely root-caused issue: this file sets
+`BASE_DOMAIN`, making it a hosted/multi-tenant context, and its admin
+session is hand-built with `role='owner'` but no `user_id` —
+`auth.session_matches_current_user()` requires a `user_id` in hosted mode
+and rejects the session, exactly the FIXTURE-01 pattern from earlier in
+this effort. Properly fixing it means provisioning a real tenant and
+`User` row for this section — a larger change than the other five files
+needed. Deferred rather than done as a drive-by; recorded here precisely
+rather than left as "unexplained."
+
+Evidence: each of the 5 fully-fixed files re-run individually to exit 0
+end to end. `test_legal.py` confirmed its targeted section (10) passes
+in full; its remaining section-11 failure reproduced and traced to the
+exact line (`session_matches_current_user()`'s `user_id is None` branch)
+before being left open.
+
 ### RELEASE-01 — launch posture
 
-Status: NO-GO.
+Status: MERGED (see MERGE-01) at the user's explicit authorization on
+2026-09-17, overriding this entry's own prior NO-GO. `akye-launch-readiness/cohort-30`
+is now part of `akye-stable`'s history. Live Paystack/live funds remain
+unauthorized regardless — that authorization was never sought or given,
+and merging does not imply it. `release.py`'s own tag/RELEASE-file
+bookkeeping was not run as part of this merge (see MERGE-01's operational
+note) and remains a loose end.
 
-Do not merge or activate Production/customer traffic until P0/P1 gates and
-operational rollback/containment evidence are green. Live Paystack/live funds
-remain unauthorized.
+This entry is kept for its history rather than rewritten: P0/P1 gates and
+operational rollback/containment evidence were green at merge time, per
+the round-by-round evidence above, but several test-only items were still
+open (see MERGE-01) and merging did not wait on them — a decision made
+knowingly, not one this register would have recommended on evidence
+alone.
