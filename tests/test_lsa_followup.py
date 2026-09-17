@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/lsa.db'
 os.environ['SECRET_KEY'] = 'test'
+os.environ['TWILIO_AUTH_TOKEN'] = 'lsa-followup-test-token'
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 TEXTS = []
@@ -18,6 +19,8 @@ import notifications
 notifications.send_email = lambda *a, **k: (True, 'stub')
 notifications.send_sms = lambda to_phone=None, message=None, *a, **k: (
     TEXTS.append({'to': to_phone, 'body': message}), (True, 'stub'))[1]
+
+from twilio.request_validator import RequestValidator
 
 from app import create_app
 from extensions import db
@@ -132,8 +135,16 @@ with app.app_context():
     stopper = LsaLead.query.filter_by(phone='3059344446').first()
     lsa.start_sequence(stopper)
     c = app.test_client()
-    c.post('/messages/incoming', data={'From': '+13059344446', 'Body': 'STOP',
-                                       'MessageSid': 'SM1'})
+    stop_form = {'From': '+13059344446', 'Body': 'STOP', 'MessageSid': 'SM1'}
+    # /messages/incoming now verifies a real Twilio signature before acting on
+    # anything (security.validate_twilio_webhook) -- added after this test was
+    # first written. An unsigned STOP never reaches the opt-out logic below at
+    # all; it is refused at the door, same as any other unsigned inbound text.
+    stop_url = 'http://localhost/messages/incoming'
+    stop_sig = RequestValidator(os.environ['TWILIO_AUTH_TOKEN']).compute_signature(
+        stop_url, stop_form)
+    c.post('/messages/incoming', data=stop_form,
+          headers={'X-Twilio-Signature': stop_sig})
     check(SmsOptOut.query.filter_by(phone='3059344446').first() is not None,
           'the number is on the do-not-text list')
     check(notifications.sms_opted_out('(305) 934-4446'),
@@ -161,9 +172,12 @@ with app.app_context():
     lsa.start_sequence(replier)
     lsa.run_sequence()
     sent_before = len(texts_to('3053387892'))
-    c.post('/messages/incoming', data={'From': '+13053387892',
-                                       'Body': 'yes how much for 3 bedrooms?',
-                                       'MessageSid': 'SM2'})
+    reply_form = {'From': '+13053387892', 'Body': 'yes how much for 3 bedrooms?',
+                  'MessageSid': 'SM2'}
+    reply_sig = RequestValidator(os.environ['TWILIO_AUTH_TOKEN']).compute_signature(
+        stop_url, reply_form)
+    c.post('/messages/incoming', data=reply_form,
+          headers={'X-Twilio-Signature': reply_sig})
     replier = LsaLead.query.filter_by(phone='3053387892').first()
     check(replier.seq_stopped == 'replied', 'the sequence stops on their reply')
     check(SmsOptOut.query.filter_by(phone='3053387892').first() is None,

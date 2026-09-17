@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from entitlements import requires_plan
-from auth import login_required
+from auth import owner_required
 from models import CommercialQuote, CommercialAccount
 from extensions import db
 from notifications import send_email
@@ -68,7 +68,7 @@ def _account_from_quote(q):
 
 
 @quotes_bp.route('/')
-@login_required
+@owner_required
 @requires_plan('commercial')
 def index():
     status_filter = request.args.get('status', '')
@@ -88,7 +88,7 @@ def index():
 
 
 @quotes_bp.route('/new', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def new():
     if request.method == 'POST':
         services_selected = request.form.getlist('services')
@@ -121,7 +121,7 @@ def new():
 
 
 @quotes_bp.route('/<int:quote_id>', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def detail(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
@@ -153,7 +153,7 @@ def detail(quote_id):
 
 
 @quotes_bp.route('/<int:quote_id>/send', methods=['POST'])
-@login_required
+@owner_required
 def send_quote(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     crm_url = request.host_url.rstrip('/')
@@ -229,7 +229,7 @@ def send_quote(quote_id):
 
 
 @quotes_bp.route('/<int:quote_id>/delete', methods=['POST'])
-@login_required
+@owner_required
 def delete(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     db.session.delete(q)

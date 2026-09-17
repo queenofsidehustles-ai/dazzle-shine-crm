@@ -22,24 +22,28 @@ once, for twenty-four hours.
 The company is recorded last. A crash before that leaves an orphan schema, which
 is untidy and invisible. Recording first would leave a company that exists and
 resolves and has no tables — a customer meeting a stack trace in their first
-minute. If anything fails the schema is dropped, so a retry with the same
-address works rather than colliding with the wreckage of the first attempt.
+minute. Provisioning owns its cleanup while it holds the slug lock, so a failed
+request can never delete a tenant created by a competing request for the same
+address.
 
 ## Off unless deliberately switched on
 
 No BASE_DOMAIN means no subdomains, which means signup cannot work and does not
-appear. The single-business instance running today has no BASE_DOMAIN, so these
-routes are simply not there.
+appear. SIGNUPS_OPEN must also be exactly 1: a missing deployment variable keeps
+the door closed rather than accidentally exposing public tenant creation.
 """
 import os
 import re
+from contextlib import contextmanager
 
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    session, jsonify, abort)
+from sqlalchemy import text
 
 import control_plane
 import provisioning
 import tenancy
+from auth import bind_session_to_current_tenant
 from extensions import db
 from models import User, LoginToken
 
@@ -48,13 +52,19 @@ signup_bp = Blueprint('signup', __name__)
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[a-z]{2,}$', re.I)
 
 
+class SlugTaken(Exception):
+    """Raised when another signup wins the requested tenant address."""
+
+
 def signups_open():
     """Signup needs a domain to carve subdomains out of, and an explicit yes.
 
-    SIGNUPS_OPEN=0 keeps tenancy working while the door is shut -- which is the
-    state to be in while onboarding the first few companies by hand."""
-    return bool(os.environ.get('BASE_DOMAIN')) and \
-        (os.environ.get('SIGNUPS_OPEN', '1') != '0')
+    Fail closed: tenancy can stay live for existing customers while public
+    account creation remains disabled unless SIGNUPS_OPEN=1 is deliberately
+    configured on the deployment.
+    """
+    return bool((os.environ.get('BASE_DOMAIN') or '').strip()) and \
+        os.environ.get('SIGNUPS_OPEN') == '1'
 
 
 def _require_open():
@@ -73,6 +83,64 @@ def _engine():
     return provisioning._engine()
 
 
+@contextmanager
+def _slug_lock(engine, slug):
+    """Serialize provisioning for one tenant address across all app workers.
+
+    A process-local lock is insufficient in production because separate workers
+    can receive the same signup concurrently. PostgreSQL advisory locks are held
+    by the dedicated connection for the whole provisioning attempt, including
+    migrations and cleanup performed through other connections.
+    """
+    if engine.dialect.name != 'postgresql':
+        raise RuntimeError('Tenant signup requires PostgreSQL.')
+    key = f'akye:tenant-provision:{slug}'
+    with engine.connect() as conn:
+        conn.execute(text('SELECT pg_advisory_lock(hashtext(:key))'), {'key': key})
+        try:
+            yield
+        finally:
+            conn.execute(text('SELECT pg_advisory_unlock(hashtext(:key))'), {'key': key})
+
+
+def _ensure_control_plane(engine):
+    """Create/repair public control-plane tables without first-boot DDL races.
+
+    SQLAlchemy's create_all(checkfirst=True) is not atomic across workers: two
+    requests can both observe a missing table and then collide creating the
+    same PostgreSQL relation/type. Serialize only this initialization step with
+    one database-wide advisory lock. Established deployments pay essentially
+    nothing because ensure_table becomes a quick check while the lock is held.
+    """
+    if engine.dialect.name != 'postgresql':
+        control_plane.ensure_table(engine)
+        return
+    key = 'akye:control-plane-init'
+    with engine.connect() as conn:
+        conn.execute(text('SELECT pg_advisory_lock(hashtext(:key))'), {'key': key})
+        try:
+            control_plane.ensure_table(engine)
+        finally:
+            conn.execute(text('SELECT pg_advisory_unlock(hashtext(:key))'), {'key': key})
+
+
+def _seed_strict(app, schema):
+    """Apply every required starter seed and fail the signup if any seed fails.
+
+    The boot-time seed helper is deliberately tolerant so one optional repair
+    cannot take an established deployment down. New-company provisioning has a
+    different contract: a tenant must never be declared ready when its required
+    starter template only partly exists.
+    """
+    with app.app_context():
+        with tenancy.use_tenant(schema):
+            import app as app_module
+            for fn in ('_seed_checklists', '_seed_scripts', '_seed_sales_scripts',
+                       '_seed_sops', '_seed_email_templates', '_seed_pricing_defaults',
+                       '_seed_message_templates'):
+                getattr(app_module, fn)()
+
+
 @signup_bp.route('/signup/check')
 def check_slug():
     """Is this address free? Called as somebody types."""
@@ -85,7 +153,7 @@ def check_slug():
                       if slug not in tenancy.RESERVED_SLUGS
                       else 'That address is reserved.'})
     engine = _engine()
-    control_plane.ensure_table(engine)
+    _ensure_control_plane(engine)
     if control_plane.find(engine, slug):
         return jsonify({'ok': False, 'reason': 'Already taken.'})
     return jsonify({'ok': True, 'host': f'{slug}.{os.environ["BASE_DOMAIN"]}'})
@@ -104,11 +172,6 @@ def signup():
         password = request.form.get('password') or ''
         slug = form['slug'].lower() or suggest_slug(form['business'])
 
-        # _validate touches the database — it creates the control-plane table
-        # if it is missing and looks the slug up. Outside a guard, any problem
-        # there returned the generic "something went wrong" page instead of
-        # the signup form, which tells somebody trying to give us money
-        # nothing at all and leaves no message on screen to report.
         try:
             error = _validate(form, slug, password)
         except Exception as e:
@@ -116,7 +179,7 @@ def signup():
             try:
                 errors.capture(e, path='/signup', method='POST')
             except Exception:
-                pass                      # never let the reporting be the fault
+                pass
             print(f'  ❌ signup validation failed: {type(e).__name__}: {e}')
             return render_template(
                 'admin/signup.html', form=form, slug=slug, base=base,
@@ -128,14 +191,11 @@ def signup():
 
         try:
             token = _create_everything(slug, form, password)
+        except SlugTaken:
+            return render_template(
+                'admin/signup.html', form=form, slug=slug, base=base,
+                error=f'"{slug}" was just taken. Please choose another address.')
         except Exception as e:
-            # Whatever went wrong, the half-built company is removed so the same
-            # address can be tried again.
-            _cleanup(slug)
-            # Printed as well as captured. The capture writes to a table, and a
-            # failure severe enough to break signup may be the same failure
-            # that stops it being written — in which case the deploy log is
-            # the only place the reason survives.
             print(f'  ❌ signup failed for {slug!r}: {type(e).__name__}: {e}')
             import traceback; traceback.print_exc()
             try:
@@ -145,13 +205,10 @@ def signup():
                 pass
             return render_template(
                 'admin/signup.html', form=form, slug=slug, base=base,
-                error='Something went wrong setting your account up. Nothing was '
-                      'charged and nothing was kept — please try again, and if it '
-                      'happens twice tell us.')
+                error='We could not finish setting your account up. Please try '
+                      'again. If it happens twice, tell us so we can investigate.')
 
         _tell_us(slug, form, base)
-
-        # Over to their own address, where the session belongs.
         scheme = 'http' if base.startswith('localhost') else 'https'
         return redirect(f'{scheme}://{slug}.{base}/welcome/{token}')
 
@@ -160,22 +217,7 @@ def signup():
 
 
 def _tell_us(slug, form, base):
-    """Email whoever runs the product that somebody just signed up.
-
-    A company signing up is the most important thing that happens on this
-    deployment, and until now it happened in silence — the row appeared in a
-    table nobody was watching. Somebody could sign up at eleven at night, hit
-    something broken, and be gone before anyone knew they had arrived.
-
-    It is also the honest end-to-end test of the product's email: same key,
-    same from-address, same path as a trial reminder. If this arrives, they
-    all will.
-
-    Never raises. A company has already been created and paid for with a
-    password by this point — failing to send a notification must not undo any
-    of that, or show them an error about our mail when nothing of theirs is
-    wrong.
-    """
+    """Email whoever runs the product that somebody just signed up."""
     try:
         import notifications
         import product
@@ -200,8 +242,6 @@ def _tell_us(slug, form, base):
             reply_to=form.get('email') or to,
             api_key=product.resend_api_key() or None)
     except Exception as e:
-        # Printed rather than swallowed silently — see errors.py for what
-        # happens when a send failure has nowhere to be seen.
         print(f'  ⚠️  could not send signup notice for {slug!r}: '
               f'{type(e).__name__}: {e}')
 
@@ -221,68 +261,92 @@ def _validate(form, slug, password):
         return ('Pick a web address of 3–40 lower-case letters, numbers or '
                 'hyphens — and not a reserved word like "www" or "admin".')
     engine = _engine()
-    control_plane.ensure_table(engine)
+    _ensure_control_plane(engine)
     if control_plane.find(engine, slug):
         return f'"{slug}" is already taken. Try another.'
     return None
 
 
 def _create_everything(slug, form, password):
-    """Schema, tables, seeds, owner account, control-plane record. Returns the
-    one-time token that logs them in on their own address."""
+    """Build one tenant completely, under a cross-worker per-slug lock."""
     engine = _engine()
     schema = tenancy.schema_for(slug)
 
-    provisioning.create_schema(engine, schema)
-    provisioning.migrate_schema(engine, schema)
+    with _slug_lock(engine, slug):
+        _ensure_control_plane(engine)
+        if control_plane.find(engine, slug):
+            raise SlugTaken(slug)
+        if provisioning.schema_exists(engine, schema):
+            raise RuntimeError(
+                f'unregistered tenant schema {schema!r} already exists; '
+                'refusing to overwrite it')
 
-    from flask import current_app
-    provisioning.seed(current_app, schema)
+        created_schema = False
+        created_org = False
+        try:
+            provisioning.create_schema(engine, schema)
+            created_schema = True
+            provisioning.migrate_schema(engine, schema)
 
-    with tenancy.use_tenant(schema):
-        owner = User(name=form['name'], username=form['email'], role='owner',
-                     active=True)
-        owner.set_password(password)
-        db.session.add(owner)
-        db.session.commit()
-        # Their business name, so the CRM is theirs from the first screen rather
-        # than saying "Your Cleaning Company" at them.
-        from models import BusinessSetting
-        BusinessSetting.set('business_name', form['business'])
-        BusinessSetting.set('email', form['email'])
-        db.session.commit()
-        raw, _ = LoginToken.issue(owner, 'signup', email=form['email'])
+            from flask import current_app
+            _seed_strict(current_app, schema)
 
-    control_plane.create(engine, slug, form['business'], form['email'])
-    control_plane.mark_provisioned(engine, slug)
-    return raw
+            with tenancy.use_tenant(schema):
+                owner = User(name=form['name'], username=form['email'], role='owner',
+                             active=True)
+                owner.set_password(password)
+                db.session.add(owner)
+                db.session.commit()
+                from models import BusinessSetting
+                BusinessSetting.set('business_name', form['business'])
+                BusinessSetting.set('email', form['email'])
+                db.session.commit()
+                raw, _ = LoginToken.issue(owner, 'signup', email=form['email'])
+
+            control_plane.create(engine, slug, form['business'], form['email'])
+            created_org = True
+            control_plane.mark_provisioned(engine, slug)
+            return raw
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            cleanup_errors = []
+            if created_org:
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text(
+                            'DELETE FROM public.organizations WHERE slug = :s'),
+                            {'s': slug})
+                except Exception as cleanup_error:
+                    cleanup_errors.append(f'organization: {cleanup_error}')
+            if created_schema:
+                try:
+                    provisioning.drop_schema(engine, schema)
+                except Exception as cleanup_error:
+                    cleanup_errors.append(f'schema: {cleanup_error}')
+            if cleanup_errors:
+                print(f'  ❌ incomplete signup cleanup for {slug!r}: '
+                      + '; '.join(cleanup_errors))
+            raise
 
 
 def _cleanup(slug):
-    """Remove a half-built company so the address can be reused."""
-    try:
-        engine = _engine()
-        schema = tenancy.schema_for(slug)
+    """Legacy/manual cleanup helper; never used by the signup exception path."""
+    engine = _engine()
+    schema = tenancy.schema_for(slug)
+    with _slug_lock(engine, slug):
+        if control_plane.find(engine, slug):
+            raise RuntimeError(f'refusing to clean up registered tenant {slug!r}')
         if provisioning.schema_exists(engine, schema):
             provisioning.drop_schema(engine, schema)
-        from sqlalchemy import text
-        with engine.begin() as conn:
-            conn.execute(text('DELETE FROM public.organizations WHERE slug = :s'),
-                         {'s': slug})
-    except Exception:
-        pass
 
 
 @signup_bp.route('/welcome/<token>')
 def welcome(token):
-    """Spend the signup token and start the session, on the company's own host.
-
-    Lives here rather than on the signup domain because a session cookie is
-    scoped to the host that sets it, and this is the host it needs to work on.
-    """
+    """Spend the signup token and start the session, on the company's own host."""
     if not tenancy.is_tenant():
-        # Reached on the product's own domain, where there is no company and no
-        # account. Almost always somebody re-opening an old link.
         return redirect(url_for('signup.signup') if signups_open() else '/')
 
     user = LoginToken.consume(token, 'signup')
@@ -291,6 +355,7 @@ def welcome(token):
 
     session.clear()
     session.permanent = True
+    bind_session_to_current_tenant()
     session['logged_in'] = True
     session['role'] = user.role
     session['user_id'] = user.id

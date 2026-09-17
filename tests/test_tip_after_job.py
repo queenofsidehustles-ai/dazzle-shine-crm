@@ -8,7 +8,7 @@ import os, sys, tempfile
 from datetime import datetime, date
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/tip.db'
-os.environ['SECRET_KEY'] = 'test'
+os.environ['SECRET_KEY'] = 'test-secret-key-not-for-production-use'
 os.environ['CRM_BASE'] = 'https://crm.example.com'
 os.environ['STRIPE_SECRET_KEY'] = 'sk_' + 'test_notareal0000004242'
 os.environ['STRIPE_PUBLISHABLE_KEY'] = 'pk_' + 'test_notareal'

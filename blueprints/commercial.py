@@ -4,7 +4,7 @@ converting a 'Won' Prospect from Find Leads, or added by hand."""
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from entitlements import requires_plan
-from auth import login_required
+from auth import owner_required
 from extensions import db
 from models import CommercialAccount, Prospect, User
 import commercial_pricing as cpricing
@@ -51,7 +51,7 @@ def _tmpl_args(**extra):
 
 
 @commercial_bp.route('/')
-@login_required
+@owner_required
 @requires_plan('commercial')
 def index():
     status_filter = request.args.get('status', '')
@@ -73,13 +73,13 @@ def index():
 
 
 @commercial_bp.route('/calculator')
-@login_required
+@owner_required
 def calculator():
     return render_template('admin/commercial_calculator.html', **_tmpl_args())
 
 
 @commercial_bp.route('/quote.json')
-@login_required
+@owner_required
 def quote_json():
     """The one place a commercial price is worked out.
 
@@ -104,7 +104,7 @@ def quote_json():
 
 
 @commercial_bp.route('/new', methods=['POST'])
-@login_required
+@owner_required
 def new():
     name = (request.form.get('business_name') or '').strip()
     if not name:
@@ -135,7 +135,7 @@ def new():
 
 
 @commercial_bp.route('/convert/<int:prospect_id>', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def convert(prospect_id):
     p = Prospect.query.get_or_404(prospect_id)
     existing = CommercialAccount.query.filter_by(prospect_id=p.id).first()
@@ -171,7 +171,7 @@ def convert(prospect_id):
 
 
 @commercial_bp.route('/<int:account_id>', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def detail(account_id):
     a = CommercialAccount.query.get_or_404(account_id)
     if request.method == 'POST':
@@ -199,7 +199,7 @@ def detail(account_id):
 
 
 @commercial_bp.route('/<int:account_id>/mark-first-paid', methods=['POST'])
-@login_required
+@owner_required
 def mark_first_paid(account_id):
     a = CommercialAccount.query.get_or_404(account_id)
     if not a.first_paid_at:
@@ -211,7 +211,7 @@ def mark_first_paid(account_id):
 
 
 @commercial_bp.route('/<int:account_id>/delete', methods=['POST'])
-@login_required
+@owner_required
 def delete(account_id):
     a = CommercialAccount.query.get_or_404(account_id)
     db.session.delete(a)

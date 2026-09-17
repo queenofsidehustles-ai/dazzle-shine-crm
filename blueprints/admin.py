@@ -1,7 +1,7 @@
 import json
 from flask import Blueprint, render_template, request, session, redirect, url_for
 from entitlements import requires_plan
-from auth import login_required, owner_required, authenticate
+from auth import login_required, owner_required, authenticate, is_owner_session
 from models import Booking, Client, Lead
 from extensions import db
 from sqlalchemy import func
@@ -87,7 +87,7 @@ def dashboard():
 
     # This month's money, cash basis — only the owner sees the money tiles.
     money = None
-    if session.get('role', 'owner') == 'owner':
+    if is_owner_session():
         d = date.today()
         start, end = finance.month_bounds(d.year, d.month)
         money = finance.profit_and_loss(start, end)
