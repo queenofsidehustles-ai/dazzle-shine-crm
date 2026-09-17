@@ -499,6 +499,71 @@ previously-failing check. The four unexplained files and the six
 SQLite-pattern files were run to capture their exact tracebacks/assertions
 (recorded above) but not further diagnosed or fixed.
 
+### RELEASE-GATE-01-TRIAGE — the two security/compliance-flagged items,
+resolved
+
+Status: both root-caused and fixed at `0540e9e` and `423b78c`. Neither was
+a real regression; both were test fixtures predating later, legitimate
+hardening. Test-only; no production code changed in either fix.
+
+**X-Forwarded-For (`test_security.py`):** the test used
+`app.test_request_context()`, which builds a request object directly and
+never invokes `app.wsgi_app` — so ProxyFix (`x_for=1`, installed in
+`create_app()`) never ran, and the check was passing or failing by
+accident regardless of what `security.client_ip()` actually does on a
+real request. Its expected value was also backwards: with `x_for=1`,
+Railway (the one trusted proxy) appends the address it saw as the *last*
+entry in `X-Forwarded-For`; trusting the *first* entry, as the test
+asserted, would mean trusting whatever an attacker claims for itself —
+the exact forgery the section's own title warns about. Verified both
+facts by direct reproduction against the real WSGI stack: `client_ip()`
+correctly returns `'5.6.7.8'` (the proxy-appended value), not `'1.2.3.4'`
+(the client-claimed one). Production behavior was already correct; only
+the test was fixed, routed through a real request via the test client.
+
+While re-running this file to completion, a genuine, pre-existing,
+three-way disagreement about `/api/stripe-webhook` (the per-tenant Stripe
+Connect webhook) and CSRF exemption surfaced: `test_csrf_api_boundary.py`
+(2026-09-12) explicitly names it a "stale alias" that must stay
+origin-checked; `test_stripe_webhook_tenant_isolation.py` (2026-09-13, one
+day later) exercises it as a real, currently-used, tenant-scoped route
+(though without an `Origin` header, so it never actually settles the CSRF
+question either way); `test_security.py` itself (unmodified since
+2026-08-25, i.e. written before either) had assumed all along it was
+CSRF-exempt like its siblings. A fix was drafted (adding the exemption to
+`security.CSRF_EXEMPT_PATHS`, mirroring BILL-01's already-approved
+reasoning for the sibling platform webhook) and **reverted immediately**
+on finding the more specific, deliberately-named test asserting the
+opposite — picking a side here is not something to do unilaterally.
+`security.py` is unchanged; `test_security.py` no longer asserts either
+answer for this route and documents the disagreement in place for whoever
+resolves it next.
+
+**SMS STOP/opt-out (`test_lsa_followup.py`):** `security.validate_twilio_webhook()`
+now requires a valid Twilio signature on `/messages/incoming` before
+acting on anything, added after this test was written. An unsigned STOP
+(or any unsigned inbound text) is refused at the door with a bare 403,
+before ever reaching the opt-out logic — confirmed by direct reproduction
+(403, no signature provided) before concluding this, not assumed. The
+STOP-handling code itself is untouched and, once actually reached, works
+exactly as intended. Fixed by signing both inbound-message requests in
+this file with `twilio.request_validator.RequestValidator`, matching the
+pattern `test_provider_webhook_boundary.py` already established.
+
+Evidence: both files pass in full end to end (not just past their
+previous failure point) — `test_security.py` 12/12 sections,
+`test_lsa_followup.py` 17/17 sections. No regressions:
+`test_csrf_api_boundary.py` (15/15), `test_provider_webhook_boundary.py`,
+`test_stripe_webhook_tenant_isolation.py`, `test_billing.py` (full
+lifecycle) all still pass against real PostgreSQL.
+
+**Net effect on the remaining open list:** all 4 "genuinely distinct,
+unexplained" items are now down to 2 (`test_login_security.py`'s
+session-context dependency, `test_tenant_links.py`'s embed-domain
+mismatch), plus the still-undecided `/api/stripe-webhook` CSRF question
+above, plus the 6 SQLite/control-plane files and `test_rbac_matrix.py`,
+unchanged from the prior entry.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
