@@ -73,6 +73,17 @@ organizations = Table(
     # second copy of "9 days left" is the one that gets the sender marked as
     # spam.
     Column('nudges_sent', String(200)),
+
+    # ── Lifecycle ──────────────────────────────────────────────────────────
+    # Owned by tenant_data_lifecycle.py, declared here for the same reason the
+    # billing columns above are: this is the one Table object every reader of
+    # `organizations` — including create_all() on a fresh database and
+    # backup.py's restore, which inserts through this object's declared
+    # columns rather than the live database's actual ones — has to agree with.
+    # tenant_data_lifecycle.ensure_columns() remains the ALTER TABLE backfill
+    # for a database that already has this table without them.
+    Column('closed_at', DateTime),
+    Column('purged_at', DateTime),
 )
 
 
