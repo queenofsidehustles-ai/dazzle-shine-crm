@@ -351,6 +351,77 @@ the moment this branch shipped, regardless of how correctly every other
 billing safeguard (PAY-01, PAY-02, signature verification, idempotent event
 handling) worked.
 
+### RELEASE-GATE-01 — release.py's test runner silently skipped most
+pytest-style suites
+
+Status: IMPLEMENTED AND VERIFIED at `cc6b9f7ae109eeee02f66975d24abcd2a8d6b2b1`
+(user-authorized before implementation, given the shared, cross-branch
+sensitivity). Fixed on this branch only; NOT pushed to `main` or
+`akye-stable` — separate explicit authorization would be needed for that,
+per the same reasoning as CI-SCHEDULE-01.
+
+`release.py --go` / `--akye --go` is the documented, real command
+(`RELEASING.md`) for promoting code to `stable`/`akye-stable` — every real
+cleaning company on Akye. Its `run_tests()` ran every `tests/test_*.py` via
+plain `python <file>` and treated exit 0 as pass. Correct for this repo's
+older script-style suites (checks execute at import time); wrong for
+genuine pytest suites (`def test_*(fixture):`), which only run if
+something calls them — `python file.py` just defines the functions and
+exits 0, having verified nothing.
+
+Confirmed empirically: of 37 pure-pytest-style files in `tests/`, **19
+exit 0 silently** under this invocation, including
+`test_tenancy_cohort_30.py`, `test_cohort_30_tenant_isolation.py`,
+`test_cohort_concurrency_postgres.py`,
+`test_tenant_session_and_object_isolation.py`,
+`test_tenant_http_object_isolation.py`,
+`test_tenant_secure_document_isolation.py`, `test_tenant_export_isolation.py`,
+`test_backup_lifecycle_containment_contract.py`, and 11 more — effectively
+the entire tenant-isolation and recovery evidence built during this
+launch-readiness effort. `release.py` is byte-identical across `main`,
+`akye-stable`, and this branch — this predates the branch and is not
+something introduced here.
+
+Fix: `_is_pytest_style()`, an AST check for "has `def test_*` functions and
+no top-level executable statement" (module docstring excluded).
+`run_tests()` now routes pytest-style files through
+`python -m pytest -q <file>` and leaves script-style files on plain
+`python <file>` — self-maintaining (AST-detected, not a hardcoded list)
+since new suites are added constantly; a hardcoded list would rot exactly
+like the PAY-02-INVOKE bug it otherwise mirrors.
+
+Evidence: ran the actual patched `run_tests()` against the full 142-file
+suite on a fresh Python 3.12 venv (matching `check_python()`'s own
+production-version requirement) with real PostgreSQL — not just the
+classifier in isolation. All 19 previously-silent files now execute for
+real, confirmed by `test_rbac_matrix.py` correctly reporting "9 failed, 16
+passed" (a known, pre-existing failure, reported earlier this session and
+confirmed via `git stash` to predate all of this session's changes) rather
+than a silent pass. `tests/test_release.py` (asserts `run_tests()` gates on
+failure) still passes in full — zero regressions from this change.
+
+**Separate, unresolved finding surfaced by the same full run — not caused
+by this fix and not triaged here:** 19 further pre-existing failures in
+script-style suites, unaffected by this change (their invocation is
+unchanged) and apparently never run end-to-end via `release.py`'s actual
+mechanism before. Spot-checked two, both look like genuine pre-existing
+issues rather than sandbox artifacts: `test_first_run.py`'s "/book
+responds (503)"; `test_whitelabel.py` sets a placeholder 4-character
+`SECRET_KEY` alongside an `https://` `CRM_BASE`, which now correctly trips
+`validate_secret()`'s production-detection heuristic (the FIXTURE-01
+pattern again — a test predating a later security hardening pass). The
+other 17 (`test_booking_page.py`, `test_booking_payment_intent_integrity.py`,
+`test_canonical_host.py`, `test_confirm_request.py`, `test_early_access.py`,
+`test_legal.py`, `test_login_security.py`, `test_lsa_followup.py`,
+`test_marketing.py`, `test_portal_invite.py`, `test_security.py`,
+`test_security_page.py`, `test_seo.py`, `test_tenant_links.py`,
+`test_tip_after_job.py`, `test_upsell_pricing.py`,
+`test_whitelabel_existing.py`) were not individually diagnosed. These are
+general CRM feature tests, not launch-readiness-gated and largely not
+Akye-multi-tenancy-specific, so triaging all 19 is a separate, unbounded
+piece of work outside this session's scope — flagged for the user's team
+to prioritize, or for an explicit follow-up request.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
