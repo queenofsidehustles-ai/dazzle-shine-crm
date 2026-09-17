@@ -157,14 +157,39 @@ with app.app_context():
 import entitlements as _ent
 _ent._clear_cache()
 
+# BASE_DOMAIN is set, so this is a hosted deployment: login_required() binds
+# every session to a resolved tenant (session_matches_current_tenant()) and
+# revalidates it against a live User row (session_matches_current_user()). A
+# hand-built session carrying only 'logged_in'/'role' predates both checks
+# and is correctly rejected now -- the fixture needs a real company and a
+# real owner User, not just a role claim.
+TENANT_SLUG = 'legalcheck'
+TENANT_BASE = f'https://{TENANT_SLUG}.akye.test'
+with app.app_context():
+    import control_plane
+    from models import User
+    from auth import _auth_fingerprint
+    control_plane.create(db.engine, TENANT_SLUG, 'Legal Check Co',
+                         'owner@legalcheck.test')
+    owner_user = User(name='Legal Check Owner', username='owner@legalcheck.test',
+                      role='owner', active=True)
+    owner_user.set_password('legal-check-password')
+    db.session.add(owner_user)
+    db.session.commit()
+    owner_id = owner_user.id
+    owner_fingerprint = _auth_fingerprint(owner_user.password_hash)
+
 admin = app.test_client()
-with admin.session_transaction() as sess:
+with admin.session_transaction(base_url=TENANT_BASE) as sess:
     sess['logged_in'] = True
     sess['role'] = 'owner'
+    sess['user_id'] = owner_id
+    sess['tenant_slug'] = TENANT_SLUG
+    sess['auth_fingerprint'] = owner_fingerprint
 import re as _re
 for path, what in [('/money/tax-forms', 'the 1099 page'),
                    ('/contractors/payroll', 'the payroll page')]:
-    resp = admin.get(path)
+    resp = admin.get(path, base_url=TENANT_BASE)
     assert resp.status_code == 200, f'{what} did not render: HTTP {resp.status_code}'
     body = _re.sub(r'\s+', ' ', resp.data.decode('utf8', 'replace'))
     check('not a tax filing' in body, f'{what} says these are records, not a filing')

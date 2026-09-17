@@ -27,7 +27,14 @@ def check(cond, m):
     print(f'  ✅ {m}')
 
 app = create_app()
-with app.app_context():
+# auth.authenticate() now calls bind_session_to_current_tenant() on success,
+# which writes to Flask's session -- a request-scoped proxy, not just an
+# app-scoped one. A bare app_context() provides g and the app's config but no
+# request, so session access raises "working outside of request context" the
+# first time a login here actually succeeds. test_request_context() provides
+# both; the c.get(...) calls below still work exactly as before, since a real
+# request pushes and pops its own nested context around this outer one.
+with app.test_request_context():
     db.create_all()
 
     print('\n1. A fresh instance with nothing configured lets nobody in')
