@@ -292,6 +292,64 @@ unaffected. CI: "Launch Readiness" run `35221110963` and "Launch Readiness
 Isolation" run `35221110933`, both `conclusion: success` at exact head
 `fde4a12`, including the `Tenant scheduler isolation` step.
 
+### BILL-01 — platform Stripe webhook was permanently unreachable behind a
+mistaken tenant-host gate
+
+Status: IMPLEMENTED AND VERIFIED at `837b514f7e3825dea938aba75319624986917e87`
+(user-authorized before running the verifying test; the harness flagged the
+change as a security-test edit and correctly asked first).
+
+Found starting the Priority 5 (profitability/support hardening) pass:
+`tests/test_billing.py` failed against real PostgreSQL because
+`/api/stripe/webhook` returned 404 for every request, including a correctly
+signed one.
+
+Root cause: `security.PROVIDER_WEBHOOK_PATHS` grouped `/api/stripe/webhook`
+with `/messages/incoming` under `require_tenant_for_machine_route()`, which
+requires the request to resolve to a tenant subdomain before the route is
+even reached. Correct for Twilio (each company connects its own
+number/token, looked up by tenant); wrong for the platform billing webhook,
+confirmed from four independent angles: `billing.stripe_key()`/
+`webhook_secret()` read `STRIPE_PLATFORM_SECRET_KEY`/
+`STRIPE_PLATFORM_WEBHOOK_SECRET` (one Stripe account for every company's
+Akye plan, explicitly distinguished in the code's own docstring from "a
+business's own Stripe account"); `billing.apply_event()` resolves the
+company from the event payload against the control plane, never from the
+request host; `DEPLOY_STEPS.md`/`LAUNCH_RUNBOOK.md` both instruct the
+operator to configure Stripe's endpoint as the bare `BASE_DOMAIN`; and
+`SECURITY.md` already documents this route as signature-authenticated, not
+host-bound.
+
+Net effect if unfixed: every subscription checkout, cancellation, and
+failed-payment event would silently never apply once this branch's
+`security.py` reached production. Confirmed candidate-branch-only
+(introduced during the TEN-06/07 host-boundary hardening work) — does not
+exist on `akye-stable`, so there was no live incident.
+
+Masked from CI because `tests/test_provider_webhook_boundary.py` had been
+written to assert the broken behavior as correct. Corrected both files to
+match the documented, payload-authenticated design; the route's Stripe
+signature verification itself is untouched — this removes a mistaken
+orthogonal host gate, it does not weaken the actual authentication.
+
+Evidence: `tests/test_billing.py` — full pass against real PostgreSQL
+(was failing at "an unsigned payload is refused"), including the complete
+checkout → subscribe → fail → recover → cancel lifecycle.
+`tests/test_provider_webhook_boundary.py` — 7/7 passing (2 corrected).
+No regressions: `test_cron_tenant_host_boundary.py`, `test_csrf_api_boundary.py`
+(38/38 combined with the above), `test_stripe_webhook_tenant_isolation.py`
+(the separate, genuinely tenant-scoped Stripe Connect webhook — unaffected).
+CI run `35222604585` ("Launch Readiness") at exact head `837b514` was in
+progress at the time of this entry — see the round report for its resolved
+status.
+
+Liability/profitability implication: this was the most consequential
+finding of the launch-readiness effort so far — unfixed, it would have made
+Akye's own subscription revenue permanently unrecognized by the application
+the moment this branch shipped, regardless of how correctly every other
+billing safeguard (PAY-01, PAY-02, signature verification, idempotent event
+handling) worked.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
