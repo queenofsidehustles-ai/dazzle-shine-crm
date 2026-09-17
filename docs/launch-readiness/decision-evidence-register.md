@@ -288,10 +288,9 @@ now-consistent invariant.
 
 Evidence: `python tests/test_scheduler.py` — exit 0 locally (was exit 1, one
 check failing); `tests/test_tenant_scheduler_isolation.py` — 4/4 passing,
-unaffected. CI run `35221110963` ("Launch Readiness") and `35221110933`
-("Launch Readiness Isolation") at exact head `fde4a12` were in progress at
-the time of this entry — not yet confirmed; see the round report for their
-resolved status.
+unaffected. CI: "Launch Readiness" run `35221110963` and "Launch Readiness
+Isolation" run `35221110933`, both `conclusion: success` at exact head
+`fde4a12`, including the `Tenant scheduler isolation` step.
 
 ### RELEASE-01 — launch posture
 
