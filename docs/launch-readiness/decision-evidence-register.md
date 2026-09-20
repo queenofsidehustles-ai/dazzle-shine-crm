@@ -837,6 +837,73 @@ code for this audit, neither acted on:**
   did before IAM-02. Not fixed or removed here; flagged as likely-dead
   tooling for whoever next reaches for it.
 
+### PRODUCT-01 — first batch of user-reported product fixes (group 1 of a
+13-item punch list)
+
+Status: fixed at `343507b`/`d2314ee` on `fix/journey-test-findings`, pushed
+to [PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**. Test-only verification (not a
+security review) -- these five items were reviewed against the actual
+code before implementation and the reminders fix was exercised live; the
+other four are copy/config changes.
+
+The user supplied a 13-item list of requested changes. Reviewed each
+against the real code first rather than taking the description at face
+value -- two turned out not to be what they looked like, and one turned
+out to be a real, previously-undiagnosed bug the description didn't
+name. Implemented the five lowest-risk, no-open-questions items now;
+the remaining eight (2FA, persistent tenant login, a migration toolbox,
+menu reorganization, market/state selection, setup-step rollback,
+address autocomplete) need product decisions or larger design work and
+are deferred pending the user's answers.
+
+- **Cleaner day-before reminders bug (real fix).** Traced "check sending
+  of auto reminders for cleaner recurring jobs": the reminder logic
+  itself was correct for both one-time and recurring bookings, but it
+  lived inside the "Follow-ups and win-backs" automation (customer
+  win-back nudges) with no disclosure that toggle also controlled
+  cleaner reminders. Split into its own function, wired into the
+  existing "Day-before reminders" automation instead (same daily cron,
+  no new scheduled trigger needed), and fixed a second bug found along
+  the way -- it computed "tomorrow" from naive UTC rather than the
+  business's local date, the same class of bug the customer-facing
+  reminder route was already fixed for. Verified live: with win-back
+  nudges off, the cleaner reminder still fires; with day-before
+  reminders off, it correctly doesn't.
+- **Cleaner-pay label (clarity, not a bug).** Traced "cleaner pay cannot
+  be right" through `pricing.py`: `client_price` and `contractor_earnings`
+  are computed independently; `labor_rate` never reaches the customer's
+  price. Confirmed correct, relabeled for clarity anyway since the
+  question itself shows the old label invited exactly this misreading.
+- **PWA install name** (`static/manifest.json`: "Dazzle & Shine CRM" →
+  "Akye App"). Flagged, not resolved: `base_admin.html`'s
+  `apple-mobile-web-app-title` is already dynamic per tenant (`{{ BIZ }}
+  CRM`) — iOS and the install manifest will now say different things
+  until someone decides whether both should say "Akye" or both should be
+  tenant-branded.
+- **Sign-up button copy** ("Get early access" → "Sign up", "Request
+  early access" → "Complete sign up"). Checked `early_access()`'s own
+  routing before changing anything: it already redirects straight to the
+  real self-serve `/signup` once `SIGNUPS_OPEN` is true, and its
+  confirmation copy already sets honest hand-onboarding expectations for
+  the closed-signups case — so the new wording is accurate in both
+  states, not just the eventual self-serve one.
+- **Support email** (`akyecrm@gmail.com` → `support@akyehq.com`):
+  searched the entire repository, no occurrence anywhere.
+  `product.py`'s `support_email()` already defaults to
+  `support@akyehq.com` and is only overridden by a `PRODUCT_SUPPORT_EMAIL`
+  environment variable — nothing to change in code. Flagged for the user
+  to check Railway's env vars / connected email account instead.
+
+Evidence: manifest and label changes confirmed by direct render against
+the local QA server; the sign-up-copy change confirmed in both the
+open- and closed-signups branches (`SIGNUPS_OPEN` toggled); the reminder
+fix confirmed by seeding a real booking for the business's local
+"tomorrow," toggling each automation independently, and checking both
+the live JSON response and `Staff.schedule_reminder_date` directly in
+the database, not just trusting the response body. Full 17-check prior
+regression suite (JOURNEY-01, IAM-02, IDOR-01) re-run clean.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
