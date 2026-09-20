@@ -1,18 +1,21 @@
 name: Mobile accessibility golden journeys
 
 on:
+  pull_request:
+    branches:
+      - akye-stable
   push:
     branches:
-      - akye-launch-readiness/cohort-30
+      - akye-stable
   workflow_dispatch:
 
 concurrency:
-  group: mobile-accessibility-${{ github.ref }}
+  group: mobile-accessibility-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   golden-journeys:
-    name: Local disposable CRM golden journeys
+    name: Local disposable Akye golden journeys
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -53,7 +56,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Start disposable local CRM
+      - name: Start disposable local Akye application
         run: |
           python -c "from app import create_app; create_app().run(host='127.0.0.1', port=5001)" > /tmp/akye-golden-server.log 2>&1 &
           echo $! > /tmp/akye-golden-server.pid
@@ -73,7 +76,7 @@ jobs:
         if: failure()
         run: cat /tmp/akye-golden-server.log || true
 
-      - name: Stop disposable local CRM
+      - name: Stop disposable local Akye application
         if: always()
         run: |
           if [ -f /tmp/akye-golden-server.pid ]; then
