@@ -969,6 +969,72 @@ but left blank — does not appear at all, proving the "only if written"
 behavior rather than just that saving works. Full 17-check prior
 regression suite re-run clean.
 
+### PRODUCT-04 — Phase D of the group-2/3 punch list (#2, persistent tenant
+login), corrected mid-build
+
+Status: fixed at `86477f1` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+**Recorded transparently because the first attempt was wrong, not just
+because the second one worked.** Built the decided design (a cross-
+subdomain cookie plus an email-lookup fallback) from scratch — a new
+`auth.py` cookie helper, an `app.py` `after_request` hook, a new root-
+domain branch in `admin.login()`, a new template — before discovering
+`marketing.workspace()` already does most of this job: a cookie-backed
+one-click "welcome back, continue to X" return path, deliberately never
+confirming whether a typed address is real (anti-enumeration by
+design), and already wired in *ahead of* `admin.login()` by
+`marketing.install()`'s `_front_door()` `before_request` hook, which
+intercepts `/login` on the product's root domain unconditionally. That
+hook would have short-circuited every request before the new code in
+`admin.py` ever ran — confirmed directly (a curl request to root
+`/login` landed on `/workspace`, not the new code), not assumed. All of
+the parallel-mechanism code was reverted rather than shipped as dead
+weight beside a working one; the local diff on `auth.py`/`app.py`
+returned to empty, confirmed before committing.
+
+**What was actually missing, added instead:** a route in for someone on
+a browser the `workspace` cookie has never seen (new device, cleared
+cookie) who also does not remember their exact subdomain. A second,
+collapsed-by-default form on `marketing/workspace.html`, "Don't know
+your address? We'll email it to you," backed by a new control-plane
+index (`tenant_logins`, written once at account creation in
+`signup.py` and `team_logins.py` — checked and confirmed those are the
+only two places a `User` row is created today) and a matching
+`login_lookup_requests` throttle table. Deliberately the same shape as
+`account.forgot_password`: identical response whether an account was
+found, an email was sent, or the address was already asked for too
+recently, and the matching address(es) are emailed rather than ever
+displayed on the page.
+
+Evidence: against real PostgreSQL, a fresh signup correctly writes its
+(email, slug) pair to the index; looking that email up returns the same
+"check your inbox" response as a made-up email, but the outbound
+notification log confirms only the real one actually queued a send —
+proving the no-enumeration property holds, not just that the happy path
+works. A second lookup for the same email inside the cooldown window
+sends nothing (log unchanged). The pre-existing `workspace` slug flow
+(both the remembered-cookie one-click redirect and a fresh-slug
+redirect) re-verified unaffected by the changes around it. Full
+21-check prior regression suite re-run clean.
+
+**Unrelated but significant finding surfaced while reading
+`control_plane.py` for this work, not yet acted on:** `organizations`
+already declares `plan`, `subscription_status`, `trial_ends_at` and
+`grandfathered` columns, with its own docstring explaining exactly why
+billing state belongs in the control plane and not a tenant's own
+schema ("A business must not be able to edit the record of what it is
+paying"). This directly confirms IAM-02's `entitlements.py` finding
+above — but is a stronger statement of it than that entry made: the
+*correct* location already exists as live schema, and `entitlements.py`
+simply does not read from it, reading `BusinessSetting` in the tenant's
+own schema instead. Not touched here — moving `entitlements.state()`
+onto `organizations` is a real migration (every existing tenant's plan
+data would need to move, and `billing_routes.py`'s webhook handler would
+need to write to the new location instead) and deserves its own pass
+with the user's sign-off, not a fix folded into an unrelated feature.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
