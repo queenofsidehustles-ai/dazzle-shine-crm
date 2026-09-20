@@ -1,17 +1,21 @@
 name: Privacy lifecycle falsification
 
 on:
+  pull_request:
+    branches:
+      - akye-stable
   push:
     branches:
-      - akye-launch-readiness/cohort-30
+      - akye-stable
   workflow_dispatch:
 
 concurrency:
-  group: privacy-lifecycle-${{ github.ref }}
+  group: privacy-lifecycle-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   lifecycle:
+    name: Destructive lifecycle P1 falsification
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -30,10 +34,15 @@ jobs:
     env:
       TEST_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact candidate revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify exact candidate revision
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.txt
       - name: Policy contract
