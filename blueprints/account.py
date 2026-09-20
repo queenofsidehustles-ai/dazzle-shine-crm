@@ -25,6 +25,7 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, session)
 
 import branding
+from auth import login_required
 from extensions import db
 from models import User, LoginToken
 
@@ -132,3 +133,129 @@ def _send_reset(user, link):
   <p style="color:#9a95ad;font-size:0.88rem">If this wasn't you, ignore this
      email — nothing has changed and your password still works.</p>
 </div>''')
+
+
+# ── My Account — a person managing their own login ──────────────────────────
+#
+# Distinct from team_logins.py, which is the owner managing OTHER people's
+# accounts (and can set someone else's password directly). This is self-
+# service: change your own password, turn two-factor on or off for yourself.
+# The environment-based single-business owner login has no User row and
+# cannot use any of it -- there is nothing here to attach a secret to.
+
+def _current_user():
+    return User.query.get(session.get('user_id'))
+
+
+@account_bp.route('/account')
+@login_required
+def my_account():
+    return render_template('admin/my_account.html', user=_current_user(),
+                           backup_codes=None, secret_display=None, otpauth_uri=None)
+
+
+@account_bp.route('/account/password', methods=['POST'])
+@login_required
+def change_password():
+    user = _current_user()
+    if not user:
+        flash('Not available for this login.', 'error')
+        return redirect(url_for('account.my_account'))
+    current = request.form.get('current_password') or ''
+    new = request.form.get('new_password') or ''
+    confirm = request.form.get('confirm_password') or ''
+    if not user.check_password(current):
+        flash('Your current password was not correct.', 'error')
+        return redirect(url_for('account.my_account'))
+    problem = _password_problem(new, confirm)
+    if problem:
+        flash(problem, 'error')
+        return redirect(url_for('account.my_account'))
+    user.set_password(new)
+    db.session.commit()
+    flash('Password changed.', 'success')
+    return redirect(url_for('account.my_account'))
+
+
+@account_bp.route('/account/2fa/start', methods=['POST'])
+@login_required
+def start_2fa():
+    """Generate a secret and show it for setup. Not yet enabled -- totp_enabled
+    only turns on once /2fa/confirm verifies a real code was produced from it,
+    so nothing about the login path changes until that happens."""
+    import totp
+    user = _current_user()
+    if not user:
+        flash('Not available for this login.', 'error')
+        return redirect(url_for('account.my_account'))
+    user.totp_secret = totp.generate_secret()
+    user.totp_enabled = False
+    db.session.commit()
+    return render_template(
+        'admin/my_account.html', user=user, backup_codes=None,
+        secret_display=totp.format_secret(user.totp_secret),
+        otpauth_uri=totp.provisioning_uri(user.totp_secret, user.username, branding.biz_name()))
+
+
+@account_bp.route('/account/2fa/confirm', methods=['POST'])
+@login_required
+def confirm_2fa():
+    import totp
+    user = _current_user()
+    if not user or not user.totp_secret:
+        flash('Start setup again.', 'error')
+        return redirect(url_for('account.my_account'))
+    code = request.form.get('totp_code', '')
+    if not totp.verify_totp(user.totp_secret, code):
+        flash('That code did not match. Try scanning again, or check the time on your phone.', 'error')
+        return render_template(
+            'admin/my_account.html', user=user, backup_codes=None,
+            secret_display=totp.format_secret(user.totp_secret),
+            otpauth_uri=totp.provisioning_uri(user.totp_secret, user.username, branding.biz_name()))
+    codes = totp.generate_backup_codes()
+    user.totp_enabled = True
+    user.totp_backup_codes = totp.hash_backup_codes(codes)
+    db.session.commit()
+    flash('Two-factor authentication is on.', 'success')
+    # The one and only time these are shown -- only hashes are kept after this.
+    return render_template('admin/my_account.html', user=user, backup_codes=codes,
+                           secret_display=None, otpauth_uri=None)
+
+
+@account_bp.route('/account/2fa/disable', methods=['POST'])
+@login_required
+def disable_2fa():
+    user = _current_user()
+    if not user:
+        flash('Not available for this login.', 'error')
+        return redirect(url_for('account.my_account'))
+    if not user.check_password(request.form.get('current_password') or ''):
+        flash('Your current password was not correct.', 'error')
+        return redirect(url_for('account.my_account'))
+    user.totp_secret = None
+    user.totp_enabled = False
+    user.totp_backup_codes = None
+    db.session.commit()
+    flash('Two-factor authentication is off.', 'success')
+    return redirect(url_for('account.my_account'))
+
+
+@account_bp.route('/account/2fa/backup-codes', methods=['POST'])
+@login_required
+def regenerate_backup_codes():
+    import totp
+    user = _current_user()
+    if not user or not user.totp_enabled:
+        flash('Not available.', 'error')
+        return redirect(url_for('account.my_account'))
+    if not user.check_password(request.form.get('current_password') or ''):
+        flash('Your current password was not correct.', 'error')
+        return redirect(url_for('account.my_account'))
+    codes = totp.generate_backup_codes()
+    user.totp_backup_codes = totp.hash_backup_codes(codes)
+    db.session.commit()
+    # Same one-time-display rule as first setup: the old codes just generated
+    # stopped working the moment these replaced them, so showing these here is
+    # the only chance -- they are hashed on the way into the database above.
+    return render_template('admin/my_account.html', user=user, backup_codes=codes,
+                           secret_display=None, otpauth_uri=None)

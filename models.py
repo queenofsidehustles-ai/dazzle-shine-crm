@@ -1839,6 +1839,14 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
 
+    # Optional two-factor (TOTP). Opt-in per account -- see totp.py and
+    # auth.authenticate(). totp_secret is only meaningful once totp_enabled
+    # is True; a secret can exist mid-setup (generated, not yet confirmed)
+    # without granting anything, since only totp_enabled gates the login path.
+    totp_secret = db.Column(db.String(64))
+    totp_enabled = db.Column(db.Boolean, default=False)
+    totp_backup_codes = db.Column(db.Text)  # JSON list of hashed one-time codes
+
     def set_password(self, pw):
         # pbkdf2:sha256 is supported on every Python build; werkzeug's newer
         # default (scrypt) needs OpenSSL scrypt support that some builds lack.

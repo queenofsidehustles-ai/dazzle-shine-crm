@@ -222,6 +222,9 @@ def reports():
     )
 
 
+PENDING_2FA_KEY = 'pending_2fa_user_id'
+
+
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
     # The product's root domain never reaches this view for /login at all --
@@ -231,7 +234,15 @@ def login():
     # See marketing.workspace() for "which company" routing, cookie and all.
     import security
     error = None
+
+    if request.method == 'POST' and 'totp_code' in request.form:
+        return _login_2fa_step()
+
     if request.method == 'POST':
+        # A fresh username/password attempt abandons any earlier pending 2FA
+        # step -- switching accounts, or trying again, must not leave a stale
+        # "which user was mid-code-entry" marker sitting in the session.
+        session.pop(PENDING_2FA_KEY, None)
         # Guessing at the password is now something that has to be done slowly.
         # The wait is by address, not by account: locking the *account* would
         # let a stranger shut the owner out of her own business by typing her
@@ -244,13 +255,16 @@ def login():
             username = request.form.get('username', '')
             ok, info = authenticate(username, request.form.get('password', ''))
             security.record_login(username, ok)
-            if ok:
+            if ok is True:
                 session.permanent = True
                 session['logged_in'] = True
                 session['role'] = info['role']
                 session['user_id'] = info['user_id']
                 session['user_name'] = info['name']
                 return redirect(url_for('admin.dashboard'))
+            if ok == '2fa':
+                session[PENDING_2FA_KEY] = info['user_id']
+                return render_template('admin/login_2fa.html', error=None)
             error = 'Wrong username or password.'
     # A freshly deployed instance with no owner login and no accounts can't be
     # opened by anybody. Say so plainly rather than leaving someone guessing.
@@ -268,6 +282,55 @@ def login():
         switch_company_url = f'{product.scheme_for(root)}://{root}/workspace?forget=1'
     return render_template('admin/login.html', error=error, not_set_up=not_set_up,
                            switch_company_url=switch_company_url)
+
+
+def _login_2fa_step():
+    """The second step of a 2FA-required login: a live TOTP code, or one of
+    the account's backup codes. The password was already checked in step
+    one -- this only ever runs with session[PENDING_2FA_KEY] already set to a
+    user this app itself verified the password for a moment ago.
+
+    Throttled the same way and for the same reason as the password step: a
+    six-digit code is guessable in bulk without a lockout, so a wrong one
+    counts against the same per-IP window as a wrong password.
+    """
+    import security, totp
+    from extensions import db
+    from models import User
+    from auth import complete_2fa_login
+
+    user_id = session.get(PENDING_2FA_KEY)
+    user = User.query.get(user_id) if user_id else None
+    if not user or not user.totp_enabled:
+        session.pop(PENDING_2FA_KEY, None)
+        return redirect(url_for('admin.login'))
+
+    blocked, mins = security.login_blocked()
+    if blocked:
+        error = (f'Too many failed sign-ins. Please wait about {mins} '
+                 f'minute{"s" if mins != 1 else ""} and try again.')
+        return render_template('admin/login_2fa.html', error=error)
+
+    code = request.form.get('totp_code', '')
+    ok = totp.verify_totp(user.totp_secret, code)
+    if not ok:
+        remaining = totp.consume_backup_code(user.totp_backup_codes, code)
+        if remaining is not None:
+            user.totp_backup_codes = remaining
+            db.session.commit()
+            ok = True
+    security.record_login(user.username, ok)
+    if not ok:
+        return render_template('admin/login_2fa.html', error='Wrong code. Try again.')
+
+    session.pop(PENDING_2FA_KEY, None)
+    info = complete_2fa_login(user)
+    session.permanent = True
+    session['logged_in'] = True
+    session['role'] = info['role']
+    session['user_id'] = info['user_id']
+    session['user_name'] = info['name']
+    return redirect(url_for('admin.dashboard'))
 
 
 @admin_bp.route('/logout')
