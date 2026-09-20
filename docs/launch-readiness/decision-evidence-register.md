@@ -636,6 +636,103 @@ independently reproduced the way the three fixes above were. A fresh
 full-suite run against a clean database is recommended before launch if a
 firm answer is wanted on any of those eight.
 
+### IAM-02 — contractor-pay authorization gap, found by policy review of
+RBAC-02, fixed
+
+Status: fixed at `3b985fd` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**. Live on `akye-stable` before this
+fix — RBAC-02's own decision above predates it and never touched these
+routes, so this was not introduced by launch-readiness work.
+
+Asked to audit the application's policies for internal consistency
+(distinct from a specific bug report), found four routes that let any
+authenticated role move or view a worker's money with no role check,
+directly contradicting `rbac.py`'s own stated design
+(`ROLE_OPTIONS`: *"Admin — operations, no finance/pay"*) and inconsistent
+with every sibling route:
+
+- `contractors.pay_contractor` (`POST /team/<id>/pay`) — a real Stripe
+  Connect transfer (`stripe_connect.create_transfer`). Was
+  `@login_required` only; the function body has no role check either.
+- `contractors.pay_manual` (`POST /team/<id>/pay-manual`) — records a
+  cash/Venmo/Zelle payment as paid. Same gap.
+- `contractors.staff_detail`'s POST handler (`section=pay`) — sets
+  `pay_type`/`pay_rate` directly on any worker's `Staff` row, gated by
+  *nothing*, not even a decorator (the route is shared with the
+  legitimately-open profile-edit fields). The same page's "Pay Settings"
+  card — rate inputs plus a working "Update Pay" submit button — and a
+  separate "Earnings" card (earned/paid/still-owed totals, itemized
+  per-job pay) both rendered unconditionally to any logged-in role,
+  found while checking the fix for a template-only issue and turning out
+  to be materially worse: read-and-write, not just read.
+- `contractors.pay_statement` (`GET /payroll/statement/<id>`) — every
+  other `/payroll/*` route is `@owner_required`; this was the one
+  exception, showing any worker's itemized earnings history to anyone
+  signed in.
+
+Fixed: the first two and `pay_statement` switched to `@owner_required`,
+matching their siblings exactly. `staff_detail`'s pay section gets a
+direct `auth.is_owner_session()` check (the route can't be blanket
+owner-only — it also serves the profile fields every role legitimately
+edits). Both sensitive cards in `contractor_detail.html` now sit behind
+the same `{% if session.role == 'owner' %}` gate `team.html` already uses
+for `pay_label()` on the roster. All four also added to `rbac.OWNER_ONLY_ENDPOINTS`
+as the same regression safety net RBAC-02 used for staff/hiring/
+commercial — belt-and-suspenders against a future decorator downgrade,
+not the live protection (the decorator/inline check is).
+
+**Reconciled, without changing behavior, while auditing the same
+surfaces:**
+- `auth.py` gained `bind_authenticated_session(user)`, the one shared
+  helper for starting a session outside the password-checked
+  `authenticate()` path. `signup.welcome()` now calls it instead of
+  hand-assembling session keys — `authenticate()` already did the
+  equivalent internally; checked every other hand-rolled
+  `session['user_id'] = ...` site in the codebase (`blueprints/admin.py`
+  is the only other one, and it correctly calls `authenticate()` first) —
+  so this closes the *pattern* behind JOURNEY-01's signup bug, not just
+  that one instance of it.
+- `/api/stripe-webhook` (`blueprints/api.py`, a tenant's own Stripe
+  account) and `/api/stripe/webhook` (`blueprints/billing_routes.py`,
+  Akye's platform billing account) — one character apart, already
+  mistaken for each other by three different tests per the
+  RELEASE-GATE-01-TRIAGE entry above — now cross-reference each other in
+  comments naming exactly which is which. The actual CSRF-exemption
+  disagreement for the tenant route stays open on purpose, per that
+  entry's own reasoning: not something to resolve unilaterally.
+- `entitlements.py`'s module docstring stopped claiming multi-tenancy is
+  a future change ("Later: a column on the organization, once the app is
+  multi-tenant") the app has in fact already made everywhere else, and
+  now names the real gap plainly: plan/subscription state lives in the
+  tenant's own schema (`BusinessSetting`), unlike every other
+  authoritative tenant fact (`control_plane.organizations`, which a
+  tenant's own session can never write to). Verified today's only write
+  path (`settings.business()`) is a hardcoded field allowlist that
+  happens to omit `'plan'`, not a structural boundary — so there is no
+  live self-upgrade exploit, but the trust tier is still architecturally
+  inconsistent with where every other authoritative fact lives. Not
+  restructured here; that is a real migration, not a doc fix.
+
+Evidence: against real PostgreSQL, a seeded dispatcher-role session
+(`ROLE_PERMISSIONS['dispatcher']` has no `pay.manage`/`finance.manage`)
+gets a 302 (owner-only redirect) or 403 on all four routes, confirmed by
+direct query against `contractor_payment` that zero rows were written by
+the blocked attempts; sees neither the Pay Settings nor Earnings card on
+the staff detail page; and is bounced off the pay statement. An owner
+session re-run immediately after confirmed unaffected on every one of the
+same checks (successful pay-manual, both cards visible, statement loads).
+The full prior journey-fix suite (signup auth_fingerprint, Clients/
+Bookings/Team search, data export) was re-run in full afterward with no
+regressions.
+
+Liability implication: this was a live authorization gap on `akye-stable`
+allowing any authenticated non-owner role (a `dispatcher` login, for
+instance) to both trigger a real Stripe payout to a contractor and view
+every worker's itemized earnings — found and closed by treating RBAC-02's
+own stated policy as a specification to audit the rest of the codebase
+against, rather than a one-time fix.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
