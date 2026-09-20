@@ -42,6 +42,27 @@
   }
   .ws .hint { color:var(--softer); font-size:.86rem; margin-top:20px; line-height:1.6; }
   .ws .hint a { color:var(--muted); }
+  .ws .lookup {
+    margin-top:22px; padding-top:20px; border-top:1px solid var(--line);
+  }
+  .ws .lookup summary {
+    cursor:pointer; color:var(--muted); font-size:.86rem; font-weight:600;
+  }
+  .ws .lookup form { margin-top:12px; display:flex; gap:8px; }
+  .ws .lookup input {
+    flex:1; min-width:0; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; font-family:inherit; font-size:.92rem; color:var(--ink);
+  }
+  .ws .lookup button {
+    border:0; border-radius:10px; padding:0 16px; font-family:inherit;
+    font-size:.86rem; font-weight:600; cursor:pointer;
+    background:var(--ink); color:#fff; white-space:nowrap;
+  }
+  .ws .sent {
+    background:var(--good-soft, #eafaf1); color:var(--good, #1a7a4c);
+    border:1px solid var(--good, #1a7a4c); border-radius:10px;
+    padding:10px 14px; font-size:.88rem; margin-top:12px; line-height:1.5;
+  }
 </style>
 {% endblock %}
 
@@ -82,6 +103,18 @@
         <button type="submit" class="btn">Go to my sign-in</button>
       </form>
       {% endif %}
+
+      <details class="lookup" {{ 'open' if lookup_sent }}>
+        <summary>Don't know your address? We'll email it to you</summary>
+        {% if lookup_sent %}
+        <div class="sent">If that email has an account with us, we've sent a link to it. Check your inbox.</div>
+        {% else %}
+        <form method="POST">
+          <input type="email" name="lookup_email" placeholder="you@example.com" aria-label="Your email" required />
+          <button type="submit">Email it</button>
+        </form>
+        {% endif %}
+      </details>
 
       <p class="hint">
         Not sure of the address? It is in the email you got when the account

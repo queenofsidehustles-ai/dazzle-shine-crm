@@ -224,6 +224,11 @@ def reports():
 
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    # The product's root domain never reaches this view for /login at all --
+    # marketing.install()'s _front_door() before_request hook already
+    # redirects it to marketing.workspace() before any blueprint route
+    # would run, since there is no tenant here to check a password against.
+    # See marketing.workspace() for "which company" routing, cookie and all.
     import security
     error = None
     if request.method == 'POST':
@@ -249,10 +254,20 @@ def login():
             error = 'Wrong username or password.'
     # A freshly deployed instance with no owner login and no accounts can't be
     # opened by anybody. Say so plainly rather than leaving someone guessing.
-    from auth import env_login_configured
+    from auth import env_login_configured, _hosted_multitenant
     from models import User
     not_set_up = not env_login_configured() and User.query.count() == 0
-    return render_template('admin/login.html', error=error, not_set_up=not_set_up)
+    switch_company_url = None
+    if _hosted_multitenant():
+        # marketing.workspace() only ever answers on the product's own root
+        # domain (_require_product_site() 404s everywhere else), so this has
+        # to be an absolute link -- a relative one would try to load it on
+        # this tenant's own subdomain instead.
+        import product
+        root = product.domain()
+        switch_company_url = f'{product.scheme_for(root)}://{root}/workspace?forget=1'
+    return render_template('admin/login.html', error=error, not_set_up=not_set_up,
+                           switch_company_url=switch_company_url)
 
 
 @admin_bp.route('/logout')

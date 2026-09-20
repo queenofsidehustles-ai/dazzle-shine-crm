@@ -306,6 +306,7 @@ def _create_everything(slug, form, password):
             control_plane.create(engine, slug, form['business'], form['email'])
             created_org = True
             control_plane.mark_provisioned(engine, slug)
+            control_plane.record_tenant_login(engine, form['email'], slug)
             return raw
         except Exception:
             try:

@@ -111,6 +111,9 @@
     {# Until this existed, a forgotten password meant asking whoever runs the
        server to edit an environment variable. #}
     <a href="{{ url_for('account.forgot_password') }}" class="forgot">Forgotten your password?</a>
+    {% if switch_company_url %}
+    <a href="{{ switch_company_url }}" class="forgot">Not your company? Find it by email</a>
+    {% endif %}
   </div>
 </body>
 </html>

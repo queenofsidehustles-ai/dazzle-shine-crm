@@ -167,7 +167,29 @@ def workspace():
         resp.delete_cookie(WORKSPACE_COOKIE)
         return resp
 
-    if request.method == 'POST':
+    lookup_sent = False
+    if request.method == 'POST' and 'lookup_email' in request.form:
+        # A different question from the form above: not "where is my
+        # company" (which this page deliberately never checks) but "which
+        # company(ies) is this email in" -- for somebody who does not
+        # remember their address at all, on a browser the cookie above has
+        # never seen. This one does look something up, so it gets the same
+        # deliberately-vague-reply, throttled shape as account.forgot_password:
+        # same answer whether anything was found, sent, or asked for too
+        # recently, and the address itself is never shown on this page.
+        lookup_sent = True
+        email = (request.form.get('lookup_email') or '').strip().lower()
+        if email:
+            import control_plane, provisioning
+            engine = provisioning._engine()
+            control_plane.ensure_table(engine)
+            if not control_plane.lookup_recently_requested(engine, email):
+                control_plane.record_lookup_request(engine, email)
+                slugs = control_plane.tenants_for_email(engine, email)
+                if slugs:
+                    _send_workspace_lookup_email(email, slugs)
+
+    elif request.method == 'POST':
         typed = (request.form.get('workspace') or '').strip().lower()
         # Accept anything they might paste: a bare name, the full host, a URL.
         typed = re.sub(r'^https?://', '', typed).split('/')[0]
@@ -193,9 +215,37 @@ def workspace():
 
     from blueprints.signup import signups_open
     return render_template('marketing/workspace.html', error=error, typed=typed,
-                           remembered=remembered,
+                           remembered=remembered, lookup_sent=lookup_sent,
                            product_domain=(product.domain() or '').lower(),
                            signups_open=signups_open())
+
+
+def _send_workspace_lookup_email(email, slugs):
+    """Every company address this email has an account in, emailed rather
+    than shown on the page -- the same reason account.forgot_password emails
+    a reset link instead of confirming an account exists."""
+    import notifications
+    base = (product.domain() or '').lower()
+    links = ''.join(
+        f'<li><a href="{product.scheme_for(f"{s}.{base}")}://{s}.{base}/login">{s}.{base}</a></li>'
+        for s in slugs)
+    plural = 's' if len(slugs) != 1 else ''
+    html = f'''
+<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1f1333">
+  <p>You (or somebody using this email address) have an account with the following {product.name()} workspace{plural}:</p>
+  <ul>{links}</ul>
+  <p style="color:#6b6478;font-size:0.9em">If you didn't ask for this, you can ignore it -- nothing changes unless this link is used.</p>
+</div>'''
+    # reply_to explicit, not left to send_email's own fallback (which reads a
+    # tenant's own BusinessSetting): there is no tenant resolved on the
+    # product's root domain, and nothing here should touch a company's schema.
+    notifications.send_email(
+        to_email=email, to_name=None,
+        subject=f'Your {product.name()} sign-in link{plural}',
+        html=html, from_name=product.name(),
+        from_email=product.from_email() or None,
+        reply_to=product.support_email() or None,
+        api_key=product.resend_api_key())
 
 
 @marketing_bp.route('/how-to-start-a-cleaning-business')
