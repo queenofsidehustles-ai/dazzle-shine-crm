@@ -1,4 +1,4 @@
-name: Mobile accessibility golden journeys
+name: Akye golden business journeys
 
 on:
   pull_request:
@@ -10,14 +10,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: mobile-accessibility-${{ github.workflow }}-${{ github.ref }}
+  group: akye-golden-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   golden-journeys:
-    name: Local disposable Akye golden journeys
+    name: Local disposable Akye business and accessibility journeys
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       DATABASE_URL: sqlite:////tmp/akye-golden.db
       SECRET_KEY: akye-golden-ci-only
@@ -69,8 +69,26 @@ jobs:
           cat /tmp/akye-golden-server.log
           exit 1
 
+      - name: Run full local business-day E2E
+        run: npm run test:e2e:local
+
       - name: Run mobile and accessibility golden journeys
         run: npm run test:golden
+
+      - name: Run launch-critical backend journey boundaries
+        run: |
+          python -m pytest -q \
+            tests/test_signup_provisioning_safety.py \
+            tests/test_operational_role_matrix.py \
+            tests/test_session_invalidation.py \
+            tests/test_tenant_http_object_isolation.py \
+            tests/test_tenant_secure_document_isolation.py \
+            tests/test_tenant_export_isolation.py \
+            tests/test_private_media_boundary.py \
+            tests/test_tenant_lifecycle_boundary.py \
+            tests/test_booking_payment_intent_integrity.py \
+            tests/test_payment_confirmation_integrity.py \
+            --tb=short
 
       - name: Show local server log on failure
         if: failure()
