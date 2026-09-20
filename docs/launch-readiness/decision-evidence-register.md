@@ -564,6 +564,78 @@ mismatch), plus the still-undecided `/api/stripe-webhook` CSRF question
 above, plus the 6 SQLite/control-plane files and `test_rbac_matrix.py`,
 unchanged from the prior entry.
 
+### JOURNEY-01 — acceptance-test findings from the 40-journey pass, three fixed
+
+Status: fixed at `e2f700d` on `fix/journey-test-findings`, opened as
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**. Live `akyehq.com` was unreachable
+from this sandbox (proxy egress allowlist), so all fixes were built and
+verified against a local server running the exact `akye-stable` code,
+against a real PostgreSQL database, driven by Playwright.
+
+**Journey #1 (P0) — brand-new signup logged owners out immediately.**
+`blueprints/signup.py`'s `welcome()` built the post-signup session by hand
+(`session['logged_in']`, `['role']`, `['user_id']`, `['user_name']`) but
+never set `session['auth_fingerprint']`.
+`auth.session_matches_current_user()` requires that fingerprint on every
+`login_required` request and fails closed (clears the session, redirects
+to `/login`) when it's missing — exactly what happened on the very next
+page load. Every brand-new signup was silently logged back out right
+after finishing signup, with no explanation, and had to sign in again
+manually with the password just set. Fixed by setting
+`session['auth_fingerprint'] = auth._auth_fingerprint(user.password_hash)`,
+matching what the normal password-login path already does
+(`auth.py` line 179). Verified on a genuinely fresh tenant (not the
+already-signed-up one used for the first pass, to rule out a stale-data
+confound): signup lands signed in, and — the actual regression — the
+immediate follow-up page load stays signed in instead of bouncing to
+`/login`.
+
+**Journey #27 — no way to search Clients, Bookings, or Team.** Each list
+page had no search once it grew past a glance. Added a `q` query-param
+search box to all three (`blueprints/bookings.py`'s `clients()` and
+`index()`, `blueprints/contractors.py`'s `team()`, plus
+`templates/admin/clients.html`, `bookings.html`, `team.html`), filtering
+on name/email/phone (and address for bookings) via `ilike`, with a
+distinct "no matches" state kept separate from the genuine empty-list
+state. Verified against seeded fixture records on all three pages: a
+partial-name query finds the target row; a query with no matches shows
+the new empty-search state, not the generic "no records yet" one.
+
+**Journey #35 — no self-serve way to get your own data out.** Settings
+had no general export; the closest things were the Money → P&L export and
+a separate commercial-leads CSV, neither of which covers customers, jobs,
+or the team roster. Added `Settings → Export data`
+(`blueprints/settings.py`, `templates/admin/export.html`, a new tab in
+`navigation.py`), with CSV downloads for customers, jobs, and workers.
+Payment tokens (`portal_token`, `stripe_customer_id`,
+`stripe_payment_method_id`) and login/payout credentials
+(`agreement_token`, `stripe_account_id`) are deliberately excluded from
+every export — confirmed by asserting their absence from each CSV's
+header row, not just eyeballing the route code. Verified all three
+downloads return `200`, `text/csv`, `Content-Disposition: attachment`,
+contain the expected seeded row, and that the export tab is reachable
+from the Settings nav.
+
+**Journey #12 caveat (Team Logins/Staff disconnection) — not addressed
+here.** The original pass recorded this as PASS-with-caveat, not a
+failure, and flagged it as a deeper architectural gap (a worker login and
+its Staff card can drift apart) rather than a simple bug fix. Left open;
+worth a dedicated look before launch but out of scope for this pass.
+
+**Re-running the full 8-phase local suite (not just these three fixes)
+surfaced unrelated failures** (reschedule, worker daily workflow, mobile
+viewport, job reassignment, address-correction persistence, password
+reset, deletion/privacy, bad-network retry) in code none of these fixes
+touch. Investigated enough to be confident these are stale-state
+artifacts of re-running the suite's later phases against a test tenant
+that had already accumulated data from the original full pass (hardcoded
+booking/client IDs and element assumptions no longer matching), not new
+product regressions — but that is inference from the pattern, not
+independently reproduced the way the three fixes above were. A fresh
+full-suite run against a clean database is recommended before launch if a
+firm answer is wanted on any of those eight.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
