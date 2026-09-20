@@ -733,6 +733,68 @@ every worker's itemized earnings — found and closed by treating RBAC-02's
 own stated policy as a specification to audit the rest of the codebase
 against, rather than a one-time fix.
 
+### IDOR-01 — My Day clock-in/out trusted a client-submitted booking_id, fixed;
+one further scan pass, two items flagged rather than fixed
+
+Status: fixed at `1d2a1d3` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**. Live on `akye-stable` before this
+fix, same as IAM-02.
+
+Asked to scan again after IAM-02, for the same class of gap in different
+territory: `blueprints/contractors.py`'s `clock_in`/`clock_out`
+(`/my-day/<token>/clock-in|clock-out/<int:booking_id>`) identify the
+worker from their personal `agreement_token` but took `booking_id`
+straight from the URL with no check that the two are related.
+`my_day()` itself already computes exactly this relationship (solo
+assignment by name, or a `BookingCrew` row) to decide which jobs even get
+a clock button — `clock_in`/`clock_out` never repeated that check
+server-side, so a request crafted by hand naming any `booking_id` in the
+tenant clocked (paid) hours against a job that worker was never assigned
+to. Checked every other route in the codebase shaped like this (a token
+plus a separate integer ID: `grep`'d for the pattern across all
+blueprints) — `ratings.<token>/<int:stars>` and
+`workorders.get_photo(token, phase, photo_index)` are the only other two,
+and both are safe (`stars` is a value, not a foreign key;
+`get_photo`'s `photo_index` is bounds-checked against that same token's
+own checklist, confirmed by reading the route). This was the one genuine
+instance, not a pattern repeated elsewhere.
+
+Fixed: `_staff_is_on_booking(s, b)`, the same test `my_day()` uses,
+called at the top of both routes before touching any `TimeEntry`.
+
+Evidence: against real PostgreSQL, a worker's own token still clocks
+in/out cleanly on their assigned job (302, a `TimeEntry` row written,
+confirmed by direct query); the identical token against a different,
+unassigned booking gets 403 with zero `TimeEntry` rows written for that
+attempt (confirmed by direct query, not inferred from the status code
+alone). Full prior fix suite (signup, search, export, IAM-02's
+contractor-pay checks) re-run clean afterward.
+
+**Two further items surfaced by the same scan, flagged rather than fixed
+— both are behavior-change judgment calls, unlike the unambiguous
+money/fraud fixes above:**
+
+- `staff_detail`'s *profile* fields (name, phone, emergency contact,
+  notes, active/inactive toggle) and `staff_toggle_active` remain open to
+  any logged-in role, including `cleaner` (`ROLE_PERMISSIONS['cleaner']`
+  is `{'assigned_work.use'}` only). So hiring a new worker is owner-only
+  (`staff.index`/`staff.edit`, RBAC-02), but editing an existing worker's
+  contact info or deactivating them — stopping them from receiving any
+  further job assignments — is not gated at all beyond being logged in.
+  Whether `admin`/`dispatcher` should manage this (plausible — it looks
+  like ordinary team administration) while `cleaner` should not
+  (`assigned_work.use` reads as intentionally narrower) is a product
+  decision this pass didn't make unilaterally.
+- Residual data-integrity question from the same fix: any `TimeEntry`
+  rows created *before* this fix, by a worker clocked into a job they
+  were not assigned to, are not identified or touched here. Not
+  fabricated — no evidence any exist on `akye-stable`'s real data — but
+  worth a one-time audit query before launch if the team wants certainty
+  (`TimeEntry` joined against `Booking`/`BookingCrew` for a mismatch) --
+  correcting or removing any found is a payroll-affecting action outside
+  this pass's authorization to take alone.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
