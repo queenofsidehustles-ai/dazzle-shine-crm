@@ -6,6 +6,11 @@
 <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
   <a href="{{ url_for('bookings.new') }}" class="btn btn-gold">➕ New Booking</a>
 </div>
+<form method="GET" action="{{ url_for('bookings.index') }}" style="margin-bottom:14px">
+  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+  <input type="search" name="q" value="{{ q or '' }}" placeholder="Search by client name, email, phone or address…"
+         style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:0.92rem">
+</form>
 <div class="filter-tabs">
   <a href="{{ url_for('bookings.index') }}" class="filter-tab {{ 'active' if not status_filter }}">All ({{ counts.all }})</a>
   <a href="{{ url_for('bookings.index', status='pending') }}" class="filter-tab {{ 'active' if status_filter == 'pending' }}">Pending ({{ counts.pending }})</a>

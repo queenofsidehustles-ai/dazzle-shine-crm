@@ -7,8 +7,18 @@
 {% endblock %}
 
 {% block content %}
+<form method="GET" action="{{ url_for('bookings.clients') }}" style="margin-bottom:14px">
+  <input type="search" name="q" value="{{ q or '' }}" placeholder="Search by name, email or phone…"
+         style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:0.92rem">
+</form>
 <div class="card">
-  {% if clients %}
+  {% if q and not clients %}
+  <div style="text-align:center;padding:34px 20px;color:var(--softer)">
+    <p style="font-size:2rem;margin-bottom:10px">🔎</p>
+    <p style="font-weight:700;color:var(--muted);margin-bottom:6px">No customers match "{{ q }}"</p>
+    <p style="font-size:0.88rem"><a href="{{ url_for('bookings.clients') }}">Clear search</a></p>
+  </div>
+  {% elif clients %}
   <div class="table-wrap">
     <table>
       <thead>

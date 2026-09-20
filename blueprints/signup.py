@@ -360,4 +360,11 @@ def welcome(token):
     session['role'] = user.role
     session['user_id'] = user.id
     session['user_name'] = user.name
+    # Bind this cookie to the current credential version, exactly as a normal
+    # password login does (auth.authenticate()). Without this,
+    # auth.session_matches_current_user() finds no auth_fingerprint on the
+    # very next request and fails closed -- every brand-new signup was being
+    # logged out immediately after finishing signup.
+    from auth import _auth_fingerprint
+    session['auth_fingerprint'] = _auth_fingerprint(user.password_hash)
     return redirect(url_for('settings.getting_started'))

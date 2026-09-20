@@ -108,6 +108,7 @@ SECTIONS = [
             ('settings.automations_page', 'Automations', True),
             ('team_logins.index', 'Team logins', True),
             ('settings.commercial', 'Commercial brand', True),
+            ('settings.export', 'Export data', True),
         ]),
     ]),
 ]

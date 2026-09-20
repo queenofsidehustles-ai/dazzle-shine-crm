@@ -1379,8 +1379,14 @@ def delete_staff(staff_id):
 @contractors_bp.route('/team')
 @login_required
 def team():
-    staff = Staff.query.order_by(Staff.is_active.desc(), Staff.name).all()
-    return render_template('admin/team.html', staff=staff, exp_levels=EXP_LEVELS)
+    q = (request.args.get('q') or '').strip()
+    query = Staff.query
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Staff.name.ilike(like), Staff.email.ilike(like), Staff.phone.ilike(like)))
+    staff = query.order_by(Staff.is_active.desc(), Staff.name).all()
+    return render_template('admin/team.html', staff=staff, exp_levels=EXP_LEVELS, q=q)
 
 
 @contractors_bp.route('/team/<int:staff_id>/language', methods=['POST'])
