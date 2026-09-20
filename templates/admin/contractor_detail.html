@@ -6,6 +6,23 @@
 {% endblock %}
 
 {% block content %}
+{% if not s.user_id and s.agreement_token %}
+<div class="card" style="margin-bottom:18px;background:var(--gold-soft);border:1px solid var(--amber-line)">
+  <p style="font-weight:700;margin:0 0 6px">No sign-in set up yet</p>
+  <p style="font-size:0.86rem;color:var(--muted);margin:0 0 10px">
+    Share this link, or resend the invite email — either one lets {{ s.name.split()[0] }} set up their own login.
+  </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <input readonly value="{{ CRM_BASE }}/contractors/join/{{ s.agreement_token }}"
+           onclick="this.select()" style="flex:1;min-width:220px;font-size:0.82rem;padding:7px 10px" />
+    {% if s.email %}
+    <form method="POST" action="{{ url_for('contractors.resend_join_invite', staff_id=s.id) }}" style="margin:0">
+      <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.82rem">Resend invite email</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 <div class="detail-grid">
 
   <!-- Left: Profile form -->

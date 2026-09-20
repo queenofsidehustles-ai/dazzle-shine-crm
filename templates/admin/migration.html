@@ -1,0 +1,45 @@
+{% extends "base_admin.html" %}
+{% block title %}Migration Toolbox — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Migration Toolbox{% endblock %}
+
+{% block content %}
+<div class="card">
+  <p style="color:var(--softer);font-size:0.9rem;margin:0">
+    Bring your existing team and customers into {{ BIZ }} from a spreadsheet, instead of
+    typing everything in by hand.
+  </p>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <h2 style="font-size:1rem;font-weight:700;margin:0">🧹 Team</h2>
+    <span style="color:var(--softer);font-size:0.82rem">{{ staff_total }} team member{{ '' if staff_total == 1 else 's' }} today</span>
+  </div>
+  <p style="color:var(--softer);font-size:0.86rem;margin:0 0 14px">
+    Upload a CSV of names and emails. Each person gets an email to set up their own
+    sign-in and finish their own profile — you never have to type a password for them.
+  </p>
+  <a href="{{ url_for('migration.team') }}" class="btn btn-gold">Import team</a>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <h2 style="font-size:1rem;font-weight:700;margin:0">👥 Clients</h2>
+    <span style="color:var(--softer);font-size:0.82rem">{{ client_total }} customer{{ '' if client_total == 1 else 's' }} today</span>
+  </div>
+  <p style="color:var(--softer);font-size:0.86rem;margin:0 0 14px">
+    Upload a CSV of your customers — name, email, and whatever else you have (phone,
+    address, notes). Created directly; there's no login for a customer to set up.
+  </p>
+  <a href="{{ url_for('migration.clients') }}" class="btn btn-gold">Import clients</a>
+</div>
+
+<div class="card" style="margin-top:16px;background:var(--info-soft)">
+  <p style="color:var(--muted);font-size:0.85rem;margin:0">
+    Not here yet: bringing over your existing calendar of upcoming jobs. Matching
+    another system's statuses and pricing correctly is a bigger job than a contact
+    list, and getting it wrong risks bad numbers in payroll and P&amp;L — so for now,
+    add upcoming jobs the normal way once your team and clients are in.
+  </p>
+</div>
+{% endblock %}

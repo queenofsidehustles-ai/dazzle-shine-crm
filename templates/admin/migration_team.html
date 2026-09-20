@@ -1,0 +1,118 @@
+{% extends "base_admin.html" %}
+{% block title %}Import Team — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Import Team{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('migration.index') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Migration Toolbox</a>
+{% endblock %}
+
+{% block content %}
+{% if not results %}
+<div class="card">
+  <p style="color:var(--softer);font-size:0.88rem;margin:0 0 16px">
+    A CSV with a header row and columns <code>name</code>, <code>email</code>, and
+    optionally <code>phone</code>. One row per person.
+  </p>
+  <form method="POST" enctype="multipart/form-data" id="import-form">
+    <div id="dropzone" style="border:2px dashed var(--line);border-radius:12px;padding:36px 20px;
+                text-align:center;cursor:pointer;transition:border-color .15s,background .15s">
+      <div style="font-size:2rem;margin-bottom:8px">📄</div>
+      <div id="dropzone-label" style="font-weight:600;color:var(--muted)">
+        Drag a CSV here, or click to choose a file
+      </div>
+      <input type="file" name="csv_file" id="csv_file" accept=".csv,text/csv" required
+             style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" />
+    </div>
+    <button type="submit" class="btn btn-gold" style="margin-top:16px">Import</button>
+  </form>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2 style="font-size:0.9rem;font-weight:700;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px">Example</h2>
+  <pre style="background:var(--ground);border-radius:8px;padding:12px;font-size:0.82rem;overflow-x:auto;margin:0">name,email,phone
+Maria Gomez,maria@example.com,555-0101
+James Ortiz,james@example.com,555-0102</pre>
+</div>
+
+<script>
+  const zone = document.getElementById('dropzone');
+  const input = document.getElementById('csv_file');
+  const label = document.getElementById('dropzone-label');
+  zone.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    if (input.files[0]) label.textContent = input.files[0].name;
+  });
+  ['dragover', 'dragenter'].forEach(evt => zone.addEventListener(evt, e => {
+    e.preventDefault();
+    zone.style.borderColor = 'var(--amber)';
+    zone.style.background = 'var(--gold-soft)';
+  }));
+  ['dragleave', 'drop'].forEach(evt => zone.addEventListener(evt, e => {
+    e.preventDefault();
+    zone.style.borderColor = 'var(--line)';
+    zone.style.background = '';
+  }));
+  zone.addEventListener('drop', e => {
+    if (e.dataTransfer.files[0]) {
+      input.files = e.dataTransfer.files;
+      label.textContent = e.dataTransfer.files[0].name;
+    }
+  });
+</script>
+
+{% else %}
+<div class="card">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px">
+    ✅ {{ results.created|length }} team member{{ '' if results.created|length == 1 else 's' }} added
+  </h2>
+  {% if results.created %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Invite email</th></tr></thead>
+      <tbody>
+        {% for row, name, email, ok, detail in results.created %}
+        <tr>
+          <td style="color:var(--softer)">{{ row }}</td>
+          <td>{{ name }}</td>
+          <td style="color:var(--muted)">{{ email }}</td>
+          <td>
+            {% if ok %}<span class="status status-confirmed">Sent</span>
+            {% else %}<span class="status status-cancelled" title="{{ detail }}">Not sent — {{ detail }}</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:0.82rem;color:var(--softer);margin-top:10px">
+    Every person listed above now has a team card, whether or not their invite email
+    went out — if one shows "Not sent," add their login from
+    <a href="{{ url_for('team_logins.index') }}">Team logins</a> or share their
+    <a href="{{ url_for('contractors.team') }}">Team</a> card's set-up link directly.
+  </p>
+  {% endif %}
+</div>
+
+{% if results.skipped %}
+<div class="card" style="margin-top:16px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--warn)">
+    ⚠️ {{ results.skipped|length }} row{{ '' if results.skipped|length == 1 else 's' }} skipped
+  </h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Row</th><th>Name / email</th><th>Why</th></tr></thead>
+      <tbody>
+        {% for row, who, why in results.skipped %}
+        <tr><td style="color:var(--softer)">{{ row }}</td><td>{{ who }}</td><td style="color:var(--warn)">{{ why }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:0.82rem;color:var(--softer);margin-top:10px">
+    Fix these in your spreadsheet and re-upload just those rows — nothing above was touched.
+  </p>
+</div>
+{% endif %}
+
+<a href="{{ url_for('migration.team') }}" class="btn btn-outline" style="margin-top:16px">Import another file</a>
+{% endif %}
+{% endblock %}

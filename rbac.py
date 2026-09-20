@@ -143,6 +143,15 @@ OWNER_ONLY_ENDPOINTS = frozenset({
     ('settings.export_customers_csv', 'GET'),
     ('settings.export_jobs_csv', 'GET'),
     ('settings.export_workers_csv', 'GET'),
+    # Migration Toolbox: bulk-creates real team and customer records (and,
+    # for team, sends real invite emails) from an uploaded file -- the same
+    # class of surface as a hand-typed hire or a customer export, at bulk
+    # scale.
+    ('migration.index', 'GET'),
+    ('migration.team', 'GET'),
+    ('migration.team', 'POST'),
+    ('migration.clients', 'GET'),
+    ('migration.clients', 'POST'),
 })
 
 

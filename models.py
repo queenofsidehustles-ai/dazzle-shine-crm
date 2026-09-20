@@ -1081,6 +1081,11 @@ class Staff(db.Model):
     color = db.Column(db.String(7), default='#7c3aed')
     is_active = db.Column(db.Boolean, default=True)
     application_id = db.Column(db.Integer, db.ForeignKey('contractor_application.id'))  # back-link to the application they came from
+    # The CRM login that belongs to this contractor, if one exists. Nullable:
+    # most Staff records still have no linked login, same as before this
+    # column existed -- set only when the Migration Toolbox's invite flow (or
+    # any future flow) deliberately connects the two. See migration 0014.
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
     # Pay settings
     pay_type = db.Column(db.String(20), default='percent')  # percent, hourly
     pay_rate = db.Column(Money, default=50.0)            # % of job or $/hr
