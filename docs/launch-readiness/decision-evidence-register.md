@@ -904,6 +904,40 @@ the live JSON response and `Staff.schedule_reminder_date` directly in
 the database, not just trusting the response body. Full 17-check prior
 regression suite (JOURNEY-01, IAM-02, IDOR-01) re-run clean.
 
+### PRODUCT-02 — Phase A of the group-2/3 punch list (#5)
+
+Status: fixed at `0ad9f2d` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+Decisions for the remaining group-2/3 items (#1 2FA, #2 persistent
+tenant login, #3 Migration Toolbox, #7 market/state) were settled with
+the user first: TOTP-only 2FA (Google-Authenticator-compatible), opt-in,
+no role enforced; tenant login persistence via a root-domain cookie plus
+an email-lookup fallback (needs a new control-plane email→tenant index,
+flagged to the user before building); Migration Toolbox's team import
+creates a Staff record per CSV row and emails each contractor an invite
+link to set up their own login and finish their own profile — fixes the
+Journey #12 Staff/login disconnection by construction rather than
+deepening it; market/state is compliance-copy-only, not booking-
+functional, and ships with the existing default terms as every state's
+fallback since correct per-state legal wording needs the user's own (or
+counsel's) input, not code. #4 (menu reorganization) explicitly deferred
+by the user. Full plan given to the user before any of this phase's
+code was written.
+
+**#5 (setup rollback), the only item ready with no open questions,
+implemented and verified this pass** — see `templates/admin/
+getting_started.html`'s fix, evidence in the commit itself (link-per-
+step confirmed present and resolving to a real, loading settings page,
+full regression suite re-run clean).
+
+**#8 (address autocomplete) is next and is blocked on the user**: it
+needs a second Google Places API key, restricted by HTTP referrer, since
+the existing server-side key (used in `places_finder.py`) is IP-
+restricted and unsafe to expose in browser JavaScript. Cannot be created
+by this session — requires the user's Google Cloud Console access.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
