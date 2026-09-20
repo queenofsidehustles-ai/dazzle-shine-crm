@@ -142,7 +142,7 @@ def run_lifecycle_emails():
     now = datetime.utcnow()
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
          'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
-         'onboarding_reminder': 0, 'schedule_reminder': 0, 'invoice': 0,
+         'onboarding_reminder': 0, 'invoice': 0,
          'quote_followup': 0, 'recurring_topup': 0, 'recurring_expenses': 0}
 
     # ── Keep recurring plans filled ~12 weeks ahead (rolling generation) ──
@@ -330,10 +330,37 @@ def run_lifecycle_emails():
         s.onboarding_reminder_count = (s.onboarding_reminder_count or 0) + 1
         db.session.commit()
 
-    # ── Day-before schedule reminder — text/email cleaners about tomorrow's jobs ──
+    return c
+
+
+def send_cleaner_schedule_reminders():
+    """Text/email every active cleaner about tomorrow's jobs. Once per cleaner
+    per day, tracked on Staff.schedule_reminder_date.
+
+    Split out from run_lifecycle_emails() (see IAM-02/JOURNEY-01-era launch-
+    readiness notes): that function is gated entirely behind the "Follow-ups
+    and win-backs" automation, described to the owner only as nudges to
+    customers who have gone quiet. A cleaner's day-before job reminder has
+    nothing to do with that, so turning off customer win-back texts was
+    silently also turning this off, with no way to tell from the toggle's own
+    label. Called from the same daily cron as the customer-facing day-before
+    reminder (/api/reminders) instead, under the "Day-before reminders"
+    automation, which already fires at the right cadence for this and needs
+    no new scheduled trigger to exist.
+
+    Also fixes a real, separate bug found alongside the above: this used to
+    compute "tomorrow" from datetime.utcnow().date(), not the business's own
+    local date -- the same trap the customer-facing reminder route was
+    deliberately fixed for (see blueprints/api.py's send_reminders()). A
+    business west of UTC could have this fire a day early by server clock.
+    """
+    from models import Booking, BookingCrew, Staff
     from notifications import send_sms
-    today_str = now.date().isoformat()
-    tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    import scheduling
+    today = scheduling.local_today()
+    today_str = today.isoformat()
+    tomorrow = (today + timedelta(days=1)).isoformat()
+    sent = 0
     for s in Staff.query.filter(Staff.is_active.is_(True)).all():
         if s.schedule_reminder_date == today_str or not s.agreement_token:
             continue
@@ -359,7 +386,6 @@ def run_lifecycle_emails():
             except Exception:
                 pass
         s.schedule_reminder_date = today_str
-        c['schedule_reminder'] += 1
+        sent += 1
         db.session.commit()
-
-    return c
+    return sent

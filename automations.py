@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 # (key, label, what it does, how often it should run)
 JOBS = [
     ('reminders', 'Day-before reminders',
-     'Texts and emails every customer booked tomorrow.', 'daily'),
+     'Texts and emails every customer booked tomorrow, and every cleaner with a job tomorrow.', 'daily'),
     ('charge-balances', 'Charge balances',
      'Takes the balance off the card on file, at each job&rsquo;s start time.', 'hourly'),
     ('lifecycle-emails', 'Follow-ups and win-backs',
