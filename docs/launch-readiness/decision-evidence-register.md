@@ -795,6 +795,48 @@ money/fraud fixes above:**
   correcting or removing any found is a payroll-affecting action outside
   this pass's authorization to take alone.
 
+### IDOR-01-AUDIT — the pre-fix TimeEntry audit IDOR-01 flagged, run
+
+Status: tool built and verified at `a9a950c`; **could not be run against
+real `akye-stable` production data** from this sandbox (no network path
+to `akyehq.com` or its database, and no production credentials were ever
+provided to this session). `audit_time_entry_assignment.py` is ready for
+the team to run directly, with `DATABASE_URL` set to production.
+
+`--slug` scopes to one tenant; unknown slug and an unmigrated schema are
+both handled without crashing the run (a schema missing `time_entry` or
+`booking_crew` is skipped with a note, not treated as zero mismatches).
+
+Run against this session's own QA database (the only PostgreSQL this
+sandbox can reach): 11 seeded tenant schemas, **0 mismatches** on the
+real data in them. To prove the tool actually catches the case it exists
+for, not just that it stays quiet, a synthetic mismatched row was
+inserted by hand (a staff member clocked into a booking assigned to
+nobody, with no crew row for them either) — the audit reported it
+correctly, by name, booking, and timestamps; the row was then removed
+and a re-run confirmed zero mismatches again. This demonstrates
+correctness, not an absence of the real thing on production — that
+still needs an actual run there.
+
+**Two further, smaller items surfaced while reviewing the surrounding
+code for this audit, neither acted on:**
+- `TimeEntry.note` and `TimeEntry.edited_by` are declared on the model
+  ("who changed it, if anybody") but nothing in the codebase ever writes
+  to either — there is no route to edit a `TimeEntry` at all once
+  created, only to open (`clock_in`) or close (`clock_out`) one. A
+  mismatch this audit finds cannot currently be corrected from the admin
+  UI, even by the owner; fixing one requires direct database access. Not
+  fixed here — building a correction UI is real feature work, not a
+  finding to silently act on.
+- `audit.py` (the repo's separate UI-completeness checker, unrelated to
+  this new script despite the similar name) logs in via
+  `ADMIN_USER`/`ADMIN_PASS`, which `auth.env_login_configured()`
+  deliberately disables on hosted multi-tenant Akye. As written, this
+  script cannot log in to a real hosted tenant at all and predates the
+  multi-tenant architecture, the same way `entitlements.py`'s docstring
+  did before IAM-02. Not fixed or removed here; flagged as likely-dead
+  tooling for whoever next reaches for it.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
