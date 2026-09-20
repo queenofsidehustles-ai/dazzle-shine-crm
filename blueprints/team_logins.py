@@ -45,6 +45,15 @@ def add():
     u.set_password(password)
     db.session.add(u)
     db.session.commit()
+
+    # Index this login so a "which company do I sign into" lookup by email
+    # (root-domain /login) can find it. Best-effort: this account already
+    # exists and works either way, even if the index write fails.
+    import auth, control_plane, provisioning
+    slug = auth.current_tenant_slug()
+    if slug:
+        control_plane.record_tenant_login(provisioning._engine(), username, slug)
+
     flash(f'Login created for {name} as {rbac.role_label(role)}. ✅', 'success')
     return redirect(url_for('team_logins.index'))
 

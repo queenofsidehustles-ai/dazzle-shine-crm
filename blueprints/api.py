@@ -100,9 +100,25 @@ def send_reminders():
             failed.append(f'#{b.id} {b.name}: {e}')
     db.session.commit()
 
-    automations.record('reminders', items=count, ok=not failed,
+    # Cleaners' own day-before reminder rides the same daily trigger and the
+    # same toggle as the customer one above -- they are the same kind of
+    # message at the same cadence. Previously lived inside the "Follow-ups
+    # and win-backs" automation instead, whose description never mentioned
+    # cleaners, so turning off customer win-back nudges silently turned this
+    # off too. A bad row here must not cost the customer reminders that
+    # already sent above, so it's isolated the same way each booking is.
+    cleaner_count = 0
+    try:
+        import lifecycle
+        cleaner_count = lifecycle.send_cleaner_schedule_reminders()
+    except Exception as e:      # noqa: BLE001
+        db.session.rollback()
+        failed.append(f'cleaner reminders: {e}')
+
+    automations.record('reminders', items=count + cleaner_count, ok=not failed,
                        detail='; '.join(failed) or None)
-    return jsonify({'ok': True, 'reminders_sent': count, 'failed': failed})
+    return jsonify({'ok': True, 'reminders_sent': count,
+                    'cleaner_reminders_sent': cleaner_count, 'failed': failed})
 
 
 # ── Auto-charge balances (cron — run hourly) ─────────────────────────────────
@@ -962,6 +978,16 @@ def create_booking():
 
 
 # ── Stripe webhook ─────────────────────────────────────────────────────────────
+# NOTE: this is /api/stripe-webhook (hyphen) — a TENANT's own Stripe account
+# (integrations.stripe_secret_key()/stripe_webhook_secret() read this
+# company's BusinessSetting), reached on that company's own subdomain. It is
+# a different route from Akye's platform billing webhook,
+# /api/stripe/webhook (slash) in billing_routes.py, which is one shared
+# Stripe account for every company's Akye subscription. The two have
+# historically been confused for each other in tests (see BILL-01 and the
+# still-open CSRF-exemption question for this route in
+# docs/launch-readiness/decision-evidence-register.md) — check which one you
+# mean before changing either.
 
 @api_bp.route('/stripe-webhook', methods=['POST'])
 def stripe_webhook():

@@ -118,7 +118,16 @@ def stripe_webhook():
     """The only route that changes what a company is entitled to.
 
     Everything here happens after the signature is verified. An unverified
-    payload is a stranger claiming somebody paid."""
+    payload is a stranger claiming somebody paid.
+
+    NOTE: this is /api/stripe/webhook (slash) -- Akye's own platform billing,
+    one shared Stripe account for every company's subscription, resolved from
+    the event payload rather than the request host (see BILL-01 in
+    docs/launch-readiness/decision-evidence-register.md). It is a different
+    route from a tenant's own booking-payments webhook,
+    /api/stripe-webhook (hyphen) in blueprints/api.py, which is that one
+    company's own Stripe account. Do not merge or rename these into each
+    other -- the two have already been mistaken for one another in tests."""
     secret = billing.webhook_secret()
     if not secret or not billing.configured():
         return jsonify({'ok': False, 'error': 'billing not configured'}), 503

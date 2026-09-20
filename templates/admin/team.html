@@ -14,7 +14,17 @@
 {% endblock %}
 
 {% block content %}
-{% if staff %}
+<form method="GET" action="{{ url_for('contractors.team') }}" style="margin-bottom:14px">
+  <input type="search" name="q" value="{{ q or '' }}" placeholder="Search by name, email or phone…"
+         style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:0.92rem">
+</form>
+{% if q and not staff %}
+<div class="card" style="text-align:center;padding:50px 20px;color:var(--softer)">
+  <p style="font-size:2rem;margin-bottom:12px">🔎</p>
+  <p style="font-weight:700;margin-bottom:6px">No team members match "{{ q }}"</p>
+  <p style="font-size:0.88rem"><a href="{{ url_for('contractors.team') }}">Clear search</a></p>
+</div>
+{% elif staff %}
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
   {% for s in staff %}
   <div style="position:relative">

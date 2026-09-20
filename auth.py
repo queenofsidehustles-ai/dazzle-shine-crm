@@ -156,12 +156,44 @@ def env_login_configured():
     return bool(user) and pw.lower() not in _WEAK
 
 
+def bind_authenticated_session(user):
+    """Start a fully authenticated session for an already-verified User.
+
+    The one place that sets every key a new login needs: tenant binding, the
+    credential-version fingerprint, and the UI-facing identity keys.
+    `authenticate()` has its own equivalent for the password-checked path;
+    this is for a flow that has already established who the user is by some
+    other means (signup, completing account setup) and has no password to
+    re-check. Forgetting `auth_fingerprint` here is exactly how a brand-new
+    signup was silently logged back out on its very next request -- see
+    JOURNEY-01 in docs/launch-readiness/decision-evidence-register.md. Call
+    this instead of hand-assigning session keys, so that mistake can't recur.
+    """
+    bind_session_to_current_tenant()
+    session['auth_fingerprint'] = _auth_fingerprint(user.password_hash)
+    session['logged_in'] = True
+    session['role'] = user.role
+    session['user_id'] = user.id
+    session['user_name'] = user.name
+
+
 def authenticate(username, password):
-    """Check a login attempt. Returns (ok, info) with user_id, role and name.
+    """Check a login attempt. Returns one of:
+
+    - (True, info) -- password correct, no 2FA required, session fully bound
+      and ready to use.
+    - ('2fa', {'user_id': ...}) -- password correct, but this account also
+      requires a TOTP or backup code before the session is bound. The
+      session is deliberately left untouched here -- see admin.login()'s
+      pending-2FA handling and complete_2fa_login() below. Checked with
+      `is True` / `== '2fa'` by the caller, never a bare truthy test: '2fa'
+      is itself truthy and must never be mistaken for success.
+    - (False, None) -- wrong username or password.
 
     Real tenant-local user accounts are always checked first. The legacy env
     owner login exists only on single-business deployments; env_login_configured
-    deliberately disables it on hosted multi-tenant Akye.
+    deliberately disables it on hosted multi-tenant Akye. It has no User row
+    to attach a TOTP secret to, so 2FA never applies to it.
     """
     from models import User
     from extensions import db
@@ -170,13 +202,9 @@ def authenticate(username, password):
     if user and user.check_password(password or ''):
         user.last_login = datetime.utcnow()
         db.session.commit()
-        # Authentication happens after app.before_request resolved the host.
-        # Stamp that tenant into the signed session before the login route marks
-        # it logged in, so the cookie cannot later be replayed on another host.
-        bind_session_to_current_tenant()
-        # Bind this cookie to the current credential version. A later password
-        # reset changes password_hash, making every older cookie invalid.
-        session['auth_fingerprint'] = _auth_fingerprint(user.password_hash)
+        if user.totp_enabled:
+            return '2fa', {'user_id': user.id}
+        bind_authenticated_session(user)
         return True, {'user_id': user.id, 'role': user.role, 'name': user.name}
     if env_login_configured():
         if (username == os.environ.get('ADMIN_USER', '').strip()
@@ -184,6 +212,14 @@ def authenticate(username, password):
             bind_session_to_current_tenant()
             return True, {'user_id': None, 'role': 'owner', 'name': 'Owner'}
     return False, None
+
+
+def complete_2fa_login(user):
+    """Finish a login that authenticate() left pending on a TOTP/backup code.
+    Call only after verifying that code elsewhere -- this itself checks
+    nothing and will bind a session for whatever user it is given."""
+    bind_authenticated_session(user)
+    return {'user_id': user.id, 'role': user.role, 'name': user.name}
 
 
 def check_credentials(username, password):

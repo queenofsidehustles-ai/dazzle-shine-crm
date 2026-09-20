@@ -43,7 +43,7 @@ from sqlalchemy import text
 import control_plane
 import provisioning
 import tenancy
-from auth import bind_session_to_current_tenant
+from auth import bind_authenticated_session
 from extensions import db
 from models import User, LoginToken
 
@@ -306,6 +306,7 @@ def _create_everything(slug, form, password):
             control_plane.create(engine, slug, form['business'], form['email'])
             created_org = True
             control_plane.mark_provisioned(engine, slug)
+            control_plane.record_tenant_login(engine, form['email'], slug)
             return raw
         except Exception:
             try:
@@ -355,9 +356,8 @@ def welcome(token):
 
     session.clear()
     session.permanent = True
-    bind_session_to_current_tenant()
-    session['logged_in'] = True
-    session['role'] = user.role
-    session['user_id'] = user.id
-    session['user_name'] = user.name
+    # Delegates to the one shared helper (also used by auth.authenticate())
+    # rather than hand-assigning session keys, so this can't again silently
+    # drift out of sync with what a real login sets -- see JOURNEY-01.
+    bind_authenticated_session(user)
     return redirect(url_for('settings.getting_started'))

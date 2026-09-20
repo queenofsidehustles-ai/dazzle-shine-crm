@@ -4,9 +4,9 @@ import secrets
 import threading
 from datetime import datetime, date, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for, flash, jsonify,
-                   current_app, abort)
+                   current_app, abort, session)
 from entitlements import requires_plan
-from auth import login_required, owner_required
+from auth import login_required, owner_required, is_owner_session
 from models import (Staff, ContractorApplication, Booking, BookingCrew, BusinessSetting,
                     ContractorPayment, ContractorDocument)
 from extensions import db
@@ -1081,6 +1081,21 @@ def _open_entry(booking_id, staff_id):
             .order_by(TimeEntry.id.desc()).first())
 
 
+def _staff_is_on_booking(s, b):
+    """Same test my_day() uses to decide which jobs even show a clock button.
+
+    my_day()'s job list already filters to this — solo assignment by name, or
+    a BookingCrew row. clock_in/clock_out took booking_id from the POST body
+    and never repeated it: the button only appears for a worker's own jobs,
+    but nothing stopped a request crafted by hand from naming any booking_id
+    in the tenant and clocking (paid) hours against a job that worker was
+    never on.
+    """
+    if (b.assigned_cleaner or '').strip().lower() == (s.name or '').strip().lower():
+        return True
+    return b.crew_row_for(s) is not None
+
+
 @contractors_bp.route('/my-day/<token>/clock-in/<int:booking_id>', methods=['POST'])
 def clock_in(token, booking_id):
     """Start the clock for the cleaner holding this link.
@@ -1092,6 +1107,8 @@ def clock_in(token, booking_id):
     from models import TimeEntry
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
     b = Booking.query.get_or_404(booking_id)
+    if not _staff_is_on_booking(s, b):
+        abort(403, description='You are not assigned to this job.')
 
     # Already running? Do nothing rather than open a second spell. Somebody
     # double-tapping on a phone with a poor signal must not end up being paid
@@ -1108,11 +1125,66 @@ def clock_out(token, booking_id):
     """Stop the clock. Closes only the spell that is actually open."""
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
     b = Booking.query.get_or_404(booking_id)
+    if not _staff_is_on_booking(s, b):
+        abort(403, description='You are not assigned to this job.')
     entry = _open_entry(b.id, s.id)
     if entry:
         entry.clock_out_at = datetime.utcnow()
         db.session.commit()
     return redirect(url_for('contractors.my_day', token=token))
+
+
+@contractors_bp.route('/join/<token>', methods=['GET', 'POST'])
+def join_team(token):
+    """Where a Staff record with no linked login sets one up -- created by
+    the Migration Toolbox's bulk import, or by resend_join_invite for a Staff
+    record made some other way. Public, token-gated, same family as
+    /my-day/<token> and /sign-agreement/<token>.
+
+    role defaults to 'cleaner' (assigned_work.use only, per rbac.py) --
+    the narrowest real role, not an assumption this person should see
+    anything beyond their own jobs. An owner can grant more from Team Logins
+    afterward if this person's role in the business is broader than that.
+    """
+    from auth import bind_authenticated_session
+    from models import User
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    if s.user_id:
+        flash('This account is already set up — sign in instead.', 'error')
+        return redirect(url_for('admin.login'))
+
+    error = None
+    if request.method == 'POST':
+        username = (request.form.get('username') or s.email or '').strip().lower()
+        password = request.form.get('password') or ''
+        confirm = request.form.get('confirm') or ''
+        phone = (request.form.get('phone') or '').strip()
+        if not username:
+            error = 'Please enter an email to sign in with.'
+        elif len(password) < 8:
+            error = 'Please use at least 8 characters.'
+        elif password != confirm:
+            error = 'The two passwords do not match.'
+        elif User.query.filter_by(username=username).first():
+            error = f'"{username}" is already in use — try signing in instead.'
+        else:
+            u = User(name=s.name, username=username, role='cleaner', active=True)
+            u.set_password(password)
+            db.session.add(u)
+            db.session.flush()
+            s.user_id = u.id
+            if phone:
+                s.phone = phone
+            db.session.commit()
+            bind_authenticated_session(u)
+            session.permanent = True
+            session['logged_in'] = True
+            session['role'] = u.role
+            session['user_id'] = u.id
+            session['user_name'] = u.name
+            flash(f'Welcome, {u.name.split()[0]}!', 'success')
+            return redirect(url_for('contractors.my_day', token=s.agreement_token))
+    return render_template('public/join_team.html', s=s, error=error)
 
 
 @contractors_bp.route('/my-day/<token>')
@@ -1277,7 +1349,7 @@ def refresh_stripe(staff_id):
 
 
 @contractors_bp.route('/team/<int:staff_id>/pay', methods=['POST'])
-@login_required
+@owner_required
 def pay_contractor(staff_id):
     s = Staff.query.get_or_404(staff_id)
     try:
@@ -1326,7 +1398,7 @@ def _told(s, amount, method, when=None):
 
 
 @contractors_bp.route('/team/<int:staff_id>/pay-manual', methods=['POST'])
-@login_required
+@owner_required
 def pay_manual(staff_id):
     """Record a payment made outside Stripe (Venmo/Zelle/cash/check)."""
     s = Staff.query.get_or_404(staff_id)
@@ -1379,8 +1451,14 @@ def delete_staff(staff_id):
 @contractors_bp.route('/team')
 @login_required
 def team():
-    staff = Staff.query.order_by(Staff.is_active.desc(), Staff.name).all()
-    return render_template('admin/team.html', staff=staff, exp_levels=EXP_LEVELS)
+    q = (request.args.get('q') or '').strip()
+    query = Staff.query
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Staff.name.ilike(like), Staff.email.ilike(like), Staff.phone.ilike(like)))
+    staff = query.order_by(Staff.is_active.desc(), Staff.name).all()
+    return render_template('admin/team.html', staff=staff, exp_levels=EXP_LEVELS, q=q)
 
 
 @contractors_bp.route('/team/<int:staff_id>/language', methods=['POST'])
@@ -1414,6 +1492,11 @@ def staff_detail(staff_id):
         # "Update Pay" form never wipes checkboxes it doesn't contain.
         section = request.form.get('section', 'profile')
         if section == 'pay':
+            # Compensation is owner-only everywhere else in this app (payroll,
+            # the team-page payout buttons); this form had no matching check,
+            # so any logged-in role could set what a worker earns.
+            if not is_owner_session():
+                abort(403, description='Your account is not permitted to perform this action.')
             s.experience_level = request.form.get('experience_level', s.experience_level)
             s.pay_type = request.form.get('pay_type', s.pay_type)
             if (request.form.get('pay_rate') or '') != '':
@@ -1814,7 +1897,7 @@ def fix_payment_date(payment_id):
 
 
 @contractors_bp.route('/payroll/statement/<int:staff_id>')
-@login_required
+@owner_required
 def pay_statement(staff_id):
     """Printable pay statement for one cleaner over a date range (Save as PDF)."""
     s = Staff.query.get_or_404(staff_id)
@@ -2061,6 +2144,30 @@ def sign_agreement(token):
     return render_template('public/sign_agreement.html',
                            s=s, biz=biz, agreement_text=agreement_text,
                            agreement_label=agreement_label)
+
+
+@contractors_bp.route('/team/<int:staff_id>/resend-join-invite', methods=['POST'])
+@login_required
+def resend_join_invite(staff_id):
+    """Resend the set-up-your-login link the Migration Toolbox sent when this
+    Staff record was created (or send it for the first time, for a Staff
+    record made some other way). Reuses migration.send_join_invite so there
+    is one copy of that email, not two that can drift apart."""
+    from blueprints.migration import send_join_invite
+    s = Staff.query.get_or_404(staff_id)
+    if s.user_id:
+        flash(f'{s.name} already has a sign-in set up.', 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+    if not s.email:
+        flash('No email on file for this team member.', 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+    ok, detail = send_join_invite(s)
+    db.session.commit()
+    if ok:
+        flash(f'Invite email sent to {s.email}.', 'success')
+    else:
+        flash(f'Could not send the invite: {detail}', 'error')
+    return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
 
 
 @contractors_bp.route('/team/<int:staff_id>/resend-agreement', methods=['POST'])

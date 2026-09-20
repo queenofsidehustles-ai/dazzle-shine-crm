@@ -131,6 +131,27 @@ OWNER_ONLY_ENDPOINTS = frozenset({
     ('quotes.new', 'POST'),
     ('quotes.send_quote', 'POST'),
     ('invoices.index', 'GET'),
+    # Contractor payouts: real money out (a Stripe transfer, or a manual
+    # payment recorded as paid). Route-decorator-only here would repeat the
+    # exact gap this set exists to close for staff/hiring/commercial — moved
+    # money is at least as sensitive as those.
+    ('contractors.pay_contractor', 'POST'),
+    ('contractors.pay_manual', 'POST'),
+    # Business data export: a full customer/job/worker CSV is the same class
+    # of surface as the ones above, even though nothing here moves money.
+    ('settings.export', 'GET'),
+    ('settings.export_customers_csv', 'GET'),
+    ('settings.export_jobs_csv', 'GET'),
+    ('settings.export_workers_csv', 'GET'),
+    # Migration Toolbox: bulk-creates real team and customer records (and,
+    # for team, sends real invite emails) from an uploaded file -- the same
+    # class of surface as a hand-typed hire or a customer export, at bulk
+    # scale.
+    ('migration.index', 'GET'),
+    ('migration.team', 'GET'),
+    ('migration.team', 'POST'),
+    ('migration.clients', 'GET'),
+    ('migration.clients', 'POST'),
 })
 
 

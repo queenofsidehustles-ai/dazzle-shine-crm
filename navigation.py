@@ -95,6 +95,10 @@ SECTIONS = [
         # noticing a banner that disappears the moment the last step is done —
         # so a business that half-finished had no way back to it, and said so.
         ('settings.getting_started', '🚀', 'Getting started', False, []),
+        # A once-in-a-while tool for a business switching over from something
+        # else, not a settings page -- its own item for the same reason
+        # Getting started is, rather than one more Settings tab.
+        ('migration.index', '📦', 'Migration Toolbox', True, []),
         # Nine tabs, two of which were setup trackers or a fault log. Both
         # routes still exist -- `settings.setup` is reached from the Getting
         # started card, and the error log from the alert email that names it --
@@ -108,6 +112,7 @@ SECTIONS = [
             ('settings.automations_page', 'Automations', True),
             ('team_logins.index', 'Team logins', True),
             ('settings.commercial', 'Commercial brand', True),
+            ('settings.export', 'Export data', True),
         ]),
     ]),
 ]

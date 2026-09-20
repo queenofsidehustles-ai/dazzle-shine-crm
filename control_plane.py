@@ -16,7 +16,7 @@ business running today never touches it.
 from datetime import datetime
 
 from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
-                        LargeBinary, Text,
+                        LargeBinary, Text, UniqueConstraint,
                         Table, select, insert, update, text)
 
 # Its own MetaData: these tables must never be created inside a tenant schema,
@@ -195,6 +195,39 @@ console_log = Table(
 )
 
 
+# Which tenant(s) a given login belongs to. A tenant's own User table can only
+# ever answer "does this email exist here" for the one company whose schema is
+# already selected -- which is no help to a returning visitor who landed on
+# the product's root domain rather than their own subdomain, since nothing has
+# picked a schema yet. This is a plain index, not a credential store: it
+# exists to route someone to the right login page, not to authenticate them --
+# the actual password check still happens on that tenant's own login route,
+# same as always. One email can appear more than once here (the same person
+# signed up for more than one company), which is why this is a lookup table
+# and not a column on organizations.
+tenant_logins = Table(
+    'tenant_logins', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('email', String(200), nullable=False, index=True),
+    Column('tenant_slug', String(40), nullable=False, index=True),
+    Column('created_at', DateTime, default=datetime.utcnow),
+    UniqueConstraint('email', 'tenant_slug', name='uq_tenant_login_email_slug'),
+)
+
+
+# One row per "find my company" email lookup, purely to throttle it -- the
+# same address cannot be asked for repeatedly, the same reason the reset-
+# password form is throttled (see blueprints/account.py). Without this, the
+# root-domain lookup form is a way to fill a stranger's inbox from a page
+# that requires no login.
+login_lookup_requests = Table(
+    'login_lookup_requests', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('email', String(200), nullable=False, index=True),
+    Column('created_at', DateTime, default=datetime.utcnow),
+)
+
+
 # Questions from the public site -- people who are not customers yet and have
 # no account to file feedback from.
 support_requests = Table(
@@ -256,7 +289,8 @@ def ensure_table(engine):
     """Create the control-plane table if it is not there. Safe to call always."""
     control_metadata.create_all(
         engine, tables=[organizations, product_leads, feedback,
-                        console_users, support_requests, console_log])
+                        console_users, support_requests, console_log,
+                        tenant_logins, login_lookup_requests])
     ensure_columns(engine)
 
 
@@ -348,6 +382,88 @@ def find_by_customer(engine, stripe_customer_id):
                 organizations.c.stripe_customer_id == stripe_customer_id)
         ).mappings().first()
         return dict(row) if row else None
+
+
+def record_tenant_login(engine, email, tenant_slug):
+    """Index one more (email, tenant) pair. Idempotent, and never raises --
+    called from the middle of signup and team-login creation, and a lookup
+    row that failed to write must never be the reason either of those fails.
+
+    Written once, at account creation, not on every sign-in: which tenant an
+    email belongs to does not change afterward, so there is nothing to keep
+    fresh on a later login.
+    """
+    email = (email or '').strip().lower()
+    tenant_slug = (tenant_slug or '').strip().lower()
+    if not email or not tenant_slug:
+        return
+    try:
+        with engine.begin() as conn:
+            exists = conn.execute(select(tenant_logins.c.id).where(
+                tenant_logins.c.email == email,
+                tenant_logins.c.tenant_slug == tenant_slug)).first()
+            if not exists:
+                conn.execute(insert(tenant_logins).values(
+                    email=email, tenant_slug=tenant_slug))
+    except Exception:
+        pass
+
+
+LOOKUP_COOLDOWN_MINUTES = 3
+
+
+def lookup_recently_requested(engine, email):
+    """True if this address was asked for within the cooldown window.
+
+    Checked before sending, not after -- the caller must not send a second
+    email just because the first attempt to record this row failed.
+    """
+    from datetime import timedelta
+    email = (email or '').strip().lower()
+    if not email:
+        return False
+    try:
+        cutoff = datetime.utcnow() - timedelta(minutes=LOOKUP_COOLDOWN_MINUTES)
+        with engine.connect() as conn:
+            row = conn.execute(select(login_lookup_requests.c.id).where(
+                login_lookup_requests.c.email == email,
+                login_lookup_requests.c.created_at >= cutoff)).first()
+        return row is not None
+    except Exception:
+        return False
+
+
+def record_lookup_request(engine, email):
+    email = (email or '').strip().lower()
+    if not email:
+        return
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(login_lookup_requests).values(email=email))
+    except Exception:
+        pass
+
+
+def tenants_for_email(engine, email):
+    """Every tenant slug this email has an account in, newest first.
+
+    A UX hint for routing someone to the right subdomain, never an
+    authentication decision -- the tenant's own login still requires the
+    real password regardless of what this returns.
+    """
+    email = (email or '').strip().lower()
+    if not email:
+        return []
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(tenant_logins.c.tenant_slug)
+                .where(tenant_logins.c.email == email)
+                .order_by(tenant_logins.c.created_at.desc())
+            ).all()
+        return [r.tenant_slug for r in rows]
+    except Exception:
+        return []
 
 
 def add_lead(engine, **fields):

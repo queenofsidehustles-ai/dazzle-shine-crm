@@ -60,10 +60,8 @@
             <div style="color:var(--softer);font-size:0.86rem;margin-top:2px">{{ s.why }}</div>
           {% endif %}
         </div>
-        {% if not s.done %}
-          <a href="{{ s.link }}" style="color:var(--gold-deep);font-size:0.88rem;
-                                        font-weight:600;text-decoration:none;white-space:nowrap">Do it</a>
-        {% endif %}
+        <a href="{{ s.link }}" style="color:var(--gold-deep);font-size:0.88rem;
+                                      font-weight:600;text-decoration:none;white-space:nowrap">{{ 'Review' if s.done else 'Do it' }}</a>
       </div>
       {% endif %}
     {% endfor %}

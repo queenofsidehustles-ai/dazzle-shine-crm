@@ -1,7 +1,11 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+import csv
+import io
+import re
+
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
 from entitlements import requires_plan
 from auth import login_required, owner_required
-from models import PricingSetting, BusinessSetting, Prospect
+from models import PricingSetting, BusinessSetting, Prospect, Client, Booking, Staff
 from extensions import db
 from pricing import SERVICES, EXTRAS, DEPOSIT_AMOUNT
 import branding
@@ -451,6 +455,19 @@ def business():
             if dark_key in request.form:
                 BusinessSetting.set(dark_key,
                                     _brands.normalise_hex(request.form.get(dark_key, '')))
+
+        # Markets is a multi-select: a deselect-everything save submits no
+        # 'markets' values at all, indistinguishable from this form's other
+        # fields simply not being on the page this POST came from. The
+        # hidden marker says "this section really was submitted."
+        if 'markets_submitted' in request.form:
+            import customer_terms as _ct
+            selected = request.form.getlist('markets')
+            _ct.set_markets(selected)
+            for code in selected:
+                key = f'market_note_{code}'
+                if key in request.form:
+                    _ct.set_market_note(code, request.form.get(key, ''))
         db.session.commit()
         # Typing the original business name back in is enough to trigger the
         # one-time restore of its commercial brand, palette and review link —
@@ -481,9 +498,14 @@ def business():
     # as homework; nobody could tell there was already a complete one in there.
     from blueprints.contractors import _default_agreement
     import branding as _b
+    import customer_terms as _ct
+    current_markets = _ct.markets()
     return render_template('admin/settings_business.html', current=current,
                            default_agreement=_default_agreement(
-                               _b.biz_name(), current['worker_model']))
+                               _b.biz_name(), current['worker_model']),
+                           us_states=_ct.US_STATES, us_state_names=_ct.US_STATE_NAMES,
+                           current_markets=current_markets,
+                           market_notes={c: _ct.market_note(c) for c in current_markets})
 
 
 # ── What has broken lately ──────────────────────────────────────────────────
@@ -521,3 +543,77 @@ def resolve_error(error_id):
     flash('Marked as sorted. It will reappear if it happens again.'
           if row.resolved else 'Reopened.', 'success')
     return redirect(url_for('settings.errors_page'))
+
+
+def _csv_response(rows, header, filename_stem):
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(header)
+    for row in rows:
+        w.writerow(row)
+    slug = re.sub(r'[^a-z0-9]+', '-', branding.biz_name().lower()).strip('-') or 'business'
+    fname = f'{slug}-{filename_stem}.csv'
+    return Response(buf.getvalue(), mimetype='text/csv',
+                    headers={'Content-Disposition': f'attachment; filename={fname}'})
+
+
+@settings_bp.route('/export')
+@owner_required
+def export():
+    """Where to get your own data out. Every download here is scoped to this
+    company's own schema the same way every other query in the app is —
+    there is no separate export code path to audit for a tenant-isolation
+    mistake."""
+    return render_template('admin/export.html',
+        customer_count=Client.query.count(),
+        job_count=Booking.query.count(),
+        worker_count=Staff.query.count())
+
+
+@settings_bp.route('/export/customers.csv')
+@owner_required
+def export_customers_csv():
+    rows = []
+    for c in Client.query.order_by(Client.created_at.asc()).all():
+        rows.append([
+            c.id, c.name, c.email, c.phone or '', c.address or '', c.city or '',
+            c.zip_code or '', len(c.bookings), c.autopay,
+            c.created_at.isoformat() if c.created_at else '', (c.notes or '').replace('\n', ' '),
+        ])
+    header = ['ID', 'Name', 'Email', 'Phone', 'Address', 'City', 'Zip',
+              'Total Bookings', 'Autopay', 'Customer Since', 'Notes']
+    return _csv_response(rows, header, 'customers')
+
+
+@settings_bp.route('/export/jobs.csv')
+@owner_required
+def export_jobs_csv():
+    rows = []
+    for b in Booking.query.order_by(Booking.created_at.asc()).all():
+        rows.append([
+            b.id, b.name or '', b.email or '', b.phone or '', b.address or '',
+            b.city or '', b.service_type, b.bedrooms or '', b.bathrooms or '',
+            b.preferred_date or '', b.preferred_time or '', b.frequency,
+            b.status, f'{b.price:.2f}' if b.price is not None else '',
+            f'{b.discount_amount:.2f}' if b.discount_amount else '0.00',
+            b.assigned_cleaner or '',
+            b.created_at.isoformat() if b.created_at else '',
+        ])
+    header = ['ID', 'Client Name', 'Email', 'Phone', 'Address', 'City',
+              'Service', 'Bedrooms', 'Bathrooms', 'Date', 'Time', 'Frequency',
+              'Status', 'Price', 'Discount', 'Assigned To', 'Created']
+    return _csv_response(rows, header, 'jobs')
+
+
+@settings_bp.route('/export/workers.csv')
+@owner_required
+def export_workers_csv():
+    rows = []
+    for s in Staff.query.order_by(Staff.name.asc()).all():
+        rows.append([
+            s.id, s.name, s.email or '', s.phone or '', s.is_active,
+            s.pay_type, s.pay_rate, s.experience_level or '',
+        ])
+    header = ['ID', 'Name', 'Email', 'Phone', 'Active', 'Pay Type', 'Pay Rate',
+              'Experience Level']
+    return _csv_response(rows, header, 'workers')

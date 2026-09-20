@@ -54,6 +54,35 @@
         <span style="font-size:0.76rem;color:var(--softer)">Your CRM runs on a server set to UTC. This is how it knows what "today" and "9am" mean where you actually are.</span>
       </div>
       <div class="form-group">
+        <label>Markets <span style="font-weight:400;color:var(--softer)">— states you operate in</span></label>
+        <input type="hidden" name="markets_submitted" value="1" />
+        <select name="markets" multiple size="6" style="height:auto">
+          {% for code, name in us_states %}
+          <option value="{{ code }}" {{ 'selected' if code in current_markets }}>{{ name }}</option>
+          {% endfor %}
+        </select>
+        <span style="font-size:0.76rem;color:var(--softer)">Cmd/Ctrl-click to select more than one. Used for state-specific
+          legal, tax or SMS-consent wording. Nothing changes here unless you write a note for a state — save this
+          first, and a note box for each state you picked will appear below.</span>
+      </div>
+      {% if current_markets %}
+      <div class="form-group">
+        <label>State-specific notes <span style="font-weight:400;color:var(--softer)">— optional</span></label>
+        <span style="font-size:0.76rem;color:var(--softer);display:block;margin-bottom:8px">
+          Shown to every customer, appended to your customer terms below, under that state's own heading.
+          Leave blank for a state that doesn't need one. Not legal advice — write your own wording or have
+          counsel review it.
+        </span>
+        {% for code in current_markets %}
+        <div style="margin-bottom:10px">
+          <label style="font-size:0.82rem;font-weight:600">{{ us_state_names.get(code, code) }}</label>
+          <textarea name="market_note_{{ code }}" rows="3"
+                    placeholder="e.g. required SMS-consent language for this state">{{ market_notes.get(code, '') }}</textarea>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="form-group">
         <label>Charge Time For Jobs With No Arrival Time</label>
         <select name="charge_hour">
           {% for h in range(6, 19) %}

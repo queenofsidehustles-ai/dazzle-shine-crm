@@ -18,12 +18,18 @@ def index():
     status_filter = request.args.get('status', '')
     group = (request.args.get('series') or '').strip()
     show_every_visit = group == 'all'
+    q = (request.args.get('q') or '').strip()
 
     query = Booking.query.order_by(Booking.created_at.desc())
     if status_filter:
         query = query.filter_by(status=status_filter)
     if group and not show_every_visit:
         query = query.filter_by(recurring_group=group)
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Booking.name.ilike(like), Booking.email.ilike(like),
+            Booking.phone.ilike(like), Booking.address.ilike(like)))
     bookings = query.all()
 
     # A recurring plan is one row unless asked otherwise. Twelve months of the
@@ -43,7 +49,7 @@ def index():
     }
     return render_template('admin/bookings.html', bookings=bookings, counts=counts,
                            status_filter=status_filter, series=group,
-                           show_every_visit=show_every_visit)
+                           show_every_visit=show_every_visit, q=q)
 
 
 @bookings_bp.route('/price-preview')
@@ -2228,14 +2234,20 @@ def delete(booking_id):
 @bookings_bp.route('/clients')
 @login_required
 def clients():
-    all_clients = Client.query.order_by(Client.created_at.desc()).all()
+    q = (request.args.get('q') or '').strip()
+    query = Client.query
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Client.name.ilike(like), Client.email.ilike(like), Client.phone.ilike(like)))
+    all_clients = query.order_by(Client.created_at.desc()).all()
     # Bookings that never got a customer record — offer to build them.
     unlinked = Booking.query.filter(
         Booking.client_id.is_(None),
         db.or_(db.and_(Booking.email.isnot(None), Booking.email != ''),
                db.and_(Booking.phone.isnot(None), Booking.phone != '')),
     ).count()
-    return render_template('admin/clients.html', clients=all_clients, unlinked=unlinked)
+    return render_template('admin/clients.html', clients=all_clients, unlinked=unlinked, q=q)
 
 
 @bookings_bp.route('/clients/new', methods=['GET', 'POST'])

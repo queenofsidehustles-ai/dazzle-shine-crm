@@ -564,6 +564,598 @@ mismatch), plus the still-undecided `/api/stripe-webhook` CSRF question
 above, plus the 6 SQLite/control-plane files and `test_rbac_matrix.py`,
 unchanged from the prior entry.
 
+### JOURNEY-01 — acceptance-test findings from the 40-journey pass, three fixed
+
+Status: fixed at `e2f700d` on `fix/journey-test-findings`, opened as
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**. Live `akyehq.com` was unreachable
+from this sandbox (proxy egress allowlist), so all fixes were built and
+verified against a local server running the exact `akye-stable` code,
+against a real PostgreSQL database, driven by Playwright.
+
+**Journey #1 (P0) — brand-new signup logged owners out immediately.**
+`blueprints/signup.py`'s `welcome()` built the post-signup session by hand
+(`session['logged_in']`, `['role']`, `['user_id']`, `['user_name']`) but
+never set `session['auth_fingerprint']`.
+`auth.session_matches_current_user()` requires that fingerprint on every
+`login_required` request and fails closed (clears the session, redirects
+to `/login`) when it's missing — exactly what happened on the very next
+page load. Every brand-new signup was silently logged back out right
+after finishing signup, with no explanation, and had to sign in again
+manually with the password just set. Fixed by setting
+`session['auth_fingerprint'] = auth._auth_fingerprint(user.password_hash)`,
+matching what the normal password-login path already does
+(`auth.py` line 179). Verified on a genuinely fresh tenant (not the
+already-signed-up one used for the first pass, to rule out a stale-data
+confound): signup lands signed in, and — the actual regression — the
+immediate follow-up page load stays signed in instead of bouncing to
+`/login`.
+
+**Journey #27 — no way to search Clients, Bookings, or Team.** Each list
+page had no search once it grew past a glance. Added a `q` query-param
+search box to all three (`blueprints/bookings.py`'s `clients()` and
+`index()`, `blueprints/contractors.py`'s `team()`, plus
+`templates/admin/clients.html`, `bookings.html`, `team.html`), filtering
+on name/email/phone (and address for bookings) via `ilike`, with a
+distinct "no matches" state kept separate from the genuine empty-list
+state. Verified against seeded fixture records on all three pages: a
+partial-name query finds the target row; a query with no matches shows
+the new empty-search state, not the generic "no records yet" one.
+
+**Journey #35 — no self-serve way to get your own data out.** Settings
+had no general export; the closest things were the Money → P&L export and
+a separate commercial-leads CSV, neither of which covers customers, jobs,
+or the team roster. Added `Settings → Export data`
+(`blueprints/settings.py`, `templates/admin/export.html`, a new tab in
+`navigation.py`), with CSV downloads for customers, jobs, and workers.
+Payment tokens (`portal_token`, `stripe_customer_id`,
+`stripe_payment_method_id`) and login/payout credentials
+(`agreement_token`, `stripe_account_id`) are deliberately excluded from
+every export — confirmed by asserting their absence from each CSV's
+header row, not just eyeballing the route code. Verified all three
+downloads return `200`, `text/csv`, `Content-Disposition: attachment`,
+contain the expected seeded row, and that the export tab is reachable
+from the Settings nav.
+
+**Journey #12 caveat (Team Logins/Staff disconnection) — not addressed
+here.** The original pass recorded this as PASS-with-caveat, not a
+failure, and flagged it as a deeper architectural gap (a worker login and
+its Staff card can drift apart) rather than a simple bug fix. Left open;
+worth a dedicated look before launch but out of scope for this pass.
+
+**Re-running the full 8-phase local suite (not just these three fixes)
+surfaced unrelated failures** (reschedule, worker daily workflow, mobile
+viewport, job reassignment, address-correction persistence, password
+reset, deletion/privacy, bad-network retry) in code none of these fixes
+touch. Investigated enough to be confident these are stale-state
+artifacts of re-running the suite's later phases against a test tenant
+that had already accumulated data from the original full pass (hardcoded
+booking/client IDs and element assumptions no longer matching), not new
+product regressions — but that is inference from the pattern, not
+independently reproduced the way the three fixes above were. A fresh
+full-suite run against a clean database is recommended before launch if a
+firm answer is wanted on any of those eight.
+
+### IAM-02 — contractor-pay authorization gap, found by policy review of
+RBAC-02, fixed
+
+Status: fixed at `3b985fd` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**. Live on `akye-stable` before this
+fix — RBAC-02's own decision above predates it and never touched these
+routes, so this was not introduced by launch-readiness work.
+
+Asked to audit the application's policies for internal consistency
+(distinct from a specific bug report), found four routes that let any
+authenticated role move or view a worker's money with no role check,
+directly contradicting `rbac.py`'s own stated design
+(`ROLE_OPTIONS`: *"Admin — operations, no finance/pay"*) and inconsistent
+with every sibling route:
+
+- `contractors.pay_contractor` (`POST /team/<id>/pay`) — a real Stripe
+  Connect transfer (`stripe_connect.create_transfer`). Was
+  `@login_required` only; the function body has no role check either.
+- `contractors.pay_manual` (`POST /team/<id>/pay-manual`) — records a
+  cash/Venmo/Zelle payment as paid. Same gap.
+- `contractors.staff_detail`'s POST handler (`section=pay`) — sets
+  `pay_type`/`pay_rate` directly on any worker's `Staff` row, gated by
+  *nothing*, not even a decorator (the route is shared with the
+  legitimately-open profile-edit fields). The same page's "Pay Settings"
+  card — rate inputs plus a working "Update Pay" submit button — and a
+  separate "Earnings" card (earned/paid/still-owed totals, itemized
+  per-job pay) both rendered unconditionally to any logged-in role,
+  found while checking the fix for a template-only issue and turning out
+  to be materially worse: read-and-write, not just read.
+- `contractors.pay_statement` (`GET /payroll/statement/<id>`) — every
+  other `/payroll/*` route is `@owner_required`; this was the one
+  exception, showing any worker's itemized earnings history to anyone
+  signed in.
+
+Fixed: the first two and `pay_statement` switched to `@owner_required`,
+matching their siblings exactly. `staff_detail`'s pay section gets a
+direct `auth.is_owner_session()` check (the route can't be blanket
+owner-only — it also serves the profile fields every role legitimately
+edits). Both sensitive cards in `contractor_detail.html` now sit behind
+the same `{% if session.role == 'owner' %}` gate `team.html` already uses
+for `pay_label()` on the roster. All four also added to `rbac.OWNER_ONLY_ENDPOINTS`
+as the same regression safety net RBAC-02 used for staff/hiring/
+commercial — belt-and-suspenders against a future decorator downgrade,
+not the live protection (the decorator/inline check is).
+
+**Reconciled, without changing behavior, while auditing the same
+surfaces:**
+- `auth.py` gained `bind_authenticated_session(user)`, the one shared
+  helper for starting a session outside the password-checked
+  `authenticate()` path. `signup.welcome()` now calls it instead of
+  hand-assembling session keys — `authenticate()` already did the
+  equivalent internally; checked every other hand-rolled
+  `session['user_id'] = ...` site in the codebase (`blueprints/admin.py`
+  is the only other one, and it correctly calls `authenticate()` first) —
+  so this closes the *pattern* behind JOURNEY-01's signup bug, not just
+  that one instance of it.
+- `/api/stripe-webhook` (`blueprints/api.py`, a tenant's own Stripe
+  account) and `/api/stripe/webhook` (`blueprints/billing_routes.py`,
+  Akye's platform billing account) — one character apart, already
+  mistaken for each other by three different tests per the
+  RELEASE-GATE-01-TRIAGE entry above — now cross-reference each other in
+  comments naming exactly which is which. The actual CSRF-exemption
+  disagreement for the tenant route stays open on purpose, per that
+  entry's own reasoning: not something to resolve unilaterally.
+- `entitlements.py`'s module docstring stopped claiming multi-tenancy is
+  a future change ("Later: a column on the organization, once the app is
+  multi-tenant") the app has in fact already made everywhere else, and
+  now names the real gap plainly: plan/subscription state lives in the
+  tenant's own schema (`BusinessSetting`), unlike every other
+  authoritative tenant fact (`control_plane.organizations`, which a
+  tenant's own session can never write to). Verified today's only write
+  path (`settings.business()`) is a hardcoded field allowlist that
+  happens to omit `'plan'`, not a structural boundary — so there is no
+  live self-upgrade exploit, but the trust tier is still architecturally
+  inconsistent with where every other authoritative fact lives. Not
+  restructured here; that is a real migration, not a doc fix.
+
+Evidence: against real PostgreSQL, a seeded dispatcher-role session
+(`ROLE_PERMISSIONS['dispatcher']` has no `pay.manage`/`finance.manage`)
+gets a 302 (owner-only redirect) or 403 on all four routes, confirmed by
+direct query against `contractor_payment` that zero rows were written by
+the blocked attempts; sees neither the Pay Settings nor Earnings card on
+the staff detail page; and is bounced off the pay statement. An owner
+session re-run immediately after confirmed unaffected on every one of the
+same checks (successful pay-manual, both cards visible, statement loads).
+The full prior journey-fix suite (signup auth_fingerprint, Clients/
+Bookings/Team search, data export) was re-run in full afterward with no
+regressions.
+
+Liability implication: this was a live authorization gap on `akye-stable`
+allowing any authenticated non-owner role (a `dispatcher` login, for
+instance) to both trigger a real Stripe payout to a contractor and view
+every worker's itemized earnings — found and closed by treating RBAC-02's
+own stated policy as a specification to audit the rest of the codebase
+against, rather than a one-time fix.
+
+### IDOR-01 — My Day clock-in/out trusted a client-submitted booking_id, fixed;
+one further scan pass, two items flagged rather than fixed
+
+Status: fixed at `1d2a1d3` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**. Live on `akye-stable` before this
+fix, same as IAM-02.
+
+Asked to scan again after IAM-02, for the same class of gap in different
+territory: `blueprints/contractors.py`'s `clock_in`/`clock_out`
+(`/my-day/<token>/clock-in|clock-out/<int:booking_id>`) identify the
+worker from their personal `agreement_token` but took `booking_id`
+straight from the URL with no check that the two are related.
+`my_day()` itself already computes exactly this relationship (solo
+assignment by name, or a `BookingCrew` row) to decide which jobs even get
+a clock button — `clock_in`/`clock_out` never repeated that check
+server-side, so a request crafted by hand naming any `booking_id` in the
+tenant clocked (paid) hours against a job that worker was never assigned
+to. Checked every other route in the codebase shaped like this (a token
+plus a separate integer ID: `grep`'d for the pattern across all
+blueprints) — `ratings.<token>/<int:stars>` and
+`workorders.get_photo(token, phase, photo_index)` are the only other two,
+and both are safe (`stars` is a value, not a foreign key;
+`get_photo`'s `photo_index` is bounds-checked against that same token's
+own checklist, confirmed by reading the route). This was the one genuine
+instance, not a pattern repeated elsewhere.
+
+Fixed: `_staff_is_on_booking(s, b)`, the same test `my_day()` uses,
+called at the top of both routes before touching any `TimeEntry`.
+
+Evidence: against real PostgreSQL, a worker's own token still clocks
+in/out cleanly on their assigned job (302, a `TimeEntry` row written,
+confirmed by direct query); the identical token against a different,
+unassigned booking gets 403 with zero `TimeEntry` rows written for that
+attempt (confirmed by direct query, not inferred from the status code
+alone). Full prior fix suite (signup, search, export, IAM-02's
+contractor-pay checks) re-run clean afterward.
+
+**Two further items surfaced by the same scan, flagged rather than fixed
+— both are behavior-change judgment calls, unlike the unambiguous
+money/fraud fixes above:**
+
+- `staff_detail`'s *profile* fields (name, phone, emergency contact,
+  notes, active/inactive toggle) and `staff_toggle_active` remain open to
+  any logged-in role, including `cleaner` (`ROLE_PERMISSIONS['cleaner']`
+  is `{'assigned_work.use'}` only). So hiring a new worker is owner-only
+  (`staff.index`/`staff.edit`, RBAC-02), but editing an existing worker's
+  contact info or deactivating them — stopping them from receiving any
+  further job assignments — is not gated at all beyond being logged in.
+  Whether `admin`/`dispatcher` should manage this (plausible — it looks
+  like ordinary team administration) while `cleaner` should not
+  (`assigned_work.use` reads as intentionally narrower) is a product
+  decision this pass didn't make unilaterally.
+- Residual data-integrity question from the same fix: any `TimeEntry`
+  rows created *before* this fix, by a worker clocked into a job they
+  were not assigned to, are not identified or touched here. Not
+  fabricated — no evidence any exist on `akye-stable`'s real data — but
+  worth a one-time audit query before launch if the team wants certainty
+  (`TimeEntry` joined against `Booking`/`BookingCrew` for a mismatch) --
+  correcting or removing any found is a payroll-affecting action outside
+  this pass's authorization to take alone.
+
+### IDOR-01-AUDIT — the pre-fix TimeEntry audit IDOR-01 flagged, run
+
+Status: tool built and verified at `a9a950c`; **could not be run against
+real `akye-stable` production data** from this sandbox (no network path
+to `akyehq.com` or its database, and no production credentials were ever
+provided to this session). `audit_time_entry_assignment.py` is ready for
+the team to run directly, with `DATABASE_URL` set to production.
+
+`--slug` scopes to one tenant; unknown slug and an unmigrated schema are
+both handled without crashing the run (a schema missing `time_entry` or
+`booking_crew` is skipped with a note, not treated as zero mismatches).
+
+Run against this session's own QA database (the only PostgreSQL this
+sandbox can reach): 11 seeded tenant schemas, **0 mismatches** on the
+real data in them. To prove the tool actually catches the case it exists
+for, not just that it stays quiet, a synthetic mismatched row was
+inserted by hand (a staff member clocked into a booking assigned to
+nobody, with no crew row for them either) — the audit reported it
+correctly, by name, booking, and timestamps; the row was then removed
+and a re-run confirmed zero mismatches again. This demonstrates
+correctness, not an absence of the real thing on production — that
+still needs an actual run there.
+
+**Two further, smaller items surfaced while reviewing the surrounding
+code for this audit, neither acted on:**
+- `TimeEntry.note` and `TimeEntry.edited_by` are declared on the model
+  ("who changed it, if anybody") but nothing in the codebase ever writes
+  to either — there is no route to edit a `TimeEntry` at all once
+  created, only to open (`clock_in`) or close (`clock_out`) one. A
+  mismatch this audit finds cannot currently be corrected from the admin
+  UI, even by the owner; fixing one requires direct database access. Not
+  fixed here — building a correction UI is real feature work, not a
+  finding to silently act on.
+- `audit.py` (the repo's separate UI-completeness checker, unrelated to
+  this new script despite the similar name) logs in via
+  `ADMIN_USER`/`ADMIN_PASS`, which `auth.env_login_configured()`
+  deliberately disables on hosted multi-tenant Akye. As written, this
+  script cannot log in to a real hosted tenant at all and predates the
+  multi-tenant architecture, the same way `entitlements.py`'s docstring
+  did before IAM-02. Not fixed or removed here; flagged as likely-dead
+  tooling for whoever next reaches for it.
+
+### PRODUCT-01 — first batch of user-reported product fixes (group 1 of a
+13-item punch list)
+
+Status: fixed at `343507b`/`d2314ee` on `fix/journey-test-findings`, pushed
+to [PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**. Test-only verification (not a
+security review) -- these five items were reviewed against the actual
+code before implementation and the reminders fix was exercised live; the
+other four are copy/config changes.
+
+The user supplied a 13-item list of requested changes. Reviewed each
+against the real code first rather than taking the description at face
+value -- two turned out not to be what they looked like, and one turned
+out to be a real, previously-undiagnosed bug the description didn't
+name. Implemented the five lowest-risk, no-open-questions items now;
+the remaining eight (2FA, persistent tenant login, a migration toolbox,
+menu reorganization, market/state selection, setup-step rollback,
+address autocomplete) need product decisions or larger design work and
+are deferred pending the user's answers.
+
+- **Cleaner day-before reminders bug (real fix).** Traced "check sending
+  of auto reminders for cleaner recurring jobs": the reminder logic
+  itself was correct for both one-time and recurring bookings, but it
+  lived inside the "Follow-ups and win-backs" automation (customer
+  win-back nudges) with no disclosure that toggle also controlled
+  cleaner reminders. Split into its own function, wired into the
+  existing "Day-before reminders" automation instead (same daily cron,
+  no new scheduled trigger needed), and fixed a second bug found along
+  the way -- it computed "tomorrow" from naive UTC rather than the
+  business's local date, the same class of bug the customer-facing
+  reminder route was already fixed for. Verified live: with win-back
+  nudges off, the cleaner reminder still fires; with day-before
+  reminders off, it correctly doesn't.
+- **Cleaner-pay label (clarity, not a bug).** Traced "cleaner pay cannot
+  be right" through `pricing.py`: `client_price` and `contractor_earnings`
+  are computed independently; `labor_rate` never reaches the customer's
+  price. Confirmed correct, relabeled for clarity anyway since the
+  question itself shows the old label invited exactly this misreading.
+- **PWA install name** (`static/manifest.json`: "Dazzle & Shine CRM" →
+  "Akye App"). Flagged, not resolved: `base_admin.html`'s
+  `apple-mobile-web-app-title` is already dynamic per tenant (`{{ BIZ }}
+  CRM`) — iOS and the install manifest will now say different things
+  until someone decides whether both should say "Akye" or both should be
+  tenant-branded.
+- **Sign-up button copy** ("Get early access" → "Sign up", "Request
+  early access" → "Complete sign up"). Checked `early_access()`'s own
+  routing before changing anything: it already redirects straight to the
+  real self-serve `/signup` once `SIGNUPS_OPEN` is true, and its
+  confirmation copy already sets honest hand-onboarding expectations for
+  the closed-signups case — so the new wording is accurate in both
+  states, not just the eventual self-serve one.
+- **Support email** (`akyecrm@gmail.com` → `support@akyehq.com`):
+  searched the entire repository, no occurrence anywhere.
+  `product.py`'s `support_email()` already defaults to
+  `support@akyehq.com` and is only overridden by a `PRODUCT_SUPPORT_EMAIL`
+  environment variable — nothing to change in code. Flagged for the user
+  to check Railway's env vars / connected email account instead.
+
+Evidence: manifest and label changes confirmed by direct render against
+the local QA server; the sign-up-copy change confirmed in both the
+open- and closed-signups branches (`SIGNUPS_OPEN` toggled); the reminder
+fix confirmed by seeding a real booking for the business's local
+"tomorrow," toggling each automation independently, and checking both
+the live JSON response and `Staff.schedule_reminder_date` directly in
+the database, not just trusting the response body. Full 17-check prior
+regression suite (JOURNEY-01, IAM-02, IDOR-01) re-run clean.
+
+### PRODUCT-02 — Phase A of the group-2/3 punch list (#5)
+
+Status: fixed at `0ad9f2d` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+Decisions for the remaining group-2/3 items (#1 2FA, #2 persistent
+tenant login, #3 Migration Toolbox, #7 market/state) were settled with
+the user first: TOTP-only 2FA (Google-Authenticator-compatible), opt-in,
+no role enforced; tenant login persistence via a root-domain cookie plus
+an email-lookup fallback (needs a new control-plane email→tenant index,
+flagged to the user before building); Migration Toolbox's team import
+creates a Staff record per CSV row and emails each contractor an invite
+link to set up their own login and finish their own profile — fixes the
+Journey #12 Staff/login disconnection by construction rather than
+deepening it; market/state is compliance-copy-only, not booking-
+functional, and ships with the existing default terms as every state's
+fallback since correct per-state legal wording needs the user's own (or
+counsel's) input, not code. #4 (menu reorganization) explicitly deferred
+by the user. Full plan given to the user before any of this phase's
+code was written.
+
+**#5 (setup rollback), the only item ready with no open questions,
+implemented and verified this pass** — see `templates/admin/
+getting_started.html`'s fix, evidence in the commit itself (link-per-
+step confirmed present and resolving to a real, loading settings page,
+full regression suite re-run clean).
+
+**#8 (address autocomplete) is next and is blocked on the user**: it
+needs a second Google Places API key, restricted by HTTP referrer, since
+the existing server-side key (used in `places_finder.py`) is IP-
+restricted and unsafe to expose in browser JavaScript. Cannot be created
+by this session — requires the user's Google Cloud Console access.
+
+### PRODUCT-03 — Phase C of the group-2/3 punch list (#7, Markets)
+
+Status: fixed at `b8862ba` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+Built per the decided scope (compliance-copy-only, not booking-
+functional): a "Markets" multi-select on Business Info, next to Time
+Zone, plus an optional per-state note appended to `customer_terms` for
+each selected market. Deliberately additive rather than a per-customer
+swap — traced `Client`/`Booking` first and confirmed neither stores a
+customer's state (only city and zip), so there is no reliable way to
+target a note at one specific customer; a business's markets are a fact
+about the business, and every customer sees every note the business has
+written for its selected markets, erring toward more disclosure rather
+than risking silently missing required disclosure for someone. Wired
+into `customer_terms.get_terms()`, the single function every existing
+surface (confirmation emails, payment page, invoices, terms-acceptance
+snapshotting) already reads through, so nothing else needed to change to
+reach all of them. Ships with the existing default terms as every
+state's fallback; explicitly not legal advice, matching the base terms'
+own existing disclaimer.
+
+Evidence: selected FL and GA as markets against real PostgreSQL, wrote a
+note for FL only, and confirmed both `get_terms()` and `as_html()`
+correctly append the FL note under its own bold heading (the same
+markup convention the rest of the terms already use) while GA — selected
+but left blank — does not appear at all, proving the "only if written"
+behavior rather than just that saving works. Full 17-check prior
+regression suite re-run clean.
+
+### PRODUCT-04 — Phase D of the group-2/3 punch list (#2, persistent tenant
+login), corrected mid-build
+
+Status: fixed at `86477f1` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+**Recorded transparently because the first attempt was wrong, not just
+because the second one worked.** Built the decided design (a cross-
+subdomain cookie plus an email-lookup fallback) from scratch — a new
+`auth.py` cookie helper, an `app.py` `after_request` hook, a new root-
+domain branch in `admin.login()`, a new template — before discovering
+`marketing.workspace()` already does most of this job: a cookie-backed
+one-click "welcome back, continue to X" return path, deliberately never
+confirming whether a typed address is real (anti-enumeration by
+design), and already wired in *ahead of* `admin.login()` by
+`marketing.install()`'s `_front_door()` `before_request` hook, which
+intercepts `/login` on the product's root domain unconditionally. That
+hook would have short-circuited every request before the new code in
+`admin.py` ever ran — confirmed directly (a curl request to root
+`/login` landed on `/workspace`, not the new code), not assumed. All of
+the parallel-mechanism code was reverted rather than shipped as dead
+weight beside a working one; the local diff on `auth.py`/`app.py`
+returned to empty, confirmed before committing.
+
+**What was actually missing, added instead:** a route in for someone on
+a browser the `workspace` cookie has never seen (new device, cleared
+cookie) who also does not remember their exact subdomain. A second,
+collapsed-by-default form on `marketing/workspace.html`, "Don't know
+your address? We'll email it to you," backed by a new control-plane
+index (`tenant_logins`, written once at account creation in
+`signup.py` and `team_logins.py` — checked and confirmed those are the
+only two places a `User` row is created today) and a matching
+`login_lookup_requests` throttle table. Deliberately the same shape as
+`account.forgot_password`: identical response whether an account was
+found, an email was sent, or the address was already asked for too
+recently, and the matching address(es) are emailed rather than ever
+displayed on the page.
+
+Evidence: against real PostgreSQL, a fresh signup correctly writes its
+(email, slug) pair to the index; looking that email up returns the same
+"check your inbox" response as a made-up email, but the outbound
+notification log confirms only the real one actually queued a send —
+proving the no-enumeration property holds, not just that the happy path
+works. A second lookup for the same email inside the cooldown window
+sends nothing (log unchanged). The pre-existing `workspace` slug flow
+(both the remembered-cookie one-click redirect and a fresh-slug
+redirect) re-verified unaffected by the changes around it. Full
+21-check prior regression suite re-run clean.
+
+**Unrelated but significant finding surfaced while reading
+`control_plane.py` for this work, not yet acted on:** `organizations`
+already declares `plan`, `subscription_status`, `trial_ends_at` and
+`grandfathered` columns, with its own docstring explaining exactly why
+billing state belongs in the control plane and not a tenant's own
+schema ("A business must not be able to edit the record of what it is
+paying"). This directly confirms IAM-02's `entitlements.py` finding
+above — but is a stronger statement of it than that entry made: the
+*correct* location already exists as live schema, and `entitlements.py`
+simply does not read from it, reading `BusinessSetting` in the tenant's
+own schema instead. Not touched here — moving `entitlements.state()`
+onto `organizations` is a real migration (every existing tenant's plan
+data would need to move, and `billing_routes.py`'s webhook handler would
+need to write to the new location instead) and deserves its own pass
+with the user's sign-off, not a fix folded into an unrelated feature.
+
+### PRODUCT-05 — Phase E of the group-2/3 punch list (#1, optional 2FA)
+
+Status: fixed at `e5c3da7` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+Built to the decided scope: TOTP only, opt-in per account, no role
+required to enable it. `totp.py` implements RFC 6238 from the standard
+library (`hmac`/`hashlib`/`base64`) rather than adding a new dependency
+— SHA1, 6 digits, 30-second step, which is deliberately what every real
+authenticator app (Google Authenticator, Authy, 1Password) implements,
+not a weaker choice made carelessly. `auth.authenticate()` now returns a
+third state, `('2fa', {...})`, distinct from `(True, info)`, and every
+read of it checks `is True` / `== '2fa'` explicitly rather than a bare
+truthy test, since the string `'2fa'` is itself truthy. A new
+self-service "My Account" area (`blueprints/account.py`, distinct from
+`team_logins.py`'s owner-manages-others page) handles setup, disable and
+backup-code regeneration; backup codes are shown in the page exactly
+once, at generation, from the plaintext held only in that one response
+before hashing.
+
+Evidence, all against real PostgreSQL with codes computed by `totp.py`
+itself: correctness cross-checked against RFC 6238's own published test
+vector (its standard 8-digit vector for its seed truncates to exactly
+the 6-digit code this implementation produces for the same input — not
+just internally self-consistent, matching the standard). Full login
+cycle verified live: setup stores a secret with `totp_enabled` still
+false; a valid code at confirm turns it on and returns backup codes;
+login now stops at a code prompt; a wrong code is rejected and grants
+nothing; the right code completes login; a backup code also completes
+login and is removed from the stored set (a second attempt with the
+same code then fails); disabling clears all three columns and returns
+login to one step; wrong-current-password is rejected by both the
+password-change and 2FA-disable forms, and the right one for password
+change actually works, confirmed by logging in with the new password.
+
+**Caught and corrected one of my own testing mistakes before trusting
+the result**: an early "wrong code still logs the user in" observation
+turned out to be a stale cookie jar (a `/logout` curl call that hadn't
+saved the cleared session cookie back to the jar file, so the next
+request silently reused the prior, already-authenticated cookie) — not
+an application bug. Re-verified correctly before recording the finding
+above, rather than reporting the false alarm as a real one.
+
+### PRODUCT-06 — Phase F of the group-2/3 punch list (#3, Migration Toolbox)
+
+Status: fixed at `743cb39` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+Built to the decided scope: team and client CSV import, with a
+self-service login for each imported team member rather than the owner
+setting a password on their behalf. `Staff.user_id` (migration 0014,
+`staff.user_id` → `user.id`) links a contractor's login back to their
+Staff card from the moment it's created, closing the drift between the
+two that `team_logins.py`'s owner-created-logins path could otherwise
+leave open. Calendar/booking-history import is deliberately excluded
+from scope — the module docstring in `blueprints/migration.py` explains
+why: reliably mapping another tool's booking states and pricing is a
+materially harder problem than a flat contact list, and getting it
+wrong risks corrupting payroll and P&L numbers.
+
+One real bug was found and fixed before any live testing began: the
+public `join_team` route was initially placed inside `migration_bp`
+(prefix `/migration`), which would have produced
+`/migration/contractors/join/<token>` instead of the
+`/contractors/join/<token>` used in the invite email and on the
+contractor detail page. Moved to `contractors_bp` and referenced via
+`url_for('contractors.join_team', ...)` rather than a hand-built string,
+so a future route change can't silently break the email again.
+
+Evidence, all against real PostgreSQL and a running QA server: `/migration/`,
+`/migration/team` and `/migration/clients` render for the owner and are
+blocked for a dispatcher login (redirected away, confirming the
+`rbac.OWNER_ONLY_ENDPOINTS` entries take effect). A team CSV upload
+creates the expected `Staff` row with a generated `agreement_token` and
+`user_id` still null, and fires an invite email addressed correctly. A
+CSV mixing a within-file duplicate, an already-existing email, an
+invalid email, a missing name and a missing email produced exactly the
+expected 2-created/5-skipped split, each skip with the correct
+plain-English reason — nothing silently dropped. Empty file, header-row-
+only file, and no-file-selected submissions each produced the intended
+error flash rather than a crash. Following the real invite link to
+`/contractors/join/<token>` pre-fills the contact's own email and phone;
+completing it creates a `User` row linked via `Staff.user_id`,
+authenticates the session, and lands on that contractor's own
+`/contractors/my-day/<token>` — confirmed live via direct `psql` query,
+not just the redirect status. Re-visiting the same join link once
+claimed correctly bounces to `/login` instead of allowing a second
+account to be set up against it. The client CSV import correctly folds
+a `history` column into a labelled note alongside any existing `notes`,
+and leaves it blank when neither is present. The "Resend invite email"
+button on the contractor detail page sends a fresh invite for an
+unclaimed Staff record, and is correctly refused with "already has a
+sign-in set up" / "No email on file" for a claimed record or one with no
+email. Full 21-check prior regression suite (signup, search, export,
+RBAC, IDOR) re-run clean after all of the above. All test data created
+during this verification pass was deleted afterward; the tenant schema
+was left matching its pre-test state.
+
+**Caught and corrected one of my own testing mistakes before trusting
+the result**: a manually-inserted test row (used to exercise the
+"no email on file" resend guard) was created via a raw SQL `INSERT`
+rather than through the application's own `Staff(...)` ORM path, which
+skipped the model-level `pay_rate` default and left it `NULL`. Visiting
+that row's own detail page then hit a pre-existing, unrelated bug —
+`Staff.pay_label()` crashes formatting a `None` pay rate — that is not
+reachable through any real path in this application, since every
+Staff-creating code path (including this feature's own CSV importer)
+goes through the ORM and always gets the `pay_rate` default. Confirmed
+by checking that every CSV-imported Staff row in the same test run had
+`pay_rate=50.00` as expected; fixed the test row's data directly rather
+than filing this as a Migration Toolbox defect, since it is not one.
+
+**Decision made without an explicit user check-in, worth flagging**: a
+contractor who completes their own join-link setup gets a login with
+`role='cleaner'` — the narrowest real RBAC role — since the toolbox has
+no way to know what role a CSV-imported name should actually hold. An
+owner who imports office/admin staff through this flow, rather than
+cleaners, will need to change that person's role afterward.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
