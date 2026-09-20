@@ -1079,6 +1079,83 @@ request silently reused the prior, already-authenticated cookie) — not
 an application bug. Re-verified correctly before recording the finding
 above, rather than reporting the false alarm as a real one.
 
+### PRODUCT-06 — Phase F of the group-2/3 punch list (#3, Migration Toolbox)
+
+Status: fixed at `743cb39` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+Built to the decided scope: team and client CSV import, with a
+self-service login for each imported team member rather than the owner
+setting a password on their behalf. `Staff.user_id` (migration 0014,
+`staff.user_id` → `user.id`) links a contractor's login back to their
+Staff card from the moment it's created, closing the drift between the
+two that `team_logins.py`'s owner-created-logins path could otherwise
+leave open. Calendar/booking-history import is deliberately excluded
+from scope — the module docstring in `blueprints/migration.py` explains
+why: reliably mapping another tool's booking states and pricing is a
+materially harder problem than a flat contact list, and getting it
+wrong risks corrupting payroll and P&L numbers.
+
+One real bug was found and fixed before any live testing began: the
+public `join_team` route was initially placed inside `migration_bp`
+(prefix `/migration`), which would have produced
+`/migration/contractors/join/<token>` instead of the
+`/contractors/join/<token>` used in the invite email and on the
+contractor detail page. Moved to `contractors_bp` and referenced via
+`url_for('contractors.join_team', ...)` rather than a hand-built string,
+so a future route change can't silently break the email again.
+
+Evidence, all against real PostgreSQL and a running QA server: `/migration/`,
+`/migration/team` and `/migration/clients` render for the owner and are
+blocked for a dispatcher login (redirected away, confirming the
+`rbac.OWNER_ONLY_ENDPOINTS` entries take effect). A team CSV upload
+creates the expected `Staff` row with a generated `agreement_token` and
+`user_id` still null, and fires an invite email addressed correctly. A
+CSV mixing a within-file duplicate, an already-existing email, an
+invalid email, a missing name and a missing email produced exactly the
+expected 2-created/5-skipped split, each skip with the correct
+plain-English reason — nothing silently dropped. Empty file, header-row-
+only file, and no-file-selected submissions each produced the intended
+error flash rather than a crash. Following the real invite link to
+`/contractors/join/<token>` pre-fills the contact's own email and phone;
+completing it creates a `User` row linked via `Staff.user_id`,
+authenticates the session, and lands on that contractor's own
+`/contractors/my-day/<token>` — confirmed live via direct `psql` query,
+not just the redirect status. Re-visiting the same join link once
+claimed correctly bounces to `/login` instead of allowing a second
+account to be set up against it. The client CSV import correctly folds
+a `history` column into a labelled note alongside any existing `notes`,
+and leaves it blank when neither is present. The "Resend invite email"
+button on the contractor detail page sends a fresh invite for an
+unclaimed Staff record, and is correctly refused with "already has a
+sign-in set up" / "No email on file" for a claimed record or one with no
+email. Full 21-check prior regression suite (signup, search, export,
+RBAC, IDOR) re-run clean after all of the above. All test data created
+during this verification pass was deleted afterward; the tenant schema
+was left matching its pre-test state.
+
+**Caught and corrected one of my own testing mistakes before trusting
+the result**: a manually-inserted test row (used to exercise the
+"no email on file" resend guard) was created via a raw SQL `INSERT`
+rather than through the application's own `Staff(...)` ORM path, which
+skipped the model-level `pay_rate` default and left it `NULL`. Visiting
+that row's own detail page then hit a pre-existing, unrelated bug —
+`Staff.pay_label()` crashes formatting a `None` pay rate — that is not
+reachable through any real path in this application, since every
+Staff-creating code path (including this feature's own CSV importer)
+goes through the ORM and always gets the `pay_rate` default. Confirmed
+by checking that every CSV-imported Staff row in the same test run had
+`pay_rate=50.00` as expected; fixed the test row's data directly rather
+than filing this as a Migration Toolbox defect, since it is not one.
+
+**Decision made without an explicit user check-in, worth flagging**: a
+contractor who completes their own join-link setup gets a login with
+`role='cleaner'` — the narrowest real RBAC role — since the toolbox has
+no way to know what role a CSV-imported name should actually hold. An
+owner who imports office/admin staff through this flow, rather than
+cleaners, will need to change that person's role afterward.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
