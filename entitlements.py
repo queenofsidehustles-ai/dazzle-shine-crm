@@ -20,8 +20,17 @@ the owner knows the product cannot do it at all.
 
 ## Where the plan actually lives
 
-Today: a row in BusinessSetting, because this deployment is one business.
-Later: a column on the organization, once the app is multi-tenant.
+A row in BusinessSetting -- which, on hosted Akye, is that one company's own
+schema, not a global table. Every other authoritative cross-tenant fact
+(active/suspended/closed, schema assignment) lives instead in
+control_plane.organizations, in the public schema, which a tenant's own
+session can never write to. Plan/subscription state does not: it sits next
+to ordinary UI settings, in the tenant's own schema, and today's write paths
+are safe only because settings.business()'s field list is a hardcoded
+allowlist that happens to omit 'plan' -- not because the plan setting is
+architecturally out of a tenant's reach the way status/schema assignment is.
+Moving it into the control plane, alongside status, is the fix; not done
+here because it is a real migration, not a doc update.
 
 Everything routes through `state()` so that change is one function, not a
 hundred call sites. Do not read the plan setting anywhere else.

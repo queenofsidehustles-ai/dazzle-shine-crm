@@ -156,6 +156,27 @@ def env_login_configured():
     return bool(user) and pw.lower() not in _WEAK
 
 
+def bind_authenticated_session(user):
+    """Start a fully authenticated session for an already-verified User.
+
+    The one place that sets every key a new login needs: tenant binding, the
+    credential-version fingerprint, and the UI-facing identity keys.
+    `authenticate()` has its own equivalent for the password-checked path;
+    this is for a flow that has already established who the user is by some
+    other means (signup, completing account setup) and has no password to
+    re-check. Forgetting `auth_fingerprint` here is exactly how a brand-new
+    signup was silently logged back out on its very next request -- see
+    JOURNEY-01 in docs/launch-readiness/decision-evidence-register.md. Call
+    this instead of hand-assigning session keys, so that mistake can't recur.
+    """
+    bind_session_to_current_tenant()
+    session['auth_fingerprint'] = _auth_fingerprint(user.password_hash)
+    session['logged_in'] = True
+    session['role'] = user.role
+    session['user_id'] = user.id
+    session['user_name'] = user.name
+
+
 def authenticate(username, password):
     """Check a login attempt. Returns (ok, info) with user_id, role and name.
 

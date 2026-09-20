@@ -962,6 +962,16 @@ def create_booking():
 
 
 # ── Stripe webhook ─────────────────────────────────────────────────────────────
+# NOTE: this is /api/stripe-webhook (hyphen) — a TENANT's own Stripe account
+# (integrations.stripe_secret_key()/stripe_webhook_secret() read this
+# company's BusinessSetting), reached on that company's own subdomain. It is
+# a different route from Akye's platform billing webhook,
+# /api/stripe/webhook (slash) in billing_routes.py, which is one shared
+# Stripe account for every company's Akye subscription. The two have
+# historically been confused for each other in tests (see BILL-01 and the
+# still-open CSRF-exemption question for this route in
+# docs/launch-readiness/decision-evidence-register.md) — check which one you
+# mean before changing either.
 
 @api_bp.route('/stripe-webhook', methods=['POST'])
 def stripe_webhook():

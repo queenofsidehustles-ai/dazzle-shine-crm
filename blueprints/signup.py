@@ -43,7 +43,7 @@ from sqlalchemy import text
 import control_plane
 import provisioning
 import tenancy
-from auth import bind_session_to_current_tenant
+from auth import bind_authenticated_session
 from extensions import db
 from models import User, LoginToken
 
@@ -355,16 +355,8 @@ def welcome(token):
 
     session.clear()
     session.permanent = True
-    bind_session_to_current_tenant()
-    session['logged_in'] = True
-    session['role'] = user.role
-    session['user_id'] = user.id
-    session['user_name'] = user.name
-    # Bind this cookie to the current credential version, exactly as a normal
-    # password login does (auth.authenticate()). Without this,
-    # auth.session_matches_current_user() finds no auth_fingerprint on the
-    # very next request and fails closed -- every brand-new signup was being
-    # logged out immediately after finishing signup.
-    from auth import _auth_fingerprint
-    session['auth_fingerprint'] = _auth_fingerprint(user.password_hash)
+    # Delegates to the one shared helper (also used by auth.authenticate())
+    # rather than hand-assigning session keys, so this can't again silently
+    # drift out of sync with what a real login sets -- see JOURNEY-01.
+    bind_authenticated_session(user)
     return redirect(url_for('settings.getting_started'))

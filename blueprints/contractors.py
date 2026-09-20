@@ -6,7 +6,7 @@ from datetime import datetime, date, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for, flash, jsonify,
                    current_app, abort)
 from entitlements import requires_plan
-from auth import login_required, owner_required
+from auth import login_required, owner_required, is_owner_session
 from models import (Staff, ContractorApplication, Booking, BookingCrew, BusinessSetting,
                     ContractorPayment, ContractorDocument)
 from extensions import db
@@ -1277,7 +1277,7 @@ def refresh_stripe(staff_id):
 
 
 @contractors_bp.route('/team/<int:staff_id>/pay', methods=['POST'])
-@login_required
+@owner_required
 def pay_contractor(staff_id):
     s = Staff.query.get_or_404(staff_id)
     try:
@@ -1326,7 +1326,7 @@ def _told(s, amount, method, when=None):
 
 
 @contractors_bp.route('/team/<int:staff_id>/pay-manual', methods=['POST'])
-@login_required
+@owner_required
 def pay_manual(staff_id):
     """Record a payment made outside Stripe (Venmo/Zelle/cash/check)."""
     s = Staff.query.get_or_404(staff_id)
@@ -1420,6 +1420,11 @@ def staff_detail(staff_id):
         # "Update Pay" form never wipes checkboxes it doesn't contain.
         section = request.form.get('section', 'profile')
         if section == 'pay':
+            # Compensation is owner-only everywhere else in this app (payroll,
+            # the team-page payout buttons); this form had no matching check,
+            # so any logged-in role could set what a worker earns.
+            if not is_owner_session():
+                abort(403, description='Your account is not permitted to perform this action.')
             s.experience_level = request.form.get('experience_level', s.experience_level)
             s.pay_type = request.form.get('pay_type', s.pay_type)
             if (request.form.get('pay_rate') or '') != '':
@@ -1820,7 +1825,7 @@ def fix_payment_date(payment_id):
 
 
 @contractors_bp.route('/payroll/statement/<int:staff_id>')
-@login_required
+@owner_required
 def pay_statement(staff_id):
     """Printable pay statement for one cleaner over a date range (Save as PDF)."""
     s = Staff.query.get_or_404(staff_id)
