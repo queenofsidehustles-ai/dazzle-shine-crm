@@ -4,7 +4,7 @@ Release-control contract for the first external cohort. This document closes the
 
 ## Release posture
 
-Akye ships from `akye-stable`. The working/remediation branch must never be a customer deployment source. A candidate may be promoted only after the exact candidate revision passes `.github/workflows/launch-readiness.yml` and the operator records the evidence below.
+Akye ships from `akye-stable`. The working/remediation branch must never be a customer deployment source. A candidate may be promoted only after the exact candidate revision passes `.github/workflows/launch-readiness-stable.yml` and the operator records the evidence below. The stable certification runs on pull requests targeting `akye-stable` and again after a push/merge to `akye-stable`; the older `.github/workflows/launch-readiness.yml` is remediation/history evidence and is not the authoritative stable release gate.
 
 Expansion is staged: internal/synthetic tenants -> 3-5 design partners -> 10 tenants -> 30 tenants. Each expansion is a new release decision; success at one stage does not authorize the next.
 
@@ -12,7 +12,7 @@ Expansion is staged: internal/synthetic tenants -> 3-5 design partners -> 10 ten
 
 Record:
 
-- candidate commit SHA and Launch Readiness run ID;
+- candidate commit SHA and Akye Stable Launch Certification run ID;
 - deployed `/version` release/channel response;
 - number and identities of tenants being admitted;
 - named release operator and incident owner;
@@ -86,7 +86,7 @@ The database backup does not itself preserve external object bytes. Private medi
 
 ### Internal / synthetic
 
-Required: exact-SHA Launch Readiness GREEN; no open P0; rollback path reviewed; database restore proof GREEN. Live funds remain unauthorized.
+Required: exact-SHA Akye Stable Launch Certification GREEN; no open P0; rollback path reviewed; database restore proof GREEN. Live funds remain unauthorized.
 
 ### 3-5 design partners
 
@@ -112,7 +112,7 @@ Severity 2 includes a tenant-critical workflow unavailable or materially incorre
 
 A final cohort release record must answer all of the following before GO:
 
-- exact candidate SHA and CI run;
+- exact candidate SHA and Akye Stable Launch Certification run;
 - all P0 PASS;
 - all P1 PASS or written risk acceptance with expiry;
 - `akye-stable` is the deployment channel;
