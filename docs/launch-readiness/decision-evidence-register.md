@@ -1035,6 +1035,50 @@ data would need to move, and `billing_routes.py`'s webhook handler would
 need to write to the new location instead) and deserves its own pass
 with the user's sign-off, not a fix folded into an unrelated feature.
 
+### PRODUCT-05 — Phase E of the group-2/3 punch list (#1, optional 2FA)
+
+Status: fixed at `e5c3da7` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+Built to the decided scope: TOTP only, opt-in per account, no role
+required to enable it. `totp.py` implements RFC 6238 from the standard
+library (`hmac`/`hashlib`/`base64`) rather than adding a new dependency
+— SHA1, 6 digits, 30-second step, which is deliberately what every real
+authenticator app (Google Authenticator, Authy, 1Password) implements,
+not a weaker choice made carelessly. `auth.authenticate()` now returns a
+third state, `('2fa', {...})`, distinct from `(True, info)`, and every
+read of it checks `is True` / `== '2fa'` explicitly rather than a bare
+truthy test, since the string `'2fa'` is itself truthy. A new
+self-service "My Account" area (`blueprints/account.py`, distinct from
+`team_logins.py`'s owner-manages-others page) handles setup, disable and
+backup-code regeneration; backup codes are shown in the page exactly
+once, at generation, from the plaintext held only in that one response
+before hashing.
+
+Evidence, all against real PostgreSQL with codes computed by `totp.py`
+itself: correctness cross-checked against RFC 6238's own published test
+vector (its standard 8-digit vector for its seed truncates to exactly
+the 6-digit code this implementation produces for the same input — not
+just internally self-consistent, matching the standard). Full login
+cycle verified live: setup stores a secret with `totp_enabled` still
+false; a valid code at confirm turns it on and returns backup codes;
+login now stops at a code prompt; a wrong code is rejected and grants
+nothing; the right code completes login; a backup code also completes
+login and is removed from the stored set (a second attempt with the
+same code then fails); disabling clears all three columns and returns
+login to one step; wrong-current-password is rejected by both the
+password-change and 2FA-disable forms, and the right one for password
+change actually works, confirmed by logging in with the new password.
+
+**Caught and corrected one of my own testing mistakes before trusting
+the result**: an early "wrong code still logs the user in" observation
+turned out to be a stale cookie jar (a `/logout` curl call that hadn't
+saved the cleared session cookie back to the jar file, so the next
+request silently reused the prior, already-authenticated cookie) — not
+an application bug. Re-verified correctly before recording the finding
+above, rather than reporting the false alarm as a real one.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
