@@ -1081,6 +1081,21 @@ def _open_entry(booking_id, staff_id):
             .order_by(TimeEntry.id.desc()).first())
 
 
+def _staff_is_on_booking(s, b):
+    """Same test my_day() uses to decide which jobs even show a clock button.
+
+    my_day()'s job list already filters to this — solo assignment by name, or
+    a BookingCrew row. clock_in/clock_out took booking_id from the POST body
+    and never repeated it: the button only appears for a worker's own jobs,
+    but nothing stopped a request crafted by hand from naming any booking_id
+    in the tenant and clocking (paid) hours against a job that worker was
+    never on.
+    """
+    if (b.assigned_cleaner or '').strip().lower() == (s.name or '').strip().lower():
+        return True
+    return b.crew_row_for(s) is not None
+
+
 @contractors_bp.route('/my-day/<token>/clock-in/<int:booking_id>', methods=['POST'])
 def clock_in(token, booking_id):
     """Start the clock for the cleaner holding this link.
@@ -1092,6 +1107,8 @@ def clock_in(token, booking_id):
     from models import TimeEntry
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
     b = Booking.query.get_or_404(booking_id)
+    if not _staff_is_on_booking(s, b):
+        abort(403, description='You are not assigned to this job.')
 
     # Already running? Do nothing rather than open a second spell. Somebody
     # double-tapping on a phone with a poor signal must not end up being paid
@@ -1108,6 +1125,8 @@ def clock_out(token, booking_id):
     """Stop the clock. Closes only the spell that is actually open."""
     s = Staff.query.filter_by(agreement_token=token).first_or_404()
     b = Booking.query.get_or_404(booking_id)
+    if not _staff_is_on_booking(s, b):
+        abort(403, description='You are not assigned to this job.')
     entry = _open_entry(b.id, s.id)
     if entry:
         entry.clock_out_at = datetime.utcnow()
