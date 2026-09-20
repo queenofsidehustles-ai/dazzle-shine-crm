@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Full end-to-end write test against a LOCAL CRM with its own empty database.
+ * Full end-to-end write test against a LOCAL Akye instance with its own empty database.
  *
  * Start the server first:
  *   DATABASE_URL="sqlite:////tmp/e2e.db" SECRET_KEY=e2e-test \
@@ -11,7 +11,7 @@
  *
  * Safe by construction: with no TWILIO_* or RESEND_* keys set, send_sms and
  * send_email return "not connected" instead of contacting anybody. Nothing here
- * touches the live CRM, real cleaners, or real money.
+ * touches the live application, real cleaners, or real money.
  */
 const { test, expect } = require('@playwright/test');
 
@@ -27,13 +27,6 @@ async function login(page) {
   await expect(page.locator('.sidebar')).toBeVisible();
 }
 
-// Today, and a date inside the current month, as YYYY-MM-DD.
-//
-// Built from the local parts rather than `toISOString()`, which is UTC. After
-// 8pm in the eastern US those are different days, so the test typed tomorrow's
-// date into an expense form and then could not find the expense — because the
-// CRM, correctly, was still showing today. The suite went red every evening
-// for a reason that had nothing to do with the product.
 const today = new Date();
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
                  + `-${String(d.getDate()).padStart(2, '0')}`;
@@ -41,7 +34,7 @@ const TODAY = iso(today);
 
 test.describe.configure({ mode: 'serial' });
 
-test.describe('CRM end-to-end — local', () => {
+test.describe('Akye end-to-end — local', () => {
   test.beforeEach(async ({ page }) => { await login(page); });
 
   test('1. logs in and lands on the dashboard', async ({ page }) => {
@@ -49,19 +42,14 @@ test.describe('CRM end-to-end — local', () => {
     await expect(page.locator('.sidebar')).toContainText('Bookings');
   });
 
-  // The money pages used to be five separate sidebar entries. They are one
-  // entry with tabs now (see navigation.py), so the sidebar carries "Money"
-  // and the pages themselves appear once you are inside the section. This
-  // test still checks all five are reachable — just in the place they now live.
   test('2. the Money section is in the nav', async ({ page }) => {
     await expect(page.locator('.sidebar')).toContainText('Money');
-
     await page.goto(CRM + '/money/pnl');
     const tabs = page.locator('.section-tabs');
     await expect(tabs).toContainText('Profit & Loss');
     await expect(tabs).toContainText('Expenses');
     await expect(tabs).toContainText('Payroll');
-    await expect(tabs).toContainText('VA commissions');
+    await expect(tabs).toContainText('Sales commissions');
   });
 
   test('3. adds a cleaner to the team', async ({ page }) => {
@@ -69,7 +57,6 @@ test.describe('CRM end-to-end — local', () => {
     await page.fill('input[name="name"]', 'Test Cleaner');
     await page.fill('input[name="email"]', 'testcleaner@example.com');
     await page.fill('input[name="phone"]', '5550001111');
-    // Must be active, or she won't be offered on the booking page.
     const active = page.locator('input[name="is_active"]');
     if (await active.count() && !(await active.isChecked())) await active.check();
     await page.click('button[type="submit"]');
@@ -84,22 +71,20 @@ test.describe('CRM end-to-end — local', () => {
     await page.fill('input[name="phone"]', '5559998888');
     await page.fill('input[name="cleaning_price"]', '600');
     await page.fill('input[name="preferred_date"]', TODAY);
-    // Don't email the (fake) customer.
     const notify = page.locator('input[name="notify_customer"]');
     if (await notify.count() && await notify.isChecked()) await notify.uncheck();
     await page.click('button[type="submit"]');
     await expect(page.locator('body')).toContainText('E2E Big House');
   });
 
-  test('5. the booking page shows the "who\'s paid" card with a cleaner picker',
-    async ({ page }) => {
-      await page.goto(CRM + '/bookings/');
-      await page.click('text=E2E Big House');
-      await expect(page.locator('body')).toContainText("Who's Paid For This Job");
-      await expect(page.locator('body')).toContainText('Give this job to a specific cleaner');
-      await expect(page.locator('select[name="add_staff_id"]')).toBeVisible();
-      await expect(page.locator('input[name="add_pay"]')).toBeVisible();
-    });
+  test('5. the booking page shows the "who\'s paid" card with a cleaner picker', async ({ page }) => {
+    await page.goto(CRM + '/bookings/');
+    await page.click('text=E2E Big House');
+    await expect(page.locator('body')).toContainText("Who's Paid For This Job");
+    await expect(page.locator('body')).toContainText('Give this job to a specific cleaner');
+    await expect(page.locator('select[name="add_staff_id"]')).toBeVisible();
+    await expect(page.locator('input[name="add_pay"]')).toBeVisible();
+  });
 
   test('6. assigns the cleaner directly at a set amount', async ({ page }) => {
     await page.goto(CRM + '/bookings/');
@@ -109,59 +94,42 @@ test.describe('CRM end-to-end — local', () => {
     await page.click('button[name="send_now"]');
     const body = page.locator('body');
     await expect(body).toContainText('Test Cleaner');
-    // The pay lands in an input, and toContainText only reads visible text —
-    // an input's value is an attribute and never appears in it. Test 7 checks
-    // the same figure the right way.
     await expect(page.locator('input[name^="pay_"]')).toHaveValue('250.00');
-    // Assigned directly means it must NOT be sitting open on the claim board.
     await expect(body).toContainText('Already assigned to Test Cleaner');
   });
 
   test('7. the set amount overrides the automatic percentage', async ({ page }) => {
     await page.goto(CRM + '/bookings/');
     await page.click('text=E2E Big House');
-    // 50% of a $600 job would be $300; we set $250 by hand and that must win.
     await expect(page.locator('input[name^="pay_"]')).toHaveValue('250.00');
   });
 
   test('8. logs expenses, including mileage', async ({ page }) => {
     await page.goto(CRM + '/money/expenses');
-
     await page.selectOption('select[name="category"]', 'ads_google');
     await page.fill('input[name="amount"]', '180');
     await page.fill('input[name="vendor"]', 'Google Ads');
     await page.fill('input[name="date"]', TODAY);
     await page.click('button:has-text("Log this expense")');
     await expect(page.locator('body')).toContainText('Google Ads');
-
-    // Mileage swaps the amount box for miles × rate.
     await page.selectOption('select[name="category"]', 'mileage');
     await expect(page.locator('input[name="miles"]')).toBeVisible();
     await page.fill('input[name="miles"]', '100');
     await page.fill('input[name="date"]', TODAY);
     await page.click('button:has-text("Log this expense")');
-    // 100 mi × $0.70 = $70.00
     await expect(page.locator('body')).toContainText('70.00');
     await expect(page.locator('body')).toContainText('100 mi');
   });
 
   test('9. refuses to hand-enter cleaner pay (double-count guard)', async ({ page }) => {
-    // The category must not even be offered in the dropdown.
     await page.goto(CRM + '/money/expenses');
     const options = await page.locator('select[name="category"] option').allInnerTexts();
     expect(options.join('|')).not.toContain('Cleaner pay');
-
-    // Posting it straight to the server must be rejected too. Playwright follows
-    // the redirect, so the refusal lands in THIS response body — checking a later
-    // page load would miss it, because the flash is consumed on first render.
     const res = await page.request.post(CRM + '/money/expenses/add', {
       form: { category: 'contractor_pay', amount: '275', date: TODAY },
     });
     expect(res.status()).toBeLessThan(400);
     expect(await res.text()).toContain('would count it twice');
-
-    // And no such row landed in the ledger. (Scope to the ledger table — the
-    // page's footer note mentions "Cleaner pay" in prose on purpose.)
     await page.goto(CRM + '/money/expenses');
     const ledger = page.locator('table').first();
     await expect(ledger).not.toContainText('Cleaner pay');
@@ -185,10 +153,6 @@ test.describe('CRM end-to-end — local', () => {
     await expect(body).toContainText('Money in');
     await expect(body).toContainText('Net profit');
     await expect(body).toContainText('Is your advertising paying for itself');
-
-    // Read the three headline figures off the stat cards structurally, then
-    // check they reconcile. Structure beats regex here — the same words appear
-    // in the statement below and in the explanatory prose.
     const tile = async (label) => {
       const value = page.locator('.stat-card', { hasText: label }).first().locator('.value');
       const raw = (await value.innerText()).replace(/[$,\s]/g, '');
@@ -200,20 +164,14 @@ test.describe('CRM end-to-end — local', () => {
     for (const [n, v] of [['in', moneyIn], ['out', moneyOut], ['net', net]]) {
       expect(Number.isNaN(v), `money ${n} should be a number`).toBe(false);
     }
-    // revenue − everything out == net profit
     expect(Math.abs((moneyIn - moneyOut) - net)).toBeLessThan(0.02);
   });
 
   test('12. unpaid jobs are NOT counted as revenue', async ({ page }) => {
     await page.goto(CRM + '/money/pnl');
-    // Labels are uppercased by CSS, so innerText comes back shouting — match
-    // case-insensitively rather than against the source casing.
     const text = await page.locator('body').innerText();
-    // The booking was never marked paid, so money in must be $0.00.
     expect(text).toMatch(/Money in[\s\S]{0,80}?\$0\.00/i);
-    // ...but it must still be visible as money owed.
     expect(text).toMatch(/still owed to you/i);
-    // And the unpaid work should show as booked pipeline, not income.
     expect(text).toMatch(/booked this period/i);
   });
 
@@ -223,25 +181,21 @@ test.describe('CRM end-to-end — local', () => {
     const csv = await res.text();
     expect(csv).toContain('Line 8 — Advertising');
     expect(csv).toContain('NET PROFIT');
-    expect(csv).toContain('Line 9 — Car & truck');   // the mileage entry
+    expect(csv).toContain('Line 9 — Car & truck');
   });
 
   test('14. white label — no hardcoded brand in the CSV export', async ({ page }) => {
     const res = await page.request.get(CRM + '/money/pnl/export');
     const csv = await res.text();
-    // This local instance has no business_name set, so the real brand must not appear.
     expect(csv).not.toContain('Dazzle');
   });
 
   test('15. every page in the sidebar loads without error', async ({ page }) => {
-    // Crawl the real nav rather than a hardcoded list — this tests exactly what
-    // she can click, and stays correct when the nav changes.
     await page.goto(CRM + '/');
     const hrefs = await page.locator('.sidebar nav a').evaluateAll(
       (as) => as.map((a) => a.getAttribute('href')).filter(Boolean));
     const links = [...new Set(hrefs)].filter((h) => h && !h.includes('logout'));
     expect(links.length, 'sidebar should have links').toBeGreaterThan(8);
-
     const broken = [];
     for (const href of links) {
       const res = await page.goto(new URL(href, CRM).toString());
@@ -257,26 +211,6 @@ test.describe('Calendar — drag to reschedule', () => {
   test.beforeEach(async ({ page }) => { await login(page); });
 
   test('dragging a job to another day moves it', async ({ page }) => {
-    // Three things had to be fixed here, and all three were the test's fault
-    // rather than the calendar's — the drag itself always worked.
-    //
-    // 1. The booking is named uniquely and deleted at the end. It used to be
-    //    called "Drag Me" and left behind, so every run added another chip to
-    //    the 5th. By the tenth the day cell was tall enough that the drop
-    //    landed nowhere and the test failed with no job having moved.
-    //
-    // 2. The drop is dispatched rather than mimed. `dragTo` moves a mouse and
-    //    hopes the browser synthesises HTML5 drag events from it, which it
-    //    does most of the time. Dispatching dragstart/dragover/drop with one
-    //    shared DataTransfer is what the page actually listens for.
-    //
-    // 3. The toast is read immediately. The calendar reloads itself 900ms
-    //    after a drop to re-read the grid from the server, which wipes it.
-    //    (Holding the reload is not an option — Chromium will not let you
-    //    reassign `location.reload`, and the assignment fails silently, which
-    //    is its own small trap.) The message lands about 20ms after the drop,
-    //    so reading it straight away has a wide margin; sleeping first does
-    //    not, which is what an earlier version of this did.
     const who = `Drag Me ${Math.random().toString(36).slice(2, 8)}`;
     await page.goto(CRM + '/bookings/new');
     await page.fill('input[name="name"]', who);
@@ -287,35 +221,23 @@ test.describe('Calendar — drag to reschedule', () => {
     if (await notify.count() && await notify.isChecked()) await notify.uncheck();
     await page.click('button[type="submit"]');
     const bookingUrl = page.url();
-
     await page.goto(CRM + '/bookings/calendar?year=2026&month=8');
-    // The chip shows only the first word of the name; the whole of it is in
-    // the title attribute, which is what makes this run-unique locator work.
     const chip = page.locator(`.jobchip[title^="${who}"]`).first();
     await expect(chip, 'the job should be on the calendar and draggable').toBeVisible();
     await expect(chip).toHaveAttribute('draggable', 'true');
-
     const target = page.locator('.daycell[data-date="2026-08-19"]');
     await expect(target).toBeVisible();
-
     const dt = await page.evaluateHandle(() => new DataTransfer());
     await chip.dispatchEvent('dragstart', { dataTransfer: dt });
     await target.dispatchEvent('dragover', { dataTransfer: dt });
     await target.dispatchEvent('drop', { dataTransfer: dt });
-
-    // Read straight away — see (3) above.
-    await expect(page.locator('#dropMsg'),
-      'the calendar should say what it just did').toContainText(`Moved ${who} to 2026-08-19`);
-
-    // And it stuck. The server is the source of truth, so this re-reads the
-    // grid rather than trusting the toast.
+    await expect(page.locator('#dropMsg'), 'the calendar should say what it just did')
+      .toContainText(`Moved ${who} to 2026-08-19`);
     await page.goto(CRM + '/bookings/calendar?year=2026&month=8');
     const moved = page.locator(`.daycell[data-date="2026-08-19"] .jobchip[title^="${who}"]`);
     await expect(moved, 'the job should now sit on the 19th').toBeVisible();
     await expect(page.locator(`.daycell[data-date="2026-08-05"] .jobchip[title^="${who}"]`),
       'and no longer on the 5th').toHaveCount(0);
-
-    // Put the database back. Leaving this behind is what broke (1).
     page.on('dialog', d => d.accept());
     await page.goto(bookingUrl);
     const del = page.locator('button:has-text("Delete Booking")');
