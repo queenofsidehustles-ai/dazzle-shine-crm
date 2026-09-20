@@ -455,6 +455,19 @@ def business():
             if dark_key in request.form:
                 BusinessSetting.set(dark_key,
                                     _brands.normalise_hex(request.form.get(dark_key, '')))
+
+        # Markets is a multi-select: a deselect-everything save submits no
+        # 'markets' values at all, indistinguishable from this form's other
+        # fields simply not being on the page this POST came from. The
+        # hidden marker says "this section really was submitted."
+        if 'markets_submitted' in request.form:
+            import customer_terms as _ct
+            selected = request.form.getlist('markets')
+            _ct.set_markets(selected)
+            for code in selected:
+                key = f'market_note_{code}'
+                if key in request.form:
+                    _ct.set_market_note(code, request.form.get(key, ''))
         db.session.commit()
         # Typing the original business name back in is enough to trigger the
         # one-time restore of its commercial brand, palette and review link —
@@ -485,9 +498,14 @@ def business():
     # as homework; nobody could tell there was already a complete one in there.
     from blueprints.contractors import _default_agreement
     import branding as _b
+    import customer_terms as _ct
+    current_markets = _ct.markets()
     return render_template('admin/settings_business.html', current=current,
                            default_agreement=_default_agreement(
-                               _b.biz_name(), current['worker_model']))
+                               _b.biz_name(), current['worker_model']),
+                           us_states=_ct.US_STATES, us_state_names=_ct.US_STATE_NAMES,
+                           current_markets=current_markets,
+                           market_notes={c: _ct.market_note(c) for c in current_markets})
 
 
 # ── What has broken lately ──────────────────────────────────────────────────
