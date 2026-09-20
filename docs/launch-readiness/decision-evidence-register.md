@@ -938,6 +938,37 @@ the existing server-side key (used in `places_finder.py`) is IP-
 restricted and unsafe to expose in browser JavaScript. Cannot be created
 by this session — requires the user's Google Cloud Console access.
 
+### PRODUCT-03 — Phase C of the group-2/3 punch list (#7, Markets)
+
+Status: fixed at `b8862ba` on `fix/journey-test-findings`, pushed to
+[PR #6](https://github.com/queenofsidehustles-ai/dazzle-shine-crm/pull/6)
+against `akye-stable`, **not merged**.
+
+Built per the decided scope (compliance-copy-only, not booking-
+functional): a "Markets" multi-select on Business Info, next to Time
+Zone, plus an optional per-state note appended to `customer_terms` for
+each selected market. Deliberately additive rather than a per-customer
+swap — traced `Client`/`Booking` first and confirmed neither stores a
+customer's state (only city and zip), so there is no reliable way to
+target a note at one specific customer; a business's markets are a fact
+about the business, and every customer sees every note the business has
+written for its selected markets, erring toward more disclosure rather
+than risking silently missing required disclosure for someone. Wired
+into `customer_terms.get_terms()`, the single function every existing
+surface (confirmation emails, payment page, invoices, terms-acceptance
+snapshotting) already reads through, so nothing else needed to change to
+reach all of them. Ships with the existing default terms as every
+state's fallback; explicitly not legal advice, matching the base terms'
+own existing disclaimer.
+
+Evidence: selected FL and GA as markets against real PostgreSQL, wrote a
+note for FL only, and confirmed both `get_terms()` and `as_html()`
+correctly append the FL note under its own bold heading (the same
+markup convention the rest of the terms already use) while GA — selected
+but left blank — does not appear at all, proving the "only if written"
+behavior rather than just that saving works. Full 17-check prior
+regression suite re-run clean.
+
 ### RELEASE-01 — launch posture
 
 Status: NO-GO.
