@@ -4,7 +4,8 @@ These are deliberately narrower than tests/test_signup.py. They attack the
 three launch-safety properties that are easiest to get wrong under real cohort
 traffic:
 
-* public signup is closed unless SIGNUPS_OPEN=1 is explicit;
+* public signup is open whenever BASE_DOMAIN is set, and SIGNUPS_OPEN=0 is the
+  only way to deliberately close it;
 * two simultaneous requests for the same slug cannot corrupt/delete the winner;
 * a required starter-template failure leaves neither a registered tenant nor an
   orphan tenant schema.
@@ -79,10 +80,24 @@ def _form(slug, email):
     }
 
 
-def test_signup_defaults_closed(monkeypatch):
-    """BASE_DOMAIN by itself must never open public tenant creation."""
+def test_signup_open_by_default(monkeypatch):
+    """BASE_DOMAIN alone is enough: self-service needs no separate opt-in."""
     monkeypatch.setenv('BASE_DOMAIN', 'akye.test')
     monkeypatch.delenv('SIGNUPS_OPEN', raising=False)
+    monkeypatch.delenv('DATABASE_URL', raising=False)
+    monkeypatch.setenv('SECRET_KEY', 'signup-safety-test-secret')
+
+    from app import create_app
+    app = create_app()
+    response = app.test_client().get('/signup', headers={'Host': 'akye.test'})
+    assert response.status_code == 200
+
+
+def test_signup_can_be_closed_explicitly(monkeypatch):
+    """SIGNUPS_OPEN=0 is the deliberate off switch for a by-hand onboarding
+    window, and it must still close the door."""
+    monkeypatch.setenv('BASE_DOMAIN', 'akye.test')
+    monkeypatch.setenv('SIGNUPS_OPEN', '0')
     monkeypatch.delenv('DATABASE_URL', raising=False)
     monkeypatch.setenv('SECRET_KEY', 'signup-safety-test-secret')
 
