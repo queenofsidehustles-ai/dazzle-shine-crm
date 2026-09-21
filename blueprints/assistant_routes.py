@@ -30,12 +30,19 @@ from actions import ACTIONS  # noqa: F401  (imported for callers and tests)
 @owner_required
 @requires_plan('assistant')
 def page():
+    # The sidebar quick-ask bar (see base_admin.html) lands here with the
+    # question as a query param rather than posting it directly -- this page
+    # already owns the whole ask/answer flow (history, voice, the confirm
+    # button), and duplicating that in two places is how they drift apart.
+    # The page auto-submits it once loaded; see assistant.html.
+    prefill_q = (request.args.get('q') or '').strip()
     return render_template('admin/assistant.html',
                            name=assistant.NAME,
                            configured=bool(assistant.os.environ.get('OPENROUTER_API_KEY')),
                            left=assistant.remaining(),
                            limit=assistant.MONTHLY_LIMIT,
-                           real_voice=speech.configured())
+                           real_voice=speech.configured(),
+                           prefill_q=prefill_q)
 
 
 @assistant_bp.route('/ask', methods=['POST'])

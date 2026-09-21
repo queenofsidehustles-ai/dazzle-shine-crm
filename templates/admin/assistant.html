@@ -311,6 +311,21 @@
     speechSynthesis.onvoiceschanged = pickVoice;   // Chrome fills the list late
   }
 
+  // A question typed into the sidebar quick-ask bar arrives here as ?q=... .
+  // Auto-submitting it, rather than just pre-filling the box, is what makes
+  // that bar feel like one action instead of a redirect plus a second click.
+  {% if prefill_q %}
+  (function () {
+    document.getElementById('q').value = {{ prefill_q | tojson }};
+    document.getElementById('askform').requestSubmit();
+    // The question is now in the answer thread below; the URL keeping it in
+    // the address bar would re-ask it on every reload of this page.
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, '', '{{ url_for("assistant.page") }}');
+    }
+  })();
+  {% endif %}
+
   // The browser voice. Kept as the floor, never the first choice.
   function browserVoice(text) {
     try {

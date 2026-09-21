@@ -36,6 +36,21 @@
       .brand-lens select { max-width:116px; font-size:var(--t-xs); }
     }
 
+    .ask-nana-quick {
+      display:flex; align-items:center; gap:7px; margin:0 16px 14px;
+      background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12);
+      border-radius:var(--r-pill); padding:8px 13px;
+    }
+    .ask-nana-quick-icon { flex:0 0 auto; font-size:0.9rem; opacity:0.85; }
+    .ask-nana-quick input {
+      flex:1; min-width:0; border:none; background:none; outline:none;
+      color:#fff; font-family:inherit; font-size:var(--t-sm);
+    }
+    .ask-nana-quick input::placeholder { color:rgba(255,255,255,0.5); }
+    .ask-nana-quick:focus-within {
+      border-color:rgba(255,255,255,0.3); background:rgba(255,255,255,0.11);
+    }
+
   </style>
 
   <!-- The Scripts and SOPs pages were written against Alpine (x-data / x-show)
@@ -50,6 +65,19 @@
       <span class="script">{{ BIZ }}</span>
       <span class="sub">Back Office</span>
     </div>
+    {# Ask Nana moved into the Knowledge Base -- a place to go looking, not
+       the front-line spot she held right under Dashboard. This is what
+       keeps her from losing prominence in that move: a quick question from
+       anywhere in the app, on every screen rather than the one page you'd
+       otherwise have to go find first. Owner-only, matching the page itself
+       (see assistant_routes.py). #}
+    {% if session.get('role') == 'owner' %}
+    <form class="ask-nana-quick" action="{{ url_for('assistant.page') }}" method="GET">
+      <span class="ask-nana-quick-icon">💬</span>
+      <input type="text" name="q" placeholder="Ask Nana anything…"
+             aria-label="Ask Nana" autocomplete="off" />
+    </form>
+    {% endif %}
     {# How far through setup, on every screen rather than only on the page
        about setup. Somebody who cannot see how much is left assumes it is a
        lot, and a job half done that looks endless is the one that gets
