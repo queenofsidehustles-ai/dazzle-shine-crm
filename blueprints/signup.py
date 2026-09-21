@@ -26,11 +26,14 @@ minute. Provisioning owns its cleanup while it holds the slug lock, so a failed
 request can never delete a tenant created by a competing request for the same
 address.
 
-## Off unless deliberately switched on
+## Open by default
 
-No BASE_DOMAIN means no subdomains, which means signup cannot work and does not
-appear. SIGNUPS_OPEN must also be exactly 1: a missing deployment variable keeps
-the door closed rather than accidentally exposing public tenant creation.
+Self-service is the product: a new client signs on and onboards themselves with
+no one on the other end. BASE_DOMAIN is a hard requirement -- there is no
+subdomain to carve a company out of without one, so no BASE_DOMAIN means signup
+cannot work and does not appear. SIGNUPS_OPEN is the deliberate *off* switch for
+a by-hand onboarding window (set it to 0 to close the door); leaving it unset
+keeps signup open rather than closed.
 """
 import os
 import re
@@ -57,14 +60,14 @@ class SlugTaken(Exception):
 
 
 def signups_open():
-    """Signup needs a domain to carve subdomains out of, and an explicit yes.
+    """Signup needs a domain to carve subdomains out of. Otherwise: open.
 
-    Fail closed: tenancy can stay live for existing customers while public
-    account creation remains disabled unless SIGNUPS_OPEN=1 is deliberately
-    configured on the deployment.
+    Self-service onboarding is the default. SIGNUPS_OPEN=0 is the deliberate
+    off switch, for the rare stretch where companies are being onboarded by
+    hand instead; anything else, including unset, leaves the door open.
     """
     return bool((os.environ.get('BASE_DOMAIN') or '').strip()) and \
-        os.environ.get('SIGNUPS_OPEN') == '1'
+        os.environ.get('SIGNUPS_OPEN') != '0'
 
 
 def _require_open():
