@@ -41,6 +41,10 @@
         <h3 style="margin:0 0 6px;font-size:1.1rem">{{ p.next.title }}</h3>
         <p style="color:var(--muted);margin:0 0 14px;line-height:1.55">{{ p.next.why }}</p>
         <a href="{{ p.next.link }}" class="btn-primary">{{ p.next.cta }} →</a>
+        {% if p.next.secondary %}
+        <a href="{{ p.next.secondary.link }}" style="margin-left:14px;color:var(--gold-deep);
+                                                      font-size:0.88rem;font-weight:600">{{ p.next.secondary.label }}</a>
+        {% endif %}
       </div>
     {% endif %}
 
@@ -57,7 +61,11 @@
           <div style="font-weight:600{{ ';text-decoration:line-through;color:var(--softer)' if s.done else '' }}">
             {{ s.title }}</div>
           {% if not s.done %}
-            <div style="color:var(--softer);font-size:0.86rem;margin-top:2px">{{ s.why }}</div>
+            <div style="color:var(--softer);font-size:0.86rem;margin-top:2px">{{ s.why }}
+              {% if s.secondary %}
+              · <a href="{{ s.secondary.link }}" style="color:var(--gold-deep);font-weight:600">{{ s.secondary.label }}</a>
+              {% endif %}
+            </div>
           {% endif %}
         </div>
         <a href="{{ s.link }}" style="color:var(--gold-deep);font-size:0.88rem;

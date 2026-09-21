@@ -163,11 +163,19 @@ def journey():
         {'key': 'team', 'done': has_staff,
          'title': 'Add a cleaner',
          'why': 'You need somebody to send a job to. Add yourself if you are still cleaning.',
-         'cta': 'Add a cleaner', 'link': '/staff/new'},
+         'cta': 'Add a cleaner', 'link': '/staff/new',
+         # A business coming off a spreadsheet or another system does not
+         # have "a cleaner" to add, it has a roster -- typing them in one at
+         # a time here is exactly the retyping the Migration Toolbox exists
+         # to skip.
+         'secondary': {'label': 'Already have a team? Import them all at once',
+                       'link': '/migration'}},
         {'key': 'client', 'done': has_client,
          'title': 'Add a customer',
          'why': 'One you already clean for. Real is better than made up — you will see how it works.',
-         'cta': 'Add a customer', 'link': '/bookings/clients/new'},
+         'cta': 'Add a customer', 'link': '/bookings/clients/new',
+         'secondary': {'label': 'Already have a customer list? Import it instead',
+                       'link': '/migration'}},
         {'key': 'job', 'done': bookings > 0 and assigned,
          'title': 'Schedule a job and assign it',
          'why': 'This is the moment it starts being useful — the cleaner gets a text with the address, '
