@@ -485,6 +485,21 @@ input:focus, select:focus, textarea:focus {
 input::placeholder, textarea::placeholder { color: var(--softer); }
 .form-group { margin-bottom: var(--s4); }
 
+/* A question mark next to a field that owners get stuck on, straight to Ask
+ * Nana with the question already typed. Not a tooltip: the answer to "do I
+ * need a W-9?" depends on this business's setup, and a static blurb here
+ * would eventually be wrong for somebody -- Nana already knows how to give
+ * a real answer instead of a generic one. */
+.ask-hint {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-left: 5px; flex: 0 0 auto;
+  border-radius: 50%; background: var(--ground); border: 1px solid var(--line);
+  color: var(--softer); font-size: 0.68rem; font-weight: 700;
+  text-decoration: none; line-height: 1; vertical-align: middle;
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
+}
+.ask-hint:hover { background: var(--amber-soft); border-color: var(--amber-line); color: var(--amber-deep); }
+
 /* ── Tables ───────────────────────────────────────────────────────────── */
 
 table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }

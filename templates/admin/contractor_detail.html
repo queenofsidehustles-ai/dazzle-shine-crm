@@ -188,7 +188,12 @@
         <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border:1px solid var(--line);
                     border-radius:8px;margin-bottom:8px">
           <div style="flex:1">
-            <p style="font-weight:600;font-size:0.9rem">{{ label }}</p>
+            <p style="font-weight:600;font-size:0.9rem">{{ label }}
+              {% if kind == 'w9' %}
+              <a class="ask-hint" title="Ask Nana: do I need this?"
+                 href="{{ url_for('assistant.page', q='Do I need a W-9 for a cleaner I hire?') }}">?</a>
+              {% endif %}
+            </p>
             {% if doc %}
               <p style="font-size:0.78rem;color:var(--good)">Received {{ doc.uploaded_at.strftime('%b %d, %Y') }}</p>
             {% else %}

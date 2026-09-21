@@ -65,25 +65,6 @@
   </div>
   {% endif %}
 
-  <p style="color:var(--muted);line-height:1.65;margin:0">
-    Ask about your own business in your own words — what came in, what is booked,
-    who is waiting on a reply, what to do first this week. <strong>{{ name }}
-    reads your books and answers out of them.</strong> Every figure is worked out
-    by the system and checked against your records before you see it, so she
-    cannot make a number up.
-  </p>
-  <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:8px 0 0">
-    She writes your emails. Nothing leaves without you: she can send one
-    outreach email to one commercial prospect, and only after you have read
-    every word and pressed send. Everything else she writes is yours to copy.
-    She never texts anybody and never charges a card.
-  </p>
-  <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:6px 0 0">
-    Tap the microphone and ask out loud — hands full, phone on the seat. Tick
-    <em>read answers out loud</em> and you never have to look at it.
-    <strong>Not while you are driving</strong>: pull over, or wait.
-  </p>
-
   <form class="ask-box" id="askform" onsubmit="return askIt(event)">
     <input id="q" name="q" autocomplete="off" autofocus
            placeholder="How much came in last month?" aria-label="Ask {{ name }}" />
@@ -130,6 +111,29 @@
     <button type="button" onclick="fill(this.innerText)">{{ s }}</button>
     {% endfor %}
   </div>
+
+  {# Used to lead the page -- three paragraphs of explanation before the box
+     you actually came to use. The box is the point; this is context for
+     somebody who scrolls down for it, not the price of admission to ask a
+     question. #}
+  <p style="color:var(--muted);line-height:1.65;margin:22px 0 0">
+    Ask about your own business in your own words — what came in, what is booked,
+    who is waiting on a reply, what to do first this week. <strong>{{ name }}
+    reads your books and answers out of them.</strong> Every figure is worked out
+    by the system and checked against your records before you see it, so she
+    cannot make a number up.
+  </p>
+  <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:8px 0 0">
+    She writes your emails. Nothing leaves without you: she can send one
+    outreach email to one commercial prospect, and only after you have read
+    every word and pressed send. Everything else she writes is yours to copy.
+    She never texts anybody and never charges a card.
+  </p>
+  <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:6px 0 0">
+    Tap the microphone and ask out loud — hands full, phone on the seat. Tick
+    <em>read answers out loud</em> and you never have to look at it.
+    <strong>Not while you are driving</strong>: pull over, or wait.
+  </p>
 
   <div id="answers"></div>
 

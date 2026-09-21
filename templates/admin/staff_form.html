@@ -33,7 +33,10 @@
          50% of the job — the model default. That is a real amount of money to
          decide by accident, and it only shows up when the job is paid out. #}
       <div class="form-group">
-        <label>How they're paid</label>
+        <label>How they're paid
+          <a class="ask-hint" title="Ask Nana: hourly or percentage?"
+             href="{{ url_for('assistant.page', q='Should I pay a cleaner hourly or a percentage of the job?') }}">?</a>
+        </label>
         <div style="display:flex;gap:10px">
           <select name="pay_type" style="flex:1">
             <option value="percent" {{ 'selected' if not staff or staff.pay_type == 'percent' }}>% of the job</option>
