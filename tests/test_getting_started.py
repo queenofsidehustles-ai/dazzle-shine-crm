@@ -203,8 +203,12 @@ check('SETUP.next' in shell, 'and names the one thing to do next')
 
 # Dismissible, and only once a day. A reminder that cannot be put away is an
 # obstacle, and it annoys the person who has already decided to do it later.
-check("request.endpoint != 'admin.dashboard'" in shell,
-      'the reminder stays off the dashboard, which already carries the full card')
+# Excludes both the dashboard AND the getting-started page itself -- each
+# already carries the full getting-started card, so the floating nudge would
+# otherwise repeat the same "what's next" message a second time on the same
+# screen.
+check("request.endpoint not in ('admin.dashboard', 'settings.getting_started')" in shell,
+      'the reminder stays off both pages that already carry the full card')
 check('hideNudge' in shell, 'the daily reminder can be dismissed')
 check("'setup-nudge-' + new Date()" in shell,
       'and is keyed by the date, so it returns tomorrow rather than never')
