@@ -138,8 +138,11 @@ def _send_reset(user, link):
 # ── My Account — a person managing their own login ──────────────────────────
 #
 # Distinct from team_logins.py, which is the owner managing OTHER people's
-# accounts (and can set someone else's password directly). This is self-
-# service: change your own password, turn two-factor on or off for yourself.
+# accounts -- creating one, disabling it, sending it a reset link (team_logins
+# reuses _reset_url/_send_reset/_recently_sent below rather than setting a
+# password directly; nobody but the account holder ever ends up knowing it).
+# This is self-service: change your own password, turn two-factor on or off
+# for yourself.
 # The environment-based single-business owner login has no User row and
 # cannot use any of it -- there is nothing here to attach a secret to.
 

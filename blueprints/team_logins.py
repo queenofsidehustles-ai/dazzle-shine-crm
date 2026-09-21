@@ -71,14 +71,26 @@ def toggle(user_id):
 @team_logins_bp.route('/<int:user_id>/reset', methods=['POST'])
 @owner_required
 def reset(user_id):
+    """Send the same reset link /forgot sends, rather than the owner typing a
+    new password on someone else's behalf.
+
+    That used to mean a second person always knew a teammate's password, at
+    least for the moment it was handed over -- by text, by sticky note,
+    however. This is the one path a password ever gets set through now,
+    self-service or owner-triggered, so there is only the one to secure."""
     u = User.query.get_or_404(user_id)
-    password = request.form.get('password') or ''
-    if len(password) < 6:
-        flash('New password must be at least 6 characters.', 'error')
+    if not u.active:
+        flash(f"{u.name}'s login is disabled — enable it first so the link works.", 'error')
         return redirect(url_for('team_logins.index'))
-    u.set_password(password)
-    db.session.commit()
-    flash(f'Password reset for {u.name}. ✅', 'success')
+
+    from blueprints.account import _reset_url, _send_reset, _recently_sent
+    from models import LoginToken
+    if _recently_sent(u):
+        flash(f'A reset link already went to {u.name} in the last few minutes.', 'info')
+        return redirect(url_for('team_logins.index'))
+    raw, _tok = LoginToken.issue(u, 'reset', email=u.username)
+    _send_reset(u, _reset_url(raw))
+    flash(f'Reset link sent to {u.name}. ✅', 'success')
     return redirect(url_for('team_logins.index'))
 
 

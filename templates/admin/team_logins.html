@@ -65,11 +65,13 @@
                   {{ 'Disable' if u.active else 'Enable' }}
                 </button>
               </form>
+              {# She picks her own password now -- the owner used to type one
+                 in here and hand it over some other way, which is one more
+                 person who has known it. This just sends the same reset link
+                 /forgot sends, so there's only ever the one path in. #}
               <form method="POST" action="{{ url_for('team_logins.reset', user_id=u.id) }}"
-                    style="display:flex;gap:4px" onsubmit="return this.password.value.length>=6 || (alert('Password must be at least 6 characters'),false)">
-                <input type="text" name="password" placeholder="new password"
-                       style="padding:5px;border:1px solid var(--line);border-radius:6px;font-size:0.78rem;width:110px">
-                <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.78rem">Reset</button>
+                    onsubmit="return confirm('Send {{ u.name }} a link to set a new password?')">
+                <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.78rem">Send reset link</button>
               </form>
               <form method="POST" action="{{ url_for('team_logins.delete', user_id=u.id) }}"
                     onsubmit="return confirm('Remove {{ u.name }}\'s login for good?')">
