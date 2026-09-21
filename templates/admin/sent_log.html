@@ -11,19 +11,23 @@
   {% if not health.sms_ready %}
   <p style="color:var(--warn);margin:0 0 6px;font-size:0.92rem">
     <strong>📱 Texting is not connected.</strong> No text has been sent to anyone —
-    customers or cleaners. Missing in Railway:
+    customers or cleaners. Still needed:
     <code style="background:#fff;padding:1px 6px;border-radius:5px">{{ health.sms_missing | join('</code>, <code style="background:#fff;padding:1px 6px;border-radius:5px">') | safe }}</code>
   </p>
   {% endif %}
   {% if not health.email_ready %}
   <p style="color:var(--warn);margin:0 0 6px;font-size:0.92rem">
-    <strong>✉️ Email is not connected.</strong> No email has been sent to anyone. Missing in Railway:
-    <code style="background:#fff;padding:1px 6px;border-radius:5px">RESEND_API_KEY</code>
+    <strong>✉️ Email is not connected.</strong> No email has been sent to anyone. Still needed:
+    <code style="background:#fff;padding:1px 6px;border-radius:5px">Resend API key</code>
   </p>
   {% endif %}
+  {# These are the same keys integrations.py reads from Settings first and the
+     environment second -- an owner never needs hosting-dashboard access to
+     connect her own accounts, and pointing her at Railway here was simply
+     wrong: Railway is only a fallback for whoever *does* have it. #}
   <p style="color:var(--amber-deep);font-size:0.85rem;margin:8px 0 0">
-    Add the missing values in your Railway project under <strong>Variables</strong>, then redeploy.
-    Until then the CRM keeps working, but nothing reaches a customer or a cleaner.
+    Connect these yourself in <a href="{{ url_for('settings.connections') }}"><strong>Settings → Connections</strong></a> —
+    no developer or hosting access needed. Until then the CRM keeps working, but nothing reaches a customer or a cleaner.
   </p>
 </div>
 {% else %}
