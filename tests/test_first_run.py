@@ -67,7 +67,7 @@ for gone, why in [('SOP Library', 'an owner who never worked in an office does n
                   ('Content Studio', 'says nothing about what comes out of it'),
                   ('VA commissions', '"VA" is a word learned inside this business')]:
     check(gone not in labels, f'{gone!r} is gone — {why}')
-for kept in ('How-to guides', 'Social posts'):
+for kept in ('SOPs', 'Social posts'):
     check(kept in labels, f'{kept!r} is on the menu')
 check(any('Sales commissions' == t[1] for _g, items in navigation.SECTIONS
           for it in items for t in it[4]),
@@ -125,10 +125,13 @@ check('#bookform { padding-bottom' in book,
       'and the form can scroll clear of it')
 check('flex:0 0 auto; margin:0;' in book, 'the button no longer takes a line of its own')
 
-print('\n9. Settings is seven tabs, not nine')
+print('\n9. Settings is six tabs, not nine')
+# Pricing and Follow-up texts moved out to Toolkit -- they are worked with
+# again and again as jobs come and go, which is what separates them from the
+# set-once config that is left.
 settings_tabs = [t for _g, items in navigation.SECTIONS for it in items
                  if it[2] == 'Settings' for t in it[4]]
-check(len(settings_tabs) == 7, f'{len(settings_tabs)} tabs across the top of Settings')
+check(len(settings_tabs) == 6, f'{len(settings_tabs)} tabs across the top of Settings')
 names = [t[1] for t in settings_tabs]
 check('What is left to do' not in names,
       'the setup list is not a settings tab — it is the Getting started card')
@@ -157,7 +160,7 @@ check(not any(i['endpoint'] == 'settings.getting_started'
       'and drops back down once the last step is done')
 check(any(i['endpoint'] == 'settings.getting_started'
           for g in finished for i in g['items']),
-      'still reachable, under Setup where it lives')
+      'still reachable, under Settings where it lives now setup is done')
 
 print('\n11. The pricing page does not open with forty fields')
 pr = open(os.path.join(TPL, 'admin/settings_pricing.html')).read()

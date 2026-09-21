@@ -11,6 +11,17 @@ its own menu entry is now a tab, and its old address still works.
 
 Adding a page means adding a line here, not editing the sidebar template and
 inventing another active-state expression.
+
+## The reorganization
+
+Four rules decided where everything below lives:
+
+  * frequently-used work stays highest in the sidebar;
+  * Toolkit is for what facilitates the job and is customer-facing —
+    pricing, templates, the cleaning checklist, follow-up wording;
+  * Settings is for the persistent stuff -- set once, rarely revisited;
+  * Knowledge Base is a place to go looking, not a place work happens --
+    Ask Nana, the SOPs, and the curated FAQs live there together.
 """
 
 # A section is: (endpoint, icon, label, owner_only, tabs)
@@ -23,11 +34,9 @@ inventing another active-state expression.
 SECTIONS = [
     ('Dashboard', [
         ('admin.dashboard', '🏠', 'Dashboard', False, []),
-        # Second, because the thing you do most often should be near the top.
-        ('assistant.page', '💬', 'Ask Nana', True, []),
     ]),
 
-    ('Jobs & Schedule', [
+    ('Jobs & Money', [
         ('bookings.index', '📋', 'Bookings', False, [
             ('bookings.index', 'All jobs', False),
             ('invoices.index', 'Invoices', False),
@@ -38,6 +47,19 @@ SECTIONS = [
             ('messages.inbox', 'Inbox', False),
             ('messages.sent_log', 'Sent log', False),
             ('messages.templates', 'Text templates', False),
+        ]),
+        # Folded in from its own top-level section -- Jobs & Money is what it
+        # is called now because the money a job made was never a separate
+        # question from the job itself.
+        ('money.pnl', '📈', 'Money', True, [
+            ('money.pnl', 'Profit & Loss', True),
+            ('admin.reports', 'Trends', True),
+            ('money.expenses', 'Expenses', True),
+            ('money.job_economics', 'Job economics', True),
+            ('contractors.payroll', 'Payroll', True),
+            ('contractors.timesheet', 'Timesheet', True),
+            ('money.tax_forms', '1099 & W-9', True),
+            ('commissions.index', 'Sales commissions', True),
         ]),
     ]),
 
@@ -52,6 +74,9 @@ SECTIONS = [
             ('quotes.index', 'Quotes', False),
         ]),
         ('discounts.index', '🏷️', 'Discounts', False, []),
+        # Moved in from Toolkit -- posting is about winning customers, not
+        # facilitating a job already booked.
+        ('content.index', '✨', 'Social posts', False, []),
     ]),
 
     ('My Team', [
@@ -66,48 +91,40 @@ SECTIONS = [
         ]),
     ]),
 
-    ('Money', [
-        ('money.pnl', '📈', 'Money', True, [
-            ('money.pnl', 'Profit & Loss', True),
-            ('admin.reports', 'Trends', True),
-            ('money.expenses', 'Expenses', True),
-            ('money.job_economics', 'Job economics', True),
-            ('contractors.payroll', 'Payroll', True),
-            ('contractors.timesheet', 'Timesheet', True),
-            ('money.tax_forms', '1099 & W-9', True),
-            ('commissions.index', 'Sales commissions', True),
-        ]),
-    ]),
-
+    # What facilitates the job and is customer-facing: the price quoted, the
+    # words sent, the checklist followed on site. Everything here is touched
+    # again and again as jobs come and go, which is what separates it from
+    # Settings below.
     ('Toolkit', [
-        ('workorders.templates', '✅', 'Checklists', False, []),
-        ('sops.index', '📖', 'How-to guides', False, []),
-        ('content.index', '✨', 'Social posts', False, []),
+        ('settings.pricing', '💲', 'Pricing', True, []),
         ('email_templates.index', '✉️', 'Templates', False, [
             ('email_templates.index', 'Emails', False),
             ('scripts.index', 'Call scripts & outreach', False),
             ('messages.templates', 'Text templates', False),
         ]),
+        ('workorders.templates', '✅', 'Cleaning Checklist', False, []),
+        ('settings.followup_texts', '💬', 'Follow-up texts', True, []),
     ]),
 
-    ('Setup', [
-        # Its own item, above Settings. Getting back to the setup list meant
-        # noticing a banner that disappears the moment the last step is done —
-        # so a business that half-finished had no way back to it, and said so.
+    # A place to go looking, not a place work happens. Ask Nana's own job
+    # changed alongside this move: she is a knowledge/value-discovery tool
+    # now, for making the most of the application, which is exactly this
+    # section's purpose rather than the daily front-line spot she held before.
+    ('Knowledge Base', [
+        ('assistant.page', '💬', 'Ask Nana', True, []),
+        ('sops.index', '📖', 'SOPs', False, []),
+        ('faq.index', '💡', 'FAQs', False, []),
+    ]),
+
+    # Set once and rarely revisited. Getting started and the Migration
+    # Toolbox live here now that setup is done -- while it isn't, the promote
+    # logic below still lifts Getting started to the very top of the sidebar,
+    # same as it always has.
+    ('Settings', [
         ('settings.getting_started', '🚀', 'Getting started', False, []),
-        # A once-in-a-while tool for a business switching over from something
-        # else, not a settings page -- its own item for the same reason
-        # Getting started is, rather than one more Settings tab.
         ('migration.index', '📦', 'Migration Toolbox', True, []),
-        # Nine tabs, two of which were setup trackers or a fault log. Both
-        # routes still exist -- `settings.setup` is reached from the Getting
-        # started card, and the error log from the alert email that names it --
-        # they are simply not a thing a cleaning company reads across the top of
-        # its own settings. What is left is ordered by how soon it is needed.
         ('settings.business', '⚙️', 'Settings', True, [
             ('settings.business', 'Business', True),
-            ('settings.pricing', 'Pricing', True),
-            ('settings.followup_texts', 'Follow-up texts', True),
             ('settings.connections', 'Connections', True),
             ('settings.automations_page', 'Automations', True),
             ('team_logins.index', 'Team logins', True),
@@ -154,6 +171,8 @@ BELONGS_TO = {
     'scripts.edit': 'scripts.index',
     'sops.edit': 'sops.index',
     'sops.new': 'sops.index',
+    'faq.new': 'faq.index',
+    'faq.edit': 'faq.index',
     'email_templates.edit': 'email_templates.index',
     'workorders.edit_template': 'workorders.templates',
     'workorders.new_template': 'workorders.templates',
@@ -264,7 +283,7 @@ def sidebar(role=None, can=None, setup_done=True):
     """
     can = can or _always_allowed
     out = []
-    # Getting started sits under SETUP, last, below fifteen things a company on
+    # Getting started sits under Settings, below fourteen things a company on
     # its first day cannot use yet. For the fortnight it matters it is the most
     # important link on the page, so while there is setup left it moves to the
     # top and drops back once there is not.

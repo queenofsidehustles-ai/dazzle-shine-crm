@@ -40,10 +40,14 @@ with app.app_context():
     print('\n2. The menu is shorter than it was')
     owner_items = sum(len(s['items']) for s in navigation.sidebar('owner'))
     # 31 was the old flat menu. The ceiling is here to stop it creeping back,
-    # not to freeze the number: it moved to 18 when Ask Nana was added, which
-    # was a deliberate decision and had to be argued for. Raising this line
-    # should always feel like that.
-    check(owner_items <= 18, f'{owner_items} sidebar links for the owner, down from 31')
+    # not to freeze the number: it moved to 18 when Ask Nana was added, and to
+    # 22 with the Toolkit/Knowledge Base/Settings reorganization -- folding
+    # Money into Jobs & Money, splitting Toolkit's customer-facing tools out
+    # from Settings' set-once config, and giving Ask Nana, SOPs and the new
+    # FAQs a Knowledge Base of their own. Each of those was a deliberate
+    # decision and had to be argued for. Raising this line should always feel
+    # like that.
+    check(owner_items <= 22, f'{owner_items} sidebar links for the owner, down from 31')
 
     print('\n3. Nothing the sidebar used to reach was dropped')
     # The full set of pages the old sidebar linked to, written out so that
@@ -95,10 +99,14 @@ with app.app_context():
     check(tabs == [], 'Calendar has no tabs — one tab is just the title twice')
     tabs, _ = navigation.tabs_for('money.pnl', 'owner')
     # Counted from navigation.py rather than typed in. Adding a tab is a
-    # product decision; what this assertion is for is that the Money section
-    # renders every tab it declares, not that the number never moves.
+    # product decision; what this assertion is for is that the Money item
+    # renders every tab it declares, not that the number never moves. Money
+    # is folded into the Jobs & Money section now rather than being a section
+    # of its own, so this finds it by endpoint within that section instead of
+    # by a section heading that no longer exists.
     _declared = next(len(item[4]) for heading, items in navigation.SECTIONS
-                     if heading == 'Money' for item in items)
+                     if heading == 'Jobs & Money' for item in items
+                     if item[0] == 'money.pnl')
     check(len(tabs) == _declared,
           f'Money renders all {_declared} tabs it declares (got {len(tabs)})')
 
