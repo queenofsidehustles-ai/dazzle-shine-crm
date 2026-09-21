@@ -134,14 +134,17 @@
       {# One reminder a day, naming the single next step and nothing else.
          Not on the dashboard: that page already carries the full getting-started
          card, and two amber boxes saying the same sentence one above the other
-         reads as a bug rather than as encouragement. The gap this closes is
-         every other screen, where there was nothing at all.
+         reads as a bug rather than as encouragement. Not on the getting-started
+         page either, for the same reason -- its entire content IS that card, so
+         this floated a second "here's what's next" on top of a page that already
+         says nothing else. The gap this closes is every other screen, where
+         there was nothing at all.
          Dismissible on purpose: a prompt you cannot put away stops being a
          nudge and becomes an obstacle, and the person it annoys most is the
          one who has decided to do it later today anyway. It comes back
          tomorrow, and it stops for good when setup is finished. #}
       {% if SETUP and not SETUP.complete and SETUP.next
-            and request.endpoint != 'admin.dashboard' %}
+            and request.endpoint not in ('admin.dashboard', 'settings.getting_started') %}
       <div class="setup-nudge" id="setupnudge" hidden>
         <div class="setup-nudge-body">
           <strong>You are {{ SETUP.percent }}% set up.</strong>
@@ -175,7 +178,17 @@
       {# Where they are in the trial. Always a countdown of some kind: one
          clock says "you have not begun", the other says "you are running
          out", and a state with neither is how a trial becomes something
-         somebody thinks they can come back to whenever. #}
+         somebody thinks they can come back to whenever.
+
+         Two different clocks live behind TRIAL.days_left depending on phase
+         -- the 14-day trial length once it starts, and a separate 30-day
+         window to start it at all -- and stating both numbers in one
+         sentence ("your 14 days... N days left") read as self-contradicting
+         since nothing told them apart. Fixed two ways: the start-by
+         countdown only appears once it is actually close (<=7 days,
+         matching the day-7 email nudge elsewhere -- see trial_nudges.py),
+         so it is not competing with "14" for most of the window; and when it
+         does appear, it says plainly what it is counting down to. #}
       {# Only where somebody is deciding what to do next. On a phone these
          banners plus the Getting started card filled the whole first screen,
          so you scrolled past three blocks of nagging to reach today's jobs. #}
@@ -186,9 +199,10 @@
           {# Says exactly what starts it. This used to say "assign a job",
              which was not the condition the code checked — so somebody could
              do the thing they were told and watch nothing happen. #}
-          <b>Your 14 days haven't started yet.</b>
-          Add your first cleaner and your first customer and the clock begins —
-          <span class="left">{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left to set up</span>.
+          <b>Add your first cleaner and your first customer to start your 14-day trial.</b>
+          {% if TRIAL.days_left <= 7 %}
+            <span class="left">{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left before that offer closes</span>.
+          {% endif %}
         {% else %}
           <b>{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left</b>
           of everything. After that you keep working on the free plan —
