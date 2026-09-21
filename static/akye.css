@@ -252,8 +252,15 @@ a  { color: var(--amber-deep); }
               border: 1px solid var(--line); border-radius: var(--r); }
 .fb-kind.listening, .btn.listening { border-color: var(--warn); color: var(--warn); }
 
-@media (max-width: 700px) {
-  .fb-open { left: var(--s3); bottom: var(--s3); padding: 9px 14px; }
+@media (max-width: 900px) {
+  /* Bottom-left is exactly where the sidebar's own footer lives once it
+     becomes the hamburger drawer -- username, Sign out, the build tag. A
+     fixed button anchored to the same corner sat on top of that footer's
+     text the moment the drawer was short enough (or open) for the two to
+     share the same few pixels. Moving to the right on the one breakpoint
+     where the sidebar can occupy that corner at all -- 900px, its own --
+     is simpler than trying to out-stack it. */
+  .fb-open { left: auto; right: var(--s3); bottom: var(--s3); padding: 9px 14px; }
   .fb-sheet { left: var(--s3); right: var(--s3); bottom: var(--s3);
               width: auto; }
 }
