@@ -57,6 +57,40 @@
       color:var(--muted); font-weight:700; margin:0 0 var(--s4);
     }
 
+    /* ── Tabs ─────────────────────────────────────────────────────────────
+       This used to be five panels stacked in one long scroll -- on a phone
+       that ran well past the fold before you ever reached "who you are",
+       and it read as uneven: one screen was a couple of radio buttons, the
+       next was three fields deep. Tabs turn the same five panels into one
+       screen at a time, built from whatever panels actually render (the
+       extras panel is skipped entirely when the business has none), so
+       nothing here is hand-numbered. */
+    .steps {
+      display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+      padding:0 0 var(--s2); margin:0 0 var(--s2); scrollbar-width:none;
+    }
+    .steps::-webkit-scrollbar { display:none; }
+    .step-tab {
+      flex:0 0 auto; display:flex; align-items:center; gap:6px;
+      border:1px solid var(--line); background:var(--surface);
+      border-radius:var(--r-pill); padding:6px 12px 6px 6px;
+      font-family:inherit; font-size:var(--t-xs); font-weight:600; color:var(--muted);
+      cursor:pointer; white-space:nowrap;
+      transition:border-color var(--ease), background var(--ease), color var(--ease);
+    }
+    .step-tab .n {
+      width:18px; height:18px; border-radius:50%; flex:0 0 auto;
+      background:var(--ground); color:var(--softer);
+      display:flex; align-items:center; justify-content:center;
+      font-size:0.66rem; font-weight:700;
+    }
+    .step-tab.active {
+      border-color:var(--b-accent); color:var(--ink);
+      background:color-mix(in srgb, var(--b-accent) 8%, #fff);
+    }
+    .step-tab.active .n { background:var(--b-accent); color:var(--b-on); }
+    .step-tab.done .n { background:var(--good); color:#fff; }
+
     .field { margin-bottom:var(--s4); }
     .field > label {
       display:block; font-size:var(--t-sm); font-weight:600; margin-bottom:var(--s2);
@@ -188,6 +222,8 @@
   {% endif %}
 
   <form id="bookform" class="card-stack" novalidate>
+    <div class="steps" id="steps"></div>
+
     <div class="panel">
       <h2>What needs cleaning</h2>
       <div class="choices">
@@ -335,6 +371,37 @@
   const errEl  = document.getElementById('formerr');
   const DEPOSIT = {{ deposit or 0 }};
 
+  // One panel visible at a time, driven by whichever panels actually
+  // rendered -- the extras panel doesn't exist at all for a business with
+  // none, so this never hard-codes a step count.
+  const stepsBar = document.getElementById('steps');
+  const panels   = Array.from(form.querySelectorAll(':scope > .panel'));
+  let current = 0;
+  const tabs = panels.map((panel, i) => {
+    const h2 = panel.querySelector('h2');
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'step-tab';
+    tab.innerHTML = '<span class="n">' + (i + 1) + '</span>' + (h2 ? h2.textContent : 'Step ' + (i + 1));
+    tab.addEventListener('click', () => goTo(i));
+    stepsBar.appendChild(tab);
+    return tab;
+  });
+
+  function goTo(i, opts) {
+    opts = opts || {};
+    current = Math.max(0, Math.min(i, panels.length - 1));
+    panels.forEach((p, idx) => { p.style.display = idx === current ? '' : 'none'; });
+    tabs.forEach((tab, idx) => {
+      tab.classList.toggle('active', idx === current);
+      tab.classList.toggle('done', idx < current);
+      tab.querySelector('.n').textContent = idx < current ? '✓' : String(idx + 1);
+    });
+    btn.textContent = current === panels.length - 1 ? 'Book this clean' : 'Continue';
+    if (opts.scroll !== false) document.querySelector('.card-stack').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  goTo(0, { scroll: false });
+
   const read = () => {
     const d = new FormData(form);
     // Both namings are sent because the two endpoints behind this page grew up
@@ -380,6 +447,7 @@
 
   form.addEventListener('submit', async function (ev) {
     ev.preventDefault();
+    if (current < panels.length - 1) { goTo(current + 1); return; }
     errEl.innerHTML = '';
     const d = new FormData(form);
     const required = { name: 'your name', email: 'your email', phone: 'your phone number' };

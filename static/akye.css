@@ -121,9 +121,19 @@ a  { color: var(--amber-deep); }
   position: fixed; inset: 0 auto 0 0;
   display: flex; flex-direction: column;
   z-index: 10; overflow-y: auto; overflow-x: hidden;
+  /* Firefox draws its own gutter from these two, rather than the
+     ::-webkit- rules below -- without this the menu scrolls fine there,
+     it just never shows that it does. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.3) transparent;
 }
-.sidebar::-webkit-scrollbar { width: 3px; }
-.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
+/* Wide enough to notice, thin enough to stay out of the way. The menu grew
+   a Toolkit and a Knowledge Base section, so on a laptop-height screen it
+   now runs past the fold on most roles -- this is what tells you there's
+   more below rather than leaving the list looking simply finished. */
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.3); border-radius: 3px; }
+.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.45); }
 
 .sidebar-brand { padding: var(--s5) var(--s5) var(--s4); }
 .sidebar-brand .script { display: block; font-size: 1.15rem; font-weight: 700;
