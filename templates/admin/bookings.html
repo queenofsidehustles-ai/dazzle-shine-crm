@@ -82,6 +82,25 @@
           <td>
             <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
               <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a>
+              {# Both actions the detail page already offers, reachable without
+                 opening the job -- a Monday-morning pass through a long list
+                 used to mean click in, offer or hold, click back, repeat. #}
+              {% if b.status in ('pending', 'confirmed') and not (b.crew and b.spots_left <= 0) %}
+              <form method="POST" action="{{ url_for('bookings.broadcast', booking_id=b.id) }}"
+                    onsubmit="return confirm({{ ('Offer the ' ~ b.spots_left ~ ' open spot(s) to the team?') | tojson if b.is_crew_job else '\'Offer this job to the whole team? First to claim it gets it.\'' }})">
+                <input type="hidden" name="next" value="{{ request.url }}" />
+                <button type="submit" title="Offer to the team"
+                        style="background:#fff;border:1px solid var(--line);color:var(--ink-2);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">📣</button>
+              </form>
+              {% endif %}
+              {% if not b.is_held and b.status not in ('completed', 'cancelled') %}
+              <form method="POST" action="{{ url_for('bookings.hold', booking_id=b.id) }}"
+                    onsubmit="return confirm('Put this job on hold? The customer and any assigned cleaner will be told.')">
+                <input type="hidden" name="next" value="{{ request.url }}" />
+                <button type="submit" title="Put on hold"
+                        style="background:#fff;border:1px solid var(--line);color:var(--ink-2);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">⏸️</button>
+              </form>
+              {% endif %}
               <form method="POST" action="{{ url_for('bookings.delete', booking_id=b.id) }}"
                     onsubmit="return confirm('Delete {{ b.name }}\'s booking (#{{ b.id }}) permanently? Use this for test bookings.')">
                 <button type="submit" title="Delete booking"

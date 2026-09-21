@@ -93,10 +93,18 @@
       </div>
     </div>
 
+    <div class="form-group" style="display:flex;align-items:center;gap:9px">
+      <input type="checkbox" id="is_recurring" style="width:auto" onchange="toggleRecurring()" />
+      <label for="is_recurring" style="margin:0;cursor:pointer">🔁 This is a recurring cleaning</label>
+    </div>
     <div class="detail-grid" style="gap:14px">
-      <div class="form-group">
-        <label>Frequency</label>
-        <select name="frequency">
+      <div class="form-group" id="freq-wrap" style="display:none">
+        <label>How often</label>
+        {# Disabled, not just hidden -- a disabled field submits nothing at
+           all, so an unchecked box reliably means one_time server-side
+           rather than a value some earlier click left sitting in a hidden
+           select. toggleRecurring() keeps it in sync with the checkbox. #}
+        <select name="frequency" id="frequency-select" disabled>
           {% for key, label in frequency_labels.items() %}
           <option value="{{ key }}">{{ label }}</option>
           {% endfor %}
@@ -182,6 +190,22 @@
 </form>
 
 <script>
+  function toggleRecurring() {
+    var cb = document.getElementById('is_recurring');
+    var wrap = document.getElementById('freq-wrap');
+    var sel = document.getElementById('frequency-select');
+    wrap.style.display = cb.checked ? '' : 'none';
+    sel.disabled = !cb.checked;
+    if (cb.checked) {
+      // Ticking the box with the select still on its default is exactly the
+      // case it exists to skip past -- land on Weekly, not on One-Time.
+      if (sel.value === 'one_time') sel.value = 'weekly';
+    } else {
+      sel.value = 'one_time';
+    }
+    sel.dispatchEvent(new Event('change'));
+  }
+
   document.querySelectorAll('select[data-prefill]').forEach(function (el) {
     var want = el.getAttribute('data-prefill');
     if (want) { el.value = want; }

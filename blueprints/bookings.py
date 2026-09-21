@@ -857,7 +857,11 @@ def broadcast(booking_id):
             flash(f'📣 Offered to {n} cleaner(s) — the first {left} to claim get the {left} open spot(s).', 'success')
     else:
         flash(f'📣 Offered to {n} cleaner(s) — first to claim it gets it.', 'success')
-    return redirect(url_for('bookings.detail', booking_id=booking_id))
+    # Offered from the list, not just the detail page (see bookings.html's row
+    # actions) -- land back where the click happened rather than forcing a
+    # detour through the job it was about.
+    return redirect(request.form.get('next') or request.referrer
+                    or url_for('bookings.detail', booking_id=booking_id))
 
 
 def _apply_hours(booking, form):
@@ -1405,7 +1409,11 @@ def hold(booking_id):
     date. Every automation in the CRM selects on an explicit list of statuses,
     and none of them contain this one."""
     b = Booking.query.get_or_404(booking_id)
-    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    # Held from the list, not just the detail page (see bookings.html's row
+    # actions) -- every early return below shares this, so the list-hold
+    # button lands back on the list whichever branch it hits.
+    back = redirect(request.form.get('next') or request.referrer
+                    or url_for('bookings.detail', booking_id=booking_id))
     if b.status in ('completed', 'cancelled'):
         flash(f'That job is {b.status_label.lower()} — there is nothing to put on hold.',
               'warning')
@@ -2172,7 +2180,7 @@ def start_plan(booking_id):
 
     start = (request.form.get('start_date') or '').strip()
     if not start:
-        flash('Pick the date of the first ongoing cleaning.', 'error')
+        flash('Pick the date of the first recurring cleaning.', 'error')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     price_raw = (request.form.get('plan_price') or '').strip().replace('$', '').replace(',', '')
@@ -2202,7 +2210,7 @@ def start_plan(booking_id):
     _link_client(seed)
 
     made = recurring.generate_series(seed)
-    flash(f'📅 Ongoing {frequency} cleanings set up for {seed.name} — '
+    flash(f'📅 Recurring {frequency} cleanings set up for {seed.name} — '
           f'{made + 1} visits on the calendar, starting {start}.', 'success')
     return redirect(url_for('bookings.detail', booking_id=seed.id))
 
@@ -2215,6 +2223,62 @@ def stop_recurring(booking_id):
         removed = recurring.stop_series(booking.recurring_group)
         flash(f'Recurring plan stopped — removed {removed} upcoming visit{"s" if removed != 1 else ""}.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/reassign-series', methods=['POST'])
+@login_required
+def reassign_series(booking_id):
+    """Swap the cleaner on this visit and every future one in the same
+    recurring plan — for someone off it for good, not just out for one visit.
+
+    A single visit already gets reassigned from its own Crew card; this
+    exists because a recurring plan can run a year of future visits, and
+    walking each one by hand is the kind of chore that quietly never
+    happens, leaving old visits pointed at somebody who's gone."""
+    from models import Staff
+    booking = Booking.query.get_or_404(booking_id)
+    staff_id = (request.form.get('staff_id') or '').strip()
+    new_staff = Staff.query.get(int(staff_id)) if staff_id.isdigit() else None
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    if not new_staff:
+        flash('Pick a cleaner to reassign to.', 'error')
+        return back
+    if not booking.recurring_group:
+        flash('This job is not part of a recurring plan.', 'error')
+        return back
+
+    today = date.today().isoformat()
+    visits = Booking.query.filter(
+        Booking.recurring_group == booking.recurring_group,
+        Booking.status.notin_(Booking.OFF_SCHEDULE),
+        Booking.preferred_date >= today,
+    ).all()
+    old_name = booking.assigned_cleaner
+    for v in visits:
+        v.assigned_cleaner = new_staff.name
+        # A fresh person on the job hasn't accepted or declined it yet.
+        v.cleaner_response = None
+        v.cleaner_notified_at = None
+    db.session.commit()
+
+    # Only the very next visit gets a fresh heads-up text. A dozen "you have
+    # a job on [date]" messages for visits months out would be noise nobody
+    # reads before it matters — the day-before reminder already covers those
+    # once their own date comes round.
+    next_visit = min(visits, key=lambda v: v.preferred_date or '') if visits else None
+    notified = False
+    if next_visit and new_staff.phone:
+        from notifications import send_sms
+        ok, _ = send_sms(new_staff.phone,
+            f"You're now on {next_visit.name}'s recurring clean, starting {next_visit.preferred_date}.")
+        notified = ok
+
+    msg = (f'🔁 Reassigned {len(visits)} upcoming visit{"s" if len(visits) != 1 else ""} '
+           f'from {old_name or "nobody"} to {new_staff.name}.')
+    if notified:
+        msg += f' Texted {new_staff.name.split()[0]} about the next one.'
+    flash(msg, 'success')
+    return back
 
 
 @bookings_bp.route('/<int:booking_id>/delete', methods=['POST'])

@@ -789,11 +789,11 @@
     {% endif %}
 
     {% if plan_suggestion %}
-    <!-- Ongoing cleanings after a one-off job -->
+    <!-- Recurring cleaning after a one-off job -->
     <div class="card" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Ongoing Cleanings</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Recurring Cleaning</h2>
       <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
-        Is this the first clean before a regular schedule? Set the ongoing visits up here.
+        Is this the first clean before a regular schedule? Set the recurring visits up here.
         They get their own service and price — this job stays exactly as it is.
       </p>
       <form method="POST" action="{{ url_for('bookings.start_plan', booking_id=booking.id) }}">
@@ -815,7 +815,7 @@
             </select>
           </div>
           <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">First ongoing cleaning</label>
+            <label style="font-size:0.82rem">First recurring cleaning</label>
             <input type="date" name="start_date" value="{{ plan_suggestion.start }}"
                    style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
           </div>
@@ -833,7 +833,7 @@
                  style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
           <span style="font-size:0.75rem;color:var(--softer)">Cards are charged when this time comes round, so nobody pays before you arrive.</span>
         </div>
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Set up ongoing cleanings</button>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Set up recurring cleaning</button>
       </form>
     </div>
     {% endif %}
@@ -868,6 +868,29 @@
       <form method="POST" action="{{ url_for('bookings.stop_recurring', booking_id=booking.id) }}"
             onsubmit="return confirm('Stop this recurring plan? Upcoming unstarted visits will be removed.')">
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;color:var(--amber-deep)">Stop recurring plan</button>
+      </form>
+
+      {# Not the same job as the Crew card above: that one changes who shows
+         up to THIS visit. A cleaner leaving the account, or off a client for
+         good, needs every visit still to come changed at once — nobody
+         should have to open a year of future bookings by hand to move them
+         off her. #}
+      <form method="POST" action="{{ url_for('bookings.reassign_series', booking_id=booking.id) }}"
+            style="border-top:1px solid var(--info-soft);padding-top:12px;margin-top:12px"
+            onsubmit="return confirm('Reassign every upcoming visit in this plan to the selected cleaner?')">
+        <label style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:5px">Reassign this series</label>
+        <select name="staff_id" required style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px">
+          <option value="">— Pick a cleaner —</option>
+          {% for s in staff %}
+          <option value="{{ s.id }}">{{ s.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">🔁 Reassign this and every future visit</button>
+        <p style="font-size:0.76rem;color:var(--softer);margin-top:6px">
+          Changes every visit still to come, not just this one — for just this
+          visit while {{ booking.assigned_cleaner or 'the current cleaner' }} is
+          out, use the Crew card above instead.
+        </p>
       </form>
       {% else %}
       <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px">This is a <strong>{{ booking.frequency }}</strong> client. Fill their calendar in one click — no more scheduling one visit at a time.</p>
