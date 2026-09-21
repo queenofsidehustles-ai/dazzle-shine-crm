@@ -133,6 +133,34 @@
           </label>
           {% endfor %}
         </form>
+        {% elif r.key == 'reminders' %}
+        {# Same job, same cron address, two people who don't have to agree.
+           A business might want her own customers left alone while cleaners
+           still get warned about tomorrow's job, or the other way round --
+           they used to be one switch, so there was no way to ask for just
+           one of those. #}
+        <div style="display:flex;flex-direction:column;gap:7px;margin-top:10px">
+          <form method="POST" action="{{ url_for('settings.save_automation') }}"
+                style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+                       padding:9px 11px;border:1px solid var(--line);border-radius:9px">
+            <span style="font-size:0.87rem">📱 Text customers booked tomorrow</span>
+            <input type="hidden" name="job" value="reminders" />
+            <input type="hidden" name="on" value="{{ '0' if customer_reminders_on else '1' }}" />
+            <button type="submit" class="btn btn-outline btn-sm">
+              {{ 'Turn off' if customer_reminders_on else 'Turn on' }}
+            </button>
+          </form>
+          <form method="POST" action="{{ url_for('settings.save_automation') }}"
+                style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+                       padding:9px 11px;border:1px solid var(--line);border-radius:9px">
+            <span style="font-size:0.87rem">🧹 Text cleaners with a job tomorrow</span>
+            <input type="hidden" name="job" value="reminders-cleaner" />
+            <input type="hidden" name="on" value="{{ '0' if cleaner_reminders_on else '1' }}" />
+            <button type="submit" class="btn btn-outline btn-sm">
+              {{ 'Turn off' if cleaner_reminders_on else 'Turn on' }}
+            </button>
+          </form>
+        </div>
         {% else %}
         <form method="POST" action="{{ url_for('settings.save_automation') }}" style="margin-top:10px">
           <input type="hidden" name="job" value="{{ r.key }}" />

@@ -67,58 +67,73 @@ def send_reminders():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
-    # holds however the job is triggered.
-    if not automations.is_enabled('reminders'):
+    # holds however the job is triggered. Customers and cleaners each have
+    # their own switch now -- only skip the whole run when neither wants
+    # anything, so one being off doesn't silently take the other down too.
+    customer_on = automations.is_enabled('reminders')
+    cleaner_on = automations.cleaner_reminders_enabled()
+    if not customer_on and not cleaner_on:
         return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
-
-    # The business's own date, not the server's. In the evening a UTC server
-    # already believes it is tomorrow, so "tomorrow" would land a day late —
-    # the same trap charge-balances was fixed for.
-    import scheduling
-    tomorrow = (scheduling.local_today() + timedelta(days=1)).isoformat()
-    bookings = Booking.query.filter(
-        Booking.preferred_date == tomorrow,
-        Booking.status.in_(['pending', 'confirmed']),
-        # Once per booking, ever. This used to re-send to everyone booked
-        # tomorrow on every call, so an hourly cron would have texted the same
-        # customer twenty-four times in a day.
-        Booking.reminder_sent_at.is_(None),
-    ).all()
 
     count = 0
     failed = []
-    for b in bookings:
-        # Per booking, so one bad record can't take the run down with it. That
-        # is exactly what happened before: a recurring visit with no balance
-        # set raised, the request 500'd, and nobody on the list got anything.
-        try:
-            _send_reminder(b)
-            b.reminder_sent_at = datetime.utcnow()
-            count += 1
-        except Exception as e:      # noqa: BLE001 — a bad row is not fatal
-            db.session.rollback()
-            failed.append(f'#{b.id} {b.name}: {e}')
-    db.session.commit()
+    if customer_on:
+        # The business's own date, not the server's. In the evening a UTC
+        # server already believes it is tomorrow, so "tomorrow" would land a
+        # day late — the same trap charge-balances was fixed for.
+        import scheduling
+        tomorrow = (scheduling.local_today() + timedelta(days=1)).isoformat()
+        bookings = Booking.query.filter(
+            Booking.preferred_date == tomorrow,
+            Booking.status.in_(['pending', 'confirmed']),
+            # Once per booking, ever. This used to re-send to everyone booked
+            # tomorrow on every call, so an hourly cron would have texted the
+            # same customer twenty-four times in a day.
+            Booking.reminder_sent_at.is_(None),
+        ).all()
 
-    # Cleaners' own day-before reminder rides the same daily trigger and the
-    # same toggle as the customer one above -- they are the same kind of
-    # message at the same cadence. Previously lived inside the "Follow-ups
-    # and win-backs" automation instead, whose description never mentioned
-    # cleaners, so turning off customer win-back nudges silently turned this
-    # off too. A bad row here must not cost the customer reminders that
-    # already sent above, so it's isolated the same way each booking is.
+        for b in bookings:
+            # Per booking, so one bad record can't take the run down with it.
+            # That is exactly what happened before: a recurring visit with no
+            # balance set raised, the request 500'd, and nobody on the list
+            # got anything.
+            try:
+                _send_reminder(b)
+                b.reminder_sent_at = datetime.utcnow()
+                count += 1
+            except Exception as e:      # noqa: BLE001 — a bad row is not fatal
+                db.session.rollback()
+                failed.append(f'#{b.id} {b.name}: {e}')
+        db.session.commit()
+
+    # Cleaners' own day-before reminder rides the same daily trigger as the
+    # customer one above, with its own switch (cleaner_reminders_enabled) --
+    # they used to share one toggle, which meant a business that wanted her
+    # customers left alone had no way to keep cleaners warned, or vice versa.
+    # Previously this also lived inside the "Follow-ups and win-backs"
+    # automation, whose description never mentioned cleaners, so turning off
+    # customer win-back nudges silently turned this off too. A bad row here
+    # must not cost the customer reminders that already sent above, so it's
+    # isolated the same way each booking is.
     cleaner_count = 0
-    try:
-        import lifecycle
-        cleaner_count = lifecycle.send_cleaner_schedule_reminders()
-    except Exception as e:      # noqa: BLE001
-        db.session.rollback()
-        failed.append(f'cleaner reminders: {e}')
+    if cleaner_on:
+        try:
+            import lifecycle
+            cleaner_count = lifecycle.send_cleaner_schedule_reminders()
+        except Exception as e:      # noqa: BLE001
+            db.session.rollback()
+            failed.append(f'cleaner reminders: {e}')
 
     automations.record('reminders', items=count + cleaner_count, ok=not failed,
                        detail='; '.join(failed) or None)
-    return jsonify({'ok': True, 'reminders_sent': count,
-                    'cleaner_reminders_sent': cleaner_count, 'failed': failed})
+    return jsonify({
+        'ok': True,
+        'reminders_sent': count,
+        'reminders_skipped': None if customer_on else 'turned off by this business',
+        'cleaner_reminders_sent': cleaner_count,
+        'cleaner_reminders_skipped': None if cleaner_on else 'turned off by this business',
+        'failed': failed,
+    })
 
 
 # ── Auto-charge balances (cron — run hourly) ─────────────────────────────────

@@ -72,11 +72,45 @@ with app.app_context():
     db.session.commit()
     check(automations.is_enabled('reminders') is False, 'reminders are off')
     check(automations.is_enabled('send-drips') is True, 'drips are untouched')
-    r = c.post('/api/reminders', headers=KEY)
-    check(r.get_json().get('skipped'), 'and the reminders endpoint skips')
     r = c.post('/api/send-drips', headers=KEY)
     check(not r.get_json().get('skipped'), 'while drips still runs')
     automations.set_enabled('reminders', True)
+    db.session.commit()
+
+    print('\n4b. Customer and cleaner reminders are two switches now, not one')
+    check(automations.cleaner_reminders_enabled() is True,
+          'cleaner reminders start on, same as everything else')
+    automations.set_enabled('reminders', False)
+    db.session.commit()
+    r = c.post('/api/reminders', headers=KEY)
+    j = r.get_json()
+    check(not j.get('skipped'), 'the run itself does not skip -- cleaners still want theirs')
+    check(j.get('reminders_skipped') == 'turned off by this business',
+          'but the customer half says it was turned off')
+    check(j.get('cleaner_reminders_skipped') is None,
+          'and the cleaner half was not')
+    automations.set_enabled('reminders', True)
+    db.session.commit()
+
+    automations.set_cleaner_reminders_enabled(False)
+    db.session.commit()
+    check(automations.is_enabled('reminders') is True,
+          'turning off cleaner reminders leaves the customer switch alone')
+    r = c.post('/api/reminders', headers=KEY)
+    j = r.get_json()
+    check(not j.get('skipped'), 'and the run still does not skip -- customers still want theirs')
+    check(j.get('cleaner_reminders_skipped') == 'turned off by this business',
+          'the cleaner half says it was turned off')
+    check(j.get('reminders_skipped') is None, 'and the customer half was not')
+
+    print('\n4c. Only when both are off does the whole run skip')
+    automations.set_enabled('reminders', False)
+    db.session.commit()
+    r = c.post('/api/reminders', headers=KEY)
+    check(r.get_json().get('skipped') == 'turned off by this business',
+          'nobody wants anything, so the run says so and stops')
+    automations.set_enabled('reminders', True)
+    automations.set_cleaner_reminders_enabled(True)
     db.session.commit()
 
     print('\n5. Off on purpose is not the same as broken')
@@ -125,6 +159,17 @@ with app.app_context():
     r = c.post('/settings/automations/save',
                data={'job': 'reminders', 'on': '0'}, follow_redirects=True)
     check(automations.is_enabled('reminders') is False, 'a switch is recorded too')
+    automations.set_enabled('reminders', True)
+    db.session.commit()
+
+    r = c.post('/settings/automations/save',
+               data={'job': 'reminders-cleaner', 'on': '0'}, follow_redirects=True)
+    check(r.status_code == 200, 'the cleaner half has its own save target')
+    check(automations.cleaner_reminders_enabled() is False, 'and its own switch is recorded')
+    check(automations.is_enabled('reminders') is True,
+          'without touching the customer half')
+    automations.set_cleaner_reminders_enabled(True)
+    db.session.commit()
 
     r = c.post('/settings/automations/save',
                data={'job': 'not-a-real-job', 'on': '1'}, follow_redirects=True)

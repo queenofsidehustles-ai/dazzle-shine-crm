@@ -105,7 +105,10 @@ def save_automation():
     import automations as _auto
     job = (request.form.get('job') or '').strip()
     known = {k for k, _l, _b, _c in _auto.JOBS}
-    if job not in known:
+    # Not a job of its own -- the cleaner half of "reminders" shares that
+    # job's one cron address, so it isn't in JOBS, but it does need its own
+    # entry here to be turned on and off separately from the customer half.
+    if job not in known and job != 'reminders-cleaner':
         flash('That is not one of the automations.', 'error')
         return redirect(url_for('settings.automations_page'))
 
@@ -117,11 +120,17 @@ def save_automation():
                'ask':   'Balances will show as owed. Nothing will be charged for you.',
                'never': 'Balances will never be charged from here.'}
               .get(_auto.balance_mode(), 'Saved.'), 'success')
+    elif job == 'reminders-cleaner':
+        on = (request.form.get('on') or '') == '1'
+        _auto.set_cleaner_reminders_enabled(on)
+        db.session.commit()
+        flash(f'Cleaner reminders are now {"on" if on else "off"}.', 'success')
     else:
         on = (request.form.get('on') or '') == '1'
         _auto.set_enabled(job, on)
         db.session.commit()
-        label = next((l for k, l, _b, _c in _auto.JOBS if k == job), job)
+        label = 'Customer reminders' if job == 'reminders' else \
+            next((l for k, l, _b, _c in _auto.JOBS if k == job), job)
         flash(f'{label} is now {"on" if on else "off"}.', 'success')
 
     return redirect(url_for('settings.automations_page'))
@@ -168,6 +177,8 @@ def automations_page():
     return render_template('admin/automations.html',
                            data=_auto.summary(),
                            balance_mode=_auto.balance_mode(),
+                           customer_reminders_on=_auto.is_enabled('reminders'),
+                           cleaner_reminders_on=_auto.cleaner_reminders_enabled(),
                            managed=managed,
                            base=branding.crm_base(),
                            tracking_since=(first.ran_at.strftime('%b %-d, %Y')

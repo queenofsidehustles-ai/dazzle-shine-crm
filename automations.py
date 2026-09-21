@@ -100,6 +100,23 @@ def set_balance_mode(mode):
                         mode if mode in BALANCE_MODES else BALANCE_DEFAULT)
 
 
+def cleaner_reminders_enabled():
+    """The cleaner half of the day-before reminders job, switched separately
+    from `is_enabled('reminders')`, which is the customer half.
+
+    One daily job, one cron address -- this doesn't split into a second row
+    in JOBS, because there is no second endpoint to call. It's two
+    independent questions asked of the same run: a business might want her
+    customers left alone while cleaners still get warned tomorrow's job
+    exists, or the other way round."""
+    return _setting('automation_reminders_cleaner_off') != '1'
+
+
+def set_cleaner_reminders_enabled(on):
+    from models import BusinessSetting
+    BusinessSetting.set('automation_reminders_cleaner_off', '' if on else '1')
+
+
 # How long without a run before a job is treated as stopped rather than idle.
 STALE_HOURS = {'hourly': 6, 'daily': 36}
 
@@ -205,6 +222,11 @@ def overview():
                             f"an uncollected balance on a saved card.")
 
         on = is_enabled(key)
+        if key == 'reminders':
+            # Two independent switches share this one row -- it only reads as
+            # fully "off" when neither customers nor cleaners are getting
+            # anything, not just because one of the two was turned down.
+            on = on or cleaner_reminders_enabled()
         if not on:
             # Off on purpose is not the same as broken, and a page that cannot
             # tell them apart trains people to ignore it.
