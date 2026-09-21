@@ -143,8 +143,11 @@ def synthetic_id(phone, received_at):
     return f'{phone}@{day}'
 
 
-def import_rows(rows):
+def import_rows(rows, new_leads=None):
     """Save parsed rows. Returns (added, updated).
+
+    Pass a list as new_leads to get back the leads this import created — the
+    ones nobody has seen before, which are the only ones auto_start considers.
 
     The lead id is the identity — Google's own where the export has one, and a
     synthetic one built from number and date where it doesn't. Re-importing an
@@ -171,7 +174,10 @@ def import_rows(rows):
                 existing.track = default_track(existing.charge_status)
             updated += 1
         else:
-            db.session.add(LsaLead(track=default_track(r['charge_status']), **r))
+            lead = LsaLead(track=default_track(r['charge_status']), **r)
+            db.session.add(lead)
+            if new_leads is not None:
+                new_leads.append(lead)
             added += 1
     db.session.commit()
     return added, updated
@@ -343,6 +349,35 @@ def start_sequence(lead):
     lead.seq_stopped = None
     db.session.commit()
     return True
+
+
+# A call older than this is not "sorry we missed you" any more, it is a stranger
+# texting out of nowhere. The first import is usually "All time", so without a
+# cut-off the first automatic run would reach every caller since the account
+# opened. Older ones still show up with a Follow up button for her to decide.
+AUTO_START_WITHIN_DAYS = 30
+
+
+def auto_start(leads, now=None):
+    """Start the sequence for callers an import has just added.
+
+    Only ever handed the leads an import created, never the whole table: a lead
+    she stopped by hand, or chose to leave alone, is not new and must stay as
+    she left it. Run after match_bookings so anyone who has already booked is
+    known. Returns (started, too_old)."""
+    from notifications import sms_opted_out
+    now = now or datetime.utcnow()
+    cutoff = now - timedelta(days=AUTO_START_WITHIN_DAYS)
+    started = too_old = 0
+    for lead in leads:
+        if lead.booked or sms_opted_out(lead.phone):
+            continue
+        if not lead.received_at or lead.received_at < cutoff:
+            too_old += 1
+            continue
+        if start_sequence(lead):
+            started += 1
+    return started, too_old
 
 
 def stop_sequence(lead, reason='manual'):

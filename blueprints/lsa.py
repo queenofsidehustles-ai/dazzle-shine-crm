@@ -53,7 +53,8 @@ def index():
 def import_csv():
     """Upload the CSV straight off the LSA Leads page (the DOWNLOAD button)."""
     if request.method == 'GET':
-        return render_template('admin/lsa_import.html')
+        return render_template('admin/lsa_import.html',
+                               auto_days=lsa.AUTO_START_WITHIN_DAYS)
 
     f = request.files.get('file')
     if not f or not f.filename:
@@ -68,11 +69,22 @@ def import_csv():
             flash('No leads found in that file.', 'warning')
         return redirect(url_for('lsa.import_csv'))
 
-    added, updated = lsa.import_rows(rows)
+    new_leads = []
+    added, updated = lsa.import_rows(rows, new_leads=new_leads)
     booked = lsa.match_bookings()
     flash(f'Imported {added} new lead{"s" if added != 1 else ""}'
           f'{f", refreshed {updated}" if updated else ""}. '
           f'{booked} of them already booked with you.', 'success')
+    if request.form.get('auto_start') and new_leads:
+        started, too_old = lsa.auto_start(new_leads)
+        flash(f'Started following up with {started} new caller'
+              f'{"s" if started != 1 else ""} — their first text goes out on the '
+              f'next daily run.', 'success')
+        if too_old:
+            flash(f'{too_old} new caller{"s" if too_old != 1 else ""} called more '
+                  f'than {lsa.AUTO_START_WITHIN_DAYS} days ago, so '
+                  f'{"they were" if too_old != 1 else "it was"} left for you to '
+                  f'start by hand.', 'warning')
     # Problems are shown but never block: a handful of unusable rows should not
     # cost her the hundred that were fine.
     for p in problems[:5]:
