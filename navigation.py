@@ -123,6 +123,13 @@ SECTIONS = [
     ('Settings', [
         ('settings.getting_started', '🚀', 'Getting started', False, []),
         ('migration.index', '📦', 'Migration Toolbox', True, []),
+        # Not owner_only, and not nested under the Settings tabs below --
+        # this is a team member's own login and 2FA, not a business-wide
+        # setting, and everything under settings.business is gated on the
+        # owner role at the top level. Nesting it there would have made it
+        # unreachable from the menu for anyone but the owner, on a page
+        # /account has never required @owner_required for.
+        ('account.my_account', '🔒', 'Security', False, []),
         ('settings.business', '⚙️', 'Settings', True, [
             ('settings.business', 'Business', True),
             ('settings.connections', 'Connections', True),

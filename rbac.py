@@ -33,26 +33,30 @@ ROLE_PERMISSIONS = {
         'messages.read', 'messages.send', 'messages.templates.manage',
         'checklist.manage',
         'pay.manage', 'finance.manage', 'users.manage', 'settings.manage',
-        'assigned_work.use',
+        'assigned_work.use', 'account.manage',
     }),
     'admin': frozenset({
         'booking.read', 'booking.create', 'booking.manage',
         'dispatch.manage', 'customer.communicate', 'assigned_work.use',
         'lead.read', 'lead.manage',
         'messages.read', 'messages.send', 'messages.templates.manage',
-        'checklist.manage',
+        'checklist.manage', 'account.manage',
     }),
     'dispatcher': frozenset({
         'booking.read', 'booking.create', 'dispatch.manage',
         'customer.communicate',
         'lead.read', 'lead.manage',
-        'messages.read', 'messages.send',
+        'messages.read', 'messages.send', 'account.manage',
     }),
-    'cleaner': frozenset({'assigned_work.use'}),
-    'limited': frozenset({'booking.read'}),
+    # Every role gets account.manage, owner included above -- it is a login
+    # managing itself, which has nothing to do with what that login is
+    # otherwise allowed to touch.
+    'cleaner': frozenset({'assigned_work.use', 'account.manage'}),
+    'limited': frozenset({'booking.read', 'account.manage'}),
 }
 
 ENDPOINT_PERMISSIONS = {
+    ('account.my_account', 'GET'): 'account.manage',
     ('admin.dashboard', 'GET'): 'booking.read',
     ('bookings.index', 'GET'): 'booking.read',
     ('bookings.clients', 'GET'): 'booking.read',

@@ -172,7 +172,10 @@ def test_limited_navigation_contains_only_explicit_read_workspace(role):
 
 
 def test_cleaner_has_no_back_office_navigation_without_explicit_get_grant():
-    assert _nav_endpoints('cleaner') == set()
+    # One deliberate exception: Security (My Account, renamed) is a login
+    # managing its own password and 2FA, not an operational permission, so
+    # every role carries account.manage regardless of what else it can do.
+    assert _nav_endpoints('cleaner') == {'account.my_account'}
 
 
 def test_request_session_role_cannot_be_elevated_by_navigation_argument():
