@@ -41,6 +41,10 @@ def _reset_url(raw):
     return f'{branding.crm_base()}{url_for("account.reset_password", token=raw)}'
 
 
+def _invite_url(raw):
+    return f'{branding.crm_base()}{url_for("account.accept_invite", token=raw)}'
+
+
 def _recently_sent(user):
     cutoff = datetime.utcnow() - RESEND_COOLDOWN
     return (LoginToken.query
@@ -96,6 +100,47 @@ def reset_password(token):
     return render_template('admin/reset_password.html')
 
 
+@account_bp.route('/invite/<token>', methods=['GET', 'POST'])
+def accept_invite(token):
+    """The other end of team_logins.add() -- a brand-new team login choosing
+    her own password instead of being handed one the owner typed.
+
+    Shares reset_password's template and validation; the only real
+    difference is what happens after. A password reset ends at the sign-in
+    page because the person already knows how to get in. An invite ends
+    logged straight in, the same way finishing signup does (see
+    signup.welcome) -- she has just proved she owns the inbox this account
+    is tied to, which is exactly what a password would otherwise have
+    proven."""
+    user = _peek(token, 'invite')
+    if not user:
+        return render_template('admin/reset_password.html', invalid=True, invite=True)
+
+    if request.method == 'POST':
+        pw = request.form.get('password') or ''
+        confirm = request.form.get('confirm') or ''
+        problem = _password_problem(pw, confirm)
+        if problem:
+            return render_template('admin/reset_password.html', error=problem, invite=True)
+
+        real = LoginToken.consume(token, 'invite')
+        if not real:
+            return render_template('admin/reset_password.html', invalid=True, invite=True)
+
+        real.set_password(pw)
+        db.session.commit()
+        LoginToken.revoke_all(real, 'invite')
+
+        from auth import bind_authenticated_session
+        session.clear()
+        session.permanent = True
+        bind_authenticated_session(real)
+        flash(f'Password set — welcome to {branding.biz_name()}.', 'success')
+        return redirect(url_for('admin.dashboard'))
+
+    return render_template('admin/reset_password.html', invite=True)
+
+
 def _peek(token, purpose):
     """Is this token good, without spending it."""
     row = LoginToken.query.filter_by(
@@ -132,6 +177,24 @@ def _send_reset(user, link):
   <p style="color:#5f5878">This link works once and expires in an hour.</p>
   <p style="color:#9a95ad;font-size:0.88rem">If this wasn't you, ignore this
      email — nothing has changed and your password still works.</p>
+</div>''')
+
+
+def _send_invite(user, link):
+    import notifications
+    biz = branding.biz_name()
+    notifications.send_email(
+        to_email=user.username, to_name=user.name,
+        subject=f"You've been added to {biz}",
+        html=f'''
+<div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#b98a33">Welcome to {biz}</h2>
+  <p>Hi {(user.name or 'there').split()[0]} — you've been added as a login for
+     {biz}. Choose a password to get started; nobody else will ever see it.</p>
+  <p style="margin:22px 0"><a href="{link}"
+     style="background:#d3a84f;color:#1a1225;padding:13px 26px;border-radius:999px;
+            text-decoration:none;font-weight:700">Choose a password →</a></p>
+  <p style="color:#5f5878">This link works once and expires in a week.</p>
 </div>''')
 
 

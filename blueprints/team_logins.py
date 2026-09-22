@@ -25,24 +25,37 @@ def index():
 @team_logins_bp.route('/add', methods=['POST'])
 @owner_required
 def add():
+    """Create a login and invite its owner to choose her own password.
+
+    Used to take a password typed here, by the owner, on somebody else's
+    behalf -- one more person who briefly knew it, and one more thing to
+    hand over safely. This sends an invite link instead, the same one-path
+    -in team_logins.reset already switched to; the username a login signs in
+    with is the same address the invite goes to, so there's one field to
+    fill in here, not two."""
+    from notifications import looks_like_email
     name = (request.form.get('name') or '').strip()
-    username = (request.form.get('username') or '').strip().lower()
-    password = request.form.get('password') or ''
+    email = (request.form.get('email') or '').strip().lower()
     role = rbac.canonical_role(request.form.get('role'))
     if not role:
         flash('Choose a valid account role.', 'error')
         return redirect(url_for('team_logins.index'))
-    if not name or not username or not password:
-        flash('Please fill in name, username, and password.', 'error')
+    if not name or not email:
+        flash('Please fill in name and email address.', 'error')
         return redirect(url_for('team_logins.index'))
-    if len(password) < 6:
-        flash('Password must be at least 6 characters.', 'error')
+    if not looks_like_email(email):
+        flash('That does not look like an email address.', 'error')
         return redirect(url_for('team_logins.index'))
-    if User.query.filter_by(username=username).first():
-        flash(f'The username "{username}" is already taken.', 'error')
+    if User.query.filter_by(username=email).first():
+        flash(f'"{email}" already has a login.', 'error')
         return redirect(url_for('team_logins.index'))
-    u = User(name=name, username=username, role=role, active=True)
-    u.set_password(password)
+
+    import secrets
+    u = User(name=name, username=email, role=role, active=True)
+    # Nobody is ever told this -- it exists only because the column can't be
+    # empty. She sets the password that actually works on the invite link
+    # below, same as everyone else's now does.
+    u.set_password(secrets.token_urlsafe(24))
     db.session.add(u)
     db.session.commit()
 
@@ -52,9 +65,15 @@ def add():
     import auth, control_plane, provisioning
     slug = auth.current_tenant_slug()
     if slug:
-        control_plane.record_tenant_login(provisioning._engine(), username, slug)
+        control_plane.record_tenant_login(provisioning._engine(), email, slug)
 
-    flash(f'Login created for {name} as {rbac.role_label(role)}. ✅', 'success')
+    from blueprints.account import _invite_url, _send_invite
+    from models import LoginToken
+    raw, _tok = LoginToken.issue(u, 'invite', email=email)
+    _send_invite(u, _invite_url(raw))
+
+    flash(f'Invited {name} as {rbac.role_label(role)} — she chooses her own '
+          f'password when she opens the link. ✅', 'success')
     return redirect(url_for('team_logins.index'))
 
 

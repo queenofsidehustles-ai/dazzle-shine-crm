@@ -2037,7 +2037,7 @@ class LoginToken(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
     token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
-    purpose = db.Column(db.String(20), nullable=False)   # signup, reset, verify
+    purpose = db.Column(db.String(20), nullable=False)   # signup, reset, verify, invite
     email = db.Column(db.String(200))       # what it was sent to, for the audit
     expires_at = db.Column(db.DateTime, nullable=False)
     used_at = db.Column(db.DateTime)
@@ -2045,8 +2045,11 @@ class LoginToken(db.Model):
 
     # How long each kind is good for. A reset is deliberately the shortest: it
     # is the one an attacker wants, and an hour is long enough for somebody to
-    # find the email and long enough for nobody else to.
-    LIFETIMES = {'signup': 24 * 60, 'reset': 60, 'verify': 7 * 24 * 60}
+    # find the email and long enough for nobody else to. An invite gets a week
+    # -- it goes to somebody who does not yet have a reason to check this
+    # inbox on the day it lands, the way a person resetting their own password
+    # right now does.
+    LIFETIMES = {'signup': 24 * 60, 'reset': 60, 'verify': 7 * 24 * 60, 'invite': 7 * 24 * 60}
 
     @staticmethod
     def _hash(raw):

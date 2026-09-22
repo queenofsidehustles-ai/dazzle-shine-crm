@@ -10,7 +10,8 @@
     Choose the least privilege this person needs. <strong>Owner</strong> is the only role with
     finance/pay authority; <strong>Admin</strong> and <strong>Dispatcher</strong> run operations,
     <strong>Cleaner</strong> is limited to assigned-work flows, and <strong>Limited</strong> is
-    booking read-only.
+    booking read-only. She'll get an email with a link to choose her own password —
+    nobody sets one on her behalf.
   </p>
   <form method="POST" action="{{ url_for('team_logins.add') }}"
         style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
@@ -20,13 +21,8 @@
              style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
     </div>
     <div style="flex:1;min-width:140px">
-      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Username</label>
-      <input type="text" name="username" placeholder="jane" required
-             style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
-    </div>
-    <div style="flex:1;min-width:140px">
-      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Password</label>
-      <input type="text" name="password" placeholder="at least 6 characters" required
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Email address</label>
+      <input type="email" name="email" placeholder="jane@example.com" required
              style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
     </div>
     <div style="min-width:220px">
@@ -46,7 +42,7 @@
   {% if users %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
       <tbody>
         {% for u in users %}
         <tr>
