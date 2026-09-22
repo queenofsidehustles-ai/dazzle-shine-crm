@@ -88,6 +88,10 @@ SECTIONS = [
         ('contractors.applications', '📥', 'Hiring', False, [
             ('contractors.applications', 'Applications', False),
             ('interviews.admin_interviews', 'Interviews', False),
+            # Used to be a card on Business Settings -- the interview link and
+            # BG-check provider these two pages actually use, moved next to
+            # them rather than a click away under Settings.
+            ('contractors.hiring_settings', 'Hiring settings', True),
         ]),
     ]),
 
@@ -214,6 +218,7 @@ MIN_PLAN = {
     'money.tax_forms': 'tax_forms',
     'commissions.index': 'va_commissions',
     'contractors.applications': 'hiring',
+    'contractors.hiring_settings': 'hiring',
     'interviews.admin_interviews': 'interviews',
     'sops.index': 'sops',
     'discounts.index': 'discounts',

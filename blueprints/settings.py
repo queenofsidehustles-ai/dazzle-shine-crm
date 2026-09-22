@@ -429,7 +429,6 @@ def pricing():
 def business():
     fields = ['business_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'website',
               'worker_model', 'reception_model', 'agreement_template',
-              'interview_calendar_link', 'bgcheck_provider_url', 'bgcheck_provider_name',
               'customer_terms',
               # Branding — what customers see on emails, quotes and review prompts.
               'google_review_link', 'content_business_description',

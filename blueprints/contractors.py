@@ -436,7 +436,7 @@ def send_interview_invite(app_id):
     biz = branding.biz_name()
     cal_link = BusinessSetting.get('interview_calendar_link', '')
     if not cal_link:
-        flash('Add your calendar link in Settings → Business first.', 'warning')
+        flash('Add your calendar link under Hiring → Hiring settings first.', 'warning')
         return redirect(url_for('contractors.application_detail', app_id=app_id))
     send_email(
         to_email=a.email, to_name=a.name,
@@ -521,7 +521,7 @@ def send_bgcheck_request(app_id):
     provider_url = BusinessSetting.get('bgcheck_provider_url', '')
     provider_name = BusinessSetting.get('bgcheck_provider_name', 'the provider below')
     if not provider_url:
-        flash('Add a background check provider URL in Settings → Business first.', 'warning')
+        flash('Add a background check provider URL under Hiring → Hiring settings first.', 'warning')
         return redirect(url_for('contractors.application_detail', app_id=app_id))
     send_email(
         to_email=a.email, to_name=a.name,
@@ -1335,6 +1335,28 @@ def training_guide():
         return redirect(url_for('contractors.training_guide'))
     guide = BusinessSetting.get('training_guide') or default_training_guide()
     return render_template('admin/training_guide_edit.html', guide=guide)
+
+
+@contractors_bp.route('/hiring-settings', methods=['GET', 'POST'])
+@owner_required
+@requires_plan('hiring')
+def hiring_settings():
+    """The interview link and background-check provider that power the
+    one-click email buttons on each application.
+
+    Used to live as a card on Business Settings, one page away from the
+    applications it actually configures. Its own tab, next to the two
+    hiring pages that read these settings, so setting them up and using
+    them are in the same place."""
+    fields = ['interview_calendar_link', 'bgcheck_provider_name', 'bgcheck_provider_url']
+    if request.method == 'POST':
+        for f in fields:
+            BusinessSetting.set(f, (request.form.get(f) or '').strip())
+        db.session.commit()
+        flash('Hiring settings saved!', 'success')
+        return redirect(url_for('contractors.hiring_settings'))
+    current = {f: BusinessSetting.get(f) or '' for f in fields}
+    return render_template('admin/hiring_settings.html', current=current)
 
 
 # ── Paying contractors ─────────────────────────────────────────────────────────
