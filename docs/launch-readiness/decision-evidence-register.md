@@ -1163,3 +1163,24 @@ Status: NO-GO.
 Do not merge or activate Production/customer traffic until P0/P1 gates and
 operational rollback/containment evidence are green. Live Paystack/live funds
 remain unauthorized.
+
+### Deferred feature list (running) — 2026-09-22
+
+No code changed; this is a bookkeeping entry, added at the user's request,
+recording items raised in conversation that are deliberately not being
+built now.
+
+- **Address autocomplete** (booking address field). Needs a second Google
+  Places API key restricted by HTTP referrer rather than IP — the existing
+  `GOOGLE_PLACES_API_KEY` is IP-restricted server-side for `places_finder.py`
+  (Find Leads) and is unsafe to expose in browser JavaScript. Blocked on the
+  user creating that key in Google Cloud Console; cannot be done from this
+  session.
+- **A fuller PWA experience.** Today there is only `static/manifest.json` and
+  a set of icons, enough for "Add to Home Screen" to give Akye its own icon
+  and a chrome-less window. There is no service worker: no offline support,
+  no install prompt beyond what the browser offers unprompted, no push
+  notifications. Needs a product decision on scope (how much offline
+  behavior is worth the added complexity of a service worker and its cache-
+  invalidation story on a frequently-updated app) before it's worth
+  building.
