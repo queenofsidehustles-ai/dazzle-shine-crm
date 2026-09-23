@@ -31,6 +31,9 @@ FIELDS = {
     'twilio_phone':           ('TWILIO_PHONE', 'Twilio phone number', False),
     'resend_api_key':         ('RESEND_API_KEY', 'Resend API key', True),
     'stripe_webhook_secret':  ('STRIPE_WEBHOOK_SECRET', 'Stripe webhook signing secret', True),
+    'cloudinary_cloud_name':  ('CLOUDINARY_CLOUD_NAME', 'Cloudinary cloud name', False),
+    'cloudinary_api_key':     ('CLOUDINARY_API_KEY', 'Cloudinary API key', False),
+    'cloudinary_api_secret':  ('CLOUDINARY_API_SECRET', 'Cloudinary API secret', True),
 }
 
 _PREFIX = 'int_'
@@ -116,6 +119,9 @@ def twilio_auth_token():      return get('twilio_auth_token')
 def twilio_phone():           return get('twilio_phone')
 def resend_api_key():         return get('resend_api_key')
 def stripe_webhook_secret():  return get('stripe_webhook_secret')
+def cloudinary_cloud_name():  return get('cloudinary_cloud_name')
+def cloudinary_api_key():     return get('cloudinary_api_key')
+def cloudinary_api_secret():  return get('cloudinary_api_secret')
 
 
 def stripe_ready():
@@ -128,6 +134,10 @@ def texting_ready():
 
 def email_ready():
     return bool(resend_api_key())
+
+
+def photos_ready():
+    return all((cloudinary_cloud_name(), cloudinary_api_key(), cloudinary_api_secret()))
 
 
 def stripe_mode():
@@ -145,6 +155,7 @@ def missing_for(area):
         'stripe': ['stripe_secret_key', 'stripe_publishable_key'],
         'texting': ['twilio_account_sid', 'twilio_auth_token', 'twilio_phone'],
         'email': ['resend_api_key'],
+        'photos': ['cloudinary_cloud_name', 'cloudinary_api_key', 'cloudinary_api_secret'],
     }
     return [FIELDS[n][1] for n in groups.get(area, []) if not get(n)]
 
@@ -156,4 +167,5 @@ def status():
                    'missing': missing_for('stripe')},
         'texting': {'ready': texting_ready(), 'missing': missing_for('texting')},
         'email': {'ready': email_ready(), 'missing': missing_for('email')},
+        'photos': {'ready': photos_ready(), 'missing': missing_for('photos')},
     }

@@ -52,6 +52,15 @@
       {% endif %}
     </div>
 
+    <div style="padding:14px;border-radius:10px;border:1px solid {{ 'var(--good)' if status.photos.ready else 'var(--amber-line)' }};background:{{ 'var(--good-soft)' if status.photos.ready else 'var(--amber-soft)' }}">
+      <div style="font-weight:700;margin-bottom:4px">📷 Job photos</div>
+      {% if status.photos.ready %}
+        <div style="color:var(--good);font-size:0.86rem">Connected. Cleaners can upload before/after photos.</div>
+      {% else %}
+        <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.photos.missing|join(', ') }}.<br>Cleaners will not be able to upload before/after photos.</div>
+      {% endif %}
+    </div>
+
   </div>
 </div>
 
@@ -184,6 +193,40 @@
       {% endif %}
     </div>
     <button type="submit" class="btn btn-gold">Save Email</button>
+  </div>
+
+  <!-- Cloudinary -->
+  <div class="card" style="margin-top:20px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Job Photos</h2>
+    <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
+      This is where your cleaners' before-and-after photos are stored. Without
+      it, photo uploads on the job checklist will fail.
+    </p>
+    {% set howto_title = 'How do I get my Cloudinary details?' %}
+    {% set howto_mins = 'about 5 minutes' %}
+    {% set howto_link = 'https://cloudinary.com/users/register/free' %}
+    {% set howto_link_text = 'Open Cloudinary' %}
+    {% set howto_note = 'The free plan is plenty to start with — it covers
+        thousands of job photos before you would ever need to pay.' %}
+    {% set steps = [
+      'Go to <strong>cloudinary.com</strong> and create a free account, or sign in to the one you have.',
+      'On the Dashboard you will see <strong>Cloud name</strong>, <strong>API Key</strong> and <strong>API Secret</strong> near the top. The secret is hidden until you click to show it.',
+      'Copy all three and paste them below, then press Save.',
+    ] %}
+    {% include '_howto.html' %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      {% for name in ['cloudinary_cloud_name', 'cloudinary_api_key', 'cloudinary_api_secret'] %}
+      {% set f = fields[name] %}
+      <div class="form-group"{% if name == 'cloudinary_api_secret' %} style="grid-column:1/-1"{% endif %}>
+        <label>{{ f.label }}</label>
+        <input type="text" name="{{ name }}" value="{{ f.value }}" autocomplete="off" />
+        {% if f.source == 'environment' %}
+          <span style="font-size:0.76rem;color:var(--softer)">Currently from your hosting settings.</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-gold">Save Job Photos</button>
   </div>
 </form>
 

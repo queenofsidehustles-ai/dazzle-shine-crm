@@ -17,7 +17,6 @@ import hashlib
 import hmac
 import io
 import json
-import os
 from typing import Any
 
 import requests
@@ -35,28 +34,27 @@ _ALLOWED_TYPES = {
 
 
 def is_ready() -> bool:
-    return all((
-        (os.environ.get("CLOUDINARY_CLOUD_NAME") or "").strip(),
-        (os.environ.get("CLOUDINARY_API_KEY") or "").strip(),
-        (os.environ.get("CLOUDINARY_API_SECRET") or "").strip(),
-    ))
+    import integrations
+    return integrations.photos_ready()
 
 
 def _signing_key() -> bytes:
-    secret = (os.environ.get("CLOUDINARY_API_SECRET") or "").strip()
+    import integrations
+    secret = integrations.cloudinary_api_secret()
     if not secret:
         raise RuntimeError("Private media signing is not configured")
     return secret.encode("utf-8")
 
 
 def _configure():
+    import integrations
     if not is_ready():
         raise RuntimeError("Private media storage is not configured")
     import cloudinary
     cloudinary.config(
-        cloud_name=os.environ["CLOUDINARY_CLOUD_NAME"],
-        api_key=os.environ["CLOUDINARY_API_KEY"],
-        api_secret=os.environ["CLOUDINARY_API_SECRET"],
+        cloud_name=integrations.cloudinary_cloud_name(),
+        api_key=integrations.cloudinary_api_key(),
+        api_secret=integrations.cloudinary_api_secret(),
         secure=True,
     )
 
