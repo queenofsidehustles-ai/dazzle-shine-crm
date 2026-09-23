@@ -1,4 +1,4 @@
-# Dazzle & Shine CRM
+# Akye (Dazzle & Shine) CRM
 
 A full **operations system for a home-services (cleaning) business** — replacing
 spreadsheets and disconnected apps with one integrated platform that runs bookings,

@@ -38,12 +38,13 @@ jobs:
             secret: BACKUP_DATABASE_URL
           - key: akye
             label: Akye — every cleaning company on the platform
-            # Recovery verification must execute the candidate code while it is
-            # being remediated. Pinning this job to akye-stable meant the nightly
-            # drill could stay green without ever exercising recovery fixes on
-            # the launch candidate. The branch remains non-production and this
-            # workflow does not deploy it.
-            ref: akye-launch-readiness/cohort-30
+            # akye-stable is the authoritative, live branch — Dazzle & Shine's
+            # own data now lives there as a tenant. This job was pointed at
+            # akye-launch-readiness/cohort-30 while that candidate branch was
+            # the one being verified pre-launch; now that it has shipped and
+            # akye-stable is what's actually running, the nightly drill needs
+            # to cover akye-stable's real database again.
+            ref: akye-stable
             secret: BACKUP_AKYE_DATABASE_URL
 
     name: ${{ matrix.key }}

@@ -14,6 +14,15 @@
   <form method="POST" enctype="multipart/form-data">
     <input type="file" name="file" accept=".csv,text/csv" required
            style="width:100%;padding:12px;border:1px dashed var(--info-soft);border-radius:9px;background:var(--ground)">
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.9rem;margin-top:14px">
+      <input type="checkbox" name="auto_start" checked style="margin-top:3px">
+      <span>Start texting new callers automatically
+        <span style="display:block;font-size:0.83rem;color:var(--softer)">
+          Only people this file adds for the first time, who called in the last
+          {{ auto_days }} days and haven't booked. Everyone already here is left as it is.
+        </span>
+      </span>
+    </label>
     <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:14px">
       Import
     </button>
@@ -25,8 +34,9 @@
     and never disturbs a follow-up already in progress.
   </p>
   <p style="font-size:0.83rem;color:var(--softer);margin-top:8px">
-    Nothing is texted by importing. Every number is checked against your bookings
-    first, and following up is a separate step you start yourself.
+    Nothing is texted the moment you import. Every number is checked against your
+    bookings first, and the first text goes out on the next daily run — so you can
+    still press Stop on anyone before then.
   </p>
 </div>
 {% endblock %}

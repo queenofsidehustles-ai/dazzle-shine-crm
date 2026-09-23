@@ -38,13 +38,21 @@ with app.app_context():
     with c.session_transaction() as s:
         s['logged_in'] = True; s['role'] = 'owner'
 
+    # The 9th of a month safely ahead of today. A fixed date passed on 9 Sept
+    # 2026 and the preview — which rightly shows only upcoming visits — stopped
+    # mentioning it, failing a test about nothing that had changed.
+    _t = date.today()
+    _m = _t.month + 2
+    FIRST = date(_t.year + (_m - 1) // 12, (_m - 1) % 12 + 1, 9)
+    FIRST_WORDS = f'{FIRST:%A} {FIRST.day} {FIRST:%B}'
+
     print('\n1. A monthly client at a hand-set discounted price')
     client = Client(name='Renee Alvarez', email='renee@example.com',
                     phone='4075550188', zip_code='32801', address='14 Lake Ct')
     db.session.add(client); db.session.commit()
     seed = Booking(client_id=client.id, service_type='standard', name='Renee Alvarez',
                    email='renee@example.com', phone='4075550188', address='14 Lake Ct',
-                   zip_code='32801', frequency='monthly', preferred_date='2026-09-09',
+                   zip_code='32801', frequency='monthly', preferred_date=FIRST.isoformat(),
                    preferred_time='9:00 AM', price=185.0, status='confirmed')
     db.session.add(seed); db.session.commit()
     check(seed.price == 185.0, 'her price is whatever was typed, not the matrix figure')
@@ -78,7 +86,7 @@ with app.app_context():
     check('Welcome, Renee!' in page, 'the preview greets her by first name')
     check('renee@example.com' in page, 'shows who it would go to')
     check('$185' in page, 'shows her actual price')
-    check('Wednesday 9 September' in page, 'and her actual first date, written out')
+    check(FIRST_WORDS in page, 'and her actual first date, written out')
     check('/portal/' in page, 'with her private portal link')
     check(client.portal_token in page, 'which is her own token')
 
@@ -186,7 +194,7 @@ with app.app_context():
     check(SENT == [], 'previewing sends nothing at all')
     check("You're all set, Renee!" in page, 'it shows the real greeting')
     check('$185' in page, 'her real price')
-    check('2026-09-09' in page, 'her real date')
+    check(FIRST.isoformat() in page, 'her real date')
     check('renee@example.com' in page, 'who the email would go to')
     check('4075550188' in page, 'and who the text would go to')
     check('Reply STOP to opt out' in page, 'including the text message itself, which never had a preview')

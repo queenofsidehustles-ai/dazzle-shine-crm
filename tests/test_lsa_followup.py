@@ -300,4 +300,50 @@ with app.app_context():
     for (track, step), body in lsa.DEFAULT_MESSAGES.items():
         check('STOP' in body, f'{track} message {step} tells them how to stop')
 
+    print('\n18. New callers start on their own; nobody already here is touched')
+    LsaLead.query.delete()
+    SmsOptOut.query.delete()
+    db.session.commit()
+    now = datetime(2026, 9, 21, 12, 0)
+    OLD_CSV = ('Customer,Job type,Search intent,Location,Lead type,Charge status,'
+               'Lead received,Last activity\n'
+               '(407) 700-0001,,Categorical,Orlando,Phone call,Not charged,Sep 10 2026,Sep 10 2026,\n'
+               '(407) 700-0002,,Categorical,Orlando,Phone call,Not charged,Sep 11 2026,Sep 11 2026,\n')
+    lsa.import_rows(lsa.parse_csv(OLD_CSV)[0])
+    lsa.match_bookings()
+    left_alone = LsaLead.query.filter_by(phone='4077000001').first()
+    stopped = LsaLead.query.filter_by(phone='4077000002').first()
+    lsa.start_sequence(stopped)
+    lsa.stop_sequence(stopped, 'manual')
+
+    db.session.add(Booking(service_type='standard', name='Booked Caller', price=200,
+                           email='booked.caller@example.com', phone='(407) 700-0004',
+                           address='1 Main St', city='Orlando'))
+    db.session.add(SmsOptOut(phone='4077000005'))
+    db.session.commit()
+    NEW_CSV = OLD_CSV + (
+        '(407) 700-0003,,Categorical,Orlando,Phone call,Not charged,Sep 20 2026,Sep 20 2026,\n'
+        '(407) 700-0004,,Categorical,Orlando,Phone call,Charged,Sep 19 2026,Sep 19 2026,\n'
+        '(407) 700-0005,,Categorical,Orlando,Phone call,Charged,Sep 19 2026,Sep 19 2026,\n'
+        '(407) 700-0006,,Categorical,Orlando,Phone call,Charged,Jun 1 2026,Jun 1 2026,\n')
+    new_leads = []
+    added, updated = lsa.import_rows(lsa.parse_csv(NEW_CSV)[0], new_leads=new_leads)
+    lsa.match_bookings()
+    check((added, updated) == (4, 2), 'the second import adds four and refreshes two')
+    check(len(new_leads) == 4, 'and hands back exactly the four it added')
+    started, too_old = lsa.auto_start(new_leads, now=now)
+    fresh = LsaLead.query.filter_by(phone='4077000003').first()
+    check(fresh.in_sequence, 'a new caller who never booked starts on their own')
+    check(not LsaLead.query.filter_by(phone='4077000004').first().seq_started_at,
+          'a new caller who has already booked does not')
+    check(not LsaLead.query.filter_by(phone='4077000005').first().seq_started_at,
+          'nor does one who has texted STOP')
+    check(not LsaLead.query.filter_by(phone='4077000006').first().seq_started_at,
+          'nor one whose call was months ago')
+    check((started, too_old) == (1, 1), 'and the counts say so')
+    check(not left_alone.seq_started_at,
+          'a lead from an earlier import she never started stays unstarted')
+    check(stopped.seq_stopped == 'manual' and not stopped.in_sequence,
+          'and one she stopped by hand stays stopped')
+
     print('\nAll Google Ads follow-up checks passed.')
