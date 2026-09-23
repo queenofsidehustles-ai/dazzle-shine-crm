@@ -9,29 +9,39 @@ Two independent CSV imports:
   resulting login is linked back to their Staff card from the start (see
   Staff.user_id, migration 0014) rather than the two drifting apart the
   way Team Logins created on its own always could.
-- Clients: creates a Client record per row directly. An office login is
-  already the one doing the importing; there is nobody else to invite.
+- Clients: creates a Client record per row directly, and — if the row
+  names a repeat frequency and a next date — one recurring booking for
+  them, generated the same way schedule_recurring() does for a booking
+  created by hand. No price, no crew, no estimated hours: it is a slot on
+  the calendar, not a completed job, and the owner fills in the rest the
+  way she would for any other new booking.
 
-Calendar/booking-history import is deliberately not here. Mapping another
-tool's booking states, pricing and recurrence reliably is a materially
-harder problem than a flat contact list, and doing it carelessly risks
-corrupting the payroll and P&L numbers those rows would otherwise feed --
-it needs its own pass, not to ride along with this one.
+Calendar/booking-HISTORY import is still deliberately not here. Mapping
+another tool's *past* booking states, pricing and payments reliably is a
+materially harder problem than a slot on tomorrow's calendar, and doing
+it carelessly risks corrupting the payroll and P&L numbers those rows
+would otherwise feed -- that needs its own pass, not to ride along with
+this one. A *future* recurring plan carries none of that: it has not
+been paid, worked or paid out yet, so there is nothing to get wrong.
 """
 import csv
 import io
 import re
 import secrets
+from datetime import date
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
+import recurring
 from auth import owner_required
 from extensions import db
-from models import Staff, Client
+from models import Staff, Client, Booking
+from pricing import SERVICE_LABELS
 
 migration_bp = Blueprint('migration', __name__, url_prefix='/migration')
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+RECURRING_FREQUENCIES = {'weekly', 'biweekly', 'monthly'}
 
 
 def _read_csv_rows(file_storage):
@@ -196,7 +206,55 @@ def _import_client_rows(rows):
             notes='\n\n'.join(notes_parts) or None,
         )
         db.session.add(c)
-        created.append((i, name, email))
+        db.session.flush()  # need c.id before a booking can reference it
+
+        recurring_note = _maybe_create_recurring(c, row)
+        created.append((i, name, email, recurring_note))
 
     db.session.commit()
     return {'created': created, 'skipped': skipped}
+
+
+def _maybe_create_recurring(client, row):
+    """If the row names a repeat frequency, seed one recurring booking for
+    this client and let recurring.generate_series() fill the calendar —
+    the same function a "Set up recurring plan" button on a hand-made
+    booking calls. Returns a short note for the results table, or None if
+    the row had no recurring columns filled in at all.
+
+    Deliberately minimal: no price, no estimated hours, no crew. Those
+    come from the pricing matrix or the owner's own judgement, and an
+    imported row from another system's spreadsheet is not a reliable
+    source for either -- the booking shows up on the calendar exactly
+    like a fresh one and gets confirmed the same way."""
+    freq = (row.get('frequency') or '').strip().lower()
+    next_date = (row.get('next_date') or '').strip()
+    if not freq and not next_date:
+        return None
+    if freq not in RECURRING_FREQUENCIES:
+        return (f'⚠️ "{freq}" is not a repeat frequency I know (use weekly, '
+                f'biweekly or monthly) — customer added, no recurring plan.')
+    if not next_date:
+        return '⚠️ No next_date given — customer added, no recurring plan.'
+    try:
+        date.fromisoformat(next_date)
+    except ValueError:
+        return (f'⚠️ "{next_date}" isn\'t a date I can read (use YYYY-MM-DD) — '
+                f'customer added, no recurring plan.')
+
+    service_type = (row.get('service_type') or '').strip().lower()
+    if service_type not in SERVICE_LABELS:
+        service_type = 'standard'
+
+    seed = Booking(
+        client_id=client.id,
+        name=client.name, email=client.email, phone=client.phone,
+        address=client.address, city=client.city, zip_code=client.zip_code,
+        service_type=service_type, frequency=freq,
+        preferred_date=next_date, status='pending',
+    )
+    db.session.add(seed)
+    db.session.flush()
+    n = recurring.generate_series(seed)
+    return (f'📅 {freq} plan seeded from {next_date} — {n} visit'
+            f'{"" if n == 1 else "s"} on the calendar, pending review.')

@@ -14,6 +14,16 @@
     <code>notes</code>, <code>history</code> (past-service notes from your old
     system — kept as a note on the customer, not turned into job records).
   </p>
+  <p style="color:var(--softer);font-size:0.88rem;margin:0 0 16px">
+    On a recurring customer, add <code>frequency</code> (<code>weekly</code>,
+    <code>biweekly</code> or <code>monthly</code>) and <code>next_date</code>
+    (<code>YYYY-MM-DD</code>, their next visit) and their recurring plan is put
+    on the calendar too — the same way it would be from a booking made by hand.
+    <code>service_type</code> is optional and defaults to Standard Cleaning.
+    No price or cleaner is set; review and confirm each one same as any new
+    booking. This is <strong>not</strong> a way to bring over past jobs — see
+    <code>history</code> above for that.
+  </p>
   <form method="POST" enctype="multipart/form-data" id="import-form">
     <div id="dropzone" style="border:2px dashed var(--line);border-radius:12px;padding:36px 20px;
                 text-align:center;cursor:pointer;transition:border-color .15s,background .15s">
@@ -30,9 +40,9 @@
 
 <div class="card" style="margin-top:16px">
   <h2 style="font-size:0.9rem;font-weight:700;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px">Example</h2>
-  <pre style="background:var(--ground);border-radius:8px;padding:12px;font-size:0.82rem;overflow-x:auto;margin:0">name,email,phone,address,city,zip,notes
-Alicia Chen,alicia@example.com,555-0201,12 Oak St,Tampa,33602,Has two dogs
-Marcus Lee,marcus@example.com,555-0202,88 Palm Ave,Tampa,33603,</pre>
+  <pre style="background:var(--ground);border-radius:8px;padding:12px;font-size:0.82rem;overflow-x:auto;margin:0">name,email,phone,address,city,zip,notes,frequency,next_date
+Alicia Chen,alicia@example.com,555-0201,12 Oak St,Tampa,33602,Has two dogs,biweekly,2026-10-06
+Marcus Lee,marcus@example.com,555-0202,88 Palm Ave,Tampa,33603,,,</pre>
 </div>
 
 <script>
@@ -69,16 +79,22 @@ Marcus Lee,marcus@example.com,555-0202,88 Palm Ave,Tampa,33603,</pre>
   {% if results.created %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Row</th><th>Name</th><th>Email</th></tr></thead>
+      <thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Recurring plan</th></tr></thead>
       <tbody>
-        {% for row, name, email in results.created %}
-        <tr><td style="color:var(--softer)">{{ row }}</td><td>{{ name }}</td><td style="color:var(--muted)">{{ email }}</td></tr>
+        {% for row, name, email, recurring_note in results.created %}
+        <tr>
+          <td style="color:var(--softer)">{{ row }}</td>
+          <td>{{ name }}</td>
+          <td style="color:var(--muted)">{{ email }}</td>
+          <td style="color:{{ 'var(--warn)' if recurring_note and recurring_note.startswith('⚠️') else 'var(--softer)' }}">{{ recurring_note or '—' }}</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   <p style="font-size:0.82rem;color:var(--softer);margin-top:10px">
     <a href="{{ url_for('bookings.clients') }}">View your customers →</a>
+    · <a href="{{ url_for('bookings.index') }}">View bookings →</a>
   </p>
   {% endif %}
 </div>

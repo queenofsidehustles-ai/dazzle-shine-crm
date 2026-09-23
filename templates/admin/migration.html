@@ -30,16 +30,20 @@
   <p style="color:var(--softer);font-size:0.86rem;margin:0 0 14px">
     Upload a CSV of your customers — name, email, and whatever else you have (phone,
     address, notes). Created directly; there's no login for a customer to set up.
+    On a recurring customer, add their repeat frequency and next visit date and
+    their plan goes on the calendar too.
   </p>
   <a href="{{ url_for('migration.clients') }}" class="btn btn-gold">Import clients</a>
 </div>
 
 <div class="card" style="margin-top:16px;background:var(--info-soft)">
   <p style="color:var(--muted);font-size:0.85rem;margin:0">
-    Not here yet: bringing over your existing calendar of upcoming jobs. Matching
-    another system's statuses and pricing correctly is a bigger job than a contact
-    list, and getting it wrong risks bad numbers in payroll and P&amp;L — so for now,
-    add upcoming jobs the normal way once your team and clients are in.
+    Not here: bringing over your existing calendar of <em>past</em> jobs. Matching
+    another system's statuses, pricing and payment history correctly is a bigger
+    job than a contact list, and getting it wrong risks bad numbers in payroll and
+    P&amp;L. A recurring plan's <em>future</em> visits are safe to bring in (see
+    Clients above) because nothing about them has happened yet — there's no
+    payment or payroll record to get wrong.
   </p>
 </div>
 {% endblock %}
