@@ -1,0 +1,20 @@
+{% extends "console/_shell.html" %}
+{% block title %}{{ doc.title }}{% endblock %}
+{% block body %}
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:var(--s3)">
+  <h2 style="font-size:1.05rem;margin:0">{{ doc.title }}</h2>
+  {% if can_edit %}
+  <a href="{{ url_for('console.playbook_edit', doc_id=doc.id) }}" class="btn btn-outline btn-sm">Edit</a>
+  {% endif %}
+</div>
+<p class="con-meta">
+  {% if doc.created_by %}Added by {{ doc.created_by }} · {% endif %}
+  updated {{ doc.updated_at.strftime('%d %b %Y, %H:%M') if doc.updated_at else '—' }}
+</p>
+<div class="con-item">
+  <pre class="con-body" style="font-family:inherit;margin:0">{{ doc.content }}</pre>
+</div>
+<p style="margin-top:var(--s4)">
+  <a href="{{ url_for('console.playbooks') }}">&larr; All playbooks</a>
+</p>
+{% endblock %}
