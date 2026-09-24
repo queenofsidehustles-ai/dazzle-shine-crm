@@ -71,7 +71,12 @@
        anywhere in the app, on every screen rather than the one page you'd
        otherwise have to go find first. Owner-only, matching the page itself
        (see assistant_routes.py). #}
-    {% if session.get('role') == 'owner' %}
+    {# Hidden on the Ask Nana page itself -- that page already has its own
+       full search bar (voice, suggested questions, history), so showing
+       this one too put two ways to ask the same question on screen at
+       once, and typing into this one just reloaded the page you were
+       already on. #}
+    {% if session.get('role') == 'owner' and request.endpoint != 'assistant.page' %}
     <form class="ask-nana-quick" action="{{ url_for('assistant.page') }}" method="GET">
       <span class="ask-nana-quick-icon">💬</span>
       <input type="text" name="q" placeholder="Ask Nana anything…"

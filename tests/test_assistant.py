@@ -828,6 +828,31 @@ with app.app_context():
     # email, never straight from what the model wrote.
     check('enable_daily_digest' in assistant.ACTION_TOOLS,
           'it travels alone, like the other two things Nana can change')
+
+    print('\n26. "How do I hire someone" has a real answer now')
+    from models import ContractorApplication as _CA
+    said = assistant.hiring_status()
+    check('No applicants yet' in said, 'an empty pipeline says so plainly')
+    check('Hiring' in said and 'View Form' in said,
+          f'and points at where to actually do it: {said!r}')
+
+    db.session.add(_CA(name='Dana Reyes', email='dana@x.com', status='new'))
+    db.session.add(_CA(name='Yusuf Ali', email='yusuf@x.com', status='reviewing'))
+    db.session.add(_CA(name='Priya Nair', email='priya@x.com', status='hired'))
+    db.session.commit()
+    said = assistant.hiring_status()
+    check('3 applicants' in said, f'counted, like everything else she says: {said!r}')
+    check('1 new' in said and '1 being reviewed' in said and '1 hired' in said,
+          'broken down by where each one stands')
+    check('Dana Reyes' not in said and 'Yusuf Ali' not in said,
+          'no names dumped -- this answers "how do I hire", not "who applied"')
+
+    # The bug this closes: asked how to hire, she used to fall back to
+    # dumping the active-staff roster because no tool spoke to hiring at
+    # all. Now one does, and it is the one the router should reach for.
+    check('hiring_status' in assistant.TOOLS, 'a real tool exists for the question')
+    check('hire' in assistant.TOOLS['hiring_status'][1].lower(),
+          'described in the words an owner would actually type')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')
