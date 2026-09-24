@@ -41,7 +41,20 @@ JOBS = [
     ('insurance-expiry', 'Subcontractor insurance',
      'Warns you before a subcontractor&rsquo;s insurance or workers&rsquo; '
      'compensation runs out.', 'daily'),
+    # Off by default, unlike the rest of this list. Those five are what
+    # somebody signed up for; this is a daily email nobody asked to start
+    # receiving, and the one automation here whose entire value depends on
+    # being wanted rather than merely tolerated.
+    ('owner-digest', 'Morning digest',
+     'Emails you each morning with what actually needs you today — the same '
+     'specific list Nana can read back, sent before you open the app.', 'daily'),
 ]
+
+# Everything above defaults to on. This one is the exception: an inbox that
+# starts filling up the day somebody signs up, before they have asked for it,
+# is the fastest way to get every automation email filtered straight past
+# them — including the ones that matter.
+DEFAULT_OFF = {'owner-digest'}
 
 # What a business has decided about each job. Absence means on: the five that
 # send messages are what somebody signed up for, and a new company should not
@@ -74,6 +87,8 @@ def is_enabled(job):
     """
     if job == 'charge-balances':
         return balance_mode() == 'auto'
+    if job in DEFAULT_OFF:
+        return _setting(f'automation_{job}_on') == '1'
     return _setting(f'automation_{job}_off') != '1'
 
 
@@ -91,6 +106,15 @@ def balance_mode():
 
 def set_enabled(job, on):
     from models import BusinessSetting
+    if job in DEFAULT_OFF:
+        # Absence has to mean off here, the opposite of every other job's
+        # switch -- so it needs its own key. Writing '1'/'' to the shared
+        # `_off` key would mean a business that had never touched this
+        # setting and one that had explicitly turned it off were
+        # indistinguishable, and is_enabled() would have no way to tell
+        # "never asked" from "asked, and said no."
+        BusinessSetting.set(f'automation_{job}_on', '1' if on else '')
+        return
     BusinessSetting.set(f'automation_{job}_off', '' if on else '1')
 
 
