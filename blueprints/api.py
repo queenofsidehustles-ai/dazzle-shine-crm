@@ -555,6 +555,34 @@ def _mail_expiry(rows, gaps):
     return bool(ok)
 
 
+@api_bp.route('/owner-digest', methods=['POST'])
+def owner_digest():
+    """The push half of Nana. Same facts daily_plan already computes for the
+    in-app list, mailed to the owner once a day rather than waiting for them
+    to open the app and look.
+
+    Off unless a business turns it on (see automations.DEFAULT_OFF) — nobody
+    should wake up to a new daily email they never asked for.
+    """
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    if not automations.is_enabled('owner-digest'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
+
+    import owner_digest as od
+    sent, detail = od.run()
+    automations.record('owner-digest', items=1 if sent else 0,
+                       ok=sent or detail == 'nothing worth sending today',
+                       detail=None if sent else detail)
+    return jsonify({'ok': True, 'sent': sent, 'detail': detail})
+
+
 # ── Applicant interview follow-ups (cron — run once daily) ────────────────────
 # Re-sends the bilingual video interview link every 2 days to applicants who
 # haven't responded (up to 2 extra nudges), then marks them "No Response".
