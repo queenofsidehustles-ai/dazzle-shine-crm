@@ -85,10 +85,14 @@ def items():
                     '/money/pnl'))
 
     # ── Pipeline that has gone quiet ──────────────────────────────────────
-    due = Prospect.query.filter(
-        Prospect.next_action_date.isnot(None),
-        Prospect.next_action_date <= today.isoformat(),
-    ).count()
+    # Counted through the same Prospect.is_due the Today list filters on. This
+    # used to be its own query, and a looser one: no stage filter at all, so it
+    # counted won, lost and resting prospects the page it links to would never
+    # show. The dashboard promised callbacks that were not there, which is a
+    # worse failure than missing them — you stop believing the number.
+    iso = today.isoformat()
+    due = sum(1 for p in Prospect.query.filter(Prospect.maybe_due(iso)).all()
+              if p.is_due(iso))
     if due:
         out.append(('today',
                     f'{due} commercial {_plural(due, "prospect")} due a call back.',

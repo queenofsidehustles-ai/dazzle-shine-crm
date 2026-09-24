@@ -173,10 +173,11 @@ def dashboard():
     rows = _backfilled()
 
     if view == 'today':
+        # Prospect.is_due is the one definition of due, shared with the
+        # dashboard count. It was written out longhand here, and a prospect
+        # resting in nurture could never satisfy it however overdue it got.
         today = local_today().isoformat()
-        shown = sorted([p for p in rows
-                        if p.is_open and (not p.next_action_date
-                                          or p.next_action_date <= today)],
+        shown = sorted([p for p in rows if p.is_due(today)],
                        key=prospecting.due_sort_key)
     elif view == 'pipeline':
         order = [k for k, _ in Prospect.STAGE_LABELS]

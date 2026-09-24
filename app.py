@@ -928,6 +928,14 @@ def _migrate_db():
         ('prospect', 'contact_name',        'VARCHAR(120)'),
         ('prospect', 'email',               'VARCHAR(200)'),
         ('prospect', 'renewal_note',        'VARCHAR(120)'),
+        # The renewal month as a date something can act on, and the stamp that
+        # keeps the wake-up from firing on each of the thirty nights before it.
+        ('prospect', 'renewal_date',        'VARCHAR(10)'),
+        ('prospect', 'renewal_woken_at',    'TIMESTAMP'),
+        # Which email sequence they are in, and how far through it.
+        ('prospect', 'sequence',            'VARCHAR(20)'),
+        ('prospect', 'drip_step',           'INTEGER DEFAULT 0'),
+        ('prospect', 'last_drip_at',        'TIMESTAMP'),
         ('prospect', 'last_emailed_at',     'TIMESTAMP'),
         # Which side of the business a record belongs to. Left NULL rather than
         # defaulted for the same reason as stage above: a DEFAULT would stamp
