@@ -243,6 +243,24 @@ support_requests = Table(
 )
 
 
+# Reference material that is the product's own, not any one company's -- a
+# growth plan, a launch runbook, anything that used to live as a link pasted
+# into somebody's inbox and should survive the person who pasted it there.
+# Plain text, rendered pre-wrapped, the same choice `SOP.content` already
+# made: one more markdown renderer to keep secure is not worth it for a page
+# only the people already inside the console ever see.
+console_docs = Table(
+    'console_docs', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('title', String(200), nullable=False),
+    Column('content', Text, nullable=False),
+    Column('created_by', String(200)),
+    Column('sort_order', Integer, default=0),
+    Column('created_at', DateTime, default=datetime.utcnow),
+    Column('updated_at', DateTime, default=datetime.utcnow, onupdate=datetime.utcnow),
+)
+
+
 def ensure_columns(engine):
     """Add any column this Table object declares that the live table does not have.
 
@@ -290,7 +308,7 @@ def ensure_table(engine):
     control_metadata.create_all(
         engine, tables=[organizations, product_leads, feedback,
                         console_users, support_requests, console_log,
-                        tenant_logins, login_lookup_requests])
+                        tenant_logins, login_lookup_requests, console_docs])
     ensure_columns(engine)
 
 
@@ -742,3 +760,40 @@ def set_console_role(engine, email, role):
         conn.execute(update(console_users)
                      .where(console_users.c.email == (email or '').strip().lower())
                      .values(role=role))
+
+
+# --------------------------------------------------------------------------
+# Playbooks -- reference material, not any one company's
+
+
+def add_console_doc(engine, title, content, created_by=None, sort_order=0):
+    with engine.begin() as conn:
+        res = conn.execute(insert(console_docs).values(
+            title=title, content=content, created_by=created_by,
+            sort_order=sort_order))
+    try:
+        return res.inserted_primary_key[0]
+    except Exception:
+        return None
+
+
+def all_console_docs(engine):
+    with engine.connect() as conn:
+        rows = conn.execute(select(console_docs).order_by(
+            console_docs.c.sort_order, console_docs.c.id)).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def console_doc(engine, doc_id):
+    with engine.connect() as conn:
+        row = conn.execute(select(console_docs).where(
+            console_docs.c.id == doc_id)).mappings().first()
+    return dict(row) if row else None
+
+
+def update_console_doc(engine, doc_id, title, content):
+    with engine.begin() as conn:
+        conn.execute(update(console_docs)
+                     .where(console_docs.c.id == doc_id)
+                     .values(title=title, content=content,
+                             updated_at=datetime.utcnow()))

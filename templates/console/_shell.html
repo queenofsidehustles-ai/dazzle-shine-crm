@@ -59,6 +59,8 @@
        class="{{ 'on' if request.endpoint == 'console.nana_proposals' }}">Nana</a>
     <a href="{{ url_for('console.people') }}"
        class="{{ 'on' if request.endpoint == 'console.people' }}">People</a>
+    <a href="{{ url_for('console.playbooks') }}"
+       class="{{ 'on' if request.endpoint and request.endpoint.startswith('console.playbook') }}">Playbooks</a>
     <a href="{{ url_for('console.log') }}"
        class="{{ 'on' if request.endpoint == 'console.log' }}">Record</a>
     <span class="right">

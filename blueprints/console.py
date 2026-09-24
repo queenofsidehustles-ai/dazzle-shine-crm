@@ -360,6 +360,78 @@ def nana_proposals():
                            me=request.console_user, counts=_counts(engine))
 
 
+@console_bp.route('/playbooks')
+@console_required
+def playbooks():
+    """Reference material for the product -- growth plans, launch runbooks,
+    anything that used to live as a link pasted into somebody's inbox."""
+    engine = _engine()
+    return render_template('console/playbooks.html',
+                           rows=control_plane.all_console_docs(engine),
+                           can_edit=control_plane.rank(request.console_user['role'])
+                                     >= control_plane.rank('manager'),
+                           me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/playbooks/<int:doc_id>')
+@console_required
+def playbook_view(doc_id):
+    engine = _engine()
+    doc = control_plane.console_doc(engine, doc_id)
+    if not doc:
+        flash('No such playbook.', 'error')
+        return redirect(url_for('console.playbooks'))
+    return render_template('console/playbook_view.html', doc=doc,
+                           can_edit=control_plane.rank(request.console_user['role'])
+                                     >= control_plane.rank('manager'),
+                           me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/playbooks/new', methods=['GET', 'POST'])
+@console_required
+@can_manage
+def playbook_new():
+    engine = _engine()
+    if request.method == 'POST':
+        title = (request.form.get('title') or '').strip()
+        content = (request.form.get('content') or '').strip()
+        if not title or not content:
+            flash('A title and some content, please.', 'error')
+            return redirect(url_for('console.playbook_new'))
+        doc_id = control_plane.add_console_doc(
+            engine, title, content, created_by=request.console_user['email'])
+        control_plane.log_console(engine, request.console_user['email'],
+                                  'added playbook', title)
+        flash('Saved.', 'success')
+        return redirect(url_for('console.playbook_view', doc_id=doc_id))
+    return render_template('console/playbook_form.html', doc=None,
+                           me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/playbooks/<int:doc_id>/edit', methods=['GET', 'POST'])
+@console_required
+@can_manage
+def playbook_edit(doc_id):
+    engine = _engine()
+    doc = control_plane.console_doc(engine, doc_id)
+    if not doc:
+        flash('No such playbook.', 'error')
+        return redirect(url_for('console.playbooks'))
+    if request.method == 'POST':
+        title = (request.form.get('title') or '').strip()
+        content = (request.form.get('content') or '').strip()
+        if not title or not content:
+            flash('A title and some content, please.', 'error')
+            return redirect(url_for('console.playbook_edit', doc_id=doc_id))
+        control_plane.update_console_doc(engine, doc_id, title, content)
+        control_plane.log_console(engine, request.console_user['email'],
+                                  'edited playbook', title)
+        flash('Saved.', 'success')
+        return redirect(url_for('console.playbook_view', doc_id=doc_id))
+    return render_template('console/playbook_form.html', doc=doc,
+                           me=request.console_user, counts=_counts(engine))
+
+
 @console_bp.route('/log')
 @console_required
 def log():
