@@ -1772,6 +1772,17 @@ class Prospect(db.Model):
     contact_name = db.Column(db.String(120))           # the human, not the business
     email = db.Column(db.String(200))                  # asked for on the call; Places never has it
     renewal_note = db.Column(db.String(120))           # "March 2027" — why a no is worth keeping
+    # The same fact as renewal_note, in a form something can act on. A note
+    # reading "March 2027" is only ever found by the person who typed it; a
+    # date can put the prospect back on the call list a month before the
+    # incumbent's contract ends, which is the one moment a commercial cleaner
+    # can actually be displaced. In commercial work "not interested" almost
+    # always means "we are under contract", so this is the single most
+    # valuable thing a cold call can come away with — more than a yes.
+    renewal_date = db.Column(db.String(10), index=True)   # YYYY-MM-DD
+    # Set once the renewal wake-up has fired, so it fires once rather than
+    # every night for thirty nights.
+    renewal_woken_at = db.Column(db.DateTime)
     last_emailed_at = db.Column(db.DateTime)
 
     # Residential or commercial side of the business. Set from the search that
@@ -1812,6 +1823,50 @@ class Prospect(db.Model):
         ('lost',       'Lost'),
     ]
     LIVE_STAGES = ('new', 'working', 'interested', 'proposal')
+
+    # Stages a prospect can come back from. Nurture is here and not in
+    # LIVE_STAGES on purpose: it should stay off today's list until its date
+    # arrives, and then appear. Leaving it out of both is what made it a hole
+    # rather than a queue — and three separate paths lead into it. An outcome
+    # of "not interested", a deliberate "keep in touch", and, most often, a
+    # prospect who simply hit MAX_ATTEMPTS. All three were set a next action
+    # and a date, and none of them was ever shown again.
+    WAKEABLE_STAGES = LIVE_STAGES + ('nurture',)
+
+    @classmethod
+    def maybe_due(cls, today):
+        """A superset of what is due, cheap enough to run as a query.
+
+        Exactness lives in is_due() and nowhere else. This exists only so a
+        caller that wants a count does not have to load every prospect ever
+        imported to get one.
+        """
+        return db.and_(
+            db.or_(cls.stage.in_(cls.WAKEABLE_STAGES), cls.stage.is_(None)),
+            db.or_(cls.next_action_date.is_(None),
+                   cls.next_action_date <= today),
+        )
+
+    def is_due(self, today=None):
+        """Does this prospect belong on today's call list?
+
+        The single definition of "due". It used to be written once in the
+        Today view and differently in the dashboard's count, so the dashboard
+        would promise seven callbacks and the list it linked to would show
+        four — which teaches you to distrust both numbers.
+
+        A live prospect with no date is due: it is work nobody has scheduled,
+        and hiding it would be the same bug in the other direction. A nurturing
+        one with no date is not — resting is what nurture is for.
+        """
+        stage = self.stage or 'new'
+        if stage not in self.WAKEABLE_STAGES:
+            return False
+        from datetime import date as _date
+        today = today or _date.today().isoformat()
+        if not self.next_action_date:
+            return stage in self.LIVE_STAGES
+        return self.next_action_date <= today
 
     @property
     def category_label(self):

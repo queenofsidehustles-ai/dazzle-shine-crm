@@ -87,8 +87,25 @@ with app.app_context():
     keen, nope = Prospect.query.get(keen.id), Prospect.query.get(nope.id)
     check(keen.stage == 'interested' and keen.next_action_date == plus(2),
           'a yes gets a walkthrough in 2 days')
-    check(nope.stage == 'lost' and not nope.next_action_date,
-          'a no is closed with nothing scheduled — it stops taking up room')
+    # This used to assert the opposite — that a no went to 'lost' with nothing
+    # scheduled. In commercial cleaning "not interested" nearly always means
+    # "we are under contract", which is a date rather than a rejection, and
+    # closing the file threw away the most winnable prospect there is: one who
+    # has already told you they buy this service. It rests and comes back.
+    check(nope.stage == 'nurture' and nope.next_action_date == plus(90),
+          'a no rests in nurture and returns in a quarter, not closed forever')
+
+    print('\n3b. Only an explicit "do not contact" actually closes the file')
+    stop = Prospect(business_name='Leave Us Alone LLC', category='property_manager',
+                    status='new', stage='new')
+    db.session.add(stop); db.session.commit()
+    c.post(f'/find-leads/{stop.id}/status', follow_redirects=True,
+           data={'mode': 'log', 'status': 'do_not_contact'})
+    stop = Prospect.query.get(stop.id)
+    check(stop.stage == 'lost' and not stop.next_action_date,
+          'asked not to be contacted: nothing scheduled, ever')
+    check(not stop.is_due(),
+          'and it never comes back onto the call list')
 
     print('\n4. What the caller actually agreed beats the suggestion')
     c.post(f'/find-leads/{keen.id}/status', follow_redirects=True, data={
@@ -189,5 +206,71 @@ with app.app_context():
     html = c.get('/find-leads/?view=pipeline').get_data(as_text=True)
     for label in ('New', 'Working', 'Interested', 'Won', 'Nurture', 'Lost'):
         check(label in html, f'{label} is on the board')
+
+    print('\n13. Nurture is a queue, not a hole')
+    # The bug this replaces: nurture was in neither LIVE_STAGES nor anything
+    # else the Today view looked at, so every prospect that rested — whether
+    # sent there by a no, by a "keep in touch", or simply by running out of
+    # call attempts — was given a next action and a date and then never shown
+    # again on any screen.
+    resting = Prospect(business_name='Back In March Ltd', category='property_manager',
+                       status='not_interested', stage='nurture',
+                       next_action='Quarterly check-in', next_action_date=plus(90))
+    ripe = Prospect(business_name='Due Today Group', category='property_manager',
+                    status='not_interested', stage='nurture',
+                    next_action='Quarterly check-in', next_action_date=TODAY)
+    db.session.add_all([resting, ripe]); db.session.commit()
+    check(not resting.is_due(), 'a nurturing prospect stays off the list until its date')
+    check(ripe.is_due(), 'and comes back onto it the day it is due')
+    html = c.get('/find-leads/').get_data(as_text=True)
+    check('Due Today Group' in html, 'the one that is due appears in Today')
+    check('Back In March Ltd' not in html, 'the one that is resting does not')
+
+    print('\n14. The dashboard count and the list it links to agree')
+    # These were two different queries: the count had no stage filter at all,
+    # so it counted won, lost and resting prospects the page would never show.
+    # A dashboard that promises seven callbacks and delivers four is worse than
+    # one that says nothing, because you stop believing the number.
+    import daily_plan
+    rows = Prospect.query.all()
+    shown = [p for p in rows if p.is_due(TODAY)]
+    counted = sum(1 for p in Prospect.query.filter(Prospect.maybe_due(TODAY)).all()
+                  if p.is_due(TODAY))
+    check(counted == len(shown),
+          f'dashboard counts exactly what Today shows ({counted})')
+    check(any('/find-leads/' in link for _u, _t, link in daily_plan.items())
+          or not shown,
+          'and the dashboard links there when there is anything to do')
+
+    print('\n15. A contract renewal wakes the prospect that was resting on it')
+    import prospecting
+    from datetime import date, timedelta as _td
+    soon = (date.today() + _td(days=prospecting.RENEWAL_LEAD_DAYS - 5)).isoformat()
+    far = (date.today() + _td(days=200)).isoformat()
+    renewing = Prospect(business_name='Contract Ends Soon Co', category='property_manager',
+                        status='not_interested', stage='nurture',
+                        next_action='Quarterly check-in', next_action_date=plus(60),
+                        renewal_date=soon)
+    later = Prospect(business_name='Locked In For Ages Co', category='property_manager',
+                     status='not_interested', stage='nurture',
+                     next_action='Quarterly check-in', next_action_date=plus(60),
+                     renewal_date=far)
+    db.session.add_all([renewing, later]); db.session.commit()
+
+    woken = prospecting.wake_renewals()
+    renewing = Prospect.query.get(renewing.id)
+    later = Prospect.query.get(later.id)
+    check(woken == 1, f'exactly the one inside the window woke ({woken})')
+    check(renewing.stage == 'working' and renewing.next_action_date == TODAY,
+          'it is back on the call list today, not in three months')
+    check(soon in (renewing.next_action or ''),
+          'and the action says when the contract actually ends')
+    check(later.stage == 'nurture' and later.next_action_date == plus(60),
+          'a renewal still months out is left alone')
+
+    # Firing once matters: this runs nightly, and a prospect that re-woke every
+    # night for thirty nights would rewrite a real next action each time.
+    again = prospecting.wake_renewals()
+    check(again == 0, 'and it does not wake the same prospect again tomorrow')
 
 print('\n🎉 Funnel checks passed.')

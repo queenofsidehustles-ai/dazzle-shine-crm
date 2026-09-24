@@ -143,12 +143,24 @@ def run_lifecycle_emails():
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
          'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
          'onboarding_reminder': 0, 'invoice': 0,
-         'quote_followup': 0, 'recurring_topup': 0, 'recurring_expenses': 0}
+         'quote_followup': 0, 'recurring_topup': 0, 'recurring_expenses': 0,
+         'renewals_woken': 0}
 
     # ── Keep recurring plans filled ~12 weeks ahead (rolling generation) ──
     try:
         import recurring
         c['recurring_topup'] = recurring.topup_all()
+    except Exception:
+        pass
+
+    # ── Put prospects back on the list before their contract renews ───────
+    # Sends nothing; it moves a resting prospect onto today's call list. It
+    # rides the daily job rather than getting a cron of its own because a
+    # second schedule is a second thing that can silently stop, and this one
+    # only has to be right to the day.
+    try:
+        import prospecting
+        c['renewals_woken'] = prospecting.wake_renewals()
     except Exception:
         pass
 
