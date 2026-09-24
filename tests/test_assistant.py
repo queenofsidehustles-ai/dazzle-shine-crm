@@ -156,8 +156,14 @@ with app.app_context():
     check('Which job' in out['say'], 'no name at all is also a question')
 
     print('\n7. There is no tool that spends money or texts anybody')
+    # cleaner_pay is a lookup like the rest -- what a cleaner WAS paid,
+    # historical fact off the books -- not a tool that pays anybody, the
+    # same reason draft_email is excepted despite writing (never sending)
+    # a message.
+    LOOKUP_NAME_EXCEPTIONS = {'draft_email', 'cleaner_pay'}
     for bad in ('charge', 'refund', 'pay', 'text', 'sms', 'send_email', 'delete'):
-        hits = [t for t in assistant.TOOLS if bad in t and t != 'draft_email']
+        hits = [t for t in assistant.TOOLS
+               if bad in t and t not in LOOKUP_NAME_EXCEPTIONS]
         check(not hits, f'nothing named like {bad!r} ({hits})')
     # Only one tool changes anything at all, and it proposes.
     writers = [n for n, (_f, d, _a) in assistant.TOOLS.items()

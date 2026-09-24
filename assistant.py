@@ -218,6 +218,184 @@ def unassigned_jobs():
                 for b in rows[:8]))
 
 
+def _period_bounds(period):
+    """Same reading as money_made's, pulled out so every money-shaped tool
+    agrees on what "last month" means rather than each guessing separately."""
+    today = _today()
+    if 'last' in period:
+        first = today.replace(day=1)
+        end = first - timedelta(days=1)
+        start = end.replace(day=1)
+        label = end.strftime('%B')
+    elif 'week' in period:
+        start = today - timedelta(days=today.weekday())
+        end, label = today, 'this week'
+    elif 'year' in period:
+        start, end, label = date(today.year, 1, 1), today, str(today.year)
+    else:
+        start, end, label = today.replace(day=1), today, 'this month'
+    return start, end, label
+
+
+def cleaner_pay(name='', period='this month'):
+    """What one cleaner was actually paid — labor only, no tips (the customer's
+    money, passing through) — over a period. Payroll is the question owners ask
+    Nana that used to have nowhere to land: money_made only ever covered what
+    came in, never what went back out to the team that earned it."""
+    from models import Staff, ContractorPayment
+    from sqlalchemy import func
+    from extensions import db
+    q = (name or '').strip()
+    if not q:
+        return 'Whose pay? Tell me a name.'
+    staff = Staff.query.filter(Staff.name.ilike(f'%{q}%')).first()
+    if not staff:
+        return f'Nobody on the team matches “{q}”.'
+    start, end, label = _period_bounds(period)
+    lo, hi = start, end + timedelta(days=1)
+    total = db.session.query(func.sum(ContractorPayment.amount)).filter(
+        ContractorPayment.staff_id == staff.id,
+        ContractorPayment.status == 'paid',
+        ContractorPayment.created_at >= lo,
+        ContractorPayment.created_at < hi,
+    ).scalar()
+    jobs = db.session.query(func.count(ContractorPayment.id)).filter(
+        ContractorPayment.staff_id == staff.id,
+        ContractorPayment.status == 'paid',
+        ContractorPayment.created_at >= lo,
+        ContractorPayment.created_at < hi,
+    ).scalar()
+    total = round(float(total or 0), 2)
+    if not jobs:
+        return f'{staff.name} was not paid anything in {label}.'
+    return (f'{staff.name} was paid {_money(total)} in {label}, '
+            f'across {jobs} job{"s" if jobs != 1 else ""}.')
+
+
+def insurance_status():
+    """Every subcontractor company whose insurance or workers' comp is expired,
+    about to run out, or was never recorded at all. Reads the same watched
+    dates the Hiring compliance page watches — one source of truth, not a
+    second guess at what "soon" means."""
+    import compliance
+    rows = compliance.expiring()
+    gaps = compliance.missing()
+    if not rows and not gaps:
+        return 'Every subcontractor company on file has current paperwork.'
+    lines = [compliance.sentence(r) for r in rows[:6]]
+    if gaps:
+        names = ', '.join(g['company'] for g in gaps[:5])
+        lines.append(f'No paperwork on file at all for: {names}.')
+    return '\n'.join(f'· {l}' for l in lines)
+
+
+def ratings_summary():
+    """How the work is actually landing, by the customers' own word for it —
+    not booked value, not completed count, the rating they left."""
+    from models import BookingRating
+    from sqlalchemy import func
+    from extensions import db
+    rated = BookingRating.query.filter(BookingRating.rating.isnot(None))
+    n = rated.count()
+    if not n:
+        return 'No ratings have come back from customers yet.'
+    avg = db.session.query(func.avg(BookingRating.rating)).filter(
+        BookingRating.rating.isnot(None)).scalar()
+    low = rated.filter(BookingRating.rating <= 3).order_by(
+        BookingRating.rated_at.desc()).limit(4).all()
+    out = f'{avg:.1f} out of 5 average, across {n} rating{"s" if n != 1 else ""}.'
+    if low:
+        out += ' Below 4 stars recently: ' + ', '.join(
+            f'{r.booking.name if r.booking else "a job"} ({r.rating}★)' for r in low)
+        out += '.'
+    return out
+
+
+def recurring_health():
+    """Recurring plans that are marked active but have no future visit on the
+    calendar — the plan a customer signed up for that quietly stopped
+    generating jobs, which nothing else surfaces until she notices the gap
+    herself weeks later."""
+    from models import Booking
+    from extensions import db
+    today = _today()
+    groups = db.session.query(Booking.recurring_group).filter(
+        Booking.recurring_group.isnot(None), Booking.recurring_active.is_(True),
+    ).distinct().all()
+    stalled = []
+    for (group,) in groups:
+        future = Booking.query.filter(
+            Booking.recurring_group == group,
+            Booking.preferred_date >= today.isoformat(),
+            Booking.status.in_(['confirmed', 'pending']),
+        ).first()
+        if not future:
+            last = Booking.query.filter_by(recurring_group=group).order_by(
+                Booking.preferred_date.desc()).first()
+            if last:
+                stalled.append(last.name)
+    if not stalled:
+        return 'Every active recurring plan has a future visit on the calendar.'
+    return (f'{len(stalled)} recurring plan{"s" if len(stalled) != 1 else ""} marked '
+            f'active with nothing upcoming scheduled: ' + ', '.join(stalled[:6]) + '.')
+
+
+def expenses(period='this month'):
+    """What went out, not just what came in — money_made only ever covered
+    revenue, so "how am I doing" always meant half the picture."""
+    import finance
+    start, end, label = _period_bounds(period)
+    rows = finance.expenses_between(start, end)
+    if not rows:
+        return f'No expenses logged in {label}.'
+    total = round(sum(float(e.amount or 0) for e in rows), 2)
+    by_cat = {}
+    for e in rows:
+        by_cat[e.category] = by_cat.get(e.category, 0) + float(e.amount or 0)
+    top = sorted(by_cat.items(), key=lambda kv: -kv[1])[:3]
+    breakdown = ', '.join(f'{cat} {_money(amt)}' for cat, amt in top)
+    return f'{_money(total)} spent in {label}. Biggest categories: {breakdown}.'
+
+
+def cancellations(period='this month'):
+    """Jobs that were on the calendar and are not happening — a figure owners
+    ask about ("how many did I lose") that had no tool before."""
+    from models import Booking
+    start, end, label = _period_bounds(period)
+    rows = Booking.query.filter(
+        Booking.status == 'cancelled',
+        Booking.preferred_date >= start.isoformat(),
+        Booking.preferred_date <= end.isoformat(),
+    ).all()
+    if not rows:
+        return f'No cancellations scheduled in {label}.'
+    lost = round(sum(float(b.price or 0) for b in rows), 2)
+    out = f'{len(rows)} cancelled job{"s" if len(rows) != 1 else ""} in {label}.'
+    if lost:
+        out += f' {_money(lost)} in booked value.'
+    return out
+
+
+def lead_sources(period='this month'):
+    """Where booked jobs actually came from, by Booking.source — the honest
+    version of "which marketing works", limited to what is actually
+    tagged rather than a guess at attribution the data cannot support."""
+    from models import Booking
+    from sqlalchemy import func
+    from extensions import db
+    start, end, label = _period_bounds(period)
+    rows = db.session.query(Booking.source, func.count(Booking.id)).filter(
+        Booking.preferred_date >= start.isoformat(),
+        Booking.preferred_date <= end.isoformat(),
+        Booking.status != 'cancelled',
+    ).group_by(Booking.source).all()
+    if not rows:
+        return f'No bookings in {label} to break down by source.'
+    parts = ', '.join(f'{(src or "unlabeled")}: {n}' for src, n in
+                      sorted(rows, key=lambda r: -r[1]))
+    return f'Bookings in {label} by source — {parts}.'
+
+
 # ---------------------------------------------------------------------------
 # The one thing it may change, and the one it may only draft
 # ---------------------------------------------------------------------------
@@ -571,6 +749,15 @@ TOOLS = {
     'leads_waiting':   (leads_waiting, 'new website enquiries waiting for a reply', []),
     'commercial_pipeline': (commercial_pipeline,
                             'how the commercial leads, quotes and accounts stand', []),
+    'cleaner_pay':     (cleaner_pay, 'what one cleaner was paid, for a period', ['name', 'period']),
+    'insurance_status': (insurance_status,
+                         'subcontractor insurance / workers comp expiring, expired or missing', []),
+    'ratings_summary': (ratings_summary, 'customer ratings / reviews — average and any low ones', []),
+    'recurring_health': (recurring_health,
+                         'recurring plans that have stopped generating future visits', []),
+    'expenses':        (expenses, 'money spent / costs, for a period', ['period']),
+    'cancellations':   (cancellations, 'jobs cancelled, for a period', ['period']),
+    'lead_sources':    (lead_sources, 'where booked jobs came from, for a period', ['period']),
 }
 
 
