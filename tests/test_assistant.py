@@ -221,7 +221,8 @@ with app.app_context():
     # A confirmation only does what is on a fixed list -- not "whatever the
     # model named", which is how a new tool would quietly become a new power.
     import blueprints.assistant_routes as ar
-    check(set(ar.ACTIONS) == {'complete_booking', 'send_prospect_email'},
+    check(set(ar.ACTIONS) == {'complete_booking', 'send_prospect_email',
+                              'enable_owner_digest'},
           f'a short, fixed list of actions: {sorted(ar.ACTIONS)}')
 
     b = Booking.query.filter_by(name='Owes Money').first()
@@ -800,6 +801,33 @@ with app.app_context():
     check('for certain' in out['say'] and '$450.00' in out['say'],
           'and what is certain is offered instead')
     check('Phone:' not in out['say'], 'still without the profile')
+
+    print('\n25. Turning on the morning digest is offered, not done')
+    import automations as _auto2, actions as _act2, proposals as _pr3
+    check(not _auto2.is_enabled('owner-digest'), 'off to start, like every business')
+    out = assistant.enable_daily_digest()
+    check('confirm' in out, 'asking for it comes back as something to confirm')
+    check(set(out['confirm']) <= {'token', 'label', 'reversible'},
+          f'the page carries a token, not the deed ({sorted(out["confirm"])})')
+    check(not _auto2.is_enabled('owner-digest'),
+          'and nothing is switched on until somebody presses it')
+
+    ok, said = _act2.run('enable_owner_digest', {})
+    check(ok and 'turned on' in said.lower(), f'pressing it flips the switch ({said!r})')
+    check(_auto2.is_enabled('owner-digest'), 'and it really is on now')
+
+    # Asking again once it is already on offers nothing to press -- an owner
+    # who asks twice should be told plainly rather than being offered the same
+    # switch a second time.
+    out = assistant.enable_daily_digest()
+    check('confirm' not in out, 'asking again with it already on offers nothing')
+    check('already' in out['say'].lower(), f'and says so plainly ({out["say"]!r})')
+
+    # Nothing named like this tool sends anything on its own -- the action
+    # runs from a token, same gate as finishing a job or sending an outreach
+    # email, never straight from what the model wrote.
+    check('enable_daily_digest' in assistant.ACTION_TOOLS,
+          'it travels alone, like the other two things Nana can change')
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')

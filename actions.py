@@ -42,6 +42,24 @@ def complete_booking(payload):
     return True, f'{b.name} marked finished. Open the job to undo it.'
 
 
+def enable_owner_digest(payload):
+    """Turn on the morning digest for this business.
+
+    Idempotent on purpose: the offer is checked fresh at the moment it was
+    made, but the world moves between the offer and the button same as every
+    other action here, and a second tab or a repeated ask should not be able
+    to raise an error over a switch that is already where it was asked to be.
+    """
+    import automations
+    from extensions import db
+    if automations.is_enabled('owner-digest'):
+        return True, 'That was already on.'
+    automations.set_enabled('owner-digest', True)
+    db.session.commit()
+    return True, ('Morning digest turned on. The next one goes out on the next '
+                  'daily run — turn it back off any time in Settings → Automations.')
+
+
 def send_prospect_email(payload):
     """Send the outreach email that was on screen, to the prospect named on it.
 
@@ -79,6 +97,8 @@ ACTIONS = {
     # above the button because the code says so here.
     'send_prospect_email': (send_prospect_email,
                             'Send an outreach email to one prospect', False),
+    'enable_owner_digest': (enable_owner_digest,
+                            'Turn on the morning digest email', True),
 }
 
 

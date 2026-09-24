@@ -442,6 +442,33 @@ def finish_job(customer=''):
     }
 
 
+def enable_daily_digest():
+    """Propose turning on the morning digest email.
+
+    Asked for, not decided on her own: a switch flipped by Nana without a
+    person pressing anything is exactly the one-exception-at-a-time drift the
+    whole action gate in actions.py exists to prevent. So this goes through
+    the same offer/press/execute path as marking a job finished or drafting
+    an email -- the third thing she can change, gated exactly like the first
+    two.
+    """
+    import automations
+    if automations.is_enabled('owner-digest'):
+        return {'say': 'That is already on — you should be getting an email '
+                       'each morning whenever there is something worth doing.'}
+    import proposals
+    summary = ('Turn on the morning digest? You would get an email each day '
+               'with what needs you — nothing on a day there is nothing to say.')
+    token = proposals.offer(
+        'enable_owner_digest', {}, summary=summary,
+        label='Turn on the morning digest', reversible=True)
+    return {
+        'say': summary,
+        'confirm': {'token': token, 'label': 'Turn on the morning digest',
+                    'reversible': True},
+    }
+
+
 def draft_email(about='', to='', api_key=None):
     """Write the words. Sending stays a button somebody presses.
 
@@ -745,6 +772,9 @@ TOOLS = {
     'unassigned_jobs': (unassigned_jobs, 'jobs with no cleaner assigned', []),
     'finish_job':      (finish_job, 'mark a job finished / completed / done', ['customer']),
     'draft_email':     (draft_email, 'write or draft an email to somebody', ['about', 'to']),
+    'enable_daily_digest': (enable_daily_digest,
+                            'turn on / sign up for the daily morning digest email — '
+                            'a push version of what is worth doing today', []),
     'whats_next':      (whats_next, 'what to do today / what needs doing / plan my day', []),
     'leads_waiting':   (leads_waiting, 'new website enquiries waiting for a reply', []),
     'commercial_pipeline': (commercial_pipeline,
@@ -767,7 +797,7 @@ TOOLS = {
 
 # Marking a job finished and writing an email are not lookups: one offers a
 # button and the other returns a draft. They stay on their own path, alone.
-ACTION_TOOLS = ('finish_job', 'draft_email')
+ACTION_TOOLS = ('finish_job', 'draft_email', 'enable_daily_digest')
 
 # How many lookups one question may pull. "What is my plan this week" honestly
 # needs four; past that the answer stops being an answer and becomes a report.
