@@ -442,6 +442,38 @@ def finish_job(customer=''):
     }
 
 
+def hiring_status():
+    """Where the hiring pipeline stands, and how it actually works.
+
+    "How do I hire a new person" had no tool that spoke to it at all -- the
+    router's least-bad guess was team(), which is the roster of people
+    already hired, and reading that back to somebody asking how to hire is
+    exactly backwards. This is what should have existed from the start:
+    real counts, grouped the same way the Hiring page itself groups them, so
+    the two can never disagree, plus the plain mechanism in one sentence.
+    """
+    from models import ContractorApplication as CA
+    from sqlalchemy import func
+    from extensions import db
+    rows = db.session.query(CA.status, func.count(CA.id)).group_by(CA.status).all()
+    counts = {status: n for status, n in rows}
+    total = sum(counts.values())
+    how = ('Share your application link — Hiring → View Form — and people '
+          'apply there. Each one lands on the Hiring page, where you review '
+          'them and can send an interview link; marking somebody hired adds '
+          'them to the team.')
+    if not total:
+        return f'No applicants yet. {how}'
+    labels = (('new', 'new'), ('reviewing', 'being reviewed'),
+             ('phone_screen', 'in a phone screen'),
+             ('bg_check', 'in background check'), ('hired', 'hired'),
+             ('rejected', 'turned down'), ('no_response', 'gone quiet'))
+    parts = [f'{counts[key]} {label}' for key, label in labels if counts.get(key)]
+    breakdown = ', '.join(parts) if parts else f'{total} on file'
+    return (f'{total} applicant{"s" if total != 1 else ""} on file: {breakdown}. '
+           f'{how}')
+
+
 def enable_daily_digest():
     """Propose turning on the morning digest email.
 
@@ -788,6 +820,9 @@ TOOLS = {
     'expenses':        (expenses, 'money spent / costs, for a period', ['period']),
     'cancellations':   (cancellations, 'jobs cancelled, for a period', ['period']),
     'lead_sources':    (lead_sources, 'where booked jobs came from, for a period', ['period']),
+    'hiring_status':   (hiring_status,
+                        'how to hire / the hiring pipeline — applicants, where each '
+                        'one stands, how many were reviewed or hired', []),
 }
 
 
