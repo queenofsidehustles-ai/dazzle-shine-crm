@@ -109,7 +109,7 @@ TRIAL_DAYS = 14
 START_WITHIN_DAYS = 30
 
 
-def trial_state(org):
+def trial_state(org, now=None):
     """Where a company is in its trial, in the words the banner needs.
 
     Two clocks, because one is not honest:
@@ -133,7 +133,7 @@ def trial_state(org):
     if status and status != 'trialing':
         return None                       # paying, cancelled, or past due
 
-    now = datetime.utcnow()
+    now = now or datetime.utcnow()
     started = org.get('activated_at')
     ends = org.get('trial_ends_at')
     created = org.get('created_at') or now

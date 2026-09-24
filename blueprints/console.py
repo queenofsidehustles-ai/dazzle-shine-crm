@@ -152,6 +152,40 @@ def companies():
                            me=request.console_user, counts=_counts(engine))
 
 
+@console_bp.route('/funnel')
+@console_required
+def funnel_view():
+    """How people become paying customers, and who needs a nudge today.
+
+    Read-only apart from marking a lead contacted. The numbers come from
+    funnel.compute, which reads only what the control plane already records;
+    see that module for what each stage means and what it leaves out.
+    """
+    import funnel
+    engine = _engine()
+    window = request.args.get('window', funnel.DEFAULT_WINDOW)
+    if window not in funnel.WINDOWS:
+        window = funnel.DEFAULT_WINDOW
+    data = funnel.compute(control_plane.all_orgs(engine),
+                          control_plane.all_leads(engine),
+                          days=funnel.WINDOWS[window])
+    return render_template('console/funnel.html', f=data, window=window,
+                           windows=list(funnel.WINDOWS),
+                           me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/leads/<int:lead_id>/contacted', methods=['POST'])
+@console_required
+def lead_contacted(lead_id):
+    engine = _engine()
+    if control_plane.mark_lead_contacted(engine, lead_id):
+        control_plane.log_console(engine, request.console_user['email'],
+                                  'contacted', f'lead #{lead_id}')
+    window = request.form.get('window')
+    return redirect(url_for('console.funnel_view', window=window)
+                    if window else url_for('console.funnel_view'))
+
+
 # What each level means, in the words somebody choosing would use.
 ROLE_MEANS = {
     'owner': 'everything, and cannot be switched off from here',

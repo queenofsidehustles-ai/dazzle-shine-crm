@@ -1,0 +1,150 @@
+{% extends "console/_shell.html" %}
+{% block title %}Funnel{% endblock %}
+{% block body %}
+<style>
+  .fn-windows { display:flex; gap:var(--s2); margin:0 0 var(--s4); flex-wrap:wrap; }
+  .fn-windows a { padding:4px 12px; border-radius:var(--r-pill); border:1px solid var(--line);
+                  color:var(--muted); text-decoration:none; font-size:var(--t-sm); font-weight:600; }
+  .fn-windows a.on { background:var(--ink); border-color:var(--ink); color:var(--surface); }
+  .fn-bar { height:8px; border-radius:var(--r-pill); background:var(--line-soft);
+            overflow:hidden; min-width:80px; }
+  .fn-bar span { display:block; height:100%; background:var(--amber); }
+  .fn-means { font-size:var(--t-xs); color:var(--softer); }
+  .fn-num { font-variant-numeric:tabular-nums; font-weight:700; }
+  .fn-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+              gap:var(--s3); margin-bottom:var(--s5); }
+  .fn-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+             padding:var(--s4); }
+  .fn-card .fn-num { font-size:1.4rem; display:block; }
+  .fn-card .fn-means { display:block; margin-top:var(--s1); }
+  .fn-h { font-size:1.05rem; margin:var(--s6) 0 var(--s3); }
+  .fn-scroll { overflow-x:auto; }
+  /* On a phone the bar has no room; the percentage beside it says the same. */
+  @media (max-width: 600px) { .fn-barcol { display:none; } }
+</style>
+
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Funnel</h2>
+
+<nav class="fn-windows" aria-label="Time window">
+  {% for w in windows %}
+  <a href="{{ url_for('console.funnel_view', window=w) }}" class="{{ 'on' if w == window }}"
+     {% if w == window %}aria-current="page"{% endif %}>
+    {{ 'All time' if w == 'all' else 'Last ' ~ w ~ ' days' }}</a>
+  {% endfor %}
+</nav>
+
+<div class="fn-cards">
+  <div class="fn-card">
+    <span class="fn-num">{{ f.leads }}</span>
+    Asked for early access
+    <span class="fn-means">{{ f.leads_signed_up }} of them signed up{% if f.leads_pct is not none %} ({{ f.leads_pct }}%){% endif %}</span>
+  </div>
+  <div class="fn-card">
+    <span class="fn-num">{{ f.days_to_activate if f.days_to_activate is not none else '—' }}</span>
+    Days to activate
+    <span class="fn-means">median, signup to first assigned job</span>
+  </div>
+  <div class="fn-card">
+    <span class="fn-num">{{ f.lost_total }}</span>
+    Lost
+    <span class="fn-means">{{ f.lost.trial_over }} trial ran out · {{ f.lost.canceled }} cancelled · {{ f.lost.closed }} closed</span>
+  </div>
+  <div class="fn-card">
+    <span class="fn-num">{{ f.past_due }}</span>
+    Payment failing
+    <span class="fn-means">Stripe is retrying their card</span>
+  </div>
+</div>
+
+<div class="fn-scroll">
+<table class="con">
+  <tr><th>Stage</th><th>Companies</th><th>Of signups</th><th class="fn-barcol" style="width:40%"></th></tr>
+  {% for s in f.stages %}
+  <tr>
+    <td>{{ s.label }}<br><span class="fn-means">{{ s.means }}</span></td>
+    <td class="fn-num">{{ s.n }}</td>
+    <td class="fn-num">{{ s.pct ~ '%' if s.pct is not none else '—' }}</td>
+    <td class="fn-barcol"><div class="fn-bar" role="img" aria-label="{{ s.pct or 0 }}% of signups"><span style="width:{{ s.pct or 0 }}%"></span></div></td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+<p class="fn-means" style="margin-top:var(--s2)">
+  Companies that signed up {{ 'in this window' if f.since else 'ever' }}, and how far each got.
+  Every stage is a share of signups, because a company can pick a plan before it assigns a job.
+  {% if f.excluded %}{{ f.excluded }} grandfathered {{ 'company is' if f.excluded == 1 else 'companies are' }} left out: never acquired through the funnel.{% endif %}
+  Site visits are not recorded, so the funnel starts at the form.
+</p>
+
+<h2 class="fn-h">Who to get in touch with</h2>
+<p class="fn-means" style="margin:0 0 var(--s3)">Whatever the window above, this is everyone it applies to right now.</p>
+
+{% set fu = f.follow_up %}
+{% if not (fu.not_started or fu.ending or fu.failing or fu.leads_waiting) %}
+<div class="con-empty">Nobody needs a nudge right now.</div>
+{% endif %}
+
+{% if fu.ending %}
+<h3 style="font-size:var(--t-sm);margin:var(--s4) 0 var(--s2)">Trial ends in {{ f.ending_soon_days }} days or fewer, no plan yet ({{ fu.ending|length }})</h3>
+<div class="fn-scroll"><table class="con">
+  <tr><th>Company</th><th>Owner</th><th>Days left</th></tr>
+  {% for o in fu.ending %}
+  <tr><td>{{ o.name }}</td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td><td class="fn-num">{{ o.days_left }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+{% if fu.failing %}
+<h3 style="font-size:var(--t-sm);margin:var(--s4) 0 var(--s2)">Payment failing ({{ fu.failing|length }})</h3>
+<div class="fn-scroll"><table class="con">
+  <tr><th>Company</th><th>Owner</th><th>Plan</th></tr>
+  {% for o in fu.failing %}
+  <tr><td>{{ o.name }}</td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td><td>{{ o.plan }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+{% if fu.not_started %}
+<h3 style="font-size:var(--t-sm);margin:var(--s4) 0 var(--s2)">Signed up, never assigned a job ({{ fu.not_started|length }})</h3>
+<div class="fn-scroll"><table class="con">
+  <tr><th>Company</th><th>Owner</th><th>Signed up</th><th>Days left to start</th></tr>
+  {% for o in fu.not_started %}
+  <tr><td>{{ o.name }}</td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td>
+      <td>{{ o.created_at.strftime('%d %b') if o.created_at }}</td><td class="fn-num">{{ o.days_left }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+{% if fu.leads_waiting %}
+<h3 style="font-size:var(--t-sm);margin:var(--s4) 0 var(--s2)">Asked for early access, not contacted, not signed up ({{ fu.leads_waiting|length }})</h3>
+<div class="fn-scroll"><table class="con">
+  <tr><th>Asked</th><th>Name</th><th>Company</th><th>Email</th><th>Cleaners</th><th></th></tr>
+  {% for l in fu.leads_waiting %}
+  <tr>
+    <td>{{ l.created_at.strftime('%d %b') if l.created_at }}</td>
+    <td>{{ l.name }}</td><td>{{ l.company }}</td>
+    <td><a href="mailto:{{ l.email }}">{{ l.email }}</a></td><td>{{ l.cleaners }}</td>
+    <td>
+      <form method="post" action="{{ url_for('console.lead_contacted', lead_id=l.id) }}">
+        <input type="hidden" name="window" value="{{ window }}">
+        <button class="btn btn-outline btn-sm" type="submit">Mark contacted</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2 class="fn-h">Where leads came from</h2>
+{% if f.sources %}
+<div class="fn-scroll"><table class="con">
+  <tr><th>Source</th><th>Leads</th><th>Went on to sign up</th></tr>
+  {% for name, s in f.sources %}
+  <tr><td>{{ name }}</td><td class="fn-num">{{ s.leads }}</td><td class="fn-num">{{ s.signed_up }}</td></tr>
+  {% endfor %}
+</table></div>
+<p class="fn-means" style="margin-top:var(--s2)">The page they were on before the early-access form. "direct" means the browser did not say.</p>
+{% else %}
+<div class="con-empty">No early-access requests in this window.</div>
+{% endif %}
+{% endblock %}
