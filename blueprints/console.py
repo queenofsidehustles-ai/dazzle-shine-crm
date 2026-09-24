@@ -258,6 +258,74 @@ def turn_on(email):
     return redirect(url_for('console.people'))
 
 
+@console_bp.route('/nana')
+@console_required
+def nana_proposals():
+    """Where Nana's offers actually land, across every company at once.
+
+    Everything she can change -- marking a job finished, sending outreach,
+    turning on the morning digest -- is written down as an AssistantProposal
+    before anybody presses anything (see proposals.py). That makes it exist
+    per tenant, under that tenant's own schema, with no cross-company view
+    of it anywhere. A one-off "has anyone asked about X" is a database
+    query away for whoever holds the URL; this is the standing answer, so
+    the next capability that ships does not need its own investigation.
+
+    Reads each tenant under its own schema via tenancy.use_tenant -- the
+    same boundary every tenant-scoped read in this app goes through, so
+    seeing across companies here does not mean weakening the wall between
+    them. A schema that fails to read (never migrated, mid-provisioning) is
+    skipped rather than failing the whole page: one company's row count is
+    not worth the rest going blank.
+
+    db.session.remove() between companies is not tidiness -- it is the fix
+    for a real bug this page hit in testing. Every tenant's AssistantProposal
+    table starts its own id sequence at 1, and without clearing the ORM
+    session between schemas, SQLAlchemy's identity map served the *first*
+    company's cached row back for every later company sharing that same id,
+    silently relabelling one company's proposal as another's and dropping
+    the row it should have shown instead. The SQL sent to Postgres was
+    always scoped correctly; the leak was in the Python object cache sitting
+    in front of it.
+    """
+    import tenancy
+    from extensions import db
+    from models import AssistantProposal
+    engine = _engine()
+    orgs = [o for o in control_plane.all_orgs(engine) if o.get('status') != 'closed']
+
+    rows = []
+    by_action = {}
+    for org in orgs:
+        # Clear the identity map before every switch, not only after a
+        # failure -- the collision above happens on the successful path.
+        db.session.remove()
+        try:
+            with tenancy.use_tenant(org['slug']):
+                proposals = AssistantProposal.query.order_by(
+                    AssistantProposal.created_at.desc()).limit(100).all()
+        except Exception:
+            db.session.rollback()
+            continue
+        for p in proposals:
+            rows.append({
+                'company': org.get('name') or org['slug'], 'slug': org['slug'],
+                'action': p.action, 'summary': p.summary,
+                'asked_by': p.asked_by, 'created_at': p.created_at,
+                'pressed': p.used_at is not None, 'used_at': p.used_at,
+                'outcome': p.outcome,
+            })
+            stat = by_action.setdefault(p.action, {'offered': 0, 'pressed': 0})
+            stat['offered'] += 1
+            if p.used_at is not None:
+                stat['pressed'] += 1
+
+    rows.sort(key=lambda r: r['created_at'], reverse=True)
+    return render_template('console/nana.html', rows=rows[:300],
+                           by_action=sorted(by_action.items()),
+                           me=request.console_user, counts=_counts(engine))
+
+
 @console_bp.route('/log')
 @console_required
 def log():

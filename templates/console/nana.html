@@ -1,0 +1,40 @@
+{% extends "console/_shell.html" %}
+{% block title %}Nana{% endblock %}
+{% block body %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">What Nana has offered, across every company</h2>
+
+{% if by_action %}
+<table class="con" style="margin-bottom:var(--s6)">
+  <tr><th>Action</th><th>Offered</th><th>Pressed</th><th>Adoption</th></tr>
+  {% for action, stat in by_action %}
+  <tr>
+    <td>{{ action }}</td>
+    <td>{{ stat.offered }}</td>
+    <td>{{ stat.pressed }}</td>
+    <td>{{ ((stat.pressed / stat.offered * 100) | round | int) if stat.offered else 0 }}%</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="con-empty">Nobody has been offered anything yet.</div>
+{% endif %}
+
+<h2 style="font-size:1.05rem;margin:var(--s6) 0 var(--s3)">
+  Every offer, newest first ({{ rows|length }})</h2>
+{% if rows %}
+<table class="con">
+  <tr><th>When</th><th>Company</th><th>Action</th><th>Said</th><th>Pressed?</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.created_at.strftime('%d %b %H:%M') if r.created_at }}</td>
+    <td>{{ r.company }}</td>
+    <td>{{ r.action }}</td>
+    <td style="max-width:360px">{{ r.summary }}</td>
+    <td>{{ 'Yes' if r.pressed else 'Not yet' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="con-empty">No offers on record yet.</div>
+{% endif %}
+{% endblock %}
