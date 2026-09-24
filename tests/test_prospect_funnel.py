@@ -273,4 +273,82 @@ with app.app_context():
     again = prospecting.wake_renewals()
     check(again == 0, 'and it does not wake the same prospect again tomorrow')
 
+    print('\n16. "Send your information" starts the sequence that chases it')
+    import lifecycle
+    from datetime import datetime as _dt
+    sent_to = []
+    real_send = lifecycle._send_prospect_drip
+    lifecycle._send_prospect_drip = lambda p, seq, n: (
+        sent_to.append((p.business_name, seq, n)) or True)
+
+    info = Prospect(business_name='Wants The Packet Ltd', category='property_manager',
+                    status='new', stage='new', contact_name='Dana Reid',
+                    email='dana@wantsthepacket.test')
+    db.session.add(info); db.session.commit()
+    c.post(f'/find-leads/{info.id}/status', follow_redirects=True,
+           data={'mode': 'log', 'status': 'send_info'})
+    info = Prospect.query.get(info.id)
+    check(info.sequence == 'send_info' and info.drip_step == 0,
+          'the call puts them into the send_info sequence')
+
+    # Nothing is due on the day of the call.
+    check(lifecycle.run_prospect_sequences(now=_dt.utcnow()) == 0,
+          'and nothing is mailed the same day')
+
+    # Day 2.
+    n = lifecycle.run_prospect_sequences(now=_dt.utcnow() + _td(days=2))
+    info = Prospect.query.get(info.id)
+    check(n == 1 and info.drip_step == 1, 'step 1 goes out on day 2')
+
+    # Day 7 -- and only one step per run, even though both are now overdue.
+    n = lifecycle.run_prospect_sequences(now=_dt.utcnow() + _td(days=30))
+    info = Prospect.query.get(info.id)
+    check(n == 1 and info.drip_step == 2,
+          'a backdated run sends one step, not the whole sequence at once')
+
+    print('\n17. Answering stops the chase without anybody stopping it')
+    c.post(f'/find-leads/{info.id}/status', follow_redirects=True,
+           data={'mode': 'log', 'status': 'interested'})
+    info = Prospect.query.get(info.id)
+    before = len(sent_to)
+    lifecycle.run_prospect_sequences(now=_dt.utcnow() + _td(days=60))
+    info = Prospect.query.get(info.id)
+    check(info.sequence is None, 'moving them out of the stage ends the sequence')
+    check(len(sent_to) == before, 'and no further email is sent')
+
+    print('\n18. The sequence stops rather than running forever')
+    done = Prospect(business_name='Ran Its Course Co', category='property_manager',
+                    status='not_interested', stage='nurture',
+                    contact_name='Sam Okafor', email='sam@ranitscourse.test',
+                    sequence='nurture', drip_step=3,
+                    last_drip_at=_dt.utcnow() - _td(days=400))
+    db.session.add(done); db.session.commit()
+    lifecycle.run_prospect_sequences(now=_dt.utcnow())
+    done = Prospect.query.get(done.id)
+    check(done.drip_step == 4, 'the last quarterly note goes out')
+    check(done.sequence is None,
+          'and then it stops mailing rather than becoming noise forever')
+    check(done.stage == 'nurture' and done.business_name == 'Ran Its Course Co',
+          'while the prospect itself stays on the books, still in nurture')
+
+    print('\n19. A real no is never mailed')
+    quiet = Prospect(business_name='Leave Us Be Ltd', category='property_manager',
+                     status='new', stage='new', contact_name='Pat Lyle',
+                     email='pat@leaveusbe.test')
+    db.session.add(quiet); db.session.commit()
+    c.post(f'/find-leads/{quiet.id}/status', follow_redirects=True,
+           data={'mode': 'log', 'status': 'keep_in_touch'})
+    quiet = Prospect.query.get(quiet.id)
+    check(quiet.sequence == 'nurture', 'keep-in-touch starts the quarterly sequence')
+    c.post(f'/find-leads/{quiet.id}/status', follow_redirects=True,
+           data={'mode': 'log', 'status': 'do_not_contact'})
+    quiet = Prospect.query.get(quiet.id)
+    check(quiet.sequence is None,
+          'and asking not to be contacted clears it immediately')
+    before = len(sent_to)
+    lifecycle.run_prospect_sequences(now=_dt.utcnow() + _td(days=365))
+    check(len(sent_to) == before, 'they are never mailed again')
+
+    lifecycle._send_prospect_drip = real_send
+
 print('\n🎉 Funnel checks passed.')

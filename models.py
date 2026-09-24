@@ -1783,6 +1783,14 @@ class Prospect(db.Model):
     # Set once the renewal wake-up has fired, so it fires once rather than
     # every night for thirty nights.
     renewal_woken_at = db.Column(db.DateTime)
+
+    # Which email sequence this prospect is in, if any, and how far through.
+    # Kept on the prospect rather than in a join table because a prospect is
+    # only ever in one: two sequences mailing the same facilities manager in
+    # the same week is the thing that gets a sending domain blocked.
+    sequence = db.Column(db.String(20), index=True)
+    drip_step = db.Column(db.Integer, default=0)
+    last_drip_at = db.Column(db.DateTime)
     last_emailed_at = db.Column(db.DateTime)
 
     # Residential or commercial side of the business. Set from the search that

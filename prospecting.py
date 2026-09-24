@@ -107,7 +107,61 @@ def apply_outcome(prospect, outcome, next_action=None, next_action_date=None):
     if not prospect.next_action:
         prospect.next_action_date = None
 
+    # Start, switch or stop the email sequence this outcome implies. The clock
+    # starts now rather than at import, so day 2 means two days after the call
+    # that earned it.
+    wanted = SEQUENCE_FOR_OUTCOME.get(outcome)
+    if stage in ('lost', 'won'):
+        # A no that means no, or a win. Either way stop mailing: the quarterly
+        # check-in is the part of this that turns into harassment.
+        prospect.sequence = None
+    elif wanted and prospect.sequence != wanted:
+        from datetime import datetime
+        prospect.sequence = wanted
+        prospect.drip_step = 0
+        prospect.last_drip_at = datetime.utcnow()
+
     return prospect.stage, prospect.next_action, prospect.next_action_date
+
+
+# ── Email sequences ──────────────────────────────────────────────────────────
+#
+# Calls are scheduled by next_action_date and done by a person. These are the
+# emails that go out between the calls, and there are deliberately only two.
+#
+# `stages` is what keeps a sequence honest: it runs only while the prospect is
+# still in the stage that started it. Move them to Interested because they rang
+# back, and the chasing stops without anybody having to remember to stop it —
+# which is the closest thing to reply detection that does not involve reading
+# somebody's mailbox.
+SEQUENCES = {
+    # "Send your information over." The whole value is the first two days --
+    # an unopened attachment is still warm on Tuesday and never happened by
+    # the end of the month. Three touches, then it rests.
+    'send_info': {
+        'label': 'After sending information',
+        'schedule': [(2, 1), (7, 2), (21, 3)],
+        'stages': ('working',),
+    },
+    # The long one. Quarterly, four times, and then it stops mailing and lives
+    # on the call list only. A supplier still sending automated email into a
+    # facilities manager's inbox in year two is not nurturing, it is noise, and
+    # the unsubscribe costs the address permanently.
+    'nurture': {
+        'label': 'Quarterly check-in',
+        'schedule': [(90, 1), (180, 2), (270, 3), (365, 4)],
+        'stages': ('nurture',),
+    },
+}
+
+# Which outcome starts which sequence. Anything absent starts none: a no-answer
+# should not trigger email at somebody who has not spoken to you yet.
+SEQUENCE_FOR_OUTCOME = {
+    'send_info':      'send_info',
+    'not_interested': 'nurture',
+    'keep_in_touch':  'nurture',
+    'backup':         'nurture',
+}
 
 
 # How long before a contract ends you want to be in the conversation. Short
