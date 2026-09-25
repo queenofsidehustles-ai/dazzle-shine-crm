@@ -83,14 +83,24 @@ check("control_plane.rank(request.console_user['role'])" in src
       and "rank('manager')" in src,
       'read-only view for a helper is computed server-side, not template-only')
 
-print('\n4. Plain text in, plain text out -- no markdown renderer smuggled in')
-check('import markdown' not in src and 'mistune' not in src,
-      'no markdown dependency was added for this')
+print('\n4. Playbook content renders as Markdown -- tables included')
+check('import markdown' in src, 'the Markdown renderer is imported')
+check("'tables'" in src, 'with the tables extension on -- the whole reason it was added')
 view = open(os.path.join(ROOT, 'templates', 'console', 'playbook_view.html')).read()
-check('<pre class="con-body"' in view,
-      'content renders pre-wrapped, the same choice SOP.content already made')
-check('|safe' not in view,
-      'and it is never marked safe -- stored content is escaped like any other')
+check('content_html | safe' in view,
+      'the rendered HTML is trusted, not the stored content directly')
+check('{{ doc.content }}' not in view,
+      'the raw field is never dropped straight into the page unrendered')
+
+import blueprints.console as console_mod
+sample = '| A | B |\n| --- | --- |\n| 1 | 2 |\n\n**bold** and a <script>alert(1)</script>'
+out = console_mod._render_playbook(sample)
+check('<table>' in out and '<td>1</td>' in out,
+      'a Markdown table actually becomes an HTML table')
+check('<strong>bold</strong>' in out, 'and Markdown formatting renders')
+check('<script>' not in out and '&lt;script&gt;' in out,
+      'but raw HTML in a playbook is escaped, not executed -- '
+      'a stored-XSS path a trusted-but-fallible editor account should not open')
 
 print('\n5. Seed script is idempotent and writes through the same helpers')
 seed = open(os.path.join(ROOT, 'seed_growth_playbook.py')).read()
