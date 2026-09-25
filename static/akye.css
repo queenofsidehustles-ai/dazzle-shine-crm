@@ -762,6 +762,23 @@ a.money-cell:hover { background:var(--ground); }
 /* Detail pages: a label/value grid. Used on every record page in
    the product -- bookings, contractors, applications, clients. */
 .detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--s5); }
+
+/* Cards a person can drag into their own order (static/card-reorder.js).
+   Spacing comes from the column, not the card, so a card looks the same in
+   whichever column it is dropped into. */
+[data-reorder-col] { display:flex; flex-direction:column; gap:18px; min-height:80px; align-content:start; }
+[data-reorder-col] > [data-card-key] { position:relative; margin-top:0 !important; margin-bottom:0 !important; }
+[data-card-key].dragging { opacity:0.45; }
+[data-card-key].drag-over { box-shadow:inset 0 3px 0 var(--amber-deep); }
+[data-reorder-col].drag-over-col { outline:2px dashed var(--amber-line); outline-offset:4px; border-radius:var(--r); }
+.card-drag-title { cursor:grab; }
+.card-drag-title:focus-visible, .card-drag-handle:focus-visible { outline:2px solid var(--amber); outline-offset:2px; border-radius:4px; }
+.card-grip { color:var(--softer); margin-right:8px; font-weight:400; letter-spacing:0; }
+.card-drag-handle {
+  position:absolute; top:14px; right:14px; cursor:grab; user-select:none;
+  color:var(--softer); font-size:1rem; line-height:1; padding:4px 6px; border-radius:6px;
+}
+.card-drag-handle:hover { background:var(--ground); color:var(--muted); }
 .detail-row, .dl {
   display:grid; grid-template-columns:minmax(120px,34%) 1fr;
   gap:var(--s3) var(--s4); padding:var(--s3) 0;

@@ -302,6 +302,7 @@
       });
     })();
   </script>
+  <script src="{{ url_for('static', filename='card-reorder.js') }}" defer></script>
   {# On every screen, deliberately. A beta tester who has to go and find
      somewhere to report a problem mostly does not. #}
   {% if session.get('logged_in') %}{% include '_feedback.html' %}{% endif %}
