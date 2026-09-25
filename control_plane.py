@@ -94,6 +94,10 @@ organizations = Table(
     Column('paid_since', DateTime),
     Column('canceled_at', DateTime),
     Column('discount_code', String(64)),
+    # Set from the console for companies made to try the product out. Left
+    # out of every funnel and sales count and never sent trial reminders; a
+    # suspension says nothing about whether an account was real.
+    Column('is_test', Boolean),
 )
 
 
@@ -398,6 +402,12 @@ def mark_provisioned(engine, slug):
         conn.execute(update(organizations)
                      .where(organizations.c.slug == slug)
                      .values(provisioned_at=datetime.utcnow()))
+
+
+def set_test_account(engine, slug, is_test):
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(organizations.c.slug == slug)
+                     .values(is_test=bool(is_test)))
 
 
 def set_status(engine, slug, status):

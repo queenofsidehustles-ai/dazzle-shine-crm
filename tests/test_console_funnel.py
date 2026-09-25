@@ -130,6 +130,19 @@ check([o['name'] for o in fu['failing']] == ['Foxtrot'], 'card failing')
 check([l['email'] for l in fu['leads_waiting']] == ['b@y.test'],
       'leads waiting: not the one who signed up, not the one already contacted')
 
+print('\n4b. A test account is left out of everything, like a grandfathered one')
+with_test = ORGS + [org('Tango', ago(3), owner_email='b@y.test', is_test=True,
+                        activated_at=ago(2), stripe_subscription_id='sub_t',
+                        subscription_status='active')]
+ft = funnel.compute(with_test, LEADS, now=NOW, days=None)
+check([st['n'] for st in ft['stages']] == [st['n'] for st in f['stages']],
+      'every stage count is unchanged by a test signup')
+check(ft['test_excluded'] == 1, 'and the page can say one test account was left out')
+check(ft['leads_signed_up'] == f['leads_signed_up'],
+      "a lead whose email matches a test account is not counted as converting")
+check(all(o['name'] != 'Tango' for rows in ft['follow_up'].values() for o in rows),
+      'and a test account is never on the follow-up list')
+
 print('\n5. Nothing recorded yet does not divide by zero')
 empty = funnel.compute([], [], now=NOW, days=30)
 check(all(s['n'] == 0 and s['pct'] is None for s in empty['stages']),

@@ -179,6 +179,23 @@ with app.app_context():
     check(control_plane.find(engine, A)['trial_ends_at'] == after['trial_ends_at'],
           'only the offered lengths are accepted')
 
+    print('\n6b. Marking a test account: managers only, recorded, reversible')
+    post(helper, f'/console/companies/{A}/test', {'on': '1'})
+    check(not control_plane.find(engine, A).get('is_test'), 'a helper cannot mark one')
+    post(manager, f'/console/companies/{A}/test', {'on': '1'})
+    check(control_plane.find(engine, A).get('is_test') is True, 'a manager can')
+    listing = get(helper, '/console/companies').data.decode()
+    check('test account' in listing.split(f'Ops Alpha {TAG}')[1].split('</tr>')[0],
+          'the company list says so')
+    post(manager, f'/console/companies/{A}/test', {'on': '0'})
+    check(control_plane.find(engine, A).get('is_test') is False, 'and it can be undone')
+    with engine.connect() as conn:
+        marks = [r[0] for r in conn.execute(text(
+            "SELECT action FROM public.console_log WHERE actor = :a AND target = :t "
+            "AND action LIKE 'marked as%' ORDER BY id"), {'a': MANAGER, 't': A})]
+    check(marks == ['marked as test account', 'marked as a real company'],
+          f'both changes are in the record ({marks})')
+
     print('\n7. Suspend needs a reason, locks the company out, and reactivates')
     post(manager, f'/console/companies/{B}/suspend', {'reason': ''})
     check(control_plane.find(engine, B)['status'] == 'active', 'no reason, no suspension')

@@ -73,6 +73,7 @@
   Companies that signed up {{ 'in this window' if f.since else 'ever' }}, and how far each got.
   Every stage is a share of signups, because a company can pick a plan before it assigns a job.
   {% if f.excluded %}{{ f.excluded }} grandfathered {{ 'company is' if f.excluded == 1 else 'companies are' }} left out: never acquired through the funnel.{% endif %}
+  {% if f.test_excluded %}{{ f.test_excluded }} test account{{ 's are' if f.test_excluded != 1 else ' is' }} left out.{% endif %}
   Site visits are not recorded, so the funnel starts at the form.
 </p>
 

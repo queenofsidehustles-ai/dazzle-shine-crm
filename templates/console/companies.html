@@ -13,7 +13,8 @@
     <td><a href="{{ url_for('console.company', slug=r.slug) }}"><strong>{{ r.name }}</strong></a>
         <br><span class="ops-dim">{{ r.slug }}{% if r.owner_email %} · {{ r.owner_email }}{% endif %}</span></td>
     <td><span class="ops-badge ops-{{ r.status }}">{{ r.status }}</span>
-        {% if r.grandfathered %}<br><span class="ops-dim">grandfathered</span>{% endif %}</td>
+        {% if r.grandfathered %}<br><span class="ops-dim">grandfathered</span>{% endif %}
+        {% if r.is_test %}<br><span class="ops-dim">test account</span>{% endif %}</td>
     <td>
       {% if r.trial %}
         {% if r.trial.phase == 'over' %}<span class="ops-bad">trial over</span>

@@ -4,7 +4,8 @@
 {% include "console/_ops_style.html" %}
 <p style="margin:0 0 var(--s2)"><a href="{{ url_for('console.companies') }}" class="ops-dim">← Companies</a></p>
 <h2 style="font-size:1.2rem;margin:0 0 var(--s1)">{{ org.name }}
-  <span class="ops-badge ops-{{ org.status }}">{{ org.status }}</span></h2>
+  <span class="ops-badge ops-{{ org.status }}">{{ org.status }}</span>
+  {% if org.is_test %}<span class="ops-badge">test account</span>{% endif %}</h2>
 <p class="ops-dim" style="margin:0 0 var(--s4)">
   <a href="https://{{ org.slug }}.{{ PRODUCT_DOMAIN }}" target="_blank" rel="noopener">{{ org.slug }}.{{ PRODUCT_DOMAIN }}</a>
   {% if org.owner_email %} · owner <a href="mailto:{{ org.owner_email }}">{{ org.owner_email }}</a>{% endif %}
@@ -82,6 +83,10 @@
     <button class="btn btn-outline btn-sm" type="submit">Extend</button>
   </form>
   {% endif %}
+  <form method="post" action="{{ url_for('console.mark_test_account', slug=org.slug) }}">
+    <input type="hidden" name="on" value="{{ '0' if org.is_test else '1' }}">
+    <button class="btn btn-outline btn-sm" type="submit">{{ 'Not a test account' if org.is_test else 'Mark as test account' }}</button>
+  </form>
   {% if org.status == 'active' %}
   <form method="post" action="{{ url_for('console.suspend_company', slug=org.slug) }}"
         onsubmit='return confirm({{ ("Suspend " ~ org.name ~ "? Nobody there will be able to sign in.")|tojson }})'>
@@ -95,7 +100,7 @@
   </form>
   {% endif %}
 </div>
-<p class="ops-dim" style="margin-top:var(--s3)">Closing a company and purging its data are not done from here. They start and end a legal retention period, so they are run from a terminal (<code>tenant_lifecycle_cli.py</code>).</p>
+<p class="ops-dim" style="margin-top:var(--s3)">A test account is left out of the Funnel and Sales numbers and never sent trial reminders; it still works normally. Closing a company and purging its data are not done from here. They start and end a legal retention period, so they are run from a terminal (<code>tenant_lifecycle_cli.py</code>).</p>
 {% endif %}
 
 <h3 class="ops-h">Reports from this company</h3>

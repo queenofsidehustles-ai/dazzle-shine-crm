@@ -252,6 +252,29 @@ def suspend_company(slug):
     return redirect(here)
 
 
+@console_bp.route('/companies/<slug>/test', methods=['POST'])
+@console_required
+def mark_test_account(slug):
+    """Mark or unmark a company as a test account. Changes the numbers only."""
+    here = url_for('console.company', slug=slug)
+    if not _may_operate():
+        return _refuse(here)
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    if not org:
+        flash(f'No company at {slug}.', 'error')
+        return redirect(url_for('console.companies'))
+    is_test = request.form.get('on') == '1'
+    control_plane.set_test_account(engine, slug, is_test)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'marked as test account' if is_test
+                              else 'marked as a real company', slug)
+    flash(f'{org["name"]} is {"now" if is_test else "no longer"} a test account — '
+          f'{"left out of" if is_test else "counted in"} the funnel and sales numbers'
+          f'{" and never sent trial reminders" if is_test else ""}.', 'success')
+    return redirect(here)
+
+
 @console_bp.route('/companies/<slug>/reactivate', methods=['POST'])
 @console_required
 def reactivate_company(slug):
