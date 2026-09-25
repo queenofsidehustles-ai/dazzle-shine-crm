@@ -37,7 +37,12 @@ FK_NAME = 'fk_staff_user_id_user'
 def upgrade():
     if not _has_column('staff', 'user_id'):
         op.add_column('staff', sa.Column('user_id', sa.Integer(), nullable=True))
-        op.create_foreign_key(FK_NAME, 'staff', 'user', ['user_id'], ['id'])
+        # SQLite cannot add a constraint to a table that already exists, and
+        # raising here stopped every migration after this one on a SQLite
+        # database (0018's booking.deposit_method never arrived). SQLite does
+        # not enforce foreign keys by default anyway; PostgreSQL still gets it.
+        if op.get_bind().dialect.name != 'sqlite':
+            op.create_foreign_key(FK_NAME, 'staff', 'user', ['user_id'], ['id'])
 
 
 def downgrade():
