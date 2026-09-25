@@ -52,7 +52,9 @@
     <a href="{{ url_for('console.inbox') }}"
        class="{{ 'on' if request.endpoint == 'console.inbox' }}">Reports{% if counts and counts.feedback %}<span class="pill">{{ counts.feedback }}</span>{% endif %}</a>
     <a href="{{ url_for('console.companies') }}"
-       class="{{ 'on' if request.endpoint == 'console.companies' }}">Companies</a>
+       class="{{ 'on' if request.endpoint in ('console.companies', 'console.company') }}">Companies</a>
+    <a href="{{ url_for('console.health') }}"
+       class="{{ 'on' if request.endpoint == 'console.health' }}">Health</a>
     <a href="{{ url_for('console.funnel_view') }}"
        class="{{ 'on' if request.endpoint == 'console.funnel_view' }}">Funnel</a>
     <a href="{{ url_for('console.nana_proposals') }}"

@@ -63,6 +63,14 @@ TIMEOUT = 120
 # still be getting texts.
 RUNNABLE = ('active',)
 
+# Jobs that belong to the product rather than to any one company, called once
+# on the product's own address. Trial reminders walk every company from the
+# control plane themselves; calling them per company would send nothing more
+# and log it seven times. Until this table existed nothing called them at all:
+# the endpoint was written and never scheduled, and no trial company was ever
+# reminded of anything.
+PRODUCT_JOBS = [('trial-nudges', 'daily')]
+
 
 def jobs_for(cadence):
     return [key for key, _label, _blurb, cad in JOBS if cad == cadence]
@@ -70,6 +78,10 @@ def jobs_for(cadence):
 
 def all_jobs():
     return [key for key, _label, _blurb, _cad in JOBS]
+
+
+def product_jobs_for(cadence=None):
+    return [key for key, cad in PRODUCT_JOBS if cadence is None or cad == cadence]
 
 
 def companies():
@@ -96,14 +108,41 @@ def companies():
 
 def call(slug, job, base, key):
     """Wake one job for one company. Returns (ok, detail)."""
-    url = f'https://{slug}.{base}/api/{job}'
+    return _post(f'https://{slug}.{base}/api/{job}', key)
+
+
+def call_product(job, base, key):
+    """Wake one product-wide job, once, on the product's own address.
+
+    The reply is reduced to counts before it is printed: it lists owners'
+    email addresses, and this output lands in a CI log.
+    """
+    ok, detail = _post(f'https://{base}/api/{job}', key, raw=True)
+    if not ok:
+        return ok, detail
+    try:
+        body = json.loads(detail)
+    except ValueError:
+        return True, detail[:160]
+    if not body.get('ok', True):
+        return False, str(body.get('error') or 'not ok')[:160]
+    counts = {k: v for k, v in body.items()
+              if isinstance(v, int) and not isinstance(v, bool) and v}
+    failed = counts.get('failed', 0)
+    summary = ', '.join(f'{k} {v}' for k, v in sorted(counts.items())) or 'nothing due'
+    return not failed, summary
+
+
+def _post(url, key, raw=False):
     req = urllib.request.Request(url, data=b'{}', method='POST', headers={
         'Content-Type': 'application/json',
         'X-Api-Key': key,
     })
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            body = r.read(2000).decode('utf8', 'replace')
+            body = r.read(20000 if raw else 2000).decode('utf8', 'replace')
+            if raw:
+                return True, body
             try:
                 detail = json.dumps(json.loads(body))[:160]
             except ValueError:
@@ -119,7 +158,7 @@ def call(slug, job, base, key):
         return False, f'{type(e).__name__}: {e}'
 
 
-def run(jobs, only=None, quiet=False):
+def run(jobs, only=None, quiet=False, product_jobs=()):
     base = (os.environ.get('BASE_DOMAIN') or '').strip().lower()
     # Trimmed, and not only for tidiness: a secret pasted with a trailing
     # newline makes urllib refuse the header outright -- "Invalid header value"
@@ -161,6 +200,16 @@ def run(jobs, only=None, quiet=False):
             # nothing is waiting on them, so there is no reason to stampede.
             time.sleep(0.4)
 
+    # Never for a single-company test run: trial reminders reach every
+    # company, which is not what `--only acme` asked for.
+    for job in ([] if only else product_jobs):
+        ok, detail = call_product(job, base, key)
+        if not quiet:
+            mark = '✅' if ok else '❌'
+            print(f'  {mark} {"(product)":<20} {job:<20} {detail}')
+        if not ok:
+            failures.append(('(product)', job, detail))
+
     if not quiet:
         print()
         if failures:
@@ -186,16 +235,17 @@ def main():
     args = p.parse_args()
 
     if args.job:
-        jobs = [args.job]
+        product = [args.job] if args.job in product_jobs_for() else []
+        jobs = [] if product else [args.job]
     elif args.cadence:
-        jobs = jobs_for(args.cadence)
+        jobs, product = jobs_for(args.cadence), product_jobs_for(args.cadence)
     else:
-        jobs = all_jobs()
+        jobs, product = all_jobs(), product_jobs_for()
 
-    if not jobs:
+    if not jobs and not product:
         sys.exit('No jobs to run — automations.JOBS is empty or the cadence matched none.')
 
-    return 1 if run(jobs, only=args.only, quiet=args.quiet) else 0
+    return 1 if run(jobs, only=args.only, quiet=args.quiet, product_jobs=product) else 0
 
 
 if __name__ == '__main__':
