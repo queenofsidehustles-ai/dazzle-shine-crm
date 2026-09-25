@@ -219,8 +219,8 @@ with app.app_context():
           'a closed company is never sent a trial email')
     check(f'Ops Charlie {TAG}' in body.split('Closed, in retention')[1],
           'it is listed as closed, with the date it can be purged')
-    check('No schedule sends these automatically yet' in body,
-          'the page says plainly that nothing sends them on its own')
+    check('once a day at 22:00 UTC' in body,
+          'the page says when they go out on their own')
     with engine.begin() as conn:
         conn.execute(text("UPDATE public.organizations SET status = 'active', closed_at = NULL "
                           'WHERE slug = :s'), {'s': C})

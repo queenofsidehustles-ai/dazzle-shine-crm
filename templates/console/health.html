@@ -41,8 +41,8 @@
 
 <h3 class="ops-h">Trial emails due today ({{ nudges|length }})</h3>
 <p class="ops-dim" style="margin:0 0 var(--s3)">Reminders to owners who have not started, or whose trial is ending.
-  <strong>No schedule sends these automatically yet</strong> — they go out only when somebody presses the button.
-  Each is recorded against the company, so pressing twice never sends twice.</p>
+  They go out automatically once a day at 22:00 UTC, with the other automations. The button sends
+  today's now instead of waiting. Each is recorded against the company, so nothing is ever sent twice.</p>
 {% if nudges %}
 <div class="ops-scroll"><table class="con">
   <tr><th>Company</th><th>Email</th><th>To</th></tr>
