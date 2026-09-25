@@ -153,6 +153,8 @@ with app.app_context():
           'a company with no real schema behind it does not break the page')
     check('E2E Nana Co A' in r.data.decode(),
           'and the companies that do have data are still shown')
+    check('Ghost Co' not in r.data.decode(),
+          'and nothing is shown under the name of a company with no schema')
 
     # Cleanup: real schemas against a disposable database — left behind,
     # a re-run collides on slug uniqueness in the control plane.

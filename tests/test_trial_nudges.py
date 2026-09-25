@@ -151,6 +151,9 @@ for status in ('active', 'past_due', 'canceled', 'incomplete'):
           f'nothing to a {status!r} subscription')
 check(tn.due(org(days_old=8, status='suspended')) is None,
       'and nothing at all to a suspended company')
+check(tn.due(org(days_old=8, status='closed')) is None
+      and tn.due(org(days_old=8, status='closing')) is None,
+      'or to one that has been closed')
 
 
 print('\n8. The words')
