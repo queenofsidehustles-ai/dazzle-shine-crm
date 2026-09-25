@@ -20,7 +20,8 @@ secretly measured against a different group reads fine and means nothing.
 
 Grandfathered companies are left out. They were never acquired through the
 funnel (see app._grandfather_established_business), and counting them would
-flatter every rate on the page.
+flatter every rate on the page. So are companies marked as test accounts in
+the console, which would drag every rate down.
 
 Pure: takes rows, returns numbers. The console route does the reading, so this
 can be tested without a database.
@@ -52,6 +53,11 @@ def _pct(part, whole):
     return round(100 * part / whole) if whole else None
 
 
+def _left_out(org):
+    """Never acquired through the funnel (grandfathered) or not real (test)."""
+    return bool(org.get('grandfathered') or org.get('is_test'))
+
+
 def lead_source(raw):
     """A referrer URL as the site it came from: 'google.com', not the full URL.
 
@@ -81,7 +87,7 @@ def compute(orgs, leads, now=None, days=None):
         when = row.get('created_at')
         return since is None or (when is not None and when >= since)
 
-    counted = [o for o in orgs if not o.get('grandfathered')]
+    counted = [o for o in orgs if not _left_out(o)]
     companies = [o for o in counted if arrived(o)]
     window_leads = [l for l in leads if arrived(l)]
 
@@ -89,7 +95,7 @@ def compute(orgs, leads, now=None, days=None):
     # same email. Matching on email is the only link there is: the early-access
     # form and the signup form are separate, and nobody is asked to connect them.
     signup_emails = {_email(o.get('owner_email')) for o in orgs
-                     if o.get('owner_email')}
+                     if o.get('owner_email') and not o.get('is_test')}
 
     def lead_converted(lead):
         return _email(lead.get('email')) in signup_emails
@@ -155,6 +161,8 @@ def compute(orgs, leads, now=None, days=None):
         'follow_up': _follow_up(counted, leads, signup_emails, now, billing),
         'ending_soon_days': ENDING_SOON_DAYS,
         'excluded': sum(1 for o in orgs if o.get('grandfathered')),
+        'test_excluded': sum(1 for o in orgs if o.get('is_test')
+                             and not o.get('grandfathered')),
     }
 
 
@@ -228,7 +236,7 @@ def sales(orgs, plans, now=None, days=None):
     def within(when):
         return since is None or (when is not None and when >= since)
 
-    counted = [o for o in orgs if not o.get('grandfathered')]
+    counted = [o for o in orgs if not _left_out(o)]
 
     def cents(o):
         return o['mrr_cents'] if o.get('mrr_cents') is not None else _list_cents(o, plans)
@@ -302,6 +310,8 @@ def sales(orgs, plans, now=None, days=None):
         'pipeline_if_all': int(round(per_trial * len(trials))),
         'pipeline_expected': (int(round(per_trial * len(trials) * rate))
                               if rate is not None else None),
+        'test_excluded': sum(1 for o in orgs if o.get('is_test')
+                             and not o.get('grandfathered')),
         'discounted': len(discounted),
         'discount_cost': discount_cost,
         'codes': codes,

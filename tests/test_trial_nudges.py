@@ -154,6 +154,8 @@ check(tn.due(org(days_old=8, status='suspended')) is None,
 check(tn.due(org(days_old=8, status='closed')) is None
       and tn.due(org(days_old=8, status='closing')) is None,
       'or to one that has been closed')
+check(tn.due(org(days_old=8, is_test=True)) is None,
+      'or to a company marked as a test account')
 
 
 print('\n8. The words')

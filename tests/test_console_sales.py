@@ -122,6 +122,12 @@ s_all = funnel.sales(ORGS, entitlements.PLANS, now=NOW, days=None)
 check(s_all['new'] == 5 and s_all['lost'] == 1, 'all time: everyone who ever started paying')
 check(s_all['net_new_mrr'] == s_all['mrr'] + s_all['past_due_mrr'],
       'and over all time, new minus lost is exactly what is billed today')
+st = funnel.sales(ORGS + [org('tango', is_test=True, subscription_status='active',
+                               stripe_subscription_id='s9', mrr_cents=24900,
+                               paid_since=NOW - timedelta(days=2))],
+                  entitlements.PLANS, now=NOW, days=30)
+check(st['mrr'] == s['mrr'] and st['paying'] == s['paying'] and st['new'] == s['new']
+      and st['test_excluded'] == 1, 'a paying test account adds nothing to any number')
 empty = funnel.sales([], entitlements.PLANS, now=NOW, days=30)
 check(empty['mrr'] == 0 and empty['arpa'] is None and empty['pipeline_expected'] is None,
       'no data: zero MRR, no average, no made-up forecast')
