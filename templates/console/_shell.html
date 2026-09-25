@@ -56,7 +56,7 @@
     <a href="{{ url_for('console.health') }}"
        class="{{ 'on' if request.endpoint == 'console.health' }}">Health</a>
     <a href="{{ url_for('console.funnel_view') }}"
-       class="{{ 'on' if request.endpoint == 'console.funnel_view' }}">Funnel</a>
+       class="{{ 'on' if request.endpoint in ('console.funnel_view', 'console.sales_view', 'console.discounts') }}">Funnel</a>
     <a href="{{ url_for('console.nana_proposals') }}"
        class="{{ 'on' if request.endpoint == 'console.nana_proposals' }}">Nana</a>
     <a href="{{ url_for('console.people') }}"

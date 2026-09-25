@@ -23,7 +23,7 @@
   @media (max-width: 600px) { .fn-barcol { display:none; } }
 </style>
 
-<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Funnel</h2>
+{% include "console/_funnel_tabs.html" %}
 
 <nav class="fn-windows" aria-label="Time window">
   {% for w in windows %}

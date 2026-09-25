@@ -27,7 +27,7 @@ owner locked out of her own schedule over an expired card would rightly never
 come back, and we would have taken her data hostage over $99.
 """
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import control_plane
 import tenancy
@@ -328,14 +328,27 @@ def apply_event(event):
             status = 'canceled'
         plan = ((obj.get('metadata') or {}).get('plan')
                 or _plan_from_items(obj) or org.get('plan') or 'solo')
-        control_plane.set_billing(
-            engine, slug,
+        fields = dict(
             plan=plan,
             subscription_status=status,
             stripe_customer_id=customer or org.get('stripe_customer_id'),
             stripe_subscription_id=obj.get('id'),
             trial_ends_at=_ts(obj.get('trial_end')),
             current_period_end=_ts(obj.get('current_period_end')))
+        # Bookkeeping for the console's sales page. Best-effort: a payload shape
+        # it does not expect must never stop the plan and status above from
+        # being recorded -- that is what decides whether a company can work.
+        try:
+            mrr = monthly_cents(obj)
+            if mrr is not None:
+                fields['mrr_cents'] = mrr
+            code = _discount_code(engine, obj)
+            if code:
+                fields['discount_code'] = code
+        except Exception:
+            pass
+        fields.update(_revenue_dates(org, status))
+        control_plane.set_billing(engine, slug, **fields)
         return True, f'{slug}: subscription {status} on {plan}'
 
     if kind == 'invoice.payment_failed':
@@ -346,7 +359,8 @@ def apply_event(event):
         return True, f'{slug}: payment failed, marked past_due'
 
     if kind in ('invoice.paid', 'invoice.payment_succeeded'):
-        control_plane.set_billing(engine, slug, subscription_status='active')
+        control_plane.set_billing(engine, slug, subscription_status='active',
+                                  **_revenue_dates(org, 'active'))
         return True, f'{slug}: payment received'
 
     return False, f'{slug}: ignored {kind}'
@@ -369,3 +383,166 @@ def _plan_from_items(subscription):
 
 def _ts(value):
     return datetime.utcfromtimestamp(value) if value else None
+
+
+# ---------------------------------------------------------------------------
+# Revenue, as the console counts it
+# ---------------------------------------------------------------------------
+
+# Months per billing interval, for turning any price into a monthly figure.
+_MONTHS = {'month': 1, 'year': 12, 'week': 12 / 52, 'day': 12 / 365}
+
+
+def monthly_cents(subscription, now=None):
+    """What this subscription brings in per month, in cents, after discounts.
+
+    From the subscription Stripe sent, not from the plan's list price: a
+    yearly plan, a second seat or a discount code all make those differ, and
+    the sales page is only worth reading if it adds up to what the bank sees.
+
+    A one-off ("once") discount is left out -- it comes off one invoice and
+    is not recurring revenue lost. Returns None when the subscription carries
+    no prices at all, so the caller keeps what it knew rather than writing 0.
+    """
+    items = ((subscription.get('items') or {}).get('data') or [])
+    total, priced = 0.0, False
+    for item in items:
+        price = item.get('price') or item.get('plan') or {}
+        amount = price.get('unit_amount', price.get('amount'))
+        if amount is None:
+            continue
+        priced = True
+        recurring = price.get('recurring') or {}
+        interval = recurring.get('interval') or price.get('interval') or 'month'
+        count = recurring.get('interval_count') or price.get('interval_count') or 1
+        total += amount * (item.get('quantity') or 1) / (_MONTHS.get(interval, 1) * count)
+    if not priced:
+        return None
+    coupon = _recurring_coupon(subscription, now)
+    if coupon:
+        if coupon.get('percent_off'):
+            total *= 1 - float(coupon['percent_off']) / 100
+        elif coupon.get('amount_off'):
+            total = max(0.0, total - coupon['amount_off'])
+    return int(round(total))
+
+
+def _recurring_coupon(subscription, now=None):
+    """The coupon still taking money off every month, if there is one."""
+    discount = subscription.get('discount')
+    if not isinstance(discount, dict):
+        return None
+    coupon = discount.get('coupon') or {}
+    duration = coupon.get('duration')
+    if duration == 'forever':
+        return coupon
+    if duration == 'repeating':
+        end = discount.get('end')
+        now = now or datetime.utcnow()
+        if end is None or datetime.utcfromtimestamp(end) > now:
+            return coupon
+    return None
+
+
+def _discount_code(engine, subscription):
+    """The code a customer typed, as a person would recognise it."""
+    discount = subscription.get('discount')
+    if not isinstance(discount, dict):
+        return None
+    promo = discount.get('promotion_code')
+    promo_id = promo.get('id') if isinstance(promo, dict) else promo
+    if promo_id:
+        row = control_plane.find_promo_code(engine, stripe_promotion_id=promo_id)
+        if row:
+            return row['code']
+    coupon = discount.get('coupon') or {}
+    # Made in the Stripe dashboard rather than the console: its name is the
+    # best label there is, and its id the fallback.
+    return (coupon.get('name') or coupon.get('id') or promo_id or '')[:64] or None
+
+
+def _revenue_dates(org, status):
+    """When they first paid, and when they left. First-write, so replays are safe."""
+    now = datetime.utcnow()
+    out = {}
+    if status == 'active':
+        if not org.get('paid_since'):
+            out['paid_since'] = now
+        if org.get('canceled_at'):
+            out['canceled_at'] = None          # came back
+    elif status == 'canceled' and not org.get('canceled_at'):
+        out['canceled_at'] = now
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Discount codes for Akye's own plans
+# ---------------------------------------------------------------------------
+
+DURATIONS = ('once', 'repeating', 'forever')
+
+
+def create_promo_code(code, *, percent_off=None, amount_off_cents=None,
+                      duration='once', duration_months=None,
+                      max_redemptions=None, expires_at=None, note=None):
+    """Make the coupon and the code a customer types, in Stripe. Returns ids.
+
+    Stripe holds the discount; checkout already accepts codes
+    (allow_promotion_codes), so a code made here works the moment this
+    returns. Raises on anything Stripe refuses, with Stripe's own message.
+    """
+    import stripe
+    key = stripe_key()
+    if not key:
+        raise RuntimeError('Stripe is not set up on this deployment, so there is '
+                           'nowhere to create the code.')
+    stripe.api_key = key
+    coupon_args = {'duration': duration, 'name': code,
+                   'metadata': {'source': 'akye-console'}}
+    if percent_off:
+        coupon_args['percent_off'] = percent_off
+    else:
+        coupon_args['amount_off'] = amount_off_cents
+        coupon_args['currency'] = 'usd'
+    if duration == 'repeating':
+        coupon_args['duration_in_months'] = duration_months
+    coupon = stripe.Coupon.create(**coupon_args)
+    promo_args = {'coupon': coupon['id'], 'code': code,
+                  'metadata': {'source': 'akye-console', 'note': (note or '')[:300]}}
+    if max_redemptions:
+        promo_args['max_redemptions'] = max_redemptions
+    if expires_at:
+        promo_args['expires_at'] = int(expires_at.replace(tzinfo=timezone.utc).timestamp())
+    try:
+        promo = stripe.PromotionCode.create(**promo_args)
+    except Exception:
+        # Do not leave a coupon behind that no code points at.
+        try:
+            stripe.Coupon.delete(coupon['id'])
+        except Exception:
+            pass
+        raise
+    return coupon['id'], promo['id']
+
+
+def set_promo_code_active(stripe_promotion_id, active):
+    import stripe
+    key = stripe_key()
+    if not key:
+        raise RuntimeError('Stripe is not set up on this deployment.')
+    stripe.api_key = key
+    stripe.PromotionCode.modify(stripe_promotion_id, active=bool(active))
+
+
+def promo_redemptions():
+    """{promotion id: times redeemed}, straight from Stripe. {} if unavailable."""
+    key = stripe_key()
+    if not key:
+        return {}
+    try:
+        import stripe
+        stripe.api_key = key
+        codes = stripe.PromotionCode.list(limit=100)
+        return {p['id']: p.get('times_redeemed') or 0 for p in codes.auto_paging_iter()}
+    except Exception:
+        return {}

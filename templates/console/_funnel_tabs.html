@@ -1,0 +1,11 @@
+<style>
+  .ops-tabs { display:flex; gap:var(--s2); flex-wrap:wrap; }
+  .ops-tabs a { padding:4px 12px; border-radius:var(--r-pill); border:1px solid var(--line);
+                color:var(--muted); text-decoration:none; font-size:var(--t-sm); font-weight:600; }
+  .ops-tabs a.on { background:var(--ink); border-color:var(--ink); color:var(--surface); }
+</style>
+<nav class="ops-tabs" aria-label="Funnel views" style="margin:0 0 var(--s3)">
+  <a href="{{ url_for('console.funnel_view') }}" class="{{ 'on' if request.endpoint == 'console.funnel_view' }}">Funnel</a>
+  <a href="{{ url_for('console.sales_view') }}" class="{{ 'on' if request.endpoint == 'console.sales_view' }}">Sales</a>
+  <a href="{{ url_for('console.discounts') }}" class="{{ 'on' if request.endpoint == 'console.discounts' }}">Discount codes</a>
+</nav>

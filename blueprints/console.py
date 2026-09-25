@@ -20,6 +20,7 @@ except whoever owns the inbox.
 """
 import functools
 import html
+import re
 from datetime import datetime, timedelta
 
 import markdown
@@ -405,6 +406,157 @@ def funnel_view():
     return render_template('console/funnel.html', f=data, window=window,
                            windows=list(funnel.WINDOWS),
                            me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/funnel/sales')
+@console_required
+def sales_view():
+    """The funnel in money: recurring revenue, how it moved, what is coming."""
+    import entitlements
+    import funnel
+    engine = _engine()
+    window = request.args.get('window', funnel.DEFAULT_WINDOW)
+    if window not in funnel.WINDOWS:
+        window = funnel.DEFAULT_WINDOW
+    data = funnel.sales(control_plane.all_orgs(engine), entitlements.PLANS,
+                        days=funnel.WINDOWS[window])
+    return render_template('console/sales.html', s=data, window=window,
+                           windows=list(funnel.WINDOWS),
+                           me=request.console_user, counts=_counts(engine))
+
+
+PROMO_CODE_RE = re.compile(r'^[A-Z0-9][A-Z0-9_-]{2,39}$')
+
+
+@console_bp.route('/discounts', methods=['GET', 'POST'])
+@console_required
+def discounts():
+    """Discount codes for Akye's plans, made in Stripe, typed at checkout."""
+    import billing
+    engine = _engine()
+    here = url_for('console.discounts')
+    if request.method == 'POST':
+        if not _may_operate():
+            return _refuse(here)
+        form, problem = _promo_form(request.form)
+        if not problem and control_plane.find_promo_code(engine, code=form['code']):
+            problem = f'{form["code"]} already exists.'
+        if problem:
+            flash(problem, 'error')
+            return redirect(here)
+        try:
+            coupon_id, promo_id = billing.create_promo_code(
+                form['code'], percent_off=form['percent_off'],
+                amount_off_cents=form['amount_off_cents'], duration=form['duration'],
+                duration_months=form['duration_months'],
+                max_redemptions=form['max_redemptions'],
+                expires_at=form['expires_at'], note=form['note'])
+        except Exception as exc:
+            flash(f'Stripe did not create it: {getattr(exc, "user_message", None) or exc}',
+                  'error')
+            return redirect(here)
+        control_plane.add_promo_code(
+            engine, stripe_coupon_id=coupon_id, stripe_promotion_id=promo_id,
+            created_by=request.console_user['email'], **form)
+        control_plane.log_console(engine, request.console_user['email'],
+                                  'created discount code', form['code'],
+                                  _describe_promo(form))
+        flash(f'{form["code"]} is live. Customers type it at checkout.', 'success')
+        return redirect(here)
+
+    import entitlements
+    import funnel
+    rows = control_plane.all_promo_codes(engine)
+    used = funnel.sales(control_plane.all_orgs(engine), entitlements.PLANS)['codes']
+    redeemed = billing.promo_redemptions()
+    for r in rows:
+        r['describe'] = _describe_promo(r)
+        r['redeemed'] = redeemed.get(r.get('stripe_promotion_id'))
+        r['usage'] = used.get(r['code'], {'used': 0, 'paying': 0, 'mrr': 0})
+    return render_template('console/discounts.html', rows=rows,
+                           may_operate=_may_operate(),
+                           stripe_ready=bool(billing.stripe_key()),
+                           me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/discounts/<code>/active', methods=['POST'])
+@console_required
+def discount_active(code):
+    import billing
+    engine = _engine()
+    here = url_for('console.discounts')
+    if not _may_operate():
+        return _refuse(here)
+    row = control_plane.find_promo_code(engine, code=code)
+    turn_on = request.form.get('on') == '1'
+    if not row:
+        flash('No such code.', 'error')
+        return redirect(here)
+    try:
+        billing.set_promo_code_active(row['stripe_promotion_id'], turn_on)
+    except Exception as exc:
+        flash(f'Stripe did not change it: {getattr(exc, "user_message", None) or exc}',
+              'error')
+        return redirect(here)
+    control_plane.set_promo_active(engine, row['code'], turn_on)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'turned on discount code' if turn_on
+                              else 'turned off discount code', row['code'])
+    flash(f'{row["code"]} is {"on" if turn_on else "off"}. Anybody already using it '
+          f'keeps their discount.', 'success')
+    return redirect(here)
+
+
+def _promo_form(form):
+    """Read and check the new-code form. Returns (clean values, problem or None)."""
+    code = (form.get('code') or '').strip().upper()
+    if not PROMO_CODE_RE.match(code):
+        return None, 'A code is 3 to 40 letters, numbers, dashes or underscores.'
+    out = {'code': code, 'percent_off': None, 'amount_off_cents': None,
+           'duration_months': None, 'max_redemptions': None, 'expires_at': None,
+           'note': (form.get('note') or '').strip()[:300] or None}
+    try:
+        if form.get('kind') == 'amount':
+            dollars = float(form.get('amount') or 0)
+            if not 0 < dollars <= 10000:
+                return None, 'A dollar discount is between $0.01 and $10,000.'
+            out['amount_off_cents'] = int(round(dollars * 100))
+        else:
+            pct = int(form.get('percent') or 0)
+            if not 1 <= pct <= 100:
+                return None, 'A percentage is between 1 and 100.'
+            out['percent_off'] = pct
+        duration = form.get('duration') or 'once'
+        if duration not in ('once', 'repeating', 'forever'):
+            return None, 'Pick how long the discount lasts.'
+        out['duration'] = duration
+        if duration == 'repeating':
+            months = int(form.get('months') or 0)
+            if not 1 <= months <= 36:
+                return None, 'For a number of months, pick between 1 and 36.'
+            out['duration_months'] = months
+        if (form.get('max_redemptions') or '').strip():
+            n = int(form['max_redemptions'])
+            if n < 1:
+                return None, 'A use limit is at least 1.'
+            out['max_redemptions'] = n
+        if (form.get('expires') or '').strip():
+            ends = datetime.strptime(form['expires'].strip(), '%Y-%m-%d').replace(
+                hour=23, minute=59, second=59)
+            if ends <= datetime.utcnow():
+                return None, 'The expiry date has to be in the future.'
+            out['expires_at'] = ends
+    except ValueError:
+        return None, 'One of the numbers or the date did not read as one.'
+    return out, None
+
+
+def _describe_promo(p):
+    off = (f'{p["percent_off"]}% off' if p.get('percent_off')
+           else f'${(p.get("amount_off_cents") or 0) / 100:,.2f} off')
+    how = {'once': 'the first payment', 'forever': 'every payment',
+           'repeating': f'{p.get("duration_months")} months'}.get(p.get('duration'), '')
+    return f'{off} {how}'.strip()
 
 
 @console_bp.route('/leads/<int:lead_id>/contacted', methods=['POST'])
