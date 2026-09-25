@@ -1,0 +1,74 @@
+{% extends "console/_shell.html" %}
+{% block title %}Health{% endblock %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Health</h2>
+
+<h3 class="ops-h" style="margin-top:0">Product email</h3>
+{% if not mail.applies %}
+<p class="ops-dim">This deployment is not the hosted product, so there is no product email.</p>
+{% else %}
+<div class="ops-card">
+  {% if mail.problem %}<p class="ops-bad" style="margin:0 0 var(--s2)">{{ mail.problem }}</p>
+  {% else %}<p class="ops-good" style="margin:0 0 var(--s2)">Configured</p>{% endif %}
+  <span class="ops-dim">Sends as {{ mail.from or '—' }} · replies to {{ mail.to or '—' }} · key {{ 'set' if mail.key else 'missing' }}</span>
+  <form method="post" action="{{ url_for('console.test_email') }}" style="margin-top:var(--s3)">
+    <button class="btn btn-outline btn-sm" type="submit" {% if mail.problem %}disabled{% endif %}>Send a test email to {{ me.email }}</button>
+  </form>
+</div>
+{% endif %}
+
+<h3 class="ops-h">Automations, every company</h3>
+{% if orgs %}
+<div class="ops-scroll"><table class="con ops-matrix">
+  <tr><th>Company</th>{% for key, label in job_labels %}<th>{{ label }}</th>{% endfor %}<th>Errors</th></tr>
+  {% for o in orgs %}{% set s = snaps[o.slug] %}
+  <tr>
+    <td><a href="{{ url_for('console.company', slug=o.slug) }}">{{ o.name }}</a></td>
+    {% if s.ok %}
+      {% for j in s.jobs %}<td><span class="ops-badge ops-{{ j.state }}" title="{{ 'last ran ' ~ j.ran_at.strftime('%d %b %H:%M') if j.ran_at else 'never ran' }}">{{ j.state }}</span></td>{% endfor %}
+      <td>{% if s.open_errors %}<span class="ops-bad">{{ s.open_errors }}</span>{% else %}0{% endif %}</td>
+    {% else %}
+      <td colspan="{{ job_labels|length + 1 }}"><span class="ops-bad">could not read ({{ s.why }})</span></td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+</table></div>
+<p class="ops-dim" style="margin-top:var(--s2)">
+  <strong>stale</strong>: has not run when it should have · <strong>never</strong>: no run recorded ·
+  <strong>off</strong>: the company turned it off. Hover a badge for when it last ran.</p>
+{% else %}<div class="con-empty">No active companies.</div>{% endif %}
+
+<h3 class="ops-h">Trial emails due today ({{ nudges|length }})</h3>
+<p class="ops-dim" style="margin:0 0 var(--s3)">Reminders to owners who have not started, or whose trial is ending.
+  <strong>No schedule sends these automatically yet</strong> — they go out only when somebody presses the button.
+  Each is recorded against the company, so pressing twice never sends twice.</p>
+{% if nudges %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Company</th><th>Email</th><th>To</th></tr>
+  {% for slug, kind, email in nudges %}
+  <tr><td><a href="{{ url_for('console.company', slug=slug) }}">{{ names.get(slug, slug) }}</a></td>
+      <td>{{ {'start_7': 'Not started (day 7)', 'start_21': 'Not started (day 21)', 'ending': 'Trial ending', 'ended': 'Trial ended'}.get(kind, kind) }}</td>
+      <td>{{ email }}</td></tr>
+  {% endfor %}
+</table></div>
+{% if may_operate %}
+<form method="post" action="{{ url_for('console.send_trial_emails') }}" style="margin-top:var(--s3)"
+      onsubmit="return confirm('Send {{ nudges|length }} trial email(s) to real owners now?')">
+  <button class="btn btn-sm" type="submit">{{ "Send it now" if nudges|length == 1 else "Send these " ~ nudges|length ~ " now" }}</button>
+</form>
+{% endif %}
+{% else %}<div class="con-empty">Nothing due today.</div>{% endif %}
+
+<h3 class="ops-h">Closed, in retention</h3>
+{% if closed %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Company</th><th>Closed</th><th>Can be purged from</th></tr>
+  {% for c in closed %}
+  <tr><td><a href="{{ url_for('console.company', slug=c.slug) }}">{{ c.name }}</a></td>
+      <td>{{ c.closed_at.strftime('%d %b %Y') }}</td><td>{{ c.purge_from.strftime('%d %b %Y') }}</td></tr>
+  {% endfor %}
+</table></div>
+<p class="ops-dim" style="margin-top:var(--s2)">Purging is permanent and is run from a terminal: <code>python3 tenant_lifecycle_cli.py purge &lt;address&gt;</code>.</p>
+{% else %}<div class="con-empty">No closed companies.</div>{% endif %}
+{% endblock %}
