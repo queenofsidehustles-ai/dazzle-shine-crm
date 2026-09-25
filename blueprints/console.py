@@ -19,8 +19,10 @@ happens in the code. What this removes is reports being invisible to everybody
 except whoever owns the inbox.
 """
 import functools
+import html
 from datetime import datetime
 
+import markdown
 from flask import (Blueprint, Response, flash, redirect, render_template,
                    request, session, url_for)
 
@@ -373,6 +375,19 @@ def playbooks():
                            me=request.console_user, counts=_counts(engine))
 
 
+def _render_playbook(content):
+    """Playbook content to HTML -- tables, headings, bold, lists.
+
+    Escaped before Markdown ever sees it, so a literal `<` typed or pasted
+    into a playbook (an HTML tag, a stray `<script>`) renders as text rather
+    than running in every other console user's browser. Markdown's own
+    syntax (`**`, `|`, `#`, `-`) uses none of the characters escape() touches,
+    so real Markdown still renders -- only raw HTML stops working, which a
+    playbook was never written in anyway."""
+    escaped = html.escape(content)
+    return markdown.markdown(escaped, extensions=['tables', 'nl2br'])
+
+
 @console_bp.route('/playbooks/<int:doc_id>')
 @console_required
 def playbook_view(doc_id):
@@ -382,6 +397,7 @@ def playbook_view(doc_id):
         flash('No such playbook.', 'error')
         return redirect(url_for('console.playbooks'))
     return render_template('console/playbook_view.html', doc=doc,
+                           content_html=_render_playbook(doc['content']),
                            can_edit=control_plane.rank(request.console_user['role'])
                                      >= control_plane.rank('manager'),
                            me=request.console_user, counts=_counts(engine))

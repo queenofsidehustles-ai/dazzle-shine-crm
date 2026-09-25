@@ -1,6 +1,38 @@
 {% extends "console/_shell.html" %}
 {% block title %}{{ doc.title }}{% endblock %}
 {% block body %}
+<style>
+  /* Markdown rendered from a playbook's content -- headings, tables, lists.
+     Scoped here since nothing else in the console renders Markdown. */
+  .pb-content { line-height: var(--lh); color: var(--ink); }
+  .pb-content h1, .pb-content h2, .pb-content h3 {
+    margin: var(--s6) 0 var(--s3); line-height: var(--lh-tight);
+  }
+  .pb-content h1:first-child, .pb-content h2:first-child, .pb-content h3:first-child { margin-top: 0; }
+  .pb-content h1 { font-size: var(--t-xl); }
+  .pb-content h2 { font-size: var(--t-lg); }
+  .pb-content h3 { font-size: var(--t-md); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .pb-content p { margin: 0 0 var(--s4); }
+  .pb-content ul, .pb-content ol { margin: 0 0 var(--s4); padding-left: 1.3em; }
+  .pb-content li { margin-bottom: var(--s1); }
+  .pb-content strong { color: var(--ink); }
+  .pb-content code { background: var(--ground); border-radius: var(--r-sm); padding: 1px 5px; font-size: 0.9em; }
+  .pb-content a { color: var(--info); }
+  .pb-content table {
+    width: 100%; border-collapse: collapse; background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+    margin: 0 0 var(--s5); font-size: var(--t-sm);
+  }
+  .pb-content th, .pb-content td {
+    text-align: left; padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  .pb-content th {
+    font-size: var(--t-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--softer);
+    background: var(--ground);
+  }
+  .pb-content tr:last-child td { border-bottom: none; }
+</style>
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:var(--s3)">
   <h2 style="font-size:1.05rem;margin:0">{{ doc.title }}</h2>
   {% if can_edit %}
@@ -12,7 +44,7 @@
   updated {{ doc.updated_at.strftime('%d %b %Y, %H:%M') if doc.updated_at else '—' }}
 </p>
 <div class="con-item">
-  <pre class="con-body" style="font-family:inherit;margin:0">{{ doc.content }}</pre>
+  <div class="pb-content">{{ content_html | safe }}</div>
 </div>
 <p style="margin-top:var(--s4)">
   <a href="{{ url_for('console.playbooks') }}">&larr; All playbooks</a>

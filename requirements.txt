@@ -14,6 +14,12 @@ cloudinary==1.40.0
 cryptography>=42.0.0
 tzdata
 
+# Renders Playbooks content (console/playbook_view.html) -- growth plans and
+# runbooks written with real tables, not the single-paragraph text SOP.content
+# was designed for. Console-editor-only input (owner/manager), the same trust
+# boundary as everything else in the console -- see blueprints/console.py.
+Markdown==3.10.3
+
 # Launch-readiness CI executes the regression suite with python -m pytest.
 # Keep the runner dependency explicit so a clean environment cannot silently
 # skip every substantive gate because pytest happened to be absent.
