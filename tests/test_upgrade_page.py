@@ -102,6 +102,33 @@ check('✕' in solo_block and 'Payroll' in solo_block,
 check(ent.FEATURE_LABELS['payroll'] in solo_block, 'using the real feature label, not the raw key')
 
 
+print('\n4b. Scale\'s real exclusive features show up, not just Pro\'s list')
+# These are gated by real @requires_plan(...) calls elsewhere in the app
+# (blueprints/commercial.py, places_finder.py, settings.py, content.py,
+# commissions.py) but only exist at runtime because Scale's PLANS entry is
+# 'features: None' -- they were never in PLANS['pro']['features'], so a page
+# that only drew rows from Pro's list silently hid them. Regression test for
+# exactly that bug.
+import blueprints.billing_routes as billing_routes
+r = client.get('/upgrade')
+text = r.get_data(as_text=True)
+scale_before = text.index('pr-name">Scale')
+scale_block = text[scale_before:]
+pro_before, pro_after = text.index('pr-name">Pro'), scale_before
+pro_block = text[pro_before:pro_after]
+for feature in billing_routes.SCALE_ONLY_FEATURES:
+    label = ent.FEATURE_LABELS[feature]
+    check(label in scale_block, f'Scale lists {label!r}')
+    # Same row appears on every card; what differs is the mark right before the
+    # label -- a check on Scale's card, a cross on Pro's, for a row Pro denies.
+    scale_mark = scale_block[max(0, scale_block.index(label) - 60):scale_block.index(label)]
+    pro_mark = pro_block[max(0, pro_block.index(label) - 60):pro_block.index(label)]
+    check('pr-check' in scale_mark, f'{label!r} is marked included on Scale')
+    check('pr-x' in pro_mark, f'{label!r} is marked excluded on Pro, not silently omitted')
+check(not ent.plan_can('pro', 'commercial') and ent.plan_can('scale', 'commercial'),
+      'sanity: commercial really is Scale-only at the entitlements level too')
+
+
 print('\n5. can_pay gates the checkout button, never the page itself')
 orig = billing.configured
 billing.configured = lambda: False

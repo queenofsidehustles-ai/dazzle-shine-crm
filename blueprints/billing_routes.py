@@ -46,12 +46,29 @@ def _limit_rows():
     return [(key, label) for key, label in entitlements.LIMIT_LABELS.items()]
 
 
+# Real feature gates that exist only because Scale's own PLANS entry is
+# 'features: None' ("everything") rather than an explicit list -- so they
+# never appear in PLANS['pro']['features'] and, before this, never appeared
+# on this page either, even though Scale genuinely does not share them with
+# Pro. Each is enforced by an actual @requires_plan(...) below; named here so
+# the comparison table can show them as the real differentiators they are,
+# without changing what can()/plan_can() actually decide at runtime.
+SCALE_ONLY_FEATURES = (
+    'commercial',       # blueprints/commercial.py, blueprints/quotes.py
+    'lead_finder',      # blueprints/places_finder.py
+    'multi_brand',      # blueprints/settings.py
+    'content_studio',   # blueprints/content.py
+    'va_commissions',   # blueprints/commissions.py
+)
+
+
 def _feature_rows():
-    """Every feature gated on some plan below Scale, in FEATURE_LABELS' own
-    order. Scale's 'everything' and the still-unassigned labels in
-    FEATURE_LABELS (nothing gates them on any plan yet) are deliberately left
-    off a page whose job is to show what upgrading actually buys."""
-    gated = set(entitlements.PLANS['pro']['features'] or set())
+    """Every feature actually gated somewhere in the app, in FEATURE_LABELS'
+    own order. The still-unassigned labels in FEATURE_LABELS (nothing gates
+    them on any plan yet -- e.g. remove_branding, data_export) are
+    deliberately left off a page whose job is to show what upgrading
+    actually buys, not features that don't exist yet."""
+    gated = set(entitlements.PLANS['pro']['features'] or set()) | set(SCALE_ONLY_FEATURES)
     return [(key, label) for key, label in entitlements.FEATURE_LABELS.items()
             if key in gated]
 
