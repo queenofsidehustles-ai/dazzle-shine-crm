@@ -20,7 +20,7 @@ except whoever owns the inbox.
 """
 import functools
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import markdown
 from flask import (Blueprint, Response, flash, redirect, render_template,
@@ -144,14 +144,245 @@ def shot(feedback_id):
                     headers={'Cache-Control': 'private, max-age=600'})
 
 
+def _may_operate():
+    """Managers and the owner may change a company. Helpers read."""
+    role = (getattr(request, 'console_user', {}) or {}).get('role')
+    return control_plane.rank(role) >= control_plane.rank('manager')
+
+
+def _refuse(where):
+    flash('Only a manager or the owner can do that.', 'error')
+    return redirect(where)
+
+
 @console_bp.route('/companies')
 @console_required
 def companies():
+    """Every company, with enough on each row to know which one needs you."""
+    import billing
+    import console_data
     engine = _engine()
-    return render_template('console/companies.html',
-                           rows=control_plane.all_orgs(engine),
-                           leads=control_plane.all_leads(engine),
+    orgs = control_plane.all_orgs(engine)
+    snaps = console_data.snapshots(orgs)
+    rows = [dict(o, trial=billing.trial_state(o), snap=snaps.get(o['slug']))
+            for o in orgs]
+    return render_template('console/companies.html', rows=rows,
+                           leads=console_data.dedupe_leads(control_plane.all_leads(engine)),
                            me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/companies/<slug>')
+@console_required
+def company(slug):
+    """One company: who they are, what they pay, and whether it is working."""
+    import billing
+    import console_data
+    import tenant_data_lifecycle
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    if not org:
+        flash(f'No company at {slug}.', 'error')
+        return redirect(url_for('console.companies'))
+    readable = (org.get('status') or 'active') in console_data.READABLE
+    closed_at = org.get('closed_at')
+    return render_template(
+        'console/company.html', org=org, trial=billing.trial_state(org),
+        snap=console_data.snapshot(slug) if readable else None,
+        reports=[f for f in control_plane.all_feedback(engine)
+                 if f.get('org_slug') == slug][:20],
+        history=[r for r in control_plane.console_log_all(engine)
+                 if r.get('target') == slug][:20],
+        purge_from=(closed_at + timedelta(days=tenant_data_lifecycle.RETENTION_DAYS)
+                    if closed_at else None),
+        may_operate=_may_operate(),
+        me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/companies/<slug>/trial', methods=['POST'])
+@console_required
+def extend_trial(slug):
+    import console_data
+    here = url_for('console.company', slug=slug)
+    if not _may_operate():
+        return _refuse(here)
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    try:
+        days = int(request.form.get('days') or 0)
+    except ValueError:
+        days = 0
+    if not org or days not in (7, 14, 30):
+        flash('Pick 7, 14 or 30 days.', 'error')
+        return redirect(here)
+    if (org.get('subscription_status') or 'trialing').lower() != 'trialing':
+        flash('They are not on a trial — their plan is set by Stripe.', 'error')
+        return redirect(here)
+    ends = console_data.extended_trial_end(org, days)
+    control_plane.set_billing(engine, slug, trial_ends_at=ends)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'extended trial', slug,
+                              f'+{days} days, now ends {ends:%d %b %Y}')
+    flash(f'Trial extended by {days} days, to {ends:%d %b %Y}.', 'success')
+    return redirect(here)
+
+
+@console_bp.route('/companies/<slug>/suspend', methods=['POST'])
+@console_required
+def suspend_company(slug):
+    here = url_for('console.company', slug=slug)
+    if not _may_operate():
+        return _refuse(here)
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    reason = (request.form.get('reason') or '').strip()
+    if not org or org.get('status') != 'active':
+        flash('Only an active company can be suspended.', 'error')
+        return redirect(here)
+    if not reason:
+        # Somebody will ask why their business stopped working. The answer
+        # has to be written down by whoever did it, at the time.
+        flash('Say why — it goes in the record.', 'error')
+        return redirect(here)
+    control_plane.set_status(engine, slug, 'suspended')
+    control_plane.log_console(engine, request.console_user['email'],
+                              'suspended', slug, reason[:300])
+    flash(f'{org["name"]} is suspended. Nobody there can sign in until it is '
+          f'reactivated.', 'success')
+    return redirect(here)
+
+
+@console_bp.route('/companies/<slug>/reactivate', methods=['POST'])
+@console_required
+def reactivate_company(slug):
+    here = url_for('console.company', slug=slug)
+    if not _may_operate():
+        return _refuse(here)
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    if not org or org.get('status') != 'suspended':
+        # Closed is deliberately not reversible from here: closure starts the
+        # retention clock, and reopening is an operator decision made from a
+        # terminal (tenant_lifecycle_cli.py), not a button.
+        flash('Only a suspended company can be reactivated here.', 'error')
+        return redirect(here)
+    control_plane.set_status(engine, slug, 'active')
+    control_plane.log_console(engine, request.console_user['email'],
+                              'reactivated', slug)
+    flash(f'{org["name"]} is active again.', 'success')
+    return redirect(here)
+
+
+@console_bp.route('/leads.csv')
+@console_required
+def leads_csv():
+    """The early-access list, for a spreadsheet. Same columns as the CLI."""
+    import csv
+    import io
+    engine = _engine()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(['when', 'name', 'company', 'email', 'phone', 'cleaners',
+                'note', 'source', 'contacted'])
+    for r in control_plane.all_leads(engine):
+        w.writerow([_csv_safe(v) for v in (
+            r['created_at'].strftime('%Y-%m-%d %H:%M') if r.get('created_at') else '',
+            r.get('name'), r.get('company'), r.get('email'), r.get('phone'),
+            r.get('cleaners'), (r.get('note') or '').replace('\n', ' '),
+            r.get('source'),
+            r['contacted_at'].strftime('%Y-%m-%d') if r.get('contacted_at') else '')])
+    control_plane.log_console(engine, request.console_user['email'],
+                              'exported', 'early-access leads')
+    return Response(buf.getvalue(), mimetype='text/csv', headers={
+        'Content-Disposition': 'attachment; filename=akye-early-access.csv'})
+
+
+def _csv_safe(value):
+    """Stop a lead typed as `=HYPERLINK(...)` running as a formula in a sheet.
+
+    These are strangers' form entries opened in a spreadsheet by somebody with
+    access to every company, which is exactly who a formula injection wants.
+    """
+    text = '' if value is None else str(value)
+    return "'" + text if text[:1] in ('=', '+', '-', '@', '\t', '\r') else text
+
+
+@console_bp.route('/health')
+@console_required
+def health():
+    """Is the product working, for everybody, right now."""
+    import console_data
+    import tenant_data_lifecycle
+    import trial_nudges
+    engine = _engine()
+    orgs = control_plane.all_orgs(engine)
+    snaps = console_data.snapshots(orgs)
+    preview = trial_nudges.run(engine, dry_run=True)
+    names = {o['slug']: o['name'] for o in orgs}
+    closed = [dict(o, purge_from=o['closed_at'] + timedelta(
+                  days=tenant_data_lifecycle.RETENTION_DAYS))
+              for o in orgs if o.get('status') == 'closed' and o.get('closed_at')
+              and not o.get('purged_at')]
+    job_labels = [(key, label) for key, label, _b, _c in _automation_jobs()]
+    return render_template(
+        'console/health.html', orgs=[o for o in orgs if o['slug'] in snaps],
+        snaps=snaps, job_labels=job_labels, mail=product.mail_status(),
+        nudges=preview.get('plan') or [], names=names, closed=closed,
+        may_operate=_may_operate(), me=request.console_user,
+        counts=_counts(engine))
+
+
+def _automation_jobs():
+    import automations
+    return automations.JOBS
+
+
+@console_bp.route('/health/test-email', methods=['POST'])
+@console_required
+def test_email():
+    """Send the product's own email to whoever pressed the button."""
+    import notifications
+    engine = _engine()
+    me = request.console_user
+    st = product.mail_status()
+    if not st['applies'] or st['problem']:
+        flash(st['problem'] or 'This deployment has no product email to test.', 'error')
+        return redirect(url_for('console.health'))
+    ok, detail = notifications.send_email(
+        me['email'], me.get('name') or 'there', f'{product.name()} test email',
+        '<p>If you are reading this, the product can send email: the same '
+        'path as trial reminders and crash alerts.</p>',
+        from_name=product.name(), from_email=st['from'], reply_to=st['to'],
+        api_key=product.resend_api_key())
+    control_plane.log_console(engine, me['email'], 'test email',
+                              me['email'], 'accepted' if ok else f'failed: {detail}'[:300])
+    if ok:
+        flash(f'Accepted by the provider. Check {me["email"]} — accepted is not '
+              f'the same as arrived.', 'success')
+    else:
+        flash(f'Not sent: {detail}', 'error')
+    return redirect(url_for('console.health'))
+
+
+@console_bp.route('/health/trial-emails', methods=['POST'])
+@console_required
+def send_trial_emails():
+    """Send the trial reminders due today. Each is recorded, so twice is safe."""
+    import trial_nudges
+    if not _may_operate():
+        return _refuse(url_for('console.health'))
+    engine = _engine()
+    counts = trial_nudges.run(engine)
+    plan = counts.get('plan') or []
+    sent = len(plan) - counts.get('failed', 0)
+    control_plane.log_console(
+        engine, request.console_user['email'], 'sent trial emails',
+        f'{sent} sent', ', '.join(f'{slug}:{kind}' for slug, kind, _e in plan)[:400])
+    if counts.get('failed'):
+        flash(f'{sent} sent, {counts["failed"]} failed — they stay due and can be '
+              f'sent again.', 'error')
+    else:
+        flash(f'{sent} trial email{"s" if sent != 1 else ""} sent.', 'success')
+    return redirect(url_for('console.health'))
 
 
 @console_bp.route('/funnel')
@@ -324,11 +555,15 @@ def nana_proposals():
     always scoped correctly; the leak was in the Python object cache sitting
     in front of it.
     """
+    import console_data
     import tenancy
     from extensions import db
     from models import AssistantProposal
     engine = _engine()
-    orgs = [o for o in control_plane.all_orgs(engine) if o.get('status') != 'closed']
+    # schema_ready: without it a company with no schema is read from `public`
+    # and somebody else's proposals are shown under its name.
+    orgs = [o for o in control_plane.all_orgs(engine) if o.get('status') != 'closed'
+            and console_data.schema_ready(o['slug'])]
 
     rows = []
     by_action = {}

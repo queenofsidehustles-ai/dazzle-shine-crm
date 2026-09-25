@@ -89,7 +89,7 @@
 <div class="fn-scroll"><table class="con">
   <tr><th>Company</th><th>Owner</th><th>Days left</th></tr>
   {% for o in fu.ending %}
-  <tr><td>{{ o.name }}</td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td><td class="fn-num">{{ o.days_left }}</td></tr>
+  <tr><td><a href="{{ url_for('console.company', slug=o.slug) }}">{{ o.name }}</a></td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td><td class="fn-num">{{ o.days_left }}</td></tr>
   {% endfor %}
 </table></div>
 {% endif %}
@@ -99,7 +99,7 @@
 <div class="fn-scroll"><table class="con">
   <tr><th>Company</th><th>Owner</th><th>Plan</th></tr>
   {% for o in fu.failing %}
-  <tr><td>{{ o.name }}</td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td><td>{{ o.plan }}</td></tr>
+  <tr><td><a href="{{ url_for('console.company', slug=o.slug) }}">{{ o.name }}</a></td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td><td>{{ o.plan }}</td></tr>
   {% endfor %}
 </table></div>
 {% endif %}
@@ -109,7 +109,7 @@
 <div class="fn-scroll"><table class="con">
   <tr><th>Company</th><th>Owner</th><th>Signed up</th><th>Days left to start</th></tr>
   {% for o in fu.not_started %}
-  <tr><td>{{ o.name }}</td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td>
+  <tr><td><a href="{{ url_for('console.company', slug=o.slug) }}">{{ o.name }}</a></td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td>
       <td>{{ o.created_at.strftime('%d %b') if o.created_at }}</td><td class="fn-num">{{ o.days_left }}</td></tr>
   {% endfor %}
 </table></div>

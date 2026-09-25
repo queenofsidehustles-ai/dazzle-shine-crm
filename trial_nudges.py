@@ -83,7 +83,9 @@ def due(org, now=None):
     """
     if not org:
         return None
-    if org.get('status') == 'suspended':
+    if org.get('status') in ('suspended', 'closing', 'closed'):
+        # A closed company is being wound down, not courted: "your trial is
+        # ending" to somebody whose account was closed is worse than silence.
         return None
 
     state = billing.trial_state(org)

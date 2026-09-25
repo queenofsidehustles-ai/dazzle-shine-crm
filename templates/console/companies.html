@@ -1,38 +1,63 @@
 {% extends "console/_shell.html" %}
 {% block title %}Companies{% endblock %}
 {% block body %}
+{% include "console/_ops_style.html" %}
 <h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Companies ({{ rows|length }})</h2>
 {% if rows %}
-<table class="con">
-  <tr><th>Address</th><th>Name</th><th>Plan</th><th>Status</th><th>Since</th></tr>
+<div class="ops-scroll"><table class="con">
+  <tr><th>Company</th><th>Status</th><th>Trial / plan</th><th>Last sign-in</th>
+      <th>Last 30 days</th><th>Needs a look</th></tr>
   {% for r in rows %}
+  {% set s = r.snap %}
   <tr>
-    <td><a href="https://{{ r.slug }}.{{ PRODUCT_DOMAIN }}" target="_blank">{{ r.slug }}</a></td>
-    <td>{{ r.name }}</td>
-    <td>{{ r.plan or 'solo' }}</td>
-    <td>{{ r.subscription_status or r.status }}</td>
-    <td>{{ r.created_at.strftime('%d %b %Y') if r.created_at }}</td>
+    <td><a href="{{ url_for('console.company', slug=r.slug) }}"><strong>{{ r.name }}</strong></a>
+        <br><span class="ops-dim">{{ r.slug }}{% if r.owner_email %} · {{ r.owner_email }}{% endif %}</span></td>
+    <td><span class="ops-badge ops-{{ r.status }}">{{ r.status }}</span>
+        {% if r.grandfathered %}<br><span class="ops-dim">grandfathered</span>{% endif %}</td>
+    <td>
+      {% if r.trial %}
+        {% if r.trial.phase == 'over' %}<span class="ops-bad">trial over</span>
+        {% elif r.trial.phase == 'not_started' %}not started · {{ r.trial.days_left }}d to start
+        {% else %}{{ r.trial.days_left }}d left{% endif %}
+      {% else %}{{ r.plan or 'solo' }} · {{ r.subscription_status }}{% endif %}
+    </td>
+    <td>{% if s and s.ok %}{{ s.owner_last_login.strftime('%d %b') if s.owner_last_login else '—' }}{% else %}—{% endif %}</td>
+    <td>{% if s and s.ok %}{{ s.bookings_30d }} booked · {{ s.completed_30d }} done{% else %}—{% endif %}</td>
+    <td>
+      {% if s is none %}<span class="ops-dim">not read ({{ r.status }})</span>
+      {% elif not s.ok %}<span class="ops-bad">could not read</span>
+      {% else %}
+        {% if s.open_errors %}<span class="ops-bad">{{ s.open_errors }} error{{ 's' if s.open_errors != 1 }}</span>{% endif %}
+        {% if s.jobs_broken %}<span class="ops-bad">{{ s.jobs_broken }} automation{{ 's' if s.jobs_broken != 1 }}</span>{% endif %}
+        {% if not s.open_errors and not s.jobs_broken %}<span class="ops-good">fine</span>{% endif %}
+      {% endif %}
+    </td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 {% else %}
 <div class="con-empty">No companies yet.</div>
 {% endif %}
 
-<h2 style="font-size:1.05rem;margin:var(--s6) 0 var(--s3)">
-  Asked for early access ({{ leads|length }})</h2>
+<div style="display:flex;align-items:baseline;gap:var(--s4);margin:var(--s6) 0 var(--s3);flex-wrap:wrap">
+  <h2 style="font-size:1.05rem;margin:0">Asked for early access ({{ leads|length }})</h2>
+  {% if leads %}<a href="{{ url_for('console.leads_csv') }}" class="btn btn-outline btn-sm">Download CSV</a>{% endif %}
+  <a href="{{ url_for('console.funnel_view') }}" class="ops-dim">Follow-ups are on the Funnel page</a>
+</div>
 {% if leads %}
-<table class="con">
-  <tr><th>When</th><th>Name</th><th>Company</th><th>Email</th><th>Cleaners</th></tr>
+<div class="ops-scroll"><table class="con">
+  <tr><th>When</th><th>Name</th><th>Company</th><th>Email</th><th>Cleaners</th><th>Replied</th></tr>
   {% for l in leads %}
   <tr>
     <td>{{ l.created_at.strftime('%d %b') if l.created_at }}</td>
-    <td>{{ l.name }}</td><td>{{ l.company }}</td>
+    <td>{{ l.name }}{% if l.times > 1 %} <span class="ops-dim">asked {{ l.times }}×</span>{% endif %}</td>
+    <td>{{ l.company }}</td>
     <td><a href="mailto:{{ l.email }}">{{ l.email }}</a></td>
     <td>{{ l.cleaners }}</td>
+    <td>{{ l.contacted_at.strftime('%d %b') if l.contacted_at else '—' }}</td>
   </tr>
   {% endfor %}
-</table>
+</table></div>
 {% else %}
 <div class="con-empty">Nobody has asked yet.</div>
 {% endif %}
