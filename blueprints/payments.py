@@ -252,7 +252,7 @@ def verify_intent_for_booking(booking, pi_id, kind):
     return pi, None
 
 
-def mark_deposit_paid(booking, req=None, amount_cents=None):
+def mark_deposit_paid(booking, req=None, amount_cents=None, method='card', when=None, notify=True):
     """Record a paid deposit and tell the customer — exactly once.
 
     Three separate things can land here for the same $50: the browser posting to
@@ -269,23 +269,30 @@ def mark_deposit_paid(booking, req=None, amount_cents=None):
     the one that notified the customer.
 
     amount_cents is what Stripe actually took, when the caller knows it. A
-    receipt should quote the charge, not what we meant to charge."""
+    receipt should quote the charge, not what we meant to charge.
+
+    method and when let the back office record a deposit that never touched
+    Stripe — cash, Zelle, Venmo, a check — so it still shows up in what has
+    been collected and never gets charged again to a saved card later.
+    notify=False records the money without emailing a receipt, for a deposit
+    already receipted by hand."""
+    from pricing import get_deposit
     # Read before writing. collected() falls back to the deposit fields when the
     # running total is NULL, so a total worked out after they are set would
     # count this deposit as already received and then add it again.
     already = collected(booking)
     booking.deposit_paid = True
     if not booking.deposit_paid_at:
-        booking.deposit_paid_at = datetime.utcnow()
+        booking.deposit_paid_at = when or datetime.utcnow()
     # Pin what was actually charged. Stripe's own figure when the caller knows
     # it, otherwise the deposit in force right now -- which is what was quoted,
     # because this runs moments after the customer was shown it. Written once
     # and never revised: a later change to the setting must not rewrite what
     # somebody already paid.
     if booking.deposit_amount_paid is None:
-        from pricing import get_deposit
         booking.deposit_amount_paid = (round((amount_cents or 0) / 100, 2)
                                        or float(get_deposit()))
+        booking.deposit_method = method
         # And count it towards what has been received. Inside this guard on
         # purpose: the browser and the webhook both land here for the same $50,
         # and a running total that added it twice would report a job as paid
@@ -310,6 +317,8 @@ def mark_deposit_paid(booking, req=None, amount_cents=None):
         import customer_terms
         customer_terms.record_acceptance(booking, req)
 
+    if not notify:
+        return False
     if booking.deposit_notified_at:
         return False
     # A job already settled in full has had its receipt from mark_paid, which
@@ -411,7 +420,7 @@ def _send_deposit_receipt(booking, amount):
     <tr><td style="padding:6px 0;color:#6b6580">Deposit paid</td>
         <td style="padding:6px 0;text-align:right"><strong>${amount:.2f}</strong></td></tr>{date_row}
     <tr><td style="padding:6px 0;color:#6b6580">Paid by</td>
-        <td style="padding:6px 0;text-align:right">Card</td></tr>
+        <td style="padding:6px 0;text-align:right">{(booking.deposit_method or 'card').title()}</td></tr>
     <tr><td style="padding:6px 0;color:#6b6580">Booking reference</td>
         <td style="padding:6px 0;text-align:right">#{booking.id}</td></tr>
     <tr><td style="padding:10px 0 0;border-top:1px solid #ece8f5;color:#6b6580">Balance due on the day</td>

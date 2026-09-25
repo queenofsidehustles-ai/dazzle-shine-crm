@@ -1255,6 +1255,40 @@ def mark_paid_route(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+@bookings_bp.route('/<int:booking_id>/mark-deposit-paid', methods=['POST'])
+@login_required
+def mark_deposit_paid_route(booking_id):
+    """Record a deposit paid outside Stripe — cash, Zelle, Venmo, a check —
+    without touching the rest of the balance. Unlike mark_paid_route, this
+    credits only the deposit amount, so amount_due() still asks for the true
+    remainder afterwards instead of reporting the job settled, and a saved
+    card on file is never auto-charged for money already collected by hand."""
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.deposit_paid:
+        flash('This booking already has a deposit recorded.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    method = request.form.get('method', 'cash')
+    when = _payment_date(request.form.get('paid_on'), booking)
+    from pricing import get_deposit
+    try:
+        amount = float(request.form.get('amount') or 0)
+    except ValueError:
+        amount = 0
+    if amount <= 0:
+        amount = float(get_deposit())
+    notify = bool(request.form.get('send_receipt'))
+    from blueprints.payments import mark_deposit_paid
+    try:
+        mark_deposit_paid(booking, amount_cents=int(round(amount * 100)),
+                           method=method, when=when, notify=notify)
+        flash(f'Deposit of ${amount:.2f} recorded ✅ ({method}) — dated {when.strftime("%b %-d, %Y")}.'
+              + ('' if notify else ' No receipt was sent.'), 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Could not record the deposit.', 'error')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
 def _payment_date(raw, booking=None):
     """Parse the date money changed hands: what she typed, else the job's own
     date, else now."""
