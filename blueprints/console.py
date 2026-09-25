@@ -102,7 +102,7 @@ def logout():
     return redirect(url_for('console.login'))
 
 
-@console_bp.route('/')
+@console_bp.route('/', strict_slashes=False)
 @console_required
 def inbox():
     """What the beta said, newest first."""

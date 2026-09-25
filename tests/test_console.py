@@ -137,6 +137,32 @@ check("'refused'" in src, 'including attempts that were turned down')
 log_page = open(os.path.join(ROOT, 'templates', 'console', 'log.html')).read()
 check('Everybody with access can read this' in log_page,
       'and everybody can read it, not only the owner')
+
+print('\n8. /console matches directly, without a redirect some mobile carrier '
+      'proxies mangle into a 404')
+# Reported live: akyehq.com/console/ worked, akyehq.com/console (no slash)
+# 404'd -- but only on cellular data, never on desktop or in incognito on the
+# same network as desktop. Root cause: Werkzeug's default trailing-slash
+# redirect for a route ending in '/' is a 308, which some carrier data-saver
+# proxies don't forward correctly. strict_slashes=False makes both paths hit
+# the same rule directly -- no redirect in flight for a proxy to mishandle.
+check("@console_bp.route('/', strict_slashes=False)" in src,
+      'the console root route disables strict_slashes')
+os.environ['DATABASE_URL'] = os.environ.get(
+    'TEST_POSTGRES_URL', 'postgresql://app_user:localtest@127.0.0.1:5432/postgres')
+os.environ['FLASK_ENV'] = 'development'
+os.environ.pop('BASE_DOMAIN', None)
+import notifications
+notifications.send_sms = lambda *a, **k: (True, 'stub')
+notifications.send_email = lambda *a, **k: (True, 'stub')
+from app import create_app
+app = create_app()
+client = app.test_client()
+for path in ('/console', '/console/'):
+    r = client.get(path, follow_redirects=False)
+    check(r.status_code == 302 and '/console/login' in (r.headers.get('Location') or ''),
+          f'{path!r} redirects straight to login -- no intermediate 308')
+
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')
