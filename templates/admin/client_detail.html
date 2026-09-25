@@ -12,23 +12,8 @@
 {% endblock %}
 
 {% block content %}
-<style>
-  /* Drag-to-reorder for the stacked info cards on this page. The handle is
-     the only thing draggable="true" reacts to -- see the JS below -- so
-     dragging never fights with selecting the portal link or clicking a
-     button inside the card. */
-  .card[data-card-key] { position:relative; }
-  .card-drag-handle {
-    position:absolute; top:14px; right:14px; cursor:grab; user-select:none;
-    color:var(--softer); font-size:1rem; line-height:1; padding:4px 6px;
-    border-radius:6px;
-  }
-  .card-drag-handle:hover { background:var(--ground); color:var(--muted); }
-  .card[data-card-key].dragging { opacity:0.45; }
-  .card[data-card-key].drag-over { box-shadow:inset 0 2px 0 var(--amber-deep); }
-</style>
 <div class="detail-grid">
-  <div id="clientCards">
+  <div id="clientCards" data-reorder="clientDetailCardOrder" data-reorder-col="main">
     <div class="card" data-card-key="contact" style="margin-bottom:18px">
       <span class="card-drag-handle" draggable="true" title="Drag to reorder" style="right:38px">⠿</span>
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;padding-right:26px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
@@ -196,75 +181,4 @@
   </div>
 </div>
 
-<script>
-// Drag-to-reorder for the stacked cards above -- remembered per browser,
-// not per client. Nothing here is business data: it is which order one
-// person likes to see their own boxes in, so it belongs in localStorage
-// rather than a database column nobody else needs to read.
-(function () {
-  var container = document.getElementById('clientCards');
-  if (!container) return;
-  var STORAGE_KEY = 'clientDetailCardOrder';
-  var cards = function () { return Array.prototype.slice.call(
-    container.querySelectorAll(':scope > [data-card-key]')); };
-
-  // Apply a saved order, if there is one. A key this page has never heard
-  // of (an old card renamed, a stale value) is simply ignored -- the cards
-  // stay in the order the template rendered them in.
-  try {
-    var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (Array.isArray(saved)) {
-      saved.forEach(function (key) {
-        var el = container.querySelector('[data-card-key="' + key + '"]');
-        if (el) container.appendChild(el);
-      });
-    }
-  } catch (e) { /* a corrupted value is not worth losing the page over */ }
-
-  function save() {
-    try {
-      localStorage.setItem(STORAGE_KEY,
-        JSON.stringify(cards().map(function (c) { return c.dataset.cardKey; })));
-    } catch (e) { /* private browsing, full storage -- the drag itself still worked */ }
-  }
-
-  var dragging = null;
-  container.querySelectorAll('.card-drag-handle').forEach(function (handle) {
-    handle.addEventListener('dragstart', function (e) {
-      dragging = handle.closest('[data-card-key]');
-      dragging.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      // Firefox will not fire subsequent drag events without this.
-      e.dataTransfer.setData('text/plain', dragging.dataset.cardKey);
-    });
-    handle.addEventListener('dragend', function () {
-      if (dragging) dragging.classList.remove('dragging');
-      cards().forEach(function (c) { c.classList.remove('drag-over'); });
-      dragging = null;
-      save();
-    });
-  });
-
-  cards().forEach(function (card) {
-    card.addEventListener('dragover', function (e) {
-      if (!dragging || dragging === card) return;
-      e.preventDefault();
-      card.classList.add('drag-over');
-    });
-    card.addEventListener('dragleave', function () {
-      card.classList.remove('drag-over');
-    });
-    card.addEventListener('drop', function (e) {
-      if (!dragging || dragging === card) return;
-      e.preventDefault();
-      card.classList.remove('drag-over');
-      // Above or below the target, by which half of it was dropped on --
-      // dropping near the top of a card means "before it", not "after".
-      var before = (e.clientY - card.getBoundingClientRect().top) <
-        card.getBoundingClientRect().height / 2;
-      container.insertBefore(dragging, before ? card : card.nextSibling);
-    });
-  });
-})();
-</script>
 {% endblock %}

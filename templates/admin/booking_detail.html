@@ -6,11 +6,11 @@
 {% endblock %}
 
 {% block content %}
-<div class="detail-grid">
+<div class="detail-grid" data-reorder="bookingDetailCardOrder">
 
   <!-- LEFT: Client & Service Info -->
-  <div style="display:flex;flex-direction:column;gap:18px">
-    <div class="card">
+  <div data-reorder-col="left">
+    <div class="card" data-card-key="customer">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
         Client Info
         <a href="#" onclick="document.getElementById('contactBox').open=true;this.blur();return false"
@@ -140,7 +140,7 @@
       {% endif %}
     </div>
 
-    <div class="card">
+    <div class="card" data-card-key="service">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
         Service Details
         <a href="#" onclick="document.getElementById('serviceBox').open=true;this.blur();return false"
@@ -261,8 +261,8 @@
   </div>
 
   <!-- RIGHT: Edit Status & Notes -->
-  <div>
-    <div class="card">
+  <div data-reorder-col="right">
+    <div class="card" data-card-key="manage">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Manage Booking</h2>
       <form method="POST" id="jobEditForm">
         <div class="form-group">
@@ -415,7 +415,7 @@
     <form method="POST" id="adCostForm" action="{{ url_for('bookings.log_ad_cost', booking_id=booking.id) }}"></form>
 
     <!-- Crew — big houses that need more than one cleaner -->
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="crew-pay" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">👥 Who's Paid For This Job</h2>
       <form method="POST" action="{{ url_for('bookings.save_crew', booking_id=booking.id) }}">
         {# The pot. Person-hours x the hourly rate — deliberately nothing to do
@@ -689,7 +689,7 @@
     </div>
 
     <!-- Offer to the team (first to claim wins) -->
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="offer-team" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">📣 Offer to the Team</h2>
       {% if booking.open_for_claim %}
       <div style="background:var(--info-soft);border:1px solid var(--info-soft);color:var(--info);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
@@ -720,7 +720,7 @@
        confirm a cleaning already done — or one they cancelled — is nonsense. #}
     {% if booking.status in ['pending', 'confirmed'] %}
     <!-- Ask the customer to confirm -->
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="waiting-customer" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🤝 Waiting On The Customer</h2>
       {% if booking.confirm_response == 'yes' %}
         <p style="color:var(--good);font-size:0.9rem;margin:0">✅ They confirmed on {{ booking.confirm_responded_at.strftime('%d %B') }}.</p>
@@ -790,7 +790,7 @@
 
     {% if plan_suggestion %}
     <!-- Recurring cleaning after a one-off job -->
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="recurring-cleaning" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Recurring Cleaning</h2>
       <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
         Is this the first clean before a regular schedule? Set the recurring visits up here.
@@ -840,7 +840,7 @@
 
     {% if booking.frequency not in ['one_time', None] %}
     <!-- Recurring plan -->
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="recurring-plan" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Recurring Plan</h2>
       {% if booking.recurring_group and booking.recurring_active %}
       <div style="background:var(--good-soft);border:1px solid var(--good-soft);color:var(--good);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
@@ -913,7 +913,7 @@
     {% endif %}
 
     <!-- Work Order Card -->
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="work-order" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Work Order / Checklist</h2>
       {% set templates = [] %}
       <form method="POST" action="{{ url_for('workorders.send_workorder', booking_id=booking.id) }}" style="display:flex;gap:8px;flex-wrap:wrap">
@@ -944,7 +944,7 @@
     {% endfor %}
     {% set photo_jc = ns.photo_jc %}
     {% if photo_jc %}
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="job-photos" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
         Job Photos
         {% if photo_jc.photos_submitted_at %}
@@ -983,7 +983,7 @@
        cron charges her card and sends a cleaner to an empty house, or cancel it
        and sever her deposit from the work. #}
     {% if booking.is_held %}
-    <div class="card" style="margin-top:18px;border:1px solid var(--amber-line);background:var(--amber-soft)">
+    <div class="card" data-card-key="on-hold" style="margin-top:18px;border:1px solid var(--amber-line);background:var(--amber-soft)">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--amber-deep);text-transform:uppercase;letter-spacing:0.12em">⏸️ On hold</h2>
       <p style="font-size:0.86rem;color:var(--amber-deep);margin:0 0 4px">
         Paused {{ booking.held_at.strftime('%b %-d, %Y') if booking.held_at else '' }} —
@@ -1013,7 +1013,7 @@
       </form>
     </div>
     {% elif booking.status not in ('completed', 'cancelled') %}
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="put-on-hold" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">⏸️ Put this on hold</h2>
       <p style="font-size:0.82rem;color:var(--muted);margin:0 0 10px">
         For a customer who needs to move the clean but hasn't picked a day. It comes
@@ -1032,7 +1032,7 @@
     {% endif %}
 
     <!-- Balance Collection Card -->
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="payment" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">💳 Payment</h2>
 
       {# "Paid" is now a question about money, not a flag: the price can go up
@@ -1212,7 +1212,7 @@
       {% endif %}
     </div>
 
-    <div class="card" style="margin-top:18px">
+    <div class="card" data-card-key="balance" style="margin-top:18px">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Balance Collection <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.78rem">(saved-card auto-charge)</span></h2>
       <div class="detail-row"><span class="dl">Total Price</span><span class="dv">${{ '%.2f' % (booking.price or 0) }}</span></div>
       {# The deposit this booking actually paid. This row printed a flat $50.00
