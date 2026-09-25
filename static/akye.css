@@ -779,6 +779,21 @@ a.money-cell:hover { background:var(--ground); }
   color:var(--softer); font-size:1rem; line-height:1; padding:4px 6px; border-radius:6px;
 }
 .card-drag-handle:hover { background:var(--ground); color:var(--muted); }
+/* ▲ ▼ for touch screens, where the drag above cannot work: shown only there,
+   with the grips hidden since they do nothing under a finger. */
+.card-move { display:none; }
+@media (hover: none) and (pointer: coarse) {
+  .card-move { display:flex; justify-content:flex-end; gap:8px; margin:-4px -4px 8px 0; }
+  .card-move-btn {
+    min-width:44px; min-height:40px; padding:0 10px; font-size:1rem; line-height:1;
+    color:var(--muted); background:var(--surface); border:1px solid var(--line);
+    border-radius:10px; cursor:pointer;
+  }
+  .card-move-btn:active { background:var(--ground); }
+  .card-move-btn:disabled { opacity:0.35; cursor:default; }
+  .card-grip, .card-drag-handle { display:none; }
+  .card-drag-title { cursor:auto; }
+}
 .detail-row, .dl {
   display:grid; grid-template-columns:minmax(120px,34%) 1fr;
   gap:var(--s3) var(--s4); padding:var(--s3) 0;

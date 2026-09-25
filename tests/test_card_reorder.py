@@ -51,6 +51,13 @@ js = read('static/card-reorder.js')
 check('Array.isArray(saved)' in js,
       'an order saved by the old single-list format is still read')
 check("'ArrowUp'" in js and "'ArrowLeft'" in js, 'cards can be moved with the keyboard')
+check("card-move-btn" in js and 'aria-label' in js,
+      'every card gets labelled ▲ ▼ buttons for touch screens')
+css = read('static/akye.css')
+touch = css[css.index('@media (hover: none) and (pointer: coarse)'):]
+check('.card-move { display:none; }' in css and '.card-move { display:flex' in touch,
+      'the buttons are hidden by default and shown only on touch screens')
+check('min-width:44px' in touch, 'and are big enough to tap')
 
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
