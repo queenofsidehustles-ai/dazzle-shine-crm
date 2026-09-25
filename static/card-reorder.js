@@ -13,6 +13,12 @@
  *
  * Keyboard: focus a card's title, then the arrow keys move it up and down,
  * or left and right between columns.
+ *
+ * Phones and tablets cannot drag this way, so each card also gets a ▲ ▼
+ * pair, shown only on touch screens (see .card-move in akye.css). The
+ * columns stack into one list there, so moving up from the top of one
+ * column lands at the bottom of the column above it, and every position on
+ * the page is reachable.
  */
 (function () {
   'use strict';
@@ -84,6 +90,63 @@
     if (!key || !cols.length) return;
     restore(board, key, cols);
 
+    // One step up (-1) or down (+1) in the page as it reads top to bottom:
+    // past the end of a column, into the next one.
+    function step(card, dir) {
+      var col = card.parentElement;
+      var sib = dir < 0 ? card.previousElementSibling : card.nextElementSibling;
+      while (sib && !sib.hasAttribute('data-card-key')) {
+        sib = dir < 0 ? sib.previousElementSibling : sib.nextElementSibling;
+      }
+      if (sib) {
+        col.insertBefore(card, dir < 0 ? sib : sib.nextSibling);
+        return true;
+      }
+      var next = cols[cols.indexOf(col) + dir];
+      if (!next) return false;
+      if (dir < 0) next.appendChild(card); else next.insertBefore(card, next.firstChild);
+      return true;
+    }
+
+    function allCards() {
+      return cols.reduce(function (acc, col) { return acc.concat(cardsOf(col)); }, []);
+    }
+
+    function refreshButtons() {
+      var all = allCards();
+      all.forEach(function (card, i) {
+        var up = card.querySelector(':scope > .card-move > [data-dir="-1"]');
+        var down = card.querySelector(':scope > .card-move > [data-dir="1"]');
+        if (up) up.disabled = i === 0;
+        if (down) down.disabled = i === all.length - 1;
+      });
+    }
+
+    function addButtons(card) {
+      var title = card.querySelector(':scope > h2, :scope > h3');
+      var name = title ? title.textContent.replace('⠿', '').trim().replace(/\s+/g, ' ').slice(0, 40)
+                       : 'this box';
+      var row = document.createElement('div');
+      row.className = 'card-move';
+      [[-1, '▲', 'up'], [1, '▼', 'down']].forEach(function (b) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'card-move-btn';
+        btn.setAttribute('data-dir', String(b[0]));
+        btn.setAttribute('aria-label', 'Move "' + name + '" ' + b[2]);
+        btn.textContent = b[1];
+        btn.addEventListener('click', function () {
+          if (!step(card, b[0])) return;
+          save(key, cols);
+          refreshButtons();
+          btn.focus();
+          card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
+        row.appendChild(btn);
+      });
+      card.insertBefore(row, card.firstChild);
+    }
+
     var dragging = null;
     function clearMarks() {
       board.querySelectorAll('.drag-over, .drag-over-col').forEach(function (el) {
@@ -94,6 +157,7 @@
     cols.forEach(function (col) {
       cardsOf(col).forEach(function (card) {
         var handle = handleFor(card);
+        addButtons(card);
         handle.setAttribute('draggable', 'true');
         handle.setAttribute('tabindex', '0');
         handle.setAttribute('title', 'Drag to move this box — or focus it and use the arrow keys');
@@ -110,17 +174,16 @@
           clearMarks();
           dragging = null;
           save(key, cols);
+          refreshButtons();
         });
 
         handle.addEventListener('keydown', function (e) {
           var colIndex = cols.indexOf(card.parentElement);
           var moved = false;
-          if (e.key === 'ArrowUp' && card.previousElementSibling) {
-            card.parentElement.insertBefore(card, card.previousElementSibling);
-            moved = true;
-          } else if (e.key === 'ArrowDown' && card.nextElementSibling) {
-            card.parentElement.insertBefore(card.nextElementSibling, card);
-            moved = true;
+          if (e.key === 'ArrowUp') {
+            moved = step(card, -1);
+          } else if (e.key === 'ArrowDown') {
+            moved = step(card, 1);
           } else if (e.key === 'ArrowLeft' && colIndex > 0) {
             cols[colIndex - 1].appendChild(card);
             moved = true;
@@ -132,6 +195,7 @@
             e.preventDefault();
             handle.focus();
             save(key, cols);
+            refreshButtons();
           }
         });
 
@@ -170,6 +234,7 @@
         clearMarks();
       });
     });
+    refreshButtons();
   }
 
   function start() {
