@@ -36,6 +36,26 @@ def _org_or_404():
     return org
 
 
+# Every limit entitlements.py tracks, in the order the comparison table shows
+# them. Reads LIMIT_LABELS rather than repeating its keys, so a limit added
+# there appears here without this file needing to change.
+PLAN_ORDER = ('solo', 'pro', 'scale')
+
+
+def _limit_rows():
+    return [(key, label) for key, label in entitlements.LIMIT_LABELS.items()]
+
+
+def _feature_rows():
+    """Every feature gated on some plan below Scale, in FEATURE_LABELS' own
+    order. Scale's 'everything' and the still-unassigned labels in
+    FEATURE_LABELS (nothing gates them on any plan yet) are deliberately left
+    off a page whose job is to show what upgrading actually buys."""
+    gated = set(entitlements.PLANS['pro']['features'] or set())
+    return [(key, label) for key, label in entitlements.FEATURE_LABELS.items()
+            if key in gated]
+
+
 @billing_bp.route('/upgrade')
 @login_required
 def upgrade():
@@ -47,9 +67,20 @@ def upgrade():
     label = entitlements.FEATURE_LABELS.get(
         feature, feature.replace('_', ' ').capitalize() if feature else '')
     need = entitlements.plan_for_feature(feature) if feature else 'pro'
+
+    limit_rows = _limit_rows()
+    feature_rows = _feature_rows()
+    limit_table = {key: {p: entitlements.PLANS[p]['limits'][key] for p in PLAN_ORDER}
+                  for key, _ in limit_rows}
+    feature_table = {key: {p: entitlements.plan_can(p, key) for p in PLAN_ORDER}
+                     for key, _ in feature_rows}
+
     return render_template('admin/upgrade.html',
                            feature=feature, feature_label=label,
                            need=need, plans=entitlements.PLANS,
+                           plan_order=PLAN_ORDER,
+                           limit_rows=limit_rows, feature_rows=feature_rows,
+                           limit_table=limit_table, feature_table=feature_table,
                            state=entitlements.state(),
                            can_pay=billing.configured())
 

@@ -280,18 +280,26 @@ def _clear_cache():
 # The questions the rest of the app asks
 # ---------------------------------------------------------------------------
 
-def can(feature):
-    """May this business use this feature right now?"""
-    plan = effective_plan()
-    if PLANS[plan]['features'] is None:      # top plan: everything
+def plan_can(plan, feature):
+    """May a plan use this feature -- any plan, not only the caller's own.
+
+    `can()` is this asked about the business making the request; the pricing
+    page asks it about all three plans at once to draw the comparison, which
+    is a different question with the same answer for the plan actually in
+    effect. Pulled out rather than duplicated so the two can never drift."""
+    if plan not in PLANS or PLANS[plan]['features'] is None:  # top plan: everything
         return True
-    # A feature is available on a plan if that plan or any lower one grants it.
     for name, cfg in PLANS.items():
         if RANK[name] > RANK[plan]:
             continue
         if cfg['features'] is None or feature in cfg['features']:
             return True
     return False
+
+
+def can(feature):
+    """May this business use this feature right now?"""
+    return plan_can(effective_plan(), feature)
 
 
 def plan_for_feature(feature):
