@@ -18,11 +18,11 @@
   <form method="POST">
     <div class="form-group">
       <label for="name">Name</label>
-      <input id="name" name="name" value="{{ form.get('name', '') }}"
+      <input type="text" id="name" name="name" value="{{ form.get('name', '') }}"
              autocomplete="off" autofocus required />
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)">
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s4)">
       <div class="form-group">
         <label for="phone">Phone <span class="dim">— optional</span></label>
         <input id="phone" name="phone" type="tel" value="{{ form.get('phone', '') }}" />
@@ -36,19 +36,19 @@
 
     <div class="form-group">
       <label for="address">Address <span class="dim">— optional</span></label>
-      <input id="address" name="address" value="{{ form.get('address', '') }}"
+      <input type="text" id="address" name="address" value="{{ form.get('address', '') }}"
              placeholder="Street address" />
       <span class="hint">This is what your cleaner sees and navigates to.</span>
     </div>
 
-    <div style="display:grid;grid-template-columns:2fr 1fr;gap:var(--s4)">
+    <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:var(--s4)">
       <div class="form-group">
         <label for="city">Town or city <span class="dim">— optional</span></label>
-        <input id="city" name="city" value="{{ form.get('city', '') }}" />
+        <input type="text" id="city" name="city" value="{{ form.get('city', '') }}" />
       </div>
       <div class="form-group">
         <label for="zip_code">ZIP <span class="dim">— optional</span></label>
-        <input id="zip_code" name="zip_code" value="{{ form.get('zip_code', '') }}" />
+        <input type="text" id="zip_code" name="zip_code" value="{{ form.get('zip_code', '') }}" />
       </div>
     </div>
 
