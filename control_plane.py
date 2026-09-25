@@ -514,6 +514,17 @@ def all_leads(engine):
         return []
 
 
+def mark_lead_contacted(engine, lead_id):
+    """Somebody has replied to this lead. Keeps the first time, if pressed twice."""
+    with engine.begin() as conn:
+        result = conn.execute(
+            update(product_leads)
+            .where(product_leads.c.id == lead_id,
+                   product_leads.c.contacted_at.is_(None))
+            .values(contacted_at=datetime.utcnow()))
+        return result.rowcount > 0
+
+
 
 # --------------------------------------------------------------------------
 # Feedback
