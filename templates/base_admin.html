@@ -148,8 +148,24 @@
       </form>
       {% endif %}
 
-      <div>{% block topbar_right %}{% endblock %}</div>
+      <div class="topbar-right">{% block topbar_right %}{% endblock %}</div>
     </div>
+    <script>
+      // The section tabs stick just under the topbar. Its height changes --
+      // a long title, or on a phone the actions dropping to their own row --
+      // so the tabs are told where it ends rather than assuming 57px and
+      // sliding underneath it.
+      (function () {
+        var bar = document.querySelector('.topbar');
+        if (!bar) return;
+        function set() {
+          document.documentElement.style.setProperty('--topbar-h', bar.offsetHeight + 'px');
+        }
+        set();
+        if (window.ResizeObserver) new ResizeObserver(set).observe(bar);
+        else window.addEventListener('resize', set);
+      })();
+    </script>
     {# The pages that used to be their own sidebar entries. One section, one
        menu item, its pages as tabs. #}
     {% if NAV_TABS %}

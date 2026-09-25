@@ -383,7 +383,7 @@ a.stat-card:hover { border-color: var(--amber-line); }
   background: var(--surface); border-bottom: 1px solid var(--line);
   padding: 0 var(--s8); display: flex; gap: var(--s1);
   overflow-x: auto; scrollbar-width: none;
-  position: sticky; top: 57px; z-index: 4;
+  position: sticky; top: var(--topbar-h, 57px); z-index: 4;
 }
 .section-tabs::-webkit-scrollbar { display: none; }
 .section-tabs a {
@@ -552,9 +552,27 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ── Phones ───────────────────────────────────────────────────────────── */
 
+/* The page's own buttons ("← All Bookings", "Delete Client") drop to a row
+ * of their own on a phone rather than running off the right-hand edge. The
+ * section tabs follow the topbar's real height (--topbar-h, set in
+ * base_admin.html), so a taller topbar never slides over them. */
+.topbar-right:empty { display: none; }
+@media (max-width: 600px) {
+  .topbar { flex-wrap: wrap; row-gap: var(--s2); }
+  .topbar-right { flex: 1 0 100%; display: flex; justify-content: flex-end; }
+  .topbar-right > * { max-width: 100%; }
+  .topbar-right .btn { white-space: nowrap; }
+}
+
 @media (max-width: 900px) {
   .content { padding: var(--s4) var(--s4) var(--s10); }
   .topbar, .section-tabs { padding-left: var(--s4); padding-right: var(--s4); }
+  /* One line for the title, shortened with an ellipsis, so it cannot push the
+   * page's own buttons off the side of the screen. */
+  .topbar h1 { flex: 1 1 auto; min-width: 0; font-size: var(--t-lg);
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar > .brand-lens { flex: 0 1 auto; min-width: 0; }
+  .topbar > .brand-lens select { min-width: 0; }
   /* Tables become a horizontal scroller rather than crushing every column
    * into three characters. */
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch;
