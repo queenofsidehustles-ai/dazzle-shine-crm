@@ -1219,7 +1219,9 @@
          whatever had happened — including on bookings that paid a different
          deposit, and on bookings that had paid none at all. #}
       <div class="detail-row"><span class="dl">Deposit Paid</span><span class="dv">
-        {% if booking.deposit_paid %}${{ '%.2f' % (booking.deposit_amount_paid or deposit_amount) }} <span style="color:var(--good)">✓</span>{% else %}—{% endif %}
+        {% if booking.deposit_paid %}${{ '%.2f' % (booking.deposit_amount_paid or deposit_amount) }}
+          {% if booking.deposit_method and booking.deposit_method != 'card' %}<span style="color:var(--softer);font-weight:400;text-transform:capitalize">({{ booking.deposit_method }})</span>{% endif %}
+          <span style="color:var(--good)">✓</span>{% else %}—{% endif %}
       </span></div>
       <div class="detail-row"><span class="dl">Received in total</span><span class="dv">${{ '%.2f' % collected }}</span></div>
       <div class="detail-row"><span class="dl">Balance Due</span><span class="dv" style="font-size:1.1rem;color:{{ 'var(--amber-deep)' if due > 0 else 'var(--ink)' }}">${{ '%.2f' % due }}</span></div>
@@ -1241,6 +1243,34 @@
           This deposit has never been receipted.
         {% endif %}
       </p>
+      {% elif not booking.deposit_paid %}
+      {# She took the deposit some other way — cash on the doorstep, Zelle,
+         Venmo — so there is no Stripe charge to confirm it. This records the
+         same $50 against the booking (crediting it, same as the card path)
+         and sends the customer the same deposit receipt, so a card on file
+         is never auto-charged for the deposit a second time. #}
+      <form method="POST" action="{{ url_for('bookings.mark_deposit_paid_route', booking_id=booking.id) }}"
+            style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"
+            onsubmit="return confirm('Record this deposit as paid?')">
+        <select name="method" style="flex:1;min-width:100px;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
+          <option value="cash">Cash</option>
+          <option value="zelle">Zelle</option>
+          <option value="venmo">Venmo</option>
+          <option value="check">Check</option>
+          <option value="other">Other</option>
+        </select>
+        <input type="number" step="0.01" min="0.01" name="amount" placeholder="${{ '%.2f' % deposit_amount }}"
+               title="Leave blank to use the standard deposit"
+               style="width:110px;padding:9px 10px;border:1px solid var(--border);border-radius:8px" />
+        <input type="date" name="paid_on" title="The day the money actually came in"
+               value="{{ booking.preferred_date or '' }}"
+               style="padding:9px 10px;border:1px solid var(--border);border-radius:8px;width:150px" />
+        <button type="submit" class="btn btn-outline" style="flex-shrink:0">✓ Record deposit</button>
+        <label style="display:flex;align-items:center;gap:7px;width:100%;font-size:0.82rem;color:var(--muted);cursor:pointer;margin-top:2px">
+          <input type="checkbox" name="send_receipt" value="1" checked style="width:auto">
+          Email the customer a deposit receipt
+        </label>
+      </form>
       {% endif %}
 
       {# Gated on what is owed, not on the balance_collected flag. The flag
