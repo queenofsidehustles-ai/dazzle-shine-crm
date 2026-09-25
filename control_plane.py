@@ -84,6 +84,16 @@ organizations = Table(
     # for a database that already has this table without them.
     Column('closed_at', DateTime),
     Column('purged_at', DateTime),
+    # ── Revenue ────────────────────────────────────────────────────────────
+    # What Stripe says this company actually pays, written by the webhook
+    # (billing.apply_event) so the console can add up money without calling
+    # Stripe on every page view. mrr_cents is monthly and net of any
+    # recurring discount; it is kept after a cancellation, because "what did
+    # we lose" is asked about the companies that left.
+    Column('mrr_cents', Integer),
+    Column('paid_since', DateTime),
+    Column('canceled_at', DateTime),
+    Column('discount_code', String(64)),
 )
 
 
@@ -108,6 +118,32 @@ product_leads = Table(
     Column('source', String(120)),
     Column('created_at', DateTime, default=datetime.utcnow, index=True),
     Column('contacted_at', DateTime),
+)
+
+
+# Discount codes for Akye's own subscriptions -- not a cleaning company's
+# codes for its customers, which live in each tenant (models.DiscountCode).
+#
+# Stripe is the authority: each row is a Stripe coupon plus the promotion code
+# a customer types at checkout (billing.checkout_session allows them). This
+# table is the console's record of what was made, by whom, and why, and the
+# map from Stripe's ids back to the code a person would recognise.
+promo_codes = Table(
+    'promo_codes', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('code', String(40), unique=True, nullable=False),
+    Column('percent_off', Integer),
+    Column('amount_off_cents', Integer),
+    Column('duration', String(20), nullable=False),     # once | repeating | forever
+    Column('duration_months', Integer),
+    Column('max_redemptions', Integer),
+    Column('expires_at', DateTime),
+    Column('note', String(300)),
+    Column('stripe_coupon_id', String(64)),
+    Column('stripe_promotion_id', String(64), index=True),
+    Column('active', Boolean, default=True),
+    Column('created_by', String(200)),
+    Column('created_at', DateTime, default=datetime.utcnow),
 )
 
 
@@ -308,7 +344,8 @@ def ensure_table(engine):
     control_metadata.create_all(
         engine, tables=[organizations, product_leads, feedback,
                         console_users, support_requests, console_log,
-                        tenant_logins, login_lookup_requests, console_docs])
+                        tenant_logins, login_lookup_requests, console_docs,
+                        promo_codes])
     ensure_columns(engine)
 
 
@@ -382,7 +419,8 @@ def set_billing(engine, slug, **fields):
     """
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
-               'grandfathered', 'status', 'activated_at', 'nudges_sent'}
+               'grandfathered', 'status', 'activated_at', 'nudges_sent',
+               'mrr_cents', 'paid_since', 'canceled_at', 'discount_code'}
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f'not billing fields: {sorted(bad)}')
@@ -523,6 +561,42 @@ def mark_lead_contacted(engine, lead_id):
                    product_leads.c.contacted_at.is_(None))
             .values(contacted_at=datetime.utcnow()))
         return result.rowcount > 0
+
+
+def add_promo_code(engine, **fields):
+    allowed = {c.name for c in promo_codes.columns} - {'id'}
+    row = {k: v for k, v in fields.items() if k in allowed}
+    row.setdefault('created_at', datetime.utcnow())
+    row.setdefault('active', True)
+    with engine.begin() as conn:
+        conn.execute(insert(promo_codes).values(**row))
+
+
+def all_promo_codes(engine):
+    """Every code, newest first."""
+    try:
+        with engine.connect() as conn:
+            return [dict(r) for r in conn.execute(
+                select(promo_codes).order_by(promo_codes.c.created_at.desc())).mappings()]
+    except Exception:
+        return []
+
+
+def find_promo_code(engine, code=None, stripe_promotion_id=None):
+    col, value = ((promo_codes.c.stripe_promotion_id, stripe_promotion_id)
+                  if stripe_promotion_id else (promo_codes.c.code, (code or '').upper()))
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(select(promo_codes).where(col == value)).mappings().first()
+            return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def set_promo_active(engine, code, active):
+    with engine.begin() as conn:
+        conn.execute(update(promo_codes).where(promo_codes.c.code == code)
+                     .values(active=bool(active)))
 
 
 

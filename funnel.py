@@ -198,3 +198,117 @@ def _median(values):
     if len(values) % 2:
         return round(values[mid], 1)
     return round((values[mid - 1] + values[mid]) / 2, 1)
+
+
+# --------------------------------------------------------------------------
+# Sales: the same companies, counted in money
+
+
+def _list_cents(org, plans):
+    return int((plans.get(org.get('plan') or 'solo') or {}).get('price', 0) * 100)
+
+
+def sales(orgs, plans, now=None, days=None):
+    """Recurring revenue now, and how it moved in the last `days` days.
+
+    Money comes from what Stripe reported for each company (mrr_cents, written
+    by the webhook: monthly, after recurring discounts). A paying company the
+    webhook has not priced yet is counted at its plan's list price and
+    flagged, so the total is never silently short and never silently guessed.
+
+    MRR, the plan mix and what is at risk are as of now. New and lost revenue
+    are for companies that started or stopped paying inside the window.
+    Grandfathered companies pay nothing through Stripe and are left out, as
+    they are from the funnel.
+    """
+    import billing
+    now = now or datetime.utcnow()
+    since = now - timedelta(days=days) if days else None
+
+    def within(when):
+        return since is None or (when is not None and when >= since)
+
+    counted = [o for o in orgs if not o.get('grandfathered')]
+
+    def cents(o):
+        return o['mrr_cents'] if o.get('mrr_cents') is not None else _list_cents(o, plans)
+
+    paying = [o for o in counted if o.get('stripe_subscription_id')
+              and _status(o) == 'active' and not _gone(o)]
+    past_due = [o for o in counted if o.get('stripe_subscription_id')
+                and _status(o) == 'past_due' and not _gone(o)]
+    mrr = sum(cents(o) for o in paying)
+
+    by_plan = {}
+    for o in paying:
+        row = by_plan.setdefault(o.get('plan') or 'solo', {'n': 0, 'mrr': 0})
+        row['n'] += 1
+        row['mrr'] += cents(o)
+    plan_rows = [(key, plans.get(key, {}).get('label', key), by_plan[key]['n'],
+                  by_plan[key]['mrr'], _pct(by_plan[key]['mrr'], mrr))
+                 for key in sorted(by_plan, key=lambda k: -by_plan[k]['mrr'])]
+
+    # Everyone who started paying in the window, whatever they are doing now:
+    # a company that paid and then left is new *and* lost, so over all time
+    # new minus lost reconciles to what is being paid today.
+    new = [o for o in counted if o.get('paid_since') and within(o['paid_since'])]
+    lost = [o for o in counted if o.get('canceled_at') and within(o['canceled_at'])
+            and _status(o) == 'canceled']
+    new_mrr = sum(cents(o) for o in new)
+    lost_mrr = sum(cents(o) for o in lost)
+
+    trials = []
+    for o in counted:
+        if _gone(o) or o.get('stripe_subscription_id'):
+            continue
+        state = billing.trial_state(o, now)
+        if state and not state['expired']:
+            trials.append(o)
+    ever_paid = [o for o in counted if o.get('paid_since')]
+    rate = len(ever_paid) / len(counted) if counted and ever_paid else None
+    arpa = mrr / len(paying) if paying else None
+    # What a converting trial is worth: today's average customer if there is
+    # one, else the cheapest paid plan. Never the Scale price a trial runs on,
+    # which would make every trial look like the most expensive customer.
+    paid_prices = sorted(p['price'] for p in plans.values() if p.get('price'))
+    per_trial = arpa if arpa else (paid_prices[0] * 100 if paid_prices else 0)
+
+    discounted = [o for o in paying if o.get('discount_code')]
+    discount_cost = sum(max(0, _list_cents(o, plans) - cents(o)) for o in discounted)
+    paying_slugs = {o['slug'] for o in paying}
+    codes = {}
+    for o in counted:
+        if o.get('discount_code'):
+            row = codes.setdefault(o['discount_code'], {'used': 0, 'paying': 0, 'mrr': 0})
+            row['used'] += 1
+            if o['slug'] in paying_slugs:
+                row['paying'] += 1
+                row['mrr'] += cents(o)
+
+    return {
+        'since': since,
+        'mrr': mrr,
+        'arr': mrr * 12,
+        'paying': len(paying),
+        'arpa': int(round(arpa)) if arpa is not None else None,
+        'estimated': sum(1 for o in paying if o.get('mrr_cents') is None),
+        'by_plan': plan_rows,
+        'new': len(new), 'new_mrr': new_mrr,
+        'lost': len(lost), 'lost_mrr': lost_mrr,
+        'net_new_mrr': new_mrr - lost_mrr,
+        'past_due': len(past_due), 'past_due_mrr': sum(cents(o) for o in past_due),
+        'trials': len(trials),
+        'paid_rate': _pct(len(ever_paid), len(counted)) if rate is not None else None,
+        'pipeline_if_all': int(round(per_trial * len(trials))),
+        'pipeline_expected': (int(round(per_trial * len(trials) * rate))
+                              if rate is not None else None),
+        'discounted': len(discounted),
+        'discount_cost': discount_cost,
+        'codes': codes,
+        'customers': sorted(
+            [{'name': o['name'], 'slug': o['slug'], 'plan': o.get('plan'),
+              'mrr': cents(o), 'estimated': o.get('mrr_cents') is None,
+              'paid_since': o.get('paid_since'), 'discount_code': o.get('discount_code'),
+              'status': _status(o)} for o in paying + past_due],
+            key=lambda r: -r['mrr']),
+    }

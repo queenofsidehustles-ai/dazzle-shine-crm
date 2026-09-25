@@ -1,0 +1,72 @@
+{% extends "console/_shell.html" %}
+{% block title %}Sales{% endblock %}
+{% macro money(cents) %}{% if cents is none %}—{% else %}${{ '{:,.0f}'.format(cents / 100) }}{% endif %}{% endmacro %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+{% include "console/_funnel_tabs.html" %}
+
+<nav class="ops-tabs" aria-label="Time window" style="margin-bottom:var(--s4)">
+  {% for w in windows %}
+  <a href="{{ url_for('console.sales_view', window=w) }}" class="{{ 'on' if w == window }}"
+     {% if w == window %}aria-current="page"{% endif %}>{{ 'All time' if w == 'all' else 'Last ' ~ w ~ ' days' }}</a>
+  {% endfor %}
+</nav>
+
+<div class="ops-grid">
+  <div class="ops-card"><span class="ops-dim">Monthly recurring revenue</span>
+    <span class="v">{{ money(s.mrr) }}</span><span class="ops-dim">{{ money(s.arr) }} a year</span></div>
+  <div class="ops-card"><span class="ops-dim">Paying companies</span>
+    <span class="v">{{ s.paying }}</span><span class="ops-dim">average {{ money(s.arpa) }}/month</span></div>
+  <div class="ops-card"><span class="ops-dim">Net new MRR</span>
+    <span class="v {{ 'ops-bad' if s.net_new_mrr < 0 }}">{{ '−' if s.net_new_mrr < 0 }}{{ money(s.net_new_mrr|abs) }}</span>
+    <span class="ops-dim">+{{ money(s.new_mrr) }} from {{ s.new }} new · −{{ money(s.lost_mrr) }} from {{ s.lost }} lost</span></div>
+  <div class="ops-card"><span class="ops-dim">At risk</span>
+    <span class="v {{ 'ops-bad' if s.past_due }}">{{ money(s.past_due_mrr) }}</span>
+    <span class="ops-dim">{{ s.past_due }} with a failing card</span></div>
+</div>
+
+<div class="ops-grid">
+  <div class="ops-card"><span class="ops-dim">On trial now</span><span class="v">{{ s.trials }}</span>
+    <span class="ops-dim">{{ money(s.pipeline_if_all) }}/month if every one pays</span></div>
+  <div class="ops-card"><span class="ops-dim">Expected from trials</span>
+    <span class="v">{{ money(s.pipeline_expected) }}</span>
+    <span class="ops-dim">{% if s.paid_rate is not none %}at your {{ s.paid_rate }}% signup-to-paid rate{% else %}no one has paid yet, so no rate to go on{% endif %}</span></div>
+  <div class="ops-card"><span class="ops-dim">Given away in discounts</span>
+    <span class="v">{{ money(s.discount_cost) }}</span>
+    <span class="ops-dim">a month, across {{ s.discounted }} paying compan{{ 'y' if s.discounted == 1 else 'ies' }}</span></div>
+</div>
+
+<h3 class="ops-h">By plan</h3>
+{% if s.by_plan %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Plan</th><th>Companies</th><th>MRR</th><th>Share</th></tr>
+  {% for key, label, n, cents, pct in s.by_plan %}
+  <tr><td>{{ label }}</td><td>{{ n }}</td><td>{{ money(cents) }}</td><td>{{ pct }}%</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="con-empty">Nobody is paying yet.</div>{% endif %}
+
+<h3 class="ops-h">Paying and past-due companies</h3>
+{% if s.customers %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Company</th><th>Plan</th><th>Per month</th><th>Paying since</th><th>Code</th></tr>
+  {% for c in s.customers %}
+  <tr>
+    <td><a href="{{ url_for('console.company', slug=c.slug) }}">{{ c.name }}</a>
+        {% if c.status == 'past_due' %} <span class="ops-badge ops-failing">past due</span>{% endif %}</td>
+    <td>{{ c.plan }}</td>
+    <td>{{ money(c.mrr) }}{% if c.estimated %} <span class="ops-dim" title="Stripe has not sent this company's price yet">list price</span>{% endif %}</td>
+    <td>{{ c.paid_since.strftime('%d %b %Y') if c.paid_since else '—' }}</td>
+    <td>{{ c.discount_code or '' }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="con-empty">No paying companies yet.</div>{% endif %}
+
+<p class="ops-dim" style="margin-top:var(--s4)">
+  Amounts are what Stripe reports each company pays per month, after any recurring discount. Yearly plans are divided by 12.
+  {% if s.estimated %}{{ s.estimated }} compan{{ 'y is' if s.estimated == 1 else 'ies are' }} shown at list price until Stripe next reports on {{ 'it' if s.estimated == 1 else 'them' }}.{% endif %}
+  Grandfathered companies pay nothing through Stripe and are left out. MRR, trials and at-risk are as of now;
+  new and lost are for companies that started or stopped paying {{ 'in this window' if s.since else 'ever' }}.
+</p>
+{% endblock %}
