@@ -35,7 +35,8 @@ rows = [l for l in new.split('\n') if w1._ROW.match(l)]
 check(len(rows) == 7, 'still 7 W1 rows')
 check(rows[0].endswith('| 15 | 15 |') and rows[6].endswith('| 14 | 100 |'),
       'signup numbers and running totals kept')
-check('FOUNDING500' in rows[0] and 'referral link' in rows[1], 'actions replaced')
+check('Lock founding-cohort offer terms' in rows[0] and 'referral link' in rows[1],
+      'actions replaced, Day 1 in the owner\'s own wording')
 check('| 8 | Mon | W2' in new and new.split('| 8 | Mon | W2')[1] == SEEDED.split('| 8 | Mon | W2')[1],
       'everything from Day 8 on is untouched')
 check(new.replace(w1.WEEK1.strip() + '\n\n', '').split('| Day | Weekday |')[0]
@@ -51,7 +52,7 @@ edited = SEEDED.replace(
     '| 1 | Mon | W1 — Prep & warm activation | 1. Lock founding-cohort offer terms  2. UTM tracking links; 3. Send warm texts/DMs to top 20 contacts. | 15 | 15 |')
 check(edited != SEEDED, 'the edited version differs from the seed')
 new2, msg = w1.apply(edited)
-check(new2 is not None and 'FOUNDING500' in new2, f'still applies ({msg})')
+check(new2 is not None and w1.MARKER in new2, f'still applies ({msg})')
 
 print('\n4. A table it does not recognise is left alone')
 broken = '\n'.join(l for l in SEEDED.split('\n') if not l.startswith('| 4 | Thu'))
@@ -61,8 +62,10 @@ check(w1.apply(SEEDED.replace('| 3 | Wed | W1 — Prep & warm activation | Annou
       'a row with the wrong number of columns: untouched')
 
 print('\n5. The section says what the product actually does')
-check('$79 off' in w1.WEEK1 and '100% code would also make Scale' in w1.WEEK1,
-      'the code is $79 off, and says why not 100%')
+check('FOUNDING500' not in w1.WEEK1 and '$79 off' not in w1.WEEK1,
+      'no offer terms are decided for the owner')
+check('Lock founding-cohort offer terms' in w1.WEEK1 and '100%-off code would make Scale' in w1.WEEK1,
+      'it says to lock the terms, and what to know before choosing')
 check('/r/<their address>' in w1.WEEK1 and 'utm_source=sms' in w1.WEEK1,
       'uses the tracking and referral links that exist')
 

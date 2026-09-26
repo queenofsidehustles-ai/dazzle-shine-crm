@@ -7,8 +7,8 @@ Two changes to that one playbook, in place -- same row, same title:
     the console (they may have been hand-edited), so the running totals from
     Day 8 on still add up. Only the Action cell changes.
   * A "Week 1 — step by step" section goes in just above the table: the
-    tracking links (attribution.py records them at signup), the founding
-    code, and each day's steps.
+    tracking links (attribution.py records them at signup), what to know
+    before locking the founding-cohort offer terms, and each day's steps.
 
 Run once, the same way seed_growth_playbook.py is:
 
@@ -26,9 +26,8 @@ TITLE = '90-Day Day-by-Day Plan'
 MARKER = '### Week 1 — step by step'
 
 ACTIONS = {
-    1: 'Create FOUNDING500 in Console → Discounts ($79 off, forever, 500 uses, ends Day 21); '
-       'one tagged link per channel; personal texts/DMs to the top 20 contacts '
-       '(see Week 1 step by step).',
+    1: '1. Lock founding-cohort offer terms 2. UTM tracking links; 3. Send warm texts/DMs '
+       'to top 20 contacts.',
     2: 'Answer Day 1 replies first; batch 2 (next 30–50 contacts); give every new owner '
        'their referral link (their Billing page); book setup calls.',
     3: 'Announce the founding cohort to the Queen of Side Hustles audience: email + one '
@@ -56,26 +55,27 @@ WEEK1 = r"""### Week 1 — step by step
 | Founder's personal posts | `akyehq.com/?utm_source=personal&utm_medium=social&utm_campaign=founding` |
 | Referrals | each owner's own `akyehq.com/r/<their address>`, shown on their Billing page |
 
-**The founding code.** The offer is "first 500 free forever on Pro" (normally $79/month), closing at the week-3 deadline. Make it **$79 off, forever** — not 100% off. Console codes are not tied to one plan, so a 100% code would also make Scale ($249) free forever; $79 off makes Pro $0 and Scale $170.
-- Checkout asks for a card even when the total is $0. Either say "card needed to claim, never charged" in the copy, or have checkout skip the card at $0 (a small code change) before Day 3's announcement.
-- Solo stays free for everyone with no card; the code is only for owners who want Pro.
+**Lock founding-cohort offer terms.** Once they're set, create the matching code in Console → Discounts (percent or dollar amount off, duration, maximum uses, expiry). Two things to know before choosing:
+- A console code works on every paid plan: a 100%-off code would make Scale ($249) free as well as Pro ($79).
+- Checkout asks for a card even when the total is $0. If the offer is free, say so in the copy, or have checkout skip the card at $0 (a small code change).
+- Solo stays free for everyone, with no card and no code.
 
 **Day 1 — Mon**
-1. Offer (30 min): Console → Discounts → new code FOUNDING500: $79 off, duration forever, max 500 uses, expires at the end of Day 21. Check it at checkout with a test account, then mark that account Test.
+1. Offer (30 min): lock founding-cohort offer terms, then create the code in Console → Discounts. Check it at checkout with a test account, then mark that account Test.
 2. Pick the 20 (30 min): cleaning-business owners you know first, then people who know several owners (suppliers, bookkeepers, coaches).
-3. Send (1–2 hrs): a personal message each, never a group text, on the Texts/DMs link. "I built software for cleaning companies: scheduling, crew pay and a free booking page. The first 500 companies get the Pro plan free forever (normally $79/month). Would you try it, or do you know an owner who would?"
+3. Send (1–2 hrs): a personal message each, never a group text, on the Texts/DMs link. "I built software for cleaning companies: scheduling, crew pay and a free booking page. [Your founding-cohort offer.] Would you try it, or do you know an owner who would?"
 4. Same day: reply within the hour; offer to set their account up with them on a call.
-- Done when: the code works at checkout and all 20 are sent.
+- Done when: the offer terms are locked, the code works at checkout, and all 20 are sent.
 
 **Day 2 — Tue**
 1. Answer every Day 1 reply before sending anything new.
 2. Batch 2: the next 30–50 contacts, the same message plus "Know another owner? Send them your link."
 3. Show every owner who signed up their Billing page → "Refer another cleaning business". Reward: one free month of Scale when someone they referred activates. Check Funnel → Referrals, and create a one-month code in Console → Discounts.
-4. Book a setup call with every Day 1 signup: the 14-day trial only starts when they assign their first job, and "your free-forever spot locks in once you finish setup" makes setup part of the offer.
+4. Book a setup call with every Day 1 signup: the 14-day trial only starts when they assign their first job, and "your founding spot locks in once you finish setup" makes setup part of the offer.
 - Done when: every contact is messaged, and every signup has a call booked or a setup email sent.
 
 **Day 3 — Wed**
-1. Angle: "Start or run your cleaning business on free software." Free Solo for anyone, with no card; the founding code for owners who want Pro, until Day 21.
+1. Angle: "Start or run your cleaning business on free software." Free Solo for anyone, with no card; the founding-cohort offer for owners who want more.
 2. Email the audience on the Newsletter link.
 3. Social: one post per platform, each on its own link.
 4. Clear the reply queue by the evening.
