@@ -151,7 +151,8 @@ feedback notice from somebody using the demo) still goes out. Nobody fictional
 is contacted, and a prospect hitting a bug is exactly what Akye wants to hear.
 
 **Paid API cost boundary:** demo visitors cannot spend Akye's provider credits.
-Nana receives no OpenRouter key; voice falls back to the browser speech engine;
+Nana receives no OpenRouter key and says she is off in the demo; AI post and
+ad writing says the same; voice falls back to the browser speech engine;
 translation returns the source text; and Find Leads uses its local fictional
 Places fixtures. These guards are server-side and apply even when platform keys
 are configured.

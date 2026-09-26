@@ -925,6 +925,9 @@ def _record(detail):
 TROUBLE = {
     'not-configured': (f'{NAME} is not switched on yet. Add an OpenRouter key in '
                        f'Settings and she will start answering.'),
+    'demo': (f'{NAME} is switched off in the demo — every question would be paid '
+             f'for on a real AI service. In your own company she answers questions '
+             f'about your jobs, customers and money.'),
     'unreachable': (f'I could not reach {NAME} just then — that is the connection, '
                     f'not your question. Try again in a moment.'),
     'service-error': (f'{NAME} is having trouble on her end. It has been recorded '
