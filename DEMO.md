@@ -150,9 +150,11 @@ asking explicitly.
 feedback notice from somebody using the demo) still goes out. Nobody fictional
 is contacted, and a prospect hitting a bug is exactly what Akye wants to hear.
 
-**Not blocked (cost, not contact):** Nana (the AI assistant), Find Leads (Google
-Places), translation and speech use Akye's API keys when a visitor uses them.
-They contact nobody, but they cost money per use.
+**Paid API cost boundary:** demo visitors cannot spend Akye's provider credits.
+Nana receives no OpenRouter key; voice falls back to the browser speech engine;
+translation returns the source text; and Find Leads uses its local fictional
+Places fixtures. These guards are server-side and apply even when platform keys
+are configured.
 
 ---
 
@@ -230,7 +232,7 @@ They contact nobody, but they cost money per use.
 | D15 | Automations are on but never run. | The settings show what Akye does; running them would change the demo's state (and could only fail to send). History is seeded instead. | Turning automations off. |
 | D16 | Stripe, email and texting show as "not connected". | True — and the reason no card is taken. | Faking a connected state. |
 | D17 | The demo is on the top plan, active, with no Stripe customer. | Every feature is visible; there is nothing to bill. | A trial that expires. |
-| D18 | AI, Places, translation and speech are not blocked. | They contact nobody; blocking them would hide features. The cost is noted below. | Blocking them too. |
+| D18 | Paid AI/lookup providers are blocked for demo companies, with local/free fallbacks where possible. | A public launch must not turn shared credentials into an unbounded cost surface. | Letting anonymous demo traffic spend platform credits. |
 | D19 | Small app fixes found while building it are in the same change (see the PR). | They were real bugs that any company would see; the demo made them visible. | Leaving them for later. |
 
 ---
@@ -240,8 +242,6 @@ They contact nobody, but they cost money per use.
 - **No daily rebuild is scheduled.** Adding one writes to production, so it is
   left for an explicit decision (a Railway cron running
   `/opt/venv/bin/python demo_company.py`, just after 00:00 UTC).
-- **AI and lookup costs** (D18): a busy launch day could run up Nana, Places
-  and translation usage on Akye's keys.
 - **The dashboard's "today" is the server's date (UTC)**, not Austin's — for
   every company, not just the demo. Between 7 PM and midnight in Austin it
   already shows tomorrow.
