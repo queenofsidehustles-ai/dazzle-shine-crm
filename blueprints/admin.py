@@ -257,9 +257,9 @@ def demo_enter():
     session.permanent = True
     destinations = {
         'today': 'admin.dashboard',
-        'customer': 'admin.clients',
-        'team': 'team.team',
-        'money': 'money.money',
+        'customer': 'bookings.clients',
+        'team': 'contractors.team',
+        'money': 'money.pnl',
         'explore': 'admin.dashboard',
     }
     endpoint = destinations.get((request.args.get('tour') or 'explore').lower(),
