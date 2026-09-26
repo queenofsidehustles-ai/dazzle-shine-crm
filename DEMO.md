@@ -44,11 +44,14 @@ Sign in at `https://brightnest.<your domain>/login`.
 Every date in the demo is worked out from the day it is built: the jobs on
 "today", the cleaner who clocked in at 8:04, the leads that came in yesterday.
 And anyone who enters through `/demo` is the owner, free to change things. So
-it is rebuilt every hour, at seven minutes past, by the **Demo rebuild**
-GitHub workflow (`.github/workflows/demo-rebuild.yml` on `main`, running the
-`akye-stable` code against the database in `AKYE_DATABASE_URL`, the same
-secret the Automations workflow uses). It can also be run by hand from the
-Actions tab. The first run after midnight UTC moves "today" on.
+it is rebuilt every hour, at seven minutes past. The **Demo rebuild** GitHub
+workflow (`.github/workflows/demo-rebuild.yml` on `main`, where GitHub runs
+schedules) calls `POST https://akyehq.com/api/rebuild-demo` with the same
+`REMINDER_API_KEY` the Automations workflow uses. The app starts
+`demo_company.py` as a process of its own — the deployed code, never the
+web worker's time — answers 202 at once, and the rebuild's report goes to the
+app's log in Railway. CI holds no database credentials. It can also be run by
+hand from the Actions tab. The first run after midnight UTC moves "today" on.
 
 A rebuild keeps the passwords and the people already in the demo stay signed
 in; anything a visitor changed is gone.

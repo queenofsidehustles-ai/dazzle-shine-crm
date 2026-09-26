@@ -729,6 +729,35 @@ def trial_nudges():
     return jsonify({'ok': True, 'sent': sent, **counts})
 
 
+# ── Demo company rebuild (cron — hourly, product site only) ──────────────────
+# Anyone entering the demo through /demo is its owner, so it is rebuilt from
+# its seed every hour (demo_company.py, DEMO.md). The rebuild takes seconds of
+# CPU and the web server is one sync worker, so it runs as a separate process
+# of the deployed code rather than inside this request: this answers at once,
+# and the process's output goes to the app's own log. The rebuild holds its
+# own lock, so an overlapping call just finds one already running.
+
+@api_bp.route('/rebuild-demo', methods=['POST'])
+def rebuild_demo():
+    import hmac
+    import product
+    if not product.is_product_site():
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    api_key = (request.headers.get('X-Api-Key') or '').strip()
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    if not expected or not hmac.compare_digest(api_key, expected):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    import subprocess
+    import sys
+    import threading
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    proc = subprocess.Popen([sys.executable, os.path.join(root, 'demo_company.py')],
+                            cwd=root, stdin=subprocess.DEVNULL, start_new_session=True)
+    # Reaped when it ends, so hourly runs never pile up as zombie processes.
+    threading.Thread(target=proc.wait, daemon=True).start()
+    return jsonify({'ok': True, 'started': True}), 202
+
+
 # ── One-click unsubscribe (public) ────────────────────────────────────────────
 
 @api_bp.route('/unsubscribe/<token>')

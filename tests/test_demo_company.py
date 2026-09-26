@@ -649,3 +649,32 @@ def test_a_scheduled_rebuild_keeps_the_passwords_and_prints_none(env, monkeypatc
         assert User.query.filter_by(username='sarah@brightnest.example').first().check_password(DEMO_PW)
         db.session.remove()
     _demo_client(env['app'])          # and the owner still signs in
+
+
+def test_the_hourly_rebuild_is_started_only_by_the_scheduler(env, monkeypatch):
+    """POST /api/rebuild-demo starts demo_company.py as its own process, on the
+    product site, with the scheduler's key -- never from a company's address,
+    and never without the key."""
+    import subprocess
+    started = []
+
+    class FakeProc:
+        def __init__(self, args, **kw):
+            started.append((args, kw))
+
+        def wait(self):
+            return 0
+    monkeypatch.setattr(subprocess, 'Popen', FakeProc)
+    monkeypatch.setenv('REMINDER_API_KEY', 'scheduler-key-for-tests')
+    c = env['app'].test_client()
+    assert c.post('/api/rebuild-demo', base_url=f'https://{HOST}').status_code == 403
+    assert c.post('/api/rebuild-demo', base_url=f'https://{HOST}',
+                  headers={'X-Api-Key': 'wrong'}).status_code == 403
+    assert c.post('/api/rebuild-demo', base_url=f'https://brightnest.{HOST}',
+                  headers={'X-Api-Key': 'scheduler-key-for-tests'}).status_code == 404
+    assert started == []
+    r = c.post('/api/rebuild-demo', base_url=f'https://{HOST}',
+               headers={'X-Api-Key': 'scheduler-key-for-tests'})
+    assert r.status_code == 202 and r.get_json()['started']
+    (args, kw), = started
+    assert args[-1].endswith('demo_company.py') and kw['start_new_session']
