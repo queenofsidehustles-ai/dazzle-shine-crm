@@ -51,6 +51,7 @@
       border-color:rgba(255,255,255,0.3); background:rgba(255,255,255,0.11);
     }
 
+  .demo-tourbar{margin:0 0 18px;padding:12px 14px;border:1px solid var(--amber-line);background:var(--amber-soft);border-radius:14px;display:flex;gap:12px;align-items:center;justify-content:space-between}.demo-tourbar strong{display:block}.demo-tourbar span{color:var(--muted);font-size:.88rem}.demo-tourbar a{white-space:nowrap;font-weight:700;color:var(--amber-deep);text-decoration:none}@media(max-width:700px){.demo-tourbar{align-items:flex-start;flex-direction:column}}
   </style>
 
   <!-- The Scripts and SOPs pages were written against Alpine (x-data / x-show)
@@ -176,6 +177,17 @@
     </div>
     {% endif %}
     <div class="content">
+      {% if session.get('demo_tour') %}
+      {% set demo_copy = {
+        'today': ('Run today’s business', 'Start here. Scan what needs attention today, then use the real navigation to inspect a job or customer.'),
+        'customer': ('Follow a customer', 'You are in Clients. Open a customer and trace their work, communication and payment history.'),
+        'team': ('Manage the team', 'You are in Team. Inspect cleaners, availability, assignments and the hiring workflow.'),
+        'money': ('See the money', 'You are in Money. Explore revenue, expenses, payroll and job economics for BrightNest.'),
+        'explore': ('Explore BrightNest freely', 'Everything here is fictional demo data. Use the real Akye navigation and try the product without contacting anyone or spending provider credits.')
+      } %}
+      {% set dc = demo_copy.get(session.get('demo_tour'), demo_copy['explore']) %}
+      <div class="demo-tourbar"><div><strong>Demo · {{ dc[0] }}</strong><span>{{ dc[1] }}</span></div><a href="{{ url_for('marketing.demo') }}">Choose another story →</a></div>
+      {% endif %}
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, msg in messages %}
           <div class="flash flash-{{ category }}">{{ msg }}</div>
