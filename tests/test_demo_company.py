@@ -488,3 +488,59 @@ def test_a_forged_stripe_event_is_refused(env):
     with env['app'].app_context(), tenancy.use_tenant('brightnest'):
         assert db.session.get(Booking, bid).paid_at is None
         db.session.remove()
+
+
+# ── Public-demo API cost boundary ─────────────────────────────────────────────
+
+def test_demo_never_spends_platform_ai_places_translation_or_speech(env, monkeypatch):
+    """A public demo visitor can click the expensive features without making a
+    billable provider request. Places stays demonstrable using local fixtures;
+    translation falls back to the source text; Nana has no provider key; voice
+    falls back to the browser speech engine."""
+    import assistant
+    import places_finder
+    import speech
+    import translate
+    import demo_guard
+
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'platform-openrouter-key')
+    monkeypatch.setenv('OPENAI_API_KEY', 'platform-openai-key')
+    monkeypatch.setenv('GOOGLE_PLACES_API_KEY', 'platform-places-key')
+
+    def network_must_not_run(*args, **kwargs):
+        raise AssertionError('demo attempted a paid external API request')
+
+    monkeypatch.setattr(places_finder.requests, 'post', network_must_not_run)
+    monkeypatch.setattr(translate.requests, 'post', network_must_not_run)
+
+    with demo_guard.forced():
+        assert assistant._api_key() == ''
+        assert speech.provider() is None
+        assert places_finder.api_key_present() is False
+        ok, rows, error = places_finder.search_businesses('medical_office', 'Austin, TX')
+        assert ok and len(rows) == 5 and not error
+        assert all(row['place_id'].startswith('demo-medical_office-') for row in rows)
+        source = 'Please bring the blue supplies.'
+        assert translate.translate(source, target='es') == source
+
+
+def test_the_paths_a_visitor_actually_takes_spend_nothing(env, monkeypatch):
+    """Not just the key helpers: the routes behind Nana and AI writing.
+
+    A question to Nana goes assistant.ask -> agent.run, which read the platform
+    key itself; AI posts and ads read it in the route. With a platform key
+    present and every network call recorded, none of them may reach out."""
+    import agent
+    import assistant
+    import demo_guard
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'platform-openrouter-key')
+    net = env['net']
+    before = len(net.calls)
+    with env['app'].app_context(), demo_guard.forced():
+        assert agent.run('How much did we make this week?') == {'say': assistant.TROUBLE['demo']}
+    c, base = _demo_client(env['app'])
+    for path, data in (('/content/generate', {'post_type': 'tip', 'platform': 'instagram'}),
+                       ('/content/generate-ads', {'location': 'Austin, TX'})):
+        r = c.post(path, base_url=base, data=data, follow_redirects=True)
+        assert r.status_code == 200 and 'switched off in the demo' in r.get_data(as_text=True), path
+    assert net.calls[before:] == []

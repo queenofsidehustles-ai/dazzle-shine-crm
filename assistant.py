@@ -82,6 +82,14 @@ API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 MONTHLY_LIMIT = int(os.environ.get('ASSISTANT_MONTHLY_LIMIT') or 300)
 
 
+def _api_key(explicit=None):
+    """OpenRouter key for a real company; never spend platform AI on the demo."""
+    import demo_guard
+    if demo_guard.active():
+        return ''
+    return (explicit or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+
+
 # ---------------------------------------------------------------------------
 # The questions this business can answer
 # ---------------------------------------------------------------------------
@@ -550,7 +558,7 @@ def draft_email(about='', to='', api_key=None):
     except Exception:
         pass
 
-    key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+    key = _api_key(api_key)
     if not key:
         return {'say': 'I cannot write it — no writing key is set up on this account.'}
 
@@ -917,6 +925,9 @@ def _record(detail):
 TROUBLE = {
     'not-configured': (f'{NAME} is not switched on yet. Add an OpenRouter key in '
                        f'Settings and she will start answering.'),
+    'demo': (f'{NAME} is switched off in the demo — every question would be paid '
+             f'for on a real AI service. In your own company she answers questions '
+             f'about your jobs, customers and money.'),
     'unreachable': (f'I could not reach {NAME} just then — that is the connection, '
                     f'not your question. Try again in a moment.'),
     'service-error': (f'{NAME} is having trouble on her end. It has been recorded '
@@ -939,7 +950,7 @@ def choose(question, api_key=None):
     question all produced "I did not follow that", which is how a typo in a
     model name spent an evening looking like a stupid assistant.
     """
-    key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+    key = _api_key(api_key)
     if not key:
         return [], 'lookup', 'not-configured'
 
@@ -1122,7 +1133,7 @@ def _compose(question, facts, api_key=None, kind='lookup', profile=None):
     The rule on figures does not change between them. Advice is allowed to have
     an opinion; it is not allowed to have its own numbers.
     """
-    key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+    key = _api_key(api_key)
     if not key:
         return None
 

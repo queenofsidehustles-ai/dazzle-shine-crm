@@ -112,7 +112,11 @@ def system_prompt(profile):
 
 def run(question, history=None, api_key=None):
     """One question, as many steps as it takes. Returns the dict the page renders."""
-    key = (api_key or os.environ.get('OPENROUTER_API_KEY') or '').strip()
+    import demo_guard
+    if demo_guard.active():
+        # The main path every question to Nana takes: no platform key for the demo.
+        return {'say': assistant.TROUBLE['demo']}
+    key = assistant._api_key(api_key)
     if not key:
         return {'say': assistant.TROUBLE['not-configured']}
 

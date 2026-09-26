@@ -111,8 +111,11 @@ def provider():
     A direct OpenAI key wins when one is set, because it is one hop fewer and
     the model name there is certain. Otherwise the OpenRouter key that is
     already answering questions does this job too, and nothing new has to be
-    signed up for.
+    signed up for. Demo companies deliberately get the free browser voice.
     """
+    import demo_guard
+    if demo_guard.active():
+        return None
     direct = (os.environ.get('OPENAI_API_KEY') or '').strip()
     if direct:
         return OPENAI_URL, [MODEL], direct
