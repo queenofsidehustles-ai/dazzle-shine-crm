@@ -488,3 +488,75 @@ def test_a_forged_stripe_event_is_refused(env):
     with env['app'].app_context(), tenancy.use_tenant('brightnest'):
         assert db.session.get(Booking, bid).paid_at is None
         db.session.remove()
+
+
+# ── Public-demo API cost boundary ─────────────────────────────────────────────
+
+def test_demo_never_spends_platform_ai_places_translation_or_speech(env, monkeypatch):
+    """A public demo visitor can click the expensive features without making a
+    billable provider request. Places stays demonstrable using local fixtures;
+    translation falls back to the source text; Nana has no provider key; voice
+    falls back to the browser speech engine."""
+    import assistant
+    import places_finder
+    import speech
+    import translate
+    import demo_guard
+
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'platform-openrouter-key')
+    monkeypatch.setenv('OPENAI_API_KEY', 'platform-openai-key')
+    monkeypatch.setenv('GOOGLE_PLACES_API_KEY', 'platform-places-key')
+
+    def network_must_not_run(*args, **kwargs):
+        raise AssertionError('demo attempted a paid external API request')
+
+    monkeypatch.setattr(places_finder.requests, 'post', network_must_not_run)
+    monkeypatch.setattr(translate.requests, 'post', network_must_not_run)
+
+    with demo_guard.forced():
+        assert assistant._api_key() == ''
+        assert speech.provider() is None
+        assert places_finder.api_key_present() is False
+        ok, rows, error = places_finder.search_businesses('medical_office', 'Austin, TX')
+        assert ok and len(rows) == 5 and not error
+        assert all(row['place_id'].startswith('demo-medical_office-') for row in rows)
+        source = 'Please bring the blue supplies.'
+        assert translate.translate(source, target='es') == source
+
+
+def test_demo_enter_authenticates_only_inside_demo_tenant(env):
+    import tenancy
+    from models import User
+    app = env['app']
+    c = app.test_client()
+    # The same route on a real tenant is not an authentication back door.
+    real = c.get('/demo-enter', base_url=f'https://{REAL}.{HOST}')
+    assert real.status_code == 404
+    # BrightNest can be entered without exposing or posting its password.
+    entered = c.get('/demo-enter?tour=today', base_url=f'https://brightnest.{HOST}')
+    assert entered.status_code in (302, 303)
+    assert entered.headers['Location'].endswith('/')
+    home = c.get('/', base_url=f'https://brightnest.{HOST{"}"}')
+    assert home.status_code == 200
+
+
+
+def test_demo_entry_security_contract_source():
+    """Static falsification for the public demo handoff.
+
+    This catches accidental weakening even when a test host is not available:
+    the route must be gated by demo_guard, resolve a seeded owner server-side,
+    bind through the normal auth helper, and never accept credentials from the
+    visitor.
+    """
+    from pathlib import Path
+    source = Path('blueprints/admin.py').read_text()
+    start = source.index("@admin_bp.route('/demo-enter')")
+    end = source.index("@admin_bp.route('/login'", start)
+    route = source[start:end]
+    assert 'demo_guard.active()' in route
+    assert 'abort(404)' in route
+    assert "filter_by(role='owner', active=True)" in route
+    assert 'bind_authenticated_session(owner)' in route
+    assert "request.form" not in route
+    assert "password" not in route.lower()

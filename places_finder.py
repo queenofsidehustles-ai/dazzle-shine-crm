@@ -33,7 +33,8 @@ FIELD_MASK = (
 
 
 def api_key_present():
-    return bool(os.environ.get('GOOGLE_PLACES_API_KEY'))
+    import demo_guard
+    return not demo_guard.active() and bool(os.environ.get('GOOGLE_PLACES_API_KEY'))
 
 
 def search_businesses(category, location, api_key=None):
@@ -42,6 +43,9 @@ def search_businesses(category, location, api_key=None):
     Returns (success: bool, listings: list[dict], error: str).
     Each listing: {place_id, business_name, phone, website, address, city, rating}.
     """
+    import demo_guard
+    if demo_guard.active():
+        return True, demo_listings(category, location), ''
     api_key = api_key or os.environ.get('GOOGLE_PLACES_API_KEY')
     if not api_key:
         return False, [], 'Google Places API key not configured'
