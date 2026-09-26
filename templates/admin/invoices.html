@@ -20,9 +20,9 @@
       <tr>
         <td><strong>{{ r.b.invoice_number }}</strong></td>
         <td>{{ r.b.name }}</td>
-        <td style="font-size:0.82rem;color:#9a95ad">{{ r.b.invoice_issued_at.strftime('%b %d') if r.b.invoice_issued_at else '—' }}</td>
-        <td style="font-size:0.82rem;color:#9a95ad">{{ r.b.invoice_due_date or '—' }}</td>
-        <td style="text-align:right;font-weight:700;color:#b98a33">${{ '%.2f'|format(r.due) }}</td>
+        <td style="font-size:0.82rem;color:var(--softer)">{{ r.b.invoice_issued_at.strftime('%b %d') if r.b.invoice_issued_at else '—' }}</td>
+        <td style="font-size:0.82rem;color:var(--softer)">{{ r.b.invoice_due_date or '—' }}</td>
+        <td style="text-align:right;font-weight:700;color:var(--amber-deep)">${{ '%.2f'|format(r.due) }}</td>
         <td><span class="status {{ colors.get(r.status,'status-pending') }}">{{ status_labels[r.status] }}</span></td>
         <td><a href="{{ url_for('bookings.detail', booking_id=r.b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Open</a></td>
       </tr>
@@ -30,7 +30,7 @@
     </tbody>
   </table></div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:40px 0">No invoices yet. Open a booking and hit <strong>"Send invoice"</strong> to create your first one. 🧾</p>
+  <p style="text-align:center;color:var(--softer);padding:40px 0">No invoices yet. Open a booking and hit <strong>"Send invoice"</strong> to create your first one. 🧾</p>
   {% endif %}
 </div>
 {% endblock %}

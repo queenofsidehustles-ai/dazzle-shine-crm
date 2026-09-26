@@ -58,43 +58,82 @@ def get_config():
 
 @api_bp.route('/reminders', methods=['POST'])
 def send_reminders():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
-    # The business's own date, not the server's. In the evening a UTC server
-    # already believes it is tomorrow, so "tomorrow" would land a day late —
-    # the same trap charge-balances was fixed for.
-    import scheduling
-    tomorrow = (scheduling.local_today() + timedelta(days=1)).isoformat()
-    bookings = Booking.query.filter(
-        Booking.preferred_date == tomorrow,
-        Booking.status.in_(['pending', 'confirmed']),
-        # Once per booking, ever. This used to re-send to everyone booked
-        # tomorrow on every call, so an hourly cron would have texted the same
-        # customer twenty-four times in a day.
-        Booking.reminder_sent_at.is_(None),
-    ).all()
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered. Customers and cleaners each have
+    # their own switch now -- only skip the whole run when neither wants
+    # anything, so one being off doesn't silently take the other down too.
+    customer_on = automations.is_enabled('reminders')
+    cleaner_on = automations.cleaner_reminders_enabled()
+    if not customer_on and not cleaner_on:
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
 
     count = 0
     failed = []
-    for b in bookings:
-        # Per booking, so one bad record can't take the run down with it. That
-        # is exactly what happened before: a recurring visit with no balance
-        # set raised, the request 500'd, and nobody on the list got anything.
-        try:
-            _send_reminder(b)
-            b.reminder_sent_at = datetime.utcnow()
-            count += 1
-        except Exception as e:      # noqa: BLE001 — a bad row is not fatal
-            db.session.rollback()
-            failed.append(f'#{b.id} {b.name}: {e}')
-    db.session.commit()
+    if customer_on:
+        # The business's own date, not the server's. In the evening a UTC
+        # server already believes it is tomorrow, so "tomorrow" would land a
+        # day late — the same trap charge-balances was fixed for.
+        import scheduling
+        tomorrow = (scheduling.local_today() + timedelta(days=1)).isoformat()
+        bookings = Booking.query.filter(
+            Booking.preferred_date == tomorrow,
+            Booking.status.in_(['pending', 'confirmed']),
+            # Once per booking, ever. This used to re-send to everyone booked
+            # tomorrow on every call, so an hourly cron would have texted the
+            # same customer twenty-four times in a day.
+            Booking.reminder_sent_at.is_(None),
+        ).all()
 
-    automations.record('reminders', items=count, ok=not failed,
+        for b in bookings:
+            # Per booking, so one bad record can't take the run down with it.
+            # That is exactly what happened before: a recurring visit with no
+            # balance set raised, the request 500'd, and nobody on the list
+            # got anything.
+            try:
+                _send_reminder(b)
+                b.reminder_sent_at = datetime.utcnow()
+                count += 1
+            except Exception as e:      # noqa: BLE001 — a bad row is not fatal
+                db.session.rollback()
+                failed.append(f'#{b.id} {b.name}: {e}')
+        db.session.commit()
+
+    # Cleaners' own day-before reminder rides the same daily trigger as the
+    # customer one above, with its own switch (cleaner_reminders_enabled) --
+    # they used to share one toggle, which meant a business that wanted her
+    # customers left alone had no way to keep cleaners warned, or vice versa.
+    # Previously this also lived inside the "Follow-ups and win-backs"
+    # automation, whose description never mentioned cleaners, so turning off
+    # customer win-back nudges silently turned this off too. A bad row here
+    # must not cost the customer reminders that already sent above, so it's
+    # isolated the same way each booking is.
+    cleaner_count = 0
+    if cleaner_on:
+        try:
+            import lifecycle
+            cleaner_count = lifecycle.send_cleaner_schedule_reminders()
+        except Exception as e:      # noqa: BLE001
+            db.session.rollback()
+            failed.append(f'cleaner reminders: {e}')
+
+    automations.record('reminders', items=count + cleaner_count, ok=not failed,
                        detail='; '.join(failed) or None)
-    return jsonify({'ok': True, 'reminders_sent': count, 'failed': failed})
+    return jsonify({
+        'ok': True,
+        'reminders_sent': count,
+        'reminders_skipped': None if customer_on else 'turned off by this business',
+        'cleaner_reminders_sent': cleaner_count,
+        'cleaner_reminders_skipped': None if cleaner_on else 'turned off by this business',
+        'failed': failed,
+    })
 
 
 # ── Auto-charge balances (cron — run hourly) ─────────────────────────────────
@@ -106,10 +145,18 @@ def send_reminders():
 
 @api_bp.route('/charge-balances', methods=['POST'])
 def charge_balances():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('charge-balances'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
 
     import scheduling
     from payment_service import charge_balance as do_charge
@@ -350,10 +397,18 @@ def _send_commercial_alert(lead, company, facility_label, sqft, frequency, messa
 
 @api_bp.route('/send-drips', methods=['POST'])
 def send_drips():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('send-drips'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
 
     from models import Lead
     today = date.today()
@@ -384,10 +439,18 @@ def lsa_followups():
     """Advance the text sequence for people who called through Google Ads and
     never booked. Sends only what is due, and re-checks every reason to stop at
     the moment of sending rather than trusting the state it was queued in."""
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('lsa-followups'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
 
     import lsa
     # Re-match first: someone who booked since the last run must drop out before
@@ -492,16 +555,52 @@ def _mail_expiry(rows, gaps):
     return bool(ok)
 
 
+@api_bp.route('/owner-digest', methods=['POST'])
+def owner_digest():
+    """The push half of Nana. Same facts daily_plan already computes for the
+    in-app list, mailed to the owner once a day rather than waiting for them
+    to open the app and look.
+
+    Off unless a business turns it on (see automations.DEFAULT_OFF) — nobody
+    should wake up to a new daily email they never asked for.
+    """
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    if not automations.is_enabled('owner-digest'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
+
+    import owner_digest as od
+    sent, detail = od.run()
+    automations.record('owner-digest', items=1 if sent else 0,
+                       ok=sent or detail == 'nothing worth sending today',
+                       detail=None if sent else detail)
+    return jsonify({'ok': True, 'sent': sent, 'detail': detail})
+
+
 # ── Applicant interview follow-ups (cron — run once daily) ────────────────────
 # Re-sends the bilingual video interview link every 2 days to applicants who
 # haven't responded (up to 2 extra nudges), then marks them "No Response".
 
 @api_bp.route('/applicant-followups', methods=['POST'])
 def applicant_followups():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('applicant-followups'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
 
     from models import ContractorApplication
     from blueprints.interviews import send_interview_invite_email
@@ -582,15 +681,52 @@ def applicant_followups():
 
 @api_bp.route('/lifecycle-emails', methods=['POST'])
 def lifecycle_emails():
-    api_key = request.headers.get('X-Api-Key') or request.args.get('api_key', '')
-    expected = os.environ.get('REMINDER_API_KEY', '')
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
     if not expected or api_key != expected:
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    # Checked here rather than by whatever woke this, so a business's decision
+    # holds however the job is triggered.
+    if not automations.is_enabled('lifecycle-emails'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
+
     import lifecycle
     counts = lifecycle.run_lifecycle_emails()
     automations.record('lifecycle-emails', items=sum(v for v in counts.values()
                                                      if isinstance(v, int)))
     return jsonify({'ok': True, **counts})
+
+
+# ── Trial nudges (cron — run once daily) ─────────────────────────────────────
+# The countdown in the banner only reaches somebody who logs in, and the whole
+# reason the trial has a start-by cap is the owner who does not. This is the
+# half of that feature that leaves the building.
+#
+# Deliberately once a day and no more. Every nudge is recorded against the
+# company, so running it twice sends nothing twice — but a schedule that fires
+# hourly would still be a schedule that sends "3 days left" the moment the
+# threshold is crossed rather than in the morning.
+
+@api_bp.route('/trial-nudges', methods=['POST'])
+def trial_nudges():
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    # Trimmed on both sides. A key pasted into a settings box with a trailing
+    # newline is not a different key, and a 403 here is indistinguishable from
+    # a scheduler that never ran.
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    import trial_nudges as tn
+    dry = request.args.get('dry_run') in ('1', 'true', 'yes')
+    counts = tn.run(dry_run=dry)
+    sent = sum(counts.get(k, 0) for k in tn.ALL)
+    if not dry:
+        automations.record('trial-nudges', items=sent)
+    return jsonify({'ok': True, 'sent': sent, **counts})
 
 
 # ── One-click unsubscribe (public) ────────────────────────────────────────────
@@ -885,6 +1021,16 @@ def create_booking():
 
 
 # ── Stripe webhook ─────────────────────────────────────────────────────────────
+# NOTE: this is /api/stripe-webhook (hyphen) — a TENANT's own Stripe account
+# (integrations.stripe_secret_key()/stripe_webhook_secret() read this
+# company's BusinessSetting), reached on that company's own subdomain. It is
+# a different route from Akye's platform billing webhook,
+# /api/stripe/webhook (slash) in billing_routes.py, which is one shared
+# Stripe account for every company's Akye subscription. The two have
+# historically been confused for each other in tests (see BILL-01 and the
+# still-open CSRF-exemption question for this route in
+# docs/launch-readiness/decision-evidence-register.md) — check which one you
+# mean before changing either.
 
 @api_bp.route('/stripe-webhook', methods=['POST'])
 def stripe_webhook():
@@ -892,6 +1038,12 @@ def stripe_webhook():
     webhook_secret = integrations.stripe_webhook_secret()
     payload = request.data
     sig_header = request.headers.get('Stripe-Signature')
+    # No secret, no webhook. Stripe's library checks the signature against
+    # whatever secret it is given, and an HMAC with an empty key is one anybody
+    # can compute -- so a company with no secret saved (a demo company never
+    # has one) would otherwise accept forged "payment succeeded" events.
+    if not (webhook_secret or '').strip():
+        return jsonify({'ok': False}), 400
 
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
@@ -906,13 +1058,23 @@ def stripe_webhook():
             # someone ends up having paid with no receipt. This fires precisely
             # when the browser never got to post its own confirm — tab closed,
             # connection dropped — which is when they most need telling.
-            from blueprints.payments import mark_deposit_paid, record_tip_from_intent
+            from blueprints.payments import (mark_deposit_paid, mark_paid,
+                                             record_tip_from_intent)
             # The tip too. This is the path that runs when the browser never
             # posted its own confirm, which is exactly when nothing else would
             # record it -- and a tip the cleaner never gets told about is worse
             # than one recorded twice.
-            record_tip_from_intent(booking, pi)
-            mark_deposit_paid(booking, amount_cents=pi.get('amount_received'))
+            metadata = pi.get('metadata') or {}
+            kind = metadata.get('kind')
+            if (str(metadata.get('booking_id') or '') == str(booking.id)
+                    and kind == 'full_payment'
+                    and metadata.get('pay_token') == booking.pay_token):
+                record_tip_from_intent(booking, pi)
+                mark_paid(booking, method='card')
+            elif (str(metadata.get('booking_id') or '') == str(booking.id)
+                  and (kind == 'deposit' or metadata.get('deposit_token'))
+                  and metadata.get('deposit_token') == booking.deposit_token):
+                mark_deposit_paid(booking, amount_cents=pi.get('amount_received'))
 
     return jsonify({'ok': True}), 200
 

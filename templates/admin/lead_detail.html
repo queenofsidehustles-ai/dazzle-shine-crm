@@ -10,9 +10,9 @@
 
   <div style="display:flex;flex-direction:column;gap:18px">
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
       <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ lead.name }}</span></div>
-      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ lead.email }}" style="color:#5d4f7d">{{ lead.email }}</a></span></div>
+      <div class="detail-row"><span class="dl">Email</span><span class="dv"><a href="mailto:{{ lead.email }}" style="color:var(--muted)">{{ lead.email }}</a></span></div>
       <div class="detail-row"><span class="dl">Phone</span><span class="dv">{{ lead.phone or '—' }}</span></div>
       {% if lead.address %}
       <div class="detail-row"><span class="dl">Address</span><span class="dv">{{ lead.address }}, {{ lead.city }} {{ lead.zip_code }}</span></div>
@@ -20,24 +20,24 @@
     </div>
 
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Quote Details</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Quote Details</h2>
       <div class="detail-row"><span class="dl">Service</span><span class="dv">{{ lead.service_label }}</span></div>
       <div class="detail-row"><span class="dl">Bedrooms</span><span class="dv">{{ lead.bedrooms or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Bathrooms</span><span class="dv">{{ lead.bathrooms or '—' }}</span></div>
       {% if lead.extras %}
       <div class="detail-row"><span class="dl">Add-ons</span><span class="dv">{{ lead.extras }}</span></div>
       {% endif %}
-      <div class="detail-row"><span class="dl">Quoted Price</span><span class="dv" style="font-size:1.3rem;font-weight:700;color:#b98a33">{% if lead.is_commercial %}<span style="font-size:1rem;font-weight:600;color:#9a95ad">Set at walkthrough</span>{% else %}${{ '%.2f' % (lead.quoted_price or 0) }}{% endif %}</span></div>
+      <div class="detail-row"><span class="dl">Quoted Price</span><span class="dv" style="font-size:1.3rem;font-weight:700;color:var(--amber-deep)">{% if lead.is_commercial %}<span style="font-size:1rem;font-weight:600;color:var(--softer)">Set at walkthrough</span>{% else %}${{ '%.2f' % (lead.quoted_price or 0) }}{% endif %}</span></div>
       {% if not lead.is_commercial %}
-      <div class="detail-row"><span class="dl">Drip Step</span><span class="dv" style="color:#9a95ad">{{ lead.drip_step }} of 3 emails sent</span></div>
+      <div class="detail-row"><span class="dl">Drip Step</span><span class="dv" style="color:var(--softer)">{{ lead.drip_step }} of 3 emails sent</span></div>
       {% endif %}
-      <div class="detail-row"><span class="dl">Received</span><span class="dv" style="color:#9a95ad;font-size:0.88rem">{{ lead.created_at.strftime('%B %d, %Y') }}</span></div>
+      <div class="detail-row"><span class="dl">Received</span><span class="dv" style="color:var(--softer);font-size:0.88rem">{{ lead.created_at.strftime('%B %d, %Y') }}</span></div>
     </div>
   </div>
 
   <div style="display:flex;flex-direction:column;gap:18px">
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Manage Lead</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Manage Lead</h2>
       <form method="POST">
         <div class="form-group">
           <label>Status</label>
@@ -49,7 +49,7 @@
         </div>
         <div class="form-group">
           <label>Closed by — VA credited for commission
-            <span style="font-weight:400;color:#9a95ad;font-size:0.8rem">(leave blank for website / paid-ad leads)</span>
+            <span style="font-weight:400;color:var(--softer);font-size:0.8rem">(leave blank for website / paid-ad leads)</span>
           </label>
           <select name="agent">
             <option value="">— none —</option>
@@ -66,8 +66,8 @@
 
     {% if lead.status != 'converted' %}
     <div class="card">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:12px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Convert to Booking</h2>
-      <p style="font-size:0.88rem;color:#5f5878;margin-bottom:14px">Creates a new booking and client from this lead. No deposit required — you can confirm dates and collect payment separately.</p>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Convert to Booking</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin-bottom:14px">Creates a new booking and client from this lead. No deposit required — you can confirm dates and collect payment separately.</p>
       <form method="POST" action="{{ url_for('leads.convert', lead_id=lead.id) }}"
             onsubmit="return confirm('Convert this lead to a booking?')">
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Convert to Booking →</button>

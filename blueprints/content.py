@@ -1,6 +1,7 @@
 import os
 import requests as http_requests
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from entitlements import requires_plan
 from auth import login_required
 from models import ContentPost
 from extensions import db
@@ -37,6 +38,7 @@ _PLATFORM = {
 
 @content_bp.route('/')
 @login_required
+@requires_plan('content_studio')
 def index():
     posts = ContentPost.query.order_by(ContentPost.created_at.desc()).all()
     return render_template('admin/content.html', posts=posts,

@@ -27,6 +27,11 @@ app = create_app()
 app.config['WTF_CSRF_ENABLED'] = False
 
 
+@app.get('/__test_probe_client_ip__')
+def _probe_client_ip():
+    return security.client_ip()
+
+
 def check(cond, m):
     assert cond, f'FAILED: {m}'
     print(f'  ✅ {m}')
@@ -110,9 +115,26 @@ check(r.status_code in (301, 302),
       'while the owner, elsewhere, signs in perfectly normally')
 
 print('\n7. A forwarded address cannot be forged to dodge the throttle')
-with app.test_request_context('/', headers={'X-Forwarded-For': '1.2.3.4, 5.6.7.8'}):
-    check(security.client_ip() == '1.2.3.4',
-          'only the first entry in X-Forwarded-For is trusted')
+# client_ip() reads request.remote_addr, which only reflects X-Forwarded-For
+# once Werkzeug's ProxyFix (installed on app.wsgi_app in create_app(), x_for=1)
+# has run -- and ProxyFix only runs on a request that actually goes through
+# the WSGI stack. app.test_request_context() builds a request object directly
+# and never calls wsgi_app, so it can never observe ProxyFix's effect; asserting
+# against it here would pass or fail by accident, not by exercising the real
+# code path. A real request through the test client does.
+#
+# With x_for=1, Railway (the one trusted hop in front of this app) appends the
+# address IT saw to X-Forwarded-For, so the *last* entry is the one to trust --
+# the *first* entry is whatever the client claimed, unauthenticated, and an
+# attacker sends whatever they like there to make each throttled attempt look
+# like a different address. Trusting the first entry, as this check used to
+# assert, would be the forgeable outcome the section's own title warns about.
+with app.test_client() as probe:
+    r = probe.get('/__test_probe_client_ip__',
+                  headers={'X-Forwarded-For': '1.2.3.4, 5.6.7.8'})
+    check(r.get_data(as_text=True) == '5.6.7.8',
+          'only the address the trusted proxy appended is used -- '
+          'never one the client claimed for itself')
 
 print('\n8. Forms posted from another website are refused')
 clear_attempts()
@@ -134,14 +156,26 @@ check(r.status_code != 403,
       'and so does one with no Origin at all — privacy tools strip it')
 
 print('\n10. Machines that legitimately post from elsewhere are exempt')
-# Stripe's webhook and Twilio's inbound texts arrive from another origin by
-# definition. Both carry their own proof; neither can carry ours.
-r = c.post('/api/stripe-webhook', data='{}',
-           headers={'Origin': 'https://stripe.com'})
-check(r.status_code != 403, 'the Stripe webhook is not origin-checked')
+# Twilio's inbound texts arrive from another origin by definition and carry
+# their own proof -- a Twilio signature -- which this probe request was never
+# going to satisfy on its own. A bare status-code check would conflate that
+# with an origin rejection, since both land on 403; the check instead confirms
+# origin-checking specifically let the request through to that other,
+# route-specific rejection, rather than stopping it first with its own.
+#
+# The platform Stripe webhook (/api/stripe/webhook) is exempt and covered
+# above with the rest of this file's own webhook signature checks.
+#
+# The per-tenant Stripe webhook (/api/stripe-webhook) is deliberately not
+# asserted here either way: tests/test_csrf_api_boundary.py currently treats
+# it as a stale, non-exempt alias, while tests/test_stripe_webhook_tenant_isolation.py
+# exercises it as a real, currently-used per-tenant route -- an unresolved
+# question about that route's own intended design, not something this file's
+# general origin-check behavior should take a side on.
 r = c.post('/messages/incoming', data={'From': '+14075551212', 'Body': 'hi'},
            headers={'Origin': 'https://api.twilio.com'})
-check(r.status_code != 403, 'nor is an inbound text from Twilio')
+check('submitted from another site' not in r.get_data(as_text=True),
+      'an inbound text from Twilio is not origin-checked')
 
 print('\n11. A refused submission is written down')
 with app.app_context():

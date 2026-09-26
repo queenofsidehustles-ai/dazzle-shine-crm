@@ -1,0 +1,138 @@
+{% extends "console/_shell.html" %}
+{% block title %}{{ org.name }}{% endblock %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+<p style="margin:0 0 var(--s2)"><a href="{{ url_for('console.companies') }}" class="ops-dim">← Companies</a></p>
+<h2 style="font-size:1.2rem;margin:0 0 var(--s1)">{{ org.name }}
+  <span class="ops-badge ops-{{ org.status }}">{{ org.status }}</span>
+  {% if org.is_demo %}<span class="ops-badge">demo company</span>{% elif org.is_test %}<span class="ops-badge">test account</span>{% endif %}</h2>
+<p class="ops-dim" style="margin:0 0 var(--s4)">
+  <a href="https://{{ org.slug }}.{{ PRODUCT_DOMAIN }}" target="_blank" rel="noopener">{{ org.slug }}.{{ PRODUCT_DOMAIN }}</a>
+  {% if org.owner_email %} · owner <a href="mailto:{{ org.owner_email }}">{{ org.owner_email }}</a>{% endif %}
+  · since {{ org.created_at.strftime('%d %b %Y') if org.created_at }}
+</p>
+<p class="ops-dim" style="margin:calc(-1 * var(--s3)) 0 var(--s4)">
+  Came from: <strong>{{ came_from }}</strong>
+  {%- if org.signup_medium %} · {{ org.signup_medium }}{% endif %}
+  {%- if org.signup_landing %} · landed on <code>{{ org.signup_landing }}</code>{% endif %}
+  {%- if org.referred_by %} · referred by <a href="{{ url_for('console.company', slug=org.referred_by) }}">{{ org.referred_by }}</a>{% endif %}
+  {%- if referred %} · referred {{ referred|length }}:
+    {% for c in referred %}<a href="{{ url_for('console.company', slug=c.slug) }}">{{ c.name or c.slug }}</a>{{ ', ' if not loop.last }}{% endfor %}
+  {%- endif %}
+</p>
+
+<div class="ops-grid">
+  <div class="ops-card"><span class="ops-dim">Plan</span>
+    <span class="v">{{ org.plan or 'solo' }}</span>
+    <span class="ops-dim">{{ org.subscription_status }}{% if org.grandfathered %} · grandfathered{% endif %}</span></div>
+  <div class="ops-card"><span class="ops-dim">Trial</span>
+    {% if trial %}
+      <span class="v">{% if trial.phase == 'over' %}over{% else %}{{ trial.days_left }}d{% endif %}</span>
+      <span class="ops-dim">{% if trial.phase == 'not_started' %}left to start{% elif trial.phase == 'running' %}left{% endif %}
+        · ends {{ trial.ends_at.strftime('%d %b') }}</span>
+    {% else %}<span class="v">—</span><span class="ops-dim">not on a trial</span>{% endif %}</div>
+  <div class="ops-card"><span class="ops-dim">Activated</span>
+    <span class="v">{{ org.activated_at.strftime('%d %b') if org.activated_at else 'not yet' }}</span>
+    <span class="ops-dim">first job assigned</span></div>
+  <div class="ops-card"><span class="ops-dim">Trial emails sent</span>
+    <span class="v" style="font-size:var(--t-sm)">{{ (org.nudges_sent or 'none')|replace(',', ', ') }}</span></div>
+</div>
+
+{% if snap is none %}
+  <p class="ops-dim">This company is {{ org.status }}, so its data is not read from here.
+  {% if purge_from %}Its data is retained until {{ purge_from.strftime('%d %b %Y') }}; permanent purge is run from a terminal with <code>tenant_lifecycle_cli.py</code>, never from this page.{% endif %}</p>
+{% elif not snap.ok %}
+  <p class="ops-bad">Could not read this company's data ({{ snap.why }}). Its schema may be missing or mid-migration.</p>
+{% else %}
+<div class="ops-grid">
+  <div class="ops-card"><span class="ops-dim">Owner last signed in</span>
+    <span class="v">{{ snap.owner_last_login.strftime('%d %b') if snap.owner_last_login else 'never' }}</span>
+    <span class="ops-dim">anyone: {{ snap.last_login.strftime('%d %b %H:%M') if snap.last_login else 'never' }}</span></div>
+  <div class="ops-card"><span class="ops-dim">People</span><span class="v">{{ snap.users }}</span>
+    <span class="ops-dim">active logins</span></div>
+  <div class="ops-card"><span class="ops-dim">Clients</span><span class="v">{{ snap.clients }}</span></div>
+  <div class="ops-card"><span class="ops-dim">Last 30 days</span><span class="v">{{ snap.bookings_30d }}</span>
+    <span class="ops-dim">booked · {{ snap.completed_30d }} completed</span></div>
+</div>
+
+<h3 class="ops-h">Automations</h3>
+<div class="ops-scroll"><table class="con">
+  <tr><th>Job</th><th>State</th><th>Last ran</th><th>Notes</th></tr>
+  {% for j in snap.jobs %}
+  <tr><td>{{ j.label }}<br><span class="ops-dim">{{ j.cadence }}</span></td>
+      <td><span class="ops-badge ops-{{ j.state }}">{{ j.state }}</span></td>
+      <td>{{ j.ran_at.strftime('%d %b %H:%M') if j.ran_at else 'never' }}</td>
+      <td>{{ j.evidence or '' }}{% if j.state == 'failing' and j.detail %}<pre class="ops-detail">{{ j.detail }}</pre>{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+
+<h3 class="ops-h">Open errors ({{ snap.open_errors }})</h3>
+{% if snap.errors %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>What</th><th>Where</th><th>Times</th><th>Last</th></tr>
+  {% for e in snap.errors %}
+  <tr><td><strong>{{ e.kind }}</strong><br><span class="ops-dim">{{ e.message }}</span></td>
+      <td>{{ e.path }}</td><td>{{ e.count }}</td>
+      <td>{{ e.last_seen.strftime('%d %b %H:%M') if e.last_seen }}</td></tr>
+  {% endfor %}
+</table></div>
+<p class="ops-dim">The owner marks these resolved from their own Errors page, where the traceback is.</p>
+{% else %}<div class="con-empty">No open errors.</div>{% endif %}
+{% endif %}
+
+<h3 class="ops-h">Actions</h3>
+{% if not may_operate %}
+<p class="ops-dim">Only a manager or the owner can change a company.</p>
+{% else %}
+<div class="ops-actions">
+  {% if trial %}
+  <form method="post" action="{{ url_for('console.extend_trial', slug=org.slug) }}">
+    <label for="days" class="ops-dim">Extend trial</label>
+    <select name="days" id="days"><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option></select>
+    <button class="btn btn-outline btn-sm" type="submit">Extend</button>
+  </form>
+  {% endif %}
+  {% if not org.is_demo %}
+  <form method="post" action="{{ url_for('console.mark_test_account', slug=org.slug) }}">
+    <input type="hidden" name="on" value="{{ '0' if org.is_test else '1' }}">
+    <button class="btn btn-outline btn-sm" type="submit">{{ 'Not a test account' if org.is_test else 'Mark as test account' }}</button>
+  </form>
+  {% endif %}
+  {% if org.status == 'active' %}
+  <form method="post" action="{{ url_for('console.suspend_company', slug=org.slug) }}"
+        onsubmit='return confirm({{ ("Suspend " ~ org.name ~ "? Nobody there will be able to sign in.")|tojson }})'>
+    <label for="reason" class="ops-dim">Suspend</label>
+    <input type="text" name="reason" id="reason" required placeholder="Why — this goes in the record">
+    <button class="btn btn-outline btn-sm" type="submit">Suspend</button>
+  </form>
+  {% elif org.status == 'suspended' %}
+  <form method="post" action="{{ url_for('console.reactivate_company', slug=org.slug) }}">
+    <button class="btn btn-outline btn-sm" type="submit">Reactivate</button>
+  </form>
+  {% endif %}
+</div>
+<p class="ops-dim" style="margin-top:var(--s3)">A test account is left out of the Funnel and Sales numbers and never sent trial reminders; it still works normally. Closing a company and purging its data are not done from here. They start and end a legal retention period, so they are run from a terminal (<code>tenant_lifecycle_cli.py</code>).</p>
+{% endif %}
+
+<h3 class="ops-h">Reports from this company</h3>
+{% if reports %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>When</th><th>Kind</th><th>What they said</th><th>Done</th></tr>
+  {% for f in reports %}
+  <tr><td>{{ f.created_at.strftime('%d %b') if f.created_at }}</td><td>{{ f.kind }}</td>
+      <td>{{ (f.body or '')|truncate(160) }}</td><td>{{ 'yes' if f.read_at else '—' }}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="con-empty">No reports from {{ org.name }}.</div>{% endif %}
+
+<h3 class="ops-h">What the console did here</h3>
+{% if history %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>
+  {% for h in history %}
+  <tr><td>{{ h.created_at.strftime('%d %b %H:%M') if h.created_at }}</td><td>{{ h.actor }}</td>
+      <td>{{ h.action }}</td><td>{{ h.detail or '' }}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="con-empty">Nothing yet.</div>{% endif %}
+{% endblock %}

@@ -1,0 +1,43 @@
+{# A "get me there" button, for every page a cleaner reads on a doorstep.
+
+   Deliberately just links. Google, Apple and Waze all accept a plain URL with
+   an address in it, which opens whichever app is already on the phone with
+   directions loaded. No API key, no account, no billing, no usage limits --
+   the paid Maps API is for drawing a map inside a page, which nobody standing
+   outside a house needs.
+
+   The address MUST be urlencode'd. An apartment number like "12 Elm St #4"
+   contains a # , which a browser reads as the start of a fragment and drops
+   everything after -- so an un-encoded link silently navigates to the wrong
+   street, and the cleaner finds out at the door.
+
+   Google first because it opens the Google Maps app on both iPhone and
+   Android, and falls back to the web when neither is installed. Waze second
+   because a lot of drivers prefer it and it is one tap either way. #}
+
+{% macro navigate(address, city, zip_code, style='full') %}
+  {% set full = (address or '') ~ (', ' ~ city if city else '') ~ (' ' ~ zip_code if zip_code else '') %}
+  {% if address %}
+    {% if style == 'full' %}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <a href="https://www.google.com/maps/dir/?api=1&destination={{ full | urlencode }}"
+           target="_blank" rel="noopener"
+           style="flex:1;min-width:140px;text-align:center;background:#d3a84f;color:#1a1225;
+                  padding:12px 16px;border-radius:999px;text-decoration:none;font-weight:700">
+          🧭 Navigate
+        </a>
+        <a href="https://waze.com/ul?q={{ full | urlencode }}&navigate=yes"
+           target="_blank" rel="noopener"
+           style="flex:0 0 auto;text-align:center;background:#f6f5fb;color:#5f5878;
+                  border:1px solid #e4dfef;padding:12px 16px;border-radius:999px;
+                  text-decoration:none;font-weight:600">
+          Waze
+        </a>
+      </div>
+    {% else %}
+      <a href="https://www.google.com/maps/dir/?api=1&destination={{ full | urlencode }}"
+         target="_blank" rel="noopener"
+         style="color:#b98a33;text-decoration:none;font-weight:600">🧭 Navigate →</a>
+    {% endif %}
+  {% endif %}
+{% endmacro %}

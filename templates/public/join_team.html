@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Set up your account — {{ s.name }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", sans-serif; background: var(--ground); color: var(--ink); min-height: 100vh; padding: 32px 16px; }
+    .wrap { max-width: 460px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 28px; }
+    .header .script { font-family: "Allura", cursive; font-size: 2rem; color: var(--amber); display: block; margin-bottom: 4px; }
+    .header h1 { font-size: 1.3rem; font-weight: 700; color: var(--ink); }
+    .header p { color: var(--softer); font-size: 0.88rem; margin-top: 6px; }
+    .card { background: #fff; border-radius: 16px; border: 1px solid var(--line); padding: 32px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); }
+    label { display: block; font-weight: 600; font-size: 0.88rem; margin-bottom: 8px; color: var(--ink); }
+    input { width: 100%; padding: 12px 14px; border: 2px solid var(--line); border-radius: 8px; font-size: 1rem;
+            font-family: "Inter", sans-serif; color: var(--ink); transition: border-color 0.2s; margin-bottom: 16px; }
+    input:focus { outline: none; border-color: var(--amber); }
+    .btn { background: linear-gradient(135deg,var(--amber),var(--amber-deep)); color: var(--ink); border: none;
+           padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; width: 100%; }
+    .btn:hover { opacity: 0.9; }
+    .flash { background: var(--warn-soft); border: 1px solid var(--warn-soft); color: var(--warn); padding: 10px 16px;
+             border-radius: 8px; font-size: 0.88rem; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <span class="script">{{ s.name }}</span>
+      <h1>Welcome to the team</h1>
+      <p>Set up your own sign-in to see your schedule and get job offers.</p>
+    </div>
+    <div class="card">
+      {% if error %}<div class="flash">{{ error }}</div>{% endif %}
+      <form method="POST">
+        <label>Email — this is what you'll sign in with</label>
+        <input type="email" name="username" value="{{ s.email or '' }}" required />
+        <label>Phone</label>
+        <input type="tel" name="phone" value="{{ s.phone or '' }}" placeholder="(555) 123-4567" />
+        <label>Choose a password</label>
+        <input type="password" name="password" autocomplete="new-password" required />
+        <label>Confirm password</label>
+        <input type="password" name="confirm" autocomplete="new-password" required />
+        <button type="submit" class="btn">Set up my account →</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

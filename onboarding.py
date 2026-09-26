@@ -104,3 +104,118 @@ def summary():
         'blocking': blocking,
         'complete': not blocking,
     }
+
+
+# ── The path to a first real job ────────────────────────────────────────────
+#
+# The checklist above is about configuration: is this business able to email a
+# customer, take a card, quote a price. It is the right list and it is the wrong
+# first screen. Somebody who has just signed up does not know what any of it is
+# for yet, and eight equally-weighted items with no order is a shape people
+# close the tab on.
+#
+# This is the other question: has the software done its job once? A business is
+# only really using a CRM when a real job is on the calendar with a real cleaner
+# assigned to it. Everything before that is setup; everything after is work.
+#
+# So this is a single line, in order, with one thing to do next. Not a list of
+# twelve equal calls to action -- one.
+
+def journey():
+    """The five steps between signing up and the software being useful."""
+    from models import BusinessSetting, Staff, Booking, BookingCrew
+
+    def setting(key):
+        return bool((BusinessSetting.get(key) or '').strip())
+
+    has_staff = Staff.query.filter_by(is_active=True).count() > 0
+    has_client = False
+    try:
+        from models import Client
+        has_client = Client.query.count() > 0
+    except Exception:
+        pass
+    bookings = Booking.query.count()
+    # Assigned means a named cleaner, by either route -- a crew row, or the
+    # single-cleaner field older jobs use.
+    assigned = (BookingCrew.query.count() > 0
+                or Booking.query.filter(Booking.assigned_cleaner.isnot(None)).count() > 0)
+
+    return [
+        {'key': 'business', 'done': setting('business_name'),
+         'title': 'Tell us about your business',
+         'why': 'Your name goes on every quote, invoice and text your customers get.',
+         'cta': 'Add your details', 'link': '/settings/business'},
+        {'key': 'pricing', 'done': setting('pricing_reviewed'),
+         'title': 'Check your prices',
+         'why': 'The CRM quotes from these. Until you have looked, it is quoting somebody else’s numbers.',
+         'cta': 'Review prices', 'link': '/settings/pricing'},
+        # `booking_page_shared`, not `booking_page_seen`. The old flag was set
+        # by opening /book — which is where this step's own button went, so the
+        # step ticked itself the moment anybody clicked it and then sat there
+        # crossed out above a business that had shared nothing.
+        {'key': 'booking_page', 'done': setting('booking_page_shared'),
+         'title': 'Share your booking page',
+         'why': 'You already have one — a page where customers pick what they want, '
+                'see your price and book themselves. It just needs to be somewhere '
+                'they will see it, like your Facebook bio.',
+         'cta': 'Show me my page', 'link': '/settings/booking-page'},
+        {'key': 'team', 'done': has_staff,
+         'title': 'Add a cleaner',
+         'why': 'You need somebody to send a job to. Add yourself if you are still cleaning.',
+         'cta': 'Add a cleaner', 'link': '/staff/new',
+         # A business coming off a spreadsheet or another system does not
+         # have "a cleaner" to add, it has a roster -- typing them in one at
+         # a time here is exactly the retyping the Migration Toolbox exists
+         # to skip.
+         'secondary': {'label': 'Already have a team? Import them all at once',
+                       'link': '/migration'}},
+        {'key': 'client', 'done': has_client,
+         'title': 'Add a customer',
+         'why': 'One you already clean for. Real is better than made up — you will see how it works.',
+         'cta': 'Add a customer', 'link': '/bookings/clients/new',
+         'secondary': {'label': 'Already have a customer list? Import it instead',
+                       'link': '/migration'}},
+        {'key': 'job', 'done': bookings > 0 and assigned,
+         'title': 'Schedule a job and assign it',
+         'why': 'This is the moment it starts being useful — the cleaner gets a text with the address, '
+                'the price and the checklist.',
+         'cta': 'Book a job', 'link': '/bookings/new'},
+    ]
+
+
+def progress():
+    """Where a business is on that path, and the single next thing to do.
+
+    Two different questions used to share one answer, and they are not the same
+    question:
+
+    `activated` — has this business put its real world into the software? A
+    cleaner they employ and a customer they clean for. That is the moment it
+    stops being a demo, and it is what starts the 14 days: somebody who has
+    entered a person and a customer has enough in front of them to judge the
+    product, and somebody who has not, has not.
+
+    `complete` — has every setup step been done? A longer list, and the right
+    condition for putting the getting-started card away.
+
+    Using `complete` for both meant the trial clock only began once all six
+    steps were finished, while the banner promised it began at the first
+    assigned job. The banner was describing a rule the code did not have.
+    """
+    steps = journey()
+    done = sum(1 for s in steps if s['done'])
+    nxt = next((s for s in steps if not s['done']), None)
+    by_key = {s['key']: bool(s['done']) for s in steps}
+    return {
+        'steps': steps,
+        'done': done,
+        'total': len(steps),
+        'percent': int(round(done / len(steps) * 100)) if steps else 0,
+        'next': nxt,
+        # The trial trigger. Both, not either: a cleaner with nobody to clean
+        # for, or a customer with nobody to send, is half a setup and shows
+        # nothing working end to end.
+        'activated': by_key.get('team', False) and by_key.get('client', False),
+        'complete': nxt is None,
+    }

@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from auth import login_required
+from auth import owner_required
 from models import Staff
 from extensions import db
 
@@ -17,16 +17,24 @@ def _rate(raw, default):
 
 
 @staff_bp.route('/')
-@login_required
+@owner_required
 def index():
     staff = Staff.query.order_by(Staff.is_active.desc(), Staff.name).all()
     return render_template('admin/staff.html', staff=staff)
 
 
 @staff_bp.route('/new', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def new():
     if request.method == 'POST':
+        # Checked here, not in the template. Hiding the button is decoration;
+        # the URL is still there and the person most likely to type it is the
+        # one who just hit the limit.
+        import entitlements
+        ok, why = entitlements.check_limit('field_workers')
+        if not ok:
+            flash(why, 'error')
+            return redirect(url_for('billing.upgrade', feature='field_workers'))
         s = Staff(
             name=request.form['name'].strip(),
             phone=request.form.get('phone', '').strip(),
@@ -45,7 +53,7 @@ def new():
 
 
 @staff_bp.route('/<int:staff_id>', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def edit(staff_id):
     s = Staff.query.get_or_404(staff_id)
     if request.method == 'POST':
@@ -66,7 +74,7 @@ def edit(staff_id):
 
 
 @staff_bp.route('/<int:staff_id>/toggle', methods=['POST'])
-@login_required
+@owner_required
 def toggle_active(staff_id):
     """Silently activate/deactivate a team member. Deactivating removes them
     from all job broadcasts, the assignment dropdown, and reminder emails.
@@ -82,7 +90,7 @@ def toggle_active(staff_id):
 
 
 @staff_bp.route('/<int:staff_id>/delete', methods=['POST'])
-@login_required
+@owner_required
 def delete(staff_id):
     s = Staff.query.get_or_404(staff_id)
     db.session.delete(s)

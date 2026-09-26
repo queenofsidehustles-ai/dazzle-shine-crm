@@ -1,9 +1,10 @@
-"""A job with nobody on it says so, on the list and on the calendar.
+"""A job with nobody on it says so, everywhere it appears.
 
 The bookings list flagged a job only when a cleaner had actively DECLINED. A job
 nobody was ever offered looked exactly like a covered one — no badge, no colour,
 nothing — so the jobs most likely to be forgotten were the ones the screen said
-least about.
+least about. The dashboard only looked at tomorrow, which is the point at which
+finding somebody is hardest.
 """
 import os, sys, tempfile
 from datetime import date, timedelta
@@ -26,6 +27,7 @@ def check(cond, m):
 
 
 TOMORROW = (date.today() + timedelta(days=1)).isoformat()
+LATER = (date.today() + timedelta(days=5)).isoformat()
 
 with app.app_context():
     db.create_all()
@@ -74,9 +76,19 @@ with app.app_context():
     check('Cleaner declined' in page, 'a decline still reads as a decline')
     check('Nobody assigned' in page, 'and a never-offered job reads differently')
 
-    print('\n6. The calendar marks it too')
-    page = c.get('/bookings/calendar').get_data(as_text=True)
-    check('NOBODY ASSIGNED' in page, 'the chip says so on hover')
-    check('⚠️ Nobody On It' in page or '⚠️ Nobody' in page, 'and carries a warning in the chip itself')
+    print('\n6. The dashboard looks past tomorrow')
+    far = Booking(service_type='standard', name='Next Week', address='6 St',
+                  price=200, status='confirmed', preferred_date=LATER)
+    db.session.add(far); db.session.commit()
+    page = c.get('/').get_data(as_text=True)
+    check('with nobody on them' in page or 'with nobody assigned' in page,
+          'tomorrow is still called out')
+    check('Next Week' in page,
+          'and so is a job five days out — which used to be invisible until the night before')
 
-print('\n🎉 A job with nobody on it is visible on the list and the calendar.')
+    print('\n7. The calendar marks it too')
+    page = c.get('/bookings/calendar').get_data(as_text=True)
+    check('unassigned' in page, 'the chip carries the class')
+    check('NOBODY ASSIGNED' in page, 'and says so on hover')
+
+print('\n🎉 A job with nobody on it is visible on every screen that shows it.')

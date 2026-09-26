@@ -1,0 +1,11 @@
+{
+  "name": "akyehq-launch-readiness",
+  "private": true,
+  "scripts": {
+    "test:golden": "playwright test tests/mobile-accessibility-golden.spec.js",
+    "test:e2e:local": "playwright test tests/local-e2e.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.0"
+  }
+}

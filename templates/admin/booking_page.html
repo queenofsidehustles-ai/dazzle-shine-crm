@@ -1,0 +1,155 @@
+{% extends "base_admin.html" %}
+{% block title %}Your booking page — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Your booking page{% endblock %}
+
+{% block content %}
+
+{# The question this screen exists to answer is "what IS this?". It was asked
+   by the first person outside the company who tried the product, and it had to
+   be answered by hand. Anything that has to be explained in a conversation is
+   a screen that has not been written yet. #}
+<div class="card" style="max-width:760px;margin-bottom:18px">
+  <h2 style="margin:0 0 10px;font-size:1.15rem">What it is</h2>
+  <p style="color:var(--muted);line-height:1.75;margin:0 0 14px">
+    It is a page on the internet, already built, where <strong>your customers book
+    you themselves</strong>. They choose what they want cleaned, see
+    <strong>your</strong> price straight away, pick a date, and it lands in your
+    Bookings list. No phone call, no back-and-forth, no quote to write out.
+  </p>
+  <p style="color:var(--muted);line-height:1.75;margin:0">
+    You do not have to build it and you cannot break it. It already exists, it
+    already uses the prices you set in
+    <a href="{{ url_for('settings.pricing') }}">Pricing</a> and the colours you
+    set in <a href="{{ url_for('settings.business') }}">Business</a>. The only
+    thing left to do is <strong>put the link where people will see it</strong>.
+  </p>
+</div>
+
+<div class="card" style="max-width:760px;margin-bottom:18px">
+  <h2 style="margin:0 0 4px;font-size:1.15rem">Your link</h2>
+  <p style="color:var(--softer);font-size:0.88rem;margin:0 0 12px">
+    This is yours. It works today, on any phone.
+  </p>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+              background:var(--surface-2);border:1px solid var(--line);
+              border-radius:10px;padding:12px 14px">
+    <code id="bookurl" style="font-size:0.95rem;word-break:break-all;flex:1">{{ booking_url }}</code>
+    <button type="button" class="btn btn-primary btn-sm" id="copyurl">Copy link</button>
+    <a href="{{ booking_url }}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Preview</a>
+  </div>
+
+  <h3 style="margin:22px 0 8px;font-size:0.98rem">Where to put it</h3>
+  <ul style="color:var(--muted);line-height:1.9;margin:0;padding-left:20px">
+    <li><strong>Your Facebook or Instagram bio</strong> — the "link" field. This
+      is usually the one that brings the most bookings.</li>
+    <li><strong>Your Google Business Profile</strong> — as the appointment link.</li>
+    <li><strong>Your email signature</strong> — "Book a clean: {{ booking_url }}"</li>
+    <li><strong>Texts to customers who ask for a price.</strong> Instead of
+      writing out a quote, send the link and let them price it themselves.</li>
+    <li><strong>Flyers and van signage</strong> — it is short enough to type.</li>
+  </ul>
+</div>
+
+<div class="card" style="max-width:760px;margin-bottom:18px">
+  <h2 style="margin:0 0 4px;font-size:1.15rem">
+    If you already have a website
+    {% if not embed_allowed %}<span class="badge badge-warn" style="vertical-align:middle;margin-left:6px">Pro</span>{% endif %}
+  </h2>
+  <p style="color:var(--muted);line-height:1.75;margin:0 0 14px">
+    The link above sends people to a separate page. If you would rather the
+    booking form appeared <em>inside</em> your own website — same fonts, same
+    menu, customer never leaves your site — that is what this line does.
+  </p>
+  <p style="color:var(--muted);line-height:1.75;margin:0 0 14px">
+    <strong>You do not need this.</strong> The link works perfectly well on its
+    own, and most cleaning companies never use the widget. It is for people who
+    already have a website and want the form on it.
+  </p>
+
+  {% if embed_allowed %}
+  <div style="background:var(--surface-2);border:1px solid var(--line);
+              border-radius:10px;padding:12px 14px;display:flex;gap:10px;
+              align-items:center;flex-wrap:wrap">
+    <code id="snippet" style="font-size:0.88rem;word-break:break-all;flex:1">{{ embed_snippet }}</code>
+    <button type="button" class="btn btn-outline btn-sm" id="copysnippet">Copy</button>
+  </div>
+  <h3 style="margin:20px 0 8px;font-size:0.98rem">How to use it</h3>
+  <ol style="color:var(--muted);line-height:1.9;margin:0;padding-left:20px">
+    <li>Copy the line above.</li>
+    <li>Open the page on your website where you want the booking form —
+      usually a page called "Book" or "Contact".</li>
+    <li>Paste it in. In Wix, Squarespace, WordPress or GoDaddy this means adding
+      a block called <strong>Embed</strong>, <strong>Custom HTML</strong> or
+      <strong>Code</strong>, then pasting the line into it.</li>
+    <li>Save and look at the page. The form appears, and grows to fit — you do
+      not have to set a height.</li>
+  </ol>
+  <p style="color:var(--softer);font-size:0.85rem;line-height:1.7;margin:14px 0 0">
+    If your website person does it for you, send them that one line and nothing
+    else. It is all they need.
+  </p>
+  {% else %}
+  <div style="background:var(--surface-2);border:1px solid var(--line);
+              border-radius:10px;padding:14px">
+    <code style="font-size:0.88rem;word-break:break-all;opacity:0.55">{{ embed_snippet }}</code>
+    <p style="color:var(--muted);line-height:1.7;margin:12px 0 0;font-size:0.9rem">
+      On the free plan your booking page lives at its own address and carries our
+      name at the bottom. Pro puts it inside your own website and takes our name
+      off. <a href="{{ url_for('billing.upgrade') }}">See plans →</a>
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+{# The tick. An explicit action, not a page view — see settings.booking_page
+   for why the old one was a lie. #}
+<div class="card" style="max-width:760px">
+  <label style="display:flex;gap:11px;align-items:flex-start;cursor:pointer">
+    <input type="checkbox" id="sharedbox" {{ 'checked' if shared }}
+           style="margin-top:4px;width:18px;height:18px;flex:none">
+    <span>
+      <strong>I've put my booking link somewhere customers will see it.</strong>
+      <span style="display:block;color:var(--softer);font-size:0.88rem;margin-top:3px">
+        Ticks this off your getting-started list. Untick it if you change your mind —
+        nothing else depends on it.
+      </span>
+    </span>
+  </label>
+</div>
+
+<script>
+function wire(btnId, codeId, label) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const text = document.getElementById(codeId).textContent.trim();
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      // An older browser, or a page not served over https. Select it so the
+      // person can still copy by hand rather than being told nothing happened.
+      const r = document.createRange();
+      r.selectNode(document.getElementById(codeId));
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(r);
+      btn.textContent = 'Press ⌘C';
+      setTimeout(() => { btn.textContent = label; }, 2500);
+      return;
+    }
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.textContent = label; }, 1800);
+    // Copying the link is somebody doing the step, so tick it for them.
+    const box = document.getElementById('sharedbox');
+    if (box && !box.checked) { box.checked = true; save(true); }
+  });
+}
+function save(on) {
+  const body = new URLSearchParams();
+  if (!on) body.set('undo', '1');
+  fetch('{{ url_for("settings.booking_page_shared") }}', {method: 'POST', body: body})
+    .catch(() => {});
+}
+wire('copyurl', 'bookurl', 'Copy link');
+wire('copysnippet', 'snippet', 'Copy');
+document.getElementById('sharedbox').addEventListener('change', e => save(e.target.checked));
+</script>
+{% endblock %}

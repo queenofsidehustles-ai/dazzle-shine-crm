@@ -14,17 +14,12 @@ believe you are covered.
 
 All additive and nullable, so every application already in the table stays an
 individual and reads exactly as it did.
-
-Numbered for this line rather than the product's. The same change is
-0012 on Akye, which has walked further; a revision id only has to be
-unique and correctly parented within the line it runs on, and the next
-merge revision joins the two as the three before it did.
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = '0009_company_applicants'
-down_revision = '0008_recurring_on_quote'
+revision = '0012_company_applicants'
+down_revision = '0011_merge_recurring_quote'
 branch_labels = None
 depends_on = None
 

@@ -431,6 +431,18 @@ def restore(path, into_url, quiet=False):
         for table in _control_tables(db, url):
             known[PUBLIC][table.name] = table
             order[PUBLIC].append(table)
+        if url.startswith('postgres'):
+            # Backstop for a scratch/verify database that already had
+            # `organizations` from before closed_at/purged_at were declared
+            # columns. create_all() does not add columns to an existing
+            # table, and verify()'s lifecycle reconciliation reads them from
+            # exactly this restored database.
+            try:
+                import tenant_data_lifecycle
+            except ImportError:
+                pass
+            else:
+                tenant_data_lifecycle.ensure_columns(db.engine)
         for schema in header.get('schemas') or [PUBLIC]:
             if schema == PUBLIC:
                 continue
@@ -657,6 +669,24 @@ def verify(path, quiet=False, scratch_url=None):
 
     if problems:
         raise BackupFailed('restore did not match the backup: ' + '; '.join(problems))
+
+    # RECOVERY-03: structurally correct is not the same as traffic-ready. A
+    # backup taken during a closed tenant's 30-day retention window can
+    # legitimately contain its schema; restoring it must not silently make
+    # that data reachable again once the retention deadline has since passed,
+    # or after the tenant was purged by a later backup this one predates.
+    # This is read-only reconciliation against the just-restored scratch
+    # database — it withholds readiness, it never purges anything itself.
+    if tenants:
+        import recovery_lifecycle
+        scratch_engine = _read_engine(scratch_url)
+        try:
+            recovery_lifecycle.assert_restore_ready(scratch_engine)
+        except RuntimeError as exc:
+            raise BackupFailed(str(exc)) from exc
+        finally:
+            scratch_engine.dispose()
+
     if not quiet:
         total = sum(expected.values())
         print(f'  ✅ verified — {total:,} rows restored and counted back, '

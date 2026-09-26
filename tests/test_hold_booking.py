@@ -139,7 +139,24 @@ with app.app_context():
     check('On hold' in page and 'Rita Vance' in page, 'the On hold list has it')
     check('waiting 0 days for a date' in page, 'with how long it has been sitting')
     cal = c.get('/bookings/calendar').get_data(as_text=True)
-    check('line-through' in cal, 'and the calendar strikes it through on its old date')
+    # On the single-business CRM the strike-through is an inline style. Akye
+    # moved the calendar to classes and akye.css, so the same behaviour is
+    # written in two places -- check whichever this branch uses, and on the
+    # class-based one check the stylesheet really does strike it through rather
+    # than trusting the class name to mean something.
+    if 'line-through' in cal:
+        check(True, 'and the calendar strikes it through on its old date')
+    else:
+        import os as _os
+        css = _os.path.join(_os.path.dirname(_os.path.dirname(
+            _os.path.abspath(__file__))), 'static', 'akye.css')
+        rule = ''
+        if _os.path.exists(css):
+            body = open(css).read()
+            i = body.find('.jobchip.s-on_hold')
+            rule = body[i:i + 200] if i >= 0 else ''
+        check('s-on_hold' in cal and 'line-through' in rule,
+              'and the calendar strikes it through on its old date')
 
     print('\n8. She calls back with a date')
     when = (date.today() + timedelta(days=9)).isoformat()

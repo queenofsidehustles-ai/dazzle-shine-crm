@@ -1,0 +1,46 @@
+{% extends "marketing/_legal.html" %}
+{% block title %}Who we share data with — {{ PRODUCT }}{% endblock %}
+{% block heading %}Who we share data with{% endblock %}
+{% block doc %}
+
+<p>Every outside company that can touch data from your account, what reaches
+them, and why. We will tell you before adding anybody to this list.</p>
+
+<table style="width:100%;border-collapse:collapse;margin-top:18px;font-size:.94rem">
+  <tr style="border-bottom:2px solid var(--ink);text-align:left">
+    <th style="padding:8px 6px">Who</th><th style="padding:8px 6px">What reaches them</th>
+    <th style="padding:8px 6px">Why</th>
+  </tr>
+  {% for who, what, why in [
+    ('Railway', 'Everything — they host the database and the application', 'Hosting'),
+    ('Stripe', 'Your billing details; and, under your own Stripe account, your customers’ payment details', 'Taking payment'),
+    ('Twilio', 'Phone numbers and the text of each message', 'Sending texts'),
+    ('Resend', 'Email addresses and the content of each email', 'Sending email'),
+    ('Cloudinary', 'Photos and video uploaded by applicants and cleaners', 'Storing images'),
+    ('GitHub', 'Nightly encrypted backups of the whole database', 'Backups, kept off our host'),
+    ('OpenRouter / Anthropic', 'Only text you ask to be translated or drafted — never customer records', 'Optional AI features'),
+    ('Google', 'Business names and addresses you search for', 'Optional commercial lead finder'),
+    ('Sentry', 'Error reports. No customer records, no message contents, no credentials', 'Knowing when something breaks'),
+  ] %}
+  <tr style="border-bottom:1px solid var(--line)">
+    <td style="padding:9px 6px"><strong>{{ who }}</strong></td>
+    <td style="padding:9px 6px;color:var(--muted)">{{ what }}</td>
+    <td style="padding:9px 6px;color:var(--muted)">{{ why }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>What this list does not include</h2>
+<p>Nobody else. We do not use advertising networks, analytics that follow people
+around, data brokers, or outsourced support with access to your account.</p>
+
+<h2>Some of these are optional</h2>
+<p>Texting, AI features and the lead finder only send anything if you switch
+them on and connect them. Leave them off and no data reaches those companies at
+all.</p>
+
+<h2>Where the data sits</h2>
+<p>Primarily in the United States. Some of these providers operate globally and
+may process data elsewhere under their own terms.</p>
+
+{% endblock %}

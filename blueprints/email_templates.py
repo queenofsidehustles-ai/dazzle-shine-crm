@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from entitlements import requires_plan
 from auth import login_required
 from models import EmailTemplate
 from extensions import db
@@ -8,6 +9,7 @@ email_templates_bp = Blueprint('email_templates', __name__, url_prefix='/email-t
 
 @email_templates_bp.route('/')
 @login_required
+@requires_plan('templates')
 def index():
     category = request.args.get('cat', 'client')
     templates = EmailTemplate.query.filter_by(category=category).order_by(EmailTemplate.id).all()

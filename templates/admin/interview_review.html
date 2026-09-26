@@ -28,9 +28,9 @@
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}
-      <div style="background:{{ '#f0fff4' if cat=='success' else '#fff5f5' }};
-                  border:1px solid {{ '#c6f6d5' if cat=='success' else '#fed7d7' }};
-                  color:{{ '#276749' if cat=='success' else '#c53030' }};
+      <div style="background:{{ 'var(--good-soft)' if cat=='success' else 'var(--warn-soft)' }};
+                  border:1px solid {{ 'var(--good-soft)' if cat=='success' else 'var(--warn-soft)' }};
+                  color:{{ 'var(--good)' if cat=='success' else 'var(--warn)' }};
                   padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9rem;font-weight:500">
         {{ msg }}
       </div>
@@ -68,12 +68,12 @@
           </div>
           {% if r.transcript %}
           <div style="padding:12px 16px 16px">
-            <div style="background:#faf9ff;border:1px solid var(--border);border-radius:8px;padding:14px 16px">
+            <div style="background:var(--info-soft);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
               <div style="font-size:0.72rem;font-weight:700;color:var(--gold-deep);
                           text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px">
                 🎙 Transcript
                 {% if r.transcript_lang == 'es' %}
-                  <span style="background:#fffbeb;color:#92400e;border:1px solid #fde68a;
+                  <span style="background:var(--amber-soft);color:var(--amber-deep);border:1px solid var(--amber-line);
                                padding:2px 8px;border-radius:999px;font-size:0.7rem;
                                text-transform:none;letter-spacing:0;font-weight:600;margin-left:6px">
                     Spanish
@@ -86,7 +86,7 @@
               {% if r.transcript_lang == 'es' %}
                 {% if r.transcript_en %}
                 <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-                  <div style="font-size:0.72rem;font-weight:700;color:#2b6cb0;text-transform:uppercase;
+                  <div style="font-size:0.72rem;font-weight:700;color:var(--info);text-transform:uppercase;
                               letter-spacing:0.12em;margin-bottom:6px">🇺🇸 In English</div>
                   <p style="font-size:0.9rem;color:var(--purple-mid);line-height:1.7;margin:0">
                     {{ r.transcript_en }}
@@ -108,10 +108,10 @@
           </div>
           {% else %}
           <div style="padding:12px 16px 16px">
-            <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px">
-              <div style="font-size:0.72rem;font-weight:700;color:#92400e;text-transform:uppercase;
+            <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:12px 16px">
+              <div style="font-size:0.72rem;font-weight:700;color:var(--amber-deep);text-transform:uppercase;
                           letter-spacing:0.12em;margin-bottom:6px">🎙 No transcript</div>
-              <p style="font-size:0.84rem;color:#7c4a04;line-height:1.6;margin:0">
+              <p style="font-size:0.84rem;color:var(--amber-deep);line-height:1.6;margin:0">
                 Nothing was captured for this answer. Live transcription only works on desktop
                 Chrome and Edge — a candidate recording on a phone gets no transcript, and it
                 can't be added afterwards. Play the video above to hear the answer.
@@ -164,9 +164,9 @@
             <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);font-weight:600;margin-bottom:2px">Interview Status</div>
             <div>
               {% if app.interview_status == 'completed' %}
-                <span style="color:#276749;font-weight:600">✅ Completed</span>
+                <span style="color:var(--good);font-weight:600">✅ Completed</span>
               {% elif app.interview_status == 'in_progress' %}
-                <span style="color:#92400e;font-weight:600">⏳ In Progress</span>
+                <span style="color:var(--amber-deep);font-weight:600">⏳ In Progress</span>
               {% else %}
                 <span style="color:var(--muted)">📬 Sent</span>
               {% endif %}
@@ -202,7 +202,7 @@
                 onsubmit="return confirm('Approve {{ app.name }}\'s video and send background check request?')"
                 style="margin-bottom:10px">
             <button type="submit"
-                    style="width:100%;background:#38a169;color:#fff;border:none;padding:12px;
+                    style="width:100%;background:var(--good);color:#fff;border:none;padding:12px;
                            border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer">
               ✓ Approve Video — Request Background Check
             </button>
@@ -211,30 +211,30 @@
           <form method="POST" action="{{ url_for('interviews.reject_interview', app_id=app.id) }}"
                 onsubmit="return confirm('Reject {{ app.name }}? A polite email will be sent to them.')">
             <button type="submit"
-                    style="width:100%;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;
+                    style="width:100%;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-soft);
                            padding:12px;border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer">
               ✗ Reject — Send Polite Email
             </button>
           </form>
 
         {% elif app.status in ('reviewing',) %}
-          <div style="background:#fef9ec;border:2px solid #d3a84f;color:#92400e;
+          <div style="background:var(--amber-soft);border:2px solid var(--amber);color:var(--amber-deep);
                       padding:12px;border-radius:8px;font-weight:600;text-align:center;font-size:0.9rem">
             🔍 Video Approved — Awaiting Background Check
           </div>
           <a href="{{ url_for('contractors.application_detail', app_id=app.id) }}"
-             style="display:block;margin-top:10px;text-align:center;background:#1f1333;color:#d3a84f;
+             style="display:block;margin-top:10px;text-align:center;background:var(--ink);color:var(--amber);
                     padding:10px;border-radius:8px;font-weight:700;font-size:0.88rem;text-decoration:none">
             View Background Check Status →
           </a>
 
         {% elif app.status in ('onboarding', 'hired') %}
-          <div style="background:#f0fff4;border:1px solid #c6f6d5;color:#276749;
+          <div style="background:var(--good-soft);border:1px solid var(--good-soft);color:var(--good);
                       padding:12px;border-radius:8px;font-weight:600;text-align:center">
             ✅ Approved — In Onboarding
           </div>
         {% elif app.status == 'rejected' %}
-          <div style="background:#fff5f5;border:1px solid #fed7d7;color:#c53030;
+          <div style="background:var(--warn-soft);border:1px solid var(--warn-soft);color:var(--warn);
                       padding:12px;border-radius:8px;font-weight:600;text-align:center">
             ✗ Rejected
           </div>
@@ -252,7 +252,7 @@
         <form method="POST" action="{{ url_for('interviews.resend_offer', app_id=app.id) }}"
               onsubmit="return confirm('Send the conditional offer email (pay details + background check link) to {{ app.name }}?')">
           <button type="submit"
-                  style="width:100%;background:#d3a84f;color:#1f1333;border:none;padding:12px;
+                  style="width:100%;background:var(--amber);color:var(--ink);border:none;padding:12px;
                          border-radius:8px;font-weight:700;font-size:0.92rem;cursor:pointer">
             💌 Send Conditional Offer Email
           </button>

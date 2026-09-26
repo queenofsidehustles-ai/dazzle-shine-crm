@@ -1,32 +1,34 @@
+{% import "public/_navigate.html" as nav %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANG }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Job Available — {{ biz }}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <title>{{ t('New job available!') }} — {{ biz }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Inter,sans-serif;background:#f6f5fb;color:#1f1333;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
-    .card{background:#fff;border:1px solid #e4dfef;border-radius:16px;max-width:440px;width:100%;padding:30px 26px;box-shadow:0 8px 40px rgba(15,7,40,0.09)}
-    .script{font-family:Allura,cursive;font-size:1.8rem;color:#d3a84f;display:block;text-align:center;line-height:1;margin-bottom:4px}
+    body{font-family:Inter,sans-serif;background:var(--ground);color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:16px;max-width:440px;width:100%;padding:30px 26px;box-shadow:0 8px 40px rgba(15,7,40,0.09)}
+    .script{font-size:1.15rem;font-weight:700;letter-spacing:-.02em;color:var(--ink);display:block;text-align:center;line-height:1;margin-bottom:4px}
     h1{font-size:1.3rem;text-align:center;margin:8px 0 16px}
-    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0eef6;font-size:0.95rem}
-    .row .k{color:#9a95ad}.row .v{font-weight:700;text-align:right}
-    .pay{background:#1f1333;border-radius:12px;padding:16px;text-align:center;margin:18px 0}
+    .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--info-soft);font-size:0.95rem}
+    .row .k{color:var(--softer)}.row .v{font-weight:700;text-align:right}
+    .pay{background:var(--ink);border-radius:12px;padding:16px;text-align:center;margin:18px 0}
     .pay .l{color:rgba(255,255,255,0.55);font-size:0.72rem;letter-spacing:0.12em;text-transform:uppercase}
-    .pay .a{color:#d3a84f;font-size:2.2rem;font-weight:800;line-height:1.1}
+    .pay .a{color:var(--amber);font-size:2.2rem;font-weight:800;line-height:1.1}
     button{width:100%;border:none;border-radius:999px;padding:16px;font-weight:800;font-size:1.05rem;cursor:pointer;font-family:inherit}
-    .claim{background:linear-gradient(135deg,#34d399,#059669);color:#fff}
-    .release{background:#fff;border:1px solid #fecaca;color:#b91c1c;font-weight:700;margin-top:12px}
+    .claim{background:linear-gradient(135deg,var(--good),var(--good));color:#fff}
+    .release{background:#fff;border:1px solid var(--warn-soft);color:var(--warn);font-weight:700;margin-top:12px}
     .banner{border-radius:10px;padding:14px 16px;text-align:center;font-weight:600;line-height:1.5}
-    .taken{background:#fef3c7;color:#92400e}
-    .clash{background:#fee2e2;color:#991b1b}
-    .good{background:#d1fae5;color:#065f46}
-    .crew{background:#eef2ff;color:#3730a3;font-size:0.9rem;margin-bottom:10px}
+    .taken{background:var(--amber-soft);color:var(--amber-deep)}
+    .clash{background:var(--warn-soft);color:var(--warn)}
+    .good{background:var(--good-soft);color:var(--good)}
+    .crew{background:var(--info-soft);color:var(--info);font-size:0.9rem;margin-bottom:10px}
     .big{font-size:2.6rem;text-align:center;margin-bottom:6px}
-    .muted{color:#9a95ad;font-size:0.85rem;text-align:center;margin-top:12px}
-    a.btnlink{display:block;text-align:center;background:#d3a84f;color:#1f1333;border-radius:999px;padding:14px;font-weight:800;text-decoration:none;margin-top:14px}
+    .muted{color:var(--softer);font-size:0.85rem;text-align:center;margin-top:12px}
+    a.btnlink{display:block;text-align:center;background:var(--amber);color:var(--ink);border-radius:999px;padding:14px;font-weight:800;text-decoration:none;margin-top:14px}
   </style>
 </head>
 <body>
@@ -34,24 +36,33 @@
     <span class="script">{{ biz }}</span>
 
     {% if state == 'open' %}
-      <h1>{{ 'Team job available! 🧹👥' if b.is_crew_job else 'New job available! 🧹' }}</h1>
+      <h1>{{ t('Team job available!') if b.is_crew_job else t('New job available!') }} 🧹{{ '👥' if b.is_crew_job }}</h1>
       {% if b.is_crew_job %}
       <div class="banner crew">👥 Big house — <b>{{ b.crew_size }} cleaners</b> on this one.
         {{ b.spots_left }} spot{{ 's' if b.spots_left != 1 }} left{% if b.crew_names %}, working with {{ b.crew_names | join(', ') }}{% endif %}.</div>
       {% endif %}
-      <div class="row"><span class="k">When</span><span class="v">{{ b.preferred_date or 'TBD' }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
-      <div class="row"><span class="k">Service</span><span class="v">{{ b.service_label }}{% if b.size_line() %} · {{ b.size_line() }}{% endif %}</span></div>
-      <div class="row"><span class="k">Area</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
+      <div class="row"><span class="k">{{ t('When') }}</span><span class="v">{{ when_label }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
+      <div class="row"><span class="k">{{ t('Service') }}</span><span class="v">{{ b.service_label }}{% if b.size_line() %} · {{ b.size_line() }}{% endif %}</span></div>
+      <div class="row"><span class="k">{{ t('Area') }}</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
       <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'd earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
-        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">flat for the job</div>
+        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">{{ t('flat for the job') }}</div>
       </div>
       {% if clash %}
         <div class="banner clash">⚠️ {{ clash }}</div>
       {% else %}
         <form method="POST" action="{{ url_for('claims.claim_do', ctoken=b.claim_token, stoken=s.agreement_token) }}">
-          <button class="claim" type="submit">{{ '✋ Claim my spot' if b.is_crew_job else '✋ Claim this job' }}</button>
+          <button class="claim" type="submit">
+            ✋ {{ t('Claim my spot') if b.is_crew_job else t('Claim this job') }}
+          </button>
         </form>
-        <p class="muted">{{ 'First ' ~ b.spots_left ~ ' to claim get the open spots.' if b.is_crew_job else 'First to claim gets it.' }} The full address appears once it's yours.</p>
+        <p class="muted">
+          {%- if b.is_crew_job -%}
+            {{ t('First') }} {{ b.spots_left }} {{ t('to claim get the open spots.') }}
+          {%- else -%}
+            {{ t('First to claim gets it.') }}
+          {%- endif %}
+          {{ t("The full address appears once it's yours.") }}
+        </p>
       {% endif %}
 
     {% elif state == 'mine' %}
@@ -63,11 +74,12 @@
       <div class="banner crew" style="margin-top:10px">👥 Team job — {{ b.crew_size }} cleaners.
         {% if mates %}You're working with <b>{{ mates | join(', ') }}</b>.{% else %}Still filling the other spot{{ 's' if b.spots_left != 1 }} — we'll text you who joins.{% endif %}</div>
       {% endif %}
-      <div class="row" style="margin-top:10px"><span class="k">When</span><span class="v">{{ b.preferred_date }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
+      <div class="row" style="margin-top:10px"><span class="k">{{ t('When') }}</span><span class="v">{{ when_label }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">Client</span><span class="v">{{ b.name }}</span></div>
       <div class="row"><span class="k">Address</span><span class="v">{{ b.address }}{% if b.city %}, {{ b.city }}{% endif %} {{ b.zip_code }}</span></div>
+      {{ nav.navigate(b.address, b.city, b.zip_code) }}
       <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'll earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
-        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">flat for the job</div>
+        <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">{{ t('flat for the job') }}</div>
       </div>
       <a class="btnlink" href="{{ myday }}">📅 See it in My Day</a>
       <form method="POST" action="{{ url_for('claims.release', booking_id=b.id, stoken=s.agreement_token) }}"

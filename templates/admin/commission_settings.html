@@ -3,9 +3,9 @@
 {% block page_title %}Commission Rates{% endblock %}
 
 {% block content %}
-<div style="margin-bottom:14px"><a href="{{ url_for('commissions.index') }}" style="color:#9a95ad;font-size:0.9rem">← Commissions</a></div>
+<div style="margin-bottom:14px"><a href="{{ url_for('commissions.index') }}" style="color:var(--softer);font-size:0.9rem">← Commissions</a></div>
 <div class="card">
-  <p style="color:#9a95ad;font-size:0.88rem;margin:0 0 16px">This is exactly what your VA earns. Change any number and save — the report recalculates instantly.</p>
+  <p style="color:var(--softer);font-size:0.88rem;margin:0 0 16px">This is exactly what your VA earns. Change any number and save — the report recalculates instantly.</p>
   <form method="POST" action="{{ url_for('commissions.settings') }}">
     <h3 style="margin:0 0 10px">🏠 Residential</h3>
     <div class="grid2">
@@ -34,7 +34,7 @@
 </div>
 <style>
   .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
-  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem}
+  .lbl{display:block;font-size:0.78rem;color:var(--softer);margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:0.92rem}
 </style>
 {% endblock %}

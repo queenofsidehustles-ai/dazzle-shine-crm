@@ -6,7 +6,7 @@
   <title>{% block title %}{{ BIZ }} CRM{% endblock %}</title>
   <!-- Add-to-home-screen (installable app icon) -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}" />
-  <meta name="theme-color" content="#1f1333" />
+  <meta name="theme-color" content="#16213a" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -15,319 +15,42 @@
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon-192.png') }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    :root {
-      --gold: #d3a84f;
-      --gold-deep: #b98a33;
-      --gold-soft: rgba(211,168,79,0.12);
-      --purple: #1f1333;
-      --purple-mid: #3b2b6b;
-      --purple-light: #5d4f7d;
-      --bg: #f6f5fb;
-      --sidebar-w: 220px;
-      --text: #1f1333;
-      --muted: #5f5878;
-      --softer: #9a95ad;
-      --border: #e4dfef;
-      --white: #ffffff;
-      --radius: 14px;
-      --shadow: 0 4px 24px rgba(15,7,40,0.08);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.6; display: flex; min-height: 100vh; }
-
-    /* SIDEBAR */
-    .sidebar {
-      width: var(--sidebar-w);
-      background: var(--purple);
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      top: 0; left: 0; bottom: 0;
-      z-index: 10;
-      overflow-y: auto;
-      overflow-x: hidden;
-    }
-    .sidebar::-webkit-scrollbar { width: 4px; }
-    .sidebar::-webkit-scrollbar-track { background: transparent; }
-    .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-    .sidebar-brand {
-      padding: 20px 18px 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-    }
-    .sidebar-brand .script {
-      font-family: "Allura", cursive;
-      font-size: 1.7rem;
-      color: var(--gold);
-      line-height: 1;
-      display: block;
-    }
-    .sidebar-brand .sub {
-      font-size: 0.7rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.45);
-      margin-top: 3px;
-    }
-    .sidebar nav { padding: 12px 0; flex: 1; }
-    .sidebar nav a {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 18px;
-      color: rgba(255,255,255,0.7);
-      text-decoration: none;
-      font-weight: 500;
-      font-size: 0.95rem;
-      border-left: 3px solid transparent;
-      transition: all 0.15s;
-    }
-    .sidebar nav a:hover, .sidebar nav a.active {
-      color: #fff;
-      background: rgba(255,255,255,0.06);
-      border-left-color: var(--gold);
-    }
-    .sidebar nav a .icon { font-size: 1.1rem; width: 20px; text-align: center; }
-    .sidebar nav .nav-sec { padding: 16px 18px 5px; font-size: 0.63rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: rgba(255,255,255,0.33); }
-    .sidebar nav .nav-sec:first-of-type { padding-top: 8px; }
-    .sidebar-footer {
-      padding: 14px 18px;
-      border-top: 1px solid rgba(255,255,255,0.1);
-    }
-    .sidebar-footer a {
-      color: rgba(255,255,255,0.5);
-      text-decoration: none;
-      font-size: 0.88rem;
-      font-weight: 500;
-    }
-    .sidebar-footer a:hover { color: #fff; }
-
-    /* MAIN CONTENT */
-    .main-wrap {
-      margin-left: var(--sidebar-w);
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-    .topbar {
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 28px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .topbar h1 {
-      font-size: 1.2rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-    /* Section tabs — the pages that used to be separate sidebar entries.
-       Sits directly under the title so it reads as part of the page, and
-       scrolls sideways on a phone rather than wrapping into three rows. */
-    .section-tabs {
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
-      padding: 0 28px;
-      display: flex;
-      gap: 4px;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-    }
-    .section-tabs::-webkit-scrollbar { display: none; }
-    .section-tabs a {
-      padding: 11px 15px 9px;
-      font-size: 0.88rem;
-      font-weight: 600;
-      color: #7a7391;
-      text-decoration: none;
-      white-space: nowrap;
-      border-bottom: 2.5px solid transparent;
-    }
-    .section-tabs a:hover { color: var(--text); }
-    .section-tabs a.active { color: var(--gold-dark, #b98a33); border-bottom-color: var(--gold, #d3a84f); }
-    @media (max-width: 900px) { .section-tabs { padding: 0 14px; } }
-    /* Brand lens — the switcher between the residential and commercial sides. */
-    .brand-lens {
-      display: flex; align-items: center; gap: 7px;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: 999px; padding: 4px 12px 4px 11px; margin-left: auto;
-    }
-    .brand-lens.is-filtered { background: var(--gold-soft); border-color: var(--gold); }
-    .brand-lens-dot {
-      width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0;
-      background: var(--softer);
-    }
-    .brand-lens.is-filtered .brand-lens-dot { background: var(--gold-deep); }
-    .brand-lens select {
-      border: none; background: none; font-family: inherit;
-      font-size: 0.86rem; font-weight: 600; color: var(--muted);
-      cursor: pointer; padding: 2px 0; max-width: 190px;
-    }
-    .brand-lens.is-filtered select { color: var(--gold-deep); }
-    .brand-lens select:focus { outline: none; }
-    @media (max-width: 700px) {
-      .brand-lens { padding: 3px 9px; }
-      .brand-lens select { max-width: 116px; font-size: 0.8rem; }
+    /* Anything genuinely specific to this shell lives here. Everything shared
+       is in akye.css -- see that file for why the system exists at all. */
+    .brand-lens { display:flex; align-items:center; gap:7px; margin-left:auto;
+                  background:var(--ground); border:1px solid var(--line);
+                  border-radius:var(--r-pill); padding:4px 12px 4px 11px; }
+    .brand-lens.is-filtered { background:var(--amber-soft); border-color:var(--amber-line); }
+    .brand-lens-dot { width:7px; height:7px; border-radius:var(--r-pill);
+                      flex-shrink:0; background:var(--softer); }
+    .brand-lens.is-filtered .brand-lens-dot { background:var(--amber-deep); }
+    .brand-lens select { border:none; background:none; font-family:inherit;
+                         font-size:var(--t-sm); font-weight:600; color:var(--muted);
+                         cursor:pointer; padding:2px 0; max-width:190px; width:auto; }
+    .brand-lens.is-filtered select { color:var(--amber-deep); }
+    .brand-lens select:focus { outline:none; box-shadow:none; }
+    @media (max-width:700px){
+      .brand-lens { padding:3px 9px; }
+      .brand-lens select { max-width:116px; font-size:var(--t-xs); }
     }
 
-    .topbar .badge-pending {
-      background: var(--gold-soft);
-      color: var(--gold-deep);
-      border-radius: 999px;
-      padding: 3px 11px;
-      font-size: 0.8rem;
-      font-weight: 700;
+    .ask-nana-quick {
+      display:flex; align-items:center; gap:7px; margin:0 16px 14px;
+      background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12);
+      border-radius:var(--r-pill); padding:8px 13px;
     }
-    .content { padding: 26px 28px; flex: 1; }
-
-    /* CARDS */
-    .card {
-      background: var(--white);
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow);
-      padding: 22px;
+    .ask-nana-quick-icon { flex:0 0 auto; font-size:0.9rem; opacity:0.85; }
+    .ask-nana-quick input {
+      flex:1; min-width:0; border:none; background:none; outline:none;
+      color:#fff; font-family:inherit; font-size:var(--t-sm);
     }
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 16px;
-      margin-bottom: 26px;
+    .ask-nana-quick input::placeholder { color:rgba(255,255,255,0.5); }
+    .ask-nana-quick:focus-within {
+      border-color:rgba(255,255,255,0.3); background:rgba(255,255,255,0.11);
     }
-    .stat-card {
-      background: var(--white);
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      padding: 18px 20px;
-      box-shadow: var(--shadow);
-    }
-    .stat-card .label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--softer); font-weight: 600; margin-bottom: 6px; }
-    .stat-card .value { font-size: 2rem; font-weight: 700; color: var(--text); line-height: 1; }
-    .stat-card .sub { font-size: 0.82rem; color: var(--muted); margin-top: 4px; }
 
-    /* TABLE */
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
-    th { text-align: left; padding: 10px 14px; color: var(--softer); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; border-bottom: 1px solid var(--border); }
-    td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #faf9ff; }
-    td a { color: var(--purple-light); text-decoration: none; font-weight: 600; }
-    td a:hover { text-decoration: underline; }
-
-    /* STATUS BADGES */
-    .status {
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 999px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-    .status-pending { background: #fef3c7; color: #92400e; }
-    .status-confirmed { background: #dbeafe; color: #1e40af; }
-    .status-completed { background: #d1fae5; color: #065f46; }
-    .status-cancelled { background: #fee2e2; color: #991b1b; }
-    .status-on_hold { background: #ede9fe; color: #5b21b6; }
-
-    /* BUTTONS */
-    .btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 9px 18px; border-radius: 999px; border: none;
-      font-size: 0.92rem; font-weight: 700; cursor: pointer; text-decoration: none;
-      transition: all 0.1s;
-    }
-    .btn-gold { background: linear-gradient(135deg,#f4d07a,#d3a84f); color: #1a1225; box-shadow: 0 8px 24px rgba(211,168,79,0.35); }
-    .btn-gold:hover { filter: brightness(1.05); }
-    .btn-dark { background: var(--purple); color: #fff; }
-    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
-    .btn-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
-
-    /* FORM INPUTS */
-    .form-group { margin-bottom: 16px; }
-    .form-group label { display: block; font-weight: 600; font-size: 0.88rem; color: var(--muted); margin-bottom: 5px; }
-    .form-group input, .form-group select, .form-group textarea {
-      width: 100%; padding: 9px 13px;
-      border: 1px solid var(--border); border-radius: 9px;
-      font-size: 0.95rem; font-family: inherit; color: var(--text);
-      background: var(--white); outline: none;
-    }
-    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-      border-color: var(--gold);
-      box-shadow: 0 0 0 3px rgba(211,168,79,0.15);
-    }
-    .form-group textarea { resize: vertical; min-height: 80px; }
-
-    /* FLASH MESSAGES */
-    .flash { padding: 11px 16px; border-radius: 10px; margin-bottom: 18px; font-weight: 600; font-size: 0.92rem; }
-    .flash-success { background: #d1fae5; color: #065f46; }
-    .flash-error { background: #fee2e2; color: #991b1b; }
-    .flash-warning { background: #fff3cd; color: #856404; }
-
-    /* FILTER TABS */
-    .filter-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
-    .filter-tab {
-      padding: 6px 16px; border-radius: 999px;
-      font-size: 0.85rem; font-weight: 600; text-decoration: none;
-      background: var(--white); border: 1px solid var(--border); color: var(--muted);
-    }
-    .filter-tab:hover { border-color: var(--gold); color: var(--text); }
-    .filter-tab.active { background: var(--purple); color: #fff; border-color: var(--purple); }
-
-    /* SECTION HEADER */
-    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; flex-wrap: wrap; }
-    .section-header h2 { font-size: 1.1rem; font-weight: 700; }
-
-    /* DETAIL GRID */
-    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
-    @media (max-width: 768px) { .detail-grid { grid-template-columns: 1fr; } }
-    .detail-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
-    .detail-row .dl { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--softer); font-weight: 600; }
-    .detail-row .dv { font-weight: 600; color: var(--text); }
-
-    /* HAMBURGER (mobile menu button) + off-canvas overlay */
-    .hamburger {
-      display: none; align-items: center; justify-content: center;
-      width: 40px; height: 40px; flex-shrink: 0;
-      border: 1px solid var(--border); background: #fff; border-radius: 10px;
-      font-size: 1.35rem; line-height: 1; cursor: pointer; color: var(--purple);
-    }
-    .nav-overlay { display: none; position: fixed; inset: 0; background: rgba(15,7,40,0.45); z-index: 9; }
-    .nav-overlay.show { display: block; }
-    img, canvas, video { max-width: 100%; }
-
-    /* ── MOBILE LAYOUT ─────────────────────────────────────────────── */
-    @media (max-width: 900px) {
-      .sidebar {
-        transform: translateX(-100%);
-        transition: transform 0.25s ease;
-        width: 260px;
-        box-shadow: 0 0 50px rgba(0,0,0,0.35);
-      }
-      .sidebar.open { transform: translateX(0); }
-      .sidebar nav a { padding: 13px 18px; font-size: 1rem; }   /* bigger touch targets */
-      .main-wrap { margin-left: 0; }
-      .topbar {
-        padding: 12px 14px;
-        justify-content: flex-start; gap: 12px;
-        position: sticky; top: 0; z-index: 8;
-      }
-      .topbar h1 { font-size: 1.05rem; }
-      .topbar > div:last-child { margin-left: auto; }
-      .hamburger { display: inline-flex; }
-      .content { padding: 16px 14px; }
-      .card { padding: 16px; }
-      /* Wide tables scroll sideways instead of crushing */
-      .table-wrap { -webkit-overflow-scrolling: touch; }
-      .table-wrap table { min-width: 560px; }
-      .stat-card .value { font-size: 1.7rem; }
-    }
   </style>
 
   <!-- The Scripts and SOPs pages were written against Alpine (x-data / x-show)
@@ -342,21 +65,59 @@
       <span class="script">{{ BIZ }}</span>
       <span class="sub">Back Office</span>
     </div>
+    {# Ask Nana moved into the Knowledge Base -- a place to go looking, not
+       the front-line spot she held right under Dashboard. This is what
+       keeps her from losing prominence in that move: a quick question from
+       anywhere in the app, on every screen rather than the one page you'd
+       otherwise have to go find first. Owner-only, matching the page itself
+       (see assistant_routes.py). #}
+    {# Hidden on the Ask Nana page itself -- that page already has its own
+       full search bar (voice, suggested questions, history), so showing
+       this one too put two ways to ask the same question on screen at
+       once, and typing into this one just reloaded the page you were
+       already on. #}
+    {% if session.get('role') == 'owner' and request.endpoint != 'assistant.page' %}
+    <form class="ask-nana-quick" action="{{ url_for('assistant.page') }}" method="GET">
+      <span class="ask-nana-quick-icon">💬</span>
+      <input type="text" name="q" placeholder="Ask Nana anything…"
+             aria-label="Ask Nana" autocomplete="off" />
+    </form>
+    {% endif %}
+    {# How far through setup, on every screen rather than only on the page
+       about setup. Somebody who cannot see how much is left assumes it is a
+       lot, and a job half done that looks endless is the one that gets
+       abandoned. Disappears for good once the last step is ticked. #}
+    {% if SETUP and not SETUP.complete %}
+    <a href="{{ url_for('settings.getting_started') }}" class="setup-meter">
+      <span class="setup-line">
+        <span>Setting up</span>
+        <span class="setup-count">{{ SETUP.done }} of {{ SETUP.total }}</span>
+      </span>
+      <span class="setup-track"><span class="setup-fill" style="width:{{ SETUP.percent }}%"></span></span>
+      {% if SETUP.next %}<span class="setup-next">Next: {{ SETUP.next.title }}</span>{% endif %}
+    </a>
+    {% endif %}
     <nav>
       {# Drawn from navigation.py — one line per page there, no active-state
          expressions here. See that file before adding a menu entry. #}
       {% for section in NAV %}
       {% if section.heading != 'Dashboard' %}<div class="nav-sec">{{ section.heading }}</div>{% endif %}
       {% for item in section['items'] %}
-      <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}">
+      {# A page their plan doesn't include is drawn greyed with a padlock, not
+         removed. An owner who can see Hiring sitting there knows the product
+         does it; one who can't, doesn't. #}
+      <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}{{ ' locked' if item.locked }}"{% if item.locked %} title="Included in Pro"{% endif %}>
         <span class="icon">{{ item.icon }}</span> {{ item.label }}
-        {% if item.endpoint == 'messages.inbox' and nav_unread %}<span style="margin-left:auto;background:#e53e3e;color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
+        {% if item.locked %}<span style="margin-left:auto;font-size:0.72rem;opacity:0.75">🔒</span>{% endif %}
+        {% if item.endpoint == 'messages.inbox' and nav_unread %}<span style="margin-left:auto;background:var(--warn);color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
       </a>
       {% endfor %}
       {% endfor %}
     </nav>
     <div class="sidebar-footer">
-      {% if session.get('user_name') %}<div style="font-size:0.75rem;color:#9a95ad;margin-bottom:6px">{{ session.get('user_name') }}{% if not is_owner %} · Team{% endif %}</div>{% endif %}
+      {% if session.get('user_name') %}<div style="font-size:0.75rem;color:var(--softer);margin-bottom:6px">{{ session.get('user_name') }}{% if not is_owner %} · Team{% endif %}</div>{% endif %}
+      {# Was a second link to the same page, right next to Sign out -- Security
+         now has its own place in the main menu, under Settings. #}
       <a href="{{ url_for('admin.logout') }}">Sign out</a>
       {# Which build is on screen. "Is my change live yet?" should not require
          logging into Railway to answer. #}
@@ -369,7 +130,7 @@
   <div class="main-wrap">
     <div class="topbar">
       <button class="hamburger" onclick="toggleNav()" aria-label="Open menu">☰</button>
-      <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+      <h1>{% block page_title %}{{ NAV_TITLE or 'Dashboard' }}{% endblock %}</h1>
 
       {% if BRAND_LENS_CHOICES %}
       {# Which side of the business is on screen. Deliberately loud when it is
@@ -387,14 +148,30 @@
       </form>
       {% endif %}
 
-      <div>{% block topbar_right %}{% endblock %}</div>
+      <div class="topbar-right">{% block topbar_right %}{% endblock %}</div>
     </div>
+    <script>
+      // The section tabs stick just under the topbar. Its height changes --
+      // a long title, or on a phone the actions dropping to their own row --
+      // so the tabs are told where it ends rather than assuming 57px and
+      // sliding underneath it.
+      (function () {
+        var bar = document.querySelector('.topbar');
+        if (!bar) return;
+        function set() {
+          document.documentElement.style.setProperty('--topbar-h', bar.offsetHeight + 'px');
+        }
+        set();
+        if (window.ResizeObserver) new ResizeObserver(set).observe(bar);
+        else window.addEventListener('resize', set);
+      })();
+    </script>
     {# The pages that used to be their own sidebar entries. One section, one
        menu item, its pages as tabs. #}
     {% if NAV_TABS %}
     <div class="section-tabs">
       {% for t in NAV_TABS %}
-      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}">{{ t.label }}</a>
+      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}" {% if t.locked %}style="opacity:0.45" title="Included in Pro"{% endif %}>{{ t.label }}{% if t.locked %} 🔒{% endif %}</a>
       {% endfor %}
     </div>
     {% endif %}
@@ -404,12 +181,93 @@
           <div class="flash flash-{{ category }}">{{ msg }}</div>
         {% endfor %}
       {% endwith %}
-      {% if SETUP_PENDING and request.endpoint != 'settings.setup' %}
-      <a href="{{ url_for('settings.setup') }}" style="display:block;text-decoration:none;background:#fff8e1;border:1px solid #f0d488;border-radius:10px;padding:13px 16px;margin-bottom:16px;color:#7c4a04">
-        <strong>Finish setting up your CRM</strong> — {{ SETUP_PENDING }} still to do before you can take real bookings.
-        <span style="text-decoration:underline">Show me →</span>
+      {# One reminder a day, naming the single next step and nothing else.
+         Not on the dashboard: that page already carries the full getting-started
+         card, and two amber boxes saying the same sentence one above the other
+         reads as a bug rather than as encouragement. Not on the getting-started
+         page either, for the same reason -- its entire content IS that card, so
+         this floated a second "here's what's next" on top of a page that already
+         says nothing else. The gap this closes is every other screen, where
+         there was nothing at all.
+         Dismissible on purpose: a prompt you cannot put away stops being a
+         nudge and becomes an obstacle, and the person it annoys most is the
+         one who has decided to do it later today anyway. It comes back
+         tomorrow, and it stops for good when setup is finished. #}
+      {% if SETUP and not SETUP.complete and SETUP.next
+            and request.endpoint not in ('admin.dashboard', 'settings.getting_started') %}
+      <div class="setup-nudge" id="setupnudge" hidden>
+        <div class="setup-nudge-body">
+          <strong>You are {{ SETUP.percent }}% set up.</strong>
+          Next: {{ SETUP.next.title }}. {{ SETUP.next.why }}
+        </div>
+        <div class="setup-nudge-acts">
+          <a class="btn-primary" href="{{ SETUP.next.link }}">{{ SETUP.next.cta }}</a>
+          <button type="button" class="btn-quiet" onclick="hideNudge()">Later</button>
+        </div>
+      </div>
+      <script>
+        // Once a day, not once a page. Keyed by date so it returns tomorrow
+        // without ever nagging twice in one sitting.
+        (function () {
+          var el = document.getElementById('setupnudge');
+          if (!el) return;
+          var key = 'setup-nudge-' + new Date().toISOString().slice(0, 10);
+          try { if (localStorage.getItem(key) === '1') return; } catch (e) {}
+          el.hidden = false;
+        })();
+        function hideNudge() {
+          var el = document.getElementById('setupnudge');
+          if (el) el.hidden = true;
+          try {
+            localStorage.setItem(
+              'setup-nudge-' + new Date().toISOString().slice(0, 10), '1');
+          } catch (e) {}
+        }
+      </script>
+      {% endif %}
+      {# Where they are in the trial. Always a countdown of some kind: one
+         clock says "you have not begun", the other says "you are running
+         out", and a state with neither is how a trial becomes something
+         somebody thinks they can come back to whenever.
+
+         Two different clocks live behind TRIAL.days_left depending on phase
+         -- the 14-day trial length once it starts, and a separate 30-day
+         window to start it at all -- and stating both numbers in one
+         sentence ("your 14 days... N days left") read as self-contradicting
+         since nothing told them apart. Fixed two ways: the start-by
+         countdown only appears once it is actually close (<=7 days,
+         matching the day-7 email nudge elsewhere -- see trial_nudges.py),
+         so it is not competing with "14" for most of the window; and when it
+         does appear, it says plainly what it is counting down to. #}
+      {# Only where somebody is deciding what to do next. On a phone these
+         banners plus the Getting started card filled the whole first screen,
+         so you scrolled past three blocks of nagging to reach today's jobs. #}
+      {% set ON_START = request.endpoint in ('admin.dashboard', 'settings.getting_started') %}
+      {% if ON_START and TRIAL and not TRIAL.expired %}
+      <a href="{{ url_for('billing.upgrade') }}" class="trialbar {{ 'urgent' if TRIAL.days_left <= 3 }}">
+        {% if TRIAL.phase == 'not_started' %}
+          {# Says exactly what starts it. This used to say "assign a job",
+             which was not the condition the code checked — so somebody could
+             do the thing they were told and watch nothing happen. #}
+          <b>Add your first cleaner and your first customer to start your 14-day trial.</b>
+          {% if TRIAL.days_left <= 7 %}
+            <span class="left">{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left before that offer closes</span>.
+          {% endif %}
+        {% else %}
+          <b>{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left</b>
+          of everything. After that you keep working on the free plan —
+          nothing is deleted.
+        {% endif %}
+        <span class="go">See plans →</span>
+      </a>
+      {% elif ON_START and TRIAL and TRIAL.expired %}
+      <a href="{{ url_for('billing.upgrade') }}" class="trialbar over">
+        <b>Your trial has finished.</b>
+        You are on the free plan — everything you entered is still here.
+        <span class="go">See plans →</span>
       </a>
       {% endif %}
+
       {% block content %}{% endblock %}
     </div>
   </div>
@@ -460,5 +318,9 @@
       });
     })();
   </script>
+  <script src="{{ url_for('static', filename='card-reorder.js') }}" defer></script>
+  {# On every screen, deliberately. A beta tester who has to go and find
+     somewhere to report a problem mostly does not. #}
+  {% if session.get('logged_in') %}{% include '_feedback.html' %}{% endif %}
 </body>
 </html>

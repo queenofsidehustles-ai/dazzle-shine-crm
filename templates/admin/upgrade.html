@@ -1,0 +1,129 @@
+{% extends "base_admin.html" %}
+{% block title %}Upgrade · {{ BIZ }}{% endblock %}
+{% block content %}
+<style>
+  /* Scoped to this page. Everything shared lives in akye.css -- this is the
+     one place three cards need to sit side by side and nowhere else does. */
+  .pr-intro { max-width: 640px; margin-bottom: var(--s6); }
+  .pr-grid {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--s5); align-items: stretch;
+  }
+  @media (max-width: 900px) { .pr-grid { grid-template-columns: 1fr; max-width: 420px; } }
+
+  .pr-card {
+    position: relative; display: flex; flex-direction: column;
+    background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+    border: 1px solid var(--line); border-top: 4px solid var(--line);
+    border-radius: var(--r-lg); box-shadow: var(--shadow);
+    padding: var(--s6) var(--s5) var(--s5);
+  }
+  .pr-card.is-current { border-color: var(--good); border-top-color: var(--good); }
+  .pr-card.is-highlight {
+    border-top-color: var(--amber); box-shadow: var(--shadow-md);
+    transform: translateY(-4px);
+  }
+  .pr-badge {
+    position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+    background: var(--amber); color: #fff; font-size: var(--t-xs); font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; padding: 4px 14px;
+    border-radius: var(--r-pill); box-shadow: var(--shadow-md); white-space: nowrap;
+  }
+  .pr-name { font-size: var(--t-lg); font-weight: 700; color: var(--ink); margin: 0; }
+  .pr-price { font-size: var(--t-2xl); font-weight: 800; color: var(--ink); margin: var(--s2) 0 0; }
+  .pr-price span { font-size: var(--t-sm); font-weight: 500; color: var(--muted); }
+  .pr-cancel { font-size: var(--t-xs); color: var(--softer); margin: 2px 0 0; }
+  .pr-blurb { color: var(--muted); font-size: var(--t-sm); line-height: var(--lh); margin: var(--s3) 0 0; }
+  .pr-current-pill {
+    display: inline-block; margin-top: var(--s3); font-size: var(--t-xs); font-weight: 700;
+    background: var(--good-soft); color: var(--good); border-radius: var(--r-pill);
+    padding: 3px 11px;
+  }
+  .pr-cta { margin-top: var(--s4); }
+  .pr-cta .btn-primary, .pr-cta .btn-secondary { width: 100%; justify-content: center; display: flex; }
+  .pr-note { color: var(--softer); font-size: var(--t-xs); margin-top: var(--s3); }
+
+  .pr-rows { list-style: none; margin: var(--s5) 0 0; padding: var(--s5) 0 0;
+             border-top: 1px solid var(--line-soft); flex: 1; }
+  .pr-rows li { display: flex; align-items: flex-start; gap: 9px; padding: 6px 0;
+                font-size: var(--t-sm); color: var(--ink); }
+  .pr-rows li .pr-x { color: var(--warn); font-weight: 700; flex: 0 0 auto; }
+  .pr-rows li .pr-check { color: var(--good); font-weight: 700; flex: 0 0 auto; }
+  .pr-rows li.pr-off { color: var(--softer); }
+  .pr-rows .pr-group { color: var(--softer); font-size: var(--t-xs); text-transform: uppercase;
+                        letter-spacing: .04em; font-weight: 700; margin: var(--s4) 0 var(--s2); }
+  .pr-rows .pr-group:first-child { margin-top: 0; }
+</style>
+
+<div class="pr-intro">
+  {% if feature_label %}
+    <h2 style="margin:0 0 8px">{{ feature_label }} is part of {{ plans[need].label }}</h2>
+    <p style="color:var(--muted);margin:0">
+      You're on {{ plans[state.effective_plan].label }} at the moment.
+      {{ plans[need].blurb }}
+    </p>
+  {% else %}
+    <h2 style="margin:0 0 8px">Choose a plan</h2>
+    <p style="color:var(--muted);margin:0">The free plan runs a real business. Upgrade when you need more capacity and automation.</p>
+  {% endif %}
+</div>
+
+<div class="pr-grid">
+  {% for key in plan_order %}
+    {% set p = plans[key] %}
+    {% set is_current = key == state.effective_plan %}
+    {% set is_highlight = key == 'pro' and not is_current %}
+    <div class="pr-card {{ 'is-current' if is_current }} {{ 'is-highlight' if is_highlight }}">
+      {% if is_highlight %}<div class="pr-badge">Most businesses</div>{% endif %}
+      <h3 class="pr-name">{{ p.label }}</h3>
+      <div class="pr-price">
+        {% if p.price == 0 %}Free{% else %}${{ p.price }}<span>/month</span>{% endif %}
+      </div>
+      {% if p.price > 0 %}<p class="pr-cancel">Cancel anytime.</p>{% endif %}
+      <p class="pr-blurb">{{ p.blurb }}</p>
+
+      {% if is_current %}
+        <span class="pr-current-pill">Your plan</span>
+      {% elif key != 'solo' %}
+        <div class="pr-cta">
+          {% if can_pay %}
+            <form method="post" action="{{ url_for('billing.checkout', plan=key) }}">
+              <button type="submit" class="btn-primary">Move to {{ p.label }}</button>
+            </form>
+          {% else %}
+            <p class="pr-note">Card payments aren't switched on for this deployment.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      <ul class="pr-rows">
+        <li class="pr-group">Capacity</li>
+        {% for row_key, row_label in limit_rows %}
+          {% set cap = limit_table[row_key][key] %}
+          <li>
+            <span class="pr-check">✓</span>
+            {% if cap is none %}Unlimited {{ row_label }}
+            {% elif row_key == 'sms_per_month' and cap == 0 %}Email only — no texting
+            {% elif row_key == 'sms_per_month' %}{{ cap }} texts/month
+            {% else %}Up to {{ cap }} {{ row_label }}{% endif %}
+          </li>
+        {% endfor %}
+
+        <li class="pr-group">Features</li>
+        {% for row_key, row_label in feature_rows %}
+          {% set included = feature_table[row_key][key] %}
+          <li class="{{ '' if included else 'pr-off' }}">
+            {% if included %}<span class="pr-check">✓</span>{% else %}<span class="pr-x">✕</span>{% endif %}
+            {{ row_label }}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endfor %}
+</div>
+
+<p style="color:var(--softer);font-size:0.86rem;margin-top:var(--s6);max-width:640px">
+  Nothing you've already entered is affected by a plan change. Moving down
+  means you can't add more of something — never that anything disappears.
+</p>
+{% endblock %}

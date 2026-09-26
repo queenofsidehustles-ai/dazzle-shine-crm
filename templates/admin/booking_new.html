@@ -4,8 +4,8 @@
 
 {% block content %}
 {% if client %}
-<div style="background:#f0edf8;border-radius:10px;padding:12px 15px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-  <span style="font-size:0.9rem;color:#3b2460">
+<div style="background:var(--line-soft);border-radius:10px;padding:12px 15px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+  <span style="font-size:0.9rem;color:var(--ink-2)">
     📋 New booking for <strong>{{ client.name }}</strong> — their details are filled in below{% if last %}, including the size of their home{% endif %}.
   </span>
   <a href="{{ url_for('bookings.client_detail', client_id=client.id) }}" class="btn btn-outline" style="padding:5px 14px;font-size:0.82rem">← Back to {{ client.name.split()[0] }}</a>
@@ -13,7 +13,7 @@
 {% endif %}
 
 <div style="margin-bottom:14px">
-  <a href="{{ url_for('bookings.index') }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem">← All bookings</a>
+  <a href="{{ url_for('bookings.index') }}" style="color:var(--info);text-decoration:none;font-size:0.85rem">← All bookings</a>
 </div>
 
 {# Named, because the running total below has to find *this* form. It used to
@@ -52,7 +52,7 @@
       </div>
     </div>
 
-    <hr style="border:none;border-top:1px solid #efecf6;margin:18px 0">
+    <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">🧹 The Job</h2>
 
     <div class="form-group">
@@ -93,10 +93,18 @@
       </div>
     </div>
 
+    <div class="form-group" style="display:flex;align-items:center;gap:9px">
+      <input type="checkbox" id="is_recurring" style="width:auto" onchange="toggleRecurring()" />
+      <label for="is_recurring" style="margin:0;cursor:pointer">🔁 This is a recurring cleaning</label>
+    </div>
     <div class="detail-grid" style="gap:14px">
-      <div class="form-group">
-        <label>Frequency</label>
-        <select name="frequency">
+      <div class="form-group" id="freq-wrap" style="display:none">
+        <label>How often</label>
+        {# Disabled, not just hidden -- a disabled field submits nothing at
+           all, so an unchecked box reliably means one_time server-side
+           rather than a value some earlier click left sitting in a hidden
+           select. toggleRecurring() keeps it in sync with the checkbox. #}
+        <select name="frequency" id="frequency-select" disabled>
           {% for key, label in frequency_labels.items() %}
           <option value="{{ key }}">{{ label }}</option>
           {% endfor %}
@@ -107,14 +115,14 @@
         <input type="text" name="cleaning_price" placeholder="Leave blank to auto-calculate" />
       </div>
     </div>
-    <div class="form-group" style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:10px;padding:12px">
-      <label style="color:#2b6cb0">📣 Lead fee ($) <span style="font-weight:400;color:#5f5878">— your ad cost. Added to the customer total and hidden from them. It never reaches the cleaner.</span></label>
+    <div class="form-group" style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:10px;padding:12px">
+      <label style="color:var(--info)">📣 Lead fee ($) <span style="font-weight:400;color:var(--muted)">— your ad cost. Added to the customer total and hidden from them. It never reaches the cleaner.</span></label>
       <input type="text" name="lead_fee" value="" placeholder="Leave blank if no ad cost" />
-      <p style="font-size:0.78rem;color:#5f5878;margin-top:6px">Optional — only enter an amount if this customer came from a paid ad. Leave blank for referrals, repeat customers, or walk-ins.</p>
+      <p style="font-size:0.78rem;color:var(--muted);margin-top:6px">Optional — only enter an amount if this customer came from a paid ad. Leave blank for referrals, repeat customers, or walk-ins.</p>
     </div>
 
     <!-- LIVE RUNNING TOTAL -->
-    <div style="background:#1f1333;color:#fff;border-radius:12px;padding:16px 18px;margin:4px 0 4px">
+    <div style="background:var(--ink);color:#fff;border-radius:12px;padding:16px 18px;margin:4px 0 4px">
       <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:rgba(255,255,255,0.7);padding:2px 0">
         <span>Cleaning price</span><span id="rt-cleaning">$0.00</span>
       </div>
@@ -124,17 +132,17 @@
       <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-weight:700">Customer pays</span>
-        <span id="rt-total" style="font-weight:700;font-size:1.5rem;color:#d3a84f">$0.00</span>
+        <span id="rt-total" style="font-weight:700;font-size:1.5rem;color:var(--amber)">$0.00</span>
       </div>
       <p style="font-size:0.72rem;color:rgba(255,255,255,0.45);margin-top:6px">The cleaner's pay is a flat amount set on the job — it doesn't come out of this total, and never out of the lead fee.</p>
     </div>
 
-    <hr style="border:none;border-top:1px solid #efecf6;margin:18px 0">
+    <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">📅 Schedule</h2>
     <div class="detail-grid" style="gap:14px">
       <div class="form-group">
-        <label>Date</label>
-        <input type="date" name="preferred_date" />
+        <label for="preferred-date">Date</label>
+        <input id="preferred-date" type="date" name="preferred_date" />
       </div>
       <div class="form-group">
         <label>Time</label>
@@ -153,11 +161,11 @@
       <textarea name="access_notes" rows="2" placeholder="Gate code 1234, key under mat, friendly dog"></textarea>
     </div>
     <div class="form-group">
-      <label>Notes <span style="font-weight:400;color:var(--softer)">(internal)</span></label>
-      <textarea name="notes" rows="2"></textarea>
+      <label for="booking-notes">Notes <span style="font-weight:400;color:var(--softer)">(internal)</span></label>
+      <textarea id="booking-notes" name="notes" rows="2"></textarea>
     </div>
 
-    <hr style="border:none;border-top:1px solid #efecf6;margin:18px 0">
+    <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px">💳 Payment</h2>
     <div class="form-group" style="margin-bottom:10px">
       <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500">
@@ -171,7 +179,7 @@
       </label>
     </div>
 
-    <label style="display:flex;align-items:center;gap:9px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin:6px 0 14px;cursor:pointer;font-weight:600;color:#166534">
+    <label style="display:flex;align-items:center;gap:9px;background:var(--good-soft);border:1px solid var(--good-soft);border-radius:10px;padding:12px 14px;margin:6px 0 14px;cursor:pointer;font-weight:600;color:var(--good)">
       <input type="checkbox" name="notify_customer" value="1" checked style="width:auto">
       📩 Send a booking confirmation — sends whether or not you also ask for payment
     </label>
@@ -182,29 +190,30 @@
 </form>
 
 <script>
-  // Selects can't take a value attribute, so the remembered choice is applied
-  // here. This used to sit after the closing endblock tag, which in a child
-  // template puts it outside every block — Jinja discarded it and the prefill
-  // never ran at all. It has to come before the running total below, or the
-  // first total is worked out from whatever the selects happened to default to.
-  // (Writing that tag literally in a comment is not safe either: Jinja reads
-  // template tags inside script comments and would close the block here.)
+  function toggleRecurring() {
+    var cb = document.getElementById('is_recurring');
+    var wrap = document.getElementById('freq-wrap');
+    var sel = document.getElementById('frequency-select');
+    wrap.style.display = cb.checked ? '' : 'none';
+    sel.disabled = !cb.checked;
+    if (cb.checked) {
+      // Ticking the box with the select still on its default is exactly the
+      // case it exists to skip past -- land on Weekly, not on One-Time.
+      if (sel.value === 'one_time') sel.value = 'weekly';
+    } else {
+      sel.value = 'one_time';
+    }
+    sel.dispatchEvent(new Event('change'));
+  }
+
   document.querySelectorAll('select[data-prefill]').forEach(function (el) {
     var want = el.getAttribute('data-prefill');
     if (want) { el.value = want; }
   });
 
   (function () {
-    // Deliberately by id. This used to select the first form in the document,
-    // and once a brand switcher appeared in the sidebar — which renders above
-    // the content block — that was the one it got. Every lookup below returned null,
-    // reading .value off null threw before the fetch, and the whole running
-    // total died silently: the box stayed at $0.00 no matter what was typed,
-    // and typing a price did nothing because the listeners were bound to the
-    // wrong form too.
     const form = document.getElementById('booking-form');
     if (!form) return;
-    // Missing a field should cost that field, not the entire total.
     const val = n => (form.querySelector('[name="' + n + '"]') || {}).value || '';
     const money = v => '$' + (Number(v) || 0).toFixed(2);
     let timer = null;
@@ -232,8 +241,7 @@
 
     form.addEventListener('input', debounced);
     form.addEventListener('change', updateTotal);
-    updateTotal();   // initial — after the prefill above, so the first total
-                     // reflects the remembered choices and not the defaults
+    updateTotal();
   })();
 </script>
 {% endblock %}

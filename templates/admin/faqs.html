@@ -1,0 +1,55 @@
+{% extends "base_admin.html" %}
+{% block title %}Knowledge Base — {{ BIZ }} CRM{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('faq.new') }}" class="btn btn-gold" style="padding:6px 16px;font-size:0.85rem">+ Add a question</a>
+{% endblock %}
+
+{% block content %}
+
+<form method="GET" style="margin-bottom:18px">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search questions and answers…"
+         style="width:100%;max-width:480px;padding:10px 14px;border:1px solid var(--line);
+                border-radius:var(--r);font-size:0.95rem;font-family:inherit" />
+</form>
+
+{% if faqs %}
+<div style="display:flex;flex-direction:column;gap:14px">
+  {% for f in faqs %}
+  <div class="card" style="padding:20px 24px" x-data="{ open: false }">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:1rem;color:var(--ink);margin-bottom:8px">{{ f.question }}</div>
+        <p style="font-size:0.88rem;color:var(--softer);margin:0;white-space:pre-wrap" x-show="!open">{{ f.answer[:200] }}{% if f.answer|length > 200 %}…{% endif %}</p>
+        <div style="font-size:0.88rem;color:var(--ink-2);margin:0;white-space:pre-wrap;line-height:1.7" x-show="open">{{ f.answer }}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
+        <button @click="open=!open" class="btn btn-outline" style="padding:5px 14px;font-size:0.78rem">
+          <span x-text="open ? 'Collapse' : 'Expand'">Expand</span>
+        </button>
+        <a href="{{ url_for('faq.edit', faq_id=f.id) }}"
+           class="btn btn-dark" style="padding:5px 14px;font-size:0.78rem;text-align:center">Edit</a>
+        <form method="POST" action="{{ url_for('faq.delete', faq_id=f.id) }}"
+              onsubmit="return confirm('Delete this question?')">
+          <button type="submit" style="background:none;border:none;color:var(--warn);font-size:0.78rem;cursor:pointer;padding:4px 0;width:100%;text-align:center">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% elif q %}
+<div class="card" style="text-align:center;padding:48px 24px">
+  <p style="font-size:2rem;margin-bottom:12px">🔍</p>
+  <p style="color:var(--softer);margin-bottom:20px">Nothing found for "{{ q }}".</p>
+  <a href="{{ url_for('faq.new') }}" class="btn btn-gold">Add it as a new question</a>
+</div>
+
+{% else %}
+<div class="card" style="text-align:center;padding:48px 24px">
+  <p style="font-size:2rem;margin-bottom:12px">💡</p>
+  <p style="color:var(--softer);margin-bottom:20px">Nothing curated yet. The first entry usually comes from the first real problem somebody solved.</p>
+  <a href="{{ url_for('faq.new') }}" class="btn btn-gold">Add the first question</a>
+</div>
+{% endif %}
+{% endblock %}

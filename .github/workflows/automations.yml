@@ -47,9 +47,6 @@ on:
       cadence:
         description: Which timetable to run by hand
         type: choice
-        # 'hourly' is charge-balances and is deliberately not offered until the
-        # per-business setting exists. Running it by hand would charge cards at
-        # every company at once.
         options: [daily]
         default: daily
       only:
@@ -57,8 +54,6 @@ on:
         type: string
         default: ''
 
-# One at a time. Two runs charging the same balances at once is the failure
-# worth designing out, whatever the endpoints do about it themselves.
 concurrency:
   group: automations
   cancel-in-progress: false
@@ -70,12 +65,19 @@ jobs:
       contents: read
 
     steps:
-      # The companies are on Akye, so the code that knows what a company is
-      # comes from Akye's released branch — not from main, which has no tenancy
-      # and no control plane to read.
+      # Exact-release provenance matters for a launch gate. Do not silently
+      # substitute a hard-coded branch here: checkout must use the same ref/SHA
+      # that triggered this workflow. For a scheduled run GitHub supplies the
+      # default-branch commit containing the workflow; for workflow_dispatch it
+      # uses the selected ref. That makes the code that runs auditable from the
+      # workflow run itself instead of being an implicit second release.
       - uses: actions/checkout@v4
-        with:
-          ref: akye-stable
+
+      - name: Record scheduler source revision
+        run: |
+          echo "scheduler_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "Scheduler source: $(git rev-parse HEAD)"
+        id: source
 
       - uses: actions/setup-python@v5
         with:
@@ -105,12 +107,11 @@ jobs:
             ${{ inputs.only && format('--only {0}', inputs.only) || '' }} \
             | tee run.log
 
-      # The whole point of moving this off the customer is that a failure
-      # becomes ours to notice. A red run is the notice.
       - name: Say what happened
         if: always()
         run: |
           echo "### Automations — ${{ steps.which.outputs.cadence }}" >> $GITHUB_STEP_SUMMARY
+          echo "Scheduler source: ${{ steps.source.outputs.scheduler_sha }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           tail -40 run.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(no output)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

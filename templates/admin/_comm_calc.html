@@ -9,33 +9,64 @@
       <input class="inp" type="number" name="square_footage" id="calc_sqft" min="0"
              value="{% if a is defined and a and a.square_footage %}{{ a.square_footage }}{% endif %}"
              oninput="runCommCalc()" style="min-width:130px"></div>
+    <div><label class="lbl">Drive time <span style="color:#9a95ad;font-weight:400">(round trip, mins)</span></label>
+      <input class="inp" type="number" name="drive_minutes" id="calc_drive" min="0" step="5"
+             value="{% if a is defined and a and a.drive_minutes %}{{ a.drive_minutes }}{% else %}{{ pricing_config.drive_minutes|round|int }}{% endif %}"
+             oninput="runCommCalc()" style="min-width:110px"></div>
     <button type="button" class="btn btn-outline" onclick="runCommCalc()" style="padding:9px 14px">Suggest price</button>
   </div>
   <div id="calc_out" style="margin-top:10px;font-size:0.92rem;color:#1f1333"></div>
 </div>
 <script>
 const COMM_PRICING = {{ pricing_config|tojson }};
+
+// The price is worked out on the server, at /commercial/quote.json. This used
+// to do the arithmetic here — and so did the full-page calculator, separately,
+// and the two had drifted: this copy ignored scope add-ons altogether, so a
+// medical office was priced at office rates. One formula, one place.
+let _commTimer = null;
 function runCommCalc(){
+  clearTimeout(_commTimer);
+  _commTimer = setTimeout(_runCommCalcNow, 180);
+}
+async function _runCommCalcNow(){
   const el = document.getElementById('calc_sqft');
-  const sqft = el ? (parseFloat(el.value)||0) : 0;
-  const catEl = document.querySelector('[name=category]');
-  const freqEl = document.querySelector('[name=frequency]');
-  const cat = catEl ? catEl.value : 'office';
-  const freq = freqEl ? freqEl.value : 'weekly';
   const out = document.getElementById('calc_out');
   if(!out) return;
+  const sqft = el ? (parseFloat(el.value)||0) : 0;
   if(!sqft){ out.innerHTML='<span style="color:#9a95ad">Enter square footage for a suggested price.</span>'; return; }
-  const rate = COMM_PRICING.prod_rates[cat] || 3000;
-  const hours = rate ? sqft/rate : 0;
-  const labor = hours * COMM_PRICING.hourly;
-  let price = COMM_PRICING.target ? labor/COMM_PRICING.target : labor;
-  price = Math.max(price, COMM_PRICING.min_visit);
-  const vpm = COMM_PRICING.visits_per_month[freq] || 4.3;
-  const monthly = price*vpm;
-  window._commQuote = {price: Math.round(price), monthly: Math.round(monthly)};
-  out.innerHTML = '💡 <b>$'+Math.round(price)+'/visit</b> &middot; ~$'+Math.round(monthly)+'/mo '+
-    '<span style="color:#9a95ad">(~'+hours.toFixed(1)+' hrs &middot; your cost $'+Math.round(labor)+
-    ', you keep ~$'+Math.round(price-labor)+'/visit)</span><br>'+
+
+  const catEl = document.querySelector('[name=category]');
+  const freqEl = document.querySelector('[name=frequency]');
+  const driveEl = document.getElementById('calc_drive');
+  const p = new URLSearchParams({
+    sqft: sqft,
+    category: catEl ? catEl.value : 'office',
+    frequency: freqEl ? freqEl.value : 'weekly',
+  });
+  if(driveEl && driveEl.value !== '') p.set('drive_minutes', driveEl.value);
+
+  let q;
+  try {
+    const r = await fetch('/commercial/quote.json?' + p.toString());
+    if(!r.ok) throw new Error(r.status);
+    q = await r.json();
+  } catch (e) {
+    // Say so rather than showing a number. A wrong price that looks right is
+    // worse than no price — somebody would quote it.
+    out.innerHTML = '<span style="color:var(--warn)">Could not work out a price just now. '
+                  + 'Check your connection and press Suggest price again.</span>';
+    return;
+  }
+
+  window._commQuote = {price: q.standard, monthly: q.monthly};
+  const driveBit = q.drive_price
+    ? ' &middot; incl. $' + q.drive_price + ' travel (' + q.drive_minutes + ' min)'
+    : '';
+  out.innerHTML = '💡 <b>$'+q.standard+'/visit</b> &middot; ~$'+q.monthly+'/mo '+
+    '<span style="color:#9a95ad">(~'+q.hours.toFixed(1)+' hrs on site'+driveBit+
+    ' &middot; your cost $'+Math.round(q.labor_cost)+
+    ', you keep ~$'+q.profit_per_visit+'/visit)</span><br>'+
     '<a href="#" onclick="applyCommPrice();return false" style="color:#b98a33;font-weight:700">↑ use this price</a>';
 }
 function applyCommPrice(){

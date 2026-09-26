@@ -1,0 +1,113 @@
+{% extends "base_admin.html" %}
+{% block title %}Security — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Security{% endblock %}
+
+{% block content %}
+{% if not user %}
+<div class="card">
+  <p style="color:var(--softer);font-size:0.9rem">
+    This login uses the environment-based owner credential, not a stored account —
+    there is no password or two-factor setting here to change.
+  </p>
+</div>
+{% else %}
+
+<div class="card" style="max-width:520px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Password</h2>
+  <form method="POST" action="{{ url_for('account.change_password') }}">
+    <div class="form-group">
+      <label>Current password</label>
+      <input type="password" name="current_password" autocomplete="current-password" required />
+    </div>
+    <div class="form-group">
+      <label>New password</label>
+      <input type="password" name="new_password" autocomplete="new-password" required />
+    </div>
+    <div class="form-group">
+      <label>Confirm new password</label>
+      <input type="password" name="confirm_password" autocomplete="new-password" required />
+    </div>
+    <button type="submit" class="btn btn-gold">Change password</button>
+  </form>
+</div>
+
+<div class="card" style="max-width:520px;margin-top:20px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Two-factor authentication</h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
+    Optional, for your login only — nobody else's sign-in is affected by your choice here.
+    Uses an authenticator app (Google Authenticator, Authy, 1Password, or any other
+    standard TOTP app), not text messages.
+  </p>
+
+  {% if backup_codes %}
+  {# Shown exactly once, right after these were generated -- only hashes are
+     kept after this response, so this is the one chance to save them. #}
+  <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:10px;padding:16px;margin-bottom:18px">
+    <p style="font-weight:700;color:var(--amber-deep);margin:0 0 10px">
+      Save these backup codes now — they won't be shown again
+    </p>
+    <p style="font-size:0.82rem;color:var(--muted);margin:0 0 12px">
+      Each works once, in place of a code from your app, if you lose access to it.
+    </p>
+    <div style="font-family:monospace;font-size:0.95rem;line-height:1.9;background:#fff;border-radius:8px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
+      {% for c in backup_codes %}<div>{{ c }}</div>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if otpauth_uri %}
+  {# Mid-setup: a secret has been generated but not yet confirmed working. #}
+  <div style="border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px">
+    <p style="font-size:0.86rem;color:var(--muted);margin:0 0 10px">
+      Add this to your authenticator app — tap the link on the same phone the app is on,
+      or type the code in by hand if it asks for one.
+    </p>
+    <p style="text-align:center;margin:0 0 12px">
+      <a href="{{ otpauth_uri }}" class="btn btn-outline" style="font-size:0.85rem">Open in authenticator app</a>
+    </p>
+    <p style="font-family:monospace;font-size:1.05rem;letter-spacing:0.05em;text-align:center;
+              background:var(--ground);border-radius:8px;padding:10px;margin:0 0 16px">
+      {{ secret_display }}
+    </p>
+    <form method="POST" action="{{ url_for('account.confirm_2fa') }}">
+      <div class="form-group">
+        <label>Enter the 6-digit code it shows now</label>
+        <input type="text" name="totp_code" inputmode="numeric" maxlength="6"
+               placeholder="123456" autofocus required style="text-align:center;letter-spacing:0.3em" />
+      </div>
+      <button type="submit" class="btn btn-gold">Confirm and turn on</button>
+    </form>
+  </div>
+
+  {% elif user.totp_enabled %}
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <span class="status status-confirmed">On</span>
+    <span style="color:var(--softer);font-size:0.85rem">Your sign-in asks for a code after your password.</span>
+  </div>
+
+  <details style="margin-bottom:12px">
+    <summary style="cursor:pointer;font-size:0.85rem;color:var(--muted);font-weight:600">Get new backup codes</summary>
+    <form method="POST" action="{{ url_for('account.regenerate_backup_codes') }}" style="margin-top:10px">
+      <p style="font-size:0.8rem;color:var(--softer);margin:0 0 8px">Your old backup codes stop working the moment you do this.</p>
+      <input type="password" name="current_password" placeholder="Current password" autocomplete="current-password" required />
+      <button type="submit" class="btn btn-outline" style="margin-top:8px;font-size:0.85rem">Generate new codes</button>
+    </form>
+  </details>
+
+  <details>
+    <summary style="cursor:pointer;font-size:0.85rem;color:var(--warn);font-weight:600">Turn off two-factor</summary>
+    <form method="POST" action="{{ url_for('account.disable_2fa') }}" style="margin-top:10px"
+          onsubmit="return confirm('Turn off two-factor authentication for your own login?')">
+      <input type="password" name="current_password" placeholder="Current password" autocomplete="current-password" required />
+      <button type="submit" class="btn btn-outline" style="margin-top:8px;font-size:0.85rem;color:var(--warn);border-color:var(--warn)">Turn off</button>
+    </form>
+  </details>
+
+  {% else %}
+  <form method="POST" action="{{ url_for('account.start_2fa') }}">
+    <button type="submit" class="btn btn-gold">Set up two-factor authentication</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

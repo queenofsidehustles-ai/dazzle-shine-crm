@@ -13,50 +13,22 @@
 #
 # ---------------------------------------------------------------------------
 # TWO DATABASES, not one.
-#
-# For a year this job backed up one database, and after Akye launched that one
-# database was still the cleaning company's. Every company paying to use the
-# platform had its clients, jobs, cleaners and pay records in a database with
-# no backup at all, and the job went green every night saying so.
-#
-# Each database below is backed up by its own job, from its own branch —
-# because the restore rebuilds tables from models.py, and the two products do
-# not have the same models. Restoring Akye from a `main` checkout would quietly
-# drop every table Akye added.
-# ---------------------------------------------------------------------------
-# Secrets. Settings → Secrets and variables → Actions:
-#
-#   BACKUP_DATABASE_URL        Dazzle & Shine's Postgres → DATABASE_PUBLIC_URL
-#   BACKUP_AKYE_DATABASE_URL   Akye's Postgres → DATABASE_PUBLIC_URL
-#
-#                         Both MUST be the public one. The internal
-#                         *.railway.internal address only resolves inside
-#                         Railway, so an internal URL here fails every night
-#                         with a DNS error.
-#
-#   BACKUP_PASSPHRASE     A long random string. The backups hold client home
-#                         addresses, access notes and pay records, so they are
-#                         encrypted before they leave this job. Keep a copy of
-#                         this passphrase somewhere that is not this repo and
-#                         not your laptop — without it the backups are noise.
 # ---------------------------------------------------------------------------
 name: Nightly backup
 
 on:
   schedule:
-    - cron: '0 8 * * *'      # 08:00 UTC — small hours in the US
-  workflow_dispatch:          # and on demand, from the Actions tab
+    - cron: '0 8 * * *'
+  workflow_dispatch:
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read           # to read the previous run's manifest
+      actions: read
 
     strategy:
-      # One database failing must not cancel the other's backup. They are
-      # different businesses and they fail for different reasons.
       fail-fast: false
       matrix:
         include:
@@ -66,28 +38,21 @@ jobs:
             secret: BACKUP_DATABASE_URL
           - key: akye
             label: Akye — every cleaning company on the platform
-            # Pinned to the launch-readiness candidate, not akye-stable, while
-            # Akye is in remediation: a scheduled run always resolves this
-            # workflow's own definition from main (checkout refs elsewhere in
-            # the job do not change that), so this is the only way the nightly
-            # drill exercises recovery fixes landing on the candidate branch
-            # before release. Point this back at akye-stable once the
-            # candidate branch ships or stops being the authoritative copy.
-            ref: akye-launch-readiness/cohort-30
+            # akye-stable is the authoritative, live branch — Dazzle & Shine's
+            # own data now lives there as a tenant. This job was pointed at
+            # akye-launch-readiness/cohort-30 while that candidate branch was
+            # the one being verified pre-launch; now that it has shipped and
+            # akye-stable is what's actually running, the nightly drill needs
+            # to cover akye-stable's real database again.
+            ref: akye-stable
             secret: BACKUP_AKYE_DATABASE_URL
 
     name: ${{ matrix.key }}
 
-    # Per database. Two backups of the SAME database racing would compare
-    # against each other's manifests and reach confusing conclusions; two
-    # backups of different databases are simply unrelated.
     concurrency:
       group: nightly-backup-${{ matrix.key }}
       cancel-in-progress: false
 
-    # A throwaway Postgres to restore into. SQLite cannot hold a database that
-    # has a schema per company, so verifying Akye against it would drop every
-    # company and call the difference a failure.
     services:
       scratch:
         image: postgres:16
@@ -103,9 +68,6 @@ jobs:
           --health-retries 10
 
     steps:
-      # Each product restores with its own models, so each checks out its own
-      # branch. This is the line that keeps Akye's tables from being silently
-      # dropped by a restore running against the single-business models.
       - uses: actions/checkout@v4
         with:
           ref: ${{ matrix.ref }}
@@ -117,9 +79,6 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      # Said plainly and early. A missing connection string is the one failure
-      # that would otherwise look like "nothing to do" rather than "this
-      # business has no backup".
       - name: Check there is a database to back up
         env:
           URL: ${{ secrets[matrix.secret] }}
@@ -131,27 +90,12 @@ jobs:
             exit 1
           fi
 
-      # The size check compares tonight against last night. Without the
-      # previous manifest every run looks like the first one, and a database
-      # that emptied itself would back up cleanly and pass.
-      #
-      # Named per database. One shared manifest would have each product
-      # comparing its row counts against the other's, which is worse than no
-      # comparison at all.
       - name: Fetch last night's manifest
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p backups
-          # The most recent run that actually left a manifest, which is not the
-          # same as the most recent SUCCESSFUL one. A refused backup still
-          # records what it saw -- that is the point of uploading it -- and
-          # asking only for successes meant a deliberate change, like a company
-          # closing, was compared against the same stale night for ever.
-          #
-          # Walks back a few runs because a job that failed before it read
-          # anything has no manifest to offer, and the night before it does.
           found=""
           for run_id in $(gh run list --workflow=backup.yml --status=completed \
                             --limit 6 --json databaseId --jq '.[].databaseId'); do
@@ -173,11 +117,6 @@ jobs:
           SECRET_KEY: backup-job-does-not-serve-requests
         run: python3 backup.py --dir backups --verify
 
-      # Encrypted before it goes anywhere. Decrypt with:
-      #   openssl enc -d -aes-256-cbc -pbkdf2 -in FILE.enc -out FILE.json.gz
-      # Runs even when the checks refused the backup. A suspicious file is still
-      # evidence, and it is customer data either way, so it does not sit around
-      # unencrypted while somebody works out what happened.
       - name: Encrypt
         if: always()
         env:
@@ -203,20 +142,6 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-      # Row counts only — no customer data — so it can be kept far longer and
-      # read by the next run without decrypting anything.
-      #
-      # Uploaded even on a failed run, and this is the important part. The
-      # comparison is "what changed since last time", and the baseline used to
-      # advance only when a run succeeded — so one deliberate change, a company
-      # closed and its schema removed, made every following night compare
-      # against the same stale manifest and fail again. A backup job that is
-      # permanently red is one nobody reads, which is worse than no check.
-      #
-      # Recording what was actually there tonight means the alarm rings once,
-      # for the night something changed, and a database that keeps shrinking
-      # rings again each night it shrinks further. Which is what a change
-      # detector is for.
       - name: Upload the manifest
         if: always()
         uses: actions/upload-artifact@v4

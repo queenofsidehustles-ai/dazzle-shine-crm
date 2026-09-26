@@ -4,7 +4,7 @@
 
 {% block content %}
 <form method="POST" class="card" style="max-width:680px">
-  <p style="color:#5f5878;font-size:0.9rem;line-height:1.7;margin-bottom:20px">
+  <p style="color:var(--muted);font-size:0.9rem;line-height:1.7;margin-bottom:20px">
     {% if lead %}
       For <strong>{{ lead.pretty_phone }}</strong>, who called
       {{ lead.received_at.strftime('%b %d') if lead.received_at else 'through Google Ads' }}{% if lead.location %} from {{ lead.location }}{% endif %}.
@@ -21,18 +21,18 @@
       <label class="dl" style="display:block;margin-bottom:5px">Their name</label>
       <input name="name" required value="{{ existing.name if existing else '' }}"
              placeholder="First name is fine"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Their email</label>
       <input name="email" type="email" required value="{{ existing.email if existing else '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     {% if not lead %}
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Their phone</label>
       <input name="phone" value="{{ existing.phone if existing else '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     {% endif %}
   </div>
@@ -41,7 +41,7 @@
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Service</label>
       <select name="service_type" id="q-service" required
-              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
         {% for key, s in services.items() %}
         <option value="{{ key }}" {{ 'selected' if existing and existing.service_type == key }}>{{ s.label }}</option>
         {% endfor %}
@@ -50,21 +50,21 @@
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Bedrooms</label>
       <input name="bedrooms" id="q-beds" type="number" min="0" value="{{ existing.bedrooms if existing else 3 }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Bathrooms</label>
       <input name="bathrooms" id="q-baths" type="number" min="0" value="{{ existing.bathrooms if existing else 2 }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     {# Optional everywhere, and the number that matters most on a build: bedroom
        count describes a house somebody lives in, not a site with a thousand
        extra square feet of floor to vacuum twice. #}
     <div>
-      <label class="dl" style="display:block;margin-bottom:5px">Sq ft <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9a95ad">(optional)</span></label>
+      <label class="dl" style="display:block;margin-bottom:5px">Sq ft <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--softer)">(optional)</span></label>
       <input name="sqft" id="q-sqft" type="number" min="0" max="20000" value="{{ existing.sqft or '' if existing else '' }}"
              placeholder="e.g. 2400"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
   </div>
 
@@ -72,9 +72,9 @@
     <label class="dl" style="display:block;margin-bottom:6px">Add-ons</label>
     <div style="display:flex;flex-wrap:wrap;gap:14px">
       {% for name, cost in extras.items() %}
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.88rem;color:#5f5878">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.88rem;color:var(--muted)">
         <input type="checkbox" name="extras" value="{{ name }}" class="q-extra" data-cost="{{ cost }}" style="width:auto">
-        {{ name }} <span style="color:#9a95ad">+${{ cost }}</span>
+        {{ name }} <span style="color:var(--softer)">+${{ cost }}</span>
       </label>
       {% endfor %}
     </div>
@@ -83,17 +83,17 @@
   {# What the quote actually promises. People ring asking for one specialised
      thing, or say plainly they don't want the oven touched — so this is a
      starting point to edit, not a fixed list. #}
-  <div style="margin-top:18px;padding:16px;background:#faf9fd;border-radius:10px">
+  <div style="margin-top:18px;padding:16px;background:var(--ground);border-radius:10px">
     <label class="dl" style="display:block;margin-bottom:4px">What you'll do for them</label>
-    <p style="font-size:0.82rem;color:#9a95ad;margin-bottom:10px">
+    <p style="font-size:0.82rem;color:var(--softer);margin-bottom:10px">
       Untick anything you agreed not to do. This is the list they'll see in the
       email and on their booking page.
-      <a href="#" id="q-all" style="color:#b98a33">Tick all</a> ·
-      <a href="#" id="q-none" style="color:#b98a33">Untick all</a>
+      <a href="#" id="q-all" style="color:var(--amber-deep)">Tick all</a> ·
+      <a href="#" id="q-none" style="color:var(--amber-deep)">Untick all</a>
     </p>
     <div id="q-checklist" style="display:grid;gap:5px;max-height:280px;overflow-y:auto">
       {% for item in checklist %}
-      <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:#5f5878;line-height:1.45">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:var(--muted);line-height:1.45">
         <input type="checkbox" name="checklist" value="{{ item }}" class="q-item"
                style="width:auto;margin-top:3px" {{ 'checked' if item in chosen }}>
         <span>{{ item }}</span>
@@ -103,8 +103,8 @@
     <label class="dl" style="display:block;margin:14px 0 5px">Anything else you agreed on the call</label>
     <textarea name="checklist_custom" rows="3"
               placeholder="One per line — e.g. Inside the china cabinet&#10;Strip and remake the guest beds"
-              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:0.9rem">{{ custom_lines|join('\n') }}</textarea>
-    <p style="font-size:0.8rem;color:#9a95ad;margin-top:7px">
+              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:0.9rem">{{ custom_lines|join('\n') }}</textarea>
+    <p style="font-size:0.8rem;color:var(--softer);margin-top:7px">
       These are added to the list exactly as you type them. Untick everything and
       leave this empty to fall back to the standard list for the service.
     </p>
@@ -116,19 +116,19 @@
      tell those apart, so this is a number she sets after seeing the site. Kept
      out of the discount for the same reason: it is money going to a landfill,
      not margin there is any of to give away. #}
-  <div id="q-debris-block" style="margin-top:18px;padding:14px;background:#fdfbf6;border:1px solid #f0e5cd;border-radius:10px;display:none">
+  <div id="q-debris-block" style="margin-top:18px;padding:14px;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:10px;display:none">
     <label class="dl" style="display:block;margin-bottom:5px">Construction debris removal</label>
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px">
       <input name="debris_fee" id="q-debris" type="number" step="0.01" min="0"
              value="{{ '%.2f'|format(existing.debris_fee) if existing and existing.debris_fee else '' }}"
              placeholder="0.00"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
       <input name="debris_note" id="q-debris-note" type="text" maxlength="120"
              value="{{ existing.debris_note or '' if existing else '' }}"
              placeholder="What it covers — e.g. 2 loads + dump fee"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
-    <p style="font-size:0.82rem;color:#9a95ad;margin-top:7px">
+    <p style="font-size:0.82rem;color:var(--softer);margin-top:7px">
       Its own line on their quote, on top of the cleaning price — and no discount
       comes off it. Dump fees are money you pay out, not margin. Leave blank if
       they're clearing the site themselves.
@@ -137,17 +137,17 @@
 
   <!-- What it costs to keep it clean afterwards. Optional: plenty of jobs are
        genuinely one-offs, and an empty box leaves the quote exactly as it was. -->
-  <div style="margin-top:18px;padding:14px;background:#f4f8f5;border-radius:10px">
+  <div style="margin-top:18px;padding:14px;background:var(--good-soft);border-radius:10px">
     <label class="dl" style="display:block;margin-bottom:5px">
-      And then keep it clean — every visit after the first <span style="font-weight:500;color:#9a95ad">(optional)</span>
+      And then keep it clean — every visit after the first <span style="font-weight:500;color:var(--softer)">(optional)</span>
     </label>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <input name="recurring_price" type="number" step="0.01" min="0"
              value="{{ '%.2f'|format(existing.recurring_price) if existing and existing.recurring_price else '' }}"
              placeholder="Price per visit"
-             style="flex:1 1 150px;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
+             style="flex:1 1 150px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
       <select name="recurring_frequency"
-              style="flex:1 1 150px;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:1rem">
+              style="flex:1 1 150px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:1rem">
         {% set rf = existing.recurring_frequency if existing else '' %}
         <option value="">How often…</option>
         <option value="weekly"   {{ 'selected' if rf == 'weekly' }}>Weekly</option>
@@ -155,25 +155,25 @@
         <option value="monthly"  {{ 'selected' if rf == 'monthly' }}>Monthly</option>
       </select>
     </div>
-    <p style="font-size:0.82rem;color:#9a95ad;margin-top:7px">
+    <p style="font-size:0.82rem;color:var(--softer);margin-top:7px">
       Fill this in and the quote shows both: what the first clean costs, and
       what it costs to keep it that way. Leave it blank for a one-off.
     </p>
   </div>
 
-  <div style="margin-top:18px;padding:14px;background:#faf9fd;border-radius:10px">
+  <div style="margin-top:18px;padding:14px;background:var(--ground);border-radius:10px">
     <label class="dl" style="display:block;margin-bottom:5px">Cleaning price you quoted them</label>
     <input name="price" id="q-price" type="number" step="0.01" min="0"
            value="{{ '%.2f'|format(existing.quoted_price) if existing and existing.quoted_price else '' }}"
            placeholder="Leave blank to use the calculated price"
-           style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
-    <p style="font-size:0.82rem;color:#9a95ad;margin-top:7px">
+           style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit;font-size:1.05rem;font-weight:700">
+    <p style="font-size:0.82rem;color:var(--softer);margin-top:7px">
       Calculated from the above: <strong id="q-calc">—</strong>. Type the
       <strong>full</strong> price here — if you're giving them a discount, put it
       below and they'll see what it was before. Debris removal is added on top of
       this, not included in it.
     </p>
-    <p id="q-postcon-hint" style="font-size:0.82rem;color:#8a6d1f;background:#fdf6e6;border-radius:7px;padding:9px 11px;margin-top:9px;display:none">
+    <p id="q-postcon-hint" style="font-size:0.82rem;color:var(--amber-deep);background:var(--amber-soft);border-radius:7px;padding:9px 11px;margin-top:9px;display:none">
       Post-construction gets walked before it gets priced. The calculated figure
       is a floor to argue up from, not a number to read out — drywall dust, how
       much the trades left behind and how many times you'll be back all sit
@@ -183,12 +183,12 @@
     {# Quoting the already-discounted figure is what this replaces: the customer
        was told "$232" with nothing to say it had ever been $290, so the discount
        bought no goodwill and left no record. #}
-    <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e4e0ee">
-      <label class="dl" style="display:block;margin-bottom:6px">Discount <span style="color:#9a95ad;font-weight:400">(optional)</span></label>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+      <label class="dl" style="display:block;margin-bottom:6px">Discount <span style="color:var(--softer);font-weight:400">(optional)</span></label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
           <select name="discount_code" id="q-disc-code"
-                  style="width:100%;padding:9px 11px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+                  style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
             <option value="">— No code —</option>
             {% for d in discount_codes %}
             <option value="{{ d.code }}"
@@ -198,7 +198,7 @@
             </option>
             {% endfor %}
           </select>
-          <p style="font-size:0.76rem;color:#9a95ad;margin-top:5px">
+          <p style="font-size:0.76rem;color:var(--softer);margin-top:5px">
             From your Discounts page. Only counts as used once they book.
           </p>
         </div>
@@ -206,8 +206,8 @@
           <input name="discount_amount" id="q-disc-amt" type="number" step="0.01" min="0"
                  value="{{ '%.2f'|format(existing.discount_amount) if existing and existing.discount_amount and not existing.discount_code else '' }}"
                  placeholder="or $ off"
-                 style="width:100%;padding:9px 11px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
-          <p style="font-size:0.76rem;color:#9a95ad;margin-top:5px">
+                 style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
+          <p style="font-size:0.76rem;color:var(--softer);margin-top:5px">
             A one-off amount, if it isn't a code.
           </p>
         </div>
@@ -215,42 +215,42 @@
       <input name="discount_label" id="q-disc-label"
              value="{{ existing.discount_label if existing and existing.discount_label else '' }}"
              placeholder="What to call it — e.g. Friends &amp; Family"
-             style="width:100%;margin-top:10px;padding:9px 11px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;margin-top:10px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
       <div id="q-disc-preview"
-           style="display:none;margin-top:12px;padding:11px 13px;background:#fff;border:1px solid #e4e0ee;border-radius:9px;font-size:0.9rem">
+           style="display:none;margin-top:12px;padding:11px 13px;background:var(--surface);border:1px solid var(--line);border-radius:9px;font-size:0.9rem">
       </div>
     </div>
   </div>
 
   <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:14px">
     <div>
-      <label class="dl" style="display:block;margin-bottom:5px">Address <span style="color:#9a95ad;font-weight:400">(optional)</span></label>
+      <label class="dl" style="display:block;margin-bottom:5px">Address <span style="color:var(--softer);font-weight:400">(optional)</span></label>
       <input name="address" value="{{ existing.address if existing else '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">City</label>
       <input name="city" value="{{ existing.city if existing else lead.location or '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">ZIP</label>
       <input name="zip_code" value="{{ existing.zip_code if existing else '' }}"
-             style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">
+             style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
   </div>
 
   <div style="margin-top:14px">
-    <label class="dl" style="display:block;margin-bottom:5px">Notes from the call <span style="color:#9a95ad;font-weight:400">(not emailed)</span></label>
+    <label class="dl" style="display:block;margin-bottom:5px">Notes from the call <span style="color:var(--softer);font-weight:400">(not emailed)</span></label>
     <textarea name="notes" rows="2"
-              style="width:100%;padding:10px 12px;border:1px solid #e4e0ee;border-radius:9px;font-family:inherit">{{ existing.notes if existing else '' }}</textarea>
+              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">{{ existing.notes if existing else '' }}</textarea>
   </div>
 
   {# Texting it as well is worth offering because email is the channel that
      quietly fails — filed as spam, and neither of you knows. #}
-  <label style="display:flex;align-items:flex-start;gap:9px;margin-top:18px;padding:13px 15px;background:#faf9fd;border-radius:10px;cursor:pointer">
+  <label style="display:flex;align-items:flex-start;gap:9px;margin-top:18px;padding:13px 15px;background:var(--ground);border-radius:10px;cursor:pointer">
     <input type="checkbox" name="also_text" value="1" checked style="width:auto;margin-top:3px">
-    <span style="font-size:0.89rem;color:#5f5878;line-height:1.5">
+    <span style="font-size:0.89rem;color:var(--muted);line-height:1.5">
       <strong>Text it to them as well</strong><br>
       Same price, same link, in a message that actually gets seen. Skipped
       automatically if they've ever replied STOP.
@@ -260,7 +260,7 @@
   <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:16px">
     Send this quote
   </button>
-  <p style="font-size:0.82rem;color:#9a95ad;margin-top:10px;text-align:center">
+  <p style="font-size:0.82rem;color:var(--softer);margin-top:10px;text-align:center">
     They pay a ${{ '%.0f'|format(deposit) }} deposit to book; the rest is charged
     the morning of the clean. If they don't book, your Day 2 and Last Chance
     emails follow automatically — and the Google Ads texts stop, since you've
@@ -356,7 +356,7 @@
       box.innerHTML = '';
       (d.items || []).forEach(item => {
         const l = document.createElement('label');
-        l.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:#5f5878;line-height:1.45';
+        l.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;color:var(--muted);line-height:1.45';
         const cb = document.createElement('input');
         cb.type = 'checkbox'; cb.name = 'checklist'; cb.value = item;
         cb.className = 'q-item'; cb.checked = true;
@@ -418,14 +418,14 @@
     const name = (labelBox.value || '').trim() || (opt && opt.value) || 'Discount';
     out.style.display = 'block';
     out.innerHTML =
-      '<div style="color:#9a95ad;font-size:0.76rem;text-transform:uppercase;' +
+      '<div style="color:var(--softer);font-size:0.76rem;text-transform:uppercase;' +
       'letter-spacing:0.1em;margin-bottom:6px">What they\'ll see</div>' +
       '<div style="display:flex;justify-content:space-between"><span>Your price</span>' +
-      '<span style="text-decoration:line-through;color:#9a95ad">' + money(full) + '</span></div>' +
-      '<div style="display:flex;justify-content:space-between;color:#2f9e6b;font-weight:600">' +
+      '<span style="text-decoration:line-through;color:var(--softer)">' + money(full) + '</span></div>' +
+      '<div style="display:flex;justify-content:space-between;color:var(--good);font-weight:600">' +
       '<span>' + name.replace(/</g, '&lt;') + '</span><span>−' + money(off) + '</span></div>' +
       '<div style="display:flex;justify-content:space-between;font-weight:700;' +
-      'border-top:1px solid #e4e0ee;margin-top:6px;padding-top:6px">' +
+      'border-top:1px solid var(--line);margin-top:6px;padding-top:6px">' +
       '<span>They pay</span><span>' + money(full - off) + '</span></div>';
   }
 

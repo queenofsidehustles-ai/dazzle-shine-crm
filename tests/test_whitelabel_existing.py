@@ -5,7 +5,7 @@ move out of code and into Settings."""
 import os, sys, tempfile
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/existing.db'
-os.environ['SECRET_KEY'] = 'test'
+os.environ['SECRET_KEY'] = 'test-secret-key-not-for-production-use'
 os.environ['CRM_BASE'] = 'https://dazzle-shine-crm-production.up.railway.app'
 for stale in ('FROM_EMAIL', 'OWNER_EMAIL', 'NOTIFY_EMAIL', 'BUSINESS_NAME'):
     os.environ.pop(stale, None)

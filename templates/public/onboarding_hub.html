@@ -4,23 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Welcome to {{ biz }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    body { font-family: Inter, -apple-system, sans-serif; background:#f6f5fb; margin:0; color:#1f1333; }
+    body { font-family: Inter, -apple-system, sans-serif; background:var(--ground); margin:0; color:var(--ink); }
     .wrap { max-width:560px; margin:0 auto; padding:24px 16px 60px; }
-    .hero { background:linear-gradient(135deg,#1f1333,#3b2460); border-radius:14px; padding:32px 24px; text-align:center; }
-    .hero h1 { color:#d3a84f; margin:0 0 6px; font-size:1.5rem; }
-    .hero p { color:#c9b8e8; margin:0; font-size:0.92rem; }
-    .step { background:#fff; border:1px solid #e4dfef; border-radius:12px; padding:22px; margin-top:16px; display:flex; gap:16px; align-items:flex-start; }
+    .hero { background:linear-gradient(135deg,var(--ink),var(--ink-2)); border-radius:14px; padding:32px 24px; text-align:center; }
+    .hero h1 { color:var(--amber); margin:0 0 6px; font-size:1.5rem; }
+    .hero p { color:var(--info-soft); margin:0; font-size:0.92rem; }
+    .step { background:#fff; border:1px solid var(--line); border-radius:12px; padding:22px; margin-top:16px; display:flex; gap:16px; align-items:flex-start; }
     .badge { flex:0 0 auto; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.95rem; }
-    .badge.todo { background:#f6f5fb; color:#7c3aed; border:2px solid #c4b5fd; }
-    .badge.done { background:#f0fff4; color:#276749; border:2px solid #c6f6d5; }
+    .badge.todo { background:var(--ground); color:var(--info); border:2px solid var(--info-soft); }
+    .badge.done { background:var(--good-soft); color:var(--good); border:2px solid var(--good-soft); }
     .step h3 { margin:0 0 4px; font-size:1.05rem; }
-    .step p { margin:0 0 12px; color:#5f5878; font-size:0.9rem; line-height:1.6; }
-    .btn { display:inline-block; background:#d3a84f; color:#1f1333; padding:12px 26px; border-radius:8px; font-weight:700; text-decoration:none; font-size:0.95rem; }
-    .btn.dark { background:#1f1333; color:#d3a84f; }
-    .done-txt { color:#276749; font-weight:700; font-size:0.9rem; }
-    .pending { color:#92400e; font-weight:600; font-size:0.88rem; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:8px 12px; display:inline-block; }
-    .note { color:#9a95ad; font-size:0.8rem; text-align:center; margin-top:24px; line-height:1.6; }
+    .step p { margin:0 0 12px; color:var(--muted); font-size:0.9rem; line-height:1.6; }
+    .btn { display:inline-block; background:var(--amber); color:var(--ink); padding:12px 26px; border-radius:8px; font-weight:700; text-decoration:none; font-size:0.95rem; }
+    .btn.dark { background:var(--ink); color:var(--amber); }
+    .done-txt { color:var(--good); font-weight:700; font-size:0.9rem; }
+    .pending { color:var(--amber-deep); font-weight:600; font-size:0.88rem; background:var(--amber-soft); border:1px solid var(--amber-line); border-radius:8px; padding:8px 12px; display:inline-block; }
+    .note { color:var(--softer); font-size:0.8rem; text-align:center; margin-top:24px; line-height:1.6; }
   </style>
 </head>
 <body>
@@ -33,9 +34,9 @@
     {% with msgs = get_flashed_messages(with_categories=true) %}
       {% for cat, msg in msgs %}
       <div style="margin-top:14px;padding:12px 16px;border-radius:10px;font-size:0.88rem;
-                  background:{{ '#fff5f5' if cat in ('error','danger') else '#fffbeb' }};
-                  border:1px solid {{ '#fed7d7' if cat in ('error','danger') else '#fde68a' }};
-                  color:{{ '#c53030' if cat in ('error','danger') else '#92400e' }}">{{ msg }}</div>
+                  background:{{ 'var(--warn-soft)' if cat in ('error','danger') else 'var(--amber-soft)' }};
+                  border:1px solid {{ 'var(--warn-soft)' if cat in ('error','danger') else 'var(--amber-line)' }};
+                  color:{{ 'var(--warn)' if cat in ('error','danger') else 'var(--amber-deep)' }}">{{ msg }}</div>
       {% endfor %}
     {% endwith %}
 
@@ -70,9 +71,9 @@
         <div>
           <h3>Set up how you get paid</h3>
           <p>You'll enter your bank details, tax info, and a quick ID check on Stripe's secure page. This is how your pay lands in your account after each job.</p>
-          <div style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:10px;padding:14px 16px;margin:0 0 14px;font-size:0.85rem;line-height:1.6;color:#1e3a5f">
+          <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:10px;padding:14px 16px;margin:0 0 14px;font-size:0.85rem;line-height:1.6;color:var(--info)">
             <p style="margin:0 0 8px"><strong>🔒 Is this safe? Yes.</strong> We use <strong>Stripe</strong> — a trusted payment company used by millions of businesses (Amazon, Shopify, DoorDash, Lyft). Your bank and tax details go <strong>directly to Stripe, not to {{ biz }}</strong> — we never see or store your bank account number. This secure step is what lets your pay be deposited straight to your account, fast, after each job.</p>
-            <p style="margin:0;color:#3b5876"><strong>🔒 ¿Es seguro? Sí.</strong> Usamos <strong>Stripe</strong>, una empresa de pagos confiable usada por millones de negocios (Amazon, Shopify, DoorDash, Lyft). Tu información bancaria y fiscal va <strong>directamente a Stripe, no a {{ biz }}</strong> — nunca vemos ni guardamos tu número de cuenta. Este paso seguro es lo que permite que tu pago se deposite directamente en tu cuenta, rápido, después de cada trabajo.</p>
+            <p style="margin:0;color:var(--info)"><strong>🔒 ¿Es seguro? Sí.</strong> Usamos <strong>Stripe</strong>, una empresa de pagos confiable usada por millones de negocios (Amazon, Shopify, DoorDash, Lyft). Tu información bancaria y fiscal va <strong>directamente a Stripe, no a {{ biz }}</strong> — nunca vemos ni guardamos tu número de cuenta. Este paso seguro es lo que permite que tu pago se deposite directamente en tu cuenta, rápido, después de cada trabajo.</p>
           </div>
           {% if not stripe_configured %}
             <span class="pending">Payment setup isn't available yet — we'll email you when it's ready.</span>
@@ -101,7 +102,7 @@
           <p>You'll be going into people's homes, so we keep a photo ID on file for everyone on the team.
           A driver's licence, state ID or passport is fine. It's encrypted, only the owner can open it,
           and no customer ever sees it.
-          <br><span style="color:#9a95ad">Guardamos una identificación con foto de cada persona del
+          <br><span style="color:var(--softer)">Guardamos una identificación con foto de cada persona del
           equipo. Se guarda cifrada y ningún cliente la ve.</span></p>
           <a class="btn" href="{{ url_for('contractors.upload_document', token=s.agreement_token, kind='id') }}">🪪 Send my ID →</a>
         </div>
@@ -122,7 +123,7 @@
           <h3>Send us your W-9</h3>
           <p>You're paid without tax withheld, so we need a Form W-9 on file to report what we paid you
           at the end of the year. It's one page, it's free, and the link walks you through it.
-          <br><span style="color:#9a95ad">Necesitamos tu Formulario W-9 para reportar tu pago al final
+          <br><span style="color:var(--softer)">Necesitamos tu Formulario W-9 para reportar tu pago al final
           del año. Es gratis y toma unos minutos.</span></p>
           <a class="btn" href="{{ url_for('contractors.upload_document', token=s.agreement_token, kind='w9') }}">📄 Send my W-9 →</a>
         </div>
@@ -162,7 +163,7 @@
         {% endif %}
         <form method="POST" action="{{ url_for('contractors.onboarding_start_date', token=s.agreement_token) }}">
           <input type="date" name="roster_start_date" value="{{ s.roster_start_date or '' }}" required
-                 style="padding:10px 12px;border:1px solid #e4dfef;border-radius:8px;font-size:0.95rem;margin-bottom:10px">
+                 style="padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:0.95rem;margin-bottom:10px">
           <br><button class="btn" type="submit" style="font-size:0.9rem">Save start date</button>
         </form>
       </div>
@@ -197,8 +198,8 @@
     </div>
 
     {% if s.agreement_signed_at and s.stripe_payouts_enabled %}
-    <div class="step" style="background:#f0fff4;border-color:#c6f6d5;justify-content:center;text-align:center;display:block">
-      <h3 style="color:#276749">🎉 You're all set!</h3>
+    <div class="step" style="background:var(--good-soft);border-color:var(--good-soft);justify-content:center;text-align:center;display:block">
+      <h3 style="color:var(--good)">🎉 You're all set!</h3>
       <p style="margin:0">Everything's complete. We'll be in touch about your first job. Welcome to the team!</p>
     </div>
     {% endif %}

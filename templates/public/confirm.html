@@ -4,24 +4,25 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Your next cleaning — {{ biz }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, "Segoe UI", Inter, sans-serif; background: #f6f5fb;
-           color: #1f1333; min-height: 100vh; display: flex; align-items: center;
+    body { font-family: -apple-system, "Segoe UI", Inter, sans-serif; background: var(--ground);
+           color: var(--ink); min-height: 100vh; display: flex; align-items: center;
            justify-content: center; padding: 20px; line-height: 1.6; }
-    .card { background: #fff; border-radius: 16px; border: 1px solid #e4dfef; padding: 34px 30px;
+    .card { background: #fff; border-radius: 16px; border: 1px solid var(--line); padding: 34px 30px;
             max-width: 440px; width: 100%; box-shadow: 0 8px 40px rgba(15,7,40,0.09); }
     h1 { font-size: 1.35rem; margin-bottom: 6px; }
-    .muted { color: #5f5878; font-size: 0.93rem; }
-    .details { background: #faf9fd; border-radius: 12px; padding: 16px 18px; margin: 20px 0; }
+    .muted { color: var(--muted); font-size: 0.93rem; }
+    .details { background: var(--ground); border-radius: 12px; padding: 16px 18px; margin: 20px 0; }
     .row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; }
-    .row .k { color: #5f5878; font-size: 0.9rem; }
+    .row .k { color: var(--muted); font-size: 0.9rem; }
     .row .v { font-weight: 600; text-align: right; }
-    .price { font-size: 1.5rem; font-weight: 700; color: #b98a33; }
+    .price { font-size: 1.5rem; font-weight: 700; color: var(--amber-deep); }
     button { width: 100%; border: none; padding: 14px; border-radius: 999px; font-weight: 700;
              font-size: 1rem; cursor: pointer; font-family: inherit; }
-    .yes { background: #d3a84f; color: #1a1225; margin-bottom: 10px; }
-    .no { background: #fff; color: #5f5878; border: 1px solid #e4dfef; }
+    .yes { background: var(--amber); color: var(--info); margin-bottom: 10px; }
+    .no { background: #fff; color: var(--muted); border: 1px solid var(--line); }
     .done { text-align: center; padding: 10px 0; }
     .done .mark { font-size: 2.4rem; margin-bottom: 8px; }
   </style>
@@ -67,7 +68,7 @@
         {% if b.frequency and b.frequency != 'one_time' %}
         <div class="row"><span class="k">Repeats</span><span class="v">{{ b.frequency|replace('biweekly','every 2 weeks')|replace('_',' ') }}</span></div>
         {% endif %}
-        <div class="row" style="border-top:1px solid #eae6f2;margin-top:6px;padding-top:10px">
+        <div class="row" style="border-top:1px solid var(--info-soft);margin-top:6px;padding-top:10px">
           <span class="k">Price per clean</span>
           <span class="v price">{% if b.price %}${{ '%.2f'|format(b.price) }}{% else %}—{% endif %}</span>
         </div>
@@ -82,7 +83,7 @@
         Another day or time would suit me better
       </button>
 
-      <div id="other" style="display:none;background:#faf9fd;border-radius:12px;padding:16px;margin-bottom:10px;text-align:left">
+      <div id="other" style="display:none;background:var(--ground);border-radius:12px;padding:16px;margin-bottom:10px;text-align:left">
         <p class="muted" style="font-size:0.88rem;margin-bottom:12px">
           No problem — when would work? Anything you can tell us helps.
         </p>
@@ -90,10 +91,10 @@
           <input type="hidden" name="answer" value="other" />
           <label class="muted" style="font-size:0.82rem;display:block;margin-bottom:4px">A date that suits</label>
           <input type="date" name="alt_date"
-                 style="width:100%;padding:10px;border:1px solid #e4dfef;border-radius:8px;margin-bottom:10px;font-family:inherit" />
+                 style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;font-family:inherit" />
           <label class="muted" style="font-size:0.82rem;display:block;margin-bottom:4px">Time of day</label>
           <select name="alt_time"
-                  style="width:100%;padding:10px;border:1px solid #e4dfef;border-radius:8px;margin-bottom:10px;font-family:inherit">
+                  style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;font-family:inherit">
             <option value="">No preference</option>
             <option>Morning</option>
             <option>Afternoon</option>
@@ -101,7 +102,7 @@
           </select>
           <label class="muted" style="font-size:0.82rem;display:block;margin-bottom:4px">Anything else?</label>
           <textarea name="alt_note" rows="2" placeholder="e.g. Fridays are best, or every other Tuesday"
-                    style="width:100%;padding:10px;border:1px solid #e4dfef;border-radius:8px;margin-bottom:12px;font-family:inherit;font-size:0.9rem"></textarea>
+                    style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:12px;font-family:inherit;font-size:0.9rem"></textarea>
           <button type="submit" class="yes" style="margin:0">Send this to {{ biz }}</button>
         </form>
       </div>

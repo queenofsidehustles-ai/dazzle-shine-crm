@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response)
 from markupsafe import escape
+from entitlements import requires_plan
 from auth import login_required
 from extensions import db
 from models import Prospect
@@ -163,6 +164,7 @@ def _email_templates():
 
 @places_finder_bp.route('/')
 @login_required
+@requires_plan('lead_finder')
 def dashboard():
     """Today by default — what is due, not everything ever imported."""
     view = request.args.get('view', 'today')
@@ -171,10 +173,11 @@ def dashboard():
     rows = _backfilled()
 
     if view == 'today':
+        # Prospect.is_due is the one definition of due, shared with the
+        # dashboard count. It was written out longhand here, and a prospect
+        # resting in nurture could never satisfy it however overdue it got.
         today = local_today().isoformat()
-        shown = sorted([p for p in rows
-                        if p.is_open and (not p.next_action_date
-                                          or p.next_action_date <= today)],
+        shown = sorted([p for p in rows if p.is_due(today)],
                        key=prospecting.due_sort_key)
     elif view == 'pipeline':
         order = [k for k, _ in Prospect.STAGE_LABELS]
@@ -354,43 +357,14 @@ def snooze(prospect_id):
 def send_outreach(prospect_id):
     """Send one of the outreach emails to a prospect and log it as a touch."""
     p = Prospect.query.get_or_404(prospect_id)
-    subject = (request.form.get('subject') or '').strip()
-    body = (request.form.get('body') or '').strip()
-    to = (request.form.get('email') or p.email or '').strip()
     view = request.args.get('view', 'today')
-
-    if not to:
-        flash('No email address for this business yet — ask for one on the call.', 'error')
-        return redirect(url_for('places_finder.dashboard', view=view))
-    if not subject or not body:
-        flash('The email needs a subject and a body.', 'error')
-        return redirect(url_for('places_finder.dashboard', view=view))
-
-    p.email = to
-    from notifications import send_email
-    import brands
-    from_name, from_email, reply_to = brands.send_identity(brands.COMMERCIAL)
-    html = ('<div style="font-family:Inter,Arial,sans-serif;font-size:15px;'
-            'line-height:1.65;color:#1f1333;white-space:pre-wrap">'
-            + escape(body) + '</div>')
-    ok, detail = send_email(to, p.contact_name or p.business_name, subject, html,
-                            from_name=from_name, from_email=from_email,
-                            reply_to=reply_to)
-
-    if ok:
-        p.last_emailed_at = datetime.utcnow()
-        p.notes = _prepend_entry(p, f'Emailed — {subject}')
-        if p.stage in (None, 'new'):
-            p.stage = 'working'
-        # An email is a touch like any other: it earns a follow-up date, or it
-        # is just another thing sent into a void.
-        p.next_action = 'Follow up on the email'
-        p.next_action_date = (local_today() + timedelta(days=4)).isoformat()
-        db.session.commit()
-        flash(f'Sent to {to}. Follow up {p.next_action_date}.', 'success')
-    else:
-        db.session.commit()
-        flash(f'Could not send: {detail}', 'error')
+    # The sending itself lives in prospecting.send_outreach, because the
+    # assistant offers this too and two copies of it is how one of them stops
+    # logging the touch without anybody noticing.
+    ok, said = prospecting.send_outreach(
+        p, request.form.get('subject'), request.form.get('body'),
+        to=request.form.get('email'))
+    flash(said, 'success' if ok else 'error')
     return redirect(url_for('places_finder.dashboard', view=view))
 
 

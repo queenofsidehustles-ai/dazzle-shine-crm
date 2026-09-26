@@ -1,0 +1,641 @@
+{% extends "marketing/_shell.html" %}
+
+{% block head_extra %}
+<style>
+  /* ── Hero ──────────────────────────────────────────────────────────────
+     A wash of light behind the headline rather than flat white. Two soft
+     radial gradients, warm on one side and cool on the other, so the page
+     has a light source instead of a fill.                                */
+  .hero {
+    position:relative; overflow:hidden;
+    padding:52px 0 56px;
+    background:
+      radial-gradient(760px 420px at 12% -8%,  rgba(240,164,75,.16), transparent 62%),
+      radial-gradient(900px 520px at 92% 4%,   rgba(59,111,181,.11), transparent 60%),
+      linear-gradient(180deg,#fff 0%,var(--surface-2) 68%,var(--ground) 100%);
+  }
+  /* A faint grid, fading out downwards, to give the space a floor. */
+  .hero::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(22,33,58,.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(22,33,58,.045) 1px, transparent 1px);
+    background-size:64px 64px;
+    -webkit-mask-image:linear-gradient(180deg, rgba(0,0,0,.5), transparent 76%);
+            mask-image:linear-gradient(180deg, rgba(0,0,0,.5), transparent 76%);
+  }
+  /* Words on the left, the software on the right. The headline was running
+     to about half the width and leaving the rest of the fold empty, which is
+     the most valuable space on the site. */
+  .hero .wrap {
+    position:relative;
+    display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);
+    gap:40px; align-items:center;
+  }
+  /* Centring two columns only looks right while they are a similar height.
+     Once the copy is taller than the picture, centring reads as the picture
+     having slipped down the page. Line them up at the top instead. */
+  @media (max-width:1200px) {
+    .hero .wrap { align-items:start; gap:32px; }
+    .shot-stage { margin-top:8px; }
+  }
+  .hero-copy { max-width:560px; }
+
+  .eyebrow {
+    display:inline-flex; align-items:center; gap:8px;
+    background:#fff; border:1px solid var(--amber-line);
+    color:var(--amber-deep); font-size:.78rem; font-weight:650;
+    padding:5px 13px; border-radius:999px; margin-bottom:16px;
+    box-shadow:var(--lift-1);
+  }
+  .eyebrow .dot {
+    width:6px; height:6px; border-radius:50%; background:var(--amber);
+    box-shadow:0 0 0 3px rgba(240,164,75,.24);
+  }
+
+  .cta-row { margin-top:24px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .also { color:var(--muted); font-size:.95rem; margin-top:12px; max-width:520px; }
+  .built { color:var(--softer); font-size:.88rem; margin-top:14px; max-width:460px; }
+
+  /* ── The product shot ──────────────────────────────────────────────────
+     A real screenshot in a browser frame, tilted very slightly and lifted
+     off the page. Nothing here is a mockup: it is the software, with the
+     demo company's real numbers in it. That is the entire argument.
+
+     It runs past the right edge of the column on purpose. A screenshot that
+     stops neatly inside its box looks like a picture of software; one that
+     carries off the edge looks like software.                            */
+  .shot-stage { position:relative; perspective:1600px; }
+  .frame {
+    position:relative; border-radius:12px; overflow:hidden;
+    background:#fff; border:1px solid var(--line);
+    box-shadow:var(--lift-3);
+    transform:perspective(1600px) rotateY(-7deg) rotateX(2deg) scale(1.06);
+    transform-origin:0% 50%;
+    max-height:430px;
+  }
+  /* The turn and the overscale are what make it read as software rather than
+     a picture of software, but they push it past the right edge — which is
+     fine with room to spare and a slice off the dashboard without. Both ease
+     off as the window narrows, and stop entirely before the layout stacks. */
+  @media (max-width:1200px) {
+    .frame { transform:perspective(1600px) rotateY(-4deg) rotateX(1deg) scale(1.0); }
+  }
+  @media (max-width:1080px) {
+    .frame { transform:none; max-height:380px; }
+    .phone { width:132px; left:-14px; bottom:-14px; }
+  }
+  .frame::after {
+    content:''; position:absolute; left:0; right:0; bottom:0; height:90px;
+    background:linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,.97));
+    pointer-events:none;
+  }
+  .chrome {
+    display:flex; align-items:center; gap:7px;
+    padding:9px 12px; background:linear-gradient(180deg,var(--surface-2),#f2f4f9);
+    border-bottom:1px solid var(--line);
+  }
+  .chrome i { width:9px; height:9px; border-radius:50%; display:block; }
+  .chrome .r{background:#ff5f57} .chrome .y{background:#febc2e} .chrome .g{background:#28c840}
+  .chrome .bar {
+    flex:1; margin-left:8px; height:19px; border-radius:5px;
+    background:#fff; border:1px solid var(--line);
+    display:flex; align-items:center; padding:0 9px;
+    font-size:.64rem; color:var(--softer); font-weight:550;
+  }
+  .frame img { display:block; width:100%; height:auto; }
+
+  /* The phone, overlapping the bottom-left of the browser. The two screens
+     in one picture are the product: the office view and the cleaner's. */
+  .phone {
+    position:absolute; left:-26px; bottom:-24px; width:146px;
+    border-radius:22px; padding:6px; background:#0d1526;
+    box-shadow:var(--lift-3), inset 0 0 0 1px rgba(255,255,255,.07);
+    transform:rotate(-4deg);
+  }
+  .phone img { display:block; width:100%; border-radius:17px; }
+  .phone .notch {
+    position:absolute; top:11px; left:50%; transform:translateX(-50%);
+    width:44px; height:4px; border-radius:3px; background:rgba(255,255,255,.22);
+  }
+
+  /* ── Feature rows with a shot beside the words ─────────────────────── */
+  .split {
+    display:grid; grid-template-columns:1fr 1fr; gap:44px; align-items:center;
+  }
+  .split .shot {
+    border-radius:14px; overflow:hidden; border:1px solid var(--line);
+    box-shadow:var(--lift-2); background:#fff;
+  }
+  .split .shot img { display:block; width:100%; height:auto; }
+
+  .points { list-style:none; margin-top:18px; display:grid; gap:11px; }
+  .points li { display:flex; gap:12px; align-items:flex-start; color:var(--muted); font-size:.97rem; }
+  .points .tick {
+    flex:0 0 auto; width:22px; height:22px; border-radius:50%;
+    background:var(--good-soft); color:var(--good);
+    display:flex; align-items:center; justify-content:center;
+    font-size:.72rem; font-weight:800; margin-top:1px;
+    box-shadow:inset 0 0 0 1px rgba(47,158,107,.22);
+  }
+
+  /* ── The broadcast section ─────────────────────────────────────────────
+     Three steps, connected by a line, with the real claim screen at the end.
+     This is the feature nobody else has and it needs to be shown, not told. */
+  .flow { display:grid; gap:14px; margin-top:24px; }
+  .step {
+    display:flex; gap:14px; align-items:flex-start;
+    background:linear-gradient(180deg,#fff,var(--surface-2));
+    border:1px solid var(--line); border-radius:14px; padding:16px 18px;
+    box-shadow:var(--lift-1);
+  }
+  .step .n {
+    flex:0 0 auto; width:26px; height:26px; border-radius:50%;
+    background:linear-gradient(180deg,#f7bd76,var(--amber) 50%,var(--gold-deep));
+    color:#fff; font-weight:800; font-size:.8rem;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 2px 6px rgba(240,164,75,.34);
+  }
+  .step b { display:block; font-size:.99rem; letter-spacing:-.01em; }
+  .step span { color:var(--muted); font-size:.92rem; }
+
+  .claim-shot {
+    max-width:250px; margin:0 auto;
+    border-radius:22px; padding:6px; background:#0d1526;
+    box-shadow:var(--lift-3), inset 0 0 0 1px rgba(255,255,255,.07);
+    transform:rotate(2deg);
+  }
+  .claim-shot img { display:block; width:100%; border-radius:17px; }
+
+  /* ── The automation section ───────────────────────────────────────────── */
+  .auto-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; margin-top:26px; }
+  .auto {
+    background:linear-gradient(180deg,#fff,var(--surface-2)); border:1px solid var(--line);
+    border-radius:14px; padding:20px; box-shadow:var(--lift-1);
+  }
+  .auto .ico {
+    width:34px; height:34px; border-radius:10px; margin-bottom:12px;
+    background:var(--amber-soft); border:1px solid var(--amber-line);
+    display:flex; align-items:center; justify-content:center; font-size:1rem;
+  }
+  .auto b { display:block; font-size:1rem; margin-bottom:5px; letter-spacing:-.01em; }
+  .auto span { color:var(--muted); font-size:.92rem; }
+
+  /* ── The numbers band, on dark ─────────────────────────────────────── */
+  .dark {
+    background:
+      radial-gradient(680px 380px at 18% 0%, rgba(240,164,75,.15), transparent 60%),
+      radial-gradient(720px 420px at 88% 110%, rgba(59,111,181,.20), transparent 62%),
+      var(--ink);
+    color:#fff; border:0;
+  }
+  .dark h2 { color:#fff; }
+  .dark .sub { color:rgba(255,255,255,.62); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-top:26px; }
+  .stat {
+    background:rgba(255,255,255,.055); border:1px solid rgba(255,255,255,.12);
+    border-radius:14px; padding:22px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.09);
+  }
+  .stat b { display:block; font-size:1.9rem; font-weight:800; letter-spacing:-.03em; color:var(--amber); }
+  .stat span { color:rgba(255,255,255,.66); font-size:.92rem; }
+
+  /* ── Questions people actually ask ─────────────────────────────────────
+     Objection handling and long-tail search in the same block. Every one of
+     these is something a cleaning company owner has either typed into Google
+     or asked on a call. Real <details> elements, so they work without
+     JavaScript and a crawler reads the answers whether or not they are open. */
+  .faq { max-width:760px; margin:26px auto 0; display:grid; gap:10px; }
+  .faq details {
+    background:linear-gradient(180deg,#fff,var(--surface-2));
+    border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--lift-1); overflow:hidden;
+  }
+  .faq summary {
+    cursor:pointer; padding:16px 20px; font-weight:650; font-size:1rem;
+    list-style:none; display:flex; align-items:center; gap:12px;
+  }
+  .faq summary::-webkit-details-marker { display:none; }
+  .faq summary::after {
+    content:'+'; margin-left:auto; color:var(--gold-deep);
+    font-weight:700; font-size:1.2rem; line-height:1;
+  }
+  .faq details[open] summary::after { content:'−'; }
+  .faq details[open] summary { border-bottom:1px solid var(--line-soft); }
+  .faq .a { padding:14px 20px 18px; color:var(--muted); font-size:.96rem; line-height:1.65; }
+
+  /* ── Closing call to action ────────────────────────────────────────── */
+  .close-card {
+    max-width:680px; margin:0 auto; text-align:center;
+    background:linear-gradient(180deg,#fff,var(--surface-2));
+    border:1px solid var(--line); border-radius:20px;
+    padding:40px 32px; box-shadow:var(--lift-2);
+  }
+
+  @media (max-width:980px){
+    .hero .wrap { grid-template-columns:1fr; gap:34px; }
+    .hero-copy { max-width:none; }
+    .frame { transform:none; max-height:340px; }
+    .split { grid-template-columns:1fr; gap:28px; }
+    .phone { display:none; }
+    .hero::before { display:none; }
+  }
+  @media (prefers-reduced-motion:reduce){ .frame, .phone { transform:none; } }
+</style>
+{% endblock %}
+
+{% block head_extra_2 %}{% endblock %}
+{% block body %}
+
+{# Structured data. Three things Google understands: what the product is, who
+   makes it, and the questions it answers. The FAQ block is what earns the
+   expandable answers under a search result, and it is generated from the same
+   plan table the software enforces rather than restated by hand. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "{{ PRODUCT }}",
+      "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "Field service management",
+      "operatingSystem": "Web",
+      "url": "{{ PRODUCT_BASE }}/",
+      "description": "Cleaning business software that hires your crew, pays them per job, and proves the work got done.",
+      "screenshot": "{{ PRODUCT_BASE }}{{ url_for('static', filename='shots/dashboard.png') }}",
+      "offers": [
+        {% for key, plan in plans.items() %}
+        {
+          "@type": "Offer",
+          "name": "{{ plan.label }}",
+          "price": "{{ plan.price }}",
+          "priceCurrency": "USD",
+          "category": "{{ 'Free' if plan.price == 0 else 'Subscription' }}"
+        }{{ "," if not loop.last }}
+        {% endfor %}
+      ],
+      "publisher": { "@id": "{{ PRODUCT_BASE }}/#org" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "{{ PRODUCT_BASE }}/#org",
+      "name": "{{ PRODUCT }}",
+      "url": "{{ PRODUCT_BASE }}/",
+      "logo": "{{ PRODUCT_BASE }}{{ url_for('static', filename='favicon.svg') }}"
+      {%- if LEGAL_ENTITY %},
+      "legalName": "{{ LEGAL_ENTITY }}"
+      {%- endif %}
+      {%- if SUPPORT_EMAIL %},
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "{{ SUPPORT_EMAIL }}",
+        "contactType": "customer support"
+      }
+      {%- endif %}
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {% for q, a in [
+          ('What does ' ~ PRODUCT ~ ' actually do?',
+           'It runs the operating side of a cleaning company: quoting and booking customers, scheduling jobs, assigning or broadcasting them to cleaners, working out what each cleaner is owed per job, keeping checklists and photos as proof, and tracking what you kept after pay and fees. Hiring is built in.'),
+          ('Do my cleaners need to download an app?',
+           'No. They get a text with a link. They tap it and the job is there, with the address, entry notes, what they earn, the checklist and a Navigate button. No account, no password, nothing to install.'),
+          ('Is there a free plan?',
+           'Yes, with no card. Two cleaners, twenty jobs a month, your own booking page, and the whole job flow from booking through to getting paid.'),
+          ('Does it handle contractor pay and 1099s?',
+           'It works out what each cleaner is owed — by percentage, hourly rate, or a flat amount per job — keeps a running yearly total, and collects W-9s during contractor onboarding. It is a record-keeping tool, not a payroll provider, and it takes no view on whether somebody is a contractor or an employee.'),
+          ('Will it work for landscaping or pressure washing?',
+           'Probably. Anything where you send a person to an address, pay per job rather than per hour, and need proof it was done, fits the same shape.')
+        ] %}
+        {
+          "@type": "Question",
+          "name": {{ q | tojson }},
+          "acceptedAnswer": { "@type": "Answer", "text": {{ a | tojson }} }
+        }{{ "," if not loop.last }}
+        {% endfor %}
+      ]
+    }
+  ]
+}
+</script>
+
+
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-copy">
+      <span class="eyebrow"><span class="dot"></span> Built by someone who runs a cleaning company</span>
+      {# The headline says what this is before it says anything clever. A
+         stranger arriving from a search has about three seconds to learn the
+         category, and "every other tool puts your jobs on a calendar" is a
+         good second line and a terrible first one -- it assumes you already
+         know what kind of tool we are talking about. The contrarian line
+         still gets said, immediately underneath, where it now lands on
+         somebody who knows what they are reading. #}
+      <h1>Cleaning business software that hires your crew,
+          pays them per job, and proves the work got done.</h1>
+      <p class="lead">
+        Every other tool puts your jobs on a calendar. <strong>Scheduling is the
+        easy part.</strong> {{ PRODUCT }} runs the parts that actually cost you
+        money — finding cleaners, paying them right, and knowing the job was
+        done to your standard.
+      </p>
+      <p class="also">
+        Made for house cleaning and maid services. Works for any team you send to
+        an address — landscaping, pressure washing, window cleaning, detailing.
+      </p>
+      <div class="cta-row">
+        {% if signups_open %}
+          <a class="btn" href="/signup">Start free — no card</a>
+        {% else %}
+          <a class="btn" href="{{ url_for('marketing.early_access') }}">Join waitlist</a>
+        {% endif %}
+        <a class="btn ghost" href="{{ url_for('marketing.pricing') }}">See pricing</a>
+      </div>
+      <p class="built">Every screen exists because something went wrong without it.</p>
+    </div>
+
+    {# Real screenshots of the running software, not illustrations. If the
+       product is the argument, show the product. #}
+    <div class="shot-stage">
+      <div class="frame">
+        <div class="chrome">
+          <i class="r"></i><i class="y"></i><i class="g"></i>
+          <span class="bar">{{ PRODUCT|lower }}hq.com — your back office</span>
+        </div>
+        <img src="{{ url_for('static', filename='shots/dashboard.png') }}"
+             alt="The {{ PRODUCT }} dashboard, showing which jobs tomorrow have nobody assigned to them"
+             loading="lazy" width="1340" height="860" />
+      </div>
+      <div class="phone">
+        <span class="notch"></span>
+        <img src="{{ url_for('static', filename='shots/phone.png') }}"
+             alt="A cleaner's job on her phone, with the address, what she earns and a Navigate button"
+             loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>The three things that actually run a cleaning business</h2>
+    <p style="color:var(--muted)">Scheduling software solves one of them.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>🧹 Finding cleaners</h3>
+        <p>Applications, video interviews, background-check requests, offers,
+           agreements and onboarding — one pipeline instead of a phone full of
+           text threads.</p>
+      </div>
+      <div class="card">
+        <h3>💵 Paying them right</h3>
+        <p>A percentage, an hourly rate, or a flat amount per job — whatever you
+           already do. W-2 employees or 1099 contractors. The offer, the job page
+           and payroll all read the same figure, so nobody is ever told two
+           different numbers. 1099s and W-9s included.</p>
+      </div>
+      <div class="card">
+        <h3>✅ Knowing it got done</h3>
+        <p>Checklists with photos, clock-in and out, and a customer signature —
+           on a texted link, with no app for the cleaner to install.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <h2>No app for your cleaners to download</h2>
+        <p style="color:var(--muted);margin-top:12px">
+          They get a text. They tap it. The job is there.
+        </p>
+        <ul class="points">
+          <li><span class="tick">✓</span> The address, and a Navigate button that opens their own maps app</li>
+          <li><span class="tick">✓</span> How to get in — the lockbox code, the gate, the dog</li>
+          <li><span class="tick">✓</span> What they earn on that job, stated before they start</li>
+          <li><span class="tick">✓</span> The checklist, photos and the customer's signature</li>
+        </ul>
+        <p style="color:var(--softer);margin-top:20px;font-size:.92rem">
+          Every competitor makes a cleaner download an app, create an account and
+          remember a password. Then pays for the support calls when she can't log in.
+        </p>
+      </div>
+      <div class="shot" style="max-width:300px;margin:0 auto">
+        <img src="{{ url_for('static', filename='shots/phone.png') }}"
+             alt="The cleaner's day, on her phone" loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="split">
+      <div class="shot">
+        <img src="{{ url_for('static', filename='shots/calendar.png') }}"
+             alt="The month calendar, with a red mark on any day that has a job nobody is assigned to"
+             loading="lazy" />
+      </div>
+      <div>
+        <h2>Scheduling that shows you the gap before the customer does</h2>
+        <p style="color:var(--muted);margin-top:12px">
+          A job on Thursday with nobody on it is marked on the calendar and on your
+          dashboard — not buried a click deep inside the day.
+        </p>
+        <ul class="points">
+          <li><span class="tick">✓</span> Drag a job to another day to move it</li>
+          <li><span class="tick">✓</span> Send a job out to the whole team and let somebody claim it</li>
+          <li><span class="tick">✓</span> Recurring work books itself forward</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <h2>Send a job to the whole team and let them claim it</h2>
+        <p style="color:var(--muted);margin-top:12px">
+          Somebody calls out on Tuesday morning. Instead of working down your
+          contacts, you send the job to the whole team and the first cleaner to
+          take it owns it.
+        </p>
+        <div class="flow">
+          <div class="step">
+            <span class="n">1</span>
+            <span><b>Send it out</b><span>One tap. Every available cleaner gets a text with the date, the area and what the job pays.</span></span>
+          </div>
+          <div class="step">
+            <span class="n">2</span>
+            <span><b>First to claim keeps it</b><span>No app, no login. They tap the text and take it. Anyone already double-booked is told before they can.</span></span>
+          </div>
+          <div class="step">
+            <span class="n">3</span>
+            <span><b>It is theirs</b><span>The address and entry notes unlock, the job lands on their day, and the pay is already agreed.</span></span>
+          </div>
+        </div>
+        <p style="color:var(--softer);margin-top:18px;font-size:.92rem">
+          The full address only appears once somebody has actually taken the
+          job — a broadcast is not a list of your customers' homes.
+        </p>
+      </div>
+      <div class="claim-shot">
+        <img src="{{ url_for('static', filename='shots/claim.png') }}"
+             alt="A job offered to the team on a cleaner's phone, showing what it pays and a Claim this job button"
+             loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>Online booking, instant quotes and automatic reminders</h2>
+    <p style="color:var(--muted)">A customer should be able to get a price at eleven at night without waking you up.</p>
+    <div class="auto-grid">
+      <div class="auto">
+        <div class="ico">💬</div>
+        <b>A booking page, free</b>
+        <span>Your name, your colours, your prices. Customers pick a service,
+              see the real number and book — and it lands in your CRM as a job.
+              Included on every plan, even the free one.</span>
+      </div>
+      <div class="auto">
+        <div class="ico">📅</div>
+        <b>Booking without the phone call</b>
+        <span>They pick the service and the day. It arrives as a job waiting for you to confirm, not as a voicemail.</span>
+      </div>
+      <div class="auto">
+        <div class="ico">🔁</div>
+        <b>Recurring work books itself</b>
+        <span>Every two weeks, every month — the next visit is on the calendar without anybody re-entering it.</span>
+      </div>
+      <div class="auto">
+        <div class="ico">🔔</div>
+        <b>Reminders and follow-ups</b>
+        <span>Confirmations, day-before reminders, the review request afterwards. Sent whether or not you remembered.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="dark">
+  <div class="wrap">
+    <h2>Cleaner pay, 1099s and job profit, kept as you go</h2>
+    <p class="sub">The parts a spreadsheet stops coping with somewhere around the third cleaner.</p>
+    <div class="stats">
+      <div class="stat"><b>Any rate</b><span>Percentage, hourly or flat per job — set once, agreed everywhere</span></div>
+      <div class="stat"><b>1099</b><span>Contractor totals and W-9s, kept as you go</span></div>
+      <div class="stat"><b>Photos</b><span>Proof the standard was met, on every visit</span></div>
+      <div class="stat"><b>To the cent</b><span>What you kept on each job, after pay and fees</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>Questions cleaning company owners ask</h2>
+    <p style="color:var(--muted)">The ones that come up on nearly every call.</p>
+    <div class="faq">
+      <details open>
+        <summary>What does {{ PRODUCT }} actually do?</summary>
+        <div class="a">It runs the operating side of a cleaning company: quoting and
+          booking customers, scheduling jobs, assigning or broadcasting them to
+          cleaners, working out what each cleaner is owed per job, keeping
+          checklists and photos as proof the work was done, and tracking what you
+          kept on each job after pay and fees. Hiring is built in too —
+          applications, interviews, offers and onboarding.</div>
+      </details>
+      <details>
+        <summary>Do my cleaners need to download an app?</summary>
+        <div class="a">No. They get a text with a link. They tap it and the job is
+          there — the address, how to get in, what they earn, the checklist, and a
+          Navigate button that opens their own maps app. No account, no password,
+          nothing to install. Somebody you hire on Tuesday can work on Wednesday.</div>
+      </details>
+      <details>
+        <summary>How is this different from ZenMaid, Jobber or Housecall Pro?</summary>
+        <div class="a">Those are scheduling tools with pay bolted on. {{ PRODUCT }}
+          is built the other way round: the hiring pipeline, per-job cleaner pay and
+          proof of work are the product, and the calendar is the easy part that
+          everybody already does well. If your problem is finding cleaners and
+          working out what you owe them on a Friday, that is what this is for.</div>
+      </details>
+      <details>
+        <summary>Is there really a free plan?</summary>
+        <div class="a">Yes, and no card is needed. Two cleaners, twenty jobs a month,
+          your own booking page, and the whole job flow from booking through to
+          getting paid. Pro is ${{ plans['pro']['price'] }} a month
+          when you outgrow it.</div>
+      </details>
+      <details>
+        <summary>Do I get a website?</summary>
+        <div class="a">You get a booking page, which is the part of a website that
+          actually earns money — your name, your colours, your prices, and a form
+          that puts the job straight into your CRM. Put the link in your Facebook
+          bio or your Google listing. On Pro you can drop it into the website you
+          already have with one line of code.</div>
+      </details>
+      <details>
+        <summary>Does it handle contractor pay and 1099s?</summary>
+        <div class="a">It works out what each cleaner is owed — by percentage, hourly
+          rate, or a flat amount you set per job — keeps a running total for the
+          year, and collects W-9s during contractor onboarding. It is a
+          record-keeping tool, not a payroll provider — it does not pay anybody or
+          file anything with the IRS, and it takes no view on whether somebody is a
+          contractor or an employee. That decision is yours.</div>
+      </details>
+      <details>
+        <summary>I do landscaping, not cleaning. Will it work?</summary>
+        <div class="a">Probably. Anything where you send a person to an address, pay
+          them for the job rather than the hour, and need proof it was done, fits
+          the same shape. The wording says "cleaning" in places because that is
+          where it was built and tested. Try the free plan and tell us what does not
+          fit.</div>
+      </details>
+      <details>
+        <summary>What happens to my data if I leave?</summary>
+        <div class="a">It is yours. You can export your customers, jobs and pay
+          records, and ask for the account to be deleted. That is written into the
+          <a href="{{ url_for('marketing.terms') }}">terms</a>, not just promised
+          here.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="close-card">
+      {% if signups_open %}
+      <h2>Start free. Really free.</h2>
+      <p style="color:var(--muted);margin-top:10px">
+        Your own booking page, two cleaners, twenty jobs a month, and the whole
+        job flow — booking to checklist to getting paid. No card, no trial clock.
+      </p>
+      {% else %}
+      <h2>We are setting up the first companies by hand</h2>
+      <p style="color:var(--muted);margin-top:10px">
+        Rather than opening the doors, we are onboarding a handful of cleaning
+        companies one at a time — loading your customers, cleaners, prices and
+        next week's jobs for you. Tell us about yours.
+      </p>
+      {% endif %}
+      <div style="margin-top:26px">
+        {% if signups_open %}
+          <a class="btn" href="/signup">Create your account</a>
+        {% else %}
+          <a class="btn" href="{{ url_for('marketing.early_access') }}">Join waitlist</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

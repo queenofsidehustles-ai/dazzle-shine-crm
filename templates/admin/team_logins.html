@@ -6,33 +6,31 @@
 
 <div class="card" style="margin-bottom:18px">
   <h3 style="margin:0 0 4px">➕ Create a login</h3>
-  <p style="color:#9a95ad;font-size:0.85rem;margin:0 0 14px">
-    Give a VA or new hire their own username and password.
-    <strong>Team</strong> members see everything except money (payroll, contractor pay,
-    reports, settings). <strong>Owner</strong> sees it all.
+  <p style="color:var(--softer);font-size:0.85rem;margin:0 0 14px">
+    Choose the least privilege this person needs. <strong>Owner</strong> is the only role with
+    finance/pay authority; <strong>Admin</strong> and <strong>Dispatcher</strong> run operations,
+    <strong>Cleaner</strong> is limited to assigned-work flows, and <strong>Limited</strong> is
+    booking read-only. She'll get an email with a link to choose her own password —
+    nobody sets one on her behalf.
   </p>
   <form method="POST" action="{{ url_for('team_logins.add') }}"
         style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
     <div style="flex:1;min-width:140px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Full name</label>
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Full name</label>
       <input type="text" name="name" placeholder="Jane Smith" required
-             style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px">
+             style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
     </div>
     <div style="flex:1;min-width:140px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Username</label>
-      <input type="text" name="username" placeholder="jane" required
-             style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px">
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Email address</label>
+      <input type="email" name="email" placeholder="jane@example.com" required
+             style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
     </div>
-    <div style="flex:1;min-width:140px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Password</label>
-      <input type="text" name="password" placeholder="at least 6 characters" required
-             style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px">
-    </div>
-    <div style="min-width:120px">
-      <label style="display:block;font-size:0.8rem;color:#9a95ad;margin-bottom:4px">Role</label>
-      <select name="role" style="width:100%;padding:10px;border:1px solid #e3e0ec;border-radius:8px">
-        <option value="team" selected>👤 Team (no money)</option>
-        <option value="owner">👑 Owner (full access)</option>
+    <div style="min-width:220px">
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Role</label>
+      <select name="role" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
+        {% for value, label in role_options %}
+        <option value="{{ value }}" {% if value == 'limited' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
       </select>
     </div>
     <button type="submit" class="btn" style="padding:11px 22px">Create login</button>
@@ -44,18 +42,18 @@
   {% if users %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
       <tbody>
         {% for u in users %}
         <tr>
           <td><strong>{{ u.name }}</strong></td>
           <td>{{ u.username }}</td>
-          <td>{{ u.role_label }}</td>
+          <td>{{ role_label(u.role) }}</td>
           <td>
             {% if u.active %}<span class="status status-completed">Active</span>
             {% else %}<span class="status status-cancelled">Disabled</span>{% endif %}
           </td>
-          <td style="font-size:0.82rem;color:#9a95ad">{{ u.last_login.strftime('%b %d, %Y') if u.last_login else 'never' }}</td>
+          <td style="font-size:0.82rem;color:var(--softer)">{{ u.last_login.strftime('%b %d, %Y') if u.last_login else 'never' }}</td>
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
               <form method="POST" action="{{ url_for('team_logins.toggle', user_id=u.id) }}">
@@ -63,15 +61,17 @@
                   {{ 'Disable' if u.active else 'Enable' }}
                 </button>
               </form>
+              {# She picks her own password now -- the owner used to type one
+                 in here and hand it over some other way, which is one more
+                 person who has known it. This just sends the same reset link
+                 /forgot sends, so there's only ever the one path in. #}
               <form method="POST" action="{{ url_for('team_logins.reset', user_id=u.id) }}"
-                    style="display:flex;gap:4px" onsubmit="return this.password.value.length>=6 || (alert('Password must be at least 6 characters'),false)">
-                <input type="text" name="password" placeholder="new password"
-                       style="padding:5px;border:1px solid #e3e0ec;border-radius:6px;font-size:0.78rem;width:110px">
-                <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.78rem">Reset</button>
+                    onsubmit="return confirm('Send {{ u.name }} a link to set a new password?')">
+                <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.78rem">Send reset link</button>
               </form>
               <form method="POST" action="{{ url_for('team_logins.delete', user_id=u.id) }}"
                     onsubmit="return confirm('Remove {{ u.name }}\'s login for good?')">
-                <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:#e53e3e">✕</button>
+                <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:var(--warn)">✕</button>
               </form>
             </div>
           </td>
@@ -81,7 +81,7 @@
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:30px 0">
+  <p style="text-align:center;color:var(--softer);padding:30px 0">
     No team logins yet. Create one above — your own owner login always works too. 🔑
   </p>
   {% endif %}

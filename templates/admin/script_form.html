@@ -27,12 +27,12 @@
         <textarea name="content" rows="18" required
                   style="font-family:monospace;font-size:0.88rem;line-height:1.7"
                   placeholder="Paste your full script here...">{{ script.content if script else '' }}</textarea>
-        <span style="font-size:0.78rem;color:#9a95ad">Use [BRACKETS] for fill-in spots. Line breaks are preserved.</span>
+        <span style="font-size:0.78rem;color:var(--softer)">Use [BRACKETS] for fill-in spots. Line breaks are preserved.</span>
       </div>
       <div class="form-group" style="max-width:160px">
         <label>Sort Order</label>
         <input type="number" name="sort_order" value="{{ script.sort_order if script else 0 }}" min="0" />
-        <span style="font-size:0.78rem;color:#9a95ad">Lower numbers appear first.</span>
+        <span style="font-size:0.78rem;color:var(--softer)">Lower numbers appear first.</span>
       </div>
       <div style="display:flex;gap:12px">
         <button type="submit" class="btn btn-gold" style="flex:1;justify-content:center">

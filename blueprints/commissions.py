@@ -2,6 +2,7 @@
 calculation engine."""
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from entitlements import requires_plan
 from auth import owner_required
 from extensions import db
 from models import User, PricingSetting, CommissionPayment
@@ -12,6 +13,7 @@ commissions_bp = Blueprint('commissions', __name__, url_prefix='/commissions')
 
 @commissions_bp.route('/')
 @owner_required
+@requires_plan('va_commissions')
 def index():
     vas = User.query.filter_by(role='team').order_by(User.name).all()
     agent = request.args.get('agent', '')

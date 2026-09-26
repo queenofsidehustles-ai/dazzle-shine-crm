@@ -1,0 +1,35 @@
+{# A fold-out "how do I get this?" for a setting somebody has to fetch from
+   somewhere else.
+
+   Written inline, next to the box it fills in, rather than in a help centre.
+   Somebody stuck on a Twilio auth token at nine at night will not go and find
+   a separate directory of articles — they will give up and the CRM will never
+   send a text. So the instructions sit under the field, closed until wanted,
+   and open without leaving the page.
+
+   Real <details>, so it works with no JavaScript and a browser's find-on-page
+   can still see inside it.
+
+   Usage:
+     {% set steps = ['Do this', 'Then this'] %}
+     {% include '_howto.html' %}
+   with optional `howto_title`, `howto_mins`, `howto_link`, `howto_link_text`,
+   `howto_note`. #}
+<details class="howto">
+  <summary>
+    {{ howto_title or 'How do I get this?' }}
+    {% if howto_mins %}<span class="mins">{{ howto_mins }}</span>{% endif %}
+  </summary>
+  <div class="howto-body">
+    <ol>
+      {% for step in steps %}
+      <li>{{ step | safe }}</li>
+      {% endfor %}
+    </ol>
+    {% if howto_note %}<p class="howto-note">{{ howto_note | safe }}</p>{% endif %}
+    {% if howto_link %}
+    <a href="{{ howto_link }}" target="_blank" rel="noopener"
+       class="btn btn-outline btn-sm">{{ howto_link_text or 'Open it' }} →</a>
+    {% endif %}
+  </div>
+</details>

@@ -1,0 +1,20 @@
+{% extends "base_admin.html" %}
+{% block title %}Thank you · {{ BIZ }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:560px;text-align:center;padding:34px">
+  <div style="font-size:2.2rem">✅</div>
+  <h2 style="margin:10px 0 8px">Payment received — thank you</h2>
+  {# Deliberately does not claim the plan has changed. This page is a URL that
+     anybody could open; the plan changes when Stripe's signed webhook says so,
+     usually within a second or two. Saying "you're upgraded" here would be
+     asserting something this page cannot know. #}
+  <p style="color:var(--muted);line-height:1.6">
+    Your account is being updated now. It usually takes a moment — refresh the
+    billing page if it hasn't caught up.
+  </p>
+  <div style="margin-top:22px;display:flex;gap:10px;justify-content:center">
+    <a href="{{ url_for('billing.billing_home') }}" class="btn-primary">Billing</a>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn-secondary">Back to work</a>
+  </div>
+</div>
+{% endblock %}

@@ -5,16 +5,16 @@
 {% block content %}
 
 {% if session.get('role', 'owner') == 'owner' %}
-<div style="text-align:right;margin-bottom:8px"><a href="{{ url_for('settings.commercial') }}" style="font-size:0.85rem;color:#b98a33">⚙️ Commercial pricing settings</a></div>
+<div style="text-align:right;margin-bottom:8px"><a href="{{ url_for('settings.commercial') }}" style="font-size:0.85rem;color:var(--amber-deep)">⚙️ Commercial pricing settings</a></div>
 {% endif %}
 
-<div class="card" style="margin-bottom:18px;background:#faf8ff;border:1px solid #ece7fb">
-  <div style="font-weight:700;color:#1f1333;margin-bottom:8px">How commercial works ✨</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:0.86rem;color:#5d4f7d">
-    <span>1️⃣ Find &amp; call leads</span><span style="color:#c9c2de">→</span>
-    <span>2️⃣ Price the job 🧮</span><span style="color:#c9c2de">→</span>
-    <span>3️⃣ Save as account</span><span style="color:#c9c2de">→</span>
-    <span style="color:#9a95ad">4️⃣ Schedule &amp; invoice (soon)</span>
+<div class="card" style="margin-bottom:18px;background:var(--info-soft);border:1px solid var(--info-soft)">
+  <div style="font-weight:700;color:var(--ink);margin-bottom:8px">How commercial works ✨</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:0.86rem;color:var(--muted)">
+    <span>1️⃣ Find &amp; call leads</span><span style="color:var(--info-soft)">→</span>
+    <span>2️⃣ Price the job 🧮</span><span style="color:var(--info-soft)">→</span>
+    <span>3️⃣ Save as account</span><span style="color:var(--info-soft)">→</span>
+    <span style="color:var(--softer)">4️⃣ Schedule &amp; invoice (soon)</span>
   </div>
   <a href="{{ url_for('commercial.calculator') }}" class="btn" style="margin-top:12px;display:inline-block;padding:11px 22px">🧮 Price a Job</a>
 </div>
@@ -22,17 +22,17 @@
 <!-- Monthly pipeline value -->
 <div class="card" style="margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
   <div>
-    <div style="font-size:0.8rem;color:#9a95ad">Recurring monthly revenue (active accounts)</div>
-    <div style="font-size:2rem;font-weight:800;color:#b98a33">${{ '%.0f' % monthly_total }}<span style="font-size:1rem;color:#9a95ad">/mo</span></div>
+    <div style="font-size:0.8rem;color:var(--softer)">Recurring monthly revenue (active accounts)</div>
+    <div style="font-size:2rem;font-weight:800;color:var(--amber-deep)">${{ '%.0f' % monthly_total }}<span style="font-size:1rem;color:var(--softer)">/mo</span></div>
   </div>
-  <div style="font-size:0.85rem;color:#9a95ad;text-align:right">
+  <div style="font-size:0.85rem;color:var(--softer);text-align:right">
     {{ counts['active'] }} active · {{ counts['lead'] }} in talks · {{ counts['paused'] }} paused
   </div>
 </div>
 
 <!-- Add account (collapsible) -->
 <details class="card" style="margin-bottom:18px">
-  <summary style="cursor:pointer;font-weight:700;color:#1f1333">➕ Add a commercial account by hand</summary>
+  <summary style="cursor:pointer;font-weight:700;color:var(--ink)">➕ Add a commercial account by hand</summary>
   <form method="POST" action="{{ url_for('commercial.new') }}" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
     <div><label class="lbl">Business name *</label><input class="inp" name="business_name" required></div>
     <div><label class="lbl">Contact person</label><input class="inp" name="contact_name"></div>
@@ -69,12 +69,12 @@
         {% for a in accounts %}
         {% set colors = {'active':'status-completed','paused':'status-pending','lead':'status-confirmed'} %}
         <tr>
-          <td><strong>{{ a.business_name }}</strong>{% if a.city %}<br><span style="font-size:0.8rem;color:#9a95ad">{{ a.city }}</span>{% endif %}</td>
-          <td style="font-size:0.85rem">{{ a.contact_name or '—' }}{% if a.phone %}<br><span style="color:#9a95ad">{{ a.phone }}</span>{% endif %}</td>
+          <td><strong>{{ a.business_name }}</strong>{% if a.city %}<br><span style="font-size:0.8rem;color:var(--softer)">{{ a.city }}</span>{% endif %}</td>
+          <td style="font-size:0.85rem">{{ a.contact_name or '—' }}{% if a.phone %}<br><span style="color:var(--softer)">{{ a.phone }}</span>{% endif %}</td>
           <td style="font-size:0.82rem">{{ a.category_label }}</td>
           <td style="font-size:0.85rem">{{ a.frequency_label }}</td>
           <td style="font-size:0.85rem">${{ '%.0f' % (a.billing_amount or 0) }}{{ '/mo' if a.billing_type=='monthly' else '/visit' }}</td>
-          <td style="font-weight:700;color:#b98a33">${{ '%.0f' % a.monthly_value }}</td>
+          <td style="font-weight:700;color:var(--amber-deep)">${{ '%.0f' % a.monthly_value }}</td>
           <td><span class="status {{ colors.get(a.status,'status-pending') }}">{{ a.status_label }}</span></td>
           <td><a href="{{ url_for('commercial.detail', account_id=a.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Open</a></td>
         </tr>
@@ -83,14 +83,14 @@
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:40px 0">
+  <p style="text-align:center;color:var(--softer);padding:40px 0">
     No commercial accounts yet. <a href="{{ url_for('commercial.calculator') }}">Price a job 🧮</a>, close a business in <a href="{{ url_for('places_finder.dashboard') }}">Find Leads</a>, or add one by hand above. 🏢
   </p>
   {% endif %}
 </div>
 
 <style>
-  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
-  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem}
+  .lbl{display:block;font-size:0.78rem;color:var(--softer);margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:0.92rem}
 </style>
 {% endblock %}

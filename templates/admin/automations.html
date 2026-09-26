@@ -14,30 +14,82 @@
 <div class="content">
 
   {% if data.all_ok %}
-  <div style="background:#f0fff4;border:1px solid #c6f6d5;border-radius:10px;padding:16px 18px;margin-bottom:18px">
-    <div style="font-weight:700;color:#276749">✅ Everything is running</div>
-    <p style="font-size:0.88rem;color:#1e7e34;line-height:1.6;margin:6px 0 0">
+  <div style="background:var(--good-soft);border:1px solid var(--good-soft);border-radius:10px;padding:16px 18px;margin-bottom:18px">
+    <div style="font-weight:700;color:var(--good)">✅ Everything is running</div>
+    <p style="font-size:0.88rem;color:var(--good);line-height:1.6;margin:6px 0 0">
       Every scheduled job has reported in recently.
     </p>
   </div>
   {% else %}
-  <div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:10px;padding:16px 18px;margin-bottom:18px">
-    <div style="font-weight:700;color:#c53030;margin-bottom:6px">
+  <div style="background:var(--warn-soft);border:1px solid var(--warn-soft);border-radius:10px;padding:16px 18px;margin-bottom:18px">
+    <div style="font-weight:700;color:var(--warn);margin-bottom:6px">
       ⚠️ {{ data.broken|length }} of {{ data.rows|length }} automations {{ 'is' if data.broken|length == 1 else 'are' }} not running
     </div>
-    <p style="font-size:0.88rem;color:#9b2c2c;line-height:1.6;margin:0">
-      Nothing in this CRM schedules itself — an outside cron service calls each job on a timetable.
-      When that stops, the app keeps looking healthy and simply goes quiet. Check your cron service
-      and make sure each address below is being called.
+    {# "Check your cron service and make sure each address below is being
+       called" is an instruction you can only follow if you already know what a
+       cron service is. Somebody who does not has no next move at all — and
+       these are the jobs that text customers and take money. #}
+    {% if managed %}
+    <p style="font-size:0.88rem;color:var(--warn);line-height:1.6;margin:0 0 4px">
+      These run on our timetable, not yours, and they haven't yet. There is
+      nothing for you to set up — if this doesn't clear on its own, tell us.
     </p>
+    {% else %}
+    <p style="font-size:0.88rem;color:var(--warn);line-height:1.6;margin:0 0 4px">
+      These jobs don't run on their own. Something outside has to wake them up on a
+      timetable, and right now nothing is. Reminders aren't going out and balances
+      aren't being charged.
+    </p>
+    {% endif %}
   </div>
-  {% endif %}
+
+  {% if not managed %}
+  <details class="howto" open>
+    <summary>Set this up — free, no card, about 10 minutes</summary>
+    <div class="howto-body">
+      <p style="font-size:0.88rem;line-height:1.6;margin:0 0 12px">
+        You are going to sign up to a free website whose whole job is to visit an
+        address on a schedule. That's it — it's a very reliable alarm clock. You do
+        this once and then never again.
+      </p>
+      <ol>
+        <li>Go to <strong>cron-job.org</strong> and make a free account. Confirm the
+          email it sends you.</li>
+        <li>Click <strong>Create cronjob</strong>.</li>
+        <li><strong>Title:</strong> type the name of the job you're setting up — for
+          the first one, <code>Day-before reminders</code>.</li>
+        <li><strong>URL:</strong> copy the address from the matching card below and
+          paste it in. Each card has its own — they are not interchangeable.</li>
+        <li><strong>Schedule:</strong> pick <strong>Every day</strong> and choose a
+          time, unless the card says hourly — then pick <strong>Every hour</strong>.</li>
+        <li>Open <strong>Advanced</strong>. Set the request method to
+          <strong>POST</strong> (not GET — it will look like it worked and do
+          nothing).</li>
+        <li>Still in Advanced, find <strong>Headers</strong> and add one.
+          Name: <code>X-Api-Key</code>. Value: your <code>REMINDER_API_KEY</code>,
+          copied exactly from your Railway settings.</li>
+        <li><strong>Save</strong>. Then press <strong>Run now</strong> — you should
+          see a green result, and this page will say <strong>Running</strong> next
+          time you reload it.</li>
+        <li>Repeat for each card below. Six jobs, six cronjobs.</li>
+      </ol>
+      <div class="howto-note">
+        Two things go wrong, and both look like nothing happening: the method is
+        left on <strong>GET</strong>, or the <code>X-Api-Key</code> has a stray
+        space at the end. If a job still says “Never run” after a Run now, check
+        those two first.
+      </div>
+    </div>
+  </details>
+  {% endif %}{# not managed #}
+  {% endif %}{# data.all_ok #}
 
   {% for r in data.rows %}
-  {% set tone = {'ok':      ('#f0fff4', '#c6f6d5', '#276749', '✅', 'Running'),
-                 'stale':   ('#fffbeb', '#fde68a', '#92400e', '⚠️', 'Hasn’t run recently'),
-                 'failing': ('#fff5f5', '#fed7d7', '#c53030', '❌', 'Last run failed'),
-                 'never':   ('#fff5f5', '#fed7d7', '#c53030', '🚫', 'Never run')}[r.state] %}
+  {% set tone = {'ok':      ('var(--good-soft)', 'var(--good-soft)', 'var(--good)', '✅', 'Running'),
+                 'stale':   ('var(--amber-soft)', 'var(--amber-line)', 'var(--amber-deep)', '⚠️', 'Hasn’t run recently'),
+                 'failing': ('var(--warn-soft)', 'var(--warn-soft)', 'var(--warn)', '❌', 'Last run failed'),
+                 'never':   ('var(--warn-soft)', 'var(--warn-soft)', 'var(--warn)', '🚫', 'Never run'),
+                 'off':     ('var(--ground)', 'var(--line)', 'var(--softer)', '⏸️', 'Turned off')}[r.state] %}
   <div class="card" style="margin-bottom:12px;border-left:4px solid {{ tone[2] }}">
     <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:240px">
@@ -53,6 +105,72 @@
         </div>
         <p style="font-size:0.87rem;color:var(--muted);line-height:1.6;margin:6px 0 0">{{ r.blurb|safe }}</p>
 
+        {% if r.key == 'charge-balances' %}
+        {# Three answers, not two. "Off" is two different businesses: one that
+           wants telling when money is owed, and one that collects it in cash
+           and does not want the card touched at all. #}
+        <form method="POST" action="{{ url_for('settings.save_automation') }}"
+              style="margin-top:12px;display:flex;flex-direction:column;gap:7px">
+          <input type="hidden" name="job" value="charge-balances" />
+          {% for value, title, note in [
+              ('auto',  'Charge the card on the day',
+               'The balance comes off the card they paid the deposit with, at the job’s start time.'),
+              ('ask',   'Tell me it’s due — I’ll decide',
+               'Nothing is charged. The balance shows as owed on the job and you charge it when you want.'),
+              ('never', 'Never charge the card',
+               'You collect the rest in cash or by invoice. The software will not offer to charge it.')] %}
+          <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;
+                        padding:9px 11px;border-radius:9px;
+                        border:1px solid {{ 'var(--amber)' if balance_mode == value else 'var(--line)' }};
+                        background:{{ 'var(--amber-soft)' if balance_mode == value else 'var(--surface)' }}">
+            <input type="radio" name="mode" value="{{ value }}"
+                   {{ 'checked' if balance_mode == value }}
+                   onchange="this.form.submit()" style="margin-top:3px" />
+            <span>
+              <strong style="font-size:0.9rem">{{ title }}</strong>
+              <span style="display:block;font-size:0.82rem;color:var(--muted);line-height:1.5">{{ note }}</span>
+            </span>
+          </label>
+          {% endfor %}
+        </form>
+        {% elif r.key == 'reminders' %}
+        {# Same job, same cron address, two people who don't have to agree.
+           A business might want her own customers left alone while cleaners
+           still get warned about tomorrow's job, or the other way round --
+           they used to be one switch, so there was no way to ask for just
+           one of those. #}
+        <div style="display:flex;flex-direction:column;gap:7px;margin-top:10px">
+          <form method="POST" action="{{ url_for('settings.save_automation') }}"
+                style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+                       padding:9px 11px;border:1px solid var(--line);border-radius:9px">
+            <span style="font-size:0.87rem">📱 Text customers booked tomorrow</span>
+            <input type="hidden" name="job" value="reminders" />
+            <input type="hidden" name="on" value="{{ '0' if customer_reminders_on else '1' }}" />
+            <button type="submit" class="btn btn-outline btn-sm">
+              {{ 'Turn off' if customer_reminders_on else 'Turn on' }}
+            </button>
+          </form>
+          <form method="POST" action="{{ url_for('settings.save_automation') }}"
+                style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+                       padding:9px 11px;border:1px solid var(--line);border-radius:9px">
+            <span style="font-size:0.87rem">🧹 Text cleaners with a job tomorrow</span>
+            <input type="hidden" name="job" value="reminders-cleaner" />
+            <input type="hidden" name="on" value="{{ '0' if cleaner_reminders_on else '1' }}" />
+            <button type="submit" class="btn btn-outline btn-sm">
+              {{ 'Turn off' if cleaner_reminders_on else 'Turn on' }}
+            </button>
+          </form>
+        </div>
+        {% else %}
+        <form method="POST" action="{{ url_for('settings.save_automation') }}" style="margin-top:10px">
+          <input type="hidden" name="job" value="{{ r.key }}" />
+          <input type="hidden" name="on" value="{{ '0' if r.on else '1' }}" />
+          <button type="submit" class="btn btn-outline btn-sm">
+            {{ 'Turn this off' if r.on else 'Turn this back on' }}
+          </button>
+        </form>
+        {% endif %}
+
         {% if r.last %}
           <p style="font-size:0.82rem;color:var(--softer);margin:8px 0 0">
             Last ran {{ r.last.ran_at.strftime('%b %-d, %Y at %-I:%M %p') }} UTC
@@ -60,10 +178,10 @@
             {%- if r.last.items %} · did {{ r.last.items }} thing{{ 's' if r.last.items != 1 }}{% endif %}
           </p>
           {% if r.last.detail %}
-            <p style="font-size:0.82rem;color:#c53030;margin:4px 0 0">{{ r.last.detail }}</p>
+            <p style="font-size:0.82rem;color:var(--warn);margin:4px 0 0">{{ r.last.detail }}</p>
           {% endif %}
         {% else %}
-          <p style="font-size:0.82rem;color:#c53030;margin:8px 0 0">
+          <p style="font-size:0.82rem;color:var(--warn);margin:8px 0 0">
             No run has ever been recorded.
             <span style="color:var(--softer)">(Recording started {{ tracking_since }} — a job that last ran
             before then shows here until its next run.)</span>
@@ -71,40 +189,51 @@
         {% endif %}
 
         {% if r.evidence %}
-        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:9px 12px;margin-top:10px">
-          <span style="font-size:0.82rem;color:#7c4a04;line-height:1.55">🔎 {{ r.evidence }}</span>
+        <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:9px 12px;margin-top:10px">
+          <span style="font-size:0.82rem;color:var(--amber-deep);line-height:1.55">🔎 {{ r.evidence }}</span>
         </div>
         {% endif %}
       </div>
 
       <div style="flex-shrink:0;text-align:right">
         <div style="font-size:0.7rem;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Address to call</div>
-        <code style="font-size:0.78rem;background:#faf9fd;border:1px solid var(--border);border-radius:6px;
+        <code style="font-size:0.78rem;background:var(--ground);border:1px solid var(--border);border-radius:6px;
                      padding:5px 9px;display:inline-block;color:var(--purple-mid)">POST /api/{{ r.key }}</code>
       </div>
     </div>
   </div>
   {% endfor %}
 
-  <div style="background:#f0f7ff;border:1px solid #bcd7f5;border-radius:10px;padding:16px 18px;margin-top:18px">
-    <div style="font-weight:700;color:#2b6cb0;margin-bottom:6px">How to set these up</div>
-    <p style="font-size:0.87rem;line-height:1.65;color:#1e3a5f;margin:0 0 8px">
+  {% if managed %}
+  <div style="background:var(--good-soft);border:1px solid var(--good);border-radius:10px;padding:16px 18px;margin-top:18px">
+    <div style="font-weight:700;color:var(--good);margin-bottom:6px">You don't set these up</div>
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--good);margin:0">
+      They run on a timetable we keep, for every business here. Switch any of them
+      off above if you'd rather do that part yourself — nothing else is needed
+      from you, and if one stops running that is ours to notice and fix.
+    </p>
+  </div>
+  {% else %}
+  <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:10px;padding:16px 18px;margin-top:18px">
+    <div style="font-weight:700;color:var(--info);margin-bottom:6px">How to set these up</div>
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--info);margin:0 0 8px">
       Each job is an address on this server that something outside has to call on a schedule — a free
       service like cron-job.org does it. Every call needs your reminder key sent as an
       <code>X-Api-Key</code> header, so nobody but you can trigger them.
     </p>
-    <p style="font-size:0.87rem;line-height:1.65;color:#1e3a5f;margin:0 0 8px">
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--info);margin:0 0 8px">
       Full address: <code>{{ base }}/api/&lt;job&gt;</code> · method <strong>POST</strong>.
       Run the hourly one every hour; the daily ones once each morning, after
       people are awake and before the day starts.
     </p>
-    <p style="font-size:0.87rem;line-height:1.65;color:#1e3a5f;margin:0">
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--info);margin:0">
       <strong>Two independent signals on this page.</strong> The green and red badges come from runs the
       CRM has recorded since this page shipped. The 🔎 notes are worked out from your actual bookings —
       jobs that came and went with no reminder, balances still sitting uncollected — so they can tell you
       about weeks before any of this existed.
     </p>
   </div>
+  {% endif %}
 
 </div>
 {% endblock %}

@@ -1,0 +1,139 @@
+{# How the data is held. Deliberately NOT on the _legal.html shell: those pages
+   are undertakings awaiting a lawyer, and this one is a description of what the
+   software actually does. Every claim below is something a person could check
+   in the code — no "bank-level", no "military-grade", no certifications we do
+   not hold. A security page that overstates is worse than none, because the
+   first thing it costs you is the trust of the customer who checks. #}
+{% extends "marketing/_shell.html" %}
+{% block title %}Security · {{ PRODUCT }}{% endblock %}
+{% block body %}
+<section>
+  <div class="wrap" style="max-width:720px">
+    <h1 style="font-size:1.9rem">How your data is protected</h1>
+    <p style="color:var(--softer);font-size:.9rem;margin-top:6px">
+      Last updated {{ UPDATED }} ·
+      <a href="{{ url_for('marketing.terms') }}">Terms</a> ·
+      <a href="{{ url_for('marketing.privacy') }}">Privacy</a> ·
+      <a href="{{ url_for('marketing.subprocessors') }}">Who we share data with</a>
+    </p>
+
+    <div class="legal">
+      <p style="font-size:1.05rem;color:var(--ink);margin-top:22px">
+        You are being asked to put your clients' home addresses, the note that says
+        where the key is kept, and your cleaners' tax and background paperwork into
+        somebody else's software. That is a real thing to ask. This page says
+        plainly what happens to it.
+      </p>
+
+      <h2>Your business is separate from every other business</h2>
+      <p>
+        Every company on {{ PRODUCT }} gets its own private area of the database —
+        not a shared table with a column saying which company a row belongs to,
+        which is the arrangement where one mistake shows your client list to
+        somebody else. The separation is set on <strong>every single database
+        connection</strong>, not once per page, because a connection handed on
+        while still pointing at the last company is exactly how that kind of leak
+        happens.
+      </p>
+      <p>
+        It is covered by automated tests that run before every release, including
+        a check that removing one company cannot touch another's data.
+      </p>
+
+      <h2>Passwords</h2>
+      <p>
+        Stored as a one-way hash, using <strong>pbkdf2-sha256</strong>. We cannot
+        read your password, and neither could anyone who obtained the database. If
+        you forget it, it is reset — never recovered, because it cannot be.
+      </p>
+      <p>
+        Repeated failed sign-in attempts from one place are slowed down. Attempts
+        are recorded without the password, and without enough of the username to be
+        worth stealing on its own.
+      </p>
+
+      <h2>The documents that would hurt most</h2>
+      <p>
+        A driver's licence, a W-9 and a background check are the three things this
+        software holds that a thief would actually want: a government ID number, a
+        social security number, and somebody's criminal history.
+      </p>
+      <p>
+        Those three are <strong>encrypted and stored inside the application</strong>,
+        and can only be opened by someone signed in as the owner. No public web
+        address for them is ever created — which means there is no link to leak,
+        forward, or find in a browser history later.
+      </p>
+
+      <h2>Card details never reach us</h2>
+      <p>
+        Payments run through <strong>Stripe</strong>. Card numbers go from your
+        customer to Stripe directly and are never stored in, or passed through,
+        this software. The payment keys you save in Settings are encrypted before
+        they are written down.
+      </p>
+
+      <h2>Backups, and proof they work</h2>
+      <p>
+        The whole database is backed up every night, encrypted before it leaves,
+        and stored at <strong>a different company from the one running the
+        software</strong> — because a backup sitting next to the thing it is
+        backing up does not survive the account being suspended or the provider
+        having a bad day.
+      </p>
+      <p>
+        Every backup is then <strong>restored and counted back automatically, the
+        same night</strong>. A backup nobody has restored is a file, not a backup,
+        and the difference only becomes apparent at the worst possible moment. If a
+        night's backup does not restore cleanly, the job fails loudly rather than
+        reporting success.
+      </p>
+
+      <h2>Connections</h2>
+      <p>
+        Every page is served over HTTPS. Your sign-in cannot be read by scripts in
+        the browser, is not sent when another website tries to act on your behalf,
+        and expires after fourteen days so a shared office computer does not stay
+        signed in indefinitely.
+      </p>
+
+      <h2>Your data belongs to you</h2>
+      <p>
+        We do not sell it, and we do not use your business data to train anything.
+        You can export it, and if you leave, it is deleted. The
+        <a href="{{ url_for('marketing.privacy') }}">privacy policy</a> covers what
+        is kept, for how long, and what happens when you cancel; the
+        <a href="{{ url_for('marketing.subprocessors') }}">data sharing page</a>
+        lists every outside company involved and what each one sees.
+      </p>
+
+      <h2>What this software is not</h2>
+      <p>
+        It is a record-keeping tool. It is not a payroll provider, not a background
+        check company, and not an adviser on whether somebody is an employee or a
+        contractor. It computes and records; the decisions and the filings stay
+        yours. The <a href="{{ url_for('marketing.terms') }}">terms</a> set this out
+        in full, and it is worth reading before you rely on any of it.
+      </p>
+
+      <h2>Telling us about a problem</h2>
+      <p>
+        If you think you have found a security problem, please write to
+        {% if SUPPORT_EMAIL %}<a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>{% else %}
+        the address on this site{% endif %}. If it concerns a specific company's
+        data, say so without including any of it. We will reply.
+      </p>
+
+      <p style="margin-top:26px;color:var(--softer);font-size:.9rem">
+        Security is not a finished state, and no software is perfect. This page
+        describes what is in place today and is updated when that changes.
+      </p>
+    </div>
+  </div>
+</section>
+<style>
+  .legal h2 { font-size:1.15rem; margin:30px 0 8px; }
+  .legal p, .legal li { color:var(--muted); font-size:.97rem; }
+  .legal strong { color:var(--ink); }
+</style>
+{% endblock %}

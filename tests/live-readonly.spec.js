@@ -7,7 +7,13 @@
  * production safely, any time, without texting anyone or polluting the books.
  *
  * Credentials come from the environment, never from source:
- *   ADMIN_USER / ADMIN_PASS  (put them in .env — it's gitignored)
+ *   LIVE_ADMIN_USER / LIVE_ADMIN_PASS  (put them in .env — it's gitignored)
+ *
+ * Deliberately NOT called ADMIN_USER / ADMIN_PASS. The local suites use those
+ * names for the throwaway server on localhost, so running the whole suite with
+ * local credentials set pointed them at production and fired failed logins at
+ * the real CRM — enough of them, from one address, to trip its own lockout.
+ * Two different machines should not share one variable name.
  *
  * Run:  npx playwright test tests/live-readonly.spec.js
  *
@@ -19,11 +25,13 @@
 const { test, expect } = require('@playwright/test');
 
 const CRM = process.env.LIVE_CRM || 'https://dazzle-shine-crm-production.up.railway.app';
-const USER = process.env.ADMIN_USER || '';
-const PASS = process.env.ADMIN_PASS || '';
+const USER = process.env.LIVE_ADMIN_USER || '';
+const PASS = process.env.LIVE_ADMIN_PASS || '';
 
 test.skip(!USER || !PASS,
-  'Set ADMIN_USER and ADMIN_PASS in .env to run the live read-only checks.');
+  'Set LIVE_ADMIN_USER and LIVE_ADMIN_PASS in .env to run the live read-only '
+  + 'checks. They are separate from ADMIN_USER/ADMIN_PASS on purpose — see the '
+  + 'note at the top of this file.');
 
 async function login(page) {
   await page.goto(CRM + '/login');

@@ -15,13 +15,13 @@
 {% block content %}
 
 <style>
-  .script-full{background:#faf9fd;border-radius:8px;padding:14px;border:1px solid #e4dfef;line-height:1.6;font-size:0.9rem;color:#3b2460}
+  .script-full{background:var(--ground);border-radius:8px;padding:14px;border:1px solid var(--line);line-height:1.6;font-size:0.9rem;color:var(--ink-2)}
   .say-line{white-space:pre-wrap;margin:2px 0}
   .say-sp{height:8px}
-  .whybox{margin:6px 0;background:#fef9ec;border:1px solid #f0dca8;border-radius:8px;padding:2px 12px}
-  .whybox summary{cursor:pointer;color:#7c4a04;font-size:0.8rem;font-weight:700;list-style:none;padding:6px 0}
+  .whybox{margin:6px 0;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:2px 12px}
+  .whybox summary{cursor:pointer;color:var(--amber-deep);font-size:0.8rem;font-weight:700;list-style:none;padding:6px 0}
   .whybox summary::-webkit-details-marker{display:none}
-  .whybox > div{font-size:0.82rem;color:#8a6d3b;padding:2px 0 8px}
+  .whybox > div{font-size:0.82rem;color:var(--amber-deep);padding:2px 0 8px}
 </style>
 
 <div class="filter-tabs">
@@ -40,12 +40,12 @@
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-          <span style="font-weight:700;font-size:1rem;color:#1f1333">{{ s.title }}</span>
-          <span style="font-size:0.72rem;background:#f0edf8;color:#7c3aed;padding:2px 8px;border-radius:999px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em">
+          <span style="font-weight:700;font-size:1rem;color:var(--ink)">{{ s.title }}</span>
+          <span style="font-size:0.72rem;background:var(--line-soft);color:var(--info);padding:2px 8px;border-radius:999px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em">
             {{ dict(categories)[s.category] }}
           </span>
         </div>
-        <p style="font-size:0.84rem;color:#9a95ad;margin:0;white-space:pre-wrap" x-show="!open">{{ s.content[:160] }}{% if s.content|length > 160 %}…{% endif %}</p>
+        <p style="font-size:0.84rem;color:var(--softer);margin:0;white-space:pre-wrap" x-show="!open">{{ s.content[:160] }}{% if s.content|length > 160 %}…{% endif %}</p>
         <div class="script-full" x-show="open">
           {% for raw in s.content.split('\n') %}
             {%- set l = raw.strip() -%}
@@ -72,7 +72,7 @@
            class="btn btn-dark" style="padding:5px 14px;font-size:0.78rem;text-align:center">Edit</a>
         <form method="POST" action="{{ url_for('scripts.delete', script_id=s.id) }}"
               onsubmit="return confirm('Delete this script?')">
-          <button type="submit" style="background:none;border:none;color:#c0392b;font-size:0.78rem;cursor:pointer;padding:4px 0;width:100%;text-align:center">Delete</button>
+          <button type="submit" style="background:none;border:none;color:var(--warn);font-size:0.78rem;cursor:pointer;padding:4px 0;width:100%;text-align:center">Delete</button>
         </form>
       </div>
     </div>
@@ -83,7 +83,7 @@
 {% else %}
 <div class="card" style="text-align:center;padding:48px 24px">
   <p style="font-size:2rem;margin-bottom:12px">📋</p>
-  <p style="color:#9a95ad;margin-bottom:20px">No scripts in this category yet.</p>
+  <p style="color:var(--softer);margin-bottom:20px">No scripts in this category yet.</p>
   <a href="{{ url_for('scripts.new', cat=active_cat) }}" class="btn btn-gold">Add Your First Script</a>
 </div>
 {% endif %}
@@ -94,7 +94,7 @@ function copyScript(btn, text) {
   navigator.clipboard.writeText(decoded).then(() => {
     const orig = btn.textContent;
     btn.textContent = 'Copied!';
-    btn.style.background = '#2ecc71';
+    btn.style.background = 'var(--good)';
     setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 2000);
   });
 }

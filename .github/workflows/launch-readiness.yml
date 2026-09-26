@@ -1,0 +1,274 @@
+name: Launch Readiness
+
+on:
+  push:
+    branches:
+      - akye-launch-readiness/cohort-30
+  workflow_dispatch:
+
+concurrency:
+  group: launch-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TEST_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/akye_launch_test
+
+jobs:
+  launch-gates:
+    name: Critical launch gates
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: akye_launch_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d akye_launch_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout exact candidate revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Record candidate SHA
+        run: |
+          echo "CANDIDATE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: PAY-01 exact money display
+        id: pay01
+        continue-on-error: true
+        run: |
+          python -m pytest -q \
+            tests/test_money_display_consistency.py \
+            tests/test_workorder_money_display.py \
+            tests/test_my_day_money_display.py \
+            --tb=short
+
+      - name: PAY-02 payment integrity
+        id: pay02
+        continue-on-error: true
+        run: |
+          set -e
+          # These five are standalone assertion scripts, not pytest modules —
+          # each does its own app/DB setup at import time and has no `def
+          # test_*` for pytest to collect, so running them under pytest exits
+          # 5 ("no tests collected") on every one of them. Run them directly;
+          # a real assertion failure still raises and still exits non-zero.
+          for test_file in \
+            tests/test_charge.py \
+            tests/test_charge_timing.py \
+            tests/test_paid_receipt.py \
+            tests/test_price_raised_after_paid.py \
+            tests/test_payment_confirmation_integrity.py
+          do
+            python "$test_file"
+          done
+          python -m pytest -q \
+            tests/test_booking_payment_intent_integrity.py \
+            tests/test_stripe_webhook_tenant_isolation.py \
+            --tb=short
+
+      - name: Tenant session, object, document, export and media isolation
+        id: tenant_http
+        continue-on-error: true
+        run: |
+          set -e
+          for test_file in \
+            tests/test_tenant_session_and_object_isolation.py \
+            tests/test_tenant_http_object_isolation.py \
+            tests/test_tenant_secure_document_isolation.py \
+            tests/test_tenant_export_isolation.py \
+            tests/test_private_media_boundary.py \
+            tests/test_private_receipt_boundary.py \
+            tests/test_private_job_photo_contract.py \
+            tests/test_job_photo_immutability.py
+          do
+            python -m pytest -q "$test_file" --tb=short
+          done
+
+      - name: Tenant lifecycle boundary
+        id: tenant_lifecycle
+        continue-on-error: true
+        run: python -m pytest -q tests/test_tenant_lifecycle_boundary.py --tb=short
+
+      - name: PostgreSQL tenant and pool isolation
+        id: tenant_pg
+        continue-on-error: true
+        run: |
+          python -m pytest -q \
+            tests/test_tenancy_cohort_30.py \
+            tests/test_tenant_pool_reuse_postgres.py \
+            tests/test_tenant_context_restoration.py \
+            tests/test_tenant_search_path_fail_closed.py \
+            --tb=short
+
+      - name: Concurrent 30-tenant pool isolation
+        id: cohort_concurrency
+        continue-on-error: true
+        run: python -m pytest -q tests/test_cohort_concurrency_postgres.py --tb=short
+
+      - name: PostgreSQL backup and restore containment
+        id: backup_restore
+        continue-on-error: true
+        env:
+          PGURL: ${{ env.TEST_POSTGRES_URL }}
+        run: python tests/test_backup_tenants.py
+
+      - name: Tenant scheduler isolation
+        id: sched_iso
+        continue-on-error: true
+        run: python -m pytest -q tests/test_tenant_scheduler_isolation.py --tb=short
+
+      - name: Cron tenant host boundary
+        id: cron_host
+        continue-on-error: true
+        run: python -m pytest -q tests/test_cron_tenant_host_boundary.py --tb=short
+
+      - name: Provider webhook boundary
+        id: provider_webhook
+        continue-on-error: true
+        run: python -m pytest -q tests/test_provider_webhook_boundary.py --tb=short
+
+      - name: Cron secret transport
+        id: cron_secret
+        continue-on-error: true
+        run: python -m pytest -q tests/test_cron_secret_transport.py --tb=short
+
+      - name: CSRF API boundary
+        id: csrf_api
+        continue-on-error: true
+        run: python -m pytest -q tests/test_csrf_api_boundary.py --tb=short
+
+      - name: Role and session fail closed
+        id: role_fail
+        continue-on-error: true
+        run: |
+          python -m pytest -q \
+            tests/test_role_fail_closed.py \
+            tests/test_operational_role_matrix.py \
+            tests/test_session_invalidation.py \
+            --tb=short
+
+      - name: Signup provisioning safety
+        id: signup
+        continue-on-error: true
+        run: python -m pytest -q tests/test_signup_provisioning_safety.py --tb=short
+
+      - name: Forwarded host tenant boundary
+        id: forwarded_host
+        continue-on-error: true
+        run: python -m pytest -q tests/test_forwarded_host_tenant_boundary.py --tb=short
+
+      - name: Candidate summary
+        if: always()
+        run: |
+          echo "candidate_sha=${CANDIDATE_SHA}"
+          echo "github_sha=${GITHUB_SHA}"
+
+      - name: Diagnose PAY-01 gate failure
+        if: always() && steps.pay01.outcome != 'success'
+        run: python -m pytest -vv tests/test_money_display_consistency.py tests/test_workorder_money_display.py tests/test_my_day_money_display.py --tb=long
+
+      - name: Diagnose PAY-02 gate failure
+        if: always() && steps.pay02.outcome != 'success'
+        run: |
+          set -e
+          for test_file in tests/test_charge.py tests/test_charge_timing.py tests/test_paid_receipt.py tests/test_price_raised_after_paid.py tests/test_payment_confirmation_integrity.py; do
+            python "$test_file"
+          done
+          python -m pytest -vv tests/test_booking_payment_intent_integrity.py tests/test_stripe_webhook_tenant_isolation.py --tb=long
+
+      - name: Diagnose tenant HTTP/media gate failure
+        if: always() && steps.tenant_http.outcome != 'success'
+        run: |
+          set -e
+          for test_file in tests/test_tenant_session_and_object_isolation.py tests/test_tenant_http_object_isolation.py tests/test_tenant_secure_document_isolation.py tests/test_tenant_export_isolation.py tests/test_private_media_boundary.py tests/test_private_receipt_boundary.py tests/test_private_job_photo_contract.py tests/test_job_photo_immutability.py; do
+            python -m pytest -vv "$test_file" --tb=long
+          done
+
+      - name: Diagnose tenant lifecycle gate failure
+        if: always() && steps.tenant_lifecycle.outcome != 'success'
+        run: python -m pytest -vv tests/test_tenant_lifecycle_boundary.py --tb=long
+
+      - name: Diagnose PostgreSQL tenancy gate failure
+        if: always() && steps.tenant_pg.outcome != 'success'
+        run: python -m pytest -vv tests/test_tenancy_cohort_30.py tests/test_tenant_pool_reuse_postgres.py tests/test_tenant_context_restoration.py tests/test_tenant_search_path_fail_closed.py --tb=long
+
+      - name: Diagnose concurrent cohort isolation failure
+        if: always() && steps.cohort_concurrency.outcome != 'success'
+        run: python -m pytest -vv tests/test_cohort_concurrency_postgres.py --tb=long
+
+      - name: Diagnose PostgreSQL backup/restore containment failure
+        if: always() && steps.backup_restore.outcome != 'success'
+        env:
+          PGURL: ${{ env.TEST_POSTGRES_URL }}
+        run: python tests/test_backup_tenants.py
+
+      - name: Diagnose tenant scheduler isolation failure
+        if: always() && steps.sched_iso.outcome != 'success'
+        run: python -m pytest -vv tests/test_tenant_scheduler_isolation.py --tb=long
+
+      - name: Diagnose cron tenant host boundary failure
+        if: always() && steps.cron_host.outcome != 'success'
+        run: python -m pytest -vv tests/test_cron_tenant_host_boundary.py --tb=long
+
+      - name: Diagnose provider webhook boundary failure
+        if: always() && steps.provider_webhook.outcome != 'success'
+        run: python -m pytest -vv tests/test_provider_webhook_boundary.py --tb=long
+
+      - name: Diagnose cron secret transport failure
+        if: always() && steps.cron_secret.outcome != 'success'
+        run: python -m pytest -vv tests/test_cron_secret_transport.py --tb=long
+
+      - name: Diagnose CSRF API boundary failure
+        if: always() && steps.csrf_api.outcome != 'success'
+        run: python -m pytest -vv tests/test_csrf_api_boundary.py --tb=long
+
+      - name: Diagnose role/session fail closed failure
+        if: always() && steps.role_fail.outcome != 'success'
+        run: python -m pytest -vv tests/test_role_fail_closed.py tests/test_operational_role_matrix.py tests/test_session_invalidation.py --tb=long
+
+      - name: Diagnose signup provisioning safety failure
+        if: always() && steps.signup.outcome != 'success'
+        run: python -m pytest -vv tests/test_signup_provisioning_safety.py --tb=long
+
+      - name: Diagnose forwarded host tenant boundary failure
+        if: always() && steps.forwarded_host.outcome != 'success'
+        run: python -m pytest -vv tests/test_forwarded_host_tenant_boundary.py --tb=long
+
+      - name: Enforce launch gates
+        if: always()
+        run: |
+          test "${{ steps.pay01.outcome }}" = success
+          test "${{ steps.pay02.outcome }}" = success
+          test "${{ steps.tenant_http.outcome }}" = success
+          test "${{ steps.tenant_lifecycle.outcome }}" = success
+          test "${{ steps.tenant_pg.outcome }}" = success
+          test "${{ steps.cohort_concurrency.outcome }}" = success
+          test "${{ steps.backup_restore.outcome }}" = success
+          test "${{ steps.sched_iso.outcome }}" = success
+          test "${{ steps.cron_host.outcome }}" = success
+          test "${{ steps.provider_webhook.outcome }}" = success
+          test "${{ steps.cron_secret.outcome }}" = success
+          test "${{ steps.csrf_api.outcome }}" = success
+          test "${{ steps.role_fail.outcome }}" = success
+          test "${{ steps.signup.outcome }}" = success
+          test "${{ steps.forwarded_host.outcome }}" = success

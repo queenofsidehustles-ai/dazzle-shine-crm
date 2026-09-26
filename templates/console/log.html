@@ -1,0 +1,25 @@
+{% extends "console/_shell.html" %}
+{% block title %}Record{% endblock %}
+{% block body %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">What has been done here</h2>
+<p style="color:var(--muted);font-size:var(--t-sm);margin:0 0 var(--s4)">
+  Everybody with access can read this, including helpers. A record only the
+  boss can see is a record the boss has to be asked for.
+</p>
+{% if not rows %}
+<div class="con-empty">Nothing yet.</div>
+{% else %}
+<table class="con">
+  <tr><th>When</th><th>Who</th><th>Did</th><th>To</th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td style="white-space:nowrap">{{ r.created_at.strftime('%d %b %H:%M') if r.created_at }}</td>
+    <td>{{ r.actor }}</td>
+    <td>{{ r.action }}</td>
+    <td>{{ r.target or '—' }}</td>
+    <td style="color:var(--softer)">{{ r.detail or '' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

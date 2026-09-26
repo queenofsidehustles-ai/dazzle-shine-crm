@@ -9,16 +9,16 @@
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
   <a href="{{ url_for('messages.inbox') }}"
      style="text-decoration:none;font-size:0.82rem;font-weight:600;padding:6px 14px;border-radius:999px;
-            border:1px solid {{ '#1f1333' if not show else '#e4dfef' }};
-            background:{{ '#1f1333' if not show else '#fff' }};
-            color:{{ '#fff' if not show else '#5f5878' }}">All</a>
+            border:1px solid {{ 'var(--ink)' if not show else 'var(--line)' }};
+            background:{{ 'var(--ink)' if not show else '#fff' }};
+            color:{{ '#fff' if not show else 'var(--muted)' }}">All</a>
   {% for key, k in kinds.items() %}
     {% if counts[key] %}
     <a href="{{ url_for('messages.inbox', kind=key) }}"
        style="text-decoration:none;font-size:0.82rem;font-weight:600;padding:6px 14px;border-radius:999px;
-              border:1px solid {{ k.colour if show == key else '#e4dfef' }};
+              border:1px solid {{ k.colour if show == key else 'var(--line)' }};
               background:{{ k.tint if show == key else '#fff' }};
-              color:{{ k.colour if show == key else '#5f5878' }}">
+              color:{{ k.colour if show == key else 'var(--muted)' }}">
       {{ k.icon }} {{ k.label }} <span style="opacity:0.65">{{ counts[key] }}</span>
     </a>
     {% endif %}
@@ -30,7 +30,7 @@
   <div style="display:flex;flex-direction:column">
     {% for t in threads %}
     <a href="{{ url_for('messages.thread', phone=t.phone) }}"
-       style="display:flex;align-items:center;gap:14px;padding:14px 8px;border-bottom:1px solid #efecf6;text-decoration:none;color:inherit">
+       style="display:flex;align-items:center;gap:14px;padding:14px 8px;border-bottom:1px solid var(--info-soft);text-decoration:none;color:inherit">
       <div style="width:42px;height:42px;border-radius:50%;background:{{ t.style.tint }};color:{{ t.style.colour }};display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">
         {{ (t.name or t.pretty)[:1]|upper }}
       </div>
@@ -42,22 +42,22 @@
                          font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:999px;
                          text-transform:uppercase;letter-spacing:0.06em">{{ t.style.label }}</span>
           </span>
-          <span style="color:#b3adc4;font-size:0.72rem;flex-shrink:0">{{ t.last.created_at.strftime('%b %-d, %-I:%M %p') }}</span>
+          <span style="color:var(--softer);font-size:0.72rem;flex-shrink:0">{{ t.last.created_at.strftime('%b %-d, %-I:%M %p') }}</span>
         </div>
-        <div style="color:#6f6885;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-          {% if t.last.direction == 'out' %}<span style="color:#9a95ad">You: </span>{% endif %}{{ t.last.body }}
+        <div style="color:var(--info);font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          {% if t.last.direction == 'out' %}<span style="color:var(--softer)">You: </span>{% endif %}{{ t.last.body }}
         </div>
       </div>
       {% if t.unread %}
-      <span style="background:#e53e3e;color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 6px;font-size:0.72rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">{{ t.unread }}</span>
+      <span style="background:var(--warn);color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 6px;font-size:0.72rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">{{ t.unread }}</span>
       {% endif %}
     </a>
     {% endfor %}
   </div>
   {% else %}
-  <div style="text-align:center;padding:48px 0;color:#9a95ad">
+  <div style="text-align:center;padding:48px 0;color:var(--softer)">
     <div style="font-size:2.4rem;margin-bottom:10px">💬</div>
-    <p style="font-weight:600;color:#5f5878">No conversations yet.</p>
+    <p style="font-weight:600;color:var(--muted)">No conversations yet.</p>
     <p style="font-size:0.88rem">Open a team member, applicant or customer and tap <strong>💬 Message</strong> to start one — or their replies to your texts will show up here.</p>
   </div>
   {% endif %}

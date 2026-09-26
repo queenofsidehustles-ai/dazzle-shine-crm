@@ -1,8 +1,20 @@
-"""Google Local Services Ads leads — import, match, and follow up.
+"""Missed contacts and quote requests — added by hand or imported, then chased.
+
+This began as a Google Local Services Ads importer and for a while that was
+the only way in, which quietly made the whole follow-up feature belong to
+companies who advertise with Google. Most missed contacts are not that. A
+voicemail, an unanswered text, a form on the website, somebody who asked for a
+price and went quiet — same conversation afterwards, and none of them arrive
+in a CSV.
+
+So there are two doors now: `add_by_hand` for one person, `import_csv` for a
+Google export. Both end up in the same list and the same sequence.
 
 Routes only. The matching and the sequence itself live in lsa.py, so the cron
 job and these screens are provably doing the same thing.
 """
+from datetime import datetime
+
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, session)
 from auth import login_required
@@ -46,6 +58,61 @@ def index():
     return render_template('admin/lsa_leads.html', rows=rows, counts=counts,
                            view=view, opted_out=opted_out,
                            due_count=len(lsa.due_now()))
+
+
+@lsa_bp.route('/add', methods=['POST'])
+@login_required
+def add_by_hand():
+    """Somebody rang and you missed it. Somebody asked for a price.
+
+    Until this existed the only way into these follow-ups was importing a
+    Google Ads CSV, which meant the feature belonged to companies who advertise
+    with Google and to nobody else. Most missed contacts are not that: a
+    voicemail, a text nobody answered, a form on the website, somebody who
+    stopped you in a car park. They are all the same conversation afterwards.
+
+    The phone number is the only thing that is genuinely required, because it
+    is the only thing a text can be sent to.
+    """
+    phone = lsa.phone10(request.form.get('phone'))
+    if not phone:
+        flash('A phone number is needed — that is where the text goes.', 'error')
+        return redirect(url_for('lsa.index'))
+
+    track = request.form.get('track')
+    if track not in (lsa.MISSED, lsa.QUOTED):
+        track = lsa.MISSED
+
+    existing = LsaLead.query.filter_by(phone=phone).first()
+    if existing:
+        # Not an error worth stopping for — somebody who calls twice is one
+        # person, and adding them again would text them twice.
+        flash(f'{phone} is already on this list.', 'error')
+        return redirect(url_for('lsa.index'))
+
+    when = datetime.utcnow()
+    lead = LsaLead(
+        lead_id=lsa.synthetic_id(phone, when),
+        phone=phone,
+        track=track,
+        received_at=when,
+        job_type=(request.form.get('note') or '').strip()[:80] or None,
+        # Blank rather than a Google word. This person did not come from
+        # Google and the export's billing status would be a lie about them.
+        charge_status=None,
+        lead_type='by_hand',
+    )
+    db.session.add(lead)
+    db.session.commit()
+
+    if request.form.get('start_now'):
+        lsa.start_sequence(lead)
+        db.session.commit()
+        flash(f'Added {phone} and started the follow-up texts.', 'success')
+    else:
+        flash(f'Added {phone}. Press Start when you want the texts to begin.',
+              'success')
+    return redirect(url_for('lsa.index'))
 
 
 @lsa_bp.route('/import', methods=['GET', 'POST'])

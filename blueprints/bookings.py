@@ -18,12 +18,18 @@ def index():
     status_filter = request.args.get('status', '')
     group = (request.args.get('series') or '').strip()
     show_every_visit = group == 'all'
+    q = (request.args.get('q') or '').strip()
 
     query = Booking.query.order_by(Booking.created_at.desc())
     if status_filter:
         query = query.filter_by(status=status_filter)
     if group and not show_every_visit:
         query = query.filter_by(recurring_group=group)
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Booking.name.ilike(like), Booking.email.ilike(like),
+            Booking.phone.ilike(like), Booking.address.ilike(like)))
     bookings = query.all()
 
     # A recurring plan is one row unless asked otherwise. Twelve months of the
@@ -43,7 +49,7 @@ def index():
     }
     return render_template('admin/bookings.html', bookings=bookings, counts=counts,
                            status_filter=status_filter, series=group,
-                           show_every_visit=show_every_visit)
+                           show_every_visit=show_every_visit, q=q)
 
 
 @bookings_bp.route('/price-preview')
@@ -851,7 +857,11 @@ def broadcast(booking_id):
             flash(f'📣 Offered to {n} cleaner(s) — the first {left} to claim get the {left} open spot(s).', 'success')
     else:
         flash(f'📣 Offered to {n} cleaner(s) — first to claim it gets it.', 'success')
-    return redirect(url_for('bookings.detail', booking_id=booking_id))
+    # Offered from the list, not just the detail page (see bookings.html's row
+    # actions) -- land back where the click happened rather than forcing a
+    # detour through the job it was about.
+    return redirect(request.form.get('next') or request.referrer
+                    or url_for('bookings.detail', booking_id=booking_id))
 
 
 def _apply_hours(booking, form):
@@ -1170,6 +1180,39 @@ def send_crew(booking_id):
     return _send_job_to(b, [c.staff for c in rows])
 
 
+@bookings_bp.route('/<int:booking_id>/crew/<int:crew_id>/use-clocked', methods=['POST'])
+@login_required
+def use_clocked_pay(booking_id, crew_id):
+    """Set one cleaner's pay on this job to what their clock says it is worth.
+
+    A deliberate press, not something that happens on clock-out. The owner
+    decides what somebody is paid; the clock only offers a figure. Money that
+    changes itself between one look at a page and the next is how an owner
+    stops trusting the numbers.
+
+    Refused once the money has gone out — a payment already made is a record,
+    not a draft.
+    """
+    b = Booking.query.get_or_404(booking_id)
+    row = BookingCrew.query.filter_by(id=crew_id, booking_id=b.id).first_or_404()
+
+    if row.paid_at:
+        flash('That cleaner has already been paid for this job.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    due = row.staff.hourly_pay_for(b) if row.staff else None
+    if due is None:
+        flash('No clocked hours to work from yet.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    row.pay_amount = due
+    db.session.commit()
+    hours = row.staff.hours_on(b)
+    flash(f'{row.staff.name} set to ${due:.2f} — {hours:.2f} hours at '
+          f'${row.staff.pay_rate:.2f}/hr.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=b.id))
+
+
 @bookings_bp.route('/<int:booking_id>/crew/remove/<int:crew_id>', methods=['POST'])
 @login_required
 def remove_crew(booking_id, crew_id):
@@ -1209,6 +1252,40 @@ def mark_paid_route(booking_id):
     except Exception:
         db.session.rollback()
         flash('Could not mark as paid.', 'error')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/mark-deposit-paid', methods=['POST'])
+@login_required
+def mark_deposit_paid_route(booking_id):
+    """Record a deposit paid outside Stripe — cash, Zelle, Venmo, a check —
+    without touching the rest of the balance. Unlike mark_paid_route, this
+    credits only the deposit amount, so amount_due() still asks for the true
+    remainder afterwards instead of reporting the job settled, and a saved
+    card on file is never auto-charged for money already collected by hand."""
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.deposit_paid:
+        flash('This booking already has a deposit recorded.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    method = request.form.get('method', 'cash')
+    when = _payment_date(request.form.get('paid_on'), booking)
+    from pricing import get_deposit
+    try:
+        amount = float(request.form.get('amount') or 0)
+    except ValueError:
+        amount = 0
+    if amount <= 0:
+        amount = float(get_deposit())
+    notify = bool(request.form.get('send_receipt'))
+    from blueprints.payments import mark_deposit_paid
+    try:
+        mark_deposit_paid(booking, amount_cents=int(round(amount * 100)),
+                           method=method, when=when, notify=notify)
+        flash(f'Deposit of ${amount:.2f} recorded ✅ ({method}) — dated {when.strftime("%b %-d, %Y")}.'
+              + ('' if notify else ' No receipt was sent.'), 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Could not record the deposit.', 'error')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -1366,7 +1443,11 @@ def hold(booking_id):
     date. Every automation in the CRM selects on an explicit list of statuses,
     and none of them contain this one."""
     b = Booking.query.get_or_404(booking_id)
-    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    # Held from the list, not just the detail page (see bookings.html's row
+    # actions) -- every early return below shares this, so the list-hold
+    # button lands back on the list whichever branch it hits.
+    back = redirect(request.form.get('next') or request.referrer
+                    or url_for('bookings.detail', booking_id=booking_id))
     if b.status in ('completed', 'cancelled'):
         flash(f'That job is {b.status_label.lower()} — there is nothing to put on hold.',
               'warning')
@@ -2133,7 +2214,7 @@ def start_plan(booking_id):
 
     start = (request.form.get('start_date') or '').strip()
     if not start:
-        flash('Pick the date of the first ongoing cleaning.', 'error')
+        flash('Pick the date of the first recurring cleaning.', 'error')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     price_raw = (request.form.get('plan_price') or '').strip().replace('$', '').replace(',', '')
@@ -2163,7 +2244,7 @@ def start_plan(booking_id):
     _link_client(seed)
 
     made = recurring.generate_series(seed)
-    flash(f'📅 Ongoing {frequency} cleanings set up for {seed.name} — '
+    flash(f'📅 Recurring {frequency} cleanings set up for {seed.name} — '
           f'{made + 1} visits on the calendar, starting {start}.', 'success')
     return redirect(url_for('bookings.detail', booking_id=seed.id))
 
@@ -2176,6 +2257,62 @@ def stop_recurring(booking_id):
         removed = recurring.stop_series(booking.recurring_group)
         flash(f'Recurring plan stopped — removed {removed} upcoming visit{"s" if removed != 1 else ""}.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/reassign-series', methods=['POST'])
+@login_required
+def reassign_series(booking_id):
+    """Swap the cleaner on this visit and every future one in the same
+    recurring plan — for someone off it for good, not just out for one visit.
+
+    A single visit already gets reassigned from its own Crew card; this
+    exists because a recurring plan can run a year of future visits, and
+    walking each one by hand is the kind of chore that quietly never
+    happens, leaving old visits pointed at somebody who's gone."""
+    from models import Staff
+    booking = Booking.query.get_or_404(booking_id)
+    staff_id = (request.form.get('staff_id') or '').strip()
+    new_staff = Staff.query.get(int(staff_id)) if staff_id.isdigit() else None
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    if not new_staff:
+        flash('Pick a cleaner to reassign to.', 'error')
+        return back
+    if not booking.recurring_group:
+        flash('This job is not part of a recurring plan.', 'error')
+        return back
+
+    today = date.today().isoformat()
+    visits = Booking.query.filter(
+        Booking.recurring_group == booking.recurring_group,
+        Booking.status.notin_(Booking.OFF_SCHEDULE),
+        Booking.preferred_date >= today,
+    ).all()
+    old_name = booking.assigned_cleaner
+    for v in visits:
+        v.assigned_cleaner = new_staff.name
+        # A fresh person on the job hasn't accepted or declined it yet.
+        v.cleaner_response = None
+        v.cleaner_notified_at = None
+    db.session.commit()
+
+    # Only the very next visit gets a fresh heads-up text. A dozen "you have
+    # a job on [date]" messages for visits months out would be noise nobody
+    # reads before it matters — the day-before reminder already covers those
+    # once their own date comes round.
+    next_visit = min(visits, key=lambda v: v.preferred_date or '') if visits else None
+    notified = False
+    if next_visit and new_staff.phone:
+        from notifications import send_sms
+        ok, _ = send_sms(new_staff.phone,
+            f"You're now on {next_visit.name}'s recurring clean, starting {next_visit.preferred_date}.")
+        notified = ok
+
+    msg = (f'🔁 Reassigned {len(visits)} upcoming visit{"s" if len(visits) != 1 else ""} '
+           f'from {old_name or "nobody"} to {new_staff.name}.')
+    if notified:
+        msg += f' Texted {new_staff.name.split()[0]} about the next one.'
+    flash(msg, 'success')
+    return back
 
 
 @bookings_bp.route('/<int:booking_id>/delete', methods=['POST'])
@@ -2195,14 +2332,63 @@ def delete(booking_id):
 @bookings_bp.route('/clients')
 @login_required
 def clients():
-    all_clients = Client.query.order_by(Client.created_at.desc()).all()
+    q = (request.args.get('q') or '').strip()
+    query = Client.query
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Client.name.ilike(like), Client.email.ilike(like), Client.phone.ilike(like)))
+    all_clients = query.order_by(Client.created_at.desc()).all()
     # Bookings that never got a customer record — offer to build them.
     unlinked = Booking.query.filter(
         Booking.client_id.is_(None),
         db.or_(db.and_(Booking.email.isnot(None), Booking.email != ''),
                db.and_(Booking.phone.isnot(None), Booking.phone != '')),
     ).count()
-    return render_template('admin/clients.html', clients=all_clients, unlinked=unlinked)
+    return render_template('admin/clients.html', clients=all_clients, unlinked=unlinked, q=q)
+
+
+@bookings_bp.route('/clients/new', methods=['GET', 'POST'])
+@login_required
+def new_client():
+    """Add a customer by hand.
+
+    There was no way to do this. A Client only ever appeared as a side effect
+    of something else — a booking coming in from the website, a lead being
+    converted, or the rebuild that walks old bookings. So the getting-started
+    list said "Add a customer", linked to a page with no button on it, and
+    stopped anybody who followed it in order.
+    """
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        if not name:
+            flash('A customer needs a name.', 'error')
+            return render_template('admin/client_new.html',
+                                   form=request.form.to_dict())
+
+        typed_email = (request.form.get('email') or '').strip()
+        if typed_email and not looks_like_email(typed_email):
+            flash(f'“{typed_email}” doesn\'t look like a complete email '
+                  f'address — check for a missing .com.', 'error')
+            return render_template('admin/client_new.html',
+                                   form=request.form.to_dict())
+
+        c = Client(
+            name=name,
+            email=(request.form.get('email') or '').strip().lower(),
+            phone=(request.form.get('phone') or '').strip(),
+            address=(request.form.get('address') or '').strip(),
+            city=(request.form.get('city') or '').strip(),
+            zip_code=(request.form.get('zip_code') or '').strip(),
+            notes=(request.form.get('notes') or '').strip(),
+        )
+        db.session.add(c)
+        db.session.commit()
+        flash(f'{c.name} added. Book them a job whenever you are ready.',
+              'success')
+        return redirect(url_for('bookings.client_detail', client_id=c.id))
+
+    return render_template('admin/client_new.html', form={})
 
 
 @bookings_bp.route('/clients/<int:client_id>')

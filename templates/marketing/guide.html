@@ -1,0 +1,104 @@
+{% extends "marketing/_shell.html" %}
+{% block title %}{{ g.TITLE }} in 2026: The Complete Guide{% endblock %}
+{% block description %}What it costs, how to register, insurance, pricing, 1099 versus W-2, and how to get your first customers. A practical nationwide guide to starting a cleaning business.{% endblock %}
+
+{% block head_extra %}
+{# Handed to search engines so the questions can be answered in the results
+   themselves. Generated from the same list the page renders, because three
+   hand-written copies drift and the one nobody looks at is this one. #}
+<script type="application/ld+json">
+{{ g.structured_data(PRODUCT, PRODUCT_BASE + request.path) | tojson }}
+</script>
+<style>
+  .guide { max-width: 720px; margin: 0 auto; }
+  .guide h1 { font-size: clamp(2rem, 5vw, 2.9rem); line-height: 1.1;
+              letter-spacing: -.03em; margin: 0 0 var(--s4); }
+  .guide .lede { font-size: 1.12rem; line-height: 1.65; color: var(--muted);
+                 margin: 0 0 var(--s6); }
+  .guide h2 { font-size: 1.4rem; line-height: 1.25; letter-spacing: -.02em;
+              margin: var(--s10) 0 var(--s4); scroll-margin-top: var(--s6); }
+  .guide p { line-height: 1.75; margin: 0 0 var(--s4); color: var(--ink); }
+  .toc { background: var(--surface); border: 1px solid var(--line);
+         border-radius: var(--r); padding: var(--s5); margin: 0 0 var(--s8); }
+  .toc ol { margin: var(--s3) 0 0; padding-left: 1.2em; }
+  .toc li { margin-bottom: 6px; line-height: 1.5; }
+  .toc a { color: var(--muted); text-decoration: none; }
+  .toc a:hover { color: var(--amber-deep); }
+  /* Block, or the label sits beside the list rather than above it. */
+  .toc .eyebrow { display: block; font-size: var(--t-xs); text-transform: uppercase;
+                  letter-spacing: .1em; color: var(--softer); font-weight: 700; }
+  .caveat { background: var(--amber-soft); border: 1px solid var(--amber-line);
+            border-radius: var(--r); padding: var(--s4) var(--s5);
+            margin: var(--s8) 0; font-size: var(--t-sm); line-height: 1.65;
+            color: var(--muted); }
+  .faq { margin-top: var(--s6); }
+  .faq details { border-top: 1px solid var(--line); padding: var(--s4) 0; }
+  .faq summary { cursor: pointer; font-weight: 650; color: var(--ink);
+                 line-height: 1.5; }
+  .faq p { margin: var(--s3) 0 0; color: var(--muted); }
+  .guide-cta { margin: var(--s10) 0 0; padding: var(--s6);
+               background: var(--surface); border: 1px solid var(--line);
+               border-radius: var(--r-lg); }
+  .guide-cta h2 { margin-top: 0; }
+</style>
+{% endblock %}
+
+{% block body %}
+<section>
+  <div class="wrap guide">
+    <p class="toc eyebrow" style="background:none;border:0;padding:0;margin:0 0 var(--s3)">
+      Free guide · no sign-up
+    </p>
+    <h1>{{ g.TITLE }}</h1>
+    <p class="lede">{{ g.SUBTITLE }}</p>
+
+    <nav class="toc" aria-label="On this page">
+      <span class="eyebrow">On this page</span>
+      <ol>
+        {% for s in g.SECTIONS %}
+        <li><a href="#{{ s.id }}">{{ s.h }}</a></li>
+        {% endfor %}
+        <li><a href="#questions">Common questions</a></li>
+      </ol>
+    </nav>
+
+    {% for s in g.SECTIONS %}
+    <h2 id="{{ s.id }}">{{ s.h }}</h2>
+    {% for para in s.body %}<p>{{ para }}</p>{% endfor %}
+    {% endfor %}
+
+    {# Said once, plainly, and meant. Rules differ everywhere and change, and
+       a page that pretends otherwise gets somebody fined. #}
+    <div class="caveat">
+      <strong>This is general information, not legal, tax or insurance advice.</strong>
+      Registration, licensing, employment and insurance rules differ by state
+      and city and they change. Before you register, hire or take money, check
+      the rules where you actually work and talk to an accountant or attorney
+      in your own state.
+    </div>
+
+    <h2 id="questions">Common questions</h2>
+    <div class="faq">
+      {% for q, a in g.FAQS %}
+      <details>
+        <summary>{{ q }}</summary>
+        <p>{{ a }}</p>
+      </details>
+      {% endfor %}
+    </div>
+
+    <div class="guide-cta">
+      <h2 style="font-size:1.25rem">When the notebook stops working</h2>
+      <p>
+        {{ PRODUCT }} is software for the part of this that gets hard around
+        the second or third cleaner — knowing who is where, that they turned
+        up, that the job met your standard, and what you owe them on Friday.
+        Free booking page on every plan.
+      </p>
+      <p style="margin-bottom:0">
+        <a class="btn" href="{{ url_for('marketing.pricing') }}">See what it costs</a>
+      </p>
+    </div>
+  </div>
+</section>
+{% endblock %}

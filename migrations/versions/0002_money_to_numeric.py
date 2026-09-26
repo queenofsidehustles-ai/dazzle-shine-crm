@@ -70,8 +70,14 @@ def _already_numeric(table, column):
     and a migration re-run against a converted column is a needless table
     rewrite on a live business."""
     from sqlalchemy import inspect as sa_inspect
+    import sqlalchemy as _sa
     try:
-        cols = {c['name']: c['type'] for c in sa_inspect(op.get_bind()).get_columns(table)}
+        bind = op.get_bind()
+        schema = None
+        if bind.dialect.name == 'postgresql':
+            schema = bind.execute(_sa.text('SELECT current_schema()')).scalar()
+        cols = {c['name']: c['type']
+                for c in sa_inspect(bind).get_columns(table, schema=schema)}
         return 'NUMERIC' in str(cols.get(column, '')).upper()
     except Exception:
         return False

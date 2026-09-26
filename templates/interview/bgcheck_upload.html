@@ -6,11 +6,12 @@
   <title>Submit Background Check — {{ BIZ }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     :root{
-      --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,0.12);
-      --purple:#1f1333; --purple-mid:#3b2b6b; --bg:#f6f5fb;
-      --white:#fff; --border:#e4dfef; --radius:14px;
+      --gold:var(--amber); --gold-deep:var(--amber-deep); --gold-soft:rgba(211,168,79,0.12);
+      --purple:var(--ink); --purple-mid:var(--ink-2); --bg:var(--ground);
+      --white:#fff; --border:var(--line); --radius:14px;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:"Inter",sans-serif;background:var(--bg);color:var(--purple);min-height:100vh}
@@ -30,15 +31,15 @@
 
     /* DROP ZONE */
     .drop{border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;
-          cursor:pointer;transition:all .15s;background:#fafafe}
+          cursor:pointer;transition:all .15s;background:var(--info-soft)}
     .drop:hover{border-color:var(--gold);background:var(--gold-soft)}
-    .drop.has-file{border-color:#1a9e5f;background:#f0fff7}
+    .drop.has-file{border-color:var(--good);background:var(--good-soft)}
     .drop .ico{font-size:2rem;margin-bottom:8px}
     .drop .big{font-weight:600;color:var(--purple);margin-bottom:4px}
-    .drop .small{font-size:0.82rem;color:#9a95ad}
+    .drop .small{font-size:0.82rem;color:var(--softer)}
     input[type=file]{display:none}
 
-    .divider{text-align:center;margin:22px 0;position:relative;color:#9a95ad;font-size:0.82rem;font-weight:600}
+    .divider{text-align:center;margin:22px 0;position:relative;color:var(--softer);font-size:0.82rem;font-weight:600}
     .divider:before,.divider:after{content:"";position:absolute;top:50%;width:40%;height:1px;background:var(--border)}
     .divider:before{left:0} .divider:after{right:0}
 
@@ -53,8 +54,8 @@
     .btn:disabled{opacity:0.5;cursor:not-allowed}
 
     .note{background:var(--gold-soft);border:1px solid var(--gold);border-radius:10px;
-          padding:14px 16px;font-size:0.85rem;color:#7c4a04;line-height:1.6;margin-top:18px}
-    .err{background:#fff5f5;border:1px solid #fed7d7;color:#c53030;border-radius:9px;
+          padding:14px 16px;font-size:0.85rem;color:var(--amber-deep);line-height:1.6;margin-top:18px}
+    .err{background:var(--warn-soft);border:1px solid var(--warn-soft);color:var(--warn);border-radius:9px;
          padding:12px 14px;font-size:0.88rem;margin-top:14px;display:none}
     .success-box{text-align:center;padding:20px 0}
     .success-box .check{font-size:3rem;margin-bottom:12px}
@@ -94,7 +95,7 @@
         Hi {{ app.name.split()[0] }}! Please upload your background check results below
         as a <strong>PDF</strong> or a <strong>clear screenshot/photo</strong>.
       </p>
-      <p class="lead" style="font-size:0.88rem;color:#5f5878;margin-top:8px">
+      <p class="lead" style="font-size:0.88rem;color:var(--muted);margin-top:8px">
         Using Care.com? Open your completed background check, then either download it as a PDF
         or take a screenshot, and upload that file here.
       </p>

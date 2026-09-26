@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from auth import login_required
+from auth import login_required, owner_required
 from models import Lead, Booking, Client, User
 from extensions import db
 from pricing import DEPOSIT_AMOUNT, get_deposit
@@ -130,7 +130,7 @@ def convert(lead_id):
 
 
 @leads_bp.route('/<int:lead_id>/delete', methods=['POST'])
-@login_required
+@owner_required
 def delete(lead_id):
     lead = Lead.query.get_or_404(lead_id)
     db.session.delete(lead)

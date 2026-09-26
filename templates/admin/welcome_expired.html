@@ -1,0 +1,9 @@
+{% extends "admin/login_shell.html" %}
+{% block panel %}
+  <h1>That link has been used</h1>
+  <p class="lead">Welcome links work once, and last a day. Your account is fine —
+     this link has just done its job already.</p>
+  <a class="btn-link" href="/login">Sign in →</a>
+  <p class="small" style="margin-top:18px">Forgotten the password you chose?
+     <a href="{{ url_for('account.forgot_password') }}">Reset it here</a>.</p>
+{% endblock %}

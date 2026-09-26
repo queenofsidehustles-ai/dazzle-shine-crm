@@ -1,0 +1,57 @@
+name: Privacy lifecycle falsification
+
+on:
+  pull_request:
+    branches:
+      - akye-stable
+  push:
+    branches:
+      - akye-stable
+  workflow_dispatch:
+
+concurrency:
+  group: privacy-lifecycle-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lifecycle:
+    name: Destructive lifecycle P1 falsification
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
+    steps:
+      - name: Checkout exact candidate revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify exact candidate revision
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Policy contract
+        run: python -m pytest -q tests/test_data_lifecycle_policy.py --tb=short
+      - name: No destructive retention bypass
+        run: python -m pytest -q tests/test_tenant_data_lifecycle_no_bypass.py --tb=short
+      - name: Tenant-bounded private media purge
+        run: python -m pytest -q tests/test_tenant_data_lifecycle_media.py --tb=short
+      - name: PostgreSQL retention and purge falsification
+        run: python -m pytest -q tests/test_tenant_data_lifecycle_postgres.py --tb=short
+      - name: Cohort-30 colliding-ID tenant isolation
+        run: python -m pytest -q tests/test_cohort_30_tenant_isolation.py --tb=short

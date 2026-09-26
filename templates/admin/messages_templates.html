@@ -4,13 +4,13 @@
 
 {% block content %}
 <div style="margin-bottom:14px">
-  <a href="{{ url_for('messages.inbox') }}" style="color:#6b46c1;text-decoration:none;font-size:0.85rem">← Back to Messages</a>
+  <a href="{{ url_for('messages.inbox') }}" style="color:var(--info);text-decoration:none;font-size:0.85rem">← Back to Messages</a>
 </div>
 
-<div class="card" style="margin-bottom:18px;background:#f0f7ff;border-color:#bcd7f5">
-  <strong style="color:#2b6cb0">Auto-fill placeholders</strong>
-  <p style="font-size:0.88rem;color:#5f5878;margin-top:6px">Type any of these in a template and they fill in automatically when you use it in a chat:</p>
-  <p style="font-size:0.84rem;color:#1f1333;margin-top:6px;line-height:1.9">
+<div class="card" style="margin-bottom:18px;background:var(--info-soft);border-color:var(--info-soft)">
+  <strong style="color:var(--info)">Auto-fill placeholders</strong>
+  <p style="font-size:0.88rem;color:var(--muted);margin-top:6px">Type any of these in a template and they fill in automatically when you use it in a chat:</p>
+  <p style="font-size:0.84rem;color:var(--ink);margin-top:6px;line-height:1.9">
     <code>{name}</code> their first name ·
     <code>{owner}</code> your name ·
     <code>{business}</code> your business name ·
@@ -38,7 +38,7 @@
   </form>
   <form method="POST" action="{{ url_for('messages.delete_template', tid=t.id) }}"
         onsubmit="return confirm('Delete this template?')" style="margin-top:8px">
-    <button type="submit" class="btn btn-outline" style="color:#c53030;border-color:#fed7d7">🗑 Delete</button>
+    <button type="submit" class="btn btn-outline" style="color:var(--warn);border-color:var(--warn-soft)">🗑 Delete</button>
   </form>
 </div>
 {% endfor %}

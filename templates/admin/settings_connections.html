@@ -5,12 +5,12 @@
 {% block content %}
 
 <div class="card">
-  <p style="color:#5f5878;font-size:0.92rem;margin:0 0 6px">
+  <p style="color:var(--muted);font-size:0.92rem;margin:0 0 6px">
     This connects your CRM to the services that take payments and send messages.
     <strong>These are your accounts.</strong> Your customers' money goes straight to your Stripe;
     it never passes through anyone else.
   </p>
-  <p style="color:#9a95ad;font-size:0.82rem;margin:0">
+  <p style="color:var(--softer);font-size:0.82rem;margin:0">
     Keys are encrypted before they're stored, and a saved key is never shown back to you in full —
     only its first and last few characters, so you can tell which one is in there.
   </p>
@@ -18,37 +18,46 @@
 
 <!-- Readiness at a glance -->
 <div class="card" style="margin-top:16px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Where you stand</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Where you stand</h2>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
 
-    <div style="padding:14px;border-radius:10px;border:1px solid {{ '#a7d8b0' if status.stripe.ready else '#f0d488' }};background:{{ '#eefaf0' if status.stripe.ready else '#fff8e1' }}">
+    <div style="padding:14px;border-radius:10px;border:1px solid {{ 'var(--good)' if status.stripe.ready else 'var(--amber-line)' }};background:{{ 'var(--good-soft)' if status.stripe.ready else 'var(--amber-soft)' }}">
       <div style="font-weight:700;margin-bottom:4px">💳 Taking payments</div>
       {% if status.stripe.ready %}
         {% if status.stripe.mode == 'live' %}
-          <div style="color:#1c6b34;font-size:0.86rem">Connected — <strong>live</strong>. Real cards will be charged.</div>
+          <div style="color:var(--good);font-size:0.86rem">Connected — <strong>live</strong>. Real cards will be charged.</div>
         {% else %}
-          <div style="color:#7c4a04;font-size:0.86rem">Connected in <strong>test mode</strong>. Real cards will <em>not</em> be charged — paste your live key when you're ready to take real money.</div>
+          <div style="color:var(--amber-deep);font-size:0.86rem">Connected in <strong>test mode</strong>. Real cards will <em>not</em> be charged — paste your live key when you're ready to take real money.</div>
         {% endif %}
       {% else %}
-        <div style="color:#7c4a04;font-size:0.86rem">Not connected. Still needed: {{ status.stripe.missing|join(', ') }}.</div>
+        <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.stripe.missing|join(', ') }}.</div>
       {% endif %}
     </div>
 
-    <div style="padding:14px;border-radius:10px;border:1px solid {{ '#a7d8b0' if status.texting.ready else '#f0d488' }};background:{{ '#eefaf0' if status.texting.ready else '#fff8e1' }}">
+    <div style="padding:14px;border-radius:10px;border:1px solid {{ 'var(--good)' if status.texting.ready else 'var(--amber-line)' }};background:{{ 'var(--good-soft)' if status.texting.ready else 'var(--amber-soft)' }}">
       <div style="font-weight:700;margin-bottom:4px">💬 Texting</div>
       {% if status.texting.ready %}
-        <div style="color:#1c6b34;font-size:0.86rem">Connected. Your cleaners get job offers by text.</div>
+        <div style="color:var(--good);font-size:0.86rem">Connected. Your cleaners get job offers by text.</div>
       {% else %}
-        <div style="color:#7c4a04;font-size:0.86rem">Not connected. Still needed: {{ status.texting.missing|join(', ') }}.<br>Job offers will go by email instead.</div>
+        <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.texting.missing|join(', ') }}.<br>Job offers will go by email instead.</div>
       {% endif %}
     </div>
 
-    <div style="padding:14px;border-radius:10px;border:1px solid {{ '#a7d8b0' if status.email.ready else '#f0d488' }};background:{{ '#eefaf0' if status.email.ready else '#fff8e1' }}">
+    <div style="padding:14px;border-radius:10px;border:1px solid {{ 'var(--good)' if status.email.ready else 'var(--amber-line)' }};background:{{ 'var(--good-soft)' if status.email.ready else 'var(--amber-soft)' }}">
       <div style="font-weight:700;margin-bottom:4px">✉️ Email</div>
       {% if status.email.ready %}
-        <div style="color:#1c6b34;font-size:0.86rem">Connected. Confirmations and invoices are sending.</div>
+        <div style="color:var(--good);font-size:0.86rem">Connected. Confirmations and invoices are sending.</div>
       {% else %}
-        <div style="color:#7c4a04;font-size:0.86rem">Not connected. Customers won't receive confirmations, invoices or receipts.</div>
+        <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Customers won't receive confirmations, invoices or receipts.</div>
+      {% endif %}
+    </div>
+
+    <div style="padding:14px;border-radius:10px;border:1px solid {{ 'var(--good)' if status.photos.ready else 'var(--amber-line)' }};background:{{ 'var(--good-soft)' if status.photos.ready else 'var(--amber-soft)' }}">
+      <div style="font-weight:700;margin-bottom:4px">📷 Job photos</div>
+      {% if status.photos.ready %}
+        <div style="color:var(--good);font-size:0.86rem">Connected. Cleaners can upload before/after photos.</div>
+      {% else %}
+        <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.photos.missing|join(', ') }}.<br>Cleaners will not be able to upload before/after photos.</div>
       {% endif %}
     </div>
 
@@ -58,26 +67,43 @@
 <form method="POST">
   <!-- Stripe -->
   <div class="card" style="margin-top:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Stripe — taking payments</h2>
-    <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:18px">
-      From your Stripe dashboard → <strong>Developers → API keys</strong>.
-      Start with the <strong>test</strong> keys if you'd like to try the CRM without charging anyone,
-      then swap in the live keys when you're ready.
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Stripe — taking payments</h2>
+    <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
+      This is how your customers pay you by card. It is your own Stripe
+      account and your own money — it has nothing to do with what you pay for
+      this software.
     </p>
+    {% set howto_title = 'How do I get my Stripe keys?' %}
+    {% set howto_mins = 'about 10 minutes' %}
+    {% set howto_link = 'https://dashboard.stripe.com/register' %}
+    {% set howto_link_text = 'Open Stripe' %}
+    {% set howto_note = 'Start in <strong>test mode</strong> if you want to try
+        the CRM without charging anybody. The keys look the same but begin
+        <code>pk_test_</code> and <code>sk_test_</code>, and no real card is ever
+        charged. Swap them for the live ones when you are ready.' %}
+    {% set steps = [
+      'Go to <strong>stripe.com</strong> and create an account, or sign in to the one you have.',
+      'They will ask for your business details and a bank account — this is where your customers\' money lands, so it has to be a real one.',
+      'In the left-hand menu click <strong>Developers</strong>, then <strong>API keys</strong>.',
+      'Copy the <strong>Publishable key</strong>. It starts <code>pk_</code> and is safe to show anybody.',
+      'Next to the <strong>Secret key</strong> click <strong>Reveal</strong>, then copy it. It starts <code>sk_</code>. Treat this one like a password.',
+      'Paste both into the boxes below and press Save.',
+    ] %}
+    {% include '_howto.html' %}
     {% for name in ['stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret'] %}
     {% set f = fields[name] %}
     <div class="form-group">
-      <label>{{ f.label }}{% if name == 'stripe_webhook_secret' %} <span style="font-weight:400;color:#9a95ad">(optional)</span>{% endif %}</label>
+      <label>{{ f.label }}{% if name == 'stripe_webhook_secret' %} <span style="font-weight:400;color:var(--softer)">(optional)</span>{% endif %}</label>
       <input type="text" name="{{ name }}" value="{{ f.value }}" autocomplete="off"
              placeholder="{% if name == 'stripe_publishable_key' %}pk_live_…{% elif name == 'stripe_secret_key' %}sk_live_…{% else %}whsec_…{% endif %}" />
       {% if f.source == 'environment' %}
-        <span style="font-size:0.76rem;color:#9a95ad">Currently coming from your hosting settings. Anything you type here takes over.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Currently coming from your hosting settings. Anything you type here takes over.</span>
       {% elif f.source == 'settings' %}
-        <span style="font-size:0.76rem;color:#9a95ad">Saved. Leave as-is to keep it, or paste a new key to replace it.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Saved. Leave as-is to keep it, or paste a new key to replace it.</span>
       {% endif %}
     </div>
     {% endfor %}
-    <div style="background:#fff8e1;border:1px solid #f0d488;border-radius:8px;padding:12px;font-size:0.84rem;color:#7c4a04;margin-bottom:16px">
+    <div style="background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:8px;padding:12px;font-size:0.84rem;color:var(--amber-deep);margin-bottom:16px">
       <strong>Check this once:</strong> after saving, press <em>Test Stripe connection</em> below. It will tell you
       which business the key belongs to. If that isn't your business name, the money would go to the wrong account.
     </div>
@@ -86,11 +112,31 @@
 
   <!-- Texting -->
   <div class="card" style="margin-top:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Texting</h2>
-    <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:18px">
-      From your Twilio console. The account SID and auth token are on the dashboard;
-      the phone number is the one you bought, written as <code>+14075550142</code>.
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Texting</h2>
+    <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
+      This is how your cleaners get their job offers and reminders by text.
+      Without it they get email instead, which is slower and easier to miss.
     </p>
+    {% set howto_title = 'How do I get my Twilio details?' %}
+    {% set howto_mins = 'about 15 minutes, then a wait' %}
+    {% set howto_link = 'https://www.twilio.com/try-twilio' %}
+    {% set howto_link_text = 'Open Twilio' %}
+    {% set howto_note = '<strong>In the US, texts will not arrive until you also
+        complete A2P 10DLC registration.</strong> It is a form about your business
+        that the phone networks require, it costs a few dollars, and it takes a
+        few days to clear. Twilio will accept your texts and quietly not deliver
+        them until it does — so do this early, and do not judge whether texting
+        works before it clears.' %}
+    {% set steps = [
+      'Go to <strong>twilio.com</strong> and sign up. You get a small free credit to try it.',
+      'On the Console dashboard you will see <strong>Account SID</strong> and <strong>Auth Token</strong>. Copy both. The auth token is hidden until you click to show it.',
+      'In the left menu go to <strong>Phone Numbers → Manage → Buy a number</strong>.',
+      'Tick <strong>SMS</strong> in the capabilities filter, pick a number with your local area code, and buy it. It costs about a dollar a month.',
+      'Copy the number in full, including the country code: <code>+14075550142</code>, not <code>(407) 555-0142</code>.',
+      'Paste all three below and press Save.',
+      'Then search Twilio for <strong>A2P 10DLC</strong> and complete the registration — see the note underneath.',
+    ] %}
+    {% include '_howto.html' %}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       {% for name in ['twilio_account_sid', 'twilio_auth_token', 'twilio_phone'] %}
       {% set f = fields[name] %}
@@ -99,12 +145,12 @@
         <input type="text" name="{{ name }}" value="{{ f.value }}" autocomplete="off"
                placeholder="{% if name == 'twilio_account_sid' %}AC…{% elif name == 'twilio_auth_token' %}your auth token{% else %}+14075550142{% endif %}" />
         {% if f.source == 'environment' %}
-          <span style="font-size:0.76rem;color:#9a95ad">Currently from your hosting settings.</span>
+          <span style="font-size:0.76rem;color:var(--softer)">Currently from your hosting settings.</span>
         {% endif %}
       </div>
       {% endfor %}
     </div>
-    <div style="background:#f0edf8;border-radius:8px;padding:12px;font-size:0.82rem;color:#5f5878;margin-bottom:16px">
+    <div style="background:var(--line-soft);border-radius:8px;padding:12px;font-size:0.82rem;color:var(--muted);margin-bottom:16px">
       In the US you also need Twilio's <strong>A2P 10DLC</strong> business registration before texts will
       actually get delivered. It takes a few days. Until it clears, texts may be accepted by Twilio and
       still not arrive.
@@ -114,26 +160,79 @@
 
   <!-- Email -->
   <div class="card" style="margin-top:20px">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Email</h2>
-    <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:18px">
-      From your Resend dashboard → <strong>API Keys</strong>. This sends booking confirmations,
-      invoices and receipts.
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Email</h2>
+    <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
+      This is how booking confirmations, invoices and receipts reach your
+      customers.
     </p>
+    {% set howto_title = 'How do I get a Resend key?' %}
+    {% set howto_mins = 'about 5 minutes' %}
+    {% set howto_link = 'https://resend.com/signup' %}
+    {% set howto_link_text = 'Open Resend' %}
+    {% set howto_note = 'At first your emails will come from a Resend address
+        rather than your own. To send from <em>your</em> domain you add a few DNS
+        records — worth doing before you email real customers, because mail from
+        your own name is far less likely to land in junk. Resend walks you
+        through it under <strong>Domains</strong>.' %}
+    {% set steps = [
+      'Go to <strong>resend.com</strong> and sign up. The free plan sends 3,000 emails a month, which is plenty to start.',
+      'In the left menu click <strong>API Keys</strong>.',
+      'Click <strong>Create API Key</strong>. Give it any name — "CRM" will do.',
+      'Leave the permission on <strong>Sending access</strong> and create it.',
+      'Copy the key. It starts <code>re_</code>. <strong>Copy it now</strong> — Resend will not show it to you a second time.',
+      'Paste it below and press Save.',
+    ] %}
+    {% include '_howto.html' %}
+    <p style="display:none"></p>
     {% set f = fields['resend_api_key'] %}
     <div class="form-group">
       <label>{{ f.label }}</label>
       <input type="text" name="resend_api_key" value="{{ f.value }}" autocomplete="off" placeholder="re_…" />
       {% if f.source == 'environment' %}
-        <span style="font-size:0.76rem;color:#9a95ad">Currently from your hosting settings.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Currently from your hosting settings.</span>
       {% endif %}
     </div>
     <button type="submit" class="btn btn-gold">Save Email</button>
+  </div>
+
+  <!-- Cloudinary -->
+  <div class="card" style="margin-top:20px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Job Photos</h2>
+    <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
+      This is where your cleaners' before-and-after photos are stored. Without
+      it, photo uploads on the job checklist will fail.
+    </p>
+    {% set howto_title = 'How do I get my Cloudinary details?' %}
+    {% set howto_mins = 'about 5 minutes' %}
+    {% set howto_link = 'https://cloudinary.com/users/register/free' %}
+    {% set howto_link_text = 'Open Cloudinary' %}
+    {% set howto_note = 'The free plan is plenty to start with — it covers
+        thousands of job photos before you would ever need to pay.' %}
+    {% set steps = [
+      'Go to <strong>cloudinary.com</strong> and create a free account, or sign in to the one you have.',
+      'On the Dashboard you will see <strong>Cloud name</strong>, <strong>API Key</strong> and <strong>API Secret</strong> near the top. The secret is hidden until you click to show it.',
+      'Copy all three and paste them below, then press Save.',
+    ] %}
+    {% include '_howto.html' %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      {% for name in ['cloudinary_cloud_name', 'cloudinary_api_key', 'cloudinary_api_secret'] %}
+      {% set f = fields[name] %}
+      <div class="form-group"{% if name == 'cloudinary_api_secret' %} style="grid-column:1/-1"{% endif %}>
+        <label>{{ f.label }}</label>
+        <input type="text" name="{{ name }}" value="{{ f.value }}" autocomplete="off" />
+        {% if f.source == 'environment' %}
+          <span style="font-size:0.76rem;color:var(--softer)">Currently from your hosting settings.</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-gold">Save Job Photos</button>
   </div>
 </form>
 
 <!-- Tests -->
 <div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Check it works</h2>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Check it works</h2>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
     <form method="POST" action="{{ url_for('settings.test_stripe') }}" style="margin:0">
       <button type="submit" class="btn btn-outline">💳 Test Stripe connection</button>
@@ -141,7 +240,7 @@
     <a href="{{ url_for('contractors.sms_test') }}" class="btn btn-outline">💬 Send a test text</a>
     <a href="{{ url_for('contractors.email_test') }}" class="btn btn-outline">✉️ Send a test email</a>
   </div>
-  <p style="color:#9a95ad;font-size:0.8rem;margin:12px 0 0">
+  <p style="color:var(--softer);font-size:0.8rem;margin:12px 0 0">
     Do all three before you take a real booking. The Stripe test is the important one — it names the
     business the money would go to.
   </p>

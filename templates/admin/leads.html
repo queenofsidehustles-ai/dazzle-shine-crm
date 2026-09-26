@@ -14,7 +14,7 @@
 
 <div class="card" style="margin-bottom:18px">
   <a href="{{ url_for('leads.new_quote') }}" class="btn btn-gold" style="padding:8px 16px">✉️ Quote a caller</a>
-  <span style="font-size:0.83rem;color:#9a95ad;margin-left:10px">
+  <span style="font-size:0.83rem;color:var(--softer);margin-left:10px">
     For someone who rang for a price — they don't need to be in a CSV first.
   </span>
 </div>
@@ -31,16 +31,16 @@
         <tr>
           <td>
             <strong>{{ lead.name }}</strong><br>
-            <span style="font-size:0.82rem;color:#9a95ad">{{ lead.email }}</span>
+            <span style="font-size:0.82rem;color:var(--softer)">{{ lead.email }}</span>
           </td>
           <td>{{ lead.service_label }}</td>
-          <td>{% if lead.is_commercial %}<span style="color:#9a95ad">At walkthrough</span>{% else %}${{ '%.2f' % (lead.quoted_price or 0) }}{% endif %}</td>
-          <td style="font-size:0.85rem;color:#9a95ad">{{ lead.source or 'website' }}</td>
+          <td>{% if lead.is_commercial %}<span style="color:var(--softer)">At walkthrough</span>{% else %}${{ '%.2f' % (lead.quoted_price or 0) }}{% endif %}</td>
+          <td style="font-size:0.85rem;color:var(--softer)">{{ lead.source or 'website' }}</td>
           <td>
             {% set colors = {'new':'status-pending','contacted':'status-confirmed','converted':'status-completed','lost':'status-cancelled'} %}
             <span class="status {{ colors.get(lead.status, 'status-pending') }}">{{ lead.status }}</span>
           </td>
-          <td style="font-size:0.82rem;color:#9a95ad">{{ lead.created_at.strftime('%b %d') }}</td>
+          <td style="font-size:0.82rem;color:var(--softer)">{{ lead.created_at.strftime('%b %d') }}</td>
           <td><a href="{{ url_for('leads.detail', lead_id=lead.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a></td>
         </tr>
         {% endfor %}
@@ -48,7 +48,7 @@
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:#9a95ad;padding:40px 0">No leads yet. They'll appear here when someone requests a quote from your website.</p>
+  <p style="text-align:center;color:var(--softer);padding:40px 0">No leads yet. They'll appear here when someone requests a quote from your website.</p>
   {% endif %}
 </div>
 {% endblock %}

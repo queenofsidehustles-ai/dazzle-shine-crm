@@ -39,7 +39,18 @@ with app.app_context():
 
     print('\n2. The menu is shorter than it was')
     owner_items = sum(len(s['items']) for s in navigation.sidebar('owner'))
-    check(owner_items <= 17, f'{owner_items} sidebar links for the owner, down from 31')
+    # 31 was the old flat menu. The ceiling is here to stop it creeping back,
+    # not to freeze the number: it moved to 18 when Ask Nana was added, to 22
+    # with the Toolkit/Knowledge Base/Settings reorganization -- folding Money
+    # into Jobs & Money, splitting Toolkit's customer-facing tools out from
+    # Settings' set-once config, and giving Ask Nana, SOPs and the new FAQs a
+    # Knowledge Base of their own -- and to 23 for Security (My Account,
+    # renamed), which moved out of the sidebar footer into Settings and had
+    # to sit at the top level of it rather than nested under the owner-only
+    # Settings tabs, since it's every team member's own login. Each of those
+    # was a deliberate decision and had to be argued for. Raising this line
+    # should always feel like that.
+    check(owner_items <= 23, f'{owner_items} sidebar links for the owner, down from 31')
 
     print('\n3. Nothing the sidebar used to reach was dropped')
     # The full set of pages the old sidebar linked to, written out so that
@@ -90,7 +101,17 @@ with app.app_context():
     tabs, _ = navigation.tabs_for('bookings.calendar', 'owner')
     check(tabs == [], 'Calendar has no tabs — one tab is just the title twice')
     tabs, _ = navigation.tabs_for('money.pnl', 'owner')
-    check(len(tabs) == 7, f'Money has its seven tabs (got {len(tabs)})')
+    # Counted from navigation.py rather than typed in. Adding a tab is a
+    # product decision; what this assertion is for is that the Money item
+    # renders every tab it declares, not that the number never moves. Money
+    # is folded into the Jobs & Money section now rather than being a section
+    # of its own, so this finds it by endpoint within that section instead of
+    # by a section heading that no longer exists.
+    _declared = next(len(item[4]) for heading, items in navigation.SECTIONS
+                     if heading == 'Jobs & Money' for item in items
+                     if item[0] == 'money.pnl')
+    check(len(tabs) == _declared,
+          f'Money renders all {_declared} tabs it declares (got {len(tabs)})')
 
     print('\n9. Every admin page still renders')
     c = app.test_client()
@@ -110,5 +131,30 @@ with app.app_context():
     html = c.get('/bookings/').get_data(as_text=True)
     check('section-tabs' in html, 'the tab bar is on a section page')
     check('sidebarScroll' in html, 'and the sidebar remembers where it was scrolled to')
+
+print('\nThe dashboard leads with the numbers')
+# The figures sat below Today and Tomorrow, so on a quiet morning the first
+# thing on the page was a large panel saying nothing was booked -- and the
+# numbers, which are true every day, were below the fold.
+import os as _os
+_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+dash = open(_os.path.join(_root, 'templates', 'admin', 'dashboard.html')).read()
+money_at = dash.index("Money in —")
+today_at = dash.index("<h2>Today</h2>")
+check(money_at < today_at, 'the money is above the day list, not below it')
+
+# Cards, not one joined strip: four boxes with air between them read as four
+# separate facts, which is what they are.
+check(dash.count('class="stat-card') >= 8,
+      'eight cards — four money, four counts')
+check('money-strip' not in dash, 'the joined strip is gone from this page')
+
+# These four were computed, passed to the page, and then never drawn.
+for label in ('Pending', 'Confirmed', 'Completed', 'Clients'):
+    check(f'>{label}<' in dash, f'{label} is shown again')
+
+# An empty day is the least interesting thing on the page and was taking the
+# most room on it.
+check('day-none' in dash, 'an empty day is one line, not a panel')
 
 print('\n🎉 Navigation checks passed.')

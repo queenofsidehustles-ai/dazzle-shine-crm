@@ -7,17 +7,17 @@
 
 {% block content %}
 <div style="max-width:760px">
-  <div style="background:#f0edf8;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:0.82rem;color:#3b2460">
-    <strong>Trigger:</strong> <code style="background:#e4dfef;padding:2px 6px;border-radius:4px">{{ t.trigger }}</code>
+  <div style="background:var(--line-soft);border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:0.82rem;color:var(--ink-2)">
+    <strong>Trigger:</strong> <code style="background:var(--line);padding:2px 6px;border-radius:4px">{{ t.trigger }}</code>
     &nbsp;·&nbsp; <strong>Fires when:</strong> {{ t.description }}
   </div>
 
   {% if variables %}
-  <div style="background:#fff9e6;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:0.82rem;color:#856404">
+  <div style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:0.82rem;color:var(--amber-deep)">
     <strong>Variables you can use in subject or body:</strong><br>
     <div style="margin-top:8px">
     {% for v in variables %}
-      <code style="background:#fff3cd;padding:2px 7px;border-radius:4px;margin:3px;display:inline-block;cursor:pointer"
+      <code style="background:var(--amber-soft);padding:2px 7px;border-radius:4px;margin:3px;display:inline-block;cursor:pointer"
             onclick="insertVar('{{ v }}')" title="Click to copy">{{ v }}</code>
     {% endfor %}
     </div>
@@ -33,7 +33,7 @@
       </div>
       <div class="form-group">
         <label>Email Body</label>
-        <p style="font-size:0.78rem;color:#9a95ad;margin-bottom:8px">
+        <p style="font-size:0.78rem;color:var(--softer);margin-bottom:8px">
           Write in plain text. Use a blank line between paragraphs. Start lines with "- " for bullet points.
           The CRM automatically wraps this in a clean branded email layout.
         </p>
@@ -59,7 +59,7 @@
 function insertVar(v) {
   navigator.clipboard.writeText(v).then(() => {
     // briefly highlight
-    event.target.style.background = '#d4edda';
+    event.target.style.background = 'var(--good-soft)';
     setTimeout(() => event.target.style.background = '', 800);
   });
 }
