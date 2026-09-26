@@ -161,6 +161,10 @@ def checkout(plan):
             success_url=f'{base}/billing/return',
             cancel_url=f'{base}/billing')
     except Exception as e:
+        import demo_guard
+        if isinstance(e, demo_guard.DemoBlocked):
+            flash(str(e), 'info')
+            return redirect(url_for('billing.billing_home'))
         import errors
         errors.capture(e, path='/billing/checkout', method='POST')
         flash('Could not open the payment page. Nothing has been charged.', 'error')

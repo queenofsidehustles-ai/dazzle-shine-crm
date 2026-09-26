@@ -69,8 +69,20 @@ def _stored(name):
         return ''
 
 
+# Keys that would let a company reach the outside world. A demo company gets
+# none of them -- not its own and not the platform's environment fallback --
+# so every Stripe, Twilio and Resend path sees "not connected" (demo_guard.py).
+_OUTBOUND = frozenset({'stripe_secret_key', 'stripe_publishable_key',
+                       'stripe_webhook_secret', 'twilio_account_sid',
+                       'twilio_auth_token', 'twilio_phone', 'resend_api_key'})
+
+
 def get(name):
     """The key this CRM should actually use. Settings first, environment second."""
+    if name in _OUTBOUND:
+        import demo_guard
+        if demo_guard.active():
+            return ''
     env_var = FIELDS.get(name, (None,))[0]
     return _stored(name) or (os.environ.get(env_var, '') if env_var else '') or ''
 

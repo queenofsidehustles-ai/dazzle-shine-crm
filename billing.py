@@ -238,8 +238,17 @@ def install(app):
 # Starting and managing a subscription
 # ---------------------------------------------------------------------------
 
+def _refuse_demo(org):
+    """A demo company never subscribes to Akye (demo_guard.py)."""
+    import demo_guard
+    if (org or {}).get('is_demo') or demo_guard.active():
+        raise demo_guard.DemoBlocked('This is a demo company. Plans cannot be '
+                                     'changed and no card is ever taken.')
+
+
 def checkout_session(org, plan, success_url, cancel_url):
     """A Stripe-hosted page for entering card details. Returns its URL."""
+    _refuse_demo(org)
     import stripe
     stripe.api_key = stripe_key()
     price = price_id(plan)
@@ -273,6 +282,7 @@ def portal_session(org, return_url):
     Deliberately not rebuilt here. Card details, tax, invoices, proration and
     dunning are Stripe's job, they do it better, and every one of those screens
     is one this product then does not have to keep correct."""
+    _refuse_demo(org)
     import stripe
     stripe.api_key = stripe_key()
     if not org.get('stripe_customer_id'):

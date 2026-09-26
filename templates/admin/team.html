@@ -62,8 +62,10 @@
         {{ s.roster_start_date or 'not set' }}
       </span>
     </div>
-    {% set steps_done = s.get_onboarding()|length %}
-    {% set steps_total = s.ONBOARDING_STEPS|length %}
+    {# Only the steps that apply to this worker: a contractor has no uniform or supply kit. #}
+    {% set applicable = s.get_applicable_steps()|map('first')|list %}
+    {% set steps_done = s.get_onboarding()|select('in', applicable)|list|length %}
+    {% set steps_total = applicable|length %}
     <div style="margin-top:10px">
       <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--softer);margin-bottom:4px">
         <span>Onboarding</span><span>{{ steps_done }}/{{ steps_total }}</span>

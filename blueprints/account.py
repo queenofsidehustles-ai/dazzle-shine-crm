@@ -25,6 +25,7 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, session)
 
 import branding
+import demo_guard
 from auth import login_required
 from extensions import db
 from models import User, LoginToken
@@ -223,6 +224,9 @@ def my_account():
 @account_bp.route('/account/password', methods=['POST'])
 @login_required
 def change_password():
+    if demo_guard.active():
+        flash(demo_guard.FIXED_DETAIL, 'info')
+        return redirect(url_for('account.my_account'))
     user = _current_user()
     if not user:
         flash('Not available for this login.', 'error')
@@ -249,6 +253,9 @@ def start_2fa():
     """Generate a secret and show it for setup. Not yet enabled -- totp_enabled
     only turns on once /2fa/confirm verifies a real code was produced from it,
     so nothing about the login path changes until that happens."""
+    if demo_guard.active():
+        flash(demo_guard.FIXED_DETAIL, 'info')
+        return redirect(url_for('account.my_account'))
     import totp
     user = _current_user()
     if not user:
@@ -266,6 +273,9 @@ def start_2fa():
 @account_bp.route('/account/2fa/confirm', methods=['POST'])
 @login_required
 def confirm_2fa():
+    if demo_guard.active():
+        flash(demo_guard.FIXED_DETAIL, 'info')
+        return redirect(url_for('account.my_account'))
     import totp
     user = _current_user()
     if not user or not user.totp_secret:

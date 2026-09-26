@@ -559,9 +559,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .topbar-right:empty { display: none; }
 @media (max-width: 600px) {
   .topbar { flex-wrap: wrap; row-gap: var(--s2); }
-  .topbar-right { flex: 1 0 100%; display: flex; justify-content: flex-end; }
+  .topbar-right { flex: 1 0 100%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
   .topbar-right > * { max-width: 100%; }
   .topbar-right .btn { white-space: nowrap; }
+  /* Reports: the two side-by-side cards stack. */
+  .reports-pair { grid-template-columns: 1fr !important; }
 }
 
 @media (max-width: 900px) {

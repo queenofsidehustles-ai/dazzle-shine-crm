@@ -69,6 +69,16 @@ def _daily_plan():
         return {'items': [], 'nothing': False, 'say': None}
 
 
+def _by_start_time(jobs):
+    """A day's jobs in the order they happen. The time is free text ("9am",
+    "between 1 and 3"); anything that cannot be read goes last, not first."""
+    from scheduling import parse_time
+    def key(b):
+        t = parse_time(b.preferred_time or '')
+        return (t is None, t or (0, 0), b.id)
+    return sorted(jobs, key=key)
+
+
 @admin_bp.route('/')
 @login_required
 def dashboard():
@@ -78,7 +88,7 @@ def dashboard():
     confirmed = Booking.query.filter_by(status='confirmed').count()
     completed = Booking.query.filter_by(status='completed').count()
     total_clients = Client.query.count()
-    today_bookings = Booking.query.filter_by(preferred_date=today).all()
+    today_bookings = _by_start_time(Booking.query.filter_by(preferred_date=today).all())
     import recurring
     # Collapse recurring plans BEFORE trimming — otherwise all eight rows
     # are the same client's next twelve months.
@@ -100,6 +110,7 @@ def dashboard():
     tomorrow_jobs = Booking.query.filter(
         Booking.preferred_date == tomorrow,
         Booking.status.in_(['confirmed', 'pending'])).all()
+    tomorrow_jobs = _by_start_time(tomorrow_jobs)
     unassigned_tomorrow = [b for b in tomorrow_jobs if b.needs_cleaner]
     # Everything ahead, not only tomorrow. A job three days out with nobody on
     # it is the same problem noticed earlier — and this dashboard would say
