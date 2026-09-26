@@ -28,6 +28,7 @@ from flask import (Blueprint, render_template, redirect, url_for, abort,
 
 import entitlements
 import product
+import os
 
 marketing_bp = Blueprint('marketing', __name__)
 
@@ -79,6 +80,23 @@ def home():
     return render_template('marketing/home.html',
                            plans=entitlements.PLANS,
                            signups_open=signups_open())
+
+
+@marketing_bp.route('/demo')
+def demo():
+    """Public, credential-free front door to the isolated BrightNest demo.
+
+    The visitor chooses a story, then we send them through a one-time handoff
+    endpoint on the demo tenant. The handoff authenticates only the fixed demo
+    owner and only when demo_guard says this request belongs to the demo.
+    """
+    _require_product_site()
+    import product
+    base = (product.domain() or '').lower()
+    demo_slug = (os.environ.get('DEMO_SLUG') or 'brightnest').strip().lower()
+    demo_host = f'{demo_slug}.{base}'
+    demo_base = f'{product.scheme_for(demo_host)}://{demo_host}'
+    return render_template('marketing/demo.html', demo_base=demo_base)
 
 
 @marketing_bp.route('/terms')
