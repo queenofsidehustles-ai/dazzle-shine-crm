@@ -524,6 +524,45 @@ def test_demo_never_spends_platform_ai_places_translation_or_speech(env, monkeyp
         assert translate.translate(source, target='es') == source
 
 
+def test_demo_enter_authenticates_only_inside_demo_tenant(env):
+    import tenancy
+    from models import User
+    app = env['app']
+    c = app.test_client()
+    # The same route on a real tenant is not an authentication back door.
+    real = c.get('/demo-enter', base_url=f'https://{REAL}.{HOST}')
+    assert real.status_code == 404
+    # BrightNest can be entered without exposing or posting its password.
+    entered = c.get('/demo-enter?tour=today', base_url=f'https://brightnest.{HOST}')
+    assert entered.status_code in (302, 303)
+    assert entered.headers['Location'].endswith('/')
+    home = c.get('/', base_url=f'https://brightnest.{HOST}')
+    assert home.status_code == 200
+
+
+
+def test_demo_entry_security_contract_source():
+    """Static falsification for the public demo handoff.
+
+    This catches accidental weakening even when a test host is not available:
+    the route must be gated by demo_guard, resolve a seeded owner server-side,
+    bind through the normal auth helper, and never accept credentials from the
+    visitor.
+    """
+    from pathlib import Path
+    source = Path('blueprints/admin.py').read_text()
+    start = source.index("@admin_bp.route('/demo-enter')")
+    end = source.index("@admin_bp.route('/login'", start)
+    route = source[start:end]
+    assert 'demo_guard.active()' in route
+    assert 'abort(404)' in route
+    assert "filter_by(role='owner', active=True)" in route
+    assert 'bind_authenticated_session(owner)' in route
+    code = route.split('"""')[2]          # the body, not the docstring
+    assert "request.form" not in code and "request.values" not in code
+    assert "password" not in code.lower()
+
+
 def test_the_paths_a_visitor_actually_takes_spend_nothing(env, monkeypatch):
     """Not just the key helpers: the routes behind Nana and AI writing.
 
@@ -544,3 +583,98 @@ def test_the_paths_a_visitor_actually_takes_spend_nothing(env, monkeypatch):
         r = c.post(path, base_url=base, data=data, follow_redirects=True)
         assert r.status_code == 200 and 'switched off in the demo' in r.get_data(as_text=True), path
     assert net.calls[before:] == []
+
+
+def test_the_public_demo_page_and_its_way_back(env):
+    """/demo on the product site sends visitors to the demo's own address; the
+    in-app "choose another story" link goes back to the product site (on the
+    demo's address /demo is not a page); and after a rebuild has signed them
+    out, the demo's login page offers the way back in -- only the demo's."""
+    import tenancy
+    from models import User
+    app = env['app']
+    page = app.test_client().get('/demo', base_url=f'https://{HOST}')
+    body = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert f'brightnest.{HOST}/demo-enter?tour=today' in body and 'Live demo' in body
+    home = app.test_client().get('/', base_url=f'https://{HOST}').get_data(as_text=True)
+    assert 'Try interactive demo' in home and 'Live demo' in home
+
+    c = app.test_client()
+    r = c.get('/demo-enter?tour=money', base_url=f'https://brightnest.{HOST}', follow_redirects=True)
+    body = r.get_data(as_text=True)
+    assert r.status_code == 200 and 'Demo · See the money' in body
+    assert f'href="https://{HOST}/demo">Choose another story' in body
+    with c.session_transaction(base_url=f'https://brightnest.{HOST}') as s:
+        with app.app_context(), tenancy.use_tenant('brightnest'):
+            assert User.query.get(s['user_id']).username == 'sarah@brightnest.example'
+
+    demo_login = app.test_client().get('/login', base_url=f'https://brightnest.{HOST}')
+    real_login = app.test_client().get('/login', base_url=f'https://{REAL}.{HOST}')
+    assert 'Enter the demo' in demo_login.get_data(as_text=True)
+    assert 'Enter the demo' not in real_login.get_data(as_text=True)
+
+
+def test_a_visitor_cannot_rename_or_rebrand_it(env):
+    """Anyone can enter as the owner. The name, contact details and branding
+    every later visitor (and the public booking page) sees stay as seeded."""
+    import tenancy
+    from models import BusinessSetting
+    c, base = _demo_client(env['app'])
+    r = c.post('/settings/business', base_url=base, follow_redirects=True,
+               data={'business_name': 'Vandalised Co', 'phone': '(555) 000-0000',
+                     'brand_tagline': 'defaced'})
+    assert r.status_code == 200 and 'stay as they are for every visitor' in r.get_data(as_text=True)
+    with env['app'].app_context(), tenancy.use_tenant('brightnest'):
+        assert BusinessSetting.get('business_name') == 'BrightNest Cleaning Co.'
+        assert BusinessSetting.get('brand_tagline') != 'defaced'
+    book = env['app'].test_client().get('/book', base_url=base).get_data(as_text=True)
+    assert 'Vandalised' not in book
+
+
+def test_a_scheduled_rebuild_keeps_the_passwords_and_prints_none(env, monkeypatch):
+    """The hourly rebuild runs with no password in its environment. It must
+    keep the passwords the logins already have -- not lock the owner out, and
+    not print a fresh one into a CI log every hour."""
+    import tenancy
+    from extensions import db
+    from models import User
+    monkeypatch.delenv('DEMO_OWNER_PASSWORD', raising=False)
+    monkeypatch.delenv('DEMO_OPS_PASSWORD', raising=False)
+    said = []
+    env['demo'].build(say=said.append)
+    out = '\n'.join(said)
+    assert out.count('password unchanged') == 2 and 'one-off' not in out
+    with env['app'].app_context(), tenancy.use_tenant('brightnest'):
+        assert User.query.filter_by(username='sarah@brightnest.example').first().check_password(DEMO_PW)
+        db.session.remove()
+    _demo_client(env['app'])          # and the owner still signs in
+
+
+def test_the_hourly_rebuild_is_started_only_by_the_scheduler(env, monkeypatch):
+    """POST /api/rebuild-demo starts demo_company.py as its own process, on the
+    product site, with the scheduler's key -- never from a company's address,
+    and never without the key."""
+    import subprocess
+    started = []
+
+    class FakeProc:
+        def __init__(self, args, **kw):
+            started.append((args, kw))
+
+        def wait(self):
+            return 0
+    monkeypatch.setattr(subprocess, 'Popen', FakeProc)
+    monkeypatch.setenv('REMINDER_API_KEY', 'scheduler-key-for-tests')
+    c = env['app'].test_client()
+    assert c.post('/api/rebuild-demo', base_url=f'https://{HOST}').status_code == 403
+    assert c.post('/api/rebuild-demo', base_url=f'https://{HOST}',
+                  headers={'X-Api-Key': 'wrong'}).status_code == 403
+    assert c.post('/api/rebuild-demo', base_url=f'https://brightnest.{HOST}',
+                  headers={'X-Api-Key': 'scheduler-key-for-tests'}).status_code == 404
+    assert started == []
+    r = c.post('/api/rebuild-demo', base_url=f'https://{HOST}',
+               headers={'X-Api-Key': 'scheduler-key-for-tests'})
+    assert r.status_code == 202 and r.get_json()['started']
+    (args, kw), = started
+    assert args[-1].endswith('demo_company.py') and kw['start_new_session']

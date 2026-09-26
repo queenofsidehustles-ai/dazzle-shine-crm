@@ -28,6 +28,7 @@ from flask import (Blueprint, render_template, redirect, url_for, abort,
 
 import entitlements
 import product
+import os
 
 marketing_bp = Blueprint('marketing', __name__)
 
@@ -79,6 +80,68 @@ def home():
     return render_template('marketing/home.html',
                            plans=entitlements.PLANS,
                            signups_open=signups_open())
+
+
+_demo_live_cache = {'at': 0.0, 'live': False}
+
+
+def _demo_slug():
+    return (os.environ.get('DEMO_SLUG') or 'brightnest').strip().lower()
+
+
+def demo_live():
+    """True when the demo company exists and is marked as the demo.
+
+    Only then does a link to it go anywhere: before demo_company.py has been
+    run, or on a deployment without one, /demo-enter is a 404. Cached for a
+    minute, because the navigation asks on every marketing page."""
+    import time
+    now = time.monotonic()
+    if now - _demo_live_cache['at'] < 60:
+        return _demo_live_cache['live']
+    live = False
+    try:
+        import control_plane
+        import provisioning
+        org = control_plane.find(provisioning._engine(), _demo_slug())
+        live = bool(org and org.get('is_demo'))
+    except Exception:
+        live = False
+    _demo_live_cache.update(at=now, live=live)
+    return live
+
+
+def demo_page_url():
+    """/demo on the product's own site, absolute: the link back to it is shown
+    inside the demo, on the demo's own address, where /demo is not a page.
+    canonical_base() would fall back to that address, so this does not use it."""
+    host = product.canonical_host() or (product.domain() or '').lower()
+    return f'{product.scheme_for(host)}://{host}/demo' if host else '/demo'
+
+
+@marketing_bp.app_context_processor
+def _inject_demo_links():
+    # Callables, so only a page that shows a demo link ever asks. The homepage
+    # is rendered from a before_request hook rather than this blueprint's own
+    # route, which is why this is app-wide and not the blueprint's.
+    return {'DEMO_LIVE': demo_live, 'DEMO_PAGE_URL': demo_page_url}
+
+
+@marketing_bp.route('/demo')
+def demo():
+    """Public, credential-free front door to the isolated BrightNest demo.
+
+    The visitor chooses a story, then we send them through a one-time handoff
+    endpoint on the demo tenant. The handoff authenticates only the fixed demo
+    owner and only when demo_guard says this request belongs to the demo.
+    """
+    _require_product_site()
+    if not demo_live():
+        abort(404)
+    base = (product.domain() or '').lower()
+    demo_host = f'{_demo_slug()}.{base}'
+    demo_base = f'{product.scheme_for(demo_host)}://{demo_host}'
+    return render_template('marketing/demo.html', demo_base=demo_base)
 
 
 @marketing_bp.route('/terms')

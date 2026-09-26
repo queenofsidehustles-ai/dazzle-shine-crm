@@ -1209,21 +1209,44 @@ class _RebuildLock:
             self.conn.close()
 
 
-def credentials(app, schema):
-    """Set the owner's and office login's passwords. Returns {email: (pw, from_env)}."""
+def _current_hashes(engine, schema):
+    """{email: password hash} of the logins in the demo as it stands, or {}."""
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(f'SELECT username, password_hash FROM "{schema}"."user"')).all()
+        return {u: h for u, h in rows if u and h}
+    except Exception:
+        return {}
+
+
+def credentials(app, schema, keep=None):
+    """Set the owner's and office login's passwords.
+
+    From the environment when it has them. Otherwise the password each login
+    already had, so a scheduled rebuild neither locks anybody out nor prints a
+    new password into a log; only a first build with no password set makes
+    one up. Returns {email: (password or None, 'env' | 'kept' | 'new')}."""
     import tenancy
     from models import User
     from extensions import db
+    keep = keep or {}
     out = {}
     with app.app_context(), tenancy.use_tenant(schema):
         for (name, email, role), env in ((OWNER, 'DEMO_OWNER_PASSWORD'),
                                          (OPS, 'DEMO_OPS_PASSWORD')):
-            pw = (os.environ.get(env) or '').strip()
-            from_env = bool(pw)
-            pw = pw or secrets.token_urlsafe(12)
             u = User.query.filter_by(username=email).first()
-            u.set_password(pw)
-            out[email] = (pw, from_env)
+            pw = (os.environ.get(env) or '').strip()
+            if pw:
+                u.set_password(pw)
+                out[email] = (pw, 'env')
+            elif keep.get(email):
+                u.password_hash = keep[email]
+                out[email] = (None, 'kept')
+            else:
+                pw = secrets.token_urlsafe(12)
+                u.set_password(pw)
+                out[email] = (pw, 'new')
         db.session.commit()
         db.session.remove()
     return out
@@ -1257,6 +1280,7 @@ def build(say=print):
         control_plane.record_tenant_login(engine, OWNER[1], DEMO_SLUG)
         demo_guard.forget_cache()
 
+        kept = _current_hashes(engine, live)
         say(f'\n  BrightNest demo seed -- {DEMO_SLUG} ({demo_today():%a %d %b %Y})')
         say('  ' + '-' * 40)
         try:
@@ -1275,6 +1299,9 @@ def build(say=print):
                         '; '.join(f'{n} ({d})' for n, _, d in failed)))
                 result_counts = counts()
                 db.session.remove()
+            # On the staging copy, before the swap: the demo is never live
+            # with passwords nobody knows.
+            creds = credentials(app, staging, kept)
         except Exception as e:
             db.session.remove()
             try:
@@ -1292,7 +1319,6 @@ def build(say=print):
             conn.execute(text(f'DROP SCHEMA IF EXISTS "{live}" CASCADE'))
             conn.execute(text(f'ALTER SCHEMA "{staging}" RENAME TO "{live}"'))
         demo_guard.forget_cache()
-        creds = credentials(app, live)
 
     for k, v in result_counts.items():
         say(f'  {k:.<22} {v}')
@@ -1304,9 +1330,11 @@ def build(say=print):
     say('  product numbers ....... EXCLUDED  (is_test)')
     say('\n  Verification .......... PASS (every check -- run --verify to list them)')
     say(f'\n  Sign in at https://{DEMO_SLUG}.<your domain>/login')
-    for email, (pw, from_env) in creds.items():
-        say(f'    {email:28} ' + ('password from the environment' if from_env
-                                   else f'password {pw}   (one-off: set it in the environment to keep it)'))
+    for email, (pw, source) in creds.items():
+        say(f'    {email:28} ' + {
+            'env': 'password from the environment',
+            'kept': 'password unchanged',
+        }.get(source, f'password {pw}   (one-off: set it in the environment to keep it)'))
     say('')
     return result_counts
 

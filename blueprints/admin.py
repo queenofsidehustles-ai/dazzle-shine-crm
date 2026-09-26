@@ -1,5 +1,5 @@
 import json
-from flask import Blueprint, render_template, request, session, redirect, url_for
+from flask import Blueprint, render_template, request, session, redirect, url_for, abort
 from entitlements import requires_plan
 from auth import login_required, owner_required, authenticate, is_owner_session
 from models import Booking, Client, Lead
@@ -236,6 +236,48 @@ def reports():
 PENDING_2FA_KEY = 'pending_2fa_user_id'
 
 
+@admin_bp.route('/demo-enter')
+def demo_enter():
+    """Credential-free entry exists only for the explicitly isolated demo.
+
+    No password is embedded in a public page. The server resolves the seeded
+    demo owner inside the demo tenant, binds an ordinary tenant session, then
+    redirects to the chosen read/write product surface. demo_guard is the
+    authorization boundary; a copied URL on any real tenant is a 404.
+    """
+    import demo_guard
+    if not demo_guard.active():
+        abort(404)
+    from models import User
+    from auth import bind_authenticated_session
+    import demo_company
+    # Sarah, the owner the seed made -- not whichever owner row happens to
+    # come back first if somebody has added another.
+    owner = (User.query.filter_by(username=demo_company.OWNER[1], active=True).first()
+             or User.query.filter_by(role='owner', active=True).order_by(User.id).first())
+    if not owner:
+        abort(503)
+    session.clear()
+    bind_authenticated_session(owner)
+    session.permanent = True
+    tour = (request.args.get('tour') or 'explore').lower()
+    if tour not in ('today', 'customer', 'team', 'money', 'explore'):
+        tour = 'explore'
+    session['demo_tour'] = tour
+    destinations = {
+        'today': 'admin.dashboard',
+        'customer': 'bookings.clients',
+        'team': 'contractors.team',
+        'money': 'money.pnl',
+        'explore': 'admin.dashboard',
+    }
+    endpoint = destinations.get(tour, 'admin.dashboard')
+    try:
+        return redirect(url_for(endpoint))
+    except Exception:
+        return redirect(url_for('admin.dashboard'))
+
+
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
     # The product's root domain never reaches this view for /login at all --
@@ -291,8 +333,10 @@ def login():
         import product
         root = product.domain()
         switch_company_url = f'{product.scheme_for(root)}://{root}/workspace?forget=1'
+    import demo_guard
     return render_template('admin/login.html', error=error, not_set_up=not_set_up,
-                           switch_company_url=switch_company_url)
+                           switch_company_url=switch_company_url,
+                           demo_entry=demo_guard.active())
 
 
 def _login_2fa_step():
