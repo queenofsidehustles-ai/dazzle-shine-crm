@@ -539,3 +539,24 @@ def test_demo_enter_authenticates_only_inside_demo_tenant(env):
     home = c.get('/', base_url=f'https://brightnest.{HOST{"}"}')
     assert home.status_code == 200
 
+
+
+def test_demo_entry_security_contract_source():
+    """Static falsification for the public demo handoff.
+
+    This catches accidental weakening even when a test host is not available:
+    the route must be gated by demo_guard, resolve a seeded owner server-side,
+    bind through the normal auth helper, and never accept credentials from the
+    visitor.
+    """
+    from pathlib import Path
+    source = Path('blueprints/admin.py').read_text()
+    start = source.index("@admin_bp.route('/demo-enter')")
+    end = source.index("@admin_bp.route('/login'", start)
+    route = source[start:end]
+    assert 'demo_guard.active()' in route
+    assert 'abort(404)' in route
+    assert "filter_by(role='owner', active=True)" in route
+    assert 'bind_authenticated_session(owner)' in route
+    assert "request.form" not in route
+    assert "password" not in route.lower()
