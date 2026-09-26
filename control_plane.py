@@ -98,6 +98,11 @@ organizations = Table(
     # out of every funnel and sales count and never sent trial reminders; a
     # suspension says nothing about whether an account was real.
     Column('is_test', Boolean),
+    # A fictional company for showing the product (demo_company.py). Implies
+    # is_test, and more: demo_guard.py stops anything it does from leaving
+    # Akye -- no email, text, Stripe or subscription -- and only a demo
+    # company can be rebuilt by the demo seed.
+    Column('is_demo', Boolean),
     # ── Where they came from ───────────────────────────────────────────────
     # Written once at signup from the link that first brought the owner to
     # the site (see attribution.py): the tracking tags on it, the site they
@@ -442,10 +447,24 @@ def mark_provisioned(engine, slug):
                      .values(provisioned_at=datetime.utcnow()))
 
 
-def set_test_account(engine, slug, is_test):
+def set_demo_company(engine, slug):
+    """Mark a company as the fictional demo: test account and demo both."""
     with engine.begin() as conn:
         conn.execute(update(organizations).where(organizations.c.slug == slug)
-                     .values(is_test=bool(is_test)))
+                     .values(is_test=True, is_demo=True))
+
+
+def set_test_account(engine, slug, is_test):
+    """Mark a company as a test account or a real one.
+
+    The demo company stays a test account whatever is asked: it is fictional,
+    and counting it would put made-up customers into the funnel and sales
+    numbers."""
+    with engine.begin() as conn:
+        q = update(organizations).where(organizations.c.slug == slug)
+        if not is_test:
+            q = q.where(organizations.c.is_demo.isnot(True))
+        conn.execute(q.values(is_test=bool(is_test)))
 
 
 def set_status(engine, slug, status):

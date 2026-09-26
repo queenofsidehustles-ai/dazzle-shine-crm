@@ -1038,6 +1038,12 @@ def stripe_webhook():
     webhook_secret = integrations.stripe_webhook_secret()
     payload = request.data
     sig_header = request.headers.get('Stripe-Signature')
+    # No secret, no webhook. Stripe's library checks the signature against
+    # whatever secret it is given, and an HMAC with an empty key is one anybody
+    # can compute -- so a company with no secret saved (a demo company never
+    # has one) would otherwise accept forged "payment succeeded" events.
+    if not (webhook_secret or '').strip():
+        return jsonify({'ok': False}), 400
 
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)

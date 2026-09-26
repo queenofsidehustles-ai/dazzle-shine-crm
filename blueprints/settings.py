@@ -208,6 +208,10 @@ def connections():
     which made that person a permanent dependency for every business using the
     CRM — and left them holding other people's payment credentials."""
     import integrations
+    import demo_guard
+    if request.method == 'POST' and demo_guard.active():
+        flash(demo_guard.FIXED_DETAIL, 'info')
+        return redirect(url_for('settings.connections'))
     if request.method == 'POST':
         pending = {}
         for name, (_env, label, is_secret) in integrations.FIELDS.items():

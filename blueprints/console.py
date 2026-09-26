@@ -268,6 +268,10 @@ def mark_test_account(slug):
         flash(f'No company at {slug}.', 'error')
         return redirect(url_for('console.companies'))
     is_test = request.form.get('on') == '1'
+    if org.get('is_demo') and not is_test:
+        flash(f'{org["name"]} is the demo company, so it stays a test account — '
+              f'its customers are made up.', 'info')
+        return redirect(here)
     control_plane.set_test_account(engine, slug, is_test)
     control_plane.log_console(engine, request.console_user['email'],
                               'marked as test account' if is_test

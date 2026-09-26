@@ -102,8 +102,11 @@ def companies():
         url = url.replace('postgresql://', 'postgresql+psycopg2://', 1)
     engine = create_engine(url)
     control_plane.ensure_table(engine)
+    # A demo company's automations never run: nothing it sends could go
+    # anywhere (demo_guard.py), and running them would still move its seeded
+    # data away from the state the demo is meant to show.
     return [o for o in control_plane.all_orgs(engine)
-            if (o.get('status') or 'active') in RUNNABLE]
+            if (o.get('status') or 'active') in RUNNABLE and not o.get('is_demo')]
 
 
 def call(slug, job, base, key):
@@ -176,7 +179,7 @@ def run(jobs, only=None, quiet=False, product_jobs=()):
     # code assembled the list -- including a future caller that builds it some
     # other way.
     orgs = [o for o in companies()
-            if (o.get('status') or 'active') in RUNNABLE]
+            if (o.get('status') or 'active') in RUNNABLE and not o.get('is_demo')]
     if only:
         orgs = [o for o in orgs if o['slug'] == only]
         if not orgs:
