@@ -1,0 +1,52 @@
+# Rebuild BrightNest, the public demo company, every hour.
+#
+# Anyone entering the demo through akyehq.com/demo is its owner and can change
+# its jobs, customers and money; its dates are also worked out from the day it
+# was built. So it is put back to its seed every hour (see DEMO.md on
+# akye-stable).
+#
+# The rebuild runs inside the Akye app, not here: this only asks for it. The
+# app starts demo_company.py as a process of its own -- the code that is
+# actually deployed -- and answers 202 straight away. Its report goes to the
+# app's log in Railway. So this workflow needs no database credentials, only
+# the key the Automations workflow already uses:
+#
+#   REMINDER_API_KEY   the same value the Akye app has in Railway.
+#
+# Scheduled workflows only run from the default branch, which is why this file
+# lives on main while the code it calls lives on akye-stable.
+name: Demo rebuild
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: demo-rebuild
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Ask Akye to rebuild the demo company
+        env:
+          REMINDER_API_KEY: ${{ secrets.REMINDER_API_KEY }}
+        run: |
+          if [ -z "$REMINDER_API_KEY" ]; then
+            echo "::error::REMINDER_API_KEY is not set in this repository's Actions secrets."
+            exit 1
+          fi
+          code=$(curl -sS -o reply.json -w '%{http_code}' --max-time 30 \
+            -X POST https://akyehq.com/api/rebuild-demo \
+            -H "X-Api-Key: $REMINDER_API_KEY" -H 'Content-Type: application/json' -d '{}')
+          echo "HTTP $code: $(cat reply.json)"
+          if [ "$code" = 403 ]; then
+            echo "::error::403 -- REMINDER_API_KEY here does not match the one the Akye app has."
+          elif [ "$code" = 404 ]; then
+            echo "::error::404 -- the deployed app has no /api/rebuild-demo yet (is the demo change released?)."
+          fi
+          test "$code" = 202
