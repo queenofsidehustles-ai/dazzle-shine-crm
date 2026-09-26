@@ -530,10 +530,10 @@ def test_demo_enter_authenticates_only_inside_demo_tenant(env):
     app = env['app']
     c = app.test_client()
     # The same route on a real tenant is not an authentication back door.
-    real = c.get('/demo-enter', base_url=f'https://{REAL{"}"}.{HOST{"}"}')
+    real = c.get('/demo-enter', base_url=f'https://{REAL}.{HOST}')
     assert real.status_code == 404
     # BrightNest can be entered without exposing or posting its password.
-    entered = c.get('/demo-enter?tour=today', base_url=f'https://brightnest.{HOST{"}"}')
+    entered = c.get('/demo-enter?tour=today', base_url=f'https://brightnest.{HOST}')
     assert entered.status_code in (302, 303)
     assert entered.headers['Location'].endswith('/')
     home = c.get('/', base_url=f'https://brightnest.{HOST{"}"}')
