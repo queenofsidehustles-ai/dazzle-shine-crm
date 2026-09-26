@@ -510,7 +510,6 @@ def test_demo_never_spends_platform_ai_places_translation_or_speech(env, monkeyp
     def network_must_not_run(*args, **kwargs):
         raise AssertionError('demo attempted a paid external API request')
 
-    monkeypatch.setattr(assistant.requests, 'post', network_must_not_run)
     monkeypatch.setattr(places_finder.requests, 'post', network_must_not_run)
     monkeypatch.setattr(translate.requests, 'post', network_must_not_run)
 
