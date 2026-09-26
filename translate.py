@@ -11,6 +11,9 @@ def translate(text, target='es'):
     text = (text or '').strip()
     if not text:
         return text
+    import demo_guard
+    if demo_guard.active():
+        return text
     api_key = os.environ.get('OPENROUTER_API_KEY')
     if not api_key:
         return text
