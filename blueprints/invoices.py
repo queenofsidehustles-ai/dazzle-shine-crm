@@ -27,7 +27,13 @@ def index():
     from blueprints.payments import amount_due
     invs = Booking.query.filter(Booking.invoice_number.isnot(None)) \
                         .order_by(Booking.invoice_issued_at.desc()).all()
-    rows = [{'b': b, 'status': invoicing.status(b), 'due': amount_due(b)} for b in invs]
+    rows = []
+    for b in invs:
+        st = invoicing.status(b)
+        # A paid invoice shows what was paid, as its receipt does, not the
+        # $0.00 still owed on it.
+        rows.append({'b': b, 'status': st,
+                     'due': invoicing.total_paid(b) if st == 'paid' else amount_due(b)})
     counts = {'all': len(invs)}
     for s in ('sent', 'overdue', 'paid', 'draft'):
         counts[s] = sum(1 for r in rows if r['status'] == s)
