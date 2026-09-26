@@ -255,6 +255,10 @@ def demo_enter():
         abort(503)
     bind_authenticated_session(owner)
     session.permanent = True
+    tour = (request.args.get('tour') or 'explore').lower()
+    if tour not in ('today', 'customer', 'team', 'money', 'explore'):
+        tour = 'explore'
+    session['demo_tour'] = tour
     destinations = {
         'today': 'admin.dashboard',
         'customer': 'bookings.clients',
@@ -262,8 +266,7 @@ def demo_enter():
         'money': 'money.pnl',
         'explore': 'admin.dashboard',
     }
-    endpoint = destinations.get((request.args.get('tour') or 'explore').lower(),
-                                'admin.dashboard')
+    endpoint = destinations.get(tour, 'admin.dashboard')
     try:
         return redirect(url_for(endpoint))
     except Exception:
