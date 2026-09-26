@@ -98,6 +98,17 @@ organizations = Table(
     # out of every funnel and sales count and never sent trial reminders; a
     # suspension says nothing about whether an account was real.
     Column('is_test', Boolean),
+    # ── Where they came from ───────────────────────────────────────────────
+    # Written once at signup from the link that first brought the owner to
+    # the site (see attribution.py): the tracking tags on it, the site they
+    # arrived from when there were none, and the company that referred them.
+    # referred_by is a company address, kept only if that company exists.
+    Column('signup_source', String(120)),
+    Column('signup_medium', String(120)),
+    Column('signup_campaign', String(120)),
+    Column('signup_referrer', String(120)),
+    Column('signup_landing', String(120)),
+    Column('referred_by', String(40), index=True),
 )
 
 
@@ -367,7 +378,7 @@ def find(engine, slug):
         return dict(row) if row else None
 
 
-def create(engine, slug, name, owner_email=None):
+def create(engine, slug, name, owner_email=None, attribution=None):
     import tenancy
     if not tenancy.valid_slug(slug):
         raise ValueError(
@@ -385,6 +396,7 @@ def create(engine, slug, name, owner_email=None):
     # asking somebody to imagine what they are not being shown.
     from datetime import timedelta
     now = datetime.utcnow()
+    came_from = _signup_attribution(engine, slug, attribution)
     with engine.begin() as conn:
         conn.execute(insert(organizations).values(
             slug=slug, name=name, schema_name=tenancy.schema_for(slug),
@@ -393,8 +405,34 @@ def create(engine, slug, name, owner_email=None):
             plan='scale',
             subscription_status='trialing',
             trial_ends_at=now + timedelta(days=30),
-            activated_at=None))
+            activated_at=None,
+            **came_from))
     return find(engine, slug)
+
+
+def _signup_attribution(engine, slug, attribution):
+    """The signup_* and referred_by values for a new company.
+
+    A referral is kept only when it names a company that exists and is not
+    the one being created: anybody can type ?ref=, and a reward should not
+    follow a name that was made up or a company referring itself.
+    """
+    a = attribution or {}
+    out = {f'signup_{k}': (a.get(k) or None) and str(a[k])[:120]
+           for k in ('source', 'medium', 'campaign', 'referrer', 'landing')}
+    out = {k: v for k, v in out.items() if v}
+    ref = (a.get('ref') or '').strip().lower()
+    if ref and ref != slug and find(engine, ref):
+        out['referred_by'] = ref
+    return out
+
+
+def referred_by(engine, slug):
+    """The companies that signed up through this company's referral link."""
+    with engine.connect() as conn:
+        return [dict(r) for r in conn.execute(
+            select(organizations).where(organizations.c.referred_by == slug)
+            .order_by(organizations.c.created_at)).mappings()]
 
 
 def mark_provisioned(engine, slug):

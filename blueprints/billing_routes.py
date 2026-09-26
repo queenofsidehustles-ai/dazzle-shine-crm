@@ -117,12 +117,32 @@ def billing_home():
                 org, f'{branding.crm_base()}/billing')
         except Exception:
             portal_url = None
+    referral_url, referred = _referral(org)
     return render_template('admin/billing.html', org=org, state=state,
                            plans=entitlements.PLANS, portal_url=portal_url,
                            can_pay=billing.configured(),
+                           referral_url=referral_url, referred=referred,
                            usage={k: entitlements.usage(k)
                                   for k in ('field_workers', 'jobs_per_month',
                                             'clients')})
+
+
+def _referral(org):
+    """This company's referral link on the product site, and who used it.
+
+    (None, []) on a single-business deployment, where there is no product
+    site to send anybody to.
+    """
+    import product
+    if not org or not product.domain():
+        return None, []
+    host = product.canonical_host() or product.domain()
+    url = f'{product.scheme_for(host)}://{host}/r/{org["slug"]}'
+    try:
+        referred = control_plane.referred_by(billing._engine(), org['slug'])
+    except Exception:
+        referred = []
+    return url, referred
 
 
 @billing_bp.route('/billing/checkout/<plan>', methods=['POST'])

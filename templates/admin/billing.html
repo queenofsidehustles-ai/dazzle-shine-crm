@@ -36,6 +36,43 @@
   </div>
 </div>
 
+{% if referral_url %}
+<div class="card" style="max-width:640px;margin-bottom:16px">
+  <h2 style="margin:0 0 4px;font-size:1.05rem">Refer another cleaning business</h2>
+  <p style="color:var(--muted);margin:0 0 12px">
+    Send this link to an owner you know. When they sign up through it, we'll
+    know it was you.
+  </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <input type="text" id="referral-link" value="{{ referral_url }}" readonly
+           aria-label="Your referral link" style="flex:1 1 220px;min-width:0"
+           onclick="this.select()">
+    <button type="button" class="btn-secondary" id="referral-copy">Copy link</button>
+  </div>
+  <p style="color:var(--softer);font-size:0.86rem;margin:10px 0 0">
+    {% if referred %}
+      {{ referred|length }} {{ 'company has' if referred|length == 1 else 'companies have' }}
+      signed up with your link.
+    {% else %}
+      Nobody has signed up with your link yet.
+    {% endif %}
+  </p>
+</div>
+<script>
+  (function () {
+    var btn = document.getElementById('referral-copy');
+    var box = document.getElementById('referral-link');
+    if (!btn || !box) return;
+    btn.addEventListener('click', function () {
+      box.select();
+      var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy link'; }, 2000); };
+      if (navigator.clipboard) navigator.clipboard.writeText(box.value).then(done, function () { document.execCommand('copy'); done(); });
+      else { document.execCommand('copy'); done(); }
+    });
+  })();
+</script>
+{% endif %}
+
 {% if portal_url %}
 <p style="color:var(--softer);font-size:0.86rem;max-width:640px">
   Card details, invoices and cancelling are handled by Stripe, so your card

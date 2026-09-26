@@ -901,7 +901,10 @@ small.dim, small.muted { font-size:var(--t-xs); }
 }
 
 .cal-dows, .cal-grid {
-  display:grid; grid-template-columns:repeat(7,1fr); gap:var(--s1);
+  /* minmax(0,...) so a column can shrink below its content: with a plain 1fr
+     a day's number and chips set the floor, and on a 320px phone the week
+     came out 1px wider than the screen. */
+  display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:var(--s1);
 }
 .cal-dows { margin-bottom:var(--s1); }
 .cal-dow {

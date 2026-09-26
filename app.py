@@ -197,6 +197,10 @@ def create_app():
     import blueprints.marketing as _marketing
     app.register_blueprint(marketing_bp)
     _marketing.install(app)
+    # Remember which link brought a visitor, so signup can say where each
+    # company came from (tracking tags, referrals). Product site only.
+    import attribution
+    attribution.install(app)
     # Let entitlements read the plan from the control plane rather than
     # from the company's own settings, so a business cannot change what
     # it is paying for by editing its own records.

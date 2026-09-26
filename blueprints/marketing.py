@@ -325,6 +325,46 @@ def _base():
     return product.canonical_base().rstrip('/')
 
 
+def _lead_source():
+    """Where an early-access lead came from, for the Funnel's sources table.
+
+    The link that first brought them (attribution.py) when there is one,
+    written 'campaign:<label>' so funnel.lead_source can tell it from a
+    referrer URL; otherwise the page they were on, as before.
+    """
+    try:
+        import attribution
+        from flask import current_app
+        came = attribution.read(request.cookies, current_app.secret_key)
+        if came:
+            return ('campaign:' + attribution.label(came))[:120]
+    except Exception:
+        pass
+    return (request.referrer or '')[:120] or 'direct'
+
+
+@marketing_bp.route('/r/<ref>')
+def referral(ref):
+    """A company's referral link: akyehq.com/r/<their address>.
+
+    Remembers who sent the visitor and shows them the home page. Checked
+    against the company list only at signup, so a mistyped link still lands
+    somewhere useful instead of on an error.
+    """
+    _require_product_site()
+    import attribution
+    from flask import current_app
+    ref = attribution.clean_ref(ref)
+    response = redirect('/')
+    secret = current_app.secret_key
+    stored = attribution.read(request.cookies, secret)
+    new = attribution.merge(stored, {'ref': ref, 'landing': request.path[:120]}
+                            if ref else {})
+    if new:
+        attribution.write(response, new, secret, secure=request.is_secure)
+    return response
+
+
 @marketing_bp.route('/early-access', methods=['GET', 'POST'])
 def early_access():
     """For somebody who wants it before the door is open.
@@ -359,8 +399,7 @@ def early_access():
             saved = False
             try:
                 saved = control_plane.add_lead(
-                    provisioning._engine(),
-                    source=(request.referrer or '')[:120] or 'direct', **form)
+                    provisioning._engine(), source=_lead_source(), **form)
             except Exception:
                 saved = False
 
