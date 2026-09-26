@@ -339,6 +339,127 @@ How to use this table: treat every Sunday row as a real checkpoint, not busywork
 Ready-to-send copy for each week's outreach lives in the "Weekly Email/SMS Templates" playbook. A condensed, printable version of this whole plan lives in the "Printable Launch Checklist" playbook.
 """),
 
+    ("Week 1 — Prep & Warm Activation", r"""As of 2026-09-26. Week 1 of the 90-Day Day-by-Day Plan, as steps you can work through. The plan's target is **100 signups by Day 7**. This playbook also tracks **activations** (a company assigning its first job), because a signup that never gets that far never starts its trial and never pays.
+
+## What the review tightened
+
+The seven days, their order and the signup targets are the 90-Day plan's. These changes make the same week more likely to work:
+
+| # | Change | Why |
+| --- | --- | --- |
+| 1 | Test the signup path on a phone before the first message | Every week-1 channel is opened on a phone. A first message to a warm contact cannot be sent twice. |
+| 2 | Track activations beside signups | Activation is what the Day 7 review acts on. The console counts a company as activated when it assigns its first job. The Launch Checklist's "profile + first customer + first message/invoice" is not what the console measures. |
+| 3 | Two asks for the warm list: owners try it, connectors introduce | Someone who doesn't run a cleaning business says no to "try my software" but often says yes to "who's one owner I should talk to?" |
+| 4 | One follow-up, 48 hours after every first message | Many replies come from a single polite follow-up. More than one reads as pressure. |
+| 5 | Request group membership on Day 1, post from Day 4 | Admin approval can take days. Requested on Day 4, the groups open in week 2. |
+| 6 | Set up every signup within 24 hours | The trial starts at the first assigned job. A short setup call is the fastest way there. |
+| 7 | Lead with cleaning businesses | Akye is built for cleaning companies (cleaner pay, cleaning checklists, a cleaning price book). The Week 1 templates also name lawn care and handyman businesses. Save those for later, or drop them. |
+| 8 | Settle the card question before Day 3 | Checkout asks for a card even when the total is $0. The Day 3 announcement goes to the biggest audience, so its wording must match what checkout does. |
+| 9 | Decide whether a lifetime deal fits before applying | A lifetime deal sold during the founding-cohort offer competes with it, and Pro's texts and Nana cost money every month. |
+
+## Daily scoreboard
+
+Fill in each evening; it takes 5 minutes. Signups and activations come from Console → Funnel.
+
+| Day | Messages sent | Replies | Signups | Activated | Plan target (running) |
+| --- | --- | --- | --- | --- | --- |
+| 1 Mon | | | | | 15 |
+| 2 Tue | | | | | 30 |
+| 3 Wed | | | | | 44 |
+| 4 Thu | | | | | 58 |
+| 5 Fri | | | | | 72 |
+| 6 Sat | | | | | 86 |
+| 7 Sun | | | | | 100 |
+
+## Before Day 1: test the funnel (20 minutes)
+
+1. On a phone, in a private window, open `akyehq.com/?utm_source=test&utm_campaign=check`.
+2. Sign up a throwaway company. Note anything confusing on a small screen.
+3. In the console, open its company page. It should say "Came from: test · check". Mark it **Test**.
+4. On that company's Billing page, check that the referral link shows and copies.
+
+If any step fails, fix it before Day 1's messages go out.
+
+## Tracking links
+
+Tags work on any akyehq.com page. Every signup is recorded under Console → Funnel → "Where signups came from". Use these exact links so each channel adds up in one row.
+
+| Channel | Link |
+| --- | --- |
+| Texts / DMs | `akyehq.com/?utm_source=sms&utm_medium=text&utm_campaign=founding` |
+| Newsletter | `akyehq.com/how-to-start-a-cleaning-business?utm_source=newsletter&utm_medium=email&utm_campaign=founding` |
+| Facebook | `akyehq.com/?utm_source=facebook&utm_medium=social&utm_campaign=founding` |
+| Instagram | `akyehq.com/?utm_source=instagram&utm_medium=social&utm_campaign=founding` |
+| Founder's posts | `akyehq.com/?utm_source=personal&utm_medium=social&utm_campaign=founding` |
+| Referrals | each owner's own `akyehq.com/r/[their address]`, shown on their Billing page |
+
+## Messages
+
+Start from the Weekly Email/SMS Templates playbook (Week 1), with these three asks. Keep texts under about 320 characters.
+
+- **Owner (asks them to try it):** "Hi [Name], I built Akye, software for cleaning companies: scheduling, crew pay and a free booking page. [Your founding-cohort offer.] Would you try it? I'll set it up with you on a 15-minute call. [link]"
+- **Connector (asks for one introduction):** "Hi [Name], I built Akye, software for cleaning companies. Do you know one cleaning-business owner I should talk to? A name is plenty. [link]"
+- **Follow-up (once, 48 hours later):** "Bumping this in case it got buried. Happy to set it up with you, or to hear it's not a fit."
+
+## Day 1 — Mon: 1. Lock founding-cohort offer terms 2. UTM tracking links; 3. Send warm texts/DMs to top 20 contacts.
+
+1. Lock founding-cohort offer terms. Then create the code in Console → Discounts and check it at checkout with a test account; mark that account Test. Before choosing: a code works on every paid plan, so a 100%-off code would make Scale free as well as Pro; and checkout asks for a card even at $0.
+2. If it isn't done yet, the funnel test above.
+3. Request to join the 15–20 owner groups now (5 minutes). Only request; no posting until Day 4.
+4. Split the top 20 into owners (ask them to try it) and connectors (ask for an introduction).
+5. Send each a personal message on the Texts / DMs link. Never a group text.
+6. Reply within the hour, and offer everyone who says yes a 15-minute setup call.
+
+Done when: the offer terms are locked, the code works at checkout, the group requests are in, all 20 messages are sent, and the scoreboard is filled in.
+
+## Day 2 — Tue: warm outreach batch 2; referral link
+
+1. Reply to Day 1 first, and hold the setup calls booked for today.
+2. Batch 2: the next 30–50 contacts, with the same split and the same messages.
+3. Show every new owner their Billing page → "Refer another cleaning business". Reward: one free month of Scale when someone they referred activates. Check Console → Funnel → Referrals, then create a one-month code in Console → Discounts.
+4. Hold a setup call with every signup within 24 hours. Aim to assign their first job on the call.
+
+Done when: batch 2 is sent, every signup has a call booked, and the scoreboard is filled in.
+
+## Day 3 — Wed: announce to the Queen of Side Hustles audience
+
+1. Settle the card question first: the copy says "card needed to claim, never charged", or checkout skips the card at $0.
+2. Angle for this audience: "Start or run your cleaning business on free software." Solo is free for everyone; the founding-cohort offer is for owners who want more.
+3. Send the email on the Newsletter link, and one post per platform on its own link.
+4. Follow up once with Day 1 contacts who haven't replied.
+5. Clear the replies by the evening.
+
+Many readers are starting out, so expect more signups than activations from this channel. Judge it on Day 7 by its own row in "Where signups came from".
+
+## Day 4 — Thu: owner groups, no pitching
+
+1. In the groups that approved you since Day 1, read the rules (is self-promotion allowed, is there a promo day, do links need approval) and note them.
+2. Post 3–5 genuinely useful answers (pricing a job, paying crew, hiring), with no links.
+3. Write down the questions that keep coming up. They become week 2's posts.
+4. Follow up once with Day 2 contacts who haven't replied.
+
+## Day 5 — Fri: lifetime deal and Product Hunt
+
+1. Decide whether a lifetime deal belongs in the program. It competes with the founding-cohort offer, and Pro's texts (1,000 a month) and Nana cost money every month. If yes, offer it only on a tier without texts and Nana, or cap them.
+2. If yes, submit the AppSumo-style application. Approval takes weeks.
+3. Product Hunt: find a hunter, and draft the tagline, gallery and first comment for the week-3 launch.
+
+## Day 6 — Sat: founder's personal post
+
+1. One post on why you built Akye (the Dazzle & Shine story), on the Founder's posts link. End it with a question so people reply.
+2. Reply to every comment the same day.
+
+## Day 7 — Sun: week review (1 hour)
+
+1. Mark any test signups as Test.
+2. Console → Funnel, 30-day window: signed up, activated, paying. Fill in the scoreboard's last row.
+3. "Where signups came from": rank the channels by activations, not signups.
+4. "Referrals": who sent whom, and which rewards are owed.
+5. Jobs run this week by each new company.
+6. Three decisions for week 2, one line each: the channel to double, the message to rewrite, the setup step to fix.
+
+The 90-Day plan's rule applies: if the week ends more than about 15% behind 100 (under about 85), pull a later tactic forward instead of waiting.
+"""),
     ("Weekly Email/SMS Templates", r"""Ready-to-send SMS/DM and email copy, one set per week of the 90-day plan. Fill in [brackets]; keep SMS under ~320 characters so it doesn't split into multiple texts.
 
 ## Week 1 — Warm activation
