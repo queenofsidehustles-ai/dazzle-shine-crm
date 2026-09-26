@@ -788,17 +788,66 @@ def playbooks():
                            me=request.console_user, counts=_counts(engine))
 
 
-def _render_playbook(content):
-    """Playbook content to HTML -- tables, headings, bold, lists.
+# A step somebody ticks off: "[ ]" or "[x]" at the start of a line, on its own
+# or after a list marker ("- [ ] Call Dana", "1. [x] Lock the offer").
+_TASK_LINE = re.compile(r'^(\s*(?:(?:[-*+]|\d+\.)\s+)?)\[( |x|X)\](?=\s)', re.M)
+# The same steps once Markdown has turned them into HTML: at the start of a
+# list item, a paragraph, or a line after a <br> (nl2br).
+_TASK_HTML = re.compile(r'(<li>\n<p>|<li>|<p>|<br />\n)\[( |x|X)\](?=\s)')
+
+
+def _render_playbook(content, tickable=False):
+    """Playbook content to HTML -- tables, headings, bold, lists, checkboxes.
 
     Escaped before Markdown ever sees it, so a literal `<` typed or pasted
     into a playbook (an HTML tag, a stray `<script>`) renders as text rather
     than running in every other console user's browser. Markdown's own
     syntax (`**`, `|`, `#`, `-`) uses none of the characters escape() touches,
     so real Markdown still renders -- only raw HTML stops working, which a
-    playbook was never written in anyway."""
+    playbook was never written in anyway.
+
+    A step written "[ ]" or "[x]" becomes a checkbox. Each box carries its
+    position among the steps in the text, which is how a tick finds its way
+    back to the right line (see playbook_task). If the boxes found in the HTML
+    and the steps found in the text ever disagree in number, the boxes are
+    shown but cannot be ticked: a tick landing on the wrong step is worse
+    than no tick."""
     escaped = html.escape(content)
-    return markdown.markdown(escaped, extensions=['tables', 'nl2br'])
+    out = markdown.markdown(escaped, extensions=['tables', 'nl2br'])
+    # Inside `code`, Markdown escapes the escape: a link's "&" came out as
+    # the literal text "&amp;". Undo only that second layer -- what is left
+    # is still an escaped entity, so nothing becomes markup.
+    out = re.sub(r'&amp;(amp|lt|gt|quot|#x27);', r'&\1;', out)
+    found = list(_TASK_HTML.finditer(out))
+    usable = tickable and len(found) == len(_TASK_LINE.findall(content))
+    position = iter(range(len(found)))
+
+    def box(m):
+        i, done = next(position), m.group(2) in 'xX'
+        attrs = (f' data-task="{i}"' if usable else ' disabled') + (' checked' if done else '')
+        tag = f'<input type="checkbox" class="pb-box" aria-label="Done"{attrs}>'
+        if m.group(1).startswith('<li>'):
+            # A loose list wraps the item's text in <p>; keep it, class the <li>.
+            return f'<li class="pb-task{" done" if done else ""}">{m.group(1)[4:]}{tag}'
+        return f'{m.group(1)}{tag}'
+
+    return _TASK_HTML.sub(box, out)
+
+
+def _set_task(content, index, done):
+    """The content with step number `index` ticked or unticked, or None."""
+    for i, m in enumerate(_TASK_LINE.finditer(content)):
+        if i == index:
+            start = m.end() - 2              # the character between [ and ]
+            return content[:start] + ('x' if done else ' ') + content[start + 1:]
+    return None
+
+
+def _playbook_rev(doc):
+    """Which version of a playbook a page was showing, so a tick made on a
+    page that is out of date is refused instead of landing on a moved line."""
+    when = doc.get('updated_at') or doc.get('created_at')
+    return when.isoformat() if when else ''
 
 
 @console_bp.route('/playbooks/<int:doc_id>')
@@ -809,11 +858,48 @@ def playbook_view(doc_id):
     if not doc:
         flash('No such playbook.', 'error')
         return redirect(url_for('console.playbooks'))
+    can_edit = (control_plane.rank(request.console_user['role'])
+                >= control_plane.rank('manager'))
     return render_template('console/playbook_view.html', doc=doc,
-                           content_html=_render_playbook(doc['content']),
-                           can_edit=control_plane.rank(request.console_user['role'])
-                                     >= control_plane.rank('manager'),
+                           content_html=_render_playbook(doc['content'],
+                                                         tickable=can_edit),
+                           rev=_playbook_rev(doc), can_edit=can_edit,
                            me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/playbooks/<int:doc_id>/task', methods=['POST'])
+@console_required
+def playbook_task(doc_id):
+    """Tick or untick one step. Saved in the playbook, so everybody sees it.
+
+    Ticking changes the playbook's text, so it takes the same rank as editing
+    it. The page sends the version it was showing; if the playbook has been
+    edited since, the tick is refused and the page asks to be reloaded.
+    """
+    from flask import jsonify
+    if control_plane.rank(request.console_user['role']) < control_plane.rank('manager'):
+        return jsonify(ok=False, error='Only a manager or the owner can tick steps.'), 403
+    engine = _engine()
+    doc = control_plane.console_doc(engine, doc_id)
+    if not doc:
+        return jsonify(ok=False, error='No such playbook.'), 404
+    if (request.form.get('rev') or '') != _playbook_rev(doc):
+        return jsonify(ok=False, error='This playbook changed since the page loaded. '
+                                       'Reload the page and tick it again.'), 409
+    try:
+        index = int(request.form.get('index', ''))
+    except ValueError:
+        index = -1
+    done = request.form.get('done') == '1'
+    content = _set_task(doc['content'], index, done) if index >= 0 else None
+    if content is None:
+        return jsonify(ok=False, error='That step is not in this playbook.'), 400
+    if content != doc['content']:
+        control_plane.update_console_doc(engine, doc_id, doc['title'], content)
+        control_plane.log_console(engine, request.console_user['email'],
+                                  'ticked a step' if done else 'unticked a step',
+                                  doc['title'], f'step {index + 1}')
+    return jsonify(ok=True, rev=_playbook_rev(control_plane.console_doc(engine, doc_id)))
 
 
 @console_bp.route('/playbooks/new', methods=['GET', 'POST'])
