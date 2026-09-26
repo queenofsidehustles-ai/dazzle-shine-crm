@@ -136,6 +136,36 @@
 </table></div>
 {% endif %}
 
+<h2 class="fn-h">Where signups came from</h2>
+{% if f.channels %}
+<div class="fn-scroll"><table class="con">
+  <tr><th>Source</th><th>Signed up</th><th>Activated</th><th>Paying now</th></tr>
+  {% for name, c in f.channels %}
+  <tr><td>{{ name }}</td><td class="fn-num">{{ c.signed_up }}</td>
+      <td class="fn-num">{{ c.activated }}</td><td class="fn-num">{{ c.paying }}</td></tr>
+  {% endfor %}
+</table></div>
+<p class="fn-means" style="margin-top:var(--s2)">From the link that first brought the owner to the site: its <code>utm_source</code> · <code>utm_campaign</code> tags, "referral" for a company's referral link, or the site they came from. "direct" means none of those — including every company from before this was recorded.</p>
+{% else %}
+<div class="con-empty">No signups in this window.</div>
+{% endif %}
+
+<h2 class="fn-h">Referrals</h2>
+{% if f.referrals %}
+<div class="fn-scroll"><table class="con">
+  <tr><th>Referred by</th><th>Companies they sent</th><th>Paying now</th></tr>
+  {% for r in f.referrals %}
+  <tr>
+    <td><a href="{{ url_for('console.company', slug=r.slug) }}">{{ r.name }}</a></td>
+    <td>{% for c in r.companies %}<a href="{{ url_for('console.company', slug=c.slug) }}">{{ c.name or c.slug }}</a>{% if c.is_paying %} (paying){% endif %}{{ ', ' if not loop.last }}{% endfor %}</td>
+    <td class="fn-num">{{ r.paying }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<div class="con-empty">No referral signups in this window. Each company's link is <code>/r/&lt;their address&gt;</code>, shown to the owner on their Billing page.</div>
+{% endif %}
+
 <h2 class="fn-h">Where leads came from</h2>
 {% if f.sources %}
 <div class="fn-scroll"><table class="con">

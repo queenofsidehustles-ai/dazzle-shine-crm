@@ -193,7 +193,8 @@ def signup():
                                    base=base, error=error)
 
         try:
-            token = _create_everything(slug, form, password)
+            token = _create_everything(slug, form, password,
+                                       attribution=_came_from())
         except SlugTaken:
             return render_template(
                 'admin/signup.html', form=form, slug=slug, base=base,
@@ -213,6 +214,11 @@ def signup():
 
         _tell_us(slug, form, base)
         scheme = 'http' if base.startswith('localhost') else 'https'
+        # Where they came from is recorded on the company now; a second
+        # company opened from this browser should not inherit the first's link.
+        import attribution
+        from flask import after_this_request
+        after_this_request(attribution.forget)
         return redirect(f'{scheme}://{slug}.{base}/welcome/{token}')
 
     return render_template('admin/signup.html', form=form, slug='', base=base,
@@ -270,7 +276,17 @@ def _validate(form, slug, password):
     return None
 
 
-def _create_everything(slug, form, password):
+def _came_from():
+    """The link that first brought this browser to the site (attribution.py)."""
+    try:
+        import attribution
+        from flask import current_app
+        return attribution.read(request.cookies, current_app.secret_key)
+    except Exception:
+        return {}
+
+
+def _create_everything(slug, form, password, attribution=None):
     """Build one tenant completely, under a cross-worker per-slug lock."""
     engine = _engine()
     schema = tenancy.schema_for(slug)
@@ -306,7 +322,8 @@ def _create_everything(slug, form, password):
                 db.session.commit()
                 raw, _ = LoginToken.issue(owner, 'signup', email=form['email'])
 
-            control_plane.create(engine, slug, form['business'], form['email'])
+            control_plane.create(engine, slug, form['business'], form['email'],
+                                 attribution=attribution)
             created_org = True
             control_plane.mark_provisioned(engine, slug)
             control_plane.record_tenant_login(engine, form['email'], slug)

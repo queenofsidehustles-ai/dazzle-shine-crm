@@ -11,7 +11,10 @@ product already records in the control plane:
   paying                   subscription_status == 'active'   (Stripe webhooks)
 
 Site visits are not recorded anywhere, so the funnel starts at the first thing
-a person does, not the first thing they see.
+a person does, not the first thing they see. What IS recorded is the link that
+first brought each company's owner to the site -- its tracking tags, or the
+company that referred them (attribution.py) -- so signups can be counted by
+channel.
 
 The stages after signup are not strictly nested -- a company can pick a plan
 before it assigns its first job -- so every stage is shown as a share of
@@ -68,6 +71,8 @@ def lead_source(raw):
     raw = (raw or '').strip()
     if not raw or raw == 'direct':
         return 'direct'
+    if raw.startswith('campaign:'):
+        return raw[len('campaign:'):] or 'direct'   # a tracked link (attribution.label)
     host = urlparse(raw if '//' in raw else f'//{raw}').hostname or raw
     return host[4:] if host.startswith('www.') else host
 
@@ -145,6 +150,35 @@ def compute(orgs, leads, now=None, days=None):
             row['signed_up'] += 1
     sources = sorted(by_source.items(), key=lambda kv: (-kv[1]['leads'], kv[0]))
 
+    # Where companies came from: the link that first brought the owner to
+    # the site (attribution.py), busiest first. Companies from before that
+    # was recorded read "direct", which is what the site knew about them.
+    import attribution
+    paying_slugs = {o['slug'] for o in paying}
+    by_channel = {}
+    for o in companies:
+        row = by_channel.setdefault(attribution.label(o),
+                                    {'signed_up': 0, 'activated': 0, 'paying': 0})
+        row['signed_up'] += 1
+        row['activated'] += 1 if o.get('activated_at') else 0
+        row['paying'] += 1 if o['slug'] in paying_slugs else 0
+    channels = sorted(by_channel.items(),
+                      key=lambda kv: (-kv[1]['signed_up'], kv[0]))
+
+    # Who sent whom, so a referral reward goes to the right company.
+    names = {o['slug']: o.get('name') or o['slug'] for o in orgs}
+    by_referrer = {}
+    for o in companies:
+        if not o.get('referred_by'):
+            continue
+        by_referrer.setdefault(o['referred_by'], []).append(
+            dict(o, is_paying=o['slug'] in paying_slugs))
+    referrals = sorted(
+        ({'slug': slug, 'name': names.get(slug, slug), 'companies': sent,
+          'paying': sum(1 for c in sent if c['is_paying'])}
+         for slug, sent in by_referrer.items()),
+        key=lambda r: (-len(r['companies']), r['name']))
+
     return {
         'since': since,
         'leads': len(window_leads),
@@ -158,6 +192,8 @@ def compute(orgs, leads, now=None, days=None):
                         if _status(o) == 'past_due' and not _gone(o)),
         'days_to_activate': days_to_activate,
         'sources': sources,
+        'channels': channels,
+        'referrals': referrals,
         'follow_up': _follow_up(counted, leads, signup_emails, now, billing),
         'ending_soon_days': ENDING_SOON_DAYS,
         'excluded': sum(1 for o in orgs if o.get('grandfathered')),

@@ -184,10 +184,13 @@ def company(slug):
     if not org:
         flash(f'No company at {slug}.', 'error')
         return redirect(url_for('console.companies'))
+    import attribution
     readable = (org.get('status') or 'active') in console_data.READABLE
     closed_at = org.get('closed_at')
     return render_template(
         'console/company.html', org=org, trial=billing.trial_state(org),
+        came_from=attribution.label(org),
+        referred=control_plane.referred_by(engine, slug),
         snap=console_data.snapshot(slug) if readable else None,
         reports=[f for f in control_plane.all_feedback(engine)
                  if f.get('org_slug') == slug][:20],

@@ -11,6 +11,15 @@
   {% if org.owner_email %} · owner <a href="mailto:{{ org.owner_email }}">{{ org.owner_email }}</a>{% endif %}
   · since {{ org.created_at.strftime('%d %b %Y') if org.created_at }}
 </p>
+<p class="ops-dim" style="margin:calc(-1 * var(--s3)) 0 var(--s4)">
+  Came from: <strong>{{ came_from }}</strong>
+  {%- if org.signup_medium %} · {{ org.signup_medium }}{% endif %}
+  {%- if org.signup_landing %} · landed on <code>{{ org.signup_landing }}</code>{% endif %}
+  {%- if org.referred_by %} · referred by <a href="{{ url_for('console.company', slug=org.referred_by) }}">{{ org.referred_by }}</a>{% endif %}
+  {%- if referred %} · referred {{ referred|length }}:
+    {% for c in referred %}<a href="{{ url_for('console.company', slug=c.slug) }}">{{ c.name or c.slug }}</a>{{ ', ' if not loop.last }}{% endfor %}
+  {%- endif %}
+</p>
 
 <div class="ops-grid">
   <div class="ops-card"><span class="ops-dim">Plan</span>
