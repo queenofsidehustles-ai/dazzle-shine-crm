@@ -522,3 +522,20 @@ def test_demo_never_spends_platform_ai_places_translation_or_speech(env, monkeyp
         assert all(row['place_id'].startswith('demo-medical_office-') for row in rows)
         source = 'Please bring the blue supplies.'
         assert translate.translate(source, target='es') == source
+
+
+def test_demo_enter_authenticates_only_inside_demo_tenant(env):
+    import tenancy
+    from models import User
+    app = env['app']
+    c = app.test_client()
+    # The same route on a real tenant is not an authentication back door.
+    real = c.get('/demo-enter', base_url=f'https://{REAL{"}"}.{HOST{"}"}')
+    assert real.status_code == 404
+    # BrightNest can be entered without exposing or posting its password.
+    entered = c.get('/demo-enter?tour=today', base_url=f'https://brightnest.{HOST{"}"}')
+    assert entered.status_code in (302, 303)
+    assert entered.headers['Location'].endswith('/')
+    home = c.get('/', base_url=f'https://brightnest.{HOST{"}"}')
+    assert home.status_code == 200
+
