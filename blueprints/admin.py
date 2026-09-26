@@ -236,6 +236,40 @@ def reports():
 PENDING_2FA_KEY = 'pending_2fa_user_id'
 
 
+@admin_bp.route('/demo-enter')
+def demo_enter():
+    """Credential-free entry exists only for the explicitly isolated demo.
+
+    No password is embedded in a public page. The server resolves the seeded
+    demo owner inside the demo tenant, binds an ordinary tenant session, then
+    redirects to the chosen read/write product surface. demo_guard is the
+    authorization boundary; a copied URL on any real tenant is a 404.
+    """
+    import demo_guard
+    if not demo_guard.active():
+        abort(404)
+    from models import User
+    from auth import bind_authenticated_session
+    owner = User.query.filter_by(role='owner', active=True).first()
+    if not owner:
+        abort(503)
+    bind_authenticated_session(owner)
+    session.permanent = True
+    destinations = {
+        'today': 'admin.dashboard',
+        'customer': 'admin.clients',
+        'team': 'team.team',
+        'money': 'money.money',
+        'explore': 'admin.dashboard',
+    }
+    endpoint = destinations.get((request.args.get('tour') or 'explore').lower(),
+                                'admin.dashboard')
+    try:
+        return redirect(url_for(endpoint))
+    except Exception:
+        return redirect(url_for('admin.dashboard'))
+
+
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
     # The product's root domain never reaches this view for /login at all --
