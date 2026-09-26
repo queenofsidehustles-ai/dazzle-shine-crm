@@ -6,7 +6,9 @@ DATABASE_URL in the environment, since this writes to the control plane:
     railway run python3 seed_growth_playbook.py
 
 Safe to run again: it skips any title that is already there rather than
-making a duplicate.
+making a duplicate. The one exception is a playbook still exactly as an
+earlier run of this script wrote it (see UNTOUCHED), which is brought up to
+date; anything edited or ticked in the console is left alone.
 """
 import sys
 
@@ -359,7 +361,7 @@ The seven days, their order and the signup targets are the 90-Day plan's. These 
 
 ## Daily scoreboard
 
-Fill in each evening; it takes 5 minutes. Signups and activations come from Console → Funnel.
+Fill in each evening (5 minutes). Tick the steps below as you go; the console saves the ticks for everyone. Signups and activations come from Console → Funnel.
 
 | Day | Messages sent | Replies | Signups | Activated | Plan target (running) |
 | --- | --- | --- | --- | --- | --- |
@@ -373,12 +375,12 @@ Fill in each evening; it takes 5 minutes. Signups and activations come from Cons
 
 ## Before Day 1: test the funnel (20 minutes)
 
-1. On a phone, in a private window, open `akyehq.com/?utm_source=test&utm_campaign=check`.
-2. Sign up a throwaway company. Note anything confusing on a small screen.
-3. In the console, open its company page. It should say "Came from: test · check". Mark it **Test**.
-4. On that company's Billing page, check that the referral link shows and copies.
+1. [ ] On a phone, in a private window, open `akyehq.com/?utm_source=test&utm_campaign=check`.
+2. [ ] Sign up a throwaway company. Note anything confusing on a small screen.
+3. [ ] In the console, open its company page. It should say "Came from: test · check". Mark it **Test**.
+4. [ ] On that company's Billing page, check that the referral link shows and copies.
 
-If any step fails, fix it before Day 1's messages go out.
+**If any step fails,** fix it before Day 1's messages go out.
 
 ## Tracking links
 
@@ -403,62 +405,62 @@ Start from the Weekly Email/SMS Templates playbook (Week 1), with these three as
 
 ## Day 1 — Mon: 1. Lock founding-cohort offer terms 2. UTM tracking links; 3. Send warm texts/DMs to top 20 contacts.
 
-1. Lock founding-cohort offer terms. Then create the code in Console → Discounts and check it at checkout with a test account; mark that account Test. Before choosing: a code works on every paid plan, so a 100%-off code would make Scale free as well as Pro; and checkout asks for a card even at $0.
-2. If it isn't done yet, the funnel test above.
-3. Request to join the 15–20 owner groups now (5 minutes). Only request; no posting until Day 4.
-4. Split the top 20 into owners (ask them to try it) and connectors (ask for an introduction).
-5. Send each a personal message on the Texts / DMs link. Never a group text.
-6. Reply within the hour, and offer everyone who says yes a 15-minute setup call.
+1. [ ] Lock founding-cohort offer terms. Then create the code in Console → Discounts and check it at checkout with a test account; mark that account Test. Before choosing: a code works on every paid plan, so a 100%-off code would make Scale free as well as Pro; and checkout asks for a card even at $0.
+2. [ ] If it isn't done yet, the funnel test above.
+3. [ ] Request to join the 15–20 owner groups now (5 minutes). Only request; no posting until Day 4.
+4. [ ] Split the top 20 into owners (ask them to try it) and connectors (ask for an introduction).
+5. [ ] Send each a personal message on the Texts / DMs link. Never a group text.
+6. [ ] Reply within the hour, and offer everyone who says yes a 15-minute setup call.
 
-Done when: the offer terms are locked, the code works at checkout, the group requests are in, all 20 messages are sent, and the scoreboard is filled in.
+**Done when:** the offer terms are locked, the code works at checkout, the group requests are in, all 20 messages are sent, and the scoreboard is filled in.
 
 ## Day 2 — Tue: warm outreach batch 2; referral link
 
-1. Reply to Day 1 first, and hold the setup calls booked for today.
-2. Batch 2: the next 30–50 contacts, with the same split and the same messages.
-3. Show every new owner their Billing page → "Refer another cleaning business". Reward: one free month of Scale when someone they referred activates. Check Console → Funnel → Referrals, then create a one-month code in Console → Discounts.
-4. Hold a setup call with every signup within 24 hours. Aim to assign their first job on the call.
+1. [ ] Reply to Day 1 first, and hold the setup calls booked for today.
+2. [ ] Batch 2: the next 30–50 contacts, with the same split and the same messages.
+3. [ ] Show every new owner their Billing page → "Refer another cleaning business". Reward: one free month of Scale when someone they referred activates. Check Console → Funnel → Referrals, then create a one-month code in Console → Discounts.
+4. [ ] Hold a setup call with every signup within 24 hours. Aim to assign their first job on the call.
 
-Done when: batch 2 is sent, every signup has a call booked, and the scoreboard is filled in.
+**Done when:** batch 2 is sent, every signup has a call booked, and the scoreboard is filled in.
 
 ## Day 3 — Wed: announce to the Queen of Side Hustles audience
 
-1. Settle the card question first: the copy says "card needed to claim, never charged", or checkout skips the card at $0.
-2. Angle for this audience: "Start or run your cleaning business on free software." Solo is free for everyone; the founding-cohort offer is for owners who want more.
-3. Send the email on the Newsletter link, and one post per platform on its own link.
-4. Follow up once with Day 1 contacts who haven't replied.
-5. Clear the replies by the evening.
+1. [ ] Settle the card question first: the copy says "card needed to claim, never charged", or checkout skips the card at $0.
+2. [ ] Angle for this audience: "Start or run your cleaning business on free software." Solo is free for everyone; the founding-cohort offer is for owners who want more.
+3. [ ] Send the email on the Newsletter link, and one post per platform on its own link.
+4. [ ] Follow up once with Day 1 contacts who haven't replied.
+5. [ ] Clear the replies by the evening.
 
-Many readers are starting out, so expect more signups than activations from this channel. Judge it on Day 7 by its own row in "Where signups came from".
+**Note:** many readers are starting out, so expect more signups than activations from this channel. Judge it on Day 7 by its own row in "Where signups came from".
 
 ## Day 4 — Thu: owner groups, no pitching
 
-1. In the groups that approved you since Day 1, read the rules (is self-promotion allowed, is there a promo day, do links need approval) and note them.
-2. Post 3–5 genuinely useful answers (pricing a job, paying crew, hiring), with no links.
-3. Write down the questions that keep coming up. They become week 2's posts.
-4. Follow up once with Day 2 contacts who haven't replied.
+1. [ ] In the groups that approved you since Day 1, read the rules (is self-promotion allowed, is there a promo day, do links need approval) and note them.
+2. [ ] Post 3–5 genuinely useful answers (pricing a job, paying crew, hiring), with no links.
+3. [ ] Write down the questions that keep coming up. They become week 2's posts.
+4. [ ] Follow up once with Day 2 contacts who haven't replied.
 
 ## Day 5 — Fri: lifetime deal and Product Hunt
 
-1. Decide whether a lifetime deal belongs in the program. It competes with the founding-cohort offer, and Pro's texts (1,000 a month) and Nana cost money every month. If yes, offer it only on a tier without texts and Nana, or cap them.
-2. If yes, submit the AppSumo-style application. Approval takes weeks.
-3. Product Hunt: find a hunter, and draft the tagline, gallery and first comment for the week-3 launch.
+1. [ ] Decide whether a lifetime deal belongs in the program. It competes with the founding-cohort offer, and Pro's texts (1,000 a month) and Nana cost money every month. If yes, offer it only on a tier without texts and Nana, or cap them.
+2. [ ] If yes, submit the AppSumo-style application. Approval takes weeks.
+3. [ ] Product Hunt: find a hunter, and draft the tagline, gallery and first comment for the week-3 launch.
 
 ## Day 6 — Sat: founder's personal post
 
-1. One post on why you built Akye (the Dazzle & Shine story), on the Founder's posts link. End it with a question so people reply.
-2. Reply to every comment the same day.
+1. [ ] One post on why you built Akye (the Dazzle & Shine story), on the Founder's posts link. End it with a question so people reply.
+2. [ ] Reply to every comment the same day.
 
 ## Day 7 — Sun: week review (1 hour)
 
-1. Mark any test signups as Test.
-2. Console → Funnel, 30-day window: signed up, activated, paying. Fill in the scoreboard's last row.
-3. "Where signups came from": rank the channels by activations, not signups.
-4. "Referrals": who sent whom, and which rewards are owed.
-5. Jobs run this week by each new company.
-6. Three decisions for week 2, one line each: the channel to double, the message to rewrite, the setup step to fix.
+1. [ ] Mark any test signups as Test.
+2. [ ] Console → Funnel, 30-day window: signed up, activated, paying. Fill in the scoreboard's last row.
+3. [ ] "Where signups came from": rank the channels by activations, not signups.
+4. [ ] "Referrals": who sent whom, and which rewards are owed.
+5. [ ] Jobs run this week by each new company.
+6. [ ] Three decisions for week 2, one line each: the channel to double, the message to rewrite, the setup step to fix.
 
-The 90-Day plan's rule applies: if the week ends more than about 15% behind 100 (under about 85), pull a later tactic forward instead of waiting.
+**Rule from the 90-Day plan:** if the week ends more than about 15% behind 100 (under about 85), pull a later tactic forward instead of waiting.
 """),
     ("Weekly Email/SMS Templates", r"""Ready-to-send SMS/DM and email copy, one set per week of the 90-day plan. Fill in [brackets]; keep SMS under ~320 characters so it doesn't split into multiple texts.
 
@@ -643,15 +645,38 @@ Subject: Today's the last day
 ]
 
 
+# Earlier versions of a playbook this script wrote, by the sha256 of their
+# content. A playbook still exactly as one of these was never edited in the
+# console, so running the script again brings it up to date. One that differs
+# at all has been edited (or ticked) by someone, and is left alone.
+UNTOUCHED = {
+    "Week 1 — Prep & Warm Activation": {
+        # First version, without checkboxes (PR #36).
+        '2b69c3d272aee6a0a1de25979d7ae39bde13eb25624050dda287fca5e22f01f9',
+    },
+}
+
+
+def _fingerprint(content):
+    import hashlib
+    return hashlib.sha256((content or '').strip().encode()).hexdigest()
+
+
 def main():
     engine = provisioning._engine()
     control_plane.ensure_table(engine)
 
-    existing = {d['title'] for d in control_plane.all_console_docs(engine)}
+    existing = {d['title']: d for d in control_plane.all_console_docs(engine)}
     added = 0
     for i, (title, content) in enumerate(DOCS):
         if title in existing:
-            print(f'  ⏭  already there: {title}')
+            doc = existing[title]
+            if _fingerprint(doc['content']) in UNTOUCHED.get(title, ()):
+                control_plane.update_console_doc(engine, doc['id'], title, content.strip())
+                print(f'  ✅ updated to the latest version: {title}')
+                added += 1
+            else:
+                print(f'  ⏭  already there: {title}')
             continue
         control_plane.add_console_doc(
             engine, title, content.strip(), created_by='seed script',
@@ -659,7 +684,7 @@ def main():
         print(f'  ✅ added: {title}')
         added += 1
 
-    print(f'\n{added} playbook(s) added. View them at /console/playbooks.')
+    print(f'\n{added} playbook(s) added or updated. View them at /console/playbooks.')
     return 0
 
 
