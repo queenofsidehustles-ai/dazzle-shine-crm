@@ -1,5 +1,5 @@
 import json
-from flask import Blueprint, render_template, request, session, redirect, url_for
+from flask import Blueprint, render_template, request, session, redirect, url_for, abort
 from entitlements import requires_plan
 from auth import login_required, owner_required, authenticate, is_owner_session
 from models import Booking, Client, Lead
@@ -250,9 +250,14 @@ def demo_enter():
         abort(404)
     from models import User
     from auth import bind_authenticated_session
-    owner = User.query.filter_by(role='owner', active=True).first()
+    import demo_company
+    # Sarah, the owner the seed made -- not whichever owner row happens to
+    # come back first if somebody has added another.
+    owner = (User.query.filter_by(username=demo_company.OWNER[1], active=True).first()
+             or User.query.filter_by(role='owner', active=True).order_by(User.id).first())
     if not owner:
         abort(503)
+    session.clear()
     bind_authenticated_session(owner)
     session.permanent = True
     tour = (request.args.get('tour') or 'explore').lower()
@@ -328,8 +333,10 @@ def login():
         import product
         root = product.domain()
         switch_company_url = f'{product.scheme_for(root)}://{root}/workspace?forget=1'
+    import demo_guard
     return render_template('admin/login.html', error=error, not_set_up=not_set_up,
-                           switch_company_url=switch_company_url)
+                           switch_company_url=switch_company_url,
+                           demo_entry=demo_guard.active())
 
 
 def _login_2fa_step():

@@ -114,6 +114,9 @@
     {% if switch_company_url %}
     <a href="{{ switch_company_url }}" class="forgot">Not your company? Find it by email</a>
     {% endif %}
+    {% if demo_entry %}
+    <a href="{{ url_for('admin.demo_enter') }}" class="forgot">Just looking? Enter the demo →</a>
+    {% endif %}
   </div>
 </body>
 </html>

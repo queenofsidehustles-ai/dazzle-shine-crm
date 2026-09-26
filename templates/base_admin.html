@@ -186,7 +186,7 @@
         'explore': ('Explore BrightNest freely', 'Everything here is fictional demo data. Use the real Akye navigation and try the product without contacting anyone or spending provider credits.')
       } %}
       {% set dc = demo_copy.get(session.get('demo_tour'), demo_copy['explore']) %}
-      <div class="demo-tourbar"><div><strong>Demo · {{ dc[0] }}</strong><span>{{ dc[1] }}</span></div><a href="{{ url_for('marketing.demo') }}">Choose another story →</a></div>
+      <div class="demo-tourbar"><div><strong>Demo · {{ dc[0] }}</strong><span>{{ dc[1] }}</span></div><a href="{{ DEMO_PAGE_URL() }}">Choose another story →</a></div>
       {% endif %}
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, msg in messages %}

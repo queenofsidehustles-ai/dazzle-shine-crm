@@ -536,7 +536,7 @@ def test_demo_enter_authenticates_only_inside_demo_tenant(env):
     entered = c.get('/demo-enter?tour=today', base_url=f'https://brightnest.{HOST}')
     assert entered.status_code in (302, 303)
     assert entered.headers['Location'].endswith('/')
-    home = c.get('/', base_url=f'https://brightnest.{HOST{"}"}')
+    home = c.get('/', base_url=f'https://brightnest.{HOST}')
     assert home.status_code == 200
 
 
@@ -558,8 +558,9 @@ def test_demo_entry_security_contract_source():
     assert 'abort(404)' in route
     assert "filter_by(role='owner', active=True)" in route
     assert 'bind_authenticated_session(owner)' in route
-    assert "request.form" not in route
-    assert "password" not in route.lower()
+    code = route.split('"""')[2]          # the body, not the docstring
+    assert "request.form" not in code and "request.values" not in code
+    assert "password" not in code.lower()
 
 
 def test_the_paths_a_visitor_actually_takes_spend_nothing(env, monkeypatch):
@@ -582,3 +583,33 @@ def test_the_paths_a_visitor_actually_takes_spend_nothing(env, monkeypatch):
         r = c.post(path, base_url=base, data=data, follow_redirects=True)
         assert r.status_code == 200 and 'switched off in the demo' in r.get_data(as_text=True), path
     assert net.calls[before:] == []
+
+
+def test_the_public_demo_page_and_its_way_back(env):
+    """/demo on the product site sends visitors to the demo's own address; the
+    in-app "choose another story" link goes back to the product site (on the
+    demo's address /demo is not a page); and after a rebuild has signed them
+    out, the demo's login page offers the way back in -- only the demo's."""
+    import tenancy
+    from models import User
+    app = env['app']
+    page = app.test_client().get('/demo', base_url=f'https://{HOST}')
+    body = page.get_data(as_text=True)
+    assert page.status_code == 200
+    assert f'brightnest.{HOST}/demo-enter?tour=today' in body and 'Live demo' in body
+    home = app.test_client().get('/', base_url=f'https://{HOST}').get_data(as_text=True)
+    assert 'Try interactive demo' in home and 'Live demo' in home
+
+    c = app.test_client()
+    r = c.get('/demo-enter?tour=money', base_url=f'https://brightnest.{HOST}', follow_redirects=True)
+    body = r.get_data(as_text=True)
+    assert r.status_code == 200 and 'Demo · See the money' in body
+    assert f'href="https://{HOST}/demo">Choose another story' in body
+    with c.session_transaction(base_url=f'https://brightnest.{HOST}') as s:
+        with app.app_context(), tenancy.use_tenant('brightnest'):
+            assert User.query.get(s['user_id']).username == 'sarah@brightnest.example'
+
+    demo_login = app.test_client().get('/login', base_url=f'https://brightnest.{HOST}')
+    real_login = app.test_client().get('/login', base_url=f'https://{REAL}.{HOST}')
+    assert 'Enter the demo' in demo_login.get_data(as_text=True)
+    assert 'Enter the demo' not in real_login.get_data(as_text=True)
