@@ -46,6 +46,16 @@ def index():
                            platforms=list(_PLATFORM.keys()))
 
 
+def _demo_refused():
+    """AI writing is paid per request on the platform's key; the demo never spends it."""
+    import demo_guard
+    if demo_guard.active():
+        flash('AI writing is switched off in the demo — each draft would be paid for '
+              'on a real AI service.', 'info')
+        return True
+    return False
+
+
 @content_bp.route('/generate', methods=['POST'])
 @login_required
 def generate():
@@ -53,6 +63,8 @@ def generate():
     platform = request.form.get('platform', 'instagram')
     context = request.form.get('context', '').strip()
 
+    if _demo_refused():
+        return redirect(url_for('content.index'))
     api_key = os.environ.get('OPENROUTER_API_KEY')
     if not api_key:
         flash('Add OPENROUTER_API_KEY to Railway to enable AI content generation.', 'error')
@@ -113,6 +125,8 @@ def generate_ads():
     location = (request.form.get('location') or branding.city_line() or '').strip()
     service_focus = request.form.get('service_focus', 'house cleaning').strip()
     usp = request.form.get('usp', '').strip()
+    if _demo_refused():
+        return redirect(url_for('content.index'))
     api_key = os.environ.get('OPENROUTER_API_KEY')
     if not api_key:
         flash('Add OPENROUTER_API_KEY to Railway to enable AI ad generation.', 'error')

@@ -560,3 +560,25 @@ def test_demo_entry_security_contract_source():
     assert 'bind_authenticated_session(owner)' in route
     assert "request.form" not in route
     assert "password" not in route.lower()
+
+
+def test_the_paths_a_visitor_actually_takes_spend_nothing(env, monkeypatch):
+    """Not just the key helpers: the routes behind Nana and AI writing.
+
+    A question to Nana goes assistant.ask -> agent.run, which read the platform
+    key itself; AI posts and ads read it in the route. With a platform key
+    present and every network call recorded, none of them may reach out."""
+    import agent
+    import assistant
+    import demo_guard
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'platform-openrouter-key')
+    net = env['net']
+    before = len(net.calls)
+    with env['app'].app_context(), demo_guard.forced():
+        assert agent.run('How much did we make this week?') == {'say': assistant.TROUBLE['demo']}
+    c, base = _demo_client(env['app'])
+    for path, data in (('/content/generate', {'post_type': 'tip', 'platform': 'instagram'}),
+                       ('/content/generate-ads', {'location': 'Austin, TX'})):
+        r = c.post(path, base_url=base, data=data, follow_redirects=True)
+        assert r.status_code == 200 and 'switched off in the demo' in r.get_data(as_text=True), path
+    assert net.calls[before:] == []
