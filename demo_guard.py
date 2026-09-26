@@ -31,6 +31,9 @@ where the next visitor works.
 
   account password / 2FA    refused (blueprints/account.py)
   Settings -> Connections   saving keys refused (blueprints/settings.py)
+  Settings -> Business      refused: the name, contact details and branding
+                            every visitor (and the public booking page) sees
+                            cannot be rewritten by one of them.
 
 `active()` answers "is the work in hand a demo company's?" three ways, and any
 one of them is enough:
@@ -46,6 +49,8 @@ import contextvars
 import time
 
 BLOCKED_DETAIL = 'Demo company — not sent. Demo companies never contact anybody.'
+IDENTITY_DETAIL = ('This is the demo company, so its name, contact details, branding '
+                   'and booking page stay as they are for every visitor.')
 FIXED_DETAIL = ('This is the demo company, so its sign-in and connections stay '
                 'as they are for everyone who is given them.')
 STAGING_SUFFIX = '__next'

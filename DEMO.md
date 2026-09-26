@@ -33,22 +33,25 @@ why it is run over `railway ssh`, with the app's own Python.)
 | `DEMO_SLUG` | The company's address. Defaults to `brightnest`. |
 
 Set the two passwords as Railway variables. If they are not set, a rebuild
-makes one-off passwords and prints them once — they are never written to the
-repository, and they change on every rebuild.
+keeps the passwords the logins already have; only the very first build, with
+nothing to keep, makes one-off passwords and prints them once. Nothing is ever
+written to the repository.
 
 Sign in at `https://brightnest.<your domain>/login`.
 
-### Rebuild it every day
+### It rebuilds itself every hour
 
 Every date in the demo is worked out from the day it is built: the jobs on
 "today", the cleaner who clocked in at 8:04, the leads that came in yesterday.
-The next day those are yesterday's, still marked as not done. **Rebuild it
-daily** (and before any recording or launch). The dashboard reads "today" from
-the server's clock, which on Railway is UTC, so the cleanest time is just after
-00:00 UTC (7 PM in Austin in summer). No schedule for this is set up yet — see
-*Remaining* below.
+And anyone who enters through `/demo` is the owner, free to change things. So
+it is rebuilt every hour, at seven minutes past, by the **Demo rebuild**
+GitHub workflow (`.github/workflows/demo-rebuild.yml` on `main`, running the
+`akye-stable` code against the database in `AKYE_DATABASE_URL`, the same
+secret the Automations workflow uses). It can also be run by hand from the
+Actions tab. The first run after midnight UTC moves "today" on.
 
-A rebuild signs out anyone signed in to the demo (the passwords are set afresh).
+A rebuild keeps the passwords and the people already in the demo stay signed
+in; anything a visitor changed is gone.
 
 ### What a rebuild touches
 
@@ -143,6 +146,7 @@ asking explicitly.
 | Stripe webhook | `blueprints/api.py` | Refused without a secret, which the demo never has, so a forged "payment succeeded" cannot be accepted. |
 | Daily automations | `scheduler.companies()` | Never run for the demo, so nothing is sent and its state does not drift. |
 | Password, two-factor, connection keys | `blueprints/account.py`, `settings.py` | Cannot be changed, so one visitor cannot lock out the next or leave real keys behind. |
+| Business name, contact details, branding | `settings.py` (Settings → Business) | Cannot be changed, so one visitor cannot rename or deface the company, or its public booking page, for everyone after them. |
 | Funnel and Sales numbers | `is_test` | Left out. A demo company stays a test account even if the console is asked otherwise. |
 | Contact details | the seed | `@example.com` / `@brightnest.example` addresses and 555-01xx numbers, reserved for fiction — they reach nobody. |
 
@@ -223,12 +227,12 @@ are configured.
 | D5 | Email to Akye's own support inbox still goes. | Crash alerts and feedback from prospects are the point of a launch; they contact nobody fictional. | Blocking all email. |
 | D6 | Staging schema, verify, then one-transaction swap; advisory lock. | A rebuild is all-or-nothing and there is never a moment without a demo; two at once cannot collide. | Deleting rows in place. |
 | D7 | Refuse if the address belongs to a company not marked as the demo. | The rebuild drops a schema; it must never be pointed at a real one. | Trusting the operator. |
-| D8 | Dates relative to the day of the build, using the same "today" as the dashboard. | Always "this morning", whenever it is built. Costs a daily rebuild. | Fixed dates, which age instantly. |
+| D8 | Dates relative to the day of the build, using the same "today" as the dashboard. | Always "this morning", whenever it is built. Costs a scheduled rebuild (hourly). | Fixed dates, which age instantly. |
 | D9 | A fixed random seed. | The same company every time; tests can compare rebuilds exactly. | Fresh randomness per build. |
 | D10 | Built through pricing, quoting, payments, invoicing, recurring and pay services where they exist; `verify()` checks the rest. | Money and pay follow the app's own rules, so Reports, P&L and Payroll agree. | Writing every table by hand. |
 | D11 | All cleaners hourly at the company's labor rate. | Payroll, job pay and timesheets line up on every page. | A mix of hourly and percentage pay. |
 | D12 | Only reserved fictional contact details (example.com, `.example`, 555-01xx). | Nothing can reach a real person even if every guard failed. | Realistic-looking real domains. |
-| D13 | Passwords from Railway variables; one-off ones printed if unset. | No credential in the repository. | A known password in code. |
+| D13 | Passwords from Railway variables; if unset, a rebuild keeps the existing ones (one-off ones only on a first build). | No credential in the repository or in a CI log; a scheduled rebuild never locks anybody out. | A known password in code. |
 | D14 | Password, two-factor and connection keys are fixed for the demo. | A shared login must not be lockable, or left holding a visitor's real keys. | Trusting visitors. |
 | D15 | Automations are on but never run. | The settings show what Akye does; running them would change the demo's state (and could only fail to send). History is seeded instead. | Turning automations off. |
 | D16 | Stripe, email and texting show as "not connected". | True — and the reason no card is taken. | Faking a connected state. |
@@ -240,9 +244,9 @@ are configured.
 
 ## Remaining
 
-- **No daily rebuild is scheduled.** Adding one writes to production, so it is
-  left for an explicit decision (a Railway cron running
-  `/opt/venv/bin/python demo_company.py`, just after 00:00 UTC).
+- **Between hourly rebuilds, visitors share one company.** Jobs, customers
+  and invoices can still be changed or deleted by one visitor and seen by the
+  next, for up to an hour.
 - **The dashboard's "today" is the server's date (UTC)**, not Austin's — for
   every company, not just the demo. Between 7 PM and midnight in Austin it
   already shows tomorrow.

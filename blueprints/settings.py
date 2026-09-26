@@ -479,6 +479,10 @@ def business():
               'commercial_reply_to', 'commercial_phone', 'commercial_website',
               'commercial_dark', 'commercial_accent', 'commercial_accent_text',
               'commercial_domain_verified']
+    import demo_guard
+    if request.method == 'POST' and demo_guard.active():
+        flash(demo_guard.IDENTITY_DETAIL, 'info')
+        return redirect(url_for('settings.business'))
     if request.method == 'POST':
         # Save only the fields this particular form actually submitted. The page
         # has several separate forms, and writing every field on every save

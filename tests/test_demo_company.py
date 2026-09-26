@@ -613,3 +613,39 @@ def test_the_public_demo_page_and_its_way_back(env):
     real_login = app.test_client().get('/login', base_url=f'https://{REAL}.{HOST}')
     assert 'Enter the demo' in demo_login.get_data(as_text=True)
     assert 'Enter the demo' not in real_login.get_data(as_text=True)
+
+
+def test_a_visitor_cannot_rename_or_rebrand_it(env):
+    """Anyone can enter as the owner. The name, contact details and branding
+    every later visitor (and the public booking page) sees stay as seeded."""
+    import tenancy
+    from models import BusinessSetting
+    c, base = _demo_client(env['app'])
+    r = c.post('/settings/business', base_url=base, follow_redirects=True,
+               data={'business_name': 'Vandalised Co', 'phone': '(555) 000-0000',
+                     'brand_tagline': 'defaced'})
+    assert r.status_code == 200 and 'stay as they are for every visitor' in r.get_data(as_text=True)
+    with env['app'].app_context(), tenancy.use_tenant('brightnest'):
+        assert BusinessSetting.get('business_name') == 'BrightNest Cleaning Co.'
+        assert BusinessSetting.get('brand_tagline') != 'defaced'
+    book = env['app'].test_client().get('/book', base_url=base).get_data(as_text=True)
+    assert 'Vandalised' not in book
+
+
+def test_a_scheduled_rebuild_keeps_the_passwords_and_prints_none(env, monkeypatch):
+    """The hourly rebuild runs with no password in its environment. It must
+    keep the passwords the logins already have -- not lock the owner out, and
+    not print a fresh one into a CI log every hour."""
+    import tenancy
+    from extensions import db
+    from models import User
+    monkeypatch.delenv('DEMO_OWNER_PASSWORD', raising=False)
+    monkeypatch.delenv('DEMO_OPS_PASSWORD', raising=False)
+    said = []
+    env['demo'].build(say=said.append)
+    out = '\n'.join(said)
+    assert out.count('password unchanged') == 2 and 'one-off' not in out
+    with env['app'].app_context(), tenancy.use_tenant('brightnest'):
+        assert User.query.filter_by(username='sarah@brightnest.example').first().check_password(DEMO_PW)
+        db.session.remove()
+    _demo_client(env['app'])          # and the owner still signs in
