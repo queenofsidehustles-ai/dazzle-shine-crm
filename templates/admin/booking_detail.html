@@ -1163,6 +1163,27 @@
       <a href="{{ url_for('bookings.email_customer', booking_id=booking.id) }}"
          class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">✉️ Email the customer</a>
 
+      {# A deposit taken somewhere else — the old CRM, cash, Zelle. Marking the
+         booking paid in full would say the balance was collected too. #}
+      {% if not booking.deposit_paid and not booking.paid_at %}
+      <form method="POST" action="{{ url_for('bookings.record_deposit_route', booking_id=booking.id) }}"
+            style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"
+            onsubmit="return confirm('Record a deposit that has already been paid? The customer is not charged and is sent nothing.')">
+        <input type="number" name="amount" step="0.01" min="0.01" required
+               value="{{ '%.2f' % deposit_amount }}" title="What they actually paid"
+               style="flex:1;min-width:110px;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
+        <input type="date" name="paid_on" title="The day they paid it"
+               style="padding:9px 10px;border:1px solid var(--border);border-radius:8px;width:150px">
+        <button type="submit" class="btn btn-outline" style="flex-shrink:0">✓ Deposit already paid</button>
+        <input type="text" name="note" placeholder="Where it was paid — e.g. old CRM, Stripe ch_…"
+               style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:0.82rem">
+        <p style="font-size:0.78rem;color:var(--softer);margin:0">
+          For money taken elsewhere. Nothing is charged and no receipt is sent —
+          the balance stays owed.
+        </p>
+      </form>
+      {% endif %}
+
       <!-- Mark as paid manually (cash / Zelle / etc.) -->
       <form method="POST" action="{{ url_for('bookings.mark_paid_route', booking_id=booking.id) }}"
             style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"

@@ -1223,6 +1223,66 @@ def remove_crew(booking_id, crew_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+@bookings_bp.route('/<int:booking_id>/record-deposit', methods=['POST'])
+@login_required
+def record_deposit_route(booking_id):
+    """Record a deposit taken somewhere else — another system, cash, Zelle.
+
+    mark-paid below settles a booking in full, which is the wrong story for a
+    job that has had its deposit and still owes a balance. Re-entering a
+    booking that was paid elsewhere had no way to say "fifty of this is already
+    in" other than marking the whole thing paid, so the money reported was
+    wrong either way.
+
+    Never sends the customer anything: they paid, and were receipted, wherever
+    this money actually changed hands."""
+    from datetime import datetime as _dt
+    booking = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    if booking.deposit_paid:
+        flash('A deposit is already recorded on this booking.', 'warning')
+        return back
+    if booking.paid_at:
+        flash('That booking is already settled in full.', 'warning')
+        return back
+
+    try:
+        amount = round(float(request.form.get('amount') or 0), 2)
+    except ValueError:
+        amount = 0
+    if amount <= 0:
+        flash('Enter the amount that was actually paid.', 'warning')
+        return back
+    price = float(booking.price or 0)
+    if price and amount > price:
+        flash(f'That is more than the job\'s price of ${price:.2f}. '
+              f'Use “Mark paid” if the whole job has been paid.', 'warning')
+        return back
+
+    from blueprints.payments import collected, sync_balance
+    already = collected(booking)
+    when = _payment_date(request.form.get('paid_on'), booking)
+    booking.deposit_paid = True
+    booking.deposit_paid_at = when
+    booking.deposit_amount_paid = amount
+    booking.amount_collected = round(already + amount, 2)
+    # Stamped as already told, because they were — by whoever took the money.
+    # Without this, anything that later notices an un-receipted deposit would
+    # email them about a payment they made days ago somewhere else.
+    booking.deposit_notified_at = when
+    if booking.status in ('pending', None):
+        booking.status = 'confirmed'
+    note = (request.form.get('note') or '').strip()
+    if note:
+        booking.notes = ((booking.notes or '') + ('\n' if booking.notes else '') + note)
+    sync_balance(booking)
+    db.session.commit()
+    flash(f'Recorded ${amount:.2f} deposit already paid, dated '
+          f'{when.strftime("%b %-d, %Y")}. Nothing was sent to the customer.', 'success')
+    return back
+
+
 @bookings_bp.route('/<int:booking_id>/mark-paid', methods=['POST'])
 @login_required
 def mark_paid_route(booking_id):
