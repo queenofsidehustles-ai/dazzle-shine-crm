@@ -488,3 +488,38 @@ def test_a_forged_stripe_event_is_refused(env):
     with env['app'].app_context(), tenancy.use_tenant('brightnest'):
         assert db.session.get(Booking, bid).paid_at is None
         db.session.remove()
+
+
+# ── Public-demo API cost boundary ─────────────────────────────────────────────
+
+def test_demo_never_spends_platform_ai_places_translation_or_speech(env, monkeypatch):
+    """A public demo visitor can click the expensive features without making a
+    billable provider request. Places stays demonstrable using local fixtures;
+    translation falls back to the source text; Nana has no provider key; voice
+    falls back to the browser speech engine."""
+    import assistant
+    import places_finder
+    import speech
+    import translate
+    import demo_guard
+
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'platform-openrouter-key')
+    monkeypatch.setenv('OPENAI_API_KEY', 'platform-openai-key')
+    monkeypatch.setenv('GOOGLE_PLACES_API_KEY', 'platform-places-key')
+
+    def network_must_not_run(*args, **kwargs):
+        raise AssertionError('demo attempted a paid external API request')
+
+    monkeypatch.setattr(assistant.requests, 'post', network_must_not_run)
+    monkeypatch.setattr(places_finder.requests, 'post', network_must_not_run)
+    monkeypatch.setattr(translate.requests, 'post', network_must_not_run)
+
+    with demo_guard.forced():
+        assert assistant._api_key() == ''
+        assert speech.provider() is None
+        assert places_finder.api_key_present() is False
+        ok, rows, error = places_finder.search_businesses('medical_office', 'Austin, TX')
+        assert ok and len(rows) == 5 and not error
+        assert all(row['place_id'].startswith('demo-medical_office-') for row in rows)
+        source = 'Please bring the blue supplies.'
+        assert translate.translate(source, target='es') == source
