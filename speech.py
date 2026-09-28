@@ -45,6 +45,18 @@ ROUTER_URL = 'https://openrouter.ai/api/v1/audio/speech'
 # is here rather than tts-1: the voice can be told how to sound, and the
 # complaint that started this was that it had no personality.
 MODEL = os.environ.get('SPEECH_MODEL', 'gpt-4o-mini-tts')
+VOICE = os.environ.get('SPEECH_VOICE', 'sage')
+
+# How she is asked to sound. Warm and unhurried, not bright and salesy --
+# she is mostly reading out money, some of it bad news. Told explicitly how
+# to say the product's own name: an invented word with no spelling a voice
+# model has ever seen, so left to guess it reliably lands on something that
+# is not "ah-CHEH" -- the pronunciation this product has always used.
+MANNER = (os.environ.get('SPEECH_MANNER') or
+          'Warm, calm and unhurried, like a trusted assistant talking to '
+          'someone they know well. Natural pace, gentle downward intonation '
+          'at the end of sentences. Never bright, chirpy or salesy. When you '
+          'say the product name "Akye", pronounce it "ah-CHEH".')
 
 # Which voice models to try through OpenRouter, best first.
 #
