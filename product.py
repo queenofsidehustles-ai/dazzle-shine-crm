@@ -128,6 +128,27 @@ def from_email():
     return explicit or support_email()
 
 
+def outreach_from_email():
+    """The address cold outreach to New Leads is sent FROM.
+
+    Kept apart from `from_email()` on purpose. Mail to people who never asked
+    for it draws the most spam complaints, and mailbox providers score a
+    sender by its domain -- so outreach goes out from its own domain
+    (PRODUCT_OUTREACH_FROM_EMAIL, verified with the same Resend account) and
+    a bad week there cannot push trial reminders and receipts into junk.
+    Unset, it falls back to the product's normal sender.
+    """
+    explicit = (os.environ.get('PRODUCT_OUTREACH_FROM_EMAIL') or '').strip()
+    return explicit or from_email()
+
+
+def outreach_reply_to():
+    """Where a reply to outreach lands: PRODUCT_OUTREACH_REPLY_TO, else the
+    support inbox, which a person reads."""
+    explicit = (os.environ.get('PRODUCT_OUTREACH_REPLY_TO') or '').strip()
+    return explicit or support_email()
+
+
 def resend_api_key():
     """The PRODUCT's own email key, from the environment only.
 

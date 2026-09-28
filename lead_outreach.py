@@ -4,8 +4,9 @@ These are the product writing to people who are not companies yet -- the
 New Leads list, uploaded or from the early-access form. So everything here is
 the product's, never a cleaning company's:
 
-  email   the product's Resend key and from-address (product.py), as the
-          invite always has.
+  email   the product's Resend key, sent from product.outreach_from_email():
+          a domain of its own, so complaints about cold mail stay off the
+          domain that sends receipts and trial reminders.
   texts   the product's own Twilio number: PRODUCT_TWILIO_ACCOUNT_SID,
           PRODUCT_TWILIO_AUTH_TOKEN, PRODUCT_TWILIO_PHONE. Deliberately no
           fallback to TWILIO_*: those are the platform keys a company with no
@@ -221,8 +222,8 @@ def send_email(engine, lead, subject, body_template, sent_by):
     ok, detail = notifications.send_email(
         to, lead.get('name') or '', subject, email_html(body, to),
         from_name=product.name(),
-        from_email=product.from_email() or None,
-        reply_to=product.support_email() or None,
+        from_email=product.outreach_from_email() or None,
+        reply_to=product.outreach_reply_to() or None,
         api_key=product.resend_api_key() or None)
     control_plane.record_lead_message(engine, lead['id'], 'email', to, subject,
                                       body, ok, detail, sent_by)

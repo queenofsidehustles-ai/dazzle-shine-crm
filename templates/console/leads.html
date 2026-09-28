@@ -48,7 +48,7 @@
     <strong>Message the ticked leads</strong>
     <label><input type="radio" name="channel" value="email" checked> Email</label>
     <label><input type="radio" name="channel" value="sms"> Text</label>
-    <span class="lo-note" data-for="email">{% if email_ready %}Sent from {{ PRODUCT }}'s own address, with an unsubscribe link and our postal address.{% else %}Email is not set up: PRODUCT_RESEND_API_KEY is missing.{% endif %}</span>
+    <span class="lo-note" data-for="email">{% if email_ready %}Sent from {{ email_from or (PRODUCT ~ "'s own address") }}, with an unsubscribe link and our postal address.{% else %}Email is not set up: PRODUCT_RESEND_API_KEY is missing.{% endif %}</span>
     <span class="lo-note" data-for="sms" hidden>{% if not sms_ready %}Texting is not set up: set PRODUCT_TWILIO_ACCOUNT_SID, PRODUCT_TWILIO_AUTH_TOKEN and PRODUCT_TWILIO_PHONE.{% elif sms_closed %}Not now: {{ sms_closed }}.{% else %}Sent from {{ PRODUCT }}'s own number. "Reply STOP to opt out" is added if the message does not say it.{% endif %}</span>
   </div>
   <input type="text" name="subject" value="{{ email_subject }}" placeholder="Subject" class="lo-subject" data-for="email">

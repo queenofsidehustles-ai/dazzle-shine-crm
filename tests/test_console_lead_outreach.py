@@ -231,6 +231,37 @@ with app.app_context():
     acts = {x['action'] for x in control_plane.console_log_all(engine) if x['actor'] == MANAGER}
 check({'sent emails', 'sent texts'} <= acts, f'emails and texts both logged ({sorted(acts)})')
 
+print('\n11. Outreach can go out from its own domain; nothing else moves with it')
+os.environ['PRODUCT_FROM_EMAIL'] = 'hello@akyehq.test'
+EMAILS.clear()
+with app.app_context():
+    lead_outreach.send_email(engine, lead(bob['id']), 's', 'b', 'test')
+check(EMAILS[-1]['from_email'] == 'hello@akyehq.test',
+      'unset, outreach uses the normal product sender')
+os.environ['PRODUCT_OUTREACH_FROM_EMAIL'] = 'hello@getakye.test'
+os.environ['PRODUCT_OUTREACH_REPLY_TO'] = 'replies@getakye.test'
+EMAILS.clear()
+with app.app_context():
+    lead_outreach.send_email(engine, lead(bob['id']), 's', 'b', 'test')
+check(EMAILS[-1]['from_email'] == 'hello@getakye.test'
+      and EMAILS[-1]['reply_to'] == 'replies@getakye.test',
+      'set, outreach is sent from the outreach domain, with its reply-to')
+import product
+check(product.from_email() == 'hello@akyehq.test',
+      'and the sender for receipts, reminders and alerts is unchanged')
+os.environ['PRODUCT_RESEND_API_KEY'] = 're_test_not_real'
+check('Sent from hello@getakye.test' in c.get('/console/leads').get_data(as_text=True),
+      'the compose box names the address it will send from')
+del os.environ['PRODUCT_RESEND_API_KEY']
+del os.environ['PRODUCT_OUTREACH_REPLY_TO']
+EMAILS.clear()
+with app.app_context():
+    lead_outreach.send_email(engine, lead(bob['id']), 's', 'b', 'test')
+check(EMAILS[-1]['reply_to'] == product.support_email(),
+      'with no outreach reply-to, replies go to the support inbox')
+for k in ('PRODUCT_FROM_EMAIL', 'PRODUCT_OUTREACH_FROM_EMAIL'):
+    os.environ.pop(k, None)
+
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)
