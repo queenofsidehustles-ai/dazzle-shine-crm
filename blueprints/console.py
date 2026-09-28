@@ -608,11 +608,59 @@ def leads_view():
     """Every prospect the product knows about -- whether they asked for early
     access themselves or somebody here uploaded them -- in one place to upload
     more, invite them, or mark one as reached."""
+    import lead_outreach as lo
     engine = _engine()
     rows = control_plane.all_leads(engine)
+    email_subject, email_body = lo.default_email()
     return render_template('console/leads.html', rows=rows,
                            can_act=_may_operate(),
+                           email_ready=lo.email_ready(),
+                           sms_ready=bool(lo.sms_credentials()),
+                           sms_closed=lo.quiet_hours(),
+                           email_subject=email_subject, email_body=email_body,
+                           sms_body=lo.default_text(),
+                           email_block=lo.email_block, sms_block=lo.sms_block,
+                           history=control_plane.lead_messages(engine, limit=50),
                            me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/leads/send', methods=['POST'])
+@console_required
+def leads_send():
+    """Email or text the leads ticked on the list, with the message typed in
+    the compose box. lead_outreach.py decides who can be reached and how."""
+    import lead_outreach as lo
+    if not _may_operate():
+        return _refuse(url_for('console.leads_view'))
+    engine = _engine()
+    channel = request.form.get('channel')
+    if channel not in ('email', 'sms'):
+        flash('Choose email or text.', 'error')
+        return redirect(url_for('console.leads_view'))
+    ids = {int(i) for i in request.form.getlist('lead_id') if i.isdigit()}
+    leads = [l for l in control_plane.all_leads(engine) if l['id'] in ids]
+    if not leads:
+        flash('Tick at least one lead to send to.', 'error')
+        return redirect(url_for('console.leads_view'))
+    body = (request.form.get('body') or '').strip()
+    if not body:
+        flash('Write the message first.', 'error')
+        return redirect(url_for('console.leads_view'))
+    me = request.console_user['email']
+    result = lo.send_many(engine, leads, channel, request.form.get('subject', ''),
+                          body, me)
+    word = 'email' if channel == 'email' else 'text'
+    control_plane.log_console(engine, me, f'sent {word}s',
+                              f'{result["sent"]} lead(s)',
+                              f'{result["failed"]} failed' if result['failed'] else None)
+    msg = f'Sent {result["sent"]} {word}{"s" if result["sent"] != 1 else ""}.'
+    if result['failed']:
+        msg += f' {result["failed"]} failed -- see Recent outreach below for why.'
+    for reason, n in result['skipped'].items():
+        msg += f' Skipped {n}: {reason}.'
+    flash(msg, 'success' if result['sent'] and not result['failed'] else
+          ('warning' if result['sent'] else 'error'))
+    return redirect(url_for('console.leads_view'))
 
 
 # Matched case-insensitively against a CSV's header row. Extra columns in the
@@ -680,48 +728,18 @@ def leads_upload():
     return redirect(url_for('console.leads_view'))
 
 
-def _send_lead_invite(lead):
+def _send_lead_invite(lead, sent_by='console'):
     """Ask this prospect to try the product. Returns (ok, detail).
 
-    Sent as the product, never as any cleaning company -- see
-    trial_nudges._send for why that distinction matters here too. The link is
-    tagged so a signup through it is counted under its own channel on the
-    Funnel rather than folded into "direct" (see attribution.py)."""
-    to = (lead.get('email') or '').strip()
-    if not to:
-        return False, 'no email address on this lead'
-    import notifications
-    first = (lead.get('name') or '').split()[0] if lead.get('name') else ''
-    biz = (lead.get('company') or '').strip()
-    url = (f'{product.base_url()}/signup?utm_source=outreach'
-           f'&utm_medium=email&utm_campaign=lead_invite')
-    greeting = f'Hi {first},' if first else 'Hi,'
-    for_biz = f' for {biz}' if biz else ''
-    html = f'''
-<div style="font-family:-apple-system,Segoe UI,Inter,sans-serif;max-width:520px;
-            margin:0 auto;color:#16213a;line-height:1.55">
-  <p style="font-size:17px;margin:0 0 18px">{greeting}</p>
-  <p>We built {product.name()} to run a cleaning business{for_biz} end to
-  end -- scheduling, the team, quotes, hiring, and getting paid -- and
-  thought it was worth a look.</p>
-  <p>No card needed to try it.</p>
-  <p style="margin:26px 0">
-    <a href="{url}" style="background:#f0a44b;color:#16213a;text-decoration:none;
-       font-weight:600;padding:12px 22px;border-radius:8px;display:inline-block">
-      Try {product.name()} free &rarr;</a>
-  </p>
-  <p style="color:#7a8499;font-size:13px;margin-top:28px;border-top:1px solid #e6eaf2;
-            padding-top:14px">
-    {product.name()}<br>
-    Questions? Just reply to this email — a person reads it.
-  </p>
-</div>'''
-    return notifications.send_email(
-        to, lead.get('name') or '', f'Try {product.name()} free', html,
-        from_name=product.name(),
-        from_email=product.from_email() or None,
-        reply_to=product.support_email() or None,
-        api_key=product.resend_api_key() or None)
+    The standard invite, sent through lead_outreach like any other console
+    email: as the product, never as a cleaning company (see trial_nudges._send
+    for why), with an unsubscribe link and the postal address, never to an
+    address that has unsubscribed, and written into the outreach history. The
+    link is tagged so a signup through it counts under its own channel on the
+    Funnel (see attribution.py)."""
+    import lead_outreach as lo
+    subject, body = lo.default_email()
+    return lo.send_email(_engine(), lead, subject, body, sent_by)
 
 
 @console_bp.route('/leads/<int:lead_id>/invite', methods=['POST'])
@@ -735,7 +753,7 @@ def lead_invite(lead_id):
     if not lead:
         flash('That lead no longer exists.', 'error')
         return redirect(url_for('console.leads_view'))
-    ok, detail = _send_lead_invite(lead)
+    ok, detail = _send_lead_invite(lead, request.console_user['email'])
     if ok:
         control_plane.mark_lead_invited(engine, lead_id)
         control_plane.log_console(engine, request.console_user['email'],
@@ -755,10 +773,11 @@ def lead_invite_all():
     if not _may_operate():
         return _refuse(url_for('console.leads_view'))
     engine = _engine()
-    due = [l for l in control_plane.all_leads(engine) if not l.get('invited_at')]
+    due = [l for l in control_plane.all_leads(engine)
+           if not l.get('invited_at') and l.get('email') and not l.get('unsubscribed_at')]
     sent = failed = 0
     for lead in due:
-        ok, _detail = _send_lead_invite(lead)
+        ok, _detail = _send_lead_invite(lead, request.console_user['email'])
         if ok:
             control_plane.mark_lead_invited(engine, lead['id'])
             sent += 1
