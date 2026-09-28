@@ -165,7 +165,7 @@
           <label class="extra-item">
             <input type="checkbox" class="extra-cb" value="{{ name }}" />
             {{ name }}
-            <span class="price">+${{ price|int }}</span>
+            <span class="price">+${{ '%.2f' % price }}</span>
           </label>
           {% endfor %}
         </div>
@@ -176,7 +176,7 @@
     <div class="price-box" id="price-box">
       <div class="label">Your Estimate</div>
       <div class="total" id="total-display">$—</div>
-      <div class="deposit-note">${{ deposit|int }} deposit secures your date · Balance due after cleaning</div>
+      <div class="deposit-note">${{ '%.2f' % deposit }} deposit secures your date · Balance due after cleaning</div>
       <div class="price-breakdown" id="breakdown" style="display:none">
         <div class="breakdown-cell">
           <div class="bl">Base Price</div>
