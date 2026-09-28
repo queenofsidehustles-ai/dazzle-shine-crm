@@ -33,7 +33,7 @@
 # reason to stop — booked, replied, opted out — is re-checked at the moment of
 # sending. A send that fails leaves the lead's step where it was, so the next
 # run retries rather than burning a message nobody received.
-name: Google Ads follow-ups
+name: Ads Retargeting
 
 on:
   schedule:
@@ -88,7 +88,7 @@ jobs:
           skipped=$(jq -r '.skipped // 0' response.json)
           failed=$(jq -r '.failed // 0' response.json)
           {
-            echo "### Google Ads follow-ups"
+            echo "### Ads Retargeting"
             echo ""
             echo "| | |"
             echo "|---|---|"
