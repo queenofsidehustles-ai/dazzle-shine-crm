@@ -71,20 +71,22 @@ with app.app_context():
     check(body.index('New Leads') < body.index('>Funnel<'),
           'and it comes before Funnel in the navigation')
 
-    print('\n3. Uploading a CSV adds the rows with usable emails, skips the rest')
+    print('\n3. Uploading a CSV accepts email or phone and skips only uncontactable rows')
     csv_text = (
         'Name,Company,Email,Phone,Cleaners,Note\n'
         f'Prospect One,One Co,one-{TAG}@example.com,555-0100,3,met at a trade show\n'
         f'Prospect Two,Two Co,TWO-{TAG}@EXAMPLE.COM,,,\n'
-        'No Email Here,Three Co,,,,\n'
+        'Phone Only,Three Co,,555-0300,2,Google Maps prospect\n'
+        'No Contact,Four Co,,,,\n'
     )
     r = c.post('/console/leads/upload',
                data={'file': (io.BytesIO(csv_text.encode()), 'prospects.csv')},
                content_type='multipart/form-data', follow_redirects=True)
     check(r.status_code == 200, 'the upload is accepted')
     body = r.data.decode()
-    check('Added 2 lead' in body, 'two rows with an email were added')
-    check('Skipped 1' in body, 'and the row with no email was skipped, not silently dropped')
+    check('Added 3 lead' in body, 'email and phone-only rows were added')
+    check('Skipped 1' in body, 'only the row with neither email nor phone was skipped')
+    check('no usable email or phone' in body, 'the result explains the actual contact rule')
 
     with engine.connect() as conn:
         one = conn.execute(select(control_plane.product_leads).where(
@@ -99,6 +101,13 @@ with app.app_context():
     check(two is not None, 'the second row is stored even with blank optional columns')
     check(two['email'] == f'two-{TAG}@example.com',
           'and the email was lower-cased, matching "TWO@..." to a real address')
+    with engine.connect() as conn:
+        phone_only = conn.execute(select(control_plane.product_leads).where(
+            control_plane.product_leads.c.phone == '555-0300')).mappings().first()
+    check(phone_only is not None and not phone_only['email'],
+          'a phone-only prospect is stored without inventing an email address')
+    body = c.get('/console/leads').data.decode()
+    check('555-0300' in body, 'the phone-only prospect is visible in New Leads')
 
     print('\n4. A helper can see the list but cannot upload or invite')
     h = app.test_client()
@@ -138,6 +147,7 @@ with app.app_context():
     check(f'two-{TAG}@example.com' in SENT, 'the lead never invited before gets one this time')
     check(f'one-{TAG}@example.com' not in SENT,
           'the one already invited individually does not get a second copy')
+    check('555-0300' not in SENT, 'phone-only prospects are never treated as email-invitable')
     with engine.connect() as conn:
         both = conn.execute(select(control_plane.product_leads.c.invited_at).where(
             control_plane.product_leads.c.email.in_(
@@ -169,6 +179,7 @@ with app.app_context():
         conn.execute(text(
             "DELETE FROM public.product_leads WHERE email = ANY(:emails)"),
             {'emails': [f'one-{TAG}@example.com', f'two-{TAG}@example.com', fresh_email]})
+        conn.execute(text("DELETE FROM public.product_leads WHERE phone = '555-0300'"))
         conn.execute(text("DELETE FROM public.console_log WHERE actor IN (:a, :h)"),
                      {'a': CONSOLE_EMAIL, 'h': HELPER_EMAIL})
         conn.execute(text("DELETE FROM public.console_users WHERE email IN (:a, :h)"),
