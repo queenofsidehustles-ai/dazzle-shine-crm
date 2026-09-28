@@ -15,6 +15,11 @@
 #
 # Scheduled workflows only run from the default branch, which is why this file
 # lives on main while the code it calls lives on akye-stable.
+#
+# www, not the bare akyehq.com: the apex is not the app, and answers a POST
+# with 405 Method Not Allowed (every run failed on that at first).
+# GitHub also runs schedules late or not at all when it is busy, so "hourly"
+# is at best hourly.
 name: Demo rebuild
 
 on:
@@ -41,7 +46,7 @@ jobs:
             exit 1
           fi
           code=$(curl -sS -o reply.json -w '%{http_code}' --max-time 30 \
-            -X POST https://akyehq.com/api/rebuild-demo \
+            -X POST https://www.akyehq.com/api/rebuild-demo \
             -H "X-Api-Key: $REMINDER_API_KEY" -H 'Content-Type: application/json' -d '{}')
           echo "HTTP $code: $(cat reply.json)"
           if [ "$code" = 403 ]; then
