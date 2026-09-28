@@ -3,6 +3,30 @@
 {% block page_title %}Business Settings{% endblock %}
 
 {% block content %}
+{% if subscription %}
+{% set state = subscription.state %}
+<div class="card" style="margin-bottom:20px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Subscription</h2>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div>
+      <p style="margin:0;font-size:1.05rem;font-weight:700">{{ subscription.plans[state.effective_plan].label }}</p>
+      <p style="color:var(--softer);font-size:0.86rem;margin:2px 0 0">
+        {% if state.on_trial %}
+          Free trial — {{ state.trial_days_left }} day{{ '' if state.trial_days_left == 1 else 's' }} left
+        {% elif state.status == 'past_due' %}
+          Payment failed — update your card to carry on
+        {% elif state.effective_plan == 'solo' %}
+          The free plan
+        {% else %}
+          ${{ subscription.plans[state.effective_plan].price }}/month
+          {% if state.grandfathered %}· founding price, locked{% endif %}
+        {% endif %}
+      </p>
+    </div>
+    <a href="{{ url_for('billing.upgrade') }}" class="btn btn-outline">Change plan</a>
+  </div>
+</div>
+{% endif %}
 <div class="card">
   <p style="color:var(--softer);font-size:0.9rem;margin-bottom:20px">This is your white-label config. Change the business name, phone, and contact info here — no code needed.</p>
   <form method="POST">

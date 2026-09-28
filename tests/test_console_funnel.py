@@ -143,6 +143,15 @@ check(ft['leads_signed_up'] == f['leads_signed_up'],
 check(all(o['name'] != 'Tango' for rows in ft['follow_up'].values() for o in rows),
       'and a test account is never on the follow-up list')
 
+print('\n4c. An owner who opted out is never on the follow-up list, but still counts')
+with_optout = ORGS + [org('Uniform', ago(3), owner_email='u@z.test',
+                          nudges_opted_out=True)]
+fo = funnel.compute(with_optout, LEADS, now=NOW, days=None)
+check(fo['stages'][0]['n'] == f['stages'][0]['n'] + 1,
+      'she still counts as a signup -- opting out of nudges is not opting out of the funnel')
+check(all(o['name'] != 'Uniform' for rows in fo['follow_up'].values() for o in rows),
+      'but she is never on any list of who to email or call')
+
 print('\n5. Nothing recorded yet does not divide by zero')
 empty = funnel.compute([], [], now=NOW, days=30)
 check(all(s['n'] == 0 and s['pct'] is None for s in empty['stages']),

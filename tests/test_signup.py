@@ -101,7 +101,7 @@ c = app.test_client()
 r = c.post("/signup", data={
     "business": "Sparkle Cleaning Services", "slug": "sparkle",
     "name": "Dana Reed", "email": "dana@sparkle.test",
-    "password": "a-perfectly-fine-password",
+    "password": "a-perfectly-fine-password", "terms_accepted": "1",
 }, headers={"Host": "rollcall.test"})
 print("REDIRECT:", r.status_code, r.headers.get("Location"))
 print("OK")
@@ -207,6 +207,8 @@ cases = [
       'password': 'a-good-password'}, b'reserved word'),
     ({'business': 'B', 'slug': 'NO CAPS', 'name': 'A', 'email': 'a@b.test',
       'password': 'a-good-password'}, b'lower-case'),
+    ({'business': 'B', 'slug': 'ok-five', 'name': 'A', 'email': 'a@b.test',
+      'password': 'a-good-password'}, b'agree to the Terms'),
 ]
 for data, expect in cases:
     out = run(STUB + f'''
@@ -232,7 +234,7 @@ print("ORGS:", orgs)
 print("OK")
 ''', 'no orphans')
 check("SCHEMAS: ['tenant_sparkle']" in out,
-      'the six refused attempts left no schemas behind')
+      'the seven refused attempts left no schemas behind')
 check("ORGS: ['sparkle']" in out, 'and no half-recorded companies')
 
 print('\n8. The address check answers as somebody types')

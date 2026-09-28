@@ -1,0 +1,71 @@
+{% extends "console/_shell.html" %}
+{% block title %}New Leads{% endblock %}
+{% block body %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Prospects to reach out to</h2>
+<p style="color:var(--muted);font-size:var(--t-sm);line-height:1.6;margin:0 0 var(--s4);max-width:640px">
+  Everybody the product knows about who is not a company yet — whether they
+  asked for early access themselves or a list was uploaded here for outreach.
+  Inviting someone sends one email with a signup link; if they sign up with
+  the same address, the Funnel already counts it as converted.
+</p>
+
+{% if can_act %}
+<form method="post" action="{{ url_for('console.leads_upload') }}" enctype="multipart/form-data"
+      style="background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+             padding:var(--s4);max-width:640px;margin-bottom:var(--s5);
+             display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap">
+  <input type="file" name="file" accept=".csv" required>
+  <button class="btn btn-primary btn-sm" type="submit">Upload CSV</button>
+  <span style="font-size:var(--t-xs);color:var(--softer);width:100%">
+    Columns: name, company, email, phone, cleaners, note — only email is required,
+    and the header names are matched without case. Extra columns are ignored.
+  </span>
+</form>
+{% endif %}
+
+{% if not rows %}
+<div class="con-empty">No leads yet — nobody has asked for early access, and nothing has been uploaded.</div>
+{% else %}
+
+{% if can_act %}
+{% set due = rows|rejectattr('invited_at')|list %}
+{% if due %}
+<form method="post" action="{{ url_for('console.lead_invite_all') }}"
+      onsubmit="return confirm('Send the signup invite to all {{ due|length }} leads not yet invited?')"
+      style="margin-bottom:var(--s4)">
+  <button class="btn btn-outline btn-sm" type="submit">Invite all not yet invited ({{ due|length }})</button>
+</form>
+{% endif %}
+{% endif %}
+
+<div class="fn-scroll"><table class="con">
+  <tr><th>Added</th><th>Name</th><th>Company</th><th>Email</th><th>Phone</th>
+      <th>Source</th><th>Invited</th><th>Contacted</th><th></th></tr>
+  {% for l in rows %}
+  <tr>
+    <td>{{ l.created_at.strftime('%d %b %Y') if l.created_at else '—' }}</td>
+    <td>{{ l.name or '—' }}</td>
+    <td>{{ l.company or '—' }}</td>
+    <td><a href="mailto:{{ l.email }}">{{ l.email }}</a></td>
+    <td>{{ l.phone or '—' }}</td>
+    <td>{{ l.source or '—' }}</td>
+    <td>{{ l.invited_at.strftime('%d %b') if l.invited_at else '—' }}</td>
+    <td>{{ l.contacted_at.strftime('%d %b') if l.contacted_at else '—' }}</td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap">
+      {% if can_act %}
+      <form method="post" action="{{ url_for('console.lead_invite', lead_id=l.id) }}">
+        <button class="btn btn-outline btn-sm" type="submit">
+          {{ 'Re-invite' if l.invited_at else 'Invite' }}</button>
+      </form>
+      {% if not l.contacted_at %}
+      <form method="post" action="{{ url_for('console.lead_contacted', lead_id=l.id) }}">
+        <button class="btn btn-outline btn-sm" type="submit">Mark contacted</button>
+      </form>
+      {% endif %}
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+{% endblock %}

@@ -33,7 +33,7 @@ JOBS = [
      'Keeps quoting leads warm until they book or opt out.', 'daily'),
     ('applicant-followups', 'Applicant follow-ups',
      'Chases candidates who started an application and stalled.', 'daily'),
-    ('lsa-followups', 'Google Ads follow-ups',
+    ('lsa-followups', 'Ads Retargeting',
      'Texts the people who called through Google Ads and never booked.', 'daily'),
     # Only does anything for a business using subcontractors. Harmless and
     # silent for everybody else, which is why it is on by default: the ones

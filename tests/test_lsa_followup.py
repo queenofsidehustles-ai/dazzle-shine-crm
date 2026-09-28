@@ -346,4 +346,33 @@ with app.app_context():
     check(stopped.seq_stopped == 'manual' and not stopped.in_sequence,
           'and one she stopped by hand stays stopped')
 
+    print('\nA rewritten follow-up text cannot drop the opt-out')
+    owner = app.test_client()
+    with owner.session_transaction() as s:
+        s['logged_in'] = True; s['role'] = 'owner'
+    no_stop = 'Hey, still want that cleaning? Call us back!'
+    r = owner.post('/settings/followup-texts', data={
+        'msg_missed_1': no_stop,
+        'msg_missed_2': lsa.DEFAULT_MESSAGES[(lsa.MISSED, 2)],
+        'msg_missed_3': lsa.DEFAULT_MESSAGES[(lsa.MISSED, 3)],
+        'msg_quoted_1': lsa.DEFAULT_MESSAGES[(lsa.QUOTED, 1)],
+        'msg_quoted_2': lsa.DEFAULT_MESSAGES[(lsa.QUOTED, 2)],
+        'msg_quoted_3': lsa.DEFAULT_MESSAGES[(lsa.QUOTED, 3)],
+    }, follow_redirects=True)
+    check('missing an opt-out' in r.get_data(as_text=True).lower(),
+          'the page explains why nothing was saved')
+    check(lsa.template_for(lsa.MISSED, 1) != no_stop,
+          'and the version with no way to opt out was never written')
+    with_stop = no_stop + ' Reply STOP to opt out.'
+    owner.post('/settings/followup-texts', data={
+        'msg_missed_1': with_stop,
+        'msg_missed_2': lsa.DEFAULT_MESSAGES[(lsa.MISSED, 2)],
+        'msg_missed_3': lsa.DEFAULT_MESSAGES[(lsa.MISSED, 3)],
+        'msg_quoted_1': lsa.DEFAULT_MESSAGES[(lsa.QUOTED, 1)],
+        'msg_quoted_2': lsa.DEFAULT_MESSAGES[(lsa.QUOTED, 2)],
+        'msg_quoted_3': lsa.DEFAULT_MESSAGES[(lsa.QUOTED, 3)],
+    }, follow_redirects=True)
+    check(lsa.template_for(lsa.MISSED, 1) == with_stop,
+          'putting the opt-out back lets the rest of the wording through')
+
     print('\nAll Google Ads follow-up checks passed.')

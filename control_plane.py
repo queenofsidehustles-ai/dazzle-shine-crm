@@ -73,6 +73,11 @@ organizations = Table(
     # second copy of "9 days left" is the one that gets the sender marked as
     # spam.
     Column('nudges_sent', String(200)),
+    # She asked not to be emailed about her trial or courted as a lead. Set by
+    # the owner herself from Settings, never by the console -- an opt-out a
+    # business cannot see or control is not one. trial_nudges.due() checks
+    # this before anything else a trial's state would otherwise call for.
+    Column('nudges_opted_out', Boolean, default=False),
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
     # Owned by tenant_data_lifecycle.py, declared here for the same reason the
@@ -114,6 +119,11 @@ organizations = Table(
     Column('signup_referrer', String(120)),
     Column('signup_landing', String(120)),
     Column('referred_by', String(40), index=True),
+    # When she agreed to the Terms of Service, at signup. Not optional: signup
+    # refuses to create the account at all without it (see blueprints/signup.py
+    # _validate). Kept as a timestamp rather than a boolean because "she agreed"
+    # is a fact worth being able to point to later, not just a flag.
+    Column('terms_accepted_at', DateTime),
 )
 
 
@@ -138,6 +148,11 @@ product_leads = Table(
     Column('source', String(120)),
     Column('created_at', DateTime, default=datetime.utcnow, index=True),
     Column('contacted_at', DateTime),
+    # Set the moment the console sends this person a signup invite. Separate
+    # from contacted_at: an invite is one specific email with a signup link in
+    # it, not "we have been in touch" -- and it is what stops the same list
+    # being emailed twice by two people working it at once.
+    Column('invited_at', DateTime),
 )
 
 
@@ -317,11 +332,11 @@ console_docs = Table(
 )
 
 
-def ensure_columns(engine):
-    """Add any column this Table object declares that the live table does not have.
+def _ensure_table_columns(engine, table):
+    """Add any column `table` declares that the live table does not have.
 
     `create_all` creates missing tables. It does not touch a table that
-    already exists, so a column added to `organizations` after a deployment
+    already exists, so a column added to a Table object after a deployment
     went live would simply never appear there — and every read of it would
     fail on the one database that matters.
 
@@ -329,19 +344,19 @@ def ensure_columns(engine):
     it by design, so it needs its own small version: additive only, one column
     at a time, and silent when there is nothing to do.
 
-    Derived from `organizations`'s own declared columns rather than a
+    Derived from the Table object's own declared columns rather than a
     separately hand-maintained list — a hand-maintained list is exactly how
     `suspended_at`, `closed_at` and `purged_at` were each independently
-    missed here before, one at a time, as the Table object grew and this
+    missed here before, one at a time, as `organizations` grew and this
     function did not.
     """
     from sqlalchemy import inspect as sa_inspect
     try:
         have = {c['name'] for c in sa_inspect(engine).get_columns(
-            'organizations', schema='public')}
+            table.name, schema='public')}
     except Exception:
         return                      # table is not there yet; create_all will make it
-    for column in organizations.columns:
+    for column in table.columns:
         if column.name == 'id' or column.name in have:
             continue
         # Deliberately just the type: no NOT NULL, UNIQUE or DEFAULT here even
@@ -353,10 +368,17 @@ def ensure_columns(engine):
         try:
             with engine.begin() as conn:
                 conn.execute(text(
-                    f'ALTER TABLE public.organizations ADD COLUMN {column.name} {sqltype}'))
-            print(f'  ✅ control plane: added organizations.{column.name}')
+                    f'ALTER TABLE public.{table.name} ADD COLUMN {column.name} {sqltype}'))
+            print(f'  ✅ control plane: added {table.name}.{column.name}')
         except Exception as e:
-            print(f'  ⚠️  could not add organizations.{column.name}: {e}')
+            print(f'  ⚠️  could not add {table.name}.{column.name}: {e}')
+
+
+def ensure_columns(engine):
+    """The additive backfill above, for every control-plane table that has
+    grown a column since it was first deployed."""
+    _ensure_table_columns(engine, organizations)
+    _ensure_table_columns(engine, product_leads)
 
 
 def ensure_table(engine):
@@ -383,7 +405,8 @@ def find(engine, slug):
         return dict(row) if row else None
 
 
-def create(engine, slug, name, owner_email=None, attribution=None):
+def create(engine, slug, name, owner_email=None, attribution=None,
+           terms_accepted_at=None):
     import tenancy
     if not tenancy.valid_slug(slug):
         raise ValueError(
@@ -411,6 +434,7 @@ def create(engine, slug, name, owner_email=None, attribution=None):
             subscription_status='trialing',
             trial_ends_at=now + timedelta(days=30),
             activated_at=None,
+            terms_accepted_at=terms_accepted_at,
             **came_from))
     return find(engine, slug)
 
@@ -487,6 +511,7 @@ def set_billing(engine, slug, **fields):
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
                'grandfathered', 'status', 'activated_at', 'nudges_sent',
+               'nudges_opted_out',
                'mrr_cents', 'paid_since', 'canceled_at', 'discount_code'}
     bad = set(fields) - allowed
     if bad:
@@ -630,6 +655,18 @@ def mark_lead_contacted(engine, lead_id):
         return result.rowcount > 0
 
 
+def mark_lead_invited(engine, lead_id):
+    """This lead has been sent a signup invite. Keeps the first time, so two
+    people working the same uploaded list at once cannot both email it."""
+    with engine.begin() as conn:
+        result = conn.execute(
+            update(product_leads)
+            .where(product_leads.c.id == lead_id,
+                   product_leads.c.invited_at.is_(None))
+            .values(invited_at=datetime.utcnow()))
+        return result.rowcount > 0
+
+
 def add_promo_code(engine, **fields):
     allowed = {c.name for c in promo_codes.columns} - {'id'}
     row = {k: v for k, v in fields.items() if k in allowed}
@@ -710,6 +747,16 @@ def mark_feedback_read(engine, feedback_id):
         conn.execute(update(feedback)
                      .where(feedback.c.id == feedback_id)
                      .values(read_at=datetime.utcnow()))
+
+
+def new_leads_count(engine):
+    """Neither contacted nor invited yet -- the ones nobody has acted on."""
+    from sqlalchemy import func
+    with engine.connect() as conn:
+        return conn.execute(
+            select(func.count()).select_from(product_leads)
+            .where(product_leads.c.contacted_at.is_(None),
+                   product_leads.c.invited_at.is_(None))).scalar() or 0
 
 
 def unread_feedback(engine):

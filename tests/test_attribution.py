@@ -182,7 +182,7 @@ else:
             return c.post('/signup', headers=PRODUCT, data={
                 'business': f'{slug.title()} Cleaning', 'slug': slug,
                 'name': 'Owner Person', 'email': f'{slug}@example.com',
-                'password': 'a-perfectly-fine-password'})
+                'password': 'a-perfectly-fine-password', 'terms_accepted': '1'})
 
         def cookie_of(response):
             for h in response.headers.getlist('Set-Cookie'):
@@ -263,6 +263,13 @@ else:
         check(r.status_code == 200 and f'value="https://akyehq.test/r/{first_slug}"' in body
               and 'Copy link' in body, f'the owner\'s Billing page shows it ({r.status_code})')
         check('1 company has' in body, 'and says one company signed up with it')
+
+        r = owner.get('/settings/business', headers=TENANT)
+        body = r.data.decode()
+        check(r.status_code == 200 and 'Subscription' in body,
+              'the Business Settings page shows what she is subscribed to')
+        check('/upgrade' in body and 'Change plan' in body,
+              'with a way to actually change it')
 
         email, password = f'console-{TAG}@example.com', 'a-real-console-password-1'
         with app.app_context():

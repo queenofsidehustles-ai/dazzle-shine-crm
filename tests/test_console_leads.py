@@ -1,0 +1,180 @@
+"""Console → New Leads: uploading a prospect list and inviting people on it.
+
+Against a real disposable Postgres, same as the rest of the console suite --
+product_leads and console_log both live in the `public` schema, which SQLite
+does not have.
+"""
+import os
+import secrets
+import sys
+
+os.environ['DATABASE_URL'] = os.environ.get(
+    'TEST_POSTGRES_URL', 'postgresql://app_user:localtest@127.0.0.1:5432/postgres')
+os.environ['SECRET_KEY'] = 'test-secret'
+os.environ['BASE_DOMAIN'] = 'akyehq.test'
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import io
+
+SENT = []
+import notifications
+notifications.send_email = lambda to, *a, **k: (SENT.append(to), (True, 'stub'))[1]
+notifications.send_sms = lambda *a, **k: (True, 'stub')
+
+from sqlalchemy import select, text
+
+from app import create_app
+from extensions import db
+import control_plane
+import provisioning
+
+app = create_app()
+failures = []
+
+
+def check(cond, m):
+    if cond:
+        print(f'  ✅ {m}')
+    else:
+        print(f'  ❌ {m}')
+        failures.append(m)
+
+
+TAG = secrets.token_hex(4)
+CONSOLE_EMAIL = f'console-{TAG}@example.com'
+CONSOLE_PASSWORD = 'a-real-console-password-1'
+HELPER_EMAIL = f'helper-{TAG}@example.com'
+
+with app.app_context():
+    engine = provisioning._engine()
+    control_plane.ensure_table(engine)
+    db.session.remove()
+
+    control_plane.add_console_user(engine, CONSOLE_EMAIL, 'Console Manager',
+                                   CONSOLE_PASSWORD, role='manager')
+    control_plane.add_console_user(engine, HELPER_EMAIL, 'Console Helper',
+                                   CONSOLE_PASSWORD, role='helper')
+    db.session.remove()
+
+    c = app.test_client()
+
+    print('\n1. Signed out, the page is not reachable')
+    r = c.get('/console/leads', follow_redirects=False)
+    check(r.status_code == 302 and 'login' in (r.headers.get('Location') or ''),
+          'redirected to the console login')
+
+    print('\n2. It is its own tab, ahead of Funnel')
+    c.post('/console/login', data={'email': CONSOLE_EMAIL, 'password': CONSOLE_PASSWORD})
+    body = c.get('/console/leads').data.decode()
+    check(r.status_code != 200 or True, 'sanity')
+    check('New Leads' in body, 'the tab is named New Leads')
+    check(body.index('New Leads') < body.index('>Funnel<'),
+          'and it comes before Funnel in the navigation')
+
+    print('\n3. Uploading a CSV adds the rows with usable emails, skips the rest')
+    csv_text = (
+        'Name,Company,Email,Phone,Cleaners,Note\n'
+        f'Prospect One,One Co,one-{TAG}@example.com,555-0100,3,met at a trade show\n'
+        f'Prospect Two,Two Co,TWO-{TAG}@EXAMPLE.COM,,,\n'
+        'No Email Here,Three Co,,,,\n'
+    )
+    r = c.post('/console/leads/upload',
+               data={'file': (io.BytesIO(csv_text.encode()), 'prospects.csv')},
+               content_type='multipart/form-data', follow_redirects=True)
+    check(r.status_code == 200, 'the upload is accepted')
+    body = r.data.decode()
+    check('Added 2 lead' in body, 'two rows with an email were added')
+    check('Skipped 1' in body, 'and the row with no email was skipped, not silently dropped')
+
+    with engine.connect() as conn:
+        one = conn.execute(select(control_plane.product_leads).where(
+            control_plane.product_leads.c.email == f'one-{TAG}@example.com')
+        ).mappings().first()
+        two = conn.execute(select(control_plane.product_leads).where(
+            control_plane.product_leads.c.email == f'two-{TAG}@example.com')
+        ).mappings().first()
+    check(one is not None and one['company'] == 'One Co' and one['phone'] == '555-0100',
+          'the row is stored with its other columns')
+    check(one['source'] == 'console upload', 'tagged as a console upload, not early access')
+    check(two is not None, 'the second row is stored even with blank optional columns')
+    check(two['email'] == f'two-{TAG}@example.com',
+          'and the email was lower-cased, matching "TWO@..." to a real address')
+
+    print('\n4. A helper can see the list but cannot upload or invite')
+    h = app.test_client()
+    h.post('/console/login', data={'email': HELPER_EMAIL, 'password': CONSOLE_PASSWORD})
+    body = h.get('/console/leads').data.decode()
+    check(f'one-{TAG}@example.com' in body, 'a helper can read the list')
+    check('Upload CSV' not in body, 'but sees no upload form')
+    r = h.post('/console/leads/upload',
+               data={'file': (io.BytesIO(csv_text.encode()), 'x.csv')},
+               content_type='multipart/form-data')
+    check(r.status_code == 302, 'and a direct POST is refused, not silently accepted')
+    with engine.connect() as conn:
+        n = conn.execute(select(control_plane.product_leads.c.id).where(
+            control_plane.product_leads.c.email == f'one-{TAG}@example.com')).all()
+    check(len(n) == 1, 'so the row was not added a second time')
+
+    print('\n5. Inviting one lead sends the email and stamps invited_at, once')
+    SENT.clear()
+    r = c.post(f'/console/leads/{one["id"]}/invite', follow_redirects=True)
+    check(r.status_code == 200, 'the invite posts')
+    check(SENT == [f'one-{TAG}@example.com'], 'and the email actually goes to that address')
+    with engine.connect() as conn:
+        invited = conn.execute(select(control_plane.product_leads.c.invited_at).where(
+            control_plane.product_leads.c.id == one['id'])).scalar()
+    check(invited is not None, 'invited_at is written')
+    body = c.get('/console/leads').data.decode()
+    check('Re-invite' in body, 'the row now offers to re-invite rather than invite')
+
+    print('\n6. "Invite all" reaches everybody not yet invited, and only them')
+    # This runs against a shared Postgres, alongside the rest of the console
+    # suite, so other untouched leads may legitimately also get one here --
+    # what matters is that our two are handled correctly relative to each
+    # other, not that SENT is only ever these two.
+    SENT.clear()
+    r = c.post('/console/leads/invite-all', follow_redirects=True)
+    check(r.status_code == 200, 'the bulk invite posts')
+    check(f'two-{TAG}@example.com' in SENT, 'the lead never invited before gets one this time')
+    check(f'one-{TAG}@example.com' not in SENT,
+          'the one already invited individually does not get a second copy')
+    with engine.connect() as conn:
+        both = conn.execute(select(control_plane.product_leads.c.invited_at).where(
+            control_plane.product_leads.c.email.in_(
+                [f'one-{TAG}@example.com', f'two-{TAG}@example.com']))).all()
+    check(all(row[0] is not None for row in both), 'both are now marked invited')
+
+    print('\n7. Every invite and upload is on the record')
+    with engine.connect() as conn:
+        actions = {row[0] for row in conn.execute(text(
+            "SELECT action FROM public.console_log WHERE actor = :a"),
+            {'a': CONSOLE_EMAIL}).all()}
+    check({'uploaded', 'invited'} <= actions, f'uploaded and invited both logged ({actions})')
+
+    print('\n8. The nav pill counts leads nobody has acted on yet')
+    # Delta rather than an absolute number: this Postgres is shared with the
+    # rest of the console suite, which may itself leave an untouched lead
+    # behind, so "1" is not a safe thing to assert here -- "went up by
+    # exactly the one just added" is.
+    before = control_plane.new_leads_count(engine)
+    fresh_email = f'fresh-{TAG}@example.com'
+    control_plane.add_lead(engine, name='Fresh', email=fresh_email, source='console upload')
+    body = c.get('/console/leads').data.decode()
+    after = control_plane.new_leads_count(engine)
+    check(after == before + 1, f'the untouched lead is counted ({before} -> {after})')
+    check(f'New Leads<span class="pill">{after}</span>' in body,
+          'and the nav pill shows that same number')
+
+    with engine.begin() as conn:
+        conn.execute(text(
+            "DELETE FROM public.product_leads WHERE email = ANY(:emails)"),
+            {'emails': [f'one-{TAG}@example.com', f'two-{TAG}@example.com', fresh_email]})
+        conn.execute(text("DELETE FROM public.console_log WHERE actor IN (:a, :h)"),
+                     {'a': CONSOLE_EMAIL, 'h': HELPER_EMAIL})
+        conn.execute(text("DELETE FROM public.console_users WHERE email IN (:a, :h)"),
+                     {'a': CONSOLE_EMAIL, 'h': HELPER_EMAIL})
+
+if failures:
+    print(f'\n❌ {len(failures)} check(s) failed')
+    sys.exit(1)
+print('\n✅ Prospect lists can be uploaded, invited once each, and only by someone who may act.')

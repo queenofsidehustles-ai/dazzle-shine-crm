@@ -8,7 +8,6 @@ info on purpose); never private consumer data.
 House style mirrors payment_service.py: read the key from env, return a
 (success, data, error) tuple, never raise.
 """
-import os
 import requests
 
 # What we actually type into Google for each category the user picks.
@@ -34,7 +33,8 @@ FIELD_MASK = (
 
 def api_key_present():
     import demo_guard
-    return not demo_guard.active() and bool(os.environ.get('GOOGLE_PLACES_API_KEY'))
+    import integrations
+    return not demo_guard.active() and bool(integrations.google_places_api_key())
 
 
 def search_businesses(category, location, api_key=None):
@@ -46,7 +46,9 @@ def search_businesses(category, location, api_key=None):
     import demo_guard
     if demo_guard.active():
         return True, demo_listings(category, location), ''
-    api_key = api_key or os.environ.get('GOOGLE_PLACES_API_KEY')
+    if not api_key:
+        import integrations
+        api_key = integrations.google_places_api_key()
     if not api_key:
         return False, [], 'Google Places API key not configured'
 

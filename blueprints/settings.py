@@ -331,12 +331,28 @@ def followup_texts():
     deploy to change a sentence would mean the wording never actually improves."""
     import lsa
     if request.method == 'POST':
-        for track, _label in lsa.TRACKS:
+        # These are unsolicited marketing texts to somebody who never booked —
+        # exactly the message TCPA requires an opt-out on. The shipped wording
+        # always carries "Reply STOP to opt out", but this page lets that
+        # wording be replaced by anything, so nothing enforced it staying.
+        # Refuse to save a rewrite that drops it rather than let an edited
+        # template quietly start breaking the law on its next send.
+        rejected = []
+        for track, label in lsa.TRACKS:
             for step in (1, 2, 3):
-                lsa.save_template(track, step,
-                                  request.form.get(f'msg_{track}_{step}', ''))
-        flash('Follow-up texts saved. Anyone mid-sequence gets the new wording '
-              'from their next message on.', 'success')
+                body = request.form.get(f'msg_{track}_{step}', '')
+                if body.strip() and 'stop' not in body.lower():
+                    rejected.append(f'{label} — message {step}')
+                    continue
+                lsa.save_template(track, step, body)
+        if rejected:
+            flash('Not saved (missing an opt-out): ' + ', '.join(rejected) +
+                  '. Every follow-up text has to tell people how to stop '
+                  'getting them — keep "Reply STOP to opt out" somewhere in '
+                  'the message.', 'error')
+        else:
+            flash('Follow-up texts saved. Anyone mid-sequence gets the new wording '
+                  'from their next message on.', 'success')
         return redirect(url_for('settings.followup_texts'))
 
     messages = {(t, s): lsa.template_for(t, s)
@@ -553,12 +569,24 @@ def business():
     import branding as _b
     import customer_terms as _ct
     current_markets = _ct.markets()
+
+    # Only a company on Akye has a subscription to show. This business's own
+    # CRM (no BASE_DOMAIN, no control plane) is not on any plan at all, so the
+    # card that shows one has nowhere to send this page's other users.
+    import billing
+    org = billing.current_org()
+    subscription = None
+    if org is not None:
+        import entitlements
+        subscription = {'state': entitlements.state(), 'plans': entitlements.PLANS}
+
     return render_template('admin/settings_business.html', current=current,
                            default_agreement=_default_agreement(
                                _b.biz_name(), current['worker_model']),
                            us_states=_ct.US_STATES, us_state_names=_ct.US_STATE_NAMES,
                            current_markets=current_markets,
-                           market_notes={c: _ct.market_note(c) for c in current_markets})
+                           market_notes={c: _ct.market_note(c) for c in current_markets},
+                           subscription=subscription)
 
 
 # ── What has broken lately ──────────────────────────────────────────────────

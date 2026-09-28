@@ -37,14 +37,18 @@
     <p class="small">At least 8 characters. Three ordinary words beats one word
        with symbols in it.</p>
 
-    <p class="small" style="margin-top:16px">
-      By creating an account you agree to the
-      <a href="/terms" target="_blank">terms of service</a> and the
-      <a href="/privacy" target="_blank">privacy policy</a>.
-      {# On the signup form rather than buried in a footer: this is the moment
-         somebody is actually agreeing, and it is the only moment where saying
-         so is worth anything. #}
-    </p>
+    {# A checkbox, not a sentence saying pressing the button counts as
+       agreeing. On the signup form rather than buried in a footer, because
+       this is the moment somebody is actually agreeing -- and _validate
+       refuses to create the account at all without it. #}
+    <label for="terms_accepted" class="small" style="display:flex;align-items:flex-start;gap:8px;margin-top:16px;cursor:pointer">
+      <input type="checkbox" id="terms_accepted" name="terms_accepted" value="1" required
+             style="margin-top:3px" {{ 'checked' if terms_accepted }} />
+      <span>
+        I agree to the <a href="/terms" target="_blank">terms of service</a> and the
+        <a href="/privacy" target="_blank">privacy policy</a>.
+      </span>
+    </label>
     {# "Create my CRM" asks somebody to press a button for a thing they have not
        agreed they want yet — and "CRM" is our word, not theirs. This says what
        pressing it gets them. #}
