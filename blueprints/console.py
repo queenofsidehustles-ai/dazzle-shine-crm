@@ -615,6 +615,7 @@ def leads_view():
     return render_template('console/leads.html', rows=rows,
                            can_act=_may_operate(),
                            email_ready=lo.email_ready(),
+                           email_from=product.outreach_from_email(),
                            sms_ready=bool(lo.sms_credentials()),
                            sms_closed=lo.quiet_hours(),
                            email_subject=email_subject, email_body=email_body,

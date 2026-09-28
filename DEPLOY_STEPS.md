@@ -515,6 +515,42 @@ customer sees when they hit reply.
 Step 4 last, and only after step 3. Pointing alerts at a mailbox that does not
 receive yet is how you end up with a crash nobody hears about.
 
+### Part 3 — A separate domain for outreach. Before the first real batch
+
+Emails to New Leads (Console → Funnel → New Leads) are cold: those people
+never asked for them, and that is the mail that draws spam complaints.
+Mailbox providers judge a sender by its domain, so outreach gets a domain of
+its own. A bad week there then cannot push receipts and trial reminders from
+`akyehq.com` into junk.
+
+1. **Register the domain.** Pick one that is recognisably Akye, such as
+   `getakye.com` or `tryakye.com`, and use it only for outreach.
+2. **Make the domain name go somewhere real.** At the registrar, forward the
+   domain's website to `https://www.akyehq.com`. People check where a sender
+   comes from, and a domain that shows nothing looks like spam.
+3. **Add it to Resend.** Go to Resend → **Domains** → **Add Domain**, enter the
+   new domain, and add the records it lists at *that* domain's registrar.
+   Use the same Resend account and the same key; there is no new key to make.
+   Then press **Verify DNS Records**.
+4. **Add a DMARC record** to the new domain: a `TXT` record named `_dmarc`
+   with the value `v=DMARC1; p=none;`. Gmail and Yahoo expect one from anyone
+   sending in bulk.
+5. **Set the variables in Railway** (on the app service, under **Variables**):
+
+   | Variable | Set it to |
+   |---|---|
+   | `PRODUCT_OUTREACH_FROM_EMAIL` | e.g. `hello@getakye.com` |
+   | `PRODUCT_OUTREACH_REPLY_TO` | optional. Leave it unset and replies go to `PRODUCT_SUPPORT_EMAIL` |
+
+   Nothing else moves. Receipts, trial reminders and alerts keep sending from
+   `PRODUCT_FROM_EMAIL`.
+6. **Check it.** Open Console → Funnel → New Leads and pick **Email**. The box
+   should say *Sent from hello@getakye.com*. Add yourself as a lead and send
+   yourself one before sending to anyone else.
+7. **Warm it up.** Start with a few dozen emails a day for the first two
+   weeks, then raise the number. A new domain that sends 200 on day one gets
+   filtered, however clean the list is.
+
 ---
 
 ## Step 12 — Turn on the trial emails
