@@ -623,10 +623,31 @@ def add_lead(engine, **fields):
     """
     allowed = {'name', 'company', 'email', 'phone', 'cleaners', 'note', 'source'}
     row = {k: (v or None) for k, v in fields.items() if k in allowed}
+    if row.get('email'):
+        row['email'] = row['email'].strip().lower()
+    if row.get('phone'):
+        row['phone'] = row['phone'].strip()
     row['created_at'] = datetime.utcnow()
     try:
         ensure_table(engine)
+        # A CSV can be uploaded twice, or the same business can appear in two
+        # prospect lists. Email and phone are contact identities; do not turn
+        # either into duplicate outreach records. Phone comparison ignores
+        # punctuation so "(240) 555-0100" and "240-555-0100" are the same.
+        email = row.get('email')
+        phone_digits = ''.join(ch for ch in (row.get('phone') or '') if ch.isdigit())
         with engine.begin() as conn:
+            if email or phone_digits:
+                existing = conn.execute(
+                    select(product_leads.c.email, product_leads.c.phone)
+                ).all()
+                for old_email, old_phone in existing:
+                    same_email = bool(email and old_email and
+                                      old_email.strip().lower() == email)
+                    old_digits = ''.join(ch for ch in (old_phone or '') if ch.isdigit())
+                    same_phone = bool(phone_digits and old_digits == phone_digits)
+                    if same_email or same_phone:
+                        return False
             conn.execute(insert(product_leads).values(**row))
         return True
     except Exception:

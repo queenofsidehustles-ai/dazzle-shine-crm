@@ -652,12 +652,17 @@ def leads_upload():
     added = skipped = 0
     for row in reader:
         email = (row.get(by_lower.get('email', ''), '') or '').strip().lower()
-        if not email or '@' not in email:
+        phone = (row.get(by_lower.get('phone', ''), '') or '').strip()
+        email_ok = bool(email and '@' in email and email.rsplit('@', 1)[-1])
+        # A prospect is contactable if either channel exists. Email is still
+        # required for the email-invite action, but not for being a lead.
+        if not email_ok and not phone:
             skipped += 1
             continue
         fields = {col: (row.get(by_lower[col], '') or '').strip()
                   for col in LEAD_CSV_COLUMNS if col in by_lower}
-        fields['email'] = email
+        fields['email'] = email if email_ok else ''
+        fields['phone'] = phone
         fields['source'] = 'console upload'
         if control_plane.add_lead(engine, **fields):
             added += 1
@@ -669,7 +674,8 @@ def leads_upload():
                               f'{skipped} skipped' if skipped else None)
     msg = f'Added {added} lead{"s" if added != 1 else ""}.'
     if skipped:
-        msg += f' Skipped {skipped} row{"s" if skipped != 1 else ""} with no usable email.'
+        msg += (f' Skipped {skipped} row{"s" if skipped != 1 else ""} '
+                f'with no usable email or phone.')
     flash(msg, 'success' if added else 'warning')
     return redirect(url_for('console.leads_view'))
 

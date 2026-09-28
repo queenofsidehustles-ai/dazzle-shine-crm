@@ -17,8 +17,9 @@
   <input type="file" name="file" accept=".csv" required>
   <button class="btn btn-primary btn-sm" type="submit">Upload CSV</button>
   <span style="font-size:var(--t-xs);color:var(--softer);width:100%">
-    Columns: name, company, email, phone, cleaners, note — only email is required,
-    and the header names are matched without case. Extra columns are ignored.
+    Columns: name, company, email, phone, cleaners, note — email or phone is required.
+    An email address is required only to send an email invitation. Header names are
+    matched without case. Extra columns are ignored.
   </span>
 </form>
 {% endif %}
@@ -28,7 +29,7 @@
 {% else %}
 
 {% if can_act %}
-{% set due = rows|rejectattr('invited_at')|list %}
+{% set due = rows|selectattr('email')|rejectattr('invited_at')|list %}
 {% if due %}
 <form method="post" action="{{ url_for('console.lead_invite_all') }}"
       onsubmit="return confirm('Send the signup invite to all {{ due|length }} leads not yet invited?')"
@@ -46,17 +47,19 @@
     <td>{{ l.created_at.strftime('%d %b %Y') if l.created_at else '—' }}</td>
     <td>{{ l.name or '—' }}</td>
     <td>{{ l.company or '—' }}</td>
-    <td><a href="mailto:{{ l.email }}">{{ l.email }}</a></td>
+    <td>{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% else %}—{% endif %}</td>
     <td>{{ l.phone or '—' }}</td>
     <td>{{ l.source or '—' }}</td>
     <td>{{ l.invited_at.strftime('%d %b') if l.invited_at else '—' }}</td>
     <td>{{ l.contacted_at.strftime('%d %b') if l.contacted_at else '—' }}</td>
     <td style="display:flex;gap:6px;flex-wrap:wrap">
       {% if can_act %}
+      {% if l.email %}
       <form method="post" action="{{ url_for('console.lead_invite', lead_id=l.id) }}">
         <button class="btn btn-outline btn-sm" type="submit">
           {{ 'Re-invite' if l.invited_at else 'Invite' }}</button>
       </form>
+      {% endif %}
       {% if not l.contacted_at %}
       <form method="post" action="{{ url_for('console.lead_contacted', lead_id=l.id) }}">
         <button class="btn btn-outline btn-sm" type="submit">Mark contacted</button>
