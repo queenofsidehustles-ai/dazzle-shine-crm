@@ -63,13 +63,19 @@ with app.app_context():
     check(r.status_code == 302 and 'login' in (r.headers.get('Location') or ''),
           'redirected to the console login')
 
-    print('\n2. It is its own tab, ahead of Funnel')
+    print('\n2. It is a tab under Funnel, not its own top-level item')
     c.post('/console/login', data={'email': CONSOLE_EMAIL, 'password': CONSOLE_PASSWORD})
     body = c.get('/console/leads').data.decode()
-    check(r.status_code != 200 or True, 'sanity')
-    check('New Leads' in body, 'the tab is named New Leads')
-    check(body.index('New Leads') < body.index('>Funnel<'),
-          'and it comes before Funnel in the navigation')
+    bar = body.split('class="con-bar"', 1)[1].split('</div>', 1)[0]
+    tabs = body.split('aria-label="Funnel views"', 1)[1].split('</nav>', 1)[0]
+    check('New Leads' not in bar, 'the top bar has no New Leads item')
+    check('class="on">Funnel' in bar, 'and Funnel is highlighted there while on New Leads')
+    check('New Leads' in tabs, 'the Funnel tabs include New Leads')
+    check(tabs.index('>Funnel<') < tabs.index('New Leads') < tabs.index('>Sales<'),
+          'between Funnel and Sales')
+    funnel = c.get('/console/funnel').data.decode()
+    check('New Leads' in funnel.split('aria-label="Funnel views"', 1)[1].split('</nav>', 1)[0],
+          'and the Funnel page shows the same tab')
 
     print('\n3. Uploading a CSV accepts email or phone and skips only uncontactable rows')
     csv_text = (
@@ -187,7 +193,9 @@ with app.app_context():
     after = control_plane.new_leads_count(engine)
     check(after == before + 1, f'the untouched lead is counted ({before} -> {after})')
     check(f'New Leads<span class="pill">{after}</span>' in body,
-          'and the nav pill shows that same number')
+          'and the New Leads tab pill shows that same number')
+    check(f'Funnel<span class="pill" title="New leads nobody has contacted yet">{after}</span>' in body,
+          'and so does the Funnel item in the top bar')
 
     with engine.begin() as conn:
         conn.execute(text(
