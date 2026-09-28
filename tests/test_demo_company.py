@@ -678,3 +678,30 @@ def test_the_hourly_rebuild_is_started_only_by_the_scheduler(env, monkeypatch):
     assert r.status_code == 202 and r.get_json()['started']
     (args, kw), = started
     assert args[-1].endswith('demo_company.py') and kw['start_new_session']
+
+
+def test_a_cleaner_is_never_double_booked_whatever_the_day():
+    """The seed picks cleaners by who is busy that day, not when; on a full day
+    it used to double-book one (every Sunday build, and 28 Sep, failed verify
+    and left the live demo stale). assign() now swaps in a teammate free at
+    that time, and when everybody is out, moves the job to a slot they are not."""
+    from datetime import date, datetime as dt
+    import demo_company
+    b = demo_company.Builder(today=date(2026, 10, 4), say=lambda *a: None)
+    day = date(2026, 9, 14)
+    b.team = [(None, date(2026, 1, 1))] * 6
+    t = lambda s: dt.strptime(s, '%I:%M %p')
+
+    class Job:
+        preferred_time, estimated_hours, status = '10:30 AM', 7.2, 'completed'
+
+    # Everybody out from 9:00 to 12:00.
+    b.spans[day] = [(i, t('9:00 AM'), t('12:00 PM')) for i in range(6)]
+    job = Job()
+    crew = b._without_clashes(job, day, (1,))
+    assert crew == (1,) and job.preferred_time == '1:00 PM'
+
+    # One teammate free: swapped in, the time stays.
+    b.spans[day] = [(i, t('9:00 AM'), t('12:00 PM')) for i in range(5)]
+    job = Job()
+    assert b._without_clashes(job, day, (1,)) == (5,) and job.preferred_time == '10:30 AM'
