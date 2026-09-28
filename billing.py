@@ -268,6 +268,13 @@ def checkout_session(org, plan, success_url, cancel_url):
         'subscription_data': {'metadata': {'slug': org['slug'], 'plan': plan}},
         'client_reference_id': org['slug'],
         'allow_promotion_codes': True,
+        # Stripe's default is to collect a card even when a promo code brings
+        # the subscription to $0 due today. This product's own marketing says
+        # "no card needed" -- a customer who types a 100%-off code and is then
+        # asked for a card anyway is being told two different things by the
+        # same signup. 'if_required' collects one only when something is
+        # actually due today or will be once the discount ends.
+        'payment_method_collection': 'if_required',
     }
     if org.get('stripe_customer_id'):
         kwargs['customer'] = org['stripe_customer_id']
