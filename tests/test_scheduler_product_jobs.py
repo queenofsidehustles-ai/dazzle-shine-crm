@@ -2,7 +2,7 @@
 
 The endpoint existed for weeks and nothing called it, so no company on a trial
 was ever reminded of anything. These pin the schedule down: the daily run
-calls it exactly once, on the apex (never per company), never during a
+calls it exactly once, on the product's own host (never per company), never during a
 single-company test run, and a failure or a failed send turns the run red.
 """
 import json
@@ -32,15 +32,26 @@ def _setup(monkeypatch, posted, reply=None):
     monkeypatch.setattr(scheduler, '_post', fake_post)
 
 
-def test_daily_run_calls_trial_reminders_once_on_the_apex(monkeypatch):
+def test_daily_run_calls_trial_reminders_once_on_the_product_host(monkeypatch):
+    # www, not the bare apex: akyehq.com is not the app and answers a POST
+    # with 405, so every trial reminder run failed there.
     posted = []
     _setup(monkeypatch, posted)
+    monkeypatch.delenv('PRODUCT_HOST', raising=False)
     failures = scheduler.run(scheduler.jobs_for('daily'), quiet=True,
                              product_jobs=scheduler.product_jobs_for('daily'))
     assert failures == []
     trial = [u for u in posted if u.endswith('/api/trial-nudges')]
-    assert trial == ['https://akyehq.com/api/trial-nudges']
+    assert trial == ['https://www.akyehq.com/api/trial-nudges']
+    # A company's own jobs stay on its own address.
     assert 'https://alpha.akyehq.com/api/reminders' in posted
+
+
+def test_product_host_can_be_set_and_is_never_doubled(monkeypatch):
+    monkeypatch.setenv('PRODUCT_HOST', 'app.example.com/')
+    assert scheduler.product_host('akyehq.com') == 'app.example.com'
+    monkeypatch.delenv('PRODUCT_HOST')
+    assert scheduler.product_host('www.akyehq.com') == 'www.akyehq.com'
 
 
 def test_daily_cadence_includes_trial_reminders_hourly_does_not():
