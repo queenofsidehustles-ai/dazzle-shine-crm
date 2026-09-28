@@ -145,6 +145,26 @@ def _referral(org):
     return url, referred
 
 
+@billing_bp.route('/billing/nudge-preference', methods=['POST'])
+@owner_required
+def nudge_preference():
+    """Whether she wants trial emails and to be chased as a lead at all.
+
+    Hers to set, from her own account -- not something support toggles on her
+    behalf and not something the console can see or touch. See
+    trial_nudges.due() and funnel._follow_up() for where this is actually
+    read."""
+    import provisioning
+    org = _org_or_404()
+    opted_out = bool(request.form.get('opted_out'))
+    control_plane.set_billing(provisioning._engine(), org['slug'],
+                              nudges_opted_out=opted_out)
+    flash('Saved. You will not get trial emails.' if opted_out
+          else 'Saved. You may get an email about your trial from time to time.',
+          'success')
+    return redirect(url_for('billing.billing_home'))
+
+
 @billing_bp.route('/billing/checkout/<plan>', methods=['POST'])
 @owner_required
 def checkout(plan):

@@ -208,6 +208,8 @@ def _follow_up(orgs, leads, signup_emails, now, billing):
     for o in orgs:
         if _gone(o):
             continue
+        if o.get('nudges_opted_out'):
+            continue                    # asked not to be chased, same as not to be emailed
         if _status(o) == 'past_due':
             failing.append(o)
             continue

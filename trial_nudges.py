@@ -26,6 +26,7 @@ What this refuses to do, in every case deliberately:
   * never email a paying customer — `trial_state` returns None for them and
     that is the whole check
   * never email a suspended company
+  * never email a company whose owner has opted out, from her own Settings
   * never send the same nudge twice, however often the cron runs. This is why
     `nudges_sent` is written down rather than worked out from dates: a cron
     that fires twice, or a deploy that replays a day, would otherwise send a
@@ -85,6 +86,8 @@ def due(org, now=None):
         return None
     if org.get('is_test'):
         return None                     # marked a test account in the console
+    if org.get('nudges_opted_out'):
+        return None                     # she asked not to be, from her own Settings
     if org.get('status') in ('suspended', 'closing', 'closed'):
         # A closed company is being wound down, not courted: "your trial is
         # ending" to somebody whose account was closed is worse than silence.

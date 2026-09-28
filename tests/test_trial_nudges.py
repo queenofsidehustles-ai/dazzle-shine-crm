@@ -10,6 +10,7 @@ really guarding is everything they must never do:
 
   * a paying customer must never be told their trial is ending
   * a suspended company must never be emailed at all
+  * an owner who opted out from her own Settings must never be emailed either
   * the same nudge must never go twice, however often the cron runs
   * a trial that lapsed months ago must never produce "your trial has just
     finished" — which is what the first run against a real database would do
@@ -156,6 +157,10 @@ check(tn.due(org(days_old=8, status='closed')) is None
       'or to one that has been closed')
 check(tn.due(org(days_old=8, is_test=True)) is None,
       'or to a company marked as a test account')
+check(tn.due(org(days_old=8, nudges_opted_out=True)) is None,
+      'or to one whose owner opted out from her own Settings')
+check(tn.due(org(days_old=25, nudges_opted_out=True)) is None,
+      'whatever the phase she is in when she asked')
 
 
 print('\n8. The words')
