@@ -34,6 +34,7 @@ FIELDS = {
     'cloudinary_cloud_name':  ('CLOUDINARY_CLOUD_NAME', 'Cloudinary cloud name', False),
     'cloudinary_api_key':     ('CLOUDINARY_API_KEY', 'Cloudinary API key', False),
     'cloudinary_api_secret':  ('CLOUDINARY_API_SECRET', 'Cloudinary API secret', True),
+    'google_places_api_key':  ('GOOGLE_PLACES_API_KEY', 'Google Places API key', True),
 }
 
 _PREFIX = 'int_'
@@ -74,7 +75,8 @@ def _stored(name):
 # so every Stripe, Twilio and Resend path sees "not connected" (demo_guard.py).
 _OUTBOUND = frozenset({'stripe_secret_key', 'stripe_publishable_key',
                        'stripe_webhook_secret', 'twilio_account_sid',
-                       'twilio_auth_token', 'twilio_phone', 'resend_api_key'})
+                       'twilio_auth_token', 'twilio_phone', 'resend_api_key',
+                       'google_places_api_key'})
 
 
 def get(name):
@@ -134,6 +136,7 @@ def stripe_webhook_secret():  return get('stripe_webhook_secret')
 def cloudinary_cloud_name():  return get('cloudinary_cloud_name')
 def cloudinary_api_key():     return get('cloudinary_api_key')
 def cloudinary_api_secret():  return get('cloudinary_api_secret')
+def google_places_api_key():  return get('google_places_api_key')
 
 
 def stripe_ready():
@@ -152,6 +155,10 @@ def photos_ready():
     return all((cloudinary_cloud_name(), cloudinary_api_key(), cloudinary_api_secret()))
 
 
+def lead_finder_ready():
+    return bool(google_places_api_key())
+
+
 def stripe_mode():
     """'live', 'test' or None — worth showing an owner prominently, because
     taking real bookings against test keys collects no money at all."""
@@ -168,6 +175,7 @@ def missing_for(area):
         'texting': ['twilio_account_sid', 'twilio_auth_token', 'twilio_phone'],
         'email': ['resend_api_key'],
         'photos': ['cloudinary_cloud_name', 'cloudinary_api_key', 'cloudinary_api_secret'],
+        'lead_finder': ['google_places_api_key'],
     }
     return [FIELDS[n][1] for n in groups.get(area, []) if not get(n)]
 
@@ -180,4 +188,5 @@ def status():
         'texting': {'ready': texting_ready(), 'missing': missing_for('texting')},
         'email': {'ready': email_ready(), 'missing': missing_for('email')},
         'photos': {'ready': photos_ready(), 'missing': missing_for('photos')},
+        'lead_finder': {'ready': lead_finder_ready(), 'missing': missing_for('lead_finder')},
     }

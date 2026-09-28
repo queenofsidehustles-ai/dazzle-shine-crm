@@ -61,6 +61,15 @@
       {% endif %}
     </div>
 
+    <div style="padding:14px;border-radius:10px;border:1px solid {{ 'var(--good)' if status.lead_finder.ready else 'var(--amber-line)' }};background:{{ 'var(--good-soft)' if status.lead_finder.ready else 'var(--amber-soft)' }}">
+      <div style="font-weight:700;margin-bottom:4px">🔎 Lead generation</div>
+      {% if status.lead_finder.ready %}
+        <div style="color:var(--good);font-size:0.86rem">Connected. The lead finder can search for businesses.</div>
+      {% else %}
+        <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.lead_finder.missing|join(', ') }}.</div>
+      {% endif %}
+    </div>
+
   </div>
 </div>
 
@@ -227,6 +236,41 @@
       {% endfor %}
     </div>
     <button type="submit" class="btn btn-gold">Save Job Photos</button>
+  </div>
+
+  <!-- Lead generation -->
+  <div class="card" style="margin-top:20px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Lead Generation</h2>
+    <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
+      Finds public business listings — property managers, realtors, Airbnb hosts
+      and the like — to build a call list. Without it, the lead finder cannot
+      search.
+    </p>
+    {% set howto_title = 'How do I get a Google Places API key?' %}
+    {% set howto_mins = 'about 10 minutes' %}
+    {% set howto_link = 'https://console.cloud.google.com/' %}
+    {% set howto_link_text = 'Open Google Cloud Console' %}
+    {% set howto_note = 'Google bills this per search, so keep the key
+        restricted to the Places API (New) — the console walks you through
+        that under API restrictions. A card on the Google Cloud project is
+        required, but a free monthly credit covers ordinary use.' %}
+    {% set steps = [
+      'Go to <strong>console.cloud.google.com</strong> and create a project, or pick one you have.',
+      'Search for and enable the <strong>Places API (New)</strong>.',
+      'Go to <strong>APIs &amp; Services → Credentials</strong> and click <strong>Create credentials → API key</strong>.',
+      'Click into the new key and restrict it to the Places API (New) — this limits what a leaked key could be used for.',
+      'Copy the key and paste it below, then press Save.',
+    ] %}
+    {% include '_howto.html' %}
+    {% set f = fields['google_places_api_key'] %}
+    <div class="form-group">
+      <label>{{ f.label }}</label>
+      <input type="text" name="google_places_api_key" value="{{ f.value }}" autocomplete="off" />
+      {% if f.source == 'environment' %}
+        <span style="font-size:0.76rem;color:var(--softer)">Currently from your hosting settings.</span>
+      {% endif %}
+    </div>
+    <button type="submit" class="btn btn-gold">Save Lead Generation</button>
   </div>
 </form>
 
