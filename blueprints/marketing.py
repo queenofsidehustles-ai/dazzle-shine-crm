@@ -144,6 +144,59 @@ def demo():
     return render_template('marketing/demo.html', demo_base=demo_base)
 
 
+@marketing_bp.route('/leads/unsubscribe/<token>', methods=['GET', 'POST'])
+def lead_unsubscribe(token):
+    """The link at the foot of every console outreach email. One click, no
+    login, no questions: the address is taken off every lead it is on and is
+    never emailed from the console again (lead_outreach.email_block)."""
+    _require_product_site()
+    import lead_outreach
+    import control_plane
+    import provisioning
+    email = lead_outreach.email_from_token(token)
+    if not email:
+        abort(404)
+    try:
+        control_plane.mark_leads_unsubscribed(provisioning._engine(), email)
+    except Exception:
+        import errors
+        errors.capture(RuntimeError('lead unsubscribe failed'), path='/leads/unsubscribe')
+    return render_template('marketing/lead_unsubscribed.html', email=email)
+
+
+@marketing_bp.route('/leads/sms-reply', methods=['POST'])
+def lead_sms_reply():
+    """Twilio's webhook for replies to the product's own texting number.
+
+    STOP (and the other carrier keywords) marks every lead with that number as
+    opted out; START undoes it. Twilio itself stops delivering after a STOP;
+    this is what lets the console know, so it never tries again. Only Twilio
+    can call it: the signature is checked against PRODUCT_TWILIO_AUTH_TOKEN."""
+    _require_product_site()
+    from flask import request, Response
+    import lead_outreach
+    creds = lead_outreach.sms_credentials()
+    signature = (request.headers.get('X-Twilio-Signature') or '').strip()
+    if not creds or not signature:
+        abort(403)
+    try:
+        from twilio.request_validator import RequestValidator
+        valid = RequestValidator(creds[1]).validate(request.url, request.form, signature)
+    except Exception:
+        valid = False
+    if not valid:
+        abort(403)
+    import notifications
+    import control_plane
+    import provisioning
+    body, sender = request.form.get('Body', ''), request.form.get('From', '')
+    if notifications.sms_stop_word(body):
+        control_plane.set_leads_sms_opt_out(provisioning._engine(), sender, True)
+    elif notifications.sms_start_word(body):
+        control_plane.set_leads_sms_opt_out(provisioning._engine(), sender, False)
+    return Response('<Response></Response>', mimetype='text/xml')
+
+
 @marketing_bp.route('/terms')
 def terms():
     _require_product_site()

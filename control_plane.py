@@ -17,7 +17,7 @@ from datetime import datetime
 
 from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
                         LargeBinary, Text, UniqueConstraint,
-                        Table, select, insert, update, text)
+                        Table, select, insert, update, text, func)
 
 # Its own MetaData: these tables must never be created inside a tenant schema,
 # and must never be swept up by a migration that walks models.py.
@@ -153,6 +153,30 @@ product_leads = Table(
     # it, not "we have been in touch" -- and it is what stops the same list
     # being emailed twice by two people working it at once.
     Column('invited_at', DateTime),
+    # Outreach from the console (lead_outreach.py). The two opt-outs are kept
+    # apart because the law keeps them apart: an unsubscribe link covers email,
+    # a STOP reply covers texts, and neither implies the other.
+    Column('last_emailed_at', DateTime),
+    Column('last_texted_at', DateTime),
+    Column('unsubscribed_at', DateTime),
+    Column('sms_opted_out_at', DateTime),
+)
+
+
+# Every email and text the console sends a prospect, sent or refused: what
+# went, to whom, who pressed the button, and what the provider said.
+product_lead_messages = Table(
+    'product_lead_messages', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('lead_id', Integer, index=True),
+    Column('channel', String(10)),                  # email | sms
+    Column('to_address', String(200)),
+    Column('subject', String(300)),
+    Column('body', Text),
+    Column('ok', Boolean, default=False),
+    Column('detail', String(400)),
+    Column('sent_by', String(200)),
+    Column('sent_at', DateTime, default=datetime.utcnow, index=True),
 )
 
 
@@ -387,7 +411,7 @@ def ensure_table(engine):
         engine, tables=[organizations, product_leads, feedback,
                         console_users, support_requests, console_log,
                         tenant_logins, login_lookup_requests, console_docs,
-                        promo_codes])
+                        promo_codes, product_lead_messages])
     ensure_columns(engine)
 
 
@@ -686,6 +710,72 @@ def mark_lead_invited(engine, lead_id):
                    product_leads.c.invited_at.is_(None))
             .values(invited_at=datetime.utcnow()))
         return result.rowcount > 0
+
+
+def lead_by_id(engine, lead_id):
+    with engine.connect() as conn:
+        row = conn.execute(select(product_leads).where(
+            product_leads.c.id == lead_id)).mappings().first()
+    return dict(row) if row else None
+
+
+def record_lead_message(engine, lead_id, channel, to_address, subject, body,
+                        ok, detail, sent_by):
+    """Write one outreach attempt down, and stamp the lead if it went."""
+    now = datetime.utcnow()
+    with engine.begin() as conn:
+        conn.execute(insert(product_lead_messages).values(
+            lead_id=lead_id, channel=channel, to_address=(to_address or '')[:200],
+            subject=(subject or '')[:300] or None, body=body, ok=bool(ok),
+            detail=(detail or '')[:400], sent_by=sent_by, sent_at=now))
+        if ok:
+            stamp = 'last_emailed_at' if channel == 'email' else 'last_texted_at'
+            conn.execute(update(product_leads).where(product_leads.c.id == lead_id)
+                         .values(**{stamp: now}))
+
+
+def lead_messages(engine, limit=100):
+    """The most recent outreach, newest first, with who it was to."""
+    try:
+        with engine.connect() as conn:
+            q = (select(product_lead_messages, product_leads.c.name,
+                        product_leads.c.company)
+                 .select_from(product_lead_messages.outerjoin(
+                     product_leads, product_leads.c.id == product_lead_messages.c.lead_id))
+                 .order_by(product_lead_messages.c.sent_at.desc()).limit(limit))
+            return [dict(r) for r in conn.execute(q).mappings()]
+    except Exception:
+        return []
+
+
+def mark_leads_unsubscribed(engine, email):
+    """Every lead at this address stops getting email. Returns how many."""
+    email = (email or '').strip().lower()
+    if not email:
+        return 0
+    with engine.begin() as conn:
+        return conn.execute(
+            update(product_leads)
+            .where(func.lower(product_leads.c.email) == email,
+                   product_leads.c.unsubscribed_at.is_(None))
+            .values(unsubscribed_at=datetime.utcnow())).rowcount
+
+
+def set_leads_sms_opt_out(engine, phone, opted_out=True):
+    """STOP (or START) from a number: every lead with it, compared by digits.
+    Returns how many leads changed."""
+    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())[-10:]
+    if len(digits) < 10:
+        return 0
+    with engine.begin() as conn:
+        ids = [r.id for r in conn.execute(
+                   select(product_leads.c.id, product_leads.c.phone))
+               if ''.join(ch for ch in (r.phone or '') if ch.isdigit())[-10:] == digits]
+        if not ids:
+            return 0
+        return conn.execute(
+            update(product_leads).where(product_leads.c.id.in_(ids))
+            .values(sms_opted_out_at=datetime.utcnow() if opted_out else None)).rowcount
 
 
 def add_promo_code(engine, **fields):
