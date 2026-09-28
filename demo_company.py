@@ -210,6 +210,7 @@ class Builder:
         self.clients = []
         self.bookings = []
         self.busy = {}                  # day -> cleaners already booked that day
+        self.spans = {}                 # day -> [(cleaner, start, end)] of their jobs
 
     def d(self, n):
         return self.today + timedelta(days=n)
@@ -360,6 +361,7 @@ class Builder:
         claim board."""
         from models import BookingCrew
         from extensions import db
+        crew = self._without_clashes(b, day, crew)
         for n, s_i in enumerate(crew):
             s = self.staff(s_i)
             db.session.add(BookingCrew(booking_id=b.id, staff_id=s.id,
@@ -372,6 +374,47 @@ class Builder:
             b.cleaner_notified_at = b.created_at + timedelta(hours=1)
             b.cleaner_response = 'accepted'
             self.busy.setdefault(day, set()).update(crew)
+            start, end = self._span(b, b.preferred_time, len(crew))
+            self.spans.setdefault(day, []).extend((i, start, end) for i in crew)
+
+    @staticmethod
+    def _span(b, slot, size):
+        """When a job at `slot` has its cleaners, measured the way verify() does."""
+        start = datetime.strptime(slot, '%I:%M %p')
+        return start, start + timedelta(hours=(b.estimated_hours or 2) / max(1, size))
+
+    def _free_at(self, i, day, start, end):
+        return all(e <= start or s >= end
+                   for j, s, e in self.spans.get(day, ()) if j == i)
+
+    def _without_clashes(self, b, day, crew):
+        """The crew, with anyone already out on another job at that time swapped
+        for a teammate who can work that day and is free then.
+
+        Every assignment comes through here, so a cleaner is never booked into
+        two places at once whatever day the demo is built on. pick_crew only
+        knows who is busy that day, not when, and on a full day it has to fall
+        back to people who are already out."""
+        if not crew or b.status == 'cancelled':
+            return crew
+        # On a day when everybody is already out at that hour there is nobody
+        # to swap in; then the job moves to the first slot its crew is free.
+        for slot in [b.preferred_time] + [s for s in SLOTS if s != b.preferred_time]:
+            start, end = self._span(b, slot, len(crew))
+            out = []
+            for i in crew:
+                if not self._free_at(i, day, start, end):
+                    spare = [j for j in range(6) if j not in crew and j not in out
+                             and self.can_work(j, day) and self._free_at(j, day, start, end)]
+                    spare.sort(key=lambda j: (j in self.busy.get(day, ()), j))
+                    if not spare:
+                        break
+                    i = spare[0]
+                out.append(i)
+            else:
+                b.preferred_time = slot
+                return tuple(out)
+        return crew                     # verify() will name the clash
 
     def pick_crew(self, day, size=1):
         """Cleaners on the team by then and free that day, rotated so the work
