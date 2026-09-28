@@ -136,19 +136,150 @@ def _send_quote_followup(q, n):
                       from_name=from_name, from_email=from_email, reply_to=reply_to)
 
 
+def _send_prospect_drip(p, sequence, n):
+    """One step of a prospect's email sequence, in the commercial identity.
+
+    Outreach and a customer's booking confirmation must not share a sender
+    reputation: this is the mail that can be marked as spam, and that is not
+    the mail that has to arrive.
+    """
+    import brands
+    from notifications import send_email, unsubscribe_token
+    from_name, from_email, reply_to = brands.send_identity(brands.COMMERCIAL)
+    first = (p.contact_name or '').split()[0] if p.contact_name else 'there'
+    place = p.business_name or 'your building'
+
+    MSGS = {
+        'send_info': {
+            1: ("Did our information reach you?",
+                f"<p>Hi {first},</p><p>Just making sure the information we sent over for "
+                f"<strong>{place}</strong> arrived — it does sometimes land in junk.</p>"
+                f"<p>Happy to answer anything, or walk the building whenever suits.</p>"),
+            2: ("Twenty minutes at " + place + "?",
+                f"<p>Hi {first},</p><p>Following up on what we sent through for "
+                f"<strong>{place}</strong>. The most useful next step is usually a short "
+                f"walkthrough — twenty minutes, and you get a real number rather than a "
+                f"range.</p><p>Would either of the next two Tuesdays work?</p>"),
+            3: ("Last note — and one question",
+                f"<p>Hi {first},</p><p>Last note from me on <strong>{place}</strong>, I "
+                f"promise. If the timing is simply wrong, that is completely fine.</p>"
+                f"<p>One question if you have a second: roughly when does your current "
+                f"cleaning contract come up? I would rather get in touch then than keep "
+                f"emailing you now.</p>"),
+        },
+        'nurture': {
+            1: ("Checking in on " + place,
+                f"<p>Hi {first},</p><p>Just a quick hello — no pitch. If your current "
+                f"cleaning is going well, genuinely glad to hear it.</p><p>If anything "
+                f"has slipped, we keep a little capacity free for exactly that.</p>"),
+            2: ("Still here if you need a second option",
+                f"<p>Hi {first},</p><p>Touching base on <strong>{place}</strong>. Most "
+                f"people we work with came to us mid-contract, when something stopped "
+                f"working — so there is no bad time to have a second number on file.</p>"),
+            3: ("Worth a conversation this quarter?",
+                f"<p>Hi {first},</p><p>Checking in on <strong>{place}</strong>. If your "
+                f"contract is coming up for renewal, this is usually the right moment to "
+                f"get a comparison quote — it takes twenty minutes.</p>"),
+            4: ("Last check-in from us",
+                f"<p>Hi {first},</p><p>This is my last scheduled note on "
+                f"<strong>{place}</strong> — I would rather stop than become the supplier "
+                f"who keeps emailing.</p><p>We are here whenever the timing changes. Just "
+                f"reply and I will pick it straight back up.</p>"),
+        },
+    }
+    subject, inner = MSGS.get(sequence, {}).get(n, (None, None))
+    if not subject:
+        return False
+
+    unsub = f"{branding.crm_base()}/api/unsubscribe/{unsubscribe_token(p.email)}"
+    foot = ('You are receiving this because we spoke about cleaning at your '
+            f'property. <a href="{unsub}" style="color:#9a95ad">Unsubscribe</a>.')
+    html = brands.email_shell(brands.COMMERCIAL, None, inner, footer_note=foot)
+    return send_email(p.email, p.contact_name or p.business_name, subject, html,
+                      from_name=from_name, from_email=from_email,
+                      reply_to=reply_to)
+
+
+def run_prospect_sequences(now=None):
+    """Send whichever step of each prospect's sequence has come due.
+
+    One step per prospect per run, even if two are overdue -- a prospect whose
+    dates were backdated by an import should get a sequence, not a pile of mail
+    in one morning.
+    """
+    from models import Prospect, db
+    import prospecting
+    now = now or datetime.utcnow()
+    sent = 0
+
+    for p in Prospect.query.filter(Prospect.sequence.isnot(None)).all():
+        seq = prospecting.SEQUENCES.get(p.sequence)
+        # Stopped, opted out, or never had an address. Each is a reason to skip
+        # rather than to clear the sequence: the address may arrive later, and
+        # an opt-out is not permission to start again if it is withdrawn.
+        if not seq or not p.email or is_opted_out(p.email):
+            continue
+        # Moved on since the sequence started -- they rang back, or she moved
+        # them herself. Either way the chasing is over.
+        if (p.stage or 'new') not in seq['stages']:
+            p.sequence = None
+            db.session.commit()
+            continue
+
+        base = p.last_drip_at or p.created_at
+        if not base:
+            continue
+        step = p.drip_step or 0
+        for days, target in seq['schedule']:
+            if step < target and base <= now - timedelta(days=days):
+                try:
+                    if _send_prospect_drip(p, p.sequence, target):
+                        sent += 1
+                except Exception:
+                    pass
+                p.drip_step = target
+                # Deliberately NOT reset to now: the schedule is measured from
+                # the day the sequence started, so step 2 lands on day 7 rather
+                # than seven days after step 1 happened to go out.
+                if target >= seq['schedule'][-1][1]:
+                    # Finished. It stays on the call list; it stops being mailed.
+                    p.sequence = None
+                db.session.commit()
+                break
+    return sent
+
+
 def run_lifecycle_emails():
     """Process every lifecycle stage. Returns a dict of how many of each were sent."""
     from models import Booking, BookingCrew, Lead, BookingRating, Staff
     now = datetime.utcnow()
     c = {'lead_final': 0, 'morning_of': 0, 'review_nudge': 0,
          'upsell': 0, 'upsell_nudge': 0, 'winback': 0, 'insurance_reminder': 0,
-         'onboarding_reminder': 0, 'schedule_reminder': 0, 'invoice': 0,
-         'quote_followup': 0, 'recurring_topup': 0, 'recurring_expenses': 0}
+         'onboarding_reminder': 0, 'invoice': 0,
+         'quote_followup': 0, 'recurring_topup': 0, 'recurring_expenses': 0,
+         'renewals_woken': 0, 'prospect_drip': 0}
 
     # ── Keep recurring plans filled ~12 weeks ahead (rolling generation) ──
     try:
         import recurring
         c['recurring_topup'] = recurring.topup_all()
+    except Exception:
+        pass
+
+    # ── Put prospects back on the list before their contract renews ───────
+    # Sends nothing; it moves a resting prospect onto today's call list. It
+    # rides the daily job rather than getting a cron of its own because a
+    # second schedule is a second thing that can silently stop, and this one
+    # only has to be right to the day.
+    try:
+        import prospecting
+        c['renewals_woken'] = prospecting.wake_renewals()
+    except Exception:
+        pass
+
+    # ── The emails that go out between the calls ──────────────────────────
+    try:
+        c['prospect_drip'] = run_prospect_sequences(now)
     except Exception:
         pass
 
@@ -330,10 +461,37 @@ def run_lifecycle_emails():
         s.onboarding_reminder_count = (s.onboarding_reminder_count or 0) + 1
         db.session.commit()
 
-    # ── Day-before schedule reminder — text/email cleaners about tomorrow's jobs ──
+    return c
+
+
+def send_cleaner_schedule_reminders():
+    """Text/email every active cleaner about tomorrow's jobs. Once per cleaner
+    per day, tracked on Staff.schedule_reminder_date.
+
+    Split out from run_lifecycle_emails() (see IAM-02/JOURNEY-01-era launch-
+    readiness notes): that function is gated entirely behind the "Follow-ups
+    and win-backs" automation, described to the owner only as nudges to
+    customers who have gone quiet. A cleaner's day-before job reminder has
+    nothing to do with that, so turning off customer win-back texts was
+    silently also turning this off, with no way to tell from the toggle's own
+    label. Called from the same daily cron as the customer-facing day-before
+    reminder (/api/reminders) instead, under the "Day-before reminders"
+    automation, which already fires at the right cadence for this and needs
+    no new scheduled trigger to exist.
+
+    Also fixes a real, separate bug found alongside the above: this used to
+    compute "tomorrow" from datetime.utcnow().date(), not the business's own
+    local date -- the same trap the customer-facing reminder route was
+    deliberately fixed for (see blueprints/api.py's send_reminders()). A
+    business west of UTC could have this fire a day early by server clock.
+    """
+    from models import Booking, BookingCrew, Staff
     from notifications import send_sms
-    today_str = now.date().isoformat()
-    tomorrow = (now.date() + timedelta(days=1)).isoformat()
+    import scheduling
+    today = scheduling.local_today()
+    today_str = today.isoformat()
+    tomorrow = (today + timedelta(days=1)).isoformat()
+    sent = 0
     for s in Staff.query.filter(Staff.is_active.is_(True)).all():
         if s.schedule_reminder_date == today_str or not s.agreement_token:
             continue
@@ -359,7 +517,6 @@ def run_lifecycle_emails():
             except Exception:
                 pass
         s.schedule_reminder_date = today_str
-        c['schedule_reminder'] += 1
+        sent += 1
         db.session.commit()
-
-    return c
+    return sent

@@ -68,6 +68,24 @@ test.describe('API — Public endpoints', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test.describe('Website — Public pages', () => {
+  // These test the cleaning company's own public website — the one with the
+  // booking form and the careers section. That site is a separate project and
+  // is not served by this repo, so unless SITE_URL points at a running copy
+  // there is nothing here to test.
+  //
+  // They used to just fail. Five permanent reds in a suite is worse than five
+  // skips: it trains everybody to read a red run as normal, which is exactly
+  // when a real failure goes unnoticed.
+  test.beforeAll(async ({ request }) => {
+    let html = '';
+    try {
+      const r = await request.get(SITE, { timeout: 5000 });
+      html = await r.text();
+    } catch (e) { /* nothing listening */ }
+    test.skip(!/id="?book|id="?careers|qq-name/.test(html),
+      `No public website at ${SITE}. Set SITE_URL to a running copy to test it.`);
+  });
+
   test('Homepage loads with correct title', async ({ page }) => {
     await page.goto(SITE);
     await expect(page).toHaveTitle(/Dazzle|Shine|Maid/i);
@@ -172,7 +190,14 @@ test.describe('CRM Admin — Navigation (requires credentials)', () => {
 
   test('Dashboard loads with stats', async ({ page }) => {
     await login(page);
-    await expect(page.locator('.stat-grid')).toBeVisible();
+    // Asserts that the dashboard shows the business its numbers — not that it
+    // does so inside a div called `.stat-grid`, which is what this used to
+    // check and which broke the moment the dashboard was redesigned. The
+    // redesign was fine; the test was describing the markup rather than the
+    // point of the page.
+    const money = page.locator('.money-strip, .stat-grid');
+    await expect(money.first()).toBeVisible();
+    await expect(money.first()).toContainText(/\$|\d/);
     console.log('  Dashboard stats visible ✓');
   });
 

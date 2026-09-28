@@ -1,12 +1,13 @@
 import json
 import secrets
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, Response, render_template, request, redirect, url_for, flash, jsonify, g
 from auth import login_required
 from models import Booking, ChecklistTemplate, JobChecklist, Staff, BookingRating
 from extensions import db
 from notifications import send_email, send_sms
 import branding
+import private_media
 
 workorders_bp = Blueprint('workorders', __name__, url_prefix='/workorders')
 
@@ -236,7 +237,7 @@ def _send_workorder_to(booking, checklist, cleaner):
     # A set amount always wins over the automatic percentage — say it plainly.
     if row and row.pay_amount is not None:
         crew_pay_html = f'<p><strong>Your pay for this job:</strong> ${row.pay_amount:.2f}</p>'
-        sms_crew += f" Your pay: ${row.pay_amount:.0f}."
+        sms_crew += f" Your pay: ${row.pay_amount:.2f}."
 
     checklist_url = url_for('workorders.view_checklist', token=checklist.token, _external=True, _scheme='https')
     sop_url = url_for('sops.library', _external=True, _scheme='https')
@@ -286,13 +287,38 @@ def send_workorder(booking_id):
 
 # ── Public checklist (no login needed) ────────────────────────────────────────
 
+def _tenant_slug():
+    return getattr(g, 'tenant_slug', None)
+
+
+def _photo_scope(checklist, phase):
+    return f'{checklist.id}:{phase}'
+
+
+def _private_photo_refs(checklist, phase):
+    tenant_slug = _tenant_slug()
+    if not tenant_slug or phase not in ('before', 'after'):
+        return []
+    refs = checklist.get_before_photos() if phase == 'before' else checklist.get_after_photos()
+    scope = _photo_scope(checklist, phase)
+    return [ref for ref in refs if private_media.parse_ref(
+        ref, tenant_slug=tenant_slug, kind='job-photo', scope_id=scope)]
+
+
+def _photo_urls(checklist, phase):
+    refs = _private_photo_refs(checklist, phase)
+    return [url_for('workorders.get_photo', token=checklist.token,
+                    phase=phase, photo_index=i)
+            for i in range(len(refs))]
+
+
 @workorders_bp.route('/checklist/<token>')
 def view_checklist(token):
-    import os
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
-    return render_template('public/checklist.html', checklist=checklist,
-        cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk'),
-        upload_preset=os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews'),
+    return render_template(
+        'public/checklist.html', checklist=checklist,
+        before_photo_urls=_photo_urls(checklist, 'before'),
+        after_photo_urls=_photo_urls(checklist, 'after'),
     )
 
 
@@ -418,29 +444,65 @@ def submit_review(token):
 @workorders_bp.route('/checklist/<token>/add-photo', methods=['POST'])
 def add_photo(token):
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
-    data = request.get_json() or {}
-    phase = data.get('phase')          # 'before' or 'after'
-    url = (data.get('url') or '').strip()
-    if phase not in ('before', 'after') or not url:
-        return jsonify({'ok': False, 'error': 'Missing phase or url'}), 400
+    tenant_slug = _tenant_slug()
+    phase = (request.form.get('phase') or '').strip()
+    photo = request.files.get('photo')
+    if not tenant_slug:
+        return jsonify({'ok': False, 'error': 'Tenant context is required.'}), 404
+    if phase not in ('before', 'after') or photo is None:
+        return jsonify({'ok': False, 'error': 'Missing phase or photo'}), 400
+    try:
+        ref = private_media.upload_image(
+            photo, tenant_slug=tenant_slug, kind='job-photo',
+            scope_id=_photo_scope(checklist, phase))
+    except (ValueError, RuntimeError) as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+
     if phase == 'before':
-        photos = checklist.get_before_photos()
-        photos.append(url)
+        photos = _private_photo_refs(checklist, phase)
+        photos.append(ref)
         checklist.before_photos = json.dumps(photos)
     else:
-        photos = checklist.get_after_photos()
-        photos.append(url)
+        photos = _private_photo_refs(checklist, phase)
+        photos.append(ref)
         checklist.after_photos = json.dumps(photos)
     db.session.commit()
-    return jsonify({'ok': True})
+    index = len(photos) - 1
+    return jsonify({
+        'ok': True,
+        'url': url_for('workorders.get_photo', token=token,
+                       phase=phase, photo_index=index),
+    })
+
+
+@workorders_bp.route('/checklist/<token>/photo/<phase>/<int:photo_index>')
+def get_photo(token, phase, photo_index):
+    checklist = JobChecklist.query.filter_by(token=token).first_or_404()
+    tenant_slug = _tenant_slug()
+    if not tenant_slug or phase not in ('before', 'after'):
+        return ('Not found', 404)
+    refs = _private_photo_refs(checklist, phase)
+    if photo_index < 0 or photo_index >= len(refs):
+        return ('Not found', 404)
+    fetched = private_media.fetch_image(
+        refs[photo_index], tenant_slug=tenant_slug, kind='job-photo',
+        scope_id=_photo_scope(checklist, phase))
+    if not fetched:
+        return ('Not found', 404)
+    body, content_type = fetched
+    response = Response(body, mimetype=content_type)
+    response.headers['Cache-Control'] = 'private, no-store'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 
 @workorders_bp.route('/checklist/<token>/submit-complete', methods=['POST'])
 def submit_complete(token):
     import os
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
-    before = checklist.get_before_photos()
-    after = checklist.get_after_photos()
+    before = _private_photo_refs(checklist, 'before')
+    after = _private_photo_refs(checklist, 'after')
     if not before or not after:
         return jsonify({'ok': False,
             'error': 'Please add at least one BEFORE photo and one AFTER photo.'}), 400

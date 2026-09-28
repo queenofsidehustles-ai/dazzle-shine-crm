@@ -4,23 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pay Statement — {{ s.name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    body { font-family: Inter, -apple-system, sans-serif; background:#f6f5fb; margin:0; color:#1f1333; }
+    body { font-family: Inter, -apple-system, sans-serif; background:var(--ground); margin:0; color:var(--ink); }
     .sheet { max-width:720px; margin:0 auto; padding:28px 24px; background:#fff; }
-    .head { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #1f1333; padding-bottom:16px; margin-bottom:20px; }
-    .biz { font-size:1.4rem; font-weight:800; color:#1f1333; }
-    .biz .sub { font-size:0.75rem; letter-spacing:0.12em; text-transform:uppercase; color:#9a95ad; font-weight:600; }
-    .meta { text-align:right; font-size:0.85rem; color:#5f5878; line-height:1.7; }
+    .head { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:20px; }
+    .biz { font-size:1.4rem; font-weight:800; color:var(--ink); }
+    .biz .sub { font-size:0.75rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--softer); font-weight:600; }
+    .meta { text-align:right; font-size:0.85rem; color:var(--muted); line-height:1.7; }
     h1 { font-size:1.1rem; margin:0 0 4px; }
     table { width:100%; border-collapse:collapse; margin-top:8px; }
     th, td { text-align:left; padding:10px 12px; font-size:0.88rem; border-bottom:1px solid #eee; }
-    th { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:#9a95ad; }
+    th { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--softer); }
     td.amt, th.amt { text-align:right; }
-    .total { display:flex; justify-content:space-between; margin-top:18px; padding:14px 16px; background:#f0fff4; border:1px solid #c6f6d5; border-radius:10px; }
-    .total .lbl { font-weight:700; color:#276749; }
-    .total .val { font-weight:800; font-size:1.3rem; color:#1a7a44; }
-    .note { margin-top:14px; font-size:0.78rem; color:#9a95ad; line-height:1.6; }
-    .printbtn { display:inline-block; margin:20px auto 0; background:#d3a84f; color:#1f1333; border:none; padding:11px 24px;
+    .total { display:flex; justify-content:space-between; margin-top:18px; padding:14px 16px; background:var(--good-soft); border:1px solid var(--good-soft); border-radius:10px; }
+    .total .lbl { font-weight:700; color:var(--good); }
+    .total .val { font-weight:800; font-size:1.3rem; color:var(--good); }
+    .note { margin-top:14px; font-size:0.78rem; color:var(--softer); line-height:1.6; }
+    .printbtn { display:inline-block; margin:20px auto 0; background:var(--amber); color:var(--ink); border:none; padding:11px 24px;
                 border-radius:8px; font-weight:700; font-size:0.9rem; cursor:pointer; }
     .wrap { max-width:720px; margin:0 auto; padding:16px; text-align:center; }
     @media print { .printbtn, .wrap { display:none; } body { background:#fff; } .sheet { padding:0; } }
@@ -55,7 +56,7 @@
           <td class="amt" style="font-weight:700">${{ '%.2f'|format(r.earned) }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="5" style="text-align:center;color:#9a95ad;padding:24px">No completed jobs in this period.</td></tr>
+        <tr><td colspan="5" style="text-align:center;color:var(--softer);padding:24px">No completed jobs in this period.</td></tr>
         {% endfor %}
       </tbody>
     </table>

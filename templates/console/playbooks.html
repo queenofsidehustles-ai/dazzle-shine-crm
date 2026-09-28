@@ -1,0 +1,30 @@
+{% extends "console/_shell.html" %}
+{% block title %}Playbooks{% endblock %}
+{% block body %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Playbooks</h2>
+<p style="color:var(--muted);font-size:var(--t-sm);line-height:1.6;margin:0 0 var(--s4);max-width:640px">
+  Reference material for the product, not any one company's — growth plans,
+  launch runbooks, anything that used to live as a link pasted into
+  somebody's inbox and should survive the person who pasted it there.
+</p>
+{% if rows %}
+<table class="con">
+  <tr><th>Title</th><th>Added by</th><th>Updated</th></tr>
+  {% for d in rows %}
+  <tr>
+    <td><a href="{{ url_for('console.playbook_view', doc_id=d.id) }}">{{ d.title }}</a></td>
+    <td>{{ d.created_by or '—' }}</td>
+    <td>{{ d.updated_at.strftime('%d %b, %H:%M') if d.updated_at else '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="con-empty">Nothing here yet.</p>
+{% endif %}
+
+{% if can_edit %}
+<p style="margin-top:var(--s5)">
+  <a href="{{ url_for('console.playbook_new') }}" class="btn btn-primary btn-sm">Add a playbook</a>
+</p>
+{% endif %}
+{% endblock %}

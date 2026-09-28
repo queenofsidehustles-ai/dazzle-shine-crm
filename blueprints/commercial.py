@@ -3,7 +3,8 @@ property managers…). Separate from residential Bookings. Accounts are created 
 converting a 'Won' Prospect from Find Leads, or added by hand."""
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-from auth import login_required
+from entitlements import requires_plan
+from auth import owner_required
 from extensions import db
 from models import CommercialAccount, Prospect, User
 import commercial_pricing as cpricing
@@ -50,7 +51,8 @@ def _tmpl_args(**extra):
 
 
 @commercial_bp.route('/')
-@login_required
+@owner_required
+@requires_plan('commercial')
 def index():
     status_filter = request.args.get('status', '')
     q = CommercialAccount.query.order_by(CommercialAccount.created_at.desc())
@@ -71,13 +73,38 @@ def index():
 
 
 @commercial_bp.route('/calculator')
-@login_required
+@owner_required
 def calculator():
     return render_template('admin/commercial_calculator.html', **_tmpl_args())
 
 
+@commercial_bp.route('/quote.json')
+@owner_required
+def quote_json():
+    """The one place a commercial price is worked out.
+
+    The calculators used to do the arithmetic themselves, in JavaScript, in two
+    separate copies — and the copies had already drifted. One of them ignored
+    scope add-ons entirely, so a medical office priced from the account form
+    came out at office rates. The Python function that this file's docstring
+    called "the pricing brain" was not called by anything at all, which meant
+    every correction made to it changed nothing anybody was ever quoted.
+
+    One implementation, on the server, asked over the wire. A price is also
+    not a thing to compute in a place the customer's browser can edit.
+    """
+    from flask import jsonify
+    return jsonify(cpricing.quote(
+        request.args.get('sqft'),
+        category=request.args.get('category') or 'office',
+        frequency=request.args.get('frequency') or 'weekly',
+        extras=request.args.getlist('extras'),
+        drive_mins=request.args.get('drive_minutes'),
+    ))
+
+
 @commercial_bp.route('/new', methods=['POST'])
-@login_required
+@owner_required
 def new():
     name = (request.form.get('business_name') or '').strip()
     if not name:
@@ -91,6 +118,7 @@ def new():
         address=(request.form.get('address') or '').strip(),
         city=(request.form.get('city') or '').strip(),
         square_footage=_int(request.form.get('square_footage')),
+        drive_minutes=_int(request.form.get('drive_minutes')),
         category=request.form.get('category', 'office'),
         frequency=request.form.get('frequency', 'weekly'),
         billing_type=request.form.get('billing_type', 'monthly'),
@@ -107,7 +135,7 @@ def new():
 
 
 @commercial_bp.route('/convert/<int:prospect_id>', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def convert(prospect_id):
     p = Prospect.query.get_or_404(prospect_id)
     existing = CommercialAccount.query.filter_by(prospect_id=p.id).first()
@@ -123,6 +151,7 @@ def convert(prospect_id):
             address=p.address or '',
             city=p.city or '',
             square_footage=_int(request.form.get('square_footage')),
+            drive_minutes=_int(request.form.get('drive_minutes')),
             category=p.category or 'office',
             frequency=request.form.get('frequency', 'weekly'),
             billing_type=request.form.get('billing_type', 'monthly'),
@@ -142,7 +171,7 @@ def convert(prospect_id):
 
 
 @commercial_bp.route('/<int:account_id>', methods=['GET', 'POST'])
-@login_required
+@owner_required
 def detail(account_id):
     a = CommercialAccount.query.get_or_404(account_id)
     if request.method == 'POST':
@@ -153,6 +182,7 @@ def detail(account_id):
         a.address = (request.form.get('address') or '').strip()
         a.city = (request.form.get('city') or '').strip()
         a.square_footage = _int(request.form.get('square_footage'))
+        a.drive_minutes = _int(request.form.get('drive_minutes'))
         a.category = request.form.get('category', a.category)
         a.frequency = request.form.get('frequency', a.frequency)
         a.billing_type = request.form.get('billing_type', a.billing_type)
@@ -169,7 +199,7 @@ def detail(account_id):
 
 
 @commercial_bp.route('/<int:account_id>/mark-first-paid', methods=['POST'])
-@login_required
+@owner_required
 def mark_first_paid(account_id):
     a = CommercialAccount.query.get_or_404(account_id)
     if not a.first_paid_at:
@@ -181,7 +211,7 @@ def mark_first_paid(account_id):
 
 
 @commercial_bp.route('/<int:account_id>/delete', methods=['POST'])
-@login_required
+@owner_required
 def delete(account_id):
     a = CommercialAccount.query.get_or_404(account_id)
     db.session.delete(a)

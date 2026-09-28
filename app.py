@@ -9,6 +9,8 @@ except Exception:
 from flask import Flask
 from extensions import db
 from blueprints.admin import admin_bp
+from blueprints.feedback import feedback_bp
+from blueprints.console import console_bp
 from blueprints.bookings import bookings_bp
 from blueprints.api import api_bp
 from blueprints.settings import settings_bp
@@ -24,6 +26,8 @@ from blueprints.discounts import discounts_bp
 from blueprints.contractors import contractors_bp
 from blueprints.scripts import scripts_bp
 from blueprints.sops import sops_bp
+from blueprints.faq import faq_bp
+from blueprints.assistant_routes import assistant_bp
 from blueprints.email_templates import email_templates_bp
 from blueprints.interviews import interviews_bp
 from blueprints.pricing_public import pricing_public_bp
@@ -33,6 +37,7 @@ from blueprints.payments import payments_bp
 from blueprints.claims import claims_bp
 from blueprints.places_finder import places_finder_bp
 from blueprints.team_logins import team_logins_bp
+from blueprints.migration import migration_bp
 from blueprints.commercial import commercial_bp
 from blueprints.commissions import commissions_bp
 from blueprints.invoices import invoices_bp
@@ -55,8 +60,38 @@ def create_app():
     # Database
     db_url = os.environ.get('DATABASE_URL', '')
     # Fall back to SQLite if URL is missing or unresolved template
+    fell_back = False
     if not db_url or db_url.startswith('$') or '://' not in db_url:
         db_url = 'sqlite:///crm.db'
+        fell_back = True
+
+    # That fallback is right on a laptop and catastrophic on the product.
+    #
+    # It cost most of a day: DATABASE_URL was never set on the deployment, so
+    # the app quietly used a SQLite file inside the container. Every restart
+    # began with an empty database, the Postgres that had been created sat
+    # untouched, and signup returned a 500 with no obvious cause — because
+    # multi-tenancy gives each company its own Postgres *schema*, and SQLite
+    # has no schemas at all. Nothing in the logs said so except one line
+    # reading "SQLiteImpl" that nobody would think to look for.
+    #
+    # BASE_DOMAIN means this is the multi-company product. SQLite there is not
+    # a degraded setup, it is one that cannot work. Say so where it will be
+    # seen, and keep saying it: /version reports it too, so the answer is one
+    # click away rather than buried in a deploy log.
+    MISCONFIGURED = bool(fell_back and (os.environ.get('BASE_DOMAIN') or '').strip())
+    if MISCONFIGURED:
+        banner = '=' * 72
+        print(f'\n{banner}')
+        print('  DATABASE_URL IS NOT SET, AND THIS IS THE MULTI-COMPANY PRODUCT.')
+        print('')
+        print('  Running on a SQLite file inside the container. That means:')
+        print('    * every restart starts from an empty database')
+        print('    * signing a company up CANNOT work — SQLite has no schemas')
+        print('    * any Postgres attached to this project is unused')
+        print('')
+        print('  Set DATABASE_URL on this service to reference the Postgres.')
+        print(f'{banner}\n')
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
     if db_url.startswith('postgresql://') and '+psycopg2' not in db_url:
@@ -64,6 +99,76 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
+
+    # Which company a request is allowed to see. Installed before anything else
+    # touches the database, because a connection handed out before the guard is
+    # in place would carry whatever search_path it had last.
+    #
+    # Inert on this deployment and every one like it: with no companies
+    # provisioned, every request resolves to `public`, which is what every query
+    # in this application has done since the day it was written. See tenancy.py.
+    import tenancy
+    tenancy.install_pool_guard()
+
+    @app.before_request
+    def _resolve_tenant():
+        from flask import request, g
+        slug, schema = tenancy.resolve(
+            request.host, os.environ.get('BASE_DOMAIN'))
+        g.tenant_slug = slug
+        tenancy._current.set(schema)
+
+    @app.before_request
+    def _one_canonical_host():
+        """Serve the product's public site under one hostname, not two.
+
+        Once the apex and www both reach this app, both serve the whole site —
+        two copies of every page, which splits what search engines index and
+        what any link points at. This sends one to the other, keeping the path
+        and the query, so a link to the wrong host still lands on the right page
+        instead of a 404.
+
+        Off until CANONICAL_HOST is set, and the default without it is safe:
+        every page advertises the host that served it. Turning it on before that
+        host answers on every path would redirect the working site to a broken
+        one, so it is a deliberate switch and not a guess.
+        """
+        from flask import request, redirect
+        import product, re
+        host = product.canonical_host()
+        if not host:
+            return None
+        here = (request.host or '').split(':')[0].lower()
+        if here == host or not here:
+            return None
+        # Infrastructure, not a visitor. Railway health-checks the container on
+        # an internal address; a 301 there reads as an unhealthy deploy and the
+        # release rolls itself back. Local development is the same shape.
+        if (here in ('localhost', '0.0.0.0') or here.startswith('127.')
+                or here.endswith('.railway.internal') or here.endswith('.local')
+                or re.match(r'^\d+\.\d+\.\d+\.\d+$', here)):
+            return None
+        # /version is how you ask an instance what it is. It has to answer on
+        # whatever hostname you asked, or it cannot tell you the host is wrong.
+        if request.path == '/version':
+            return None
+        # Only the product's own site. A company's subdomain is its own address
+        # and must never be redirected to ours.
+        if tenancy.slug_from_host(request.host, product.domain()) is not None:
+            return None
+        # Never redirect an API call. Stripe posts webhooks and a 301 on a POST
+        # is not something a sender is obliged to follow — the payment would
+        # look delivered to us and never arrive.
+        if request.path.startswith('/api/'):
+            return None
+        target = f'{product.scheme_for(host)}://{host}{request.full_path.rstrip("?")}'
+        return redirect(target, code=301)
+
+    @app.teardown_request
+    def _clear_tenant(exc=None):
+        # Back to public between requests. A worker thread that kept the last
+        # company's schema would hand it to whoever it served next.
+        tenancy._current.set(tenancy.PUBLIC)
 
     # Cookie policy and the refusal of forms posted from other sites. Installed
     # before any blueprint so it applies to every route, including ones added
@@ -79,6 +184,30 @@ def create_app():
 
     db.init_app(app)
 
+    from blueprints.account import account_bp
+    app.register_blueprint(account_bp)
+    from blueprints.signup import signup_bp
+    app.register_blueprint(signup_bp)
+    from blueprints.billing_routes import billing_bp
+    app.register_blueprint(billing_bp)
+    # The product's own public pages. They appear on the product domain
+    # and nowhere else -- never over a customer's CRM, never on the
+    # single-business instance.
+    from blueprints.marketing import marketing_bp
+    import blueprints.marketing as _marketing
+    app.register_blueprint(marketing_bp)
+    _marketing.install(app)
+    # Remember which link brought a visitor, so signup can say where each
+    # company came from (tracking tags, referrals). Product site only.
+    import attribution
+    attribution.install(app)
+    # Let entitlements read the plan from the control plane rather than
+    # from the company's own settings, so a business cannot change what
+    # it is paying for by editing its own records.
+    import billing
+    billing.install(app)
+    app.register_blueprint(console_bp)
+    app.register_blueprint(feedback_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(bookings_bp)
     app.register_blueprint(api_bp)
@@ -95,6 +224,8 @@ def create_app():
     app.register_blueprint(contractors_bp)
     app.register_blueprint(scripts_bp)
     app.register_blueprint(sops_bp)
+    app.register_blueprint(faq_bp)
+    app.register_blueprint(assistant_bp)
     app.register_blueprint(email_templates_bp)
     app.register_blueprint(interviews_bp)
     app.register_blueprint(pricing_public_bp)
@@ -104,6 +235,7 @@ def create_app():
     app.register_blueprint(claims_bp)
     app.register_blueprint(places_finder_bp)
     app.register_blueprint(team_logins_bp)
+    app.register_blueprint(migration_bp)
     app.register_blueprint(commercial_bp)
     app.register_blueprint(commissions_bp)
     app.register_blueprint(invoices_bp)
@@ -122,16 +254,116 @@ def create_app():
             from flask import session, request
             if not session.get('logged_in'):
                 return {}
-            import navigation
+            import navigation, entitlements
             role = session.get('role', 'owner')
-            tabs, active_tab = navigation.tabs_for(request.endpoint, role)
-            return {'NAV': navigation.sidebar(role),
+            can = entitlements.can
+            tabs, active_tab = navigation.tabs_for(request.endpoint, role, can)
+            # Whether there is still setup to do decides where Getting started
+            # sits. Cheap: the flag is written once the last step is done and
+            # read from settings thereafter, so an established business is not
+            # recomputing its onboarding on every page.
+            setup_done = True
+            try:
+                from models import BusinessSetting
+                if session.get('role') == 'owner':
+                    setup_done = BusinessSetting.get('setup_complete') == '1'
+            except Exception:
+                pass
+            # How far through setup, for the meter and the reminder. Only
+            # worked out for an owner who has not finished -- an established
+            # business pays nothing for a question it answered months ago.
+            setup = None
+            if not setup_done and session.get('role') == 'owner':
+                try:
+                    import onboarding
+                    setup = onboarding.progress()
+                except Exception:
+                    setup = None
+
+            return {'NAV': navigation.sidebar(role, can, setup_done),
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
+                    'NAV_TITLE': navigation.title_for(request.endpoint),
                     'NAV_TABS': tabs,
-                    'NAV_ACTIVE_TAB': active_tab}
+                    'NAV_ACTIVE_TAB': active_tab,
+                    'SETUP': setup}
         except Exception:
             # A broken menu must never take a working page down with it.
-            return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [], 'NAV_ACTIVE_TAB': None}
+            return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [],
+                    'NAV_ACTIVE_TAB': None, 'SETUP': None}
+
+    @app.context_processor
+    def inject_trial():
+        """Where this company is in its trial, for the banner.
+
+        Also the place activation gets stamped. There is no single event for
+        "first job assigned" -- a job can be assigned directly, claimed off
+        the board, or added as a crew row -- so rather than hook three
+        routes and miss a fourth, this notices the first time the condition
+        is true. It runs once per company for the lifetime of the account.
+        """
+        try:
+            import billing, onboarding, provisioning, tenancy
+            org = billing.current_org()
+            if not org:
+                return {'TRIAL': None}
+
+            state = billing.trial_state(org)
+            if state and not state['started']:
+                # Have they actually begun? Cheap: onboarding already knows.
+                if onboarding.progress().get('activated'):
+                    billing.mark_activated(provisioning._engine(), org['slug'])
+                    org = billing.current_org()
+                    state = billing.trial_state(org)
+            return {'TRIAL': state}
+        except Exception:
+            return {'TRIAL': None}          # never take a page down for a banner
+
+    @app.context_processor
+    def inject_product():
+        import product, branding
+        return {'PRODUCT': product.name(), 'TAGLINE': product.tagline(),
+                'SUPPORT_EMAIL': product.support_email(),
+                'PRODUCT_DOMAIN': product.domain(),
+                # Absolute, because OpenGraph and canonical links are not
+                # allowed to be relative — a share card with a relative image
+                # URL simply shows nothing.
+                #
+                # canonical_base(), not crm_base(): crm_base() prefers the
+                # CRM_BASE environment variable, which our own deploy guide told
+                # her to set to the bare apex — while the product is served on
+                # www. Every canonical tag and og:url on the site therefore
+                # named a host that 404s on every path but "/".
+                'PRODUCT_BASE': product.canonical_base().rstrip('/'),
+                'LEGAL_ENTITY': product.legal_entity(),
+                'LEGAL_ADDRESS': product.legal_address()}
+
+    # How far a brand-new business has got towards its first real job. None
+    # once they are up and running, so the banner disappears by itself rather
+    # than needing dismissing.
+    @app.context_processor
+    def inject_onboarding():
+        try:
+            from flask import session
+            if not session.get('logged_in'):
+                return {}
+            import onboarding
+            p = onboarding.progress()
+            return {'ONBOARDING': None if p['complete'] else p}
+        except Exception:
+            return {}
+
+    # What this business's plan allows — PLAN, plan_can(), plan_usage() and
+    # friends. See entitlements.py.
+    @app.context_processor
+    def inject_plan():
+        try:
+            from flask import session
+            if not session.get('logged_in'):
+                return {}
+            import entitlements
+            return entitlements.template_context()
+        except Exception:
+            return {}
 
     # Unread-message count for the sidebar badge (all admin pages).
     @app.context_processor
@@ -227,7 +459,37 @@ def create_app():
         # instance is still missing that predates migrations existing. Both come
         # out once every instance carries a version row. See migrate.py.
         import migrate
+        # English and Spanish on the pages a cleaner or applicant opens.
+        import i18n
+        i18n.install(app)
+
         migrate.run_at_boot(app)
+
+        # And every company's own schema. run_at_boot handles the default
+        # schema only, so without this the first release carrying a migration
+        # leaves every existing customer on the old one — the new table simply
+        # absent, and the first page that reads it erroring for them alone.
+        # Never fatal: a company that cannot be migrated is a problem for that
+        # company, and refusing to start makes it everybody's.
+        try:
+            import provisioning
+            provisioning.migrate_all()
+        except Exception as _e:
+            print(f'  ⚠️  company schemas not migrated: {_e}')
+
+        # The control plane's own additive columns (closed_at, purged_at).
+        # control_plane.find() selects them unconditionally, so an existing
+        # deployment's `public.organizations` — created before those columns
+        # existed — must be backfilled before any tenant request runs, not
+        # merely by the CLI paths that happened to call ensure_table()
+        # already. Never fatal: this deployment may have no control plane at
+        # all (a single-business instance) or run on SQLite, neither of
+        # which is an error.
+        try:
+            import control_plane
+            control_plane.ensure_table(db.engine)
+        except Exception as _e:
+            print(f'  ⚠️  control plane not migrated: {_e}')
         db.create_all()
         _migrate_db()
         _seed_checklists()
@@ -241,6 +503,7 @@ def create_app():
         _patch_pay_rate_40_to_50()
         _seed_existing_brand_settings()
         _skip_setup_for_established_business()
+        _grandfather_established_business()
 
     return app
 
@@ -669,6 +932,14 @@ def _migrate_db():
         ('prospect', 'contact_name',        'VARCHAR(120)'),
         ('prospect', 'email',               'VARCHAR(200)'),
         ('prospect', 'renewal_note',        'VARCHAR(120)'),
+        # The renewal month as a date something can act on, and the stamp that
+        # keeps the wake-up from firing on each of the thirty nights before it.
+        ('prospect', 'renewal_date',        'VARCHAR(10)'),
+        ('prospect', 'renewal_woken_at',    'TIMESTAMP'),
+        # Which email sequence they are in, and how far through it.
+        ('prospect', 'sequence',            'VARCHAR(20)'),
+        ('prospect', 'drip_step',           'INTEGER DEFAULT 0'),
+        ('prospect', 'last_drip_at',        'TIMESTAMP'),
         ('prospect', 'last_emailed_at',     'TIMESTAMP'),
         # Which side of the business a record belongs to. Left NULL rather than
         # defaulted for the same reason as stage above: a DEFAULT would stamp
@@ -2233,3 +2504,52 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8001)), debug=True)
 
 # Redeploy trigger: ensure clean boot runs _migrate_db (adds access_notes + recent columns to prod)
+
+
+def _grandfather_established_business():
+    """A business already running on this CRM does not get downgraded by the
+    arrival of plans.
+
+    Plans default to Solo, which is right for a brand-new signup and badly wrong
+    for a deployment that has been running somebody's operation for a year: the
+    morning after this ships, an owner with nine cleaners would find padlocks on
+    Payroll and Hiring — features she has used every week — because a table she
+    has never heard of has no row in it.
+
+    So an instance with real history behind it is put on the top plan and marked
+    grandfathered, which no future price change touches. Deliberately generic:
+    any deployment with a history qualifies, not just the first one."""
+    from models import BusinessSetting, Booking, Staff
+    if BusinessSetting.get('plan'):
+        return
+
+    # A deployment with no BASE_DOMAIN is not part of the subscription product.
+    # It is one company running its own CRM on its own server -- this business,
+    # or a private deployment -- and plan tiers mean nothing there. Limiting it
+    # to two cleaners and no texting would be crippling software somebody
+    # already owns in order to sell it back to them.
+    #
+    # Free and paid tiers exist to divide up a shared, hosted product. Where
+    # there is no shared product, everything is included.
+    single_business = not (os.environ.get('BASE_DOMAIN') or '').strip()
+    if single_business:
+        BusinessSetting.set('plan', 'scale')
+        BusinessSetting.set('plan_status', 'active')
+        BusinessSetting.set('grandfathered', '1')
+        db.session.commit()
+        return
+
+    # On the hosted product, a company that already has a history predates
+    # plans existing and keeps everything -- otherwise the morning this shipped
+    # an owner with nine cleaners would find padlocks on features she uses
+    # weekly, because a table she has never heard of had no row in it.
+    established = Booking.query.count() >= 5 or Staff.query.count() >= 3
+    if established:
+        BusinessSetting.set('plan', 'scale')
+        BusinessSetting.set('plan_status', 'active')
+        BusinessSetting.set('grandfathered', '1')
+        print('  ✅ established business — grandfathered onto the full plan')
+    else:
+        BusinessSetting.set('plan', 'solo')
+        BusinessSetting.set('plan_status', 'active')
+    db.session.commit()

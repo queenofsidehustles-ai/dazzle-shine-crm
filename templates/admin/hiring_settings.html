@@ -1,0 +1,37 @@
+{% extends "base_admin.html" %}
+{% block title %}Hiring Settings — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Hiring Settings{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:640px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Hiring Workflow</h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:20px">These power the one-click email buttons on each application. Set them once and the CRM does the rest.</p>
+  <form method="POST">
+    <div class="form-group">
+      <label>Interview Calendar Link</label>
+      <input type="url" name="interview_calendar_link" value="{{ current.interview_calendar_link }}"
+             placeholder="https://calendly.com/yourname/phone-interview" />
+      <span style="font-size:0.76rem;color:var(--softer)">Your Calendly, Google Calendar booking link, or any scheduling URL. Used by "Send Interview Invite" button.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px">
+      <div class="form-group">
+        <label>BG Check Provider Name</label>
+        <input type="text" name="bgcheck_provider_name" value="{{ current.bgcheck_provider_name }}"
+               placeholder="e.g. FDLE, Checkr, Care.com" />
+      </div>
+      <div class="form-group">
+        <label>BG Check Provider Link</label>
+        <input type="url" name="bgcheck_provider_url" value="{{ current.bgcheck_provider_url }}"
+               placeholder="https://bg.fdle.state.fl.us or https://checkr.com/applicants" />
+      </div>
+    </div>
+    <div style="background:var(--line-soft);border-radius:8px;padding:12px;font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+      <strong style="color:var(--ink-2)">A good starting point:</strong><br>
+      • <strong>FDLE</strong> (Florida state check, ~$24, applicant pays) → <code>https://bg.fdle.state.fl.us</code><br>
+      • <strong>Checkr for Individuals</strong> (~$30) → <code>https://checkr.com/applicants</code><br>
+      • <strong>Free first step</strong>: Always check National Sex Offender Registry → <code>https://www.nsopw.gov</code>
+    </div>
+    <button type="submit" class="btn btn-gold">Save Hiring Settings</button>
+  </form>
+</div>
+{% endblock %}

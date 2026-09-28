@@ -30,6 +30,7 @@ Nothing here touches a database or a customer's settings. It moves a git
 branch, and Railway does the rest.
 """
 import argparse
+import ast
 import os
 import re
 import subprocess
@@ -155,6 +156,35 @@ def check_python():
         f'Then run this again exactly as you did.')
 
 
+def _is_pytest_style(path):
+    """True for a suite whose checks only run if pytest calls them.
+
+    A `def test_*` function is not executed by importing its module -- only by
+    something that collects and calls it. A suite written that way (no
+    module-level assert/check() of its own) run as `python file.py` just
+    defines the functions and exits 0, having verified nothing; it needs
+    `python -m pytest file.py` to actually run. A suite that checks itself at
+    import time (module-level assert/check() calls, the older style in this
+    repo) is exactly backwards under pytest: collecting zero test functions is
+    itself a failure (exit 5), even though every check it ran passed.
+    """
+    try:
+        tree = ast.parse(path.read_text())
+    except SyntaxError:
+        return False
+    if not any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+               and n.name.startswith('test_') for n in tree.body):
+        return False
+    for i, n in enumerate(tree.body):
+        if i == 0 and isinstance(n, ast.Expr) and isinstance(
+                getattr(n, 'value', None), ast.Constant) and isinstance(
+                n.value.value, str):
+            continue  # the module docstring, not an executable check
+        if isinstance(n, (ast.Expr, ast.Assert, ast.If, ast.For, ast.While, ast.With)):
+            return False  # runs its own checks at import time -- a script
+    return True
+
+
 def run_tests():
     """Every suite must pass before anything reaches anybody."""
     check_python()
@@ -162,8 +192,9 @@ def run_tests():
     say(f'Running {len(tests)} test suites…')
     failed = []
     for t in tests:
-        r = subprocess.run([sys.executable, str(t)], cwd=ROOT,
-                           capture_output=True, text=True)
+        cmd = ([sys.executable, '-m', 'pytest', '-q', str(t)]
+               if _is_pytest_style(t) else [sys.executable, str(t)])
+        r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
         if r.returncode == 0:
             say(f'  ✅ {t.name}')
         else:

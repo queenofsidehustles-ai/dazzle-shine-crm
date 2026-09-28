@@ -1,0 +1,107 @@
+{% extends "base_admin.html" %}
+{% block title %}Timesheet — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Timesheet{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('contractors.payroll') }}" class="btn btn-outline btn-sm">Payroll</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <div class="section-header">
+    <h2>{{ start.strftime('%-d %B') }} — {{ end.strftime('%-d %B %Y') }}</h2>
+    <span style="display:flex;gap:var(--s2)">
+      <a href="{{ url_for('contractors.timesheet', start=prev_start) }}"
+         class="btn btn-outline btn-sm">← Previous</a>
+      <a href="{{ url_for('contractors.timesheet', start=next_start) }}"
+         class="btn btn-outline btn-sm">Next →</a>
+    </span>
+  </div>
+
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="ts">
+      <thead>
+        <tr>
+          <th>Cleaner</th>
+          {% for d in days %}
+          <th class="num{{ ' today' if d.isoformat() == today_iso }}">
+            {{ d.strftime('%a') }}<small>{{ d.strftime('%-d') }}</small>
+          </th>
+          {% endfor %}
+          <th class="num total">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>
+            <strong>{{ r.staff.name }}</strong>
+            <br /><small class="dim">{{ r.staff.pay_label() }}</small>
+            {% if r.open %}
+            <br /><span class="running">● still clocked in</span>
+            {% endif %}
+          </td>
+          {% for d in days %}
+          {% set h = r.by_day[d.isoformat()] %}
+          <td class="num{{ ' zero' if not h }}">{{ '%.2f'|format(h) if h else '—' }}</td>
+          {% endfor %}
+          <td class="num total">{{ '%.2f'|format(r.total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td><strong>Everyone</strong></td>
+          {% for d in days %}
+          {% set h = day_totals[d.isoformat()] %}
+          <td class="num{{ ' zero' if not h }}">{{ '%.2f'|format(h) if h else '—' }}</td>
+          {% endfor %}
+          <td class="num total">{{ '%.2f'|format(grand) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  {# Said on the screen, not only in a document nobody reads. The moment this
+     page starts looking like payroll is the moment somebody assumes we did
+     the parts we did not do. #}
+  <p class="disclaim">
+    <strong>Hours, not payroll.</strong> These are the times your cleaners
+    clocked. Overtime, break rules and rounding vary by state and are not
+    applied here — hand these figures to whoever runs your payroll and let them
+    apply the rules. This software does not pay anybody, withhold anything or
+    file anything, and it takes no view on whether somebody is a contractor or
+    an employee.
+  </p>
+
+  {% else %}
+  <div class="empty">
+    <div class="icon">🕒</div>
+    <h3>Nobody clocked any hours this week</h3>
+    <p>
+      Cleaners paid by the hour get a <strong>Clock in</strong> button on their
+      own job page — the link they already get by text. Cleaners on a
+      percentage or a flat rate per job never see it, so there is nothing for
+      them to forget.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  .ts th.num, .ts td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .ts th small { display:block; font-weight:400; color:var(--softer); font-size:var(--t-xs); }
+  .ts th.today { color:var(--amber-deep); }
+  .ts td.zero { color:var(--softer); }
+  .ts .total { font-weight:700; }
+  .ts tfoot td { border-top:2px solid var(--line); font-weight:650; background:var(--ground); }
+  .running { color:var(--good); font-size:var(--t-xs); font-weight:650; }
+  .disclaim {
+    margin-top:var(--s5); padding:var(--s4);
+    background:var(--info-soft); border:1px solid var(--info-line);
+    border-radius:var(--r-sm); color:var(--ink);
+    font-size:var(--t-sm); line-height:1.6;
+  }
+</style>
+{% endblock %}

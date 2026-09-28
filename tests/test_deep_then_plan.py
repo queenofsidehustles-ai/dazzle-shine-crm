@@ -41,14 +41,14 @@ with app.app_context():
     db.session.add(deep); db.session.commit()
 
     page = c.get(f'/bookings/{deep.id}').get_data(as_text=True)
-    check('Ongoing Cleanings' in page, 'the booking page offers to set up ongoing cleanings')
+    check('Recurring Cleaning' in page, 'the booking page offers to set up a recurring cleaning')
     check('Every 2 weeks' in page, 'with fortnightly offered')
-    check('Set up ongoing cleanings' in page, 'and a button to do it')
+    check('Set up recurring cleaning' in page, 'and a button to do it')
 
     print('\n2. The form opens with sensible numbers, not empty boxes')
     suggested_start = (date.fromisoformat(deep_day) + timedelta(days=14)).isoformat()
     check(suggested_start in page,
-          f'the first ongoing visit is suggested two weeks after the deep clean ({suggested_start})')
+          f'the first recurring visit is suggested two weeks after the deep clean ({suggested_start})')
     check('9:00 AM' in page, "and carries over the deep clean's arrival time")
 
     print('\n3. Setting it up creates a separate plan')

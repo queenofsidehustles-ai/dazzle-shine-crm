@@ -1,0 +1,10 @@
+# Pin the build to the Python provider explicitly.
+#
+# package.json exists at the repo root (added for the Playwright golden-journey
+# CI suite in tests/) but this is a Flask application, not a Node app. Left to
+# auto-detect, nixpacks saw package.json and stopped running the Python
+# install phase — pip install never ran, so gunicorn (pinned in
+# requirements.txt) was never installed, and the deploy crash-looped on
+# "gunicorn: command not found" despite the code itself being fine. Pinning
+# the provider here is the fix; package.json stays where CI expects it.
+providers = ["python"]

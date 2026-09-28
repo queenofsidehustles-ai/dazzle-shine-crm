@@ -14,6 +14,19 @@ from extensions import db
 from models import Booking, BookingCrew, Staff, ContractorPayment
 import finance
 app = create_app()
+
+# PLAN FOR THIS TEST. A fresh database starts on the free plan, which allows two
+# cleaners and sends no texts -- correct for a brand-new signup, and not what
+# this file is about. Say which plan is being exercised rather than leaving it
+# to a default that will change again.
+with app.app_context():
+    from models import BusinessSetting as _BS
+    from extensions import db as _db
+    _BS.set('plan', 'scale')
+    _BS.set('plan_status', 'active')
+    _db.session.commit()
+import entitlements as _ent
+_ent._clear_cache()
 import blueprints.payments as pay_bp
 pay_bp._send_receipt = lambda *a, **k: None
 pay_bp._alert_owner_paid = lambda *a, **k: None
