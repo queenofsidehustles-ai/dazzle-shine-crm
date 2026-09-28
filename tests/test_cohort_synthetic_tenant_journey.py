@@ -117,6 +117,7 @@ with app.app_context():
         'name': 'Robin Owner',
         'email': OWNER_EMAIL,
         'password': OWNER_PASSWORD,
+        'terms_accepted': '1',
     }, follow_redirects=False)
     check(r.status_code == 302, 'signup redirects on success')
     location = r.headers.get('Location', '')

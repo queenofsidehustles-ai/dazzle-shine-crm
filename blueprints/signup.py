@@ -38,6 +38,7 @@ keeps signup open rather than closed.
 import os
 import re
 from contextlib import contextmanager
+from datetime import datetime
 
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    session, jsonify, abort)
@@ -174,9 +175,10 @@ def signup():
         form['email'] = form['email'].lower()
         password = request.form.get('password') or ''
         slug = form['slug'].lower() or suggest_slug(form['business'])
+        terms_accepted = bool(request.form.get('terms_accepted'))
 
         try:
-            error = _validate(form, slug, password)
+            error = _validate(form, slug, password, terms_accepted)
         except Exception as e:
             import errors
             try:
@@ -186,18 +188,22 @@ def signup():
             print(f'  ❌ signup validation failed: {type(e).__name__}: {e}')
             return render_template(
                 'admin/signup.html', form=form, slug=slug, base=base,
+                terms_accepted=terms_accepted,
                 error='We could not check that address just now. Please try '
                       'again in a moment — nothing was created.')
         if error:
             return render_template('admin/signup.html', form=form, slug=slug,
-                                   base=base, error=error)
+                                   base=base, terms_accepted=terms_accepted,
+                                   error=error)
 
         try:
             token = _create_everything(slug, form, password,
-                                       attribution=_came_from())
+                                       attribution=_came_from(),
+                                       terms_accepted=terms_accepted)
         except SlugTaken:
             return render_template(
                 'admin/signup.html', form=form, slug=slug, base=base,
+                terms_accepted=terms_accepted,
                 error=f'"{slug}" was just taken. Please choose another address.')
         except Exception as e:
             print(f'  ❌ signup failed for {slug!r}: {type(e).__name__}: {e}')
@@ -209,6 +215,7 @@ def signup():
                 pass
             return render_template(
                 'admin/signup.html', form=form, slug=slug, base=base,
+                terms_accepted=terms_accepted,
                 error='We could not finish setting your account up. Please try '
                       'again. If it happens twice, tell us so we can investigate.')
 
@@ -255,7 +262,7 @@ def _tell_us(slug, form, base):
               f'{type(e).__name__}: {e}')
 
 
-def _validate(form, slug, password):
+def _validate(form, slug, password, terms_accepted=False):
     if not form['business']:
         return 'What is the business called?'
     if not form['name']:
@@ -273,6 +280,12 @@ def _validate(form, slug, password):
     _ensure_control_plane(engine)
     if control_plane.find(engine, slug):
         return f'"{slug}" is already taken. Try another.'
+    # Checked last: everything above is "did you fill this in right", which is
+    # worth telling her about before "and also, you didn't tick the box" --
+    # not because agreeing matters less, but because a form that leads with
+    # the least useful error to fix first is a worse form.
+    if not terms_accepted:
+        return 'Please agree to the Terms of Service to create an account.'
     return None
 
 
@@ -286,7 +299,7 @@ def _came_from():
         return {}
 
 
-def _create_everything(slug, form, password, attribution=None):
+def _create_everything(slug, form, password, attribution=None, terms_accepted=False):
     """Build one tenant completely, under a cross-worker per-slug lock."""
     engine = _engine()
     schema = tenancy.schema_for(slug)
@@ -323,7 +336,15 @@ def _create_everything(slug, form, password, attribution=None):
                 raw, _ = LoginToken.issue(owner, 'signup', email=form['email'])
 
             control_plane.create(engine, slug, form['business'], form['email'],
-                                 attribution=attribution)
+                                 attribution=attribution,
+                                 # _validate already refused to reach here
+                                 # without this being true; stamped again at
+                                 # the point of creation rather than trusted
+                                 # from further up, so the record is of when
+                                 # the account was actually made, not the
+                                 # request that started it.
+                                 terms_accepted_at=(datetime.utcnow()
+                                                    if terms_accepted else None))
             created_org = True
             control_plane.mark_provisioned(engine, slug)
             control_plane.record_tenant_login(engine, form['email'], slug)
