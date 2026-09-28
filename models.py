@@ -138,6 +138,7 @@ class Booking(db.Model):
     # set and stay silent — including when it was the only one that would have
     # sent the receipt.
     deposit_notified_at = db.Column(db.DateTime)
+    deposit_method = db.Column(db.String(20))  # card, cash, zelle, venmo, check, other
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
     tip_amount = db.Column(Money, default=0)  # customer's tip — belongs to the cleaner, never revenue
     tip_payment_intent = db.Column(db.String(100))  # the Stripe charge, when tipped after the job
@@ -948,7 +949,12 @@ class ContractorApplication(db.Model):
     rejection_sent_at = db.Column(db.DateTime)
     # Video interview
     interview_token = db.Column(db.String(64), unique=True)
-    interview_status = db.Column(db.String(20), default='not_sent')  # not_sent, sent, in_progress, completed
+    # not_sent, pending, sent, in_progress, completed.
+    # 'pending' is set when screening passes and means the invite is QUEUED --
+    # applicant-followups sends it. It is not 'sent' and must never be shown as
+    # sent: a hiring screen saying somebody was contacted when they were not is
+    # how a good candidate is left waiting for an email nobody sent.
+    interview_status = db.Column(db.String(20), default='not_sent')
     interview_sent_at = db.Column(db.DateTime)
     interview_completed_at = db.Column(db.DateTime)
     interview_nudge_count = db.Column(db.Integer, default=0)   # auto follow-up nudges sent (0, 1, 2)
@@ -1076,6 +1082,11 @@ class Staff(db.Model):
     color = db.Column(db.String(7), default='#7c3aed')
     is_active = db.Column(db.Boolean, default=True)
     application_id = db.Column(db.Integer, db.ForeignKey('contractor_application.id'))  # back-link to the application they came from
+    # The CRM login that belongs to this contractor, if one exists. Nullable:
+    # most Staff records still have no linked login, same as before this
+    # column existed -- set only when the Migration Toolbox's invite flow (or
+    # any future flow) deliberately connects the two. See migration 0014.
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
     # Pay settings
     pay_type = db.Column(db.String(20), default='percent')  # percent, hourly
     pay_rate = db.Column(Money, default=50.0)            # % of job or $/hr
@@ -1192,10 +1203,93 @@ class Staff(db.Model):
             return f'${self.pay_rate:.2f}/hr'
         return f'{self.pay_rate:.0f}% of job'
 
+    def hours_on(self, booking):
+        """Hours this cleaner actually clocked on one job.
+
+        The sum of their spells, so somebody who broke off and came back is
+        counted once for each. Returns None -- not zero -- when they never
+        clocked at all, because "worked no hours" and "we have no record" are
+        different answers and only one of them should be used to pay somebody.
+        """
+        rows = [t for t in (booking.time_entries or []) if t.staff_id == self.id]
+        if not rows:
+            return None
+        return round(sum(t.hours for t in rows), 2)
+
+    def hourly_pay_for(self, booking):
+        """What the clock says this job is worth to an hourly cleaner.
+
+        None unless all three things are true: they are paid by the hour, they
+        have a rate, and they actually clocked. Never guessed from the job's
+        estimated hours -- an estimate is what the job was priced on, not what
+        somebody worked, and quietly paying one as if it were the other is how
+        a cleaner ends up short.
+
+        This is a suggestion. Nothing calls it to move money on its own; the
+        owner sees the figure and applies it, the same way every other pay
+        number in here works.
+        """
+        if (self.pay_type or '') != 'hourly' or not self.pay_rate:
+            return None
+        hours = self.hours_on(booking)
+        if hours is None:
+            return None
+        return round(hours * self.pay_rate, 2)
+
     def calc_pay(self, job_price=0, hours_worked=0):
         if self.pay_type == 'hourly':
             return round((hours_worked or 0) * (self.pay_rate or 0), 2)
         return round((job_price or 0) * ((self.pay_rate or 0) / 100), 2)
+
+
+class TimeEntry(db.Model):
+    """One cleaner's clock-in and clock-out on one job.
+
+    The job already had `clock_in_at` on its checklist, but there is one
+    checklist per job, not one per cleaner — so a two-person job recorded a
+    single shared clock and could not say that Maria did three hours and Ana
+    did two. That is fine for "did somebody turn up", and useless for paying
+    anybody by the hour.
+
+    Several rows per cleaner per job are allowed on purpose. Somebody who
+    leaves to fetch a machine and comes back has two spells, and the honest
+    record of that is two rows, not one long one with a note attached.
+
+    This records hours. It does not pay anybody, apply overtime, deduct breaks
+    or round to anybody's state rules — see `Staff.hourly_pay_for`, and see the
+    terms of service, which say plainly that this is not a payroll provider.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'),
+                           nullable=False, index=True)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'),
+                         nullable=False, index=True)
+    clock_in_at = db.Column(db.DateTime, nullable=False)
+    clock_out_at = db.Column(db.DateTime)          # null while still on the job
+    note = db.Column(db.String(200))               # why it was edited, if it was
+    edited_by = db.Column(db.String(80))           # who changed it, if anybody
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    booking = db.relationship('Booking', backref='time_entries')
+    staff = db.relationship('Staff', backref='time_entries')
+
+    @property
+    def is_open(self):
+        """Still clocked in. Shown differently, and worth nothing yet."""
+        return self.clock_in_at is not None and self.clock_out_at is None
+
+    @property
+    def hours(self):
+        """Hours on this spell, or 0 while it is still running.
+
+        Never negative. A clock-out earlier than its clock-in is a mistake
+        somebody made in an edit box, and paying a negative number of hours is
+        worse than paying none.
+        """
+        if not self.clock_in_at or not self.clock_out_at:
+            return 0.0
+        seconds = (self.clock_out_at - self.clock_in_at).total_seconds()
+        return round(max(0.0, seconds) / 3600, 2)
 
 
 class Availability(db.Model):
@@ -1412,6 +1506,19 @@ class SOP(db.Model):
         ('quality',     'Quality Control'),
         ('operations',  'Operations & Admin'),
     ]
+
+
+class Faq(db.Model):
+    """A question a real user hit, and the answer that actually worked.
+
+    Curated by whoever solved the problem, for whoever hits it next. Nothing
+    here is generated -- the point is that it already worked once.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    question = db.Column(db.String(300), nullable=False)
+    answer = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Script(db.Model):
@@ -1666,6 +1773,25 @@ class Prospect(db.Model):
     contact_name = db.Column(db.String(120))           # the human, not the business
     email = db.Column(db.String(200))                  # asked for on the call; Places never has it
     renewal_note = db.Column(db.String(120))           # "March 2027" — why a no is worth keeping
+    # The same fact as renewal_note, in a form something can act on. A note
+    # reading "March 2027" is only ever found by the person who typed it; a
+    # date can put the prospect back on the call list a month before the
+    # incumbent's contract ends, which is the one moment a commercial cleaner
+    # can actually be displaced. In commercial work "not interested" almost
+    # always means "we are under contract", so this is the single most
+    # valuable thing a cold call can come away with — more than a yes.
+    renewal_date = db.Column(db.String(10), index=True)   # YYYY-MM-DD
+    # Set once the renewal wake-up has fired, so it fires once rather than
+    # every night for thirty nights.
+    renewal_woken_at = db.Column(db.DateTime)
+
+    # Which email sequence this prospect is in, if any, and how far through.
+    # Kept on the prospect rather than in a join table because a prospect is
+    # only ever in one: two sequences mailing the same facilities manager in
+    # the same week is the thing that gets a sending domain blocked.
+    sequence = db.Column(db.String(20), index=True)
+    drip_step = db.Column(db.Integer, default=0)
+    last_drip_at = db.Column(db.DateTime)
     last_emailed_at = db.Column(db.DateTime)
 
     # Residential or commercial side of the business. Set from the search that
@@ -1706,6 +1832,50 @@ class Prospect(db.Model):
         ('lost',       'Lost'),
     ]
     LIVE_STAGES = ('new', 'working', 'interested', 'proposal')
+
+    # Stages a prospect can come back from. Nurture is here and not in
+    # LIVE_STAGES on purpose: it should stay off today's list until its date
+    # arrives, and then appear. Leaving it out of both is what made it a hole
+    # rather than a queue — and three separate paths lead into it. An outcome
+    # of "not interested", a deliberate "keep in touch", and, most often, a
+    # prospect who simply hit MAX_ATTEMPTS. All three were set a next action
+    # and a date, and none of them was ever shown again.
+    WAKEABLE_STAGES = LIVE_STAGES + ('nurture',)
+
+    @classmethod
+    def maybe_due(cls, today):
+        """A superset of what is due, cheap enough to run as a query.
+
+        Exactness lives in is_due() and nowhere else. This exists only so a
+        caller that wants a count does not have to load every prospect ever
+        imported to get one.
+        """
+        return db.and_(
+            db.or_(cls.stage.in_(cls.WAKEABLE_STAGES), cls.stage.is_(None)),
+            db.or_(cls.next_action_date.is_(None),
+                   cls.next_action_date <= today),
+        )
+
+    def is_due(self, today=None):
+        """Does this prospect belong on today's call list?
+
+        The single definition of "due". It used to be written once in the
+        Today view and differently in the dashboard's count, so the dashboard
+        would promise seven callbacks and the list it linked to would show
+        four — which teaches you to distrust both numbers.
+
+        A live prospect with no date is due: it is work nobody has scheduled,
+        and hiding it would be the same bug in the other direction. A nurturing
+        one with no date is not — resting is what nurture is for.
+        """
+        stage = self.stage or 'new'
+        if stage not in self.WAKEABLE_STAGES:
+            return False
+        from datetime import date as _date
+        today = today or _date.today().isoformat()
+        if not self.next_action_date:
+            return stage in self.LIVE_STAGES
+        return self.next_action_date <= today
 
     @property
     def category_label(self):
@@ -1751,6 +1921,14 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
 
+    # Optional two-factor (TOTP). Opt-in per account -- see totp.py and
+    # auth.authenticate(). totp_secret is only meaningful once totp_enabled
+    # is True; a secret can exist mid-setup (generated, not yet confirmed)
+    # without granting anything, since only totp_enabled gates the login path.
+    totp_secret = db.Column(db.String(64))
+    totp_enabled = db.Column(db.Boolean, default=False)
+    totp_backup_codes = db.Column(db.Text)  # JSON list of hashed one-time codes
+
     def set_password(self, pw):
         # pbkdf2:sha256 is supported on every Python build; werkzeug's newer
         # default (scrypt) needs OpenSSL scrypt support that some builds lack.
@@ -1777,6 +1955,10 @@ class CommercialAccount(db.Model):
     address = db.Column(db.String(300))
     city = db.Column(db.String(100))
     square_footage = db.Column(db.Integer)                     # drives the cost-based quote
+    # Round-trip driving for one visit. Stored per account because a
+    # customer's distance is a property of that customer, and re-quoting them
+    # a year later should not start again from the generic default.
+    drive_minutes = db.Column(db.Integer)
     category = db.Column(db.String(40), default='office')      # reuses Prospect categories
     frequency = db.Column(db.String(30), default='weekly')     # nightly/weekly/biweekly/monthly/custom
     billing_type = db.Column(db.String(20), default='monthly') # 'monthly' or 'per_visit'
@@ -1900,3 +2082,132 @@ class ErrorLog(db.Model):
         if h:
             return f'{h}h ago'
         return f'{max(1, delta.seconds // 60)}m ago'
+
+
+class LoginToken(db.Model):
+    """A single-use link that proves someone controls an email address.
+
+    Three jobs, one mechanism: finishing a signup, resetting a forgotten
+    password, and confirming an address is real.
+
+    **Only a hash is stored.** The token itself is put in an email and then
+    forgotten. A leaked database backup therefore hands over no working links --
+    which matters here more than in most places, because these links are, for
+    the moment they are alive, a way into a business's entire customer list.
+    Exactly the reasoning behind never storing a password.
+
+    Single-use and short-lived. A reset link that still works a week later, in
+    an inbox somebody else can read, is a password that never changed."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    purpose = db.Column(db.String(20), nullable=False)   # signup, reset, verify, invite
+    email = db.Column(db.String(200))       # what it was sent to, for the audit
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # How long each kind is good for. A reset is deliberately the shortest: it
+    # is the one an attacker wants, and an hour is long enough for somebody to
+    # find the email and long enough for nobody else to. An invite gets a week
+    # -- it goes to somebody who does not yet have a reason to check this
+    # inbox on the day it lands, the way a person resetting their own password
+    # right now does.
+    LIFETIMES = {'signup': 24 * 60, 'reset': 60, 'verify': 7 * 24 * 60, 'invite': 7 * 24 * 60}
+
+    @staticmethod
+    def _hash(raw):
+        return hashlib.sha256((raw or '').encode()).hexdigest()
+
+    @classmethod
+    def issue(cls, user, purpose, email=None):
+        """Create one. Returns (raw_token, row) -- the raw is never stored."""
+        import secrets as _secrets
+        from datetime import timedelta
+        raw = _secrets.token_urlsafe(32)
+        row = cls(user_id=getattr(user, 'id', user), purpose=purpose,
+                  token_hash=cls._hash(raw),
+                  email=email or getattr(user, 'username', None),
+                  expires_at=datetime.utcnow() + timedelta(
+                      minutes=cls.LIFETIMES.get(purpose, 60)))
+        db.session.add(row)
+        db.session.commit()
+        return raw, row
+
+    @classmethod
+    def consume(cls, raw, purpose):
+        """Spend a token. Returns the User, or None for anything wrong.
+
+        Deliberately one return value for every kind of failure -- unknown,
+        expired, already used, wrong purpose. Telling the caller which would let
+        somebody probe for which tokens exist."""
+        row = cls.query.filter_by(token_hash=cls._hash(raw),
+                                  purpose=purpose).first()
+        if not row or row.used_at or row.expires_at < datetime.utcnow():
+            return None
+        row.used_at = datetime.utcnow()
+        db.session.commit()
+        return User.query.get(row.user_id)
+
+    @classmethod
+    def revoke_all(cls, user, purpose=None):
+        """Invalidate outstanding tokens -- after a password changes, every
+        reset link that was in flight has to stop working."""
+        q = cls.query.filter_by(user_id=getattr(user, 'id', user), used_at=None)
+        if purpose:
+            q = q.filter_by(purpose=purpose)
+        for row in q.all():
+            row.used_at = datetime.utcnow()
+        db.session.commit()
+class EntitlementDenial(db.Model):
+    """Somebody wanted something their plan does not include.
+
+    One row per padlock hit. Cheap to write and impossible to reconstruct
+    later, which is the whole argument for writing it: the wall a business
+    kept hitting in the fortnight before they upgraded is the feature they
+    actually bought, and the wall they hit before they cancelled is the one
+    priced into the wrong tier. Neither shows up in revenue reporting.
+
+    Nothing reads this table yet. That is fine — it is being filled now so
+    there is a year of it to read when the pricing question comes up."""
+    id = db.Column(db.Integer, primary_key=True)
+    feature = db.Column(db.String(60), index=True)   # 'hiring', or 'limit:field_workers'
+    plan = db.Column(db.String(20))                  # the plan they were on when blocked
+    path = db.Column(db.String(200))                 # where they hit it
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class AssistantProposal(db.Model):
+    """Something Nana offered to do, and whether a person said yes.
+
+    The whole safety of an assistant that acts rests on one question: is the
+    thing being executed the same thing the person read and approved? If the
+    browser posts back what to do, the answer is "probably" -- the page could
+    send a different job id, or a different address, than the one on screen.
+
+    So nothing is posted back but a token. The proposal itself -- the action,
+    the exact arguments, the sentence the person read -- is written here first
+    and only read from here. What runs is what was offered, by construction
+    rather than by trust.
+
+    It is also the record afterwards. Once something can send an email on a
+    business's behalf, "who approved this, and what did it say at the time"
+    stops being a nicety and becomes the first question anybody asks.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    action = db.Column(db.String(50), nullable=False)
+    # The arguments, as JSON. Written by the code that offers, never by the
+    # model: it picks the action and the code decides what the action means.
+    payload = db.Column(db.Text, nullable=False, default='{}')
+    # What the person actually read before they pressed the button. Kept
+    # verbatim so the record is of the decision, not of a reconstruction.
+    summary = db.Column(db.Text, nullable=False, default='')
+    label = db.Column(db.String(120), nullable=False, default='Confirm')
+    # Whether it can be taken back afterwards. Changes what the button says,
+    # and it is the code that says so, not the model.
+    reversible = db.Column(db.Boolean, nullable=False, default=True)
+    asked_by = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    used_at = db.Column(db.DateTime)
+    outcome = db.Column(db.Text)

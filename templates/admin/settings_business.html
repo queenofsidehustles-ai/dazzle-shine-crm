@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="card">
-  <p style="color:#9a95ad;font-size:0.9rem;margin-bottom:20px">This is your white-label config. Change the business name, phone, and contact info here — no code needed.</p>
+  <p style="color:var(--softer);font-size:0.9rem;margin-bottom:20px">This is your white-label config. Change the business name, phone, and contact info here — no code needed.</p>
   <form method="POST">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div class="form-group" style="grid-column:1/-1">
@@ -51,8 +51,37 @@
           <option value="{{ tz }}" {{ 'selected' if (current.timezone or 'America/New_York') == tz }}>{{ tzlabel }}</option>
           {% endfor %}
         </select>
-        <span style="font-size:0.76rem;color:#9a95ad">Your CRM runs on a server set to UTC. This is how it knows what "today" and "9am" mean where you actually are.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Your CRM runs on a server set to UTC. This is how it knows what "today" and "9am" mean where you actually are.</span>
       </div>
+      <div class="form-group">
+        <label>Markets <span style="font-weight:400;color:var(--softer)">— states you operate in</span></label>
+        <input type="hidden" name="markets_submitted" value="1" />
+        <select name="markets" multiple size="6" style="height:auto">
+          {% for code, name in us_states %}
+          <option value="{{ code }}" {{ 'selected' if code in current_markets }}>{{ name }}</option>
+          {% endfor %}
+        </select>
+        <span style="font-size:0.76rem;color:var(--softer)">Cmd/Ctrl-click to select more than one. Used for state-specific
+          legal, tax or SMS-consent wording. Nothing changes here unless you write a note for a state — save this
+          first, and a note box for each state you picked will appear below.</span>
+      </div>
+      {% if current_markets %}
+      <div class="form-group">
+        <label>State-specific notes <span style="font-weight:400;color:var(--softer)">— optional</span></label>
+        <span style="font-size:0.76rem;color:var(--softer);display:block;margin-bottom:8px">
+          Shown to every customer, appended to your customer terms below, under that state's own heading.
+          Leave blank for a state that doesn't need one. Not legal advice — write your own wording or have
+          counsel review it.
+        </span>
+        {% for code in current_markets %}
+        <div style="margin-bottom:10px">
+          <label style="font-size:0.82rem;font-weight:600">{{ us_state_names.get(code, code) }}</label>
+          <textarea name="market_note_{{ code }}" rows="3"
+                    placeholder="e.g. required SMS-consent language for this state">{{ market_notes.get(code, '') }}</textarea>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
       <div class="form-group">
         <label>Charge Time For Jobs With No Arrival Time</label>
         <select name="charge_hour">
@@ -60,7 +89,7 @@
           <option value="{{ h }}" {{ 'selected' if (current.charge_hour or '9')|int == h }}>{{ (h % 12) or 12 }}:00 {{ 'AM' if h < 12 else 'PM' }}</option>
           {% endfor %}
         </select>
-        <span style="font-size:0.76rem;color:#9a95ad">Cards are charged when each job's own arrival time comes round, so nobody pays before you turn up. This is only the fallback for a booking with no time filled in.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Cards are charged when each job's own arrival time comes round, so nobody pays before you turn up. This is only the fallback for a booking with no time filled in.</span>
       </div>
     </div>
     <button type="submit" class="btn btn-gold" style="margin-top:8px">Save Business Info</button>
@@ -69,8 +98,8 @@
 
 <!-- White-Label Model Settings -->
 <div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Business Model Settings</h2>
-  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">These control terminology and agreement type throughout the CRM. Change these when white-labeling for a new client.</p>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Business Model Settings</h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:20px">These control terminology and agreement type throughout the CRM. Change these when white-labeling for a new client.</p>
   <form method="POST">
     <input type="hidden" name="business_name" value="{{ current.business_name }}" />
     <input type="hidden" name="phone" value="{{ current.phone }}" />
@@ -87,7 +116,7 @@
           <option value="contractor" {{ 'selected' if current.worker_model == 'contractor' }}>Independent Contractor (1099)</option>
           <option value="employee" {{ 'selected' if current.worker_model == 'employee' }}>Employee (W-2)</option>
         </select>
-        <span style="font-size:0.76rem;color:#9a95ad">Changes agreement type and onboarding language.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Changes agreement type and onboarding language.</span>
       </div>
       <div class="form-group">
         <label>Reception Model</label>
@@ -95,22 +124,72 @@
           <option value="va" {{ 'selected' if current.reception_model == 'va' }}>Virtual Assistant (VA)</option>
           <option value="receptionist" {{ 'selected' if current.reception_model == 'receptionist' }}>In-House Receptionist</option>
         </select>
-        <span style="font-size:0.76rem;color:#9a95ad">Affects scripts library labels and context.</span>
+        <span style="font-size:0.76rem;color:var(--softer)">Affects scripts library labels and context.</span>
       </div>
     </div>
-    <div class="form-group" style="margin-top:4px">
-      <label>Work Agreement Template</label>
-      <textarea name="agreement_template" rows="16"
-                style="font-family:monospace;font-size:0.82rem;line-height:1.7"
-                placeholder="Leave blank to use the built-in default for your worker model. Paste your custom agreement text here to override it.">{{ current.agreement_template }}</textarea>
-      <span style="font-size:0.76rem;color:#9a95ad">Cleaners see this when they click their signing link. Leave blank to use the built-in IC or Employee agreement based on the worker model above.</span>
+    {# Sixteen rows of empty monospace box, labelled "Work Agreement Template",
+       between two dropdowns. Nobody could tell whether it was something they
+       had to write. It is not — there is a complete agreement built in, and it
+       is already what cleaners sign. So: say that first, put the box away
+       behind an arrow, and let anyone who wants to change it start from the
+       real text rather than a blank page. #}
+    <div style="margin-top:14px;padding:13px 15px;background:var(--good-soft);
+                border:1px solid var(--good);border-radius:9px">
+      <div style="font-weight:700;color:var(--good);font-size:0.9rem;margin-bottom:3px">
+        ✅ Your work agreement is ready to use
+      </div>
+      <p style="font-size:0.85rem;color:var(--good);margin:0;line-height:1.6">
+        Cleaners sign it when they join, from the link the CRM sends them. It is
+        written for the worker type you picked above, so there is nothing you need
+        to do here — unless you want your own wording.
+      </p>
     </div>
+
+    <details class="howto" style="margin-top:10px">
+      <summary>Use my own wording instead</summary>
+      <div class="howto-body">
+        <p style="font-size:0.88rem;line-height:1.6;margin:0 0 10px">
+          Anything you put here replaces the built-in agreement completely. Empty
+          the box to go back to it. Start from the built-in text rather than a
+          blank page if you only want to change a line or two:
+        </p>
+        <button type="button" id="load-default-agreement" class="btn btn-outline"
+                style="font-size:0.82rem;padding:6px 14px;margin-bottom:10px">
+          Load the built-in agreement so I can edit it
+        </button>
+        <textarea name="agreement_template" id="agreement-box" rows="16"
+                  style="font-family:monospace;font-size:0.82rem;line-height:1.7"
+                  placeholder="Empty — your cleaners are signing the built-in agreement.">{{ current.agreement_template }}</textarea>
+        <p style="font-size:0.78rem;color:var(--softer);margin:6px 0 0">
+          A work agreement is a legal document. If you change it, have somebody
+          who knows your state's rules read it before a cleaner signs it.
+        </p>
+      </div>
+    </details>
+    <script id="default-agreement-text" type="text/plain">{{ default_agreement }}</script>
+    <script>
+      // Editing from the real text beats editing from nothing — and it makes
+      // plain what the built-in agreement actually says, which was the thing
+      // nobody could tell from an empty box.
+      (function () {
+        const btn = document.getElementById('load-default-agreement');
+        const box = document.getElementById('agreement-box');
+        const src = document.getElementById('default-agreement-text');
+        if (!btn || !box || !src) return;
+        btn.addEventListener('click', function () {
+          if (box.value.trim() &&
+              !confirm('Replace what is in the box with the built-in agreement?')) return;
+          box.value = src.textContent.trim();
+          box.focus();
+        });
+      })();
+    </script>
 
     <div class="form-group" style="margin-top:18px">
       <label>📜 Customer Service &amp; Payment Terms</label>
       <textarea name="customer_terms" rows="18"
                 style="font-family:monospace;font-size:0.82rem;line-height:1.7">{{ current.customer_terms }}</textarea>
-      <span style="font-size:0.76rem;color:#9a95ad">
+      <span style="font-size:0.76rem;color:var(--softer)">
         Shown on every payment page and printed on every invoice, so the terms travel with the bill.
         Wrap a line in <code>**stars**</code> to make it a heading.
         <strong>These apply from the moment a customer sees them — they don't reach back to bookings already made.</strong>
@@ -123,48 +202,159 @@
 
 <!-- Branding: what customers see -->
 <div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Branding &amp; Customer-Facing Details</h2>
-  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">These appear on quotes, invoices, receipts and the emails your customers receive.</p>
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Branding &amp; Customer-Facing Details</h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:20px">These appear on quotes, invoices, receipts and the emails your customers receive.</p>
   <form method="POST">
     <div class="form-group">
       <label>Google Review Link</label>
       <input type="url" name="google_review_link" value="{{ current.google_review_link }}"
              placeholder="https://g.page/r/…/review" />
-      <span style="font-size:0.76rem;color:#9a95ad">Shown to customers who rate you 4 or 5 stars. Leave blank and the review button is hidden entirely — better no button than one pointing at the wrong business.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">Shown to customers who rate you 4 or 5 stars. Leave blank and the review button is hidden entirely — better no button than one pointing at the wrong business.</span>
     </div>
     <div class="form-group">
       <label>Email Tagline</label>
       <input type="text" name="brand_tagline" value="{{ current.brand_tagline }}"
              placeholder="Professional Cleaning Proposal" />
-      <span style="font-size:0.76rem;color:#9a95ad">The small line under your name at the top of quote emails.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">The small line under your name at the top of quote emails.</span>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
-      <div class="form-group">
-        <label>Header Colour</label>
-        <input type="text" name="brand_dark" value="{{ current.brand_dark }}" placeholder="#1f2937" />
+    {# Where the page they are colouring actually lives. Without this it is a
+       setting with no visible effect, which is how settings get ignored. #}
+    {# The link itself, shown and copyable. A settings page that only says the
+       feature exists is a settings page nobody acts on. #}
+    <div class="bookinglink">
+      <div class="bl-top">
+        <div>
+          <b>Your booking page</b>
+          <span>Customers pick a service, see your price and book — it arrives
+                as a job. Put this link in your Facebook bio, your Google
+                listing, your email signature.</span>
+        </div>
+        <a href="{{ url_for('settings.booking_page') }}"
+           class="btn btn-outline btn-sm">Where to put it →</a>
       </div>
-      <div class="form-group">
-        <label>Accent Colour</label>
-        <input type="text" name="brand_accent" value="{{ current.brand_accent }}" placeholder="#2563eb" />
-      </div>
-      <div class="form-group">
-        <label>Text On Accent</label>
-        <input type="text" name="brand_accent_text" value="{{ current.brand_accent_text }}" placeholder="#ffffff" />
+      <div class="bl-url">
+        <code id="bookingurl">{{ current._booking_url }}</code>
+        <button type="button" class="btn btn-outline btn-sm" id="copybooking">Copy link</button>
       </div>
     </div>
+
+    {# The embed used to be explained here, at the bottom of a long settings
+       page, which is where it went unread — the first person outside the
+       company to try the product had to have it explained by hand. The whole
+       explanation now lives on one screen of its own; this is a pointer to it
+       rather than a second copy that can drift. #}
+    <div class="embedbox">
+      <div class="eb-top">
+        <div>
+          <b>Put it on your own website</b>
+          <span>One line to paste, and step-by-step instructions for Wix,
+                Squarespace, WordPress and GoDaddy.</span>
+        </div>
+        <a href="{{ url_for('settings.booking_page') }}" class="btn btn-outline btn-sm">Show me →</a>
+      </div>
+    </div>
+
+    {# Your colours, on the pages your customers see: the booking page, quotes,
+       receipts and review prompts. Two pickers rather than three boxes of hex,
+       because "text on accent" is not a decision anybody wants to make -- it is
+       computed from the accent so a pale colour never ends up with white text
+       on it. #}
+    {% set _dark = current.brand_dark or '#1f2937' %}
+    {% set _accent = current.brand_accent or '#2563eb' %}
+    <div class="brandpick">
+      <div class="bp-fields">
+        <div class="form-group">
+          <label>Header colour</label>
+          <div class="swatch-row">
+            <input type="color" id="pick_dark" value="{{ _dark }}" aria-label="Pick the header colour" />
+            <input type="text" name="brand_dark" id="hex_dark" value="{{ current.brand_dark }}"
+                   placeholder="#1f2937" spellcheck="false" />
+          </div>
+          <span class="hint">The band across the top of your booking page and emails.</span>
+        </div>
+        <div class="form-group">
+          <label>Button colour</label>
+          <div class="swatch-row">
+            <input type="color" id="pick_accent" value="{{ _accent }}" aria-label="Pick the button colour" />
+            <input type="text" name="brand_accent" id="hex_accent" value="{{ current.brand_accent }}"
+                   placeholder="#2563eb" spellcheck="false" />
+          </div>
+          <span class="hint">Buttons and prices. Pick the colour customers know you by.</span>
+        </div>
+        <input type="hidden" name="brand_accent_text" id="hex_accent_text"
+               value="{{ current.brand_accent_text or '#ffffff' }}" />
+      </div>
+
+      {# Shown, not described. Nobody can picture a hex code. #}
+      <div class="bp-preview" aria-hidden="true">
+        <div class="bp-head" id="pv_head">{{ current.business_name or 'Your business' }}</div>
+        <div class="bp-body">
+          <div class="bp-line"></div>
+          <div class="bp-line short"></div>
+          <div class="bp-price" id="pv_price">$180.00</div>
+          <div class="bp-btn" id="pv_btn">Book this clean</div>
+        </div>
+      </div>
+    </div>
+    {# "Only switch this on once your domain is verified with your email
+       provider" assumes the reader knows what verifying a domain is, who their
+       email provider is, and how to tell when it is done. Most people running a
+       cleaning company know none of the three — and getting it wrong stops
+       every email the CRM sends, silently. #}
     <div class="form-group">
       <label>Send Email From Your Own Domain</label>
       <select name="brand_domain_verified">
         <option value="" {{ '' if current.brand_domain_verified == '1' else 'selected' }}>Not yet — send from the default address</option>
         <option value="1" {{ 'selected' if current.brand_domain_verified == '1' }}>Yes — my domain is verified</option>
       </select>
-      <span style="font-size:0.76rem;color:#9a95ad">Only switch this on once your domain is verified with your email provider. Turning it on too early means your emails stop arriving.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">
+        Leave this on “Not yet” unless you have done the steps below. Your emails
+        still send either way — this only changes the address they come from.
+      </span>
     </div>
+
+    <details class="howto">
+      <summary>What this means, and how to do it <span class="mins">about 20 minutes, once</span></summary>
+      <div class="howto-body">
+        <p style="font-size:0.88rem;line-height:1.6;margin:0 0 12px">
+          Right now your customers' emails arrive from our address. That works, and
+          plenty of businesses leave it alone. If you would rather they came from
+          <code>hello@yourbusiness.com</code>, you have to prove to the email system
+          that the domain is yours — otherwise anyone could send email pretending to
+          be you, which is exactly why spam filters check.
+        </p>
+        <ol>
+          <li><strong>Do you own a domain?</strong> If your email is
+            <code>@gmail.com</code>, you don't yet — you would need to buy one
+            (about $12 a year at Namecheap, GoDaddy or Cloudflare). If your email is
+            already <code>@yourbusiness.com</code>, you do.</li>
+          <li><strong>Add it at Resend.</strong> Sign in at
+            <code>resend.com</code> → <strong>Domains</strong> → <strong>Add
+            Domain</strong> → type your domain.</li>
+          <li><strong>Copy the records it shows you.</strong> Three or four rows,
+            named things like <code>DKIM</code> and <code>SPF</code>. They are just
+            text — you are copying, not writing.</li>
+          <li><strong>Paste them where you bought the domain</strong>, under
+            <strong>DNS</strong> or <strong>DNS Records</strong>. One row at a time,
+            copying each value exactly.</li>
+          <li><strong>Wait, then check.</strong> Back at Resend, the domain turns
+            <strong>Verified</strong> — usually minutes, sometimes a few hours.</li>
+          <li><strong>Only then</strong> change the box above to “Yes”, and set the
+            from-address you want.</li>
+        </ol>
+        <div class="howto-note">
+          Switching to “Yes” before Resend says <strong>Verified</strong> stops your
+          emails arriving — quotes, receipts and confirmations all just stop, with no
+          error to tell you. If email goes quiet after changing this, put it back to
+          “Not yet” and everything resumes.
+        </div>
+      </div>
+    </details>
     <div class="form-group">
       <label>How You Describe The Business</label>
       <input type="text" name="content_business_description" value="{{ current.content_business_description }}"
              placeholder="{{ BIZ }} — professional home cleaning service in {{ BIZ_CITY or 'your city' }}." />
-      <span style="font-size:0.76rem;color:#9a95ad">Used when the CRM writes social posts for you. Leave blank to build it from your name and city.</span>
+      <span style="font-size:0.76rem;color:var(--softer)">Used when the CRM writes social posts for you. Leave blank to build it from your name and city.</span>
     </div>
     <button type="submit" class="btn btn-gold">Save Branding</button>
   </form>
@@ -172,8 +362,8 @@
 
 <!-- Optional second trading name -->
 <div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Commercial Brand <span style="text-transform:none;letter-spacing:0;font-weight:500">(optional)</span></h2>
-  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Commercial Brand <span style="text-transform:none;letter-spacing:0;font-weight:500">(optional)</span></h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:20px">
     Some cleaning businesses sell commercial work under a separate name. If you do, fill this in and office, medical and retail quotes will go out branded that way.
     <strong>Leave it all blank if you trade under one name</strong> — those quotes will simply go out as {{ BIZ }}.
   </p>
@@ -207,11 +397,11 @@
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
       <div class="form-group">
         <label>Header Colour</label>
-        <input type="text" name="commercial_dark" value="{{ current.commercial_dark }}" placeholder="#12324a" />
+        <input type="text" name="commercial_dark" value="{{ current.commercial_dark }}" placeholder="#1f2937" />
       </div>
       <div class="form-group">
         <label>Accent Colour</label>
-        <input type="text" name="commercial_accent" value="{{ current.commercial_accent }}" placeholder="#2a89c4" />
+        <input type="text" name="commercial_accent" value="{{ current.commercial_accent }}" placeholder="#2563eb" />
       </div>
       <div class="form-group">
         <label>Text On Accent</label>
@@ -229,39 +419,162 @@
   </form>
 </div>
 
-<!-- Hiring Workflow Settings -->
-<div class="card" style="margin-top:20px">
-  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:#9a95ad;text-transform:uppercase;letter-spacing:0.12em">Hiring Workflow</h2>
-  <p style="color:#9a95ad;font-size:0.85rem;margin-bottom:20px">These power the one-click email buttons on each application. Set them once and the CRM does the rest.</p>
-  <form method="POST">
-    {% for f in ['business_name','phone','email','address','city','state','zip_code','website','worker_model','reception_model','agreement_template','customer_terms'] %}
-    <input type="hidden" name="{{ f }}" value="{{ current[f] }}" />
-    {% endfor %}
-    <div class="form-group">
-      <label>Interview Calendar Link</label>
-      <input type="url" name="interview_calendar_link" value="{{ current.interview_calendar_link }}"
-             placeholder="https://calendly.com/yourname/phone-interview" />
-      <span style="font-size:0.76rem;color:#9a95ad">Your Calendly, Google Calendar booking link, or any scheduling URL. Used by "Send Interview Invite" button.</span>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px">
-      <div class="form-group">
-        <label>BG Check Provider Name</label>
-        <input type="text" name="bgcheck_provider_name" value="{{ current.bgcheck_provider_name }}"
-               placeholder="e.g. FDLE, Checkr, Care.com" />
-      </div>
-      <div class="form-group">
-        <label>BG Check Provider Link</label>
-        <input type="url" name="bgcheck_provider_url" value="{{ current.bgcheck_provider_url }}"
-               placeholder="https://bg.fdle.state.fl.us or https://checkr.com/applicants" />
-      </div>
-    </div>
-    <div style="background:#f0edf8;border-radius:8px;padding:12px;font-size:0.82rem;color:#5f5878;margin-bottom:16px">
-      <strong style="color:#3b2460">A good starting point:</strong><br>
-      • <strong>FDLE</strong> (Florida state check, ~$24, applicant pays) → <code>https://bg.fdle.state.fl.us</code><br>
-      • <strong>Checkr for Individuals</strong> (~$30) → <code>https://checkr.com/applicants</code><br>
-      • <strong>Free first step</strong>: Always check National Sex Offender Registry → <code>https://www.nsopw.gov</code>
-    </div>
-    <button type="submit" class="btn btn-gold">Save Hiring Settings</button>
-  </form>
-</div>
+
+<style>
+  .embedbox {
+    border:1px solid var(--line); border-radius:var(--r-sm);
+    padding:var(--s4); margin-bottom:var(--s5); background:var(--surface);
+  }
+  .eb-top { display:flex; gap:var(--s4); align-items:flex-start; }
+  .eb-top > div { flex:1; }
+  .eb-top b { display:block; font-weight:650; }
+  .eb-top span { color:var(--muted); font-size:var(--t-sm); }
+  .eb-code {
+    display:flex; gap:var(--s2); align-items:center; margin-top:var(--s3);
+  }
+  .eb-code code, .eb-locked code {
+    flex:1; min-width:0; display:block; overflow-x:auto; white-space:nowrap;
+    background:var(--ground); border:1px solid var(--line-soft);
+    border-radius:var(--r-sm); padding:var(--s3); font-size:var(--t-xs);
+    font-family:ui-monospace,monospace; color:var(--ink);
+  }
+  .eb-locked { margin-top:var(--s3); }
+  .eb-locked code { opacity:.45; }
+  .eb-locked p { color:var(--muted); font-size:var(--t-sm); margin-top:var(--s2); }
+
+  .bookinglink {
+    background:var(--amber-soft); border:1px solid var(--amber-line);
+    border-radius:var(--r-sm); padding:var(--s4); margin-bottom:var(--s5);
+  }
+  .bl-top { display:flex; align-items:flex-start; gap:var(--s4); flex-wrap:wrap; }
+  .bl-top > div { flex:1; min-width:220px; }
+  .bookinglink b { display:block; font-weight:650; }
+  .bookinglink span { color:var(--muted); font-size:var(--t-sm); }
+  .bl-url { display:flex; gap:var(--s2); align-items:center; margin-top:var(--s3); }
+  .bl-url code {
+    flex:1; min-width:0; overflow-x:auto; white-space:nowrap;
+    background:var(--surface); border:1px solid var(--amber-line);
+    border-radius:var(--r-sm); padding:var(--s3);
+    font-family:ui-monospace,monospace; font-size:var(--t-sm); color:var(--ink);
+  }
+
+  /* ── Brand colour picker ───────────────────────────────────────────────
+     Two colours and a picture of the result. The third value — what colour
+     the text on a button should be — is worked out rather than asked for,
+     because it is the one somebody always gets wrong and the cost is a
+     booking page nobody can read. */
+  .brandpick { display:grid; grid-template-columns:1fr 260px; gap:var(--s6); align-items:start; }
+  .bp-fields { display:grid; gap:var(--s4); }
+  .swatch-row { display:flex; gap:var(--s2); align-items:center; }
+  .swatch-row input[type="color"] {
+    -webkit-appearance:none; appearance:none;
+    width:46px; height:42px; padding:0; cursor:pointer;
+    border:1px solid var(--line); border-radius:var(--r-sm); background:none;
+    flex:0 0 auto;
+  }
+  .swatch-row input[type="color"]::-webkit-color-swatch-wrapper { padding:3px; }
+  .swatch-row input[type="color"]::-webkit-color-swatch { border:0; border-radius:6px; }
+  .swatch-row input[type="text"] { flex:1; min-width:0; font-family:ui-monospace,monospace; }
+  .brandpick .hint { display:block; font-size:var(--t-xs); color:var(--softer); margin-top:var(--s1); }
+
+  .bp-preview {
+    border:1px solid var(--line); border-radius:var(--r);
+    overflow:hidden; box-shadow:var(--shadow); background:#fff;
+  }
+  .bp-head {
+    padding:var(--s4) var(--s4) var(--s5);
+    color:#fff; font-weight:700; font-size:var(--t-sm);
+    background:#1f2937;
+  }
+  .bp-body { padding:var(--s4); }
+  .bp-line { height:8px; border-radius:4px; background:var(--line); margin-bottom:var(--s2); }
+  .bp-line.short { width:62%; margin-bottom:var(--s4); }
+  .bp-price { font-size:var(--t-xl); font-weight:800; letter-spacing:-.02em; color:#2563eb; }
+  .bp-btn {
+    margin-top:var(--s4); text-align:center; padding:var(--s3);
+    border-radius:var(--r-pill); font-weight:650; font-size:var(--t-sm);
+    background:#2563eb; color:#fff;
+  }
+  @media (max-width:760px) { .brandpick { grid-template-columns:1fr; } }
+</style>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const pickD = $('pick_dark'), hexD = $('hex_dark');
+  const pickA = $('pick_accent'), hexA = $('hex_accent');
+  const outT  = $('hex_accent_text');
+  if (!pickA) return;
+
+  const norm = v => {
+    v = (v || '').trim();
+    if (!v) return null;
+    if (v[0] !== '#') v = '#' + v;
+    if (/^#[0-9a-f]{3}$/i.test(v)) v = '#' + v[1]+v[1] + v[2]+v[2] + v[3]+v[3];
+    return /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : null;
+  };
+
+  // Relative luminance, the WCAG way. A mid yellow and a mid blue are nothing
+  // alike to a human eye even when their hex values look similarly "medium",
+  // and this is what tells them apart.
+  const readable = hex => {
+    const c = [1, 3, 5].map(i => {
+      const v = parseInt(hex.substr(i, 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    const L = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    // Contrast against white vs against near-black; pick the better one.
+    return (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.05) ? '#ffffff' : '#111827';
+  };
+
+  function paint() {
+    const d = norm(hexD.value) || pickD.value;
+    const a = norm(hexA.value) || pickA.value;
+    const t = readable(a);
+    outT.value = t;
+    $('pv_head').style.background = d;
+    $('pv_head').style.color = readable(d);
+    $('pv_price').style.color = a;
+    $('pv_btn').style.background = a;
+    $('pv_btn').style.color = t;
+  }
+
+  const sync = (pick, hex) => {
+    pick.addEventListener('input', () => { hex.value = pick.value; paint(); });
+    hex.addEventListener('input', () => {
+      const n = norm(hex.value);
+      if (n) pick.value = n;
+      paint();
+    });
+  };
+  sync(pickD, hexD);
+  sync(pickA, hexA);
+  paint();
+})();
+</script>
+
+<script>
+function wireCopy(btnId, codeId, label) {
+  const btn = document.getElementById(btnId);
+  const code = document.getElementById(codeId);
+  if (!btn || !code) return;
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(code.textContent.trim());
+      btn.textContent = 'Copied';
+    } catch (e) {
+      // Clipboard access is refused often enough -- over plain http, or with
+      // the permission denied -- that failing silently would look broken.
+      const r = document.createRange();
+      r.selectNodeContents(code);
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(r);
+      btn.textContent = 'Selected — press Cmd/Ctrl+C';
+    }
+    setTimeout(() => { btn.textContent = label; }, 2500);
+  });
+}
+wireCopy('copybooking', 'bookingurl', 'Copy link');
+</script>
+
 {% endblock %}

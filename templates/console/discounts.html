@@ -1,0 +1,56 @@
+{% extends "console/_shell.html" %}
+{% block title %}Discount codes{% endblock %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+{% include "console/_funnel_tabs.html" %}
+<p class="ops-dim" style="margin:0 0 var(--s4)">Codes for Akye's own plans. Each is created in Stripe and typed by the customer on the checkout page.
+  A cleaning company's codes for its own customers are separate: they're in that company's CRM.</p>
+
+{% if may_operate %}
+<div class="ops-card" style="margin-bottom:var(--s5)">
+  <h3 style="font-size:var(--t-sm);margin:0 0 var(--s3)">New code</h3>
+  {% if not stripe_ready %}<p class="ops-bad">Stripe is not set up on this deployment, so codes cannot be created.</p>{% endif %}
+  <form method="post" action="{{ url_for('console.discounts') }}" class="ops-form">
+    <label>Code <input type="text" name="code" required maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9_\-]{2,39}" placeholder="FOUNDING50" style="text-transform:uppercase"></label>
+    <label>Discount
+      <span style="display:flex;gap:var(--s2)">
+        <select name="kind" aria-label="Kind of discount"><option value="percent">% off</option><option value="amount">$ off</option></select>
+        <input type="number" name="percent" min="1" max="100" placeholder="50" aria-label="Percent off">
+        <input type="number" name="amount" min="0.01" step="0.01" placeholder="or dollars" aria-label="Dollars off">
+      </span></label>
+    <label>Lasts
+      <span style="display:flex;gap:var(--s2)">
+        <select name="duration" aria-label="How long it lasts"><option value="once">First payment only</option><option value="repeating">A number of months</option><option value="forever">Forever</option></select>
+        <input type="number" name="months" min="1" max="36" placeholder="months" aria-label="Months">
+      </span></label>
+    <label>Use limit <input type="number" name="max_redemptions" min="1" placeholder="unlimited"></label>
+    <label>Expires <input type="date" name="expires"></label>
+    <label>Note <input type="text" name="note" maxlength="300" placeholder="Who it's for — goes in the record"></label>
+    <div><button class="btn btn-sm" type="submit" {% if not stripe_ready %}disabled{% endif %}>Create code</button></div>
+  </form>
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Code</th><th>Discount</th><th>Limits</th><th>Used by</th><th>Status</th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td><strong>{{ r.code }}</strong>{% if r.note %}<br><span class="ops-dim">{{ r.note }}</span>{% endif %}</td>
+    <td>{{ r.describe }}</td>
+    <td class="ops-dim">{{ ('up to ' ~ r.max_redemptions ~ ' uses') if r.max_redemptions else 'no use limit' }}<br>
+        {{ ('until ' ~ r.expires_at.strftime('%d %b %Y')) if r.expires_at else 'no expiry' }}</td>
+    <td>{{ r.usage.used }} compan{{ 'y' if r.usage.used == 1 else 'ies' }}{% if r.usage.paying %}, {{ r.usage.paying }} paying{% endif %}
+        {% if r.redeemed is not none %}<br><span class="ops-dim">Stripe: {{ r.redeemed }} redemption{{ 's' if r.redeemed != 1 }}</span>{% endif %}</td>
+    <td><span class="ops-badge {{ 'ops-ok' if r.active else 'ops-closed' }}">{{ 'on' if r.active else 'off' }}</span></td>
+    <td>{% if may_operate %}
+      <form method="post" action="{{ url_for('console.discount_active', code=r.code) }}">
+        <input type="hidden" name="on" value="{{ '0' if r.active else '1' }}">
+        <button class="btn btn-outline btn-sm" type="submit">{{ 'Turn off' if r.active else 'Turn on' }}</button>
+      </form>{% endif %}
+      <span class="ops-dim">by {{ r.created_by }}, {{ r.created_at.strftime('%d %b') if r.created_at }}</span></td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="con-empty">No codes yet.</div>{% endif %}
+{% endblock %}

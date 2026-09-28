@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from entitlements import requires_plan
 from auth import login_required
 from models import Script
 from extensions import db
@@ -8,6 +9,7 @@ scripts_bp = Blueprint('scripts', __name__, url_prefix='/scripts')
 
 @scripts_bp.route('/')
 @login_required
+@requires_plan('templates')
 def index():
     import call_scripts
     category = request.args.get('cat', 'inbound')

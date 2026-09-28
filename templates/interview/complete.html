@@ -6,13 +6,14 @@
   <title>Interview Complete — {{ BIZ }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     :root {
-      --gold: #d3a84f;
-      --purple: #1f1333;
-      --purple-mid: #3b2b6b;
-      --bg: #f6f5fb;
-      --border: #e4dfef;
+      --gold: var(--amber);
+      --purple: var(--ink);
+      --purple-mid: var(--ink-2);
+      --bg: var(--ground);
+      --border: var(--line);
       --radius: 14px;
       --shadow: 0 4px 24px rgba(15,7,40,0.1);
     }
@@ -63,7 +64,7 @@
     .icon-wrap {
       width: 80px;
       height: 80px;
-      background: linear-gradient(135deg, #d3a84f 0%, #b98a33 100%);
+      background: linear-gradient(135deg, var(--amber) 0%, var(--amber-deep) 100%);
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -97,7 +98,7 @@
       font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.15em;
-      color: #9a95ad;
+      color: var(--softer);
       font-weight: 600;
       margin-bottom: 12px;
     }
@@ -118,7 +119,7 @@
     footer {
       text-align: center;
       padding: 18px;
-      color: #9a95ad;
+      color: var(--softer);
       font-size: 0.8rem;
       border-top: 1px solid var(--border);
     }
@@ -145,7 +146,7 @@
         </p>
       {% endif %}
 
-      <p style="color:#9a95ad;font-size:0.88rem">
+      <p style="color:var(--softer);font-size:0.88rem">
         You can now close this page. We'll be in touch via email.
       </p>
 
@@ -160,7 +161,7 @@
         </ul>
       </div>
 
-      <p style="margin-top:24px;font-size:0.88rem;color:#9a95ad">
+      <p style="margin-top:24px;font-size:0.88rem;color:var(--softer)">
         Questions? Email us at
         <a href="mailto:{{ BIZ_EMAIL }}" style="color:var(--gold)">{{ BIZ_EMAIL }}</a>
       </p>

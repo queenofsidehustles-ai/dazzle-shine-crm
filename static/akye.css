@@ -1,0 +1,1164 @@
+/* Akye — the design system.
+ *
+ * The interface felt clunky for a reason that had nothing to do with taste:
+ * there was no system under it. A year of adding pages one at a time left nine
+ * font sizes, shadows invented per card, spacing typed in by hand, and buttons
+ * that looked slightly different on every screen. Every page was fine and the
+ * whole was uneven, which is exactly what "clunky" describes.
+ *
+ * So this is tokens first and components second. Nothing below is decorative:
+ * each value exists because something in the product needed it, and screens
+ * pick from these rather than inventing their own.
+ *
+ * ── The palette ───────────────────────────────────────────────────────────
+ *
+ * Akye is "good morning", so the colour is dawn: warm amber over deep navy.
+ * That is also a commercial choice — every competitor in this category is
+ * corporate blue, and being the warm one is free differentiation.
+ *
+ * Amber is the only colour that means "do this". If everything is highlighted
+ * nothing is, so it is rationed: primary buttons, active navigation, the one
+ * next action. Green and red are reserved for money and state — paid, unpaid,
+ * complete, failed — and never used decoratively.
+ */
+
+:root {
+  /* ── Colour ────────────────────────────────────────────────────────── */
+  --amber:        #f0a44b;   /* the one "do this" colour */
+  --amber-deep:   #d98a2b;   /* hover, and text on light backgrounds */
+  --amber-soft:   #fdf3e6;   /* tinted panels */
+  --amber-line:   #f5d9b3;   /* borders on tinted panels */
+
+  --ink:          #16213a;   /* headings, sidebar, body text */
+  --ink-2:        #223052;   /* raised surfaces on the sidebar */
+  --muted:        #6b7590;   /* secondary text */
+  --softer:       #98a1b8;   /* tertiary — labels, timestamps */
+
+  --surface:      #ffffff;
+  --surface-2:    #fbfcfe;   /* the near-white a raised card fades to */   /* cards */
+  --ground:       #f7f8fb;   /* page background, faintly cool */
+  --line:         #e3e7f0;   /* borders */
+  --line-soft:    #eef1f7;   /* internal dividers */
+
+  --good:         #2f9e6b;   /* paid, complete, confirmed */
+  --good-soft:    #e8f6ef;
+  --warn:         #d9534f;   /* unpaid, failed, overdue */
+  --warn-soft:    #fdecec;
+  --info:         #3b6fb5;
+  --info-soft:    #eaf1fa;
+  --info-line:    #cfe0f3;   /* the border that goes with --info-soft */
+
+  /* ── Spacing ───────────────────────────────────────────────────────────
+   * A 4px scale. Ad-hoc padding is most of what reads as unevenness, and a
+   * scale removes the decision rather than relying on anyone's judgement. */
+  --s1: 4px;   --s2: 8px;   --s3: 12px;  --s4: 16px;
+  --s5: 20px;  --s6: 24px;  --s8: 32px;  --s10: 40px;  --s12: 48px;
+
+  /* ── Type ──────────────────────────────────────────────────────────────
+   * Six sizes. There were nine, which is why nothing felt deliberate. */
+  --t-xs:  0.76rem;   /* labels, timestamps */
+  --t-sm:  0.875rem;  /* secondary text, table cells */
+  --t-md:  0.95rem;   /* body */
+  --t-lg:  1.1rem;    /* card titles */
+  --t-xl:  1.35rem;   /* page titles */
+  --t-2xl: 1.9rem;    /* the one number on a stat tile */
+
+  --lh-tight: 1.25;
+  --lh:       1.55;
+
+  /* ── Shape ─────────────────────────────────────────────────────────── */
+  --r-sm: 8px;   --r: 12px;   --r-lg: 16px;   --r-pill: 999px;
+
+  /* Two soft layered shadows rather than one heavy one. A single large blur
+   * is what makes a card look stuck on top of the page instead of resting
+   * on it. */
+  --shadow:    0 1px 2px rgba(22,33,58,.045),
+               0 3px 8px  rgba(22,33,58,.05),
+               0 10px 22px rgba(22,33,58,.045);
+  --shadow-md: 0 1px 2px rgba(22,33,58,.05),
+               0 6px 16px rgba(22,33,58,.07),
+               0 18px 40px rgba(22,33,58,.06);
+  --shadow-lg: 0 2px 4px rgba(22,33,58,.06),
+               0 14px 30px rgba(22,33,58,.10),
+               0 40px 76px rgba(22,33,58,.10);
+  --ring:      0 0 0 3px rgba(240,164,75,.28);
+
+  /* Fast enough to feel responsive, slow enough to be seen. */
+  --ease: 140ms cubic-bezier(.4,0,.2,1);
+
+  --sidebar-w: 232px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--t-md);
+  line-height: var(--lh);
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 600px at 78% -10%, rgba(59,111,181,.055), transparent 60%),
+    radial-gradient(900px 500px at 4% 0%,     rgba(240,164,75,.05),  transparent 58%),
+    var(--ground);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { line-height: var(--lh-tight); letter-spacing: -.011em; margin: 0; }
+h1 { font-size: var(--t-xl);  font-weight: 700; }
+h2 { font-size: var(--t-lg);  font-weight: 700; }
+h3 { font-size: var(--t-md);  font-weight: 650; }
+p  { margin: 0 0 var(--s3); }
+a  { color: var(--amber-deep); }
+
+/* ── Sidebar ──────────────────────────────────────────────────────────── */
+
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--ink);
+  color: #fff;
+  position: fixed; inset: 0 auto 0 0;
+  display: flex; flex-direction: column;
+  z-index: 10; overflow-y: auto; overflow-x: hidden;
+  /* Firefox draws its own gutter from these two, rather than the
+     ::-webkit- rules below -- without this the menu scrolls fine there,
+     it just never shows that it does. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.3) transparent;
+}
+/* Wide enough to notice, thin enough to stay out of the way. The menu grew
+   a Toolkit and a Knowledge Base section, so on a laptop-height screen it
+   now runs past the fold on most roles -- this is what tells you there's
+   more below rather than leaving the list looking simply finished. */
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.3); border-radius: 3px; }
+.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.45); }
+
+.sidebar-brand { padding: var(--s5) var(--s5) var(--s4); }
+.sidebar-brand .script { display: block; font-size: 1.15rem; font-weight: 700;
+                         letter-spacing: -.02em; color: #fff; }
+.sidebar-brand .sub { font-size: var(--t-xs); letter-spacing: .14em;
+                      text-transform: uppercase; color: rgba(255,255,255,.42);
+                      margin-top: 2px; }
+
+.sidebar nav { padding: var(--s2) 0 var(--s6); flex: 1; }
+.sidebar nav a {
+  display: flex; align-items: center; gap: 10px;
+  margin: 1px var(--s3); padding: 9px var(--s3);
+  border-radius: var(--r-sm);
+  color: rgba(255,255,255,.7); text-decoration: none;
+  font-weight: 500; font-size: var(--t-sm);
+  transition: background var(--ease), color var(--ease);
+}
+.sidebar nav a:hover { background: rgba(255,255,255,.07); color: #fff; }
+/* The active item is a filled pill rather than a left border. A border is
+ * easy to miss on a long menu; a filled shape is not. */
+.sidebar nav a.active { background: var(--amber); color: var(--ink); font-weight: 650; }
+.sidebar nav a.active .icon { filter: none; }
+.sidebar nav a.locked { opacity: .42; }
+.sidebar nav a.locked:hover { opacity: .68; }
+.sidebar nav a .icon { font-size: 1rem; width: 18px; text-align: center; flex: 0 0 18px; }
+
+.sidebar nav .nav-sec {
+  padding: var(--s5) var(--s5) var(--s2);
+  font-size: 0.66rem; font-weight: 700; letter-spacing: .13em;
+  text-transform: uppercase; color: rgba(255,255,255,.32);
+}
+.sidebar nav .nav-sec:first-of-type { padding-top: var(--s2); }
+
+/* `hidden` has to actually hide.
+   The attribute's default rule is display:none at the very bottom of the
+   cascade, so any class that sets a display -- .btn is inline-flex -- silently
+   beats it. Thirteen places in this app toggle el.hidden, and the ones on a
+   .btn were never hidden at all: the microphone showed on browsers with no
+   speech recognition, and Stop showed while nothing was speaking. */
+[hidden] { display: none !important; }
+
+/* The question box on the public site. Bottom-right here, unlike the
+   in-product feedback button: nothing else sits in that corner of the
+   marketing pages, and it is where a visitor expects to find help. */
+.ask-open { position: fixed; right: var(--s5); bottom: var(--s5); z-index: 60;
+            padding: 11px 18px; border-radius: var(--r-pill);
+            border: 1px solid var(--amber-line); background: var(--surface);
+            color: var(--amber-deep); font-family: inherit; font-size: var(--t-sm);
+            font-weight: 700; cursor: pointer; box-shadow: var(--shadow); }
+.ask-open:hover { background: var(--amber-soft); }
+.ask-sheet { position: fixed; right: var(--s5); bottom: var(--s5); z-index: 61;
+             width: min(360px, calc(100vw - var(--s8))); padding: var(--s5);
+             background: var(--surface); border: 1px solid var(--line);
+             border-radius: var(--r-lg); box-shadow: var(--shadow-lg); }
+.ask-head { display: flex; align-items: center; justify-content: space-between; }
+.ask-x { background: none; border: 0; font-size: 1.4rem; line-height: 1;
+         color: var(--softer); cursor: pointer; }
+.ask-note { font-size: var(--t-xs); color: var(--softer); line-height: 1.5; }
+.ask-sheet textarea, .ask-sheet input { width: 100%; margin-top: var(--s3);
+             padding: var(--s3); font-family: inherit; font-size: var(--t-sm);
+             border: 1px solid var(--line); border-radius: var(--r);
+             background: var(--surface); color: var(--ink); }
+.ask-row { display: flex; align-items: center; justify-content: space-between;
+           gap: var(--s3); margin-top: var(--s4); }
+/* Off-screen rather than display:none -- a robot skips what is not rendered. */
+.ask-trap { position: absolute !important; left: -9999px !important;
+            width: 1px !important; height: 1px !important; }
+@media (max-width: 700px) {
+  .ask-open { right: var(--s3); bottom: var(--s3); }
+  .ask-sheet { right: var(--s3); left: var(--s3); bottom: var(--s3); width: auto; }
+}
+
+/* Beta feedback, on every screen.
+   Bottom-left rather than bottom-right: the right corner is where browser
+   extensions and chat widgets sit, and a button nobody can hit is not on
+   every page in any useful sense. */
+.fb-open { position: fixed; left: var(--s5); bottom: var(--s5); z-index: 60;
+           display: inline-flex; align-items: center; gap: 6px;
+           padding: 10px 16px; border-radius: var(--r-pill);
+           border: 1px solid var(--line); background: var(--surface);
+           color: var(--muted); font-family: inherit; font-size: var(--t-sm);
+           font-weight: 650; cursor: pointer; box-shadow: var(--shadow); }
+.fb-open:hover { color: var(--ink); border-color: var(--amber-line); }
+
+.fb-sheet { position: fixed; left: var(--s5); bottom: var(--s5); z-index: 61;
+            width: min(380px, calc(100vw - var(--s8)));
+            max-height: calc(100vh - var(--s10));
+            overflow-y: auto; padding: var(--s5);
+            background: var(--surface); border: 1px solid var(--line);
+            border-radius: var(--r-lg); box-shadow: var(--shadow-lg); }
+.fb-head { display: flex; align-items: center; justify-content: space-between;
+           margin-bottom: var(--s3); }
+.fb-x { background: none; border: 0; font-size: 1.4rem; line-height: 1;
+        color: var(--softer); cursor: pointer; padding: 0 4px; }
+.fb-x:hover { color: var(--ink); }
+
+.fb-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--s3); }
+.fb-kind { padding: 5px 11px; border-radius: var(--r-pill);
+           border: 1px solid var(--line); background: var(--surface);
+           color: var(--muted); font-family: inherit; font-size: var(--t-xs);
+           font-weight: 600; cursor: pointer; }
+.fb-kind.on { background: var(--amber-soft); border-color: var(--amber-line);
+              color: var(--amber-deep); }
+
+.fb-sheet textarea { width: 100%; padding: var(--s3); font-family: inherit;
+                     font-size: var(--t-sm); line-height: 1.55;
+                     border: 1px solid var(--line); border-radius: var(--r);
+                     background: var(--surface); color: var(--ink); resize: vertical; }
+.fb-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2);
+          margin-top: var(--s3); }
+.fb-send { justify-content: space-between; }
+.fb-file { cursor: pointer; }
+.fb-note { font-size: var(--t-xs); color: var(--softer); }
+.fb-small { margin-top: var(--s3); line-height: 1.5; }
+.fb-preview { display: block; margin-top: var(--s3); max-width: 100%;
+              border: 1px solid var(--line); border-radius: var(--r); }
+.fb-kind.listening, .btn.listening { border-color: var(--warn); color: var(--warn); }
+
+@media (max-width: 900px) {
+  /* Bottom-left is exactly where the sidebar's own footer lives once it
+     becomes the hamburger drawer -- username, Sign out, the build tag. A
+     fixed button anchored to the same corner sat on top of that footer's
+     text the moment the drawer was short enough (or open) for the two to
+     share the same few pixels. Moving to the right on the one breakpoint
+     where the sidebar can occupy that corner at all -- 900px, its own --
+     is simpler than trying to out-stack it. */
+  .fb-open { left: auto; right: var(--s3); bottom: var(--s3); padding: 9px 14px; }
+  .fb-sheet { left: var(--s3); right: var(--s3); bottom: var(--s3);
+              width: auto; }
+}
+
+/* Semantic colours for a stat card, so the dashboard can say what a number
+   means without hex literals scattered through the template. Same roles the
+   money strip used; the strip stays for pages that want one dense row. */
+.stat-card.pos  .value { color: var(--good); }
+.stat-card.neg  .value { color: var(--warn); }
+.stat-card.warn .value { color: var(--amber-deep); }
+.stat-card.info .value { color: var(--info); }
+.stat-card.owed .value { color: var(--amber-deep); }
+.stat-card.hero { background: var(--amber-soft); border-color: var(--amber-line); }
+.stat-card.hero .value { color: var(--amber-deep); }
+.stat-card.hero .label { color: var(--amber-deep); }
+a.stat-card { text-decoration: none; color: inherit; display: block; }
+a.stat-card:hover { border-color: var(--amber-line); }
+
+/* An empty day, said in one line. It used to be a panel with an icon and a
+   button, which gave the least interesting thing on the page the most room. */
+.day-none { color: var(--muted); font-size: var(--t-sm); padding: var(--s2) 0; }
+.day-none a { color: var(--amber-deep); font-weight: 650; margin-left: var(--s2); }
+
+/* Choosing a voice. Only shown when the device offers more than one, because
+   a menu with a single entry is a decision nobody gets to make. */
+.voice-pick { font-family: inherit; font-size: var(--t-xs); color: var(--muted);
+              background: var(--surface); border: 1px solid var(--line);
+              border-radius: var(--r-pill); padding: 4px 10px; max-width: 190px; }
+
+/* Three dots that move while an answer is being worked out. A still ellipsis
+   is indistinguishable from a page that did nothing, and thinking questions
+   take a few seconds. */
+.thinking { display: inline-flex; gap: 4px; align-items: center; margin-left: 2px;
+            vertical-align: middle; }
+.thinking i { width: 5px; height: 5px; border-radius: var(--r-pill);
+              background: var(--softer); display: block;
+              animation: nana-think 1.1s ease-in-out infinite; }
+.thinking i:nth-child(2) { animation-delay: .16s; }
+.thinking i:nth-child(3) { animation-delay: .32s; }
+@keyframes nana-think {
+  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+  30%           { opacity: 1;   transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking i { animation: none; opacity: .55; }
+}
+
+/* The head of a draft: who it goes to and what it says it is about. Shown
+   because an email you approve without seeing its subject line is an email you
+   did not really read. */
+.draft-head { margin-top: var(--s3); padding: var(--s3) var(--s4);
+              border: 1px solid var(--line); border-radius: var(--r);
+              background: var(--ground); font-size: var(--t-sm);
+              line-height: 1.7; color: var(--ink); }
+.draft-head span { display: inline-block; min-width: 62px; color: var(--softer);
+                   font-size: var(--t-xs); text-transform: uppercase;
+                   letter-spacing: .08em; font-weight: 650; }
+
+/* Said next to the button, not after the press: whether the thing on offer
+   can be walked back. Quiet rather than alarming -- most of what Nana offers
+   is undoable, so this only appears where it is genuinely true. */
+.confirm-note { margin-left: var(--s3); font-size: var(--t-xs); color: var(--softer); }
+
+/* The setup meter, under the wordmark. Sits on the dark sidebar, so it takes
+   its colours from white at low opacity like every other control up here --
+   the page tokens are tuned for ink on a light ground and go muddy against
+   this one. Disappears for good once the last setup step is ticked. */
+.setup-meter { display: block; margin: 0 var(--s5) var(--s4); padding: var(--s3) var(--s4);
+               border-radius: var(--r); text-decoration: none;
+               background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); }
+.setup-meter:hover { background: rgba(255,255,255,.11); }
+.setup-line { display: flex; align-items: baseline; justify-content: space-between;
+              font-size: var(--t-xs); font-weight: 650; letter-spacing: .02em;
+              color: rgba(255,255,255,.82); }
+.setup-count { font-variant-numeric: tabular-nums; font-weight: 600;
+               color: rgba(255,255,255,.58); }
+.setup-track { display: block; height: 5px; margin: 7px 0 0; overflow: hidden;
+               border-radius: var(--r-pill); background: rgba(255,255,255,.14); }
+.setup-fill { display: block; height: 100%; border-radius: inherit;
+              background: var(--amber); transition: width .4s ease; }
+.setup-next { display: block; margin-top: 7px; font-size: var(--t-xs); line-height: 1.35;
+              color: rgba(255,255,255,.55); }
+
+/* The once-a-day reminder, on the light content ground rather than the
+   sidebar, so it uses the page tokens. Warm rather than alarming: this is an
+   unfinished job, not a problem. */
+.setup-nudge { display: flex; align-items: center; gap: var(--s5); flex-wrap: wrap;
+               margin: 0 0 var(--s5); padding: var(--s4) var(--s5);
+               border-radius: var(--r); background: var(--amber-soft);
+               border: 1px solid var(--amber-line); }
+.setup-nudge-body { flex: 1 1 280px; font-size: var(--t-sm); line-height: 1.5;
+                    color: var(--muted); }
+.setup-nudge-body strong { color: var(--ink); }
+.setup-nudge-acts { display: flex; align-items: center; gap: var(--s3); margin-left: auto; }
+.setup-nudge .btn-quiet { background: none; border: none; cursor: pointer;
+                          font-family: inherit; font-size: var(--t-sm); font-weight: 600;
+                          color: var(--softer); padding: var(--s2) 4px; }
+.setup-nudge .btn-quiet:hover { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .setup-fill { transition: none; } }
+
+.sidebar-footer { padding: var(--s4) var(--s5); border-top: 1px solid rgba(255,255,255,.08); }
+.sidebar-footer a { color: rgba(255,255,255,.5); text-decoration: none;
+                    font-size: var(--t-sm); font-weight: 500; }
+.sidebar-footer a:hover { color: #fff; }
+
+/* ── Page frame ───────────────────────────────────────────────────────── */
+
+.main-wrap { margin-left: var(--sidebar-w); min-height: 100vh;
+             display: flex; flex-direction: column; }
+
+.topbar {
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: var(--s4) var(--s8);
+  display: flex; align-items: center; gap: var(--s3);
+  position: sticky; top: 0; z-index: 5;
+}
+.topbar h1 { font-size: var(--t-xl); font-weight: 700; }
+
+.section-tabs {
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: 0 var(--s8); display: flex; gap: var(--s1);
+  overflow-x: auto; scrollbar-width: none;
+  position: sticky; top: var(--topbar-h, 57px); z-index: 4;
+}
+.section-tabs::-webkit-scrollbar { display: none; }
+.section-tabs a {
+  padding: 11px var(--s4) 9px; font-size: var(--t-sm); font-weight: 600;
+  color: var(--muted); text-decoration: none; white-space: nowrap;
+  border-bottom: 2px solid transparent; transition: color var(--ease), border-color var(--ease);
+}
+.section-tabs a:hover { color: var(--ink); }
+.section-tabs a.active { color: var(--amber-deep); border-bottom-color: var(--amber); }
+
+.content { padding: var(--s6) var(--s8) var(--s12); flex: 1; }
+
+/* ── Cards ────────────────────────────────────────────────────────────── */
+
+.card {
+  position: relative;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--r); box-shadow: var(--shadow);
+  padding: var(--s5);
+  transition: box-shadow var(--ease), border-color var(--ease);
+}
+/* The lit edge. One pixel, and it is the difference between a rectangle and
+   a surface. */
+.card::before {
+  content: ''; position: absolute; inset: 0 0 auto; height: 1px;
+  border-radius: var(--r) var(--r) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.95), transparent);
+  pointer-events: none;
+}
+.card:hover { box-shadow: var(--shadow-md); border-color: #dbe1ee; }
+
+.stat-grid { display: grid; gap: var(--s4); margin-bottom: var(--s6);
+             grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.stat-card {
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--r); padding: var(--s4) var(--s5); box-shadow: var(--shadow);
+  transition: transform var(--ease), box-shadow var(--ease), border-color var(--ease);
+}
+a.stat-card:hover {
+  transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: #dbe1ee;
+}
+.stat-card .label { font-size: var(--t-xs); text-transform: uppercase;
+                    letter-spacing: .11em; color: var(--softer);
+                    font-weight: 650; margin-bottom: var(--s1); }
+.stat-card .value { font-size: var(--t-2xl); font-weight: 750;
+                    letter-spacing: -.02em; line-height: 1.1; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+
+/* `button[type="submit"]` is an attribute selector, so it outranks every
+   class. Left unqualified it silently repainted 161 buttons that had already
+   said what they were -- a `btn-danger` delete rendered amber, and a plain
+   text link styled as a submit could not opt out at all. `:not([class])`
+   keeps the convenience for the 26 buttons that declare nothing, and gets out
+   of the way of every button that does. */
+.btn-primary, .btn-secondary, button[type="submit"]:not([class]), .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 10px var(--s5); border-radius: var(--r-pill);
+  font-family: inherit; font-size: var(--t-sm); font-weight: 650;
+  border: 1px solid transparent; cursor: pointer; text-decoration: none;
+  transition: background var(--ease), border-color var(--ease),
+              transform var(--ease), box-shadow var(--ease);
+}
+/* Lit from above: brighter along the top edge, deeper at the bottom, with a
+   hairline of white inside the top rim and a matching dark line at the base.
+   That is the difference between a physical control and a coloured box. */
+.btn-primary, button[type="submit"]:not([class]) {
+  background: linear-gradient(180deg, #f7bd76 0%, var(--amber) 46%, var(--amber-deep) 100%);
+  color: #fff; border-color: #cf8226;
+  text-shadow: 0 1px 1px rgba(133,80,10,.26);
+}
+.btn-primary:hover, button[type="submit"]:not([class]):hover {
+  background: linear-gradient(180deg, #f9c58a 0%, #f2ab5b 46%, #cf8226 100%);
+  color: #fff; border-color: #c07a22;
+}
+.btn-secondary, .btn.ghost {
+  background: var(--surface); color: var(--ink); border-color: var(--line);
+}
+.btn-secondary:hover, .btn.ghost:hover { border-color: var(--softer); background: var(--ground); }
+/* A press that moves is a press that registered. One pixel is enough. */
+.btn-primary:active, .btn-secondary:active, button[type="submit"]:not([class]):active { transform: translateY(1px); }
+.btn-danger { background: var(--warn); color: #fff; }
+.btn-danger:hover { background: #c0453c; }
+.btn-sm { padding: 6px var(--s3); font-size: var(--t-xs); }
+
+:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+
+/* ── Forms ────────────────────────────────────────────────────────────── */
+
+label { display: block; font-size: var(--t-sm); font-weight: 600;
+        margin-bottom: var(--s1); color: var(--ink); }
+input[type="text"], input[type="email"], input[type="tel"], input[type="number"],
+input[type="password"], input[type="date"], input[type="time"], input[type="search"],
+select, textarea {
+  width: 100%; padding: 10px var(--s3);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font-family: inherit; font-size: var(--t-md); color: var(--ink);
+  background: var(--surface);
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--amber); box-shadow: var(--ring);
+}
+input::placeholder, textarea::placeholder { color: var(--softer); }
+.form-group { margin-bottom: var(--s4); }
+
+/* A question mark next to a field that owners get stuck on, straight to Ask
+ * Nana with the question already typed. Not a tooltip: the answer to "do I
+ * need a W-9?" depends on this business's setup, and a static blurb here
+ * would eventually be wrong for somebody -- Nana already knows how to give
+ * a real answer instead of a generic one. */
+.ask-hint {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-left: 5px; flex: 0 0 auto;
+  border-radius: 50%; background: var(--ground); border: 1px solid var(--line);
+  color: var(--softer); font-size: 0.68rem; font-weight: 700;
+  text-decoration: none; line-height: 1; vertical-align: middle;
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
+}
+.ask-hint:hover { background: var(--amber-soft); border-color: var(--amber-line); color: var(--amber-deep); }
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+
+table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+th {
+  text-align: left; font-size: var(--t-xs); font-weight: 650;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--softer);
+  padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+td { padding: var(--s3); border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+tbody tr { transition: background var(--ease); }
+tbody tr:hover { background: var(--ground); }
+tbody tr:last-child td { border-bottom: none; }
+/* Money and counts line up on the decimal point. Ragged figures are hard to
+ * compare down a column, and comparing is the whole reason for a table. */
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── Badges ───────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: var(--r-pill);
+  font-size: var(--t-xs); font-weight: 650; white-space: nowrap;
+}
+.badge-good { background: var(--good-soft); color: var(--good); }
+.badge-warn { background: var(--warn-soft); color: var(--warn); }
+.badge-info { background: var(--info-soft); color: var(--info); }
+.badge-amber, .badge-pending { background: var(--amber-soft); color: var(--amber-deep); }
+.badge-muted { background: var(--ground); color: var(--muted); }
+
+/* ── Empty states ─────────────────────────────────────────────────────── */
+
+.empty { text-align: center; padding: var(--s10) var(--s5); color: var(--muted); }
+.empty .icon { font-size: 2rem; opacity: .55; margin-bottom: var(--s3); }
+.empty h3 { color: var(--ink); margin-bottom: var(--s2); }
+
+/* ── Flash messages ───────────────────────────────────────────────────── */
+
+.flash { padding: 11px var(--s4); border-radius: var(--r-sm);
+         margin-bottom: var(--s4); font-size: var(--t-sm); font-weight: 500; }
+.flash.success { background: var(--good-soft); color: var(--good); }
+.flash.error   { background: var(--warn-soft); color: var(--warn); }
+
+/* ── Phones ───────────────────────────────────────────────────────────── */
+
+/* The page's own buttons ("← All Bookings", "Delete Client") drop to a row
+ * of their own on a phone rather than running off the right-hand edge. The
+ * section tabs follow the topbar's real height (--topbar-h, set in
+ * base_admin.html), so a taller topbar never slides over them. */
+.topbar-right:empty { display: none; }
+@media (max-width: 600px) {
+  .topbar { flex-wrap: wrap; row-gap: var(--s2); }
+  .topbar-right { flex: 1 0 100%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
+  .topbar-right > * { max-width: 100%; }
+  .topbar-right .btn { white-space: nowrap; }
+  /* Reports: the two side-by-side cards stack. */
+  .reports-pair { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 900px) {
+  .content { padding: var(--s4) var(--s4) var(--s10); }
+  .topbar, .section-tabs { padding-left: var(--s4); padding-right: var(--s4); }
+  /* One line for the title, shortened with an ellipsis, so it cannot push the
+   * page's own buttons off the side of the screen. */
+  .topbar h1 { flex: 1 1 auto; min-width: 0; font-size: var(--t-lg);
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar > .brand-lens { flex: 0 1 auto; min-width: 0; }
+  .topbar > .brand-lens select { min-width: 0; }
+  /* Tables become a horizontal scroller rather than crushing every column
+   * into three characters. */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch;
+                margin: 0 calc(var(--s4) * -1); padding: 0 var(--s4); }
+  .sidebar nav a { padding: 12px var(--s3); font-size: var(--t-md); }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Dashboard
+   A dashboard is not a report. An owner opens it between two
+   other things, and the only question it has to answer is
+   "is anything about to go wrong today". Totals come after.
+   ───────────────────────────────────────────────────────────── */
+
+/* The attention strip. Only renders the rows that are actually
+   true, so a business with nothing outstanding sees one calm
+   line rather than four zeroes -- a zero styled like a warning
+   teaches people to ignore warnings. */
+.attn { display:grid; gap:var(--s2); margin-bottom:var(--s6); }
+.attn-item {
+  display:flex; align-items:center; gap:var(--s3);
+  padding:var(--s3) var(--s4);
+  background:var(--surface); border:1px solid var(--line);
+  border-left:3px solid var(--softer);
+  border-radius:var(--r-sm);
+  text-decoration:none; color:inherit;
+  transition:border-color var(--ease), transform var(--ease), box-shadow var(--ease);
+}
+.attn-item:hover { transform:translateX(2px); box-shadow:var(--shadow); }
+.attn-item .n {
+  font-size:var(--t-lg); font-weight:700; font-variant-numeric:tabular-nums;
+  min-width:1.6em; text-align:center;
+}
+.attn-item .what { flex:1; font-size:var(--t-sm); }
+.attn-item .what b { font-weight:650; display:block; color:var(--ink); }
+.attn-item .what span { color:var(--muted); }
+.attn-item .go { color:var(--softer); font-size:var(--t-lg); line-height:1; }
+.attn-item:hover .go { color:var(--amber-deep); }
+
+.attn-item.is-urgent { border-left-color:var(--warn); }
+.attn-item.is-urgent .n { color:var(--warn); }
+.attn-item.is-warn   { border-left-color:var(--amber); }
+.attn-item.is-warn .n { color:var(--amber-deep); }
+.attn-item.is-info   { border-left-color:var(--info); }
+.attn-item.is-info .n { color:var(--info); }
+
+.attn-clear {
+  display:flex; align-items:center; gap:var(--s3);
+  padding:var(--s4); margin-bottom:var(--s6);
+  background:var(--good-soft); border:1px solid #c9e9da;
+  border-radius:var(--r-sm); color:#1f6f4c; font-size:var(--t-sm);
+}
+.attn-clear b { font-weight:650; }
+
+/* Today's work, as a day sheet rather than a table. Rows are
+   read down the left edge -- time, then who, then where -- which
+   is the order an owner asks the questions in. */
+.day { display:grid; gap:1px; background:var(--line-soft);
+       border:1px solid var(--line); border-radius:var(--r-sm); overflow:hidden; }
+.day-row {
+  display:grid; grid-template-columns:74px 1fr auto;
+  gap:var(--s4); align-items:center;
+  padding:var(--s3) var(--s4); background:var(--surface);
+  text-decoration:none; color:inherit;
+  transition:background var(--ease);
+}
+.day-row:hover { background:var(--amber-soft); }
+.day-time {
+  font-size:var(--t-sm); font-weight:650; color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.day-time small { display:block; font-weight:400; color:var(--softer); font-size:var(--t-xs); }
+.day-who { min-width:0; }
+.day-who b { display:block; font-weight:600; font-size:var(--t-md); }
+.day-who span {
+  display:block; color:var(--muted); font-size:var(--t-xs);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.day-crew { font-size:var(--t-xs); color:var(--muted); text-align:right; white-space:nowrap; }
+.day-crew .none { color:var(--warn); font-weight:600; }
+
+/* Money, as one strip of four figures rather than four cards.
+   It is context, not the headline -- the headline is the work. */
+.money-strip {
+  display:grid; grid-template-columns:repeat(4,1fr);
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r); overflow:hidden; margin-bottom:var(--s6);
+}
+.money-cell {
+  padding:var(--s4) var(--s5); text-decoration:none; color:inherit;
+  border-right:1px solid var(--line-soft);
+  transition:background var(--ease);
+}
+.money-cell:last-child { border-right:0; }
+a.money-cell:hover { background:var(--ground); }
+.money-cell .label {
+  font-size:var(--t-xs); color:var(--muted); text-transform:uppercase;
+  letter-spacing:.07em; font-weight:600;
+}
+.money-cell .value {
+  font-size:var(--t-xl); font-weight:700; margin-top:var(--s1);
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em;
+}
+.money-cell .sub { font-size:var(--t-xs); color:var(--softer); margin-top:2px; }
+.money-cell.pos .value { color:var(--good); }
+.money-cell.neg .value { color:var(--warn); }
+.money-cell.hero { background:var(--amber-soft); }
+.money-cell.hero .value { color:var(--amber-deep); }
+.money-cell.hero .label { color:var(--amber-deep); }
+
+@media (max-width:900px) {
+  .money-strip { grid-template-columns:repeat(2,1fr); }
+  .money-cell:nth-child(2) { border-right:0; }
+  .money-cell:nth-child(-n+2) { border-bottom:1px solid var(--line-soft); }
+}
+@media (max-width:560px) {
+  .day-row { grid-template-columns:64px 1fr; }
+  .day-crew { grid-column:2; text-align:left; margin-top:2px; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   The rest of the shared vocabulary
+   These class names are used across dozens of templates and
+   predate this file. They are restyled here rather than renamed
+   -- renaming would mean editing 111 templates to change how
+   something looks, which is exactly the trap this file exists
+   to get out of.
+   ───────────────────────────────────────────────────────────── */
+
+/* Buttons. `btn-gold` is the old name for the primary action and
+   is kept as an alias so no template has to change. */
+.btn-gold, .btn-primary {
+  background:linear-gradient(180deg, #f7bd76 0%, var(--amber) 46%, var(--amber-deep) 100%);
+  color:#fff; border:1px solid #cf8226; font-weight:600;
+  text-shadow:0 1px 1px rgba(133,80,10,.26);
+}
+.btn-gold:hover, .btn-primary:hover {
+  background:linear-gradient(180deg, #f9c58a 0%, #f2ab5b 46%, #cf8226 100%);
+  border-color:#c07a22;
+}
+.btn-outline {
+  background:linear-gradient(180deg,#fff,#f8fafd); color:var(--ink);
+  border:1px solid var(--line); font-weight:550;
+}
+.btn-outline:hover { border-color:var(--softer); background:var(--ground); }
+.btn-dark {
+  background:linear-gradient(180deg, var(--ink-2) 0%, var(--ink) 62%, #101a2e 100%);
+  color:#fff; border:1px solid #0f1829; font-weight:600;
+}
+.btn-dark:hover { background:var(--ink-2); border-color:var(--ink-2); }
+.btn-danger { background:var(--warn); color:#fff; border:1px solid var(--warn); font-weight:600; }
+.btn-danger:hover { filter:brightness(.92); }
+
+/* Status chips. Same shape as a badge, coloured by meaning:
+   pending is waiting on someone, confirmed is agreed, completed
+   is done, cancelled is over. */
+.status {
+  display:inline-block; padding:3px 10px; border-radius:var(--r-pill);
+  font-size:var(--t-xs); font-weight:650; letter-spacing:.01em;
+  text-transform:capitalize; white-space:nowrap;
+  background:var(--ground); color:var(--muted); border:1px solid var(--line);
+}
+.status-pending    { background:var(--amber-soft); color:var(--amber-deep); border-color:var(--amber-line); }
+.status-confirmed  { background:var(--info-soft);  color:var(--info);       border-color:var(--info-line); }
+.status-completed  { background:var(--good-soft);  color:var(--good);       border-color:#c9e9da; }
+.status-cancelled  { background:var(--ground);     color:var(--softer);     border-color:var(--line);
+                     text-decoration:line-through; }
+.status-in_progress{ background:var(--info-soft);  color:var(--info);       border-color:#cfe0f3; }
+/* A job paused while the customer finds a new date. Struck through like a
+   cancellation, because neither is happening -- but its own colour, because a
+   held job keeps its deposit, its notes and its place in the plan. */
+.status-on_hold    { background:var(--amber-soft); color:var(--amber-deep); border-color:var(--amber-line);
+                     text-decoration:line-through; }
+
+/* The header line inside a card: a title on the left, an action
+   on the right, a rule underneath. */
+.section-header, .section-head {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:var(--s4); flex-wrap:wrap;
+  padding-bottom:var(--s3); margin-bottom:var(--s4);
+  border-bottom:1px solid var(--line-soft);
+}
+.section-header h2, .section-head h2 {
+  font-size:var(--t-lg); font-weight:650; letter-spacing:-.01em; margin:0;
+}
+
+/* Filter tabs -- the row of "All / Pending / Confirmed" links.
+   The selected one is filled, not underlined, so it reads at a
+   glance on a phone. */
+.filter-tabs {
+  display:flex; gap:var(--s2); flex-wrap:wrap; margin-bottom:var(--s5);
+}
+.filter-tab {
+  padding:var(--s2) var(--s4); border-radius:var(--r-pill);
+  border:1px solid var(--line); background:var(--surface);
+  color:var(--muted); font-size:var(--t-sm); font-weight:550;
+  text-decoration:none; white-space:nowrap;
+  transition:all var(--ease);
+}
+.filter-tab:hover { border-color:var(--softer); color:var(--ink); }
+.filter-tab.active {
+  background:var(--ink); border-color:var(--ink); color:#fff; font-weight:600;
+}
+
+/* Detail pages: a label/value grid. Used on every record page in
+   the product -- bookings, contractors, applications, clients. */
+.detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--s5); }
+
+/* Cards a person can drag into their own order (static/card-reorder.js).
+   Spacing comes from the column, not the card, so a card looks the same in
+   whichever column it is dropped into. */
+[data-reorder-col] { display:flex; flex-direction:column; gap:18px; min-height:80px; align-content:start; }
+[data-reorder-col] > [data-card-key] { position:relative; margin-top:0 !important; margin-bottom:0 !important; }
+[data-card-key].dragging { opacity:0.45; }
+[data-card-key].drag-over { box-shadow:inset 0 3px 0 var(--amber-deep); }
+[data-reorder-col].drag-over-col { outline:2px dashed var(--amber-line); outline-offset:4px; border-radius:var(--r); }
+.card-drag-title { cursor:grab; }
+.card-drag-title:focus-visible, .card-drag-handle:focus-visible { outline:2px solid var(--amber); outline-offset:2px; border-radius:4px; }
+.card-grip { color:var(--softer); margin-right:8px; font-weight:400; letter-spacing:0; }
+.card-drag-handle {
+  position:absolute; top:14px; right:14px; cursor:grab; user-select:none;
+  color:var(--softer); font-size:1rem; line-height:1; padding:4px 6px; border-radius:6px;
+}
+.card-drag-handle:hover { background:var(--ground); color:var(--muted); }
+/* ▲ ▼ for touch screens, where the drag above cannot work: shown only there,
+   with the grips hidden since they do nothing under a finger. */
+.card-move { display:none; }
+@media (hover: none) and (pointer: coarse) {
+  .card-move { display:flex; justify-content:flex-end; gap:8px; margin:-4px -4px 8px 0; }
+  .card-move-btn {
+    min-width:44px; min-height:40px; padding:0 10px; font-size:1rem; line-height:1;
+    color:var(--muted); background:var(--surface); border:1px solid var(--line);
+    border-radius:10px; cursor:pointer;
+  }
+  .card-move-btn:active { background:var(--ground); }
+  .card-move-btn:disabled { opacity:0.35; cursor:default; }
+  .card-grip, .card-drag-handle { display:none; }
+  .card-drag-title { cursor:auto; }
+}
+.detail-row, .dl {
+  display:grid; grid-template-columns:minmax(120px,34%) 1fr;
+  gap:var(--s3) var(--s4); padding:var(--s3) 0;
+  border-bottom:1px solid var(--line-soft); font-size:var(--t-sm);
+}
+.detail-row:last-child, .dl:last-child { border-bottom:0; }
+.detail-row > :first-child, .dl > :first-child, .dl dt {
+  color:var(--muted); font-weight:550;
+}
+.dv, .dl dd { margin:0; color:var(--ink); font-weight:500; word-break:break-word; }
+.dv.num, .amt { font-variant-numeric:tabular-nums; }
+
+@media (max-width:560px) {
+  .detail-row, .dl { grid-template-columns:1fr; gap:2px; padding:var(--s3) 0; }
+}
+
+/* Muted text, everywhere. Replaces the hardcoded #9a95ad that was
+   pasted into thirty templates. */
+.dim, .muted { color:var(--muted); }
+small.dim, small.muted { font-size:var(--t-xs); }
+
+/* ─────────────────────────────────────────────────────────────
+   Mobile navigation
+   The sidebar is permanent on a laptop and slides in on a phone.
+   Owners check the day's work standing in a kitchen, so this is
+   not a nicety.
+   ───────────────────────────────────────────────────────────── */
+.hamburger {
+  display:none; background:none; border:0; cursor:pointer;
+  font-size:1.35rem; line-height:1; color:var(--ink);
+  padding:var(--s2) var(--s2) var(--s2) 0; margin-right:var(--s1);
+}
+.nav-overlay {
+  display:none; position:fixed; inset:0; z-index:60;
+  background:rgba(22,33,58,.42);
+  opacity:0; transition:opacity var(--ease);
+}
+.nav-overlay.open { display:block; opacity:1; }
+
+@media (max-width:900px) {
+  .hamburger { display:block; }
+  .sidebar {
+    position:fixed; top:0; left:0; bottom:0; z-index:70;
+    transform:translateX(-100%);
+    transition:transform 200ms cubic-bezier(.4,0,.2,1);
+    box-shadow:var(--shadow-lg);
+  }
+  .sidebar.open { transform:translateX(0); }
+  .main-wrap { margin-left:0; }
+}
+
+/* The getting-started card. It is the first thing on the dashboard
+   of a brand new account and the only place amber is used as a
+   background, because at that moment there is exactly one thing
+   to do. */
+.onboard-card {
+  display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap;
+  padding:var(--s5); margin-bottom:var(--s6);
+  background:var(--amber-soft); border:1px solid var(--amber-line);
+  border-radius:var(--r); text-decoration:none; color:inherit;
+  transition:box-shadow var(--ease), border-color var(--ease);
+}
+.onboard-card:hover { box-shadow:var(--shadow); border-color:var(--amber); }
+.onboard-card > div { flex:1; min-width:230px; }
+.onboard-card .eyebrow {
+  font-size:var(--t-xs); letter-spacing:.12em; text-transform:uppercase;
+  color:var(--amber-deep); font-weight:700;
+}
+.onboard-card .t { font-weight:650; font-size:var(--t-lg); margin-top:var(--s1); }
+.onboard-card .w { color:var(--muted); font-size:var(--t-sm); margin-top:2px; }
+
+/* ─────────────────────────────────────────────────────────────
+   Calendar
+   A month view is scanned, not read. The owner is looking for two
+   things: how busy a week is, and where the holes are. So the
+   chips carry status by colour and a day with an unassigned job
+   is marked on the cell itself -- otherwise you have to open
+   every day to find the one that will go wrong.
+   ───────────────────────────────────────────────────────────── */
+.cal-head {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:var(--s3); margin-bottom:var(--s5);
+}
+.cal-head h2 {
+  font-size:var(--t-xl); font-weight:650; letter-spacing:-.02em;
+  color:var(--ink); margin:0;
+}
+
+.cal-dows, .cal-grid {
+  /* minmax(0,...) so a column can shrink below its content: with a plain 1fr
+     a day's number and chips set the floor, and on a 320px phone the week
+     came out 1px wider than the screen. */
+  display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:var(--s1);
+}
+.cal-dows { margin-bottom:var(--s1); }
+.cal-dow {
+  text-align:center; font-size:var(--t-xs); font-weight:700;
+  color:var(--softer); text-transform:uppercase; letter-spacing:.1em;
+  padding:var(--s2) 0;
+}
+
+.daycell {
+  min-height:104px; background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r-sm); padding:var(--s2);
+  transition:background var(--ease), border-color var(--ease);
+}
+.daycell.blank { background:var(--ground); border-color:transparent; }
+.daycell.drop { background:var(--amber-soft); border-color:var(--amber); }
+
+.daynum {
+  font-size:var(--t-xs); font-weight:700; color:var(--muted);
+  margin-bottom:var(--s1); display:flex; align-items:center; gap:4px;
+}
+.daycell.today { border-color:var(--amber); box-shadow:0 0 0 2px rgba(240,164,75,.18); }
+.daycell.today .daynum { color:var(--amber-deep); }
+
+/* A dot, not a word. It has to survive being one of thirty-five cells. */
+.daynum .gap {
+  margin-left:auto; width:6px; height:6px; border-radius:50%;
+  background:var(--warn); flex:0 0 auto;
+}
+
+.jobchip {
+  display:block; font-size:var(--t-xs); padding:3px 6px;
+  border-radius:5px; margin-bottom:2px; text-decoration:none;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  font-weight:550; border:1px solid transparent;
+  transition:filter var(--ease);
+}
+.jobchip[draggable="true"] { cursor:grab; }
+.jobchip:hover { filter:brightness(.96); }
+.jobchip.s-pending   { background:var(--amber-soft); color:var(--amber-deep); }
+.jobchip.s-confirmed { background:var(--info-soft);  color:var(--info); }
+.jobchip.s-completed { background:var(--good-soft);  color:var(--good); }
+.jobchip.s-cancelled { background:var(--ground); color:var(--softer); text-decoration:line-through; }
+.jobchip.s-on_hold   { background:var(--amber-soft); color:var(--amber-deep);
+                       text-decoration:line-through; opacity:.8; }
+/* An unassigned job gets an outline, so it reads as an open slot. */
+.jobchip.unassigned { border-color:var(--warn); }
+
+.cal-legend {
+  display:flex; gap:var(--s5); margin-top:var(--s4); flex-wrap:wrap;
+  padding-top:var(--s4); border-top:1px solid var(--line-soft);
+}
+.cal-legend span { display:flex; align-items:center; gap:6px;
+                   font-size:var(--t-xs); color:var(--muted); }
+.cal-legend .sw { width:12px; height:12px; border-radius:3px; border:1px solid; }
+
+@media (max-width:720px) {
+  .daycell { min-height:74px; padding:3px; }
+  .jobchip { font-size:.68rem; padding:2px 4px; }
+  .cal-dow { font-size:.62rem; letter-spacing:.06em; }
+}
+
+/* A quiet day is not an error. The full empty state -- big icon, generous
+   padding -- is right for "you have no clients yet" and wrong for "nothing
+   is booked today", which is a normal Tuesday and should not be a 300px
+   hole in the middle of the page. */
+.empty.compact {
+  display:flex; align-items:center; justify-content:center; gap:var(--s3);
+  padding:var(--s5); text-align:left; font-size:var(--t-sm);
+}
+.empty.compact .icon { font-size:1.1rem; margin:0; opacity:.5; }
+.empty.compact p { margin:0; }
+
+/* The "you have not finished setting up" strip. It carries a class rather
+   than inline styles so it can be styled once -- and so a product screenshot
+   can hide it, because a half-configured account is not what a prospect
+   should be shown. */
+.setup-banner {
+  display:block; text-decoration:none;
+  background:var(--amber-soft); border:1px solid var(--amber-line);
+  border-radius:var(--r-sm); padding:var(--s3) var(--s4);
+  margin-bottom:var(--s4); color:var(--amber-deep); font-size:var(--t-sm);
+  transition:border-color var(--ease), box-shadow var(--ease);
+}
+.setup-banner:hover { border-color:var(--amber); box-shadow:var(--shadow); }
+.setup-banner strong { font-weight:700; }
+
+/* ── Depth, applied to the pieces that were flat ────────────────────────── */
+
+/* The sidebar is the back wall of the room: darker at the bottom, with a
+   hard edge where it meets the page. */
+.sidebar {
+  background:
+    linear-gradient(180deg, var(--ink-2) 0%, var(--ink) 58%, #121c31 100%);
+  box-shadow: inset -1px 0 0 rgba(255,255,255,.05),
+              4px 0 24px rgba(22,33,58,.10);
+}
+/* The active item is a raised pill, not a painted rectangle. */
+.sidebar nav a.active {
+  box-shadow: 0 1px 2px rgba(146,89,16,.28), 0 4px 12px rgba(240,164,75,.26);
+}
+
+/* The topbar floats over the content it scrolls above. */
+.topbar {
+  background: rgba(255,255,255,.86);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  box-shadow: 0 1px 0 var(--line), 0 6px 20px -14px rgba(22,33,58,.28);
+}
+
+/* Attention rows and day rows sit on the page rather than in it. */
+.attn-item { box-shadow: var(--shadow); }
+.attn-item:hover { box-shadow: var(--shadow-md); }
+.day, .money-strip, .cal-grid .daycell {
+  box-shadow: 0 1px 2px rgba(22,33,58,.04);
+}
+.money-strip { box-shadow: var(--shadow); }
+.daycell.today { box-shadow: 0 0 0 2px rgba(240,164,75,.20), var(--shadow); }
+
+/* Tables read better with a graded header than a flat fill. */
+thead th {
+  background: linear-gradient(180deg, #fbfcfe, #f4f6fa);
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+/* Buttons pick up a matched shadow so the primary action reads as the raised
+   one on the page. */
+.btn-primary, .btn-gold, button[type="submit"]:not([class]) {
+  box-shadow: 0 1px 2px rgba(217,138,43,.22), 0 5px 14px rgba(240,164,75,.26);
+}
+.btn-primary:hover, .btn-gold:hover, button[type="submit"]:not([class]):hover {
+  box-shadow: 0 2px 4px rgba(217,138,43,.24), 0 9px 22px rgba(240,164,75,.34);
+}
+.btn-outline { box-shadow: 0 1px 2px rgba(22,33,58,.04); }
+.btn-dark { box-shadow: 0 1px 2px rgba(22,33,58,.16), 0 6px 16px rgba(22,33,58,.18); }
+
+/* Somebody who has asked their operating system to stop moving things gets a
+   still page. The depth stays; only the motion goes. */
+@media (prefers-reduced-motion: reduce) {
+  .card, .stat-card, .attn-item, .btn, .btn-primary, .day-row, .jobchip {
+    transition: none !important;
+  }
+  .card:hover, a.stat-card:hover, .attn-item:hover { transform: none !important; }
+}
+
+/* The inner rim on every raised button. Kept in one place so the primary,
+   the gold alias and a bare submit button cannot drift apart. */
+.btn-primary, .btn-gold, .btn-dark, button[type="submit"]:not([class]) {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.38),
+              inset 0 -1px 0 rgba(0,0,0,.14),
+              0 1px 2px rgba(158,97,17,.22),
+              0 5px 14px rgba(240,164,75,.24);
+}
+.btn-dark {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14),
+              0 1px 2px rgba(22,33,58,.20),
+              0 6px 16px rgba(22,33,58,.20);
+}
+.btn-outline {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(22,33,58,.05);
+}
+.btn-primary:active, .btn-gold:active, .btn-dark:active,
+button[type="submit"]:not([class]):active {
+  box-shadow: inset 0 2px 5px rgba(120,71,8,.26), 0 1px 2px rgba(158,97,17,.2);
+}
+.btn-dark:active { box-shadow: inset 0 2px 5px rgba(0,0,0,.34); }
+
+/* ─────────────────────────────────────────────────────────────
+   Language toggle
+   Two words, not a dropdown of flags. A cleaner who opened the
+   page in the wrong language needs one tap, and a flag is a
+   country rather than a language.
+   ───────────────────────────────────────────────────────────── */
+.langsw {
+  display:inline-flex; align-items:center; gap:0;
+  border:1px solid var(--line); border-radius:var(--r-pill);
+  overflow:hidden; background:var(--surface); font-size:var(--t-xs);
+  box-shadow:0 1px 2px rgba(22,33,58,.05);
+}
+.langsw a {
+  padding:5px 12px; text-decoration:none; color:var(--muted);
+  font-weight:650; letter-spacing:.02em; min-width:38px; text-align:center;
+  transition:background var(--ease), color var(--ease);
+}
+.langsw a:hover { background:var(--ground); color:var(--ink); }
+.langsw a.on { background:var(--ink); color:#fff; }
+.langsw a.on:hover { background:var(--ink-2); }
+
+/* ─────────────────────────────────────────────────────────────
+   "How do I get this?"
+   Instructions beside the box they fill in, closed until asked
+   for. Somebody stuck on a Twilio token at nine at night will
+   not go and find a help centre — they will give up, and the
+   CRM will never send a text.
+   ───────────────────────────────────────────────────────────── */
+.howto {
+  border:1px solid var(--line); border-radius:var(--r-sm);
+  background:var(--ground); margin:var(--s3) 0 var(--s5);
+  overflow:hidden;
+}
+.howto summary {
+  cursor:pointer; padding:var(--s3) var(--s4); list-style:none;
+  font-size:var(--t-sm); font-weight:650; color:var(--info);
+  display:flex; align-items:center; gap:var(--s2);
+}
+.howto summary::-webkit-details-marker { display:none; }
+.howto summary::before {
+  content:'?'; flex:0 0 auto;
+  width:18px; height:18px; border-radius:50%;
+  background:var(--info-soft); color:var(--info);
+  font-size:.72rem; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+}
+.howto summary::after { content:'▸'; margin-left:auto; color:var(--softer); }
+.howto[open] summary::after { content:'▾'; }
+.howto summary:hover { background:var(--info-soft); }
+.howto summary .mins {
+  font-weight:500; color:var(--softer); font-size:var(--t-xs);
+}
+.howto[open] summary { border-bottom:1px solid var(--line); }
+
+.howto-body { padding:var(--s4) var(--s5) var(--s5); background:var(--surface); }
+.howto-body ol { margin:0; padding-left:var(--s5); display:grid; gap:var(--s3); }
+.howto-body li { font-size:var(--t-sm); line-height:1.6; color:var(--ink); }
+.howto-body code {
+  background:var(--ground); border:1px solid var(--line-soft);
+  border-radius:4px; padding:1px 5px; font-size:.86em;
+}
+.howto-note {
+  margin-top:var(--s4); padding:var(--s3) var(--s4);
+  background:var(--amber-soft); border:1px solid var(--amber-line);
+  border-radius:var(--r-sm); color:var(--amber-deep);
+  font-size:var(--t-sm); line-height:1.6;
+}
+.howto-note code { background:rgba(255,255,255,.6); border-color:var(--amber-line); }
+.howto-body .btn { margin-top:var(--s4); }
+
+/* The trial countdown. Always saying something: not-started, running out,
+   or finished. A state with no clock is how a trial becomes a thing somebody
+   believes they can come back to whenever. */
+.trialbar {
+  display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap;
+  padding:var(--s3) var(--s4); margin-bottom:var(--s4);
+  border-radius:var(--r-sm); text-decoration:none;
+  font-size:var(--t-sm); line-height:1.5;
+  background:var(--info-soft); border:1px solid var(--info-line); color:var(--ink);
+  transition:box-shadow var(--ease);
+}
+.trialbar:hover { box-shadow:var(--shadow); }
+.trialbar b { font-weight:700; }
+.trialbar .left { font-weight:650; }
+.trialbar .go { margin-left:auto; color:var(--info); font-weight:650; white-space:nowrap; }
+.trialbar.urgent { background:var(--amber-soft); border-color:var(--amber-line); }
+.trialbar.urgent .go { color:var(--amber-deep); }
+.trialbar.over { background:var(--ground); border-color:var(--line); color:var(--muted); }
+.trialbar.over .go { color:var(--ink); }

@@ -57,6 +57,49 @@ def _log_outbound(channel, to_address, to_name, subject, body, ok, detail,
         pass
 
 
+def _demo_blocked(channel, to_address, to_name, subject, body):
+    """(False, why) if this is a demo company's message, which never leaves.
+
+    Checked before any key is looked up, so it holds even when a caller hands
+    in a key of its own. Logged like any other failure, so the Sent Log shows
+    what the demo would have sent. See demo_guard.py."""
+    import demo_guard
+    if not demo_guard.active():
+        return None
+    if channel == 'email' and _is_our_support_inbox(to_address):
+        # Akye's own crash alert or feedback notice about the demo, to Akye.
+        # Nobody fictional is contacted, and a prospect's crash is one to hear about.
+        return None
+    _log_outbound(channel, to_address, to_name, subject, body, False,
+                  demo_guard.BLOCKED_DETAIL)
+    _say_demo_blocked_once()
+    return False, demo_guard.BLOCKED_DETAIL
+
+
+def _is_our_support_inbox(address):
+    try:
+        import product
+        ours = (product.support_email() or '').strip().lower()
+    except Exception:
+        return False
+    return bool(ours) and (address or '').strip().lower() == ours
+
+
+def _say_demo_blocked_once():
+    """Tell whoever pressed the button, once per request, that nothing went.
+
+    Many pages report "Sent" from having asked rather than from the answer, so
+    without this a demo would claim texts and emails it never sent."""
+    try:
+        from flask import flash, g, has_request_context
+        if has_request_context() and not g.get('demo_blocked_said'):
+            g.demo_blocked_said = True
+            flash('Demo company: nothing was actually sent — every email and text '
+                  'is written to the Sent Log instead.', 'info')
+    except Exception:
+        pass
+
+
 # ── Marketing opt-out (unsubscribe) ─────────────────────────────────────────────
 
 def _unsub_secret():
@@ -163,6 +206,9 @@ def send_marketing_sms(to_phone, message):
     deliberately do not: someone who stopped marketing still needs to be told
     their cleaner is outside, and Twilio makes the final call on a number that
     has genuinely opted out of everything."""
+    blocked = _demo_blocked('sms', to_phone, None, None, message)
+    if blocked:
+        return blocked
     if sms_opted_out(to_phone):
         detail = 'Not sent — this number has asked us to stop texting.'
         _log_outbound('sms', to_phone, None, None, message, False, detail)
@@ -243,12 +289,23 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
 
 
 def send_email(to_email, to_name, subject, html, from_name=None,
-               from_email=None, reply_to=None):
+               from_email=None, reply_to=None, api_key=None):
     """Send via Resend. Returns (ok: bool, detail: str) so callers/diagnostics
     can see what happened. Existing callers that ignore the return value are
     unaffected. from_email/reply_to let a branded caller (e.g. a commercial
-    quote) override the sender identity per brand."""
-    api_key = integrations.resend_api_key()
+    quote) override the sender identity per brand.
+
+    `api_key` exists for mail the PRODUCT sends — a trial reminder, a crash
+    alert — as opposed to mail a cleaning company sends its own customers.
+    Without it the key comes from `integrations`, which reads whichever
+    company's settings the current request belongs to. So a crash inside a
+    customer's CRM would have emailed us through that customer's Resend
+    account: billed to them, in their logs, and failing outright if they had
+    never connected one. Those are our emails and they go out on our key."""
+    blocked = _demo_blocked('email', to_email, to_name, subject, html)
+    if blocked:
+        return blocked
+    api_key = (api_key or '').strip() or integrations.resend_api_key()
     from_email = from_email or branding.from_email()
     if not from_name:
         from_name = branding.biz_name()
@@ -309,6 +366,9 @@ def send_email(to_email, to_name, subject, html, from_name=None,
 
 
 def add_to_mailerlite(email, name, group_id=None):
+    import demo_guard
+    if demo_guard.active():
+        return
     api_key = os.environ.get('MAILERLITE_API_KEY')
     if not group_id:
         group_id = os.environ.get('MAILERLITE_GROUP_ID', '189490896944760797')
@@ -335,6 +395,24 @@ def add_to_mailerlite(email, name, group_id=None):
 def send_sms(to_phone, message):
     """Send an SMS via Twilio. Returns (ok: bool, detail: str) so diagnostics
     can surface the real reason a text failed. Existing callers ignore the return."""
+    blocked = _demo_blocked('sms', to_phone, None, None, message)
+    if blocked:
+        return blocked
+    # The free plan sends no texts, and this is the only limit in the product
+    # that is about money rather than product design: every message costs real
+    # cash, every month, forever, to somebody who has never paid anything. It is
+    # enforced here rather than at each of the two dozen call sites, because one
+    # of those would eventually be missed and nobody would notice until the bill.
+    #
+    # Email is untouched, so a free business is never unable to reach its
+    # customers -- only unable to do it by text.
+    try:
+        import entitlements
+        if not entitlements.can('sms'):
+            entitlements.record_denial('sms', path='send_sms')
+            return False, 'Texting is part of the Pro plan. This was not sent.'
+    except Exception:
+        pass          # never let a plan check be the reason a text fails
     account_sid = integrations.twilio_account_sid()
     auth_token = integrations.twilio_auth_token()
     from_phone = integrations.twilio_phone()

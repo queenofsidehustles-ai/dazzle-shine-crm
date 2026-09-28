@@ -1,0 +1,236 @@
+"""The pages a company sees about money, and the one Stripe talks to.
+
+Four routes, and only one of them can change what anybody is entitled to.
+
+    /upgrade              where a padlock sends you
+    /billing              the plan, the trial, the card
+    /billing/checkout     hands off to Stripe's own payment page
+    /billing/return       a friendly "setting you up" page, and nothing more
+
+    /api/stripe/webhook   the only thing that changes a plan
+
+The last two are the point. Stripe sends the customer back to a success URL
+after checkout, and that URL is a link like any other -- it can be opened,
+shared, bookmarked or typed by anybody. If arriving there upgraded the account,
+the plan could be upgraded by visiting a page. So it says thank you and nothing
+else, and the entitlement changes when Stripe tells us, over a signed webhook.
+"""
+import os
+
+from flask import (Blueprint, render_template, request, redirect, url_for,
+                   jsonify, abort, flash)
+
+import billing
+import branding
+import control_plane
+import entitlements
+from auth import login_required, owner_required
+
+billing_bp = Blueprint('billing', __name__)
+
+
+def _org_or_404():
+    org = billing.current_org()
+    if org is None:
+        abort(404)
+    return org
+
+
+# Every limit entitlements.py tracks, in the order the comparison table shows
+# them. Reads LIMIT_LABELS rather than repeating its keys, so a limit added
+# there appears here without this file needing to change.
+PLAN_ORDER = ('solo', 'pro', 'scale')
+
+
+def _limit_rows():
+    return [(key, label) for key, label in entitlements.LIMIT_LABELS.items()]
+
+
+# Real feature gates that exist only because Scale's own PLANS entry is
+# 'features: None' ("everything") rather than an explicit list -- so they
+# never appear in PLANS['pro']['features'] and, before this, never appeared
+# on this page either, even though Scale genuinely does not share them with
+# Pro. Each is enforced by an actual @requires_plan(...) below; named here so
+# the comparison table can show them as the real differentiators they are,
+# without changing what can()/plan_can() actually decide at runtime.
+SCALE_ONLY_FEATURES = (
+    'commercial',       # blueprints/commercial.py, blueprints/quotes.py
+    'lead_finder',      # blueprints/places_finder.py
+    'multi_brand',      # blueprints/settings.py
+    'content_studio',   # blueprints/content.py
+    'va_commissions',   # blueprints/commissions.py
+)
+
+
+def _feature_rows():
+    """Every feature actually gated somewhere in the app, in FEATURE_LABELS'
+    own order. The still-unassigned labels in FEATURE_LABELS (nothing gates
+    them on any plan yet -- e.g. remove_branding, data_export) are
+    deliberately left off a page whose job is to show what upgrading
+    actually buys, not features that don't exist yet."""
+    gated = set(entitlements.PLANS['pro']['features'] or set()) | set(SCALE_ONLY_FEATURES)
+    return [(key, label) for key, label in entitlements.FEATURE_LABELS.items()
+            if key in gated]
+
+
+@billing_bp.route('/upgrade')
+@login_required
+def upgrade():
+    """Where a locked feature sends somebody.
+
+    Named in entitlements.requires_plan, which redirects here. Shows what they
+    were reaching for, so the page answers the question they actually have."""
+    feature = request.args.get('feature') or ''
+    label = entitlements.FEATURE_LABELS.get(
+        feature, feature.replace('_', ' ').capitalize() if feature else '')
+    need = entitlements.plan_for_feature(feature) if feature else 'pro'
+
+    limit_rows = _limit_rows()
+    feature_rows = _feature_rows()
+    limit_table = {key: {p: entitlements.PLANS[p]['limits'][key] for p in PLAN_ORDER}
+                  for key, _ in limit_rows}
+    feature_table = {key: {p: entitlements.plan_can(p, key) for p in PLAN_ORDER}
+                     for key, _ in feature_rows}
+
+    return render_template('admin/upgrade.html',
+                           feature=feature, feature_label=label,
+                           need=need, plans=entitlements.PLANS,
+                           plan_order=PLAN_ORDER,
+                           limit_rows=limit_rows, feature_rows=feature_rows,
+                           limit_table=limit_table, feature_table=feature_table,
+                           state=entitlements.state(),
+                           can_pay=billing.configured())
+
+
+@billing_bp.route('/billing')
+@owner_required
+def billing_home():
+    """What they are on, what it costs, and how to change it.
+
+    Owner-only: what the business pays is not a VA's business."""
+    org = billing.current_org()
+    state = entitlements.state()
+    portal_url = None
+    if org and org.get('stripe_customer_id') and billing.configured():
+        try:
+            portal_url = billing.portal_session(
+                org, f'{branding.crm_base()}/billing')
+        except Exception:
+            portal_url = None
+    referral_url, referred = _referral(org)
+    return render_template('admin/billing.html', org=org, state=state,
+                           plans=entitlements.PLANS, portal_url=portal_url,
+                           can_pay=billing.configured(),
+                           referral_url=referral_url, referred=referred,
+                           usage={k: entitlements.usage(k)
+                                  for k in ('field_workers', 'jobs_per_month',
+                                            'clients')})
+
+
+def _referral(org):
+    """This company's referral link on the product site, and who used it.
+
+    (None, []) on a single-business deployment, where there is no product
+    site to send anybody to.
+    """
+    import product
+    if not org or not product.domain():
+        return None, []
+    host = product.canonical_host() or product.domain()
+    url = f'{product.scheme_for(host)}://{host}/r/{org["slug"]}'
+    try:
+        referred = control_plane.referred_by(billing._engine(), org['slug'])
+    except Exception:
+        referred = []
+    return url, referred
+
+
+@billing_bp.route('/billing/checkout/<plan>', methods=['POST'])
+@owner_required
+def checkout(plan):
+    if plan not in ('pro', 'scale'):
+        abort(404)
+    if not billing.configured():
+        flash('Card payments are not switched on for this deployment yet.', 'error')
+        return redirect(url_for('billing.billing_home'))
+    org = _org_or_404()
+    base = branding.crm_base()
+    try:
+        url = billing.checkout_session(
+            org, plan,
+            success_url=f'{base}/billing/return',
+            cancel_url=f'{base}/billing')
+    except Exception as e:
+        import demo_guard
+        if isinstance(e, demo_guard.DemoBlocked):
+            flash(str(e), 'info')
+            return redirect(url_for('billing.billing_home'))
+        import errors
+        errors.capture(e, path='/billing/checkout', method='POST')
+        flash('Could not open the payment page. Nothing has been charged.', 'error')
+        return redirect(url_for('billing.billing_home'))
+    return redirect(url, code=303)
+
+
+@billing_bp.route('/billing/return')
+@owner_required
+def checkout_return():
+    """Deliberately does nothing but say thank you.
+
+    Reaching this page is not proof of anything -- it is a URL. The plan changes
+    when Stripe's signed webhook says it changed, which is usually within a
+    second or two, occasionally longer. So this page tells the truth: the
+    payment went through, and the account is being updated."""
+    return render_template('admin/billing_return.html',
+                           state=entitlements.state())
+
+
+@billing_bp.route('/api/stripe/webhook', methods=['POST'])
+def stripe_webhook():
+    """The only route that changes what a company is entitled to.
+
+    Everything here happens after the signature is verified. An unverified
+    payload is a stranger claiming somebody paid.
+
+    NOTE: this is /api/stripe/webhook (slash) -- Akye's own platform billing,
+    one shared Stripe account for every company's subscription, resolved from
+    the event payload rather than the request host (see BILL-01 in
+    docs/launch-readiness/decision-evidence-register.md). It is a different
+    route from a tenant's own booking-payments webhook,
+    /api/stripe-webhook (hyphen) in blueprints/api.py, which is that one
+    company's own Stripe account. Do not merge or rename these into each
+    other -- the two have already been mistaken for one another in tests."""
+    secret = billing.webhook_secret()
+    if not secret or not billing.configured():
+        return jsonify({'ok': False, 'error': 'billing not configured'}), 503
+
+    import stripe
+    stripe.api_key = billing.stripe_key()
+    try:
+        event = stripe.Webhook.construct_event(
+            request.data, request.headers.get('Stripe-Signature'), secret)
+    except Exception:
+        # Do not say why. A caller learning the difference between a bad
+        # signature and a malformed body learns something worth knowing.
+        return jsonify({'ok': False}), 400
+
+    try:
+        changed, detail = billing.apply_event(event)
+    except Exception as e:
+        import errors
+        errors.capture(e, path='/api/stripe/webhook', method='POST')
+        # 500 so Stripe retries. The handlers are idempotent, so a retry is
+        # safe, and losing a payment event is worse than processing it twice.
+        return jsonify({'ok': False}), 500
+
+    if not changed:
+        # Acknowledged, not applied -- an event we do not act on, or one for a
+        # company we do not know. Recorded so it is visible, and 200 so Stripe
+        # stops retrying something that will never succeed.
+        try:
+            from models import ErrorLog
+            ErrorLog.record(kind='stripe', message=detail[:400],
+                            path='/api/stripe/webhook', method='POST')
+        except Exception:
+            pass
+    return jsonify({'ok': True, 'detail': detail}), 200

@@ -109,7 +109,102 @@ def home(token):
     return render_template('public/portal.html', client=client, token=token,
                            upcoming=upcoming, history=history, invoices=invoices,
                            amount_due=amount_due, settled=is_settled,
+                           quotes=_open_quotes(client),
                            stripe_pk=pk, biz=_biz(), today=today)
+
+
+def _open_quotes(client):
+    """Quotes sent to this customer and still unanswered.
+
+    Both kinds: a commercial quote and the quote attached to an enquiry. They
+    were only ever reachable from the one email they went out in, and a quote
+    nobody can find again is one that expires unanswered -- especially if that
+    email went to spam, which is the single loudest complaint about the market
+    leader.
+
+    Keyed on the email address, because that is the only thing a quote and a
+    customer record reliably share.
+    """
+    out = []
+    email = (client.email or '').strip().lower()
+    if not email:
+        return out
+
+    from models import CommercialQuote, Lead
+    try:
+        for q in CommercialQuote.query.filter(
+                CommercialQuote.status.in_(['sent', 'pending'])).all():
+            if (q.email or '').strip().lower() == email and q.token:
+                out.append({'what': q.company or 'Commercial quote',
+                            'price': q.monthly_price or q.price_per_visit,
+                            'per': 'a month' if q.monthly_price else 'a visit',
+                            'link': url_for('quotes.view', token=q.token)
+                                    if _has_route('quotes.view') else None,
+                            'sent': q.sent_at})
+    except Exception:
+        pass
+
+    try:
+        for l in Lead.query.filter(Lead.quote_token.isnot(None)).all():
+            if ((l.email or '').strip().lower() == email
+                    and (l.status or '') not in ('booked', 'won', 'lost')):
+                out.append({'what': l.service_type or 'Cleaning quote',
+                            'price': l.quote_full_price or l.quoted_price,
+                            'per': '', 'sent': l.quote_sent_at,
+                            'link': url_for('quote_accept.view', token=l.quote_token)})
+    except Exception:
+        pass
+    return out
+
+
+def _has_route(endpoint):
+    from flask import current_app
+    return endpoint in current_app.view_functions
+
+
+@portal_bp.route('/portal/<token>/request', methods=['POST'])
+def request_work(token):
+    """Ask for another clean, without phoning anybody.
+
+    It becomes an enquiry rather than a booking. A customer choosing a date is
+    not the same as that date being free, and a booking the business has not
+    seen is how two crews end up promised to the same Tuesday.
+    """
+    from models import Lead
+    client = _client(token)
+    if _needs_gate(client) and not _verified(client):
+        abort(404)
+
+    what = (request.form.get('what') or '').strip()
+    when = (request.form.get('when') or '').strip()
+    if not what:
+        return redirect(url_for('portal.home', token=token))
+
+    note = f'From the customer portal. Asked for: {what}'
+    if when:
+        note += f'\nWhen suits them: {when}'
+    lead = Lead(name=client.name, email=client.email or '',
+                phone=client.phone or '', service_type='portal request',
+                address=client.address or '', city=client.city or '',
+                notes=note, source='Customer portal')
+    db.session.add(lead)
+    db.session.commit()
+
+    # Tell the business now. An enquiry that sits unseen until somebody opens
+    # the CRM is slower than the phone call this replaced.
+    try:
+        import notifications
+        notifications.send_email(
+            branding.owner_email(), branding.biz_name(),
+            f'{client.name} asked for more work',
+            f'<p style="font-size:15px;white-space:pre-wrap">{note}</p>'
+            f'<p style="color:#777;font-size:13px">{client.email or ""} '
+            f'{client.phone or ""}</p>')
+    except Exception:
+        pass
+
+    session[f'portal_asked_{client.id}'] = True
+    return redirect(url_for('portal.home', token=token))
 
 
 @portal_bp.route('/portal/<token>/setup-intent', methods=['POST'])

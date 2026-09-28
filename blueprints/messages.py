@@ -11,7 +11,8 @@ screen was from a cleaner's profile or the inbox list."""
 from datetime import datetime
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response, jsonify)
-from auth import login_required
+from entitlements import requires_plan
+from auth import login_required, owner_required
 from extensions import db
 from models import (Message, Staff, ContractorApplication, BusinessSetting,
                     MessageTemplate, OutboundLog, Client, Booking)
@@ -264,6 +265,7 @@ def fill_template(phone):
 # ── Manage reusable templates ───────────────────────────────────────────────
 @messages_bp.route('/templates', methods=['GET', 'POST'])
 @login_required
+@requires_plan('templates')
 def templates():
     if request.method == 'POST':
         title = (request.form.get('title') or '').strip()
@@ -406,7 +408,7 @@ def send(phone):
 
 # ── One-tap: ask an applicant to re-upload their background check ────────────
 @messages_bp.route('/thread/<phone>/request-bgcheck', methods=['POST'])
-@login_required
+@owner_required
 def request_bgcheck(phone):
     phone10 = norm_phone(phone)
     contact = resolve_contact(phone10)

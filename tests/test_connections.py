@@ -77,9 +77,11 @@ with app.app_context():
           'submitting the form without retyping the key leaves it intact')
 
     print('\n6. She can replace or clear a key herself')
-    c.post('/settings/connections', data={'stripe_secret_key': PREFIX_TEST + 'NOTAREALKEY000004242'},
-           follow_redirects=True)
-    check(integrations.stripe_mode() == 'test', 'pasting a test key switches the mode')
+    c.post('/settings/connections', data={
+        'stripe_secret_key': PREFIX_TEST + 'NOTAREALKEY000004242',
+        'stripe_publishable_key': 'pk_test_NOTAREAL'},
+        follow_redirects=True)
+    check(integrations.stripe_mode() == 'test', 'pasting a test key pair switches the mode')
     c.post('/settings/connections', data={'resend_api_key': '', 'clear_resend_api_key': '1'},
            follow_redirects=True)
     check(not integrations.email_ready(), 'and clearing a key disconnects that service')
@@ -107,7 +109,30 @@ with app.app_context():
     check(integrations.source('stripe_secret_key') == 'settings', 'and is reported as such')
     os.environ.pop('STRIPE_SECRET_KEY', None)
 
-    print('\n9. Only the owner can see or change any of this')
+    print('\n9. A mismatched key pair is refused, not saved')
+    integrations.set('stripe_secret_key', LIVE)
+    integrations.set('stripe_publishable_key', PREFIX_PUB + 'NOTAREAL')
+    c.post('/settings/connections',
+           data={'stripe_secret_key': PREFIX_TEST + 'NOTAREALKEY000004242'},
+           follow_redirects=True)
+    check(integrations.stripe_secret_key() == LIVE,
+          'a test secret key against a live publishable key on file is rejected')
+    check(integrations.stripe_publishable_key() == PREFIX_PUB + 'NOTAREAL',
+          'the publishable key is untouched too')
+    r = c.post('/settings/connections',
+               data={'stripe_secret_key': PREFIX_TEST + 'NOTAREALKEY000004242'},
+               follow_redirects=True)
+    check('mode' in r.get_data(as_text=True).lower(), 'and the owner is told why')
+    c.post('/settings/connections',
+           data={'stripe_secret_key': PREFIX_TEST + 'NOTAREALKEY000004242',
+                 'stripe_publishable_key': 'pk_test_NOTAREAL'},
+           follow_redirects=True)
+    check(integrations.stripe_mode() == 'test',
+          'but a matched test/test pair saves fine')
+    integrations.set('stripe_secret_key', LIVE)
+    integrations.set('stripe_publishable_key', PREFIX_PUB + 'NOTAREAL')
+
+    print('\n10. Only the owner can see or change any of this')
     anon = app.test_client()
     r = anon.get('/settings/connections')
     check(r.status_code in (301, 302, 401, 403), f'logged out is refused ({r.status_code})')

@@ -1,0 +1,138 @@
+{% extends "console/_shell.html" %}
+{% block title %}{{ doc.title }}{% endblock %}
+{% block body %}
+<style>
+  /* Markdown rendered from a playbook's content -- headings, tables, lists.
+     Scoped here since nothing else in the console renders Markdown. */
+  .pb-content { line-height: var(--lh); color: var(--ink); }
+  .pb-content h1, .pb-content h2, .pb-content h3 {
+    margin: var(--s6) 0 var(--s3); line-height: var(--lh-tight);
+  }
+  .pb-content h1:first-child, .pb-content h2:first-child, .pb-content h3:first-child { margin-top: 0; }
+  .pb-content h1 { font-size: var(--t-xl); }
+  .pb-content h2 { font-size: var(--t-lg); }
+  .pb-content h3 { font-size: var(--t-md); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .pb-content p { margin: 0 0 var(--s4); }
+  .pb-content ul, .pb-content ol { margin: 0 0 var(--s4); padding-left: 1.3em; }
+  .pb-content li { margin-bottom: var(--s1); }
+  .pb-content strong { color: var(--ink); }
+  .pb-content code { background: var(--ground); border-radius: var(--r-sm); padding: 1px 5px; font-size: 0.9em; }
+  .pb-content a { color: var(--info); }
+  .pb-content table {
+    width: 100%; border-collapse: collapse; background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+    margin: 0 0 var(--s5); font-size: var(--t-sm);
+  }
+  .pb-content th, .pb-content td {
+    text-align: left; padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  .pb-content th {
+    font-size: var(--t-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--softer);
+    background: var(--ground);
+  }
+  .pb-content tr:last-child td { border-bottom: none; }
+
+  /* Steps written "[ ]" / "[x]": a checklist, ticked off in place. */
+  .pb-content li.pb-task { margin-bottom: var(--s2); padding-left: var(--s1); }
+  .pb-content .pb-box {
+    width: 18px; height: 18px; margin: 0 var(--s2) 0 0; vertical-align: -3px;
+    accent-color: var(--good); cursor: pointer;
+  }
+  .pb-content .pb-box:disabled { cursor: default; }
+  .pb-content li.pb-task.done { color: var(--softer); text-decoration: line-through;
+                                text-decoration-color: var(--line); }
+  .pb-content li.pb-task.done strong { color: inherit; }
+  .pb-progress {
+    display: inline-block; margin-left: var(--s2); padding: 2px 8px; border-radius: 999px;
+    background: var(--ground); color: var(--muted); font-size: var(--t-xs); font-weight: 600;
+    vertical-align: middle; font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0;
+  }
+  .pb-progress.all { background: var(--good-soft, #e6f5ee); color: var(--good); }
+  .pb-status { font-size: var(--t-sm); color: var(--muted); margin: 0 0 var(--s3); }
+  .pb-status.error { color: var(--warn); }
+</style>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:var(--s3)">
+  <h2 style="font-size:1.05rem;margin:0">{{ doc.title }}</h2>
+  {% if can_edit %}
+  <a href="{{ url_for('console.playbook_edit', doc_id=doc.id) }}" class="btn btn-outline btn-sm">Edit</a>
+  {% endif %}
+</div>
+<p class="con-meta">
+  {% if doc.created_by %}Added by {{ doc.created_by }} · {% endif %}
+  updated {{ doc.updated_at.strftime('%d %b %Y, %H:%M') if doc.updated_at else '—' }}
+</p>
+<p class="pb-status" id="pb-status" role="status" hidden></p>
+<div class="con-item">
+  <div class="pb-content" id="pb-content"
+       data-save="{{ url_for('console.playbook_task', doc_id=doc.id) }}"
+       data-rev="{{ rev }}">{{ content_html | safe }}</div>
+</div>
+<script>
+  (function () {
+    var root = document.getElementById('pb-content');
+    var status = document.getElementById('pb-status');
+    var boxes = Array.prototype.slice.call(root.querySelectorAll('.pb-box'));
+    if (!boxes.length) return;
+
+    // "3 / 6" beside each section heading, and a total at the top.
+    function sections() {
+      var out = [], current = null;
+      Array.prototype.forEach.call(root.children, function (el) {
+        if (el.tagName === 'H2') { current = { head: el, boxes: [] }; out.push(current); return; }
+        if (current) current.boxes = current.boxes.concat(
+          Array.prototype.slice.call(el.querySelectorAll('.pb-box')));
+      });
+      return out.filter(function (s) { return s.boxes.length; });
+    }
+    function count(list) { return list.filter(function (b) { return b.checked; }).length; }
+    function paint() {
+      sections().forEach(function (s) {
+        var badge = s.head.querySelector('.pb-progress');
+        if (!badge) { badge = document.createElement('span'); badge.className = 'pb-progress'; s.head.appendChild(badge); }
+        var n = count(s.boxes);
+        badge.textContent = n + ' / ' + s.boxes.length;
+        badge.classList.toggle('all', n === s.boxes.length);
+      });
+      if (!status.classList.contains('error')) {
+        status.hidden = false;
+        status.textContent = count(boxes) + ' of ' + boxes.length + ' steps done.'
+          + (boxes[0].disabled ? ' Only a manager or the owner can tick steps.' : '');
+      }
+    }
+    function mark(box) {
+      var li = box.closest('li.pb-task');
+      if (li) li.classList.toggle('done', box.checked);
+    }
+
+    // One save at a time, each carrying the version the last one returned.
+    var queue = Promise.resolve();
+    boxes.forEach(function (box) {
+      if (box.disabled) return;
+      box.addEventListener('change', function () {
+        mark(box); paint();
+        queue = queue.then(function () {
+          var body = new URLSearchParams({ index: box.dataset.task, done: box.checked ? '1' : '0',
+                                           rev: root.dataset.rev });
+          return fetch(root.dataset.save, { method: 'POST', body: body, credentials: 'same-origin' })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j }; }); })
+            .then(function (res) {
+              if (!res.ok) throw new Error(res.j.error || 'Not saved.');
+              root.dataset.rev = res.j.rev;
+            })
+            .catch(function (e) {
+              box.checked = !box.checked; mark(box);
+              status.hidden = false; status.classList.add('error');
+              status.textContent = (e && e.message) || 'Not saved. Check your connection and try again.';
+              paint();
+            });
+        });
+      });
+    });
+    paint();
+  })();
+</script>
+<p style="margin-top:var(--s4)">
+  <a href="{{ url_for('console.playbooks') }}">&larr; All playbooks</a>
+</p>
+{% endblock %}

@@ -95,9 +95,79 @@ on site, and we will provide them to your card issuer.
 """
 
 
-def get_terms():
+US_STATES = [
+    ('AL', 'Alabama'), ('AK', 'Alaska'), ('AZ', 'Arizona'), ('AR', 'Arkansas'),
+    ('CA', 'California'), ('CO', 'Colorado'), ('CT', 'Connecticut'), ('DE', 'Delaware'),
+    ('DC', 'District of Columbia'), ('FL', 'Florida'), ('GA', 'Georgia'), ('HI', 'Hawaii'),
+    ('ID', 'Idaho'), ('IL', 'Illinois'), ('IN', 'Indiana'), ('IA', 'Iowa'),
+    ('KS', 'Kansas'), ('KY', 'Kentucky'), ('LA', 'Louisiana'), ('ME', 'Maine'),
+    ('MD', 'Maryland'), ('MA', 'Massachusetts'), ('MI', 'Michigan'), ('MN', 'Minnesota'),
+    ('MS', 'Mississippi'), ('MO', 'Missouri'), ('MT', 'Montana'), ('NE', 'Nebraska'),
+    ('NV', 'Nevada'), ('NH', 'New Hampshire'), ('NJ', 'New Jersey'), ('NM', 'New Mexico'),
+    ('NY', 'New York'), ('NC', 'North Carolina'), ('ND', 'North Dakota'), ('OH', 'Ohio'),
+    ('OK', 'Oklahoma'), ('OR', 'Oregon'), ('PA', 'Pennsylvania'), ('RI', 'Rhode Island'),
+    ('SC', 'South Carolina'), ('SD', 'South Dakota'), ('TN', 'Tennessee'), ('TX', 'Texas'),
+    ('UT', 'Utah'), ('VT', 'Vermont'), ('VA', 'Virginia'), ('WA', 'Washington'),
+    ('WV', 'West Virginia'), ('WI', 'Wisconsin'), ('WY', 'Wyoming'),
+]
+US_STATE_NAMES = dict(US_STATES)
+
+
+def markets():
+    """State codes this business has marked as an active market, in the order
+    they were selected."""
     from models import BusinessSetting
-    return (BusinessSetting.get('customer_terms') or '').strip() or DEFAULT_TERMS
+    raw = (BusinessSetting.get('markets') or '').strip()
+    return [c for c in raw.split(',') if c]
+
+
+def set_markets(codes):
+    """Save the selected markets, silently dropping anything not a real
+    state code -- a stray value from a tampered form must not end up
+    driving compliance text for a state that doesn't exist."""
+    from models import BusinessSetting
+    clean = [c for c in codes if c in US_STATE_NAMES]
+    BusinessSetting.set('markets', ','.join(clean))
+
+
+def market_note(state_code):
+    """This business's own compliance note for one state -- empty until
+    they write one. Not legal advice and not generated here; see get_terms()."""
+    from models import BusinessSetting
+    return (BusinessSetting.get(f'market_note_{state_code}') or '').strip()
+
+
+def set_market_note(state_code, text):
+    from models import BusinessSetting
+    if state_code not in US_STATE_NAMES:
+        return
+    BusinessSetting.set(f'market_note_{state_code}', (text or '').strip())
+
+
+def get_terms():
+    """The base terms, plus any per-market compliance note the business has
+    written for a state it operates in.
+
+    Additive, not a per-customer swap: this app has no reliable way to know
+    which state a given customer is in (Client/Booking store a city and zip,
+    never a state), and a business's own selected markets are a fact about
+    the business, not about one booking. A note is only ever appended, never
+    used to replace the base terms, so selecting a market a business doesn't
+    write a note for changes nothing -- and every customer sees every note
+    the business has written, which is the safe direction to err in: more
+    disclosure than a given customer strictly needed is not the failure mode
+    that matters here, missing disclosure is.
+    """
+    from models import BusinessSetting
+    base = (BusinessSetting.get('customer_terms') or '').strip() or DEFAULT_TERMS
+    notes = []
+    for code in markets():
+        note = market_note(code)
+        if note:
+            notes.append(f'**{US_STATE_NAMES.get(code, code)} customers**\n\n{note}')
+    if notes:
+        return base + '\n\n' + '\n\n'.join(notes)
+    return base
 
 
 def as_html():

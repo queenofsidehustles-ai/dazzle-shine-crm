@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 # (key, label, what it does, how often it should run)
 JOBS = [
     ('reminders', 'Day-before reminders',
-     'Texts and emails every customer booked tomorrow.', 'daily'),
+     'Texts and emails every customer booked tomorrow, and every cleaner with a job tomorrow.', 'daily'),
     ('charge-balances', 'Charge balances',
      'Takes the balance off the card on file, at each job&rsquo;s start time.', 'hourly'),
     ('lifecycle-emails', 'Follow-ups and win-backs',
@@ -41,7 +41,105 @@ JOBS = [
     ('insurance-expiry', 'Subcontractor insurance',
      'Warns you before a subcontractor&rsquo;s insurance or workers&rsquo; '
      'compensation runs out.', 'daily'),
+    # Off by default, unlike the rest of this list. Those five are what
+    # somebody signed up for; this is a daily email nobody asked to start
+    # receiving, and the one automation here whose entire value depends on
+    # being wanted rather than merely tolerated.
+    ('owner-digest', 'Morning digest',
+     'Emails you each morning with what actually needs you today — the same '
+     'specific list Nana can read back, sent before you open the app.', 'daily'),
 ]
+
+# Everything above defaults to on. This one is the exception: an inbox that
+# starts filling up the day somebody signs up, before they have asked for it,
+# is the fastest way to get every automation email filtered straight past
+# them — including the ones that matter.
+DEFAULT_OFF = {'owner-digest'}
+
+# What a business has decided about each job. Absence means on: the five that
+# send messages are what somebody signed up for, and a new company should not
+# have to switch its reminders on.
+#
+# Balances are the exception and have three answers rather than two, because
+# "off" is two different businesses: one that wants telling when money is owed,
+# and one that collects it in cash and does not want the card touched at all.
+BALANCE_MODES = ('auto', 'ask', 'never')
+BALANCE_DEFAULT = 'ask'
+
+
+def _setting(key, default=''):
+    try:
+        from models import BusinessSetting
+        return (BusinessSetting.get(key) or default).strip()
+    except Exception:
+        # A settings lookup must never be the reason a job does not run. On the
+        # message jobs that means carrying on; on the money one the default is
+        # the cautious answer, so a broken read cannot charge anybody.
+        return default
+
+
+def is_enabled(job):
+    """Has this business turned this job off?
+
+    Checked by the job itself rather than by whatever woke it, so the answer
+    holds however it is triggered -- the nightly run, a run by hand, or anything
+    built later that nobody has thought of yet.
+    """
+    if job == 'charge-balances':
+        return balance_mode() == 'auto'
+    if job in DEFAULT_OFF:
+        return _setting(f'automation_{job}_on') == '1'
+    return _setting(f'automation_{job}_off') != '1'
+
+
+def balance_mode():
+    """auto: charge the card on the day.
+       ask:  do not charge; show it as owed so the owner decides.
+       never: do not charge, and do not offer to -- collected outside here.
+
+    Defaults to `ask`. Charging a card cannot be undone, so the default is the
+    one that cannot surprise a customer.
+    """
+    mode = _setting('balance_collection', BALANCE_DEFAULT)
+    return mode if mode in BALANCE_MODES else BALANCE_DEFAULT
+
+
+def set_enabled(job, on):
+    from models import BusinessSetting
+    if job in DEFAULT_OFF:
+        # Absence has to mean off here, the opposite of every other job's
+        # switch -- so it needs its own key. Writing '1'/'' to the shared
+        # `_off` key would mean a business that had never touched this
+        # setting and one that had explicitly turned it off were
+        # indistinguishable, and is_enabled() would have no way to tell
+        # "never asked" from "asked, and said no."
+        BusinessSetting.set(f'automation_{job}_on', '1' if on else '')
+        return
+    BusinessSetting.set(f'automation_{job}_off', '' if on else '1')
+
+
+def set_balance_mode(mode):
+    from models import BusinessSetting
+    BusinessSetting.set('balance_collection',
+                        mode if mode in BALANCE_MODES else BALANCE_DEFAULT)
+
+
+def cleaner_reminders_enabled():
+    """The cleaner half of the day-before reminders job, switched separately
+    from `is_enabled('reminders')`, which is the customer half.
+
+    One daily job, one cron address -- this doesn't split into a second row
+    in JOBS, because there is no second endpoint to call. It's two
+    independent questions asked of the same run: a business might want her
+    customers left alone while cleaners still get warned tomorrow's job
+    exists, or the other way round."""
+    return _setting('automation_reminders_cleaner_off') != '1'
+
+
+def set_cleaner_reminders_enabled(on):
+    from models import BusinessSetting
+    BusinessSetting.set('automation_reminders_cleaner_off', '' if on else '1')
+
 
 # How long without a run before a job is treated as stopped rather than idle.
 STALE_HOURS = {'hourly': 6, 'daily': 36}
@@ -147,9 +245,20 @@ def overview():
                 evidence = (f"{n} finished job{'s' if n != 1 else ''} still {'have' if n != 1 else 'has'} "
                             f"an uncollected balance on a saved card.")
 
+        on = is_enabled(key)
+        if key == 'reminders':
+            # Two independent switches share this one row -- it only reads as
+            # fully "off" when neither customers nor cleaners are getting
+            # anything, not just because one of the two was turned down.
+            on = on or cleaner_reminders_enabled()
+        if not on:
+            # Off on purpose is not the same as broken, and a page that cannot
+            # tell them apart trains people to ignore it.
+            state, evidence = 'off', ''
         out.append({
             'key': key, 'label': label, 'blurb': blurb, 'cadence': cadence,
             'last': last, 'hours': hours, 'state': state, 'evidence': evidence,
+            'on': on,
         })
     return out
 

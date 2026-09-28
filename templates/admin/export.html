@@ -1,0 +1,40 @@
+{% extends "base_admin.html" %}
+{% block title %}Export data — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Export data{% endblock %}
+
+{% block content %}
+<div class="card">
+  <p style="color:var(--muted);font-size:0.92rem;margin:0">
+    Your data, out as a spreadsheet. Each download is a CSV file scoped to
+    this business only, the same way every other page here is — nothing
+    from any other company can end up in your file.
+  </p>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+
+    <div style="padding:16px;border:1px solid var(--border);border-radius:10px">
+      <div style="font-weight:700;margin-bottom:4px">👥 Customers</div>
+      <div style="color:var(--softer);font-size:0.85rem;margin-bottom:14px">{{ customer_count }} customer{{ '' if customer_count == 1 else 's' }}</div>
+      <a href="{{ url_for('settings.export_customers_csv') }}" class="btn btn-outline">⬇ Download customers.csv</a>
+    </div>
+
+    <div style="padding:16px;border:1px solid var(--border);border-radius:10px">
+      <div style="font-weight:700;margin-bottom:4px">📋 Jobs</div>
+      <div style="color:var(--softer);font-size:0.85rem;margin-bottom:14px">{{ job_count }} job{{ '' if job_count == 1 else 's' }}</div>
+      <a href="{{ url_for('settings.export_jobs_csv') }}" class="btn btn-outline">⬇ Download jobs.csv</a>
+    </div>
+
+    <div style="padding:16px;border:1px solid var(--border);border-radius:10px">
+      <div style="font-weight:700;margin-bottom:4px">🧹 Team</div>
+      <div style="color:var(--softer);font-size:0.85rem;margin-bottom:14px">{{ worker_count }} team member{{ '' if worker_count == 1 else 's' }}</div>
+      <a href="{{ url_for('settings.export_workers_csv') }}" class="btn btn-outline">⬇ Download workers.csv</a>
+    </div>
+
+  </div>
+  <p style="color:var(--softer);font-size:0.8rem;margin:16px 0 0">
+    Payment details and login tokens are never included in these files.
+  </p>
+</div>
+{% endblock %}

@@ -11,6 +11,17 @@ its own menu entry is now a tab, and its old address still works.
 
 Adding a page means adding a line here, not editing the sidebar template and
 inventing another active-state expression.
+
+## The reorganization
+
+Four rules decided where everything below lives:
+
+  * frequently-used work stays highest in the sidebar;
+  * Toolkit is for what facilitates the job and is customer-facing —
+    pricing, templates, the cleaning checklist, follow-up wording;
+  * Settings is for the persistent stuff -- set once, rarely revisited;
+  * Knowledge Base is a place to go looking, not a place work happens --
+    Ask Nana, the SOPs, and the curated FAQs live there together.
 """
 
 # A section is: (endpoint, icon, label, owner_only, tabs)
@@ -25,7 +36,7 @@ SECTIONS = [
         ('admin.dashboard', '🏠', 'Dashboard', False, []),
     ]),
 
-    ('Jobs & Schedule', [
+    ('Jobs & Money', [
         ('bookings.index', '📋', 'Bookings', False, [
             ('bookings.index', 'All jobs', False),
             ('invoices.index', 'Invoices', False),
@@ -37,12 +48,25 @@ SECTIONS = [
             ('messages.sent_log', 'Sent log', False),
             ('messages.templates', 'Text templates', False),
         ]),
+        # Folded in from its own top-level section -- Jobs & Money is what it
+        # is called now because the money a job made was never a separate
+        # question from the job itself.
+        ('money.pnl', '📈', 'Money', True, [
+            ('money.pnl', 'Profit & Loss', True),
+            ('admin.reports', 'Trends', True),
+            ('money.expenses', 'Expenses', True),
+            ('money.job_economics', 'Job economics', True),
+            ('contractors.payroll', 'Payroll', True),
+            ('contractors.timesheet', 'Timesheet', True),
+            ('money.tax_forms', '1099 & W-9', True),
+            ('commissions.index', 'Sales commissions', True),
+        ]),
     ]),
 
     ('Get Customers', [
         ('leads.index', '💡', 'Leads', False, [
             ('leads.index', 'Website leads', False),
-            ('lsa.index', 'Google Ads leads', False),
+            ('lsa.index', 'Missed contacts', False),
         ]),
         ('places_finder.dashboard', '🏢', 'Commercial', False, [
             ('places_finder.dashboard', 'Find leads', False),
@@ -50,6 +74,9 @@ SECTIONS = [
             ('quotes.index', 'Quotes', False),
         ]),
         ('discounts.index', '🏷️', 'Discounts', False, []),
+        # Moved in from Toolkit -- posting is about winning customers, not
+        # facilitating a job already booked.
+        ('content.index', '✨', 'Social posts', False, []),
     ]),
 
     ('My Team', [
@@ -61,42 +88,59 @@ SECTIONS = [
         ('contractors.applications', '📥', 'Hiring', False, [
             ('contractors.applications', 'Applications', False),
             ('interviews.admin_interviews', 'Interviews', False),
+            # Used to be a card on Business Settings -- the interview link and
+            # BG-check provider these two pages actually use, moved next to
+            # them rather than a click away under Settings.
+            ('contractors.hiring_settings', 'Hiring settings', True),
         ]),
     ]),
 
-    ('Money', [
-        ('money.pnl', '📈', 'Money', True, [
-            ('money.pnl', 'Profit & Loss', True),
-            ('admin.reports', 'Trends', True),
-            ('money.expenses', 'Expenses', True),
-            ('money.job_economics', 'Job economics', True),
-            ('contractors.payroll', 'Payroll', True),
-            ('money.tax_forms', '1099 & W-9', True),
-            ('commissions.index', 'VA commissions', True),
-        ]),
-    ]),
-
+    # What facilitates the job and is customer-facing: the price quoted, the
+    # words sent, the checklist followed on site. Everything here is touched
+    # again and again as jobs come and go, which is what separates it from
+    # Settings below.
     ('Toolkit', [
-        ('workorders.templates', '✅', 'Checklists', False, []),
-        ('sops.index', '📖', 'SOP Library', False, []),
-        ('content.index', '✨', 'Content Studio', False, []),
+        ('settings.pricing', '💲', 'Pricing', True, []),
         ('email_templates.index', '✉️', 'Templates', False, [
             ('email_templates.index', 'Emails', False),
             ('scripts.index', 'Call scripts & outreach', False),
             ('messages.templates', 'Text templates', False),
         ]),
+        ('workorders.templates', '✅', 'Cleaning Checklist', False, []),
+        ('settings.followup_texts', '💬', 'Follow-up texts', True, []),
     ]),
 
-    ('Setup', [
-        ('settings.pricing', '⚙️', 'Settings', True, [
-            ('settings.pricing', 'Pricing', True),
+    # A place to go looking, not a place work happens. Ask Nana's own job
+    # changed alongside this move: she is a knowledge/value-discovery tool
+    # now, for making the most of the application, which is exactly this
+    # section's purpose rather than the daily front-line spot she held before.
+    ('Knowledge Base', [
+        ('assistant.page', '💬', 'Ask Nana', True, []),
+        ('sops.index', '📖', 'SOPs', False, []),
+        ('faq.index', '💡', 'FAQs', False, []),
+    ]),
+
+    # Set once and rarely revisited. Getting started and the Migration
+    # Toolbox live here now that setup is done -- while it isn't, the promote
+    # logic below still lifts Getting started to the very top of the sidebar,
+    # same as it always has.
+    ('Settings', [
+        ('settings.getting_started', '🚀', 'Getting started', False, []),
+        ('migration.index', '📦', 'Migration Toolbox', True, []),
+        # Not owner_only, and not nested under the Settings tabs below --
+        # this is a team member's own login and 2FA, not a business-wide
+        # setting, and everything under settings.business is gated on the
+        # owner role at the top level. Nesting it there would have made it
+        # unreachable from the menu for anyone but the owner, on a page
+        # /account has never required @owner_required for.
+        ('account.my_account', '🔒', 'Security', False, []),
+        ('settings.business', '⚙️', 'Settings', True, [
             ('settings.business', 'Business', True),
-            ('settings.commercial', 'Commercial brand', True),
-            ('settings.followup_texts', 'Follow-up texts', True),
             ('settings.connections', 'Connections', True),
             ('settings.automations_page', 'Automations', True),
             ('team_logins.index', 'Team logins', True),
-            ('settings.errors_page', 'Errors', True),
+            ('settings.commercial', 'Commercial brand', True),
+            ('settings.export', 'Export data', True),
         ]),
     ]),
 ]
@@ -138,6 +182,8 @@ BELONGS_TO = {
     'scripts.edit': 'scripts.index',
     'sops.edit': 'sops.index',
     'sops.new': 'sops.index',
+    'faq.new': 'faq.index',
+    'faq.edit': 'faq.index',
     'email_templates.edit': 'email_templates.index',
     'workorders.edit_template': 'workorders.templates',
     'workorders.new_template': 'workorders.templates',
@@ -152,29 +198,160 @@ BELONGS_TO = {
 }
 
 
+# Which plan feature a page belongs to. Anything not listed here is on every
+# plan, including the free one — that is the default on purpose, so forgetting
+# to add a line here leaves a page open rather than locking paying customers
+# out of it.
+#
+# Note what is deliberately absent: bookings, calendar, clients, checklists and
+# the messages inbox. A free business has to be able to run a real job from
+# booking to completion, or it never finds out what this software does and
+# never has a reason to pay for it. What is gated below is what appears once
+# they start succeeding — a crew to pay, people to hire, margins to check.
+MIN_PLAN = {
+    'assistant.page': 'assistant',
+    'money.pnl': 'reports',
+    'admin.reports': 'reports',
+    'money.expenses': 'reports',
+    'money.job_economics': 'job_economics',
+    'contractors.payroll': 'payroll',
+    'money.tax_forms': 'tax_forms',
+    'commissions.index': 'va_commissions',
+    'contractors.applications': 'hiring',
+    'contractors.hiring_settings': 'hiring',
+    'interviews.admin_interviews': 'interviews',
+    'sops.index': 'sops',
+    'discounts.index': 'discounts',
+    'email_templates.index': 'templates',
+    'scripts.index': 'templates',
+    'messages.templates': 'templates',
+    'invoices.index': 'invoices',
+    'settings.automations_page': 'automations',
+    'team_logins.index': 'team_logins',
+    'places_finder.dashboard': 'lead_finder',
+    'commercial.index': 'commercial',
+    'quotes.index': 'commercial',
+    'settings.commercial': 'multi_brand',
+    'content.index': 'content_studio',
+}
+
+
 def _is_owner(role):
-    return (role or 'owner') == 'owner'
+    if role != 'owner':
+        return False
+    try:
+        from flask import has_request_context, session
+        if has_request_context():
+            return session.get('role') == 'owner'
+    except Exception:
+        return False
+    return True
 
 
-def sidebar(role='owner'):
-    """The menu to draw, already filtered to what this person may see."""
+def _effective_role(role):
+    """Use the authenticated session role in request context.
+
+    A caller-supplied role is presentation data, not authority. Outside a
+    request context the old no-role navigation tests get the least-privileged
+    back-office view instead of pretending to be owner.
+    """
+    try:
+        from flask import has_request_context, session
+        if has_request_context():
+            return session.get('role')
+    except Exception:
+        return None
+    return role if role is not None else 'limited'
+
+
+def _role_can_open(endpoint, role, owner_only=False):
+    """Whether this role may GET the page represented by a menu link."""
+    if _is_owner(role):
+        return True
+    if owner_only:
+        return False
+    import rbac
+    effective = _effective_role(role)
+    permission = rbac.required_permission(endpoint, 'GET')
+    return bool(permission and rbac.has_permission(effective, permission))
+
+
+def feature_for(endpoint):
+    """The plan feature a page needs, or None if it is on every plan."""
+    return MIN_PLAN.get(_resolve(endpoint))
+
+
+def _always_allowed(_feature):
+    return True
+
+
+def sidebar(role=None, can=None, setup_done=True):
+    """The menu to draw, already filtered to plan and IAM access.
+
+    `can(feature)` decides plan access. A page their plan does not include is
+    marked `locked` and still drawn — see entitlements.py for why. IAM is
+    different: a route the role cannot open is removed completely so the menu
+    cannot advertise an action the server will reject.
+    """
+    can = can or _always_allowed
     out = []
+    # Getting started sits under Settings, below fourteen things a company on
+    # its first day cannot use yet. For the fortnight it matters it is the most
+    # important link on the page, so while there is setup left it moves to the
+    # top and drops back once there is not.
+    promote = None if setup_done else 'settings.getting_started'
     for heading, items in SECTIONS:
-        visible = [
-            {'endpoint': ep, 'icon': icon, 'label': label,
-             'tabs': [{'endpoint': t[0], 'label': t[1]}
-                      for t in tabs if _is_owner(role) or not t[2]]}
-            for ep, icon, label, owner_only, tabs in items
-            if _is_owner(role) or not owner_only
-        ]
+        visible = []
+        for ep, icon, label, owner_only, tabs in items:
+            if not _role_can_open(ep, role, owner_only):
+                continue
+            if ep == promote and heading != 'Dashboard':
+                continue                      # drawn at the top instead
+            visible.append({
+                'endpoint': ep, 'icon': icon, 'label': label,
+                'locked': _locked(ep, can),
+                'tabs': [{'endpoint': t[0], 'label': t[1],
+                          'locked': _locked(t[0], can)}
+                         for t in tabs if _role_can_open(t[0], role, t[2])],
+            })
+        if heading == 'Dashboard' and promote:
+            for _h, its in SECTIONS:
+                for it in its:
+                    if it[0] == promote and _role_can_open(it[0], role, it[3]):
+                        visible.append({
+                            'endpoint': it[0], 'icon': it[1], 'label': it[2],
+                            'locked': _locked(it[0], can), 'tabs': [],
+                        })
         if visible:
             out.append({'heading': heading, 'items': visible})
     return out
 
 
+def _locked(endpoint, can):
+    feature = MIN_PLAN.get(endpoint)
+    return bool(feature) and not can(feature)
+
+
 def _resolve(endpoint):
     """The endpoint whose place in the menu we should be showing."""
     return BELONGS_TO.get(endpoint, endpoint)
+
+
+def title_for(endpoint):
+    """The words on the menu item that leads here.
+
+    The page title used to default to the literal string "Dashboard", so any
+    template that forgot to set one silently claimed to be the dashboard --
+    which is how "Getting started" ended up titled Dashboard. Taking the
+    default from the menu means the worst a forgetful template can do is agree
+    with the link the person clicked.
+    """
+    target = active_item(endpoint)
+    for _group, items in SECTIONS:
+        for ep, _icon, label, _owner, _tabs in items:
+            if ep == target:
+                return label
+    return None
 
 
 def active_item(endpoint):
@@ -187,19 +364,21 @@ def active_item(endpoint):
     return None
 
 
-def tabs_for(endpoint, role='owner'):
+def tabs_for(endpoint, role=None, can=None):
     """(tabs, active_endpoint) for the page being viewed.
 
     Empty when the page's section has only one page in it — a lone tab is just
     the page title written twice.
     """
+    can = can or _always_allowed
     target = _resolve(endpoint)
     for _, items in SECTIONS:
         for ep, _icon, _label, _owner, tabs in items:
             if not tabs:
                 continue
             if target == ep or any(target == t[0] for t in tabs):
-                allowed = [{'endpoint': t[0], 'label': t[1]}
-                           for t in tabs if _is_owner(role) or not t[2]]
+                allowed = [{'endpoint': t[0], 'label': t[1],
+                            'locked': _locked(t[0], can)}
+                           for t in tabs if _role_can_open(t[0], role, t[2])]
                 return (allowed if len(allowed) > 1 else []), target
     return [], target

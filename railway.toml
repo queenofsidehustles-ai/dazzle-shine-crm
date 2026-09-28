@@ -1,3 +1,23 @@
+# DO NOT RELY ON THIS FILE. Railway has stopped applying it (see below), so
+# editing it is not a way to change production.
+#
+# The live settings for the capable-youthfulness service (www.akyehq.com and
+# every tenant subdomain) are held in the Railway dashboard:
+#   Service -> Settings -> Build  -> Builder:              Railpack
+#   Service -> Settings -> Deploy -> Custom Start Command:
+#       gunicorn 'app:create_app()' --bind 0.0.0.0:$PORT
+#   Service -> Settings -> Deploy -> Restart Policy:       On Failure, 10 retries
+# Change them there.
+#
+# Why: on 2026-09-24 Railway built this service with Railpack and ignored the
+# startCommand below. Railpack fell back to its default `main:app`; there is no
+# main.py, so gunicorn crash-looped and the site went down. Setting the start
+# command in the dashboard fixed it. Railway has deprecated these config files
+# ("Config as Code") and says they stop working entirely on 2026-12-01.
+#
+# The values below are kept only as a record of what the dashboard should
+# match. If they ever differ, the dashboard is right.
+
 [build]
 builder = "nixpacks"
 

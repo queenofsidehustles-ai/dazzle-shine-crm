@@ -6,11 +6,12 @@
   <title>Get a Price — {{ BIZ }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
     :root {
-      --gold:#d3a84f; --gold-deep:#b98a33; --gold-soft:rgba(211,168,79,0.12);
-      --purple:#1f1333; --purple-mid:#3b2b6b; --bg:#f6f5fb;
-      --white:#fff; --border:#e4dfef; --radius:14px;
+      --gold:var(--amber); --gold-deep:var(--amber-deep); --gold-soft:rgba(211,168,79,0.12);
+      --purple:var(--ink); --purple-mid:var(--ink-2); --bg:var(--ground);
+      --white:#fff; --border:var(--line); --radius:14px;
       --shadow:0 4px 24px rgba(15,7,40,0.1);
     }
     *{box-sizing:border-box;margin:0;padding:0}
@@ -36,12 +37,12 @@
     .svc-card:hover{border-color:var(--gold)}
     .svc-card.active{border-color:var(--gold);background:var(--gold-soft)}
     .svc-card strong{display:block;font-size:0.88rem;color:var(--purple);margin-bottom:4px}
-    .svc-card small{font-size:0.75rem;color:#9a95ad}
+    .svc-card small{font-size:0.75rem;color:var(--softer)}
     input[type=radio]{display:none}
 
     /* SELECTS */
     .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
-    label.field-label{display:block;font-size:0.8rem;font-weight:600;color:#5f5878;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.1em}
+    label.field-label{display:block;font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.1em}
     select,input[type=number]{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;
              font-family:"Inter",sans-serif;font-size:0.95rem;color:var(--purple);background:var(--white);
              appearance:none;-webkit-appearance:none}
@@ -156,7 +157,7 @@
     <div class="step">
       <div class="step-head">
         <div class="step-num">3</div>
-        <h3>Add-on services <span style="font-weight:400;font-size:0.88rem;color:#9a95ad">(optional)</span></h3>
+        <h3>Add-on services <span style="font-weight:400;font-size:0.88rem;color:var(--softer)">(optional)</span></h3>
       </div>
       <div class="step-body">
         <div class="extras-grid">
