@@ -8,6 +8,19 @@ import branding
 settings_bp = Blueprint('settings', __name__, url_prefix='/settings')
 
 
+def _stripe_key_mode(value):
+    """'live', 'test' or None from a raw key string — used to catch a secret
+    key and publishable key saved from different Stripe dashboard modes.
+    Neither prefix means the value is empty or not a recognisable Stripe key,
+    and is deliberately not treated as a mismatch on its own."""
+    value = value or ''
+    if value.startswith('sk_live') or value.startswith('pk_live'):
+        return 'live'
+    if value.startswith('sk_test') or value.startswith('pk_test'):
+        return 'test'
+    return None
+
+
 @settings_bp.route('/brand/<key>', methods=['POST'])
 @login_required
 def switch_brand(key):
@@ -79,7 +92,7 @@ def connections():
     CRM — and left them holding other people's payment credentials."""
     import integrations
     if request.method == 'POST':
-        saved = []
+        pending = {}
         for name, (_env, label, is_secret) in integrations.FIELDS.items():
             if name not in request.form:
                 continue
@@ -90,8 +103,30 @@ def connections():
             if is_secret and value and '…' in value:
                 continue
             if value or request.form.get(f'clear_{name}'):
-                integrations.set(name, value)
-                saved.append(label)
+                pending[name] = value
+
+        # A test-mode secret key and a live-mode publishable key (or the
+        # reverse) each save fine on their own — Stripe never sees both at
+        # once until a customer is mid-checkout, where the PaymentIntent
+        # created server-side with one key can't be confirmed in the browser
+        # with the other. That surfaces as a payment failure on a live
+        # deposit page, not as anything an owner would catch in Settings.
+        if 'stripe_secret_key' in pending or 'stripe_publishable_key' in pending:
+            next_secret = pending.get('stripe_secret_key', integrations.stripe_secret_key())
+            next_pk = pending.get('stripe_publishable_key', integrations.stripe_publishable_key())
+            secret_mode = _stripe_key_mode(next_secret)
+            pk_mode = _stripe_key_mode(next_pk)
+            if secret_mode and pk_mode and secret_mode != pk_mode:
+                flash(f'Not saved: the secret key is {secret_mode.upper()} mode but the '
+                      f'publishable key is {pk_mode.upper()} mode. Copy both keys from the '
+                      f'same Test/Live toggle in your Stripe dashboard — a mismatched pair '
+                      f'will let customers reach checkout and then fail to pay.', 'error')
+                return redirect(url_for('settings.connections'))
+
+        saved = []
+        for name, value in pending.items():
+            integrations.set(name, value)
+            saved.append(integrations.FIELDS[name][1])
         flash(f"Saved: {', '.join(saved)}." if saved else 'Nothing changed.', 'success')
         return redirect(url_for('settings.connections'))
 

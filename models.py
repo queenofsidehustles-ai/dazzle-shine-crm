@@ -138,6 +138,7 @@ class Booking(db.Model):
     # set and stay silent — including when it was the only one that would have
     # sent the receipt.
     deposit_notified_at = db.Column(db.DateTime)
+    deposit_method = db.Column(db.String(20))  # card, cash, zelle, venmo, check, other
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
     tip_amount = db.Column(Money, default=0)  # customer's tip — belongs to the cleaner, never revenue
     tip_payment_intent = db.Column(db.String(100))  # the Stripe charge, when tipped after the job
