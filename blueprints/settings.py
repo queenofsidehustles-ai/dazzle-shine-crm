@@ -569,12 +569,24 @@ def business():
     import branding as _b
     import customer_terms as _ct
     current_markets = _ct.markets()
+
+    # Only a company on Akye has a subscription to show. This business's own
+    # CRM (no BASE_DOMAIN, no control plane) is not on any plan at all, so the
+    # card that shows one has nowhere to send this page's other users.
+    import billing
+    org = billing.current_org()
+    subscription = None
+    if org is not None:
+        import entitlements
+        subscription = {'state': entitlements.state(), 'plans': entitlements.PLANS}
+
     return render_template('admin/settings_business.html', current=current,
                            default_agreement=_default_agreement(
                                _b.biz_name(), current['worker_model']),
                            us_states=_ct.US_STATES, us_state_names=_ct.US_STATE_NAMES,
                            current_markets=current_markets,
-                           market_notes={c: _ct.market_note(c) for c in current_markets})
+                           market_notes={c: _ct.market_note(c) for c in current_markets},
+                           subscription=subscription)
 
 
 # ── What has broken lately ──────────────────────────────────────────────────
