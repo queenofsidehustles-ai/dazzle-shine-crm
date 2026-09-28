@@ -66,14 +66,13 @@ jobs:
             secret: BACKUP_DATABASE_URL
           - key: akye
             label: Akye — every cleaning company on the platform
-            # Pinned to the launch-readiness candidate, not akye-stable, while
-            # Akye is in remediation: a scheduled run always resolves this
-            # workflow's own definition from main (checkout refs elsewhere in
-            # the job do not change that), so this is the only way the nightly
-            # drill exercises recovery fixes landing on the candidate branch
-            # before release. Point this back at akye-stable once the
-            # candidate branch ships or stops being the authoritative copy.
-            ref: akye-launch-readiness/cohort-30
+            # akye-stable is what production runs, so the restore check has to
+            # use its models. A scheduled run always takes this workflow from
+            # main, so this line is the only thing choosing that code. It was
+            # pinned to the akye-launch-readiness/cohort-30 remediation branch;
+            # once that fell behind production's schema, every nightly restore
+            # check failed (from 2026-09-25) and Akye's backups went unverified.
+            ref: akye-stable
             secret: BACKUP_AKYE_DATABASE_URL
 
     name: ${{ matrix.key }}
