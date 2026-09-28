@@ -597,8 +597,175 @@ def lead_contacted(lead_id):
         control_plane.log_console(engine, request.console_user['email'],
                                   'contacted', f'lead #{lead_id}')
     window = request.form.get('window')
-    return redirect(url_for('console.funnel_view', window=window)
-                    if window else url_for('console.funnel_view'))
+    if window:
+        return redirect(url_for('console.funnel_view', window=window))
+    return redirect(url_for('console.leads_view'))
+
+
+@console_bp.route('/leads')
+@console_required
+def leads_view():
+    """Every prospect the product knows about -- whether they asked for early
+    access themselves or somebody here uploaded them -- in one place to upload
+    more, invite them, or mark one as reached."""
+    engine = _engine()
+    rows = control_plane.all_leads(engine)
+    return render_template('console/leads.html', rows=rows,
+                           can_act=_may_operate(),
+                           me=request.console_user, counts=_counts(engine))
+
+
+# Matched case-insensitively against a CSV's header row. Extra columns in the
+# file are ignored rather than refused -- an export from a spreadsheet a
+# prospect list was built in almost always carries more than this needs.
+LEAD_CSV_COLUMNS = ('name', 'company', 'email', 'phone', 'cleaners', 'note')
+
+
+@console_bp.route('/leads/upload', methods=['POST'])
+@console_required
+def leads_upload():
+    """Add a list of prospects from a CSV, for outreach rather than something
+    they filled in themselves -- see product_leads.source below."""
+    if not _may_operate():
+        return _refuse(url_for('console.leads_view'))
+    engine = _engine()
+    file = request.files.get('file')
+    if not file or not file.filename:
+        flash('Choose a CSV file first.', 'error')
+        return redirect(url_for('console.leads_view'))
+
+    import csv
+    import io
+    try:
+        text = file.read().decode('utf-8-sig', errors='replace')
+    except Exception:
+        flash('Could not read that file as text.', 'error')
+        return redirect(url_for('console.leads_view'))
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        flash('That file has no header row.', 'error')
+        return redirect(url_for('console.leads_view'))
+    # Case-insensitive, so "Email" and "email" both find the column.
+    by_lower = {(h or '').strip().lower(): h for h in reader.fieldnames}
+
+    added = skipped = 0
+    for row in reader:
+        email = (row.get(by_lower.get('email', ''), '') or '').strip().lower()
+        if not email or '@' not in email:
+            skipped += 1
+            continue
+        fields = {col: (row.get(by_lower[col], '') or '').strip()
+                  for col in LEAD_CSV_COLUMNS if col in by_lower}
+        fields['email'] = email
+        fields['source'] = 'console upload'
+        if control_plane.add_lead(engine, **fields):
+            added += 1
+        else:
+            skipped += 1
+
+    control_plane.log_console(engine, request.console_user['email'],
+                              'uploaded', f'{added} lead(s)',
+                              f'{skipped} skipped' if skipped else None)
+    msg = f'Added {added} lead{"s" if added != 1 else ""}.'
+    if skipped:
+        msg += f' Skipped {skipped} row{"s" if skipped != 1 else ""} with no usable email.'
+    flash(msg, 'success' if added else 'warning')
+    return redirect(url_for('console.leads_view'))
+
+
+def _send_lead_invite(lead):
+    """Ask this prospect to try the product. Returns (ok, detail).
+
+    Sent as the product, never as any cleaning company -- see
+    trial_nudges._send for why that distinction matters here too. The link is
+    tagged so a signup through it is counted under its own channel on the
+    Funnel rather than folded into "direct" (see attribution.py)."""
+    to = (lead.get('email') or '').strip()
+    if not to:
+        return False, 'no email address on this lead'
+    import notifications
+    first = (lead.get('name') or '').split()[0] if lead.get('name') else ''
+    biz = (lead.get('company') or '').strip()
+    url = (f'{product.base_url()}/signup?utm_source=outreach'
+           f'&utm_medium=email&utm_campaign=lead_invite')
+    greeting = f'Hi {first},' if first else 'Hi,'
+    for_biz = f' for {biz}' if biz else ''
+    html = f'''
+<div style="font-family:-apple-system,Segoe UI,Inter,sans-serif;max-width:520px;
+            margin:0 auto;color:#16213a;line-height:1.55">
+  <p style="font-size:17px;margin:0 0 18px">{greeting}</p>
+  <p>We built {product.name()} to run a cleaning business{for_biz} end to
+  end -- scheduling, the team, quotes, hiring, and getting paid -- and
+  thought it was worth a look.</p>
+  <p>No card needed to try it.</p>
+  <p style="margin:26px 0">
+    <a href="{url}" style="background:#f0a44b;color:#16213a;text-decoration:none;
+       font-weight:600;padding:12px 22px;border-radius:8px;display:inline-block">
+      Try {product.name()} free &rarr;</a>
+  </p>
+  <p style="color:#7a8499;font-size:13px;margin-top:28px;border-top:1px solid #e6eaf2;
+            padding-top:14px">
+    {product.name()}<br>
+    Questions? Just reply to this email — a person reads it.
+  </p>
+</div>'''
+    return notifications.send_email(
+        to, lead.get('name') or '', f'Try {product.name()} free', html,
+        from_name=product.name(),
+        from_email=product.from_email() or None,
+        reply_to=product.support_email() or None,
+        api_key=product.resend_api_key() or None)
+
+
+@console_bp.route('/leads/<int:lead_id>/invite', methods=['POST'])
+@console_required
+def lead_invite(lead_id):
+    if not _may_operate():
+        return _refuse(url_for('console.leads_view'))
+    engine = _engine()
+    lead = next((l for l in control_plane.all_leads(engine)
+                if l['id'] == lead_id), None)
+    if not lead:
+        flash('That lead no longer exists.', 'error')
+        return redirect(url_for('console.leads_view'))
+    ok, detail = _send_lead_invite(lead)
+    if ok:
+        control_plane.mark_lead_invited(engine, lead_id)
+        control_plane.log_console(engine, request.console_user['email'],
+                                  'invited', lead.get('email') or f'lead #{lead_id}')
+        flash(f'Invited {lead.get("email")}.', 'success')
+    else:
+        flash(f'Could not send that invite: {detail}', 'error')
+    return redirect(url_for('console.leads_view'))
+
+
+@console_bp.route('/leads/invite-all', methods=['POST'])
+@console_required
+def lead_invite_all():
+    """Everybody on the list who has never been sent one, in one press --
+    uploading a list of a hundred prospects to click a hundred times is not a
+    feature."""
+    if not _may_operate():
+        return _refuse(url_for('console.leads_view'))
+    engine = _engine()
+    due = [l for l in control_plane.all_leads(engine) if not l.get('invited_at')]
+    sent = failed = 0
+    for lead in due:
+        ok, _detail = _send_lead_invite(lead)
+        if ok:
+            control_plane.mark_lead_invited(engine, lead['id'])
+            sent += 1
+        else:
+            failed += 1
+    control_plane.log_console(engine, request.console_user['email'],
+                              'invited', f'{sent} lead(s)',
+                              f'{failed} failed' if failed else None)
+    msg = f'Invited {sent} lead{"s" if sent != 1 else ""}.'
+    if failed:
+        msg += f' {failed} failed to send.'
+    flash(msg, 'success' if sent else 'warning')
+    return redirect(url_for('console.leads_view'))
 
 
 # What each level means, in the words somebody choosing would use.
@@ -964,7 +1131,8 @@ def log():
 
 def _counts(engine):
     return {'feedback': control_plane.unread_feedback(engine),
-            'support': control_plane.unanswered_support(engine)}
+            'support': control_plane.unanswered_support(engine),
+            'leads': control_plane.new_leads_count(engine)}
 
 
 # --------------------------------------------------------------------------
