@@ -39,6 +39,12 @@ Needs three things in the environment:
     AKYE_DATABASE_URL   the Akye database, to read the list of companies
     BASE_DOMAIN         akyehq.com — what a company's address is built from
     REMINDER_API_KEY    the key the endpoints check; the same one Railway has
+
+And optionally:
+
+    PRODUCT_HOST        where the product's own jobs are called. Defaults to
+                        www.<BASE_DOMAIN>: the bare akyehq.com is not the app
+                        and answers a POST with 405.
 """
 import argparse
 import json
@@ -114,13 +120,25 @@ def call(slug, job, base, key):
     return _post(f'https://{slug}.{base}/api/{job}', key)
 
 
+def product_host(base):
+    """The host the product's own site answers on.
+
+    Not the bare domain: akyehq.com is not the app -- a POST there gets
+    405 Method Not Allowed, which is how trial reminders silently never ran.
+    The product is served on www."""
+    explicit = (os.environ.get('PRODUCT_HOST') or '').strip().lower().strip('/')
+    if explicit:
+        return explicit
+    return base if base.startswith('www.') else f'www.{base}'
+
+
 def call_product(job, base, key):
     """Wake one product-wide job, once, on the product's own address.
 
     The reply is reduced to counts before it is printed: it lists owners'
     email addresses, and this output lands in a CI log.
     """
-    ok, detail = _post(f'https://{base}/api/{job}', key, raw=True)
+    ok, detail = _post(f'https://{product_host(base)}/api/{job}', key, raw=True)
     if not ok:
         return ok, detail
     try:
