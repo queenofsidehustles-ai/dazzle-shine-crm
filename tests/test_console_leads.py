@@ -109,6 +109,20 @@ with app.app_context():
     body = c.get('/console/leads').data.decode()
     check('555-0300' in body, 'the phone-only prospect is visible in New Leads')
 
+    print('\n3b. Re-uploading the same identities does not duplicate outreach')
+    dup_text = (
+        'Name,Company,Email,Phone,Cleaners,Note\n'
+        f'Email Duplicate,Elsewhere,ONE-{TAG}@EXAMPLE.COM,999-9999,,\n'
+        'Phone Duplicate,Elsewhere,,(555) 0300,,\n'
+    )
+    before_dup = len(control_plane.all_leads(engine))
+    r = c.post('/console/leads/upload',
+               data={'file': (io.BytesIO(dup_text.encode()), 'duplicates.csv')},
+               content_type='multipart/form-data', follow_redirects=True)
+    after_dup = len(control_plane.all_leads(engine))
+    check(after_dup == before_dup, 'duplicate email and normalized phone add no new rows')
+    check('Added 0 leads' in r.data.decode(), 'the upload reports that nothing new was added')
+
     print('\n4. A helper can see the list but cannot upload or invite')
     h = app.test_client()
     h.post('/console/login', data={'email': HELPER_EMAIL, 'password': CONSOLE_PASSWORD})
