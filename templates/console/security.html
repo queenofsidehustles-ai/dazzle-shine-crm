@@ -1,0 +1,51 @@
+{% extends "console/_shell.html" %}
+{% block title %}Security{% endblock %}
+{% block body %}
+<div style="max-width:560px">
+  <h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Two-factor sign-in</h2>
+  <p style="color:var(--muted);font-size:var(--t-sm);line-height:1.6;margin:0 0 var(--s4)">
+    The console can see every company, so signing in takes your password and a
+    six-digit code from an authenticator app on your phone (Google Authenticator,
+    1Password, Authy or similar).
+    {% if required %}It is required for every console login.{% endif %}
+  </p>
+
+  {% if backup_codes %}
+  <div class="flash success" style="margin-bottom:var(--s4)">
+    <strong>Save these backup codes now.</strong> Each one signs you in once if you
+    lose your phone. They will not be shown again.
+    <div style="font-family:ui-monospace,monospace;margin-top:var(--s2);columns:2">
+      {% for c in backup_codes %}<div>{{ c }}</div>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if secret %}
+  <ol style="font-size:var(--t-sm);line-height:1.7;padding-left:1.2em">
+    <li>On your phone, <a href="{{ otpauth_uri }}">open this in your authenticator app</a>,
+      or add an account by hand with this key:
+      <div style="font-family:ui-monospace,monospace;font-size:1rem;margin:var(--s2) 0">{{ secret }}</div></li>
+    <li>Type the six-digit code it shows:</li>
+  </ol>
+  <form method="post" action="{{ url_for('console.security_confirm') }}"
+        style="display:flex;gap:var(--s2);align-items:center">
+    <input type="text" name="code" required autofocus autocomplete="one-time-code"
+           inputmode="numeric" style="max-width:160px">
+    <button type="submit" class="btn btn-primary btn-sm">Turn it on</button>
+  </form>
+  {% elif me.totp_enabled %}
+  <p style="font-size:var(--t-sm)"><strong>On.</strong> You will be asked for a code each time you sign in.</p>
+  <form method="post" action="{{ url_for('console.security_disable') }}"
+        style="display:flex;gap:var(--s2);align-items:center;margin-top:var(--s4)">
+    <input type="password" name="password" required placeholder="Your password"
+           autocomplete="current-password" style="max-width:220px">
+    <button type="submit" class="btn btn-outline btn-sm">Turn off</button>
+  </form>
+  {% else %}
+  <p style="font-size:var(--t-sm)"><strong>Off.</strong></p>
+  <form method="post" action="{{ url_for('console.security_start') }}">
+    <button type="submit" class="btn btn-primary btn-sm">Set up two-factor</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

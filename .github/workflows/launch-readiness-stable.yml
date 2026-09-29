@@ -83,6 +83,11 @@ jobs:
         run: |
           python -m pytest -q tests/test_role_fail_closed.py tests/test_operational_role_matrix.py tests/test_session_invalidation.py tests/test_signup_provisioning_safety.py tests/test_forwarded_host_tenant_boundary.py --tb=short
 
+      - name: Security headers, console two-factor and signup limits
+        env:
+          TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/akye_launch_test
+        run: python tests/test_launch_security.py
+
       - name: Demo company is coherent, rebuilt in place, and sends nothing
         run: python -m pytest -q tests/test_demo_company.py --tb=short
 

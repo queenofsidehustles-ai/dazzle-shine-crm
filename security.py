@@ -424,6 +424,36 @@ def prune_login_attempts(days=30):
         return 0
 
 
+def _frameable():
+    """The one page other websites are meant to show in a frame: a company's
+    booking form, embedded with /embed.js as /book?embed=1."""
+    return (request.path == '/book'
+            and request.args.get('embed') in ('1', 'true', 'yes'))
+
+
+def apply_security_headers(response):
+    """Headers every response carries, unless a route already chose its own.
+
+    - HSTS: once a browser has seen the site over HTTPS it never tries plain
+      HTTP again, so a login cannot be downgraded on hostile wifi. Production
+      only, so a laptop on http://localhost is not pinned.
+    - No framing except the booking embed, so the login, payment and admin
+      pages cannot be laid invisibly over another site's buttons.
+    - No MIME sniffing, and only the origin (never the path, which can carry a
+      portal or unsubscribe token) in the Referer sent to other sites.
+    """
+    h = response.headers
+    h.setdefault('X-Content-Type-Options', 'nosniff')
+    h.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    if not _frameable():
+        h.setdefault('X-Frame-Options', 'SAMEORIGIN')
+        if 'Content-Security-Policy' not in h:
+            h['Content-Security-Policy'] = "frame-ancestors 'self'"
+    if _is_production() and request.is_secure:
+        h.setdefault('Strict-Transport-Security', 'max-age=31536000')
+    return response
+
+
 def install(app):
     validate_secret(app)
     harden_session(app)
@@ -434,3 +464,4 @@ def install(app):
     app.before_request(validate_twilio_webhook)
     app.before_request(check_request_origin)
     app.after_request(bind_created_booking_payment)
+    app.after_request(apply_security_headers)

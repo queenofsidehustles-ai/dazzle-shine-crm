@@ -55,6 +55,53 @@ signup_bp = Blueprint('signup', __name__)
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[a-z]{2,}$', re.I)
 
+# Every signup creates a whole schema for a company. Without limits, a script
+# could create thousands and take the database down for every real company.
+# Three companies a day from one address covers somebody setting up a second
+# business; the daily ceiling is a circuit breaker, raised with an env var.
+SIGNUPS_PER_ADDRESS_PER_DAY = 3
+DEFAULT_DAILY_SIGNUP_CAP = 50
+# A field people never see. Browsers leave it empty; form-filling bots do not.
+HONEYPOT_FIELD = 'website'
+
+
+def _daily_cap():
+    try:
+        return max(1, int(os.environ.get('SIGNUP_DAILY_CAP') or DEFAULT_DAILY_SIGNUP_CAP))
+    except ValueError:
+        return DEFAULT_DAILY_SIGNUP_CAP
+
+
+def _limits_apply():
+    """On for the live product; SIGNUP_LIMITS=1 or 0 overrides, so a laptop
+    or a test suite opening a dozen companies from 127.0.0.1 is not refused."""
+    raw = (os.environ.get('SIGNUP_LIMITS') or '').strip()
+    if raw in ('0', '1'):
+        return raw == '1'
+    import security
+    return security._is_production()
+
+
+def _refused(engine):
+    """Why this signup must not create anything right now, or None."""
+    from datetime import timedelta
+    import product
+    import security
+    if (request.form.get(HONEYPOT_FIELD) or '').strip():
+        return 'We could not create that account. Please try again.'
+    if not _limits_apply():
+        return None
+    since = datetime.utcnow() - timedelta(days=1)
+    if control_plane.signup_attempts_since(engine, security.client_ip(), since) \
+            >= SIGNUPS_PER_ADDRESS_PER_DAY:
+        return ('That is as many new companies as we can open from one place in '
+                'a day. Please try again tomorrow.')
+    if control_plane.orgs_created_since(engine, since) >= _daily_cap():
+        support = product.support_email()
+        return ('We have opened as many new accounts as we can today. Please try '
+                'again tomorrow' + (f', or email {support}.' if support else '.'))
+    return None
+
 
 class SlugTaken(Exception):
     """Raised when another signup wins the requested tenant address."""
@@ -179,6 +226,8 @@ def signup():
 
         try:
             error = _validate(form, slug, password, terms_accepted)
+            if not error:
+                error = _refused(_engine())
         except Exception as e:
             import errors
             try:
@@ -219,6 +268,8 @@ def signup():
                 error='We could not finish setting your account up. Please try '
                       'again. If it happens twice, tell us so we can investigate.')
 
+        import security
+        control_plane.record_signup_attempt(_engine(), security.client_ip())
         _tell_us(slug, form, base)
         scheme = 'http' if base.startswith('localhost') else 'https'
         # Where they came from is recorded on the company now; a second

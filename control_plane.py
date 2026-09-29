@@ -270,6 +270,12 @@ console_users = Table(
     # limited anything before.
     Column('failed', Integer, default=0),
     Column('locked_until', DateTime),
+    # Two-factor. A console login sees every company, so a password alone is
+    # one phished email away from all of them. Same authenticator-app codes
+    # and one-time backup codes as a company's own logins (totp.py).
+    Column('totp_secret', String(64)),
+    Column('totp_enabled', Boolean, default=False),
+    Column('totp_backup_codes', Text),
 )
 
 
@@ -320,6 +326,17 @@ login_lookup_requests = Table(
     Column('id', Integer, primary_key=True),
     Column('email', String(200), nullable=False, index=True),
     Column('created_at', DateTime, default=datetime.utcnow),
+)
+
+
+# One row per signup attempt, by address, purely to rate limit it. Every
+# signup creates a whole schema for a company; without a limit, a script could
+# create thousands of them and take the database down for every real company.
+signup_attempts = Table(
+    'signup_attempts', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('ip', String(45), nullable=False, index=True),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
 )
 
 
@@ -403,6 +420,7 @@ def ensure_columns(engine):
     grown a column since it was first deployed."""
     _ensure_table_columns(engine, organizations)
     _ensure_table_columns(engine, product_leads)
+    _ensure_table_columns(engine, console_users)
 
 
 def ensure_table(engine):
@@ -411,7 +429,7 @@ def ensure_table(engine):
         engine, tables=[organizations, product_leads, feedback,
                         console_users, support_requests, console_log,
                         tenant_logins, login_lookup_requests, console_docs,
-                        promo_codes, product_lead_messages])
+                        promo_codes, product_lead_messages, signup_attempts])
     ensure_columns(engine)
 
 
@@ -969,8 +987,11 @@ def check_console_login(engine, email, password):
     "No such account" and "wrong password" told apart is how somebody learns
     which addresses are real, and this list is small enough to be worth
     guessing at.
+
+    A right password on a login with two-factor switched on returns the user
+    too: the caller must still ask for the code (check_console_code) before
+    treating them as signed in.
     """
-    from datetime import timedelta
     from werkzeug.security import check_password_hash
     row = console_user(engine, email)
     if not row or not row.get('active'):
@@ -980,21 +1001,125 @@ def check_console_login(engine, email, password):
         return None, 'locked'
     if not row.get('password_hash') or not check_password_hash(
             row['password_hash'], password or ''):
-        failed = (row.get('failed') or 0) + 1
-        values = {'failed': failed}
-        if failed >= LOCK_AFTER:
-            values['locked_until'] = datetime.utcnow() + timedelta(minutes=LOCK_MINUTES)
-            values['failed'] = 0
-        with engine.begin() as conn:
-            conn.execute(update(console_users)
-                         .where(console_users.c.id == row['id']).values(**values))
-        return None, 'locked' if 'locked_until' in values else 'no'
+        return None, _console_login_failed(engine, row)
 
+    if row.get('totp_enabled'):
+        # Right password, second step still to come. Not a completed login,
+        # so neither the failure count nor last_login_at moves yet.
+        return row, None
+    _console_login_succeeded(engine, row)
+    return row, None
+
+
+def _console_login_failed(engine, row):
+    """Count a wrong password or code against the same lockout. 'locked' or 'no'."""
+    from datetime import timedelta
+    failed = (row.get('failed') or 0) + 1
+    values = {'failed': failed}
+    if failed >= LOCK_AFTER:
+        values['locked_until'] = datetime.utcnow() + timedelta(minutes=LOCK_MINUTES)
+        values['failed'] = 0
+    with engine.begin() as conn:
+        conn.execute(update(console_users)
+                     .where(console_users.c.id == row['id']).values(**values))
+    return 'locked' if 'locked_until' in values else 'no'
+
+
+def _console_login_succeeded(engine, row):
     with engine.begin() as conn:
         conn.execute(update(console_users).where(console_users.c.id == row['id'])
                      .values(failed=0, locked_until=None,
                              last_login_at=datetime.utcnow()))
-    return row, None
+
+
+def check_console_code(engine, email, code):
+    """Second step: a live authenticator code, or one unused backup code.
+    (user, why-not), with wrong codes counting toward the same lockout as
+    wrong passwords -- six digits are guessable in bulk otherwise."""
+    import totp
+    row = console_user(engine, email)
+    if not row or not row.get('active') or not row.get('totp_enabled'):
+        return None, 'no'
+    locked = row.get('locked_until')
+    if locked and locked > datetime.utcnow():
+        return None, 'locked'
+    code = (code or '').strip()
+    if totp.verify_totp(row.get('totp_secret') or '', code):
+        _console_login_succeeded(engine, row)
+        return row, None
+    remaining = totp.consume_backup_code(row.get('totp_backup_codes'), code)
+    if remaining is not None:
+        with engine.begin() as conn:
+            conn.execute(update(console_users).where(console_users.c.id == row['id'])
+                         .values(totp_backup_codes=remaining))
+        _console_login_succeeded(engine, row)
+        return row, None
+    return None, _console_login_failed(engine, row)
+
+
+def start_console_totp(engine, email):
+    """A fresh secret, saved but not switched on until a code proves it works."""
+    import totp
+    secret = totp.generate_secret()
+    with engine.begin() as conn:
+        conn.execute(update(console_users)
+                     .where(console_users.c.email == (email or '').strip().lower())
+                     .values(totp_secret=secret, totp_enabled=False))
+    return secret
+
+
+def enable_console_totp(engine, email, code):
+    """Switch two-factor on if `code` came from the saved secret. Returns the
+    backup codes -- shown once, only their hashes kept -- or None."""
+    import totp
+    row = console_user(engine, email)
+    if not row or not row.get('totp_secret') or not totp.verify_totp(row['totp_secret'], code):
+        return None
+    codes = totp.generate_backup_codes()
+    with engine.begin() as conn:
+        conn.execute(update(console_users).where(console_users.c.id == row['id'])
+                     .values(totp_enabled=True,
+                             totp_backup_codes=totp.hash_backup_codes(codes)))
+    return codes
+
+
+def disable_console_totp(engine, email):
+    with engine.begin() as conn:
+        conn.execute(update(console_users)
+                     .where(console_users.c.email == (email or '').strip().lower())
+                     .values(totp_secret=None, totp_enabled=False,
+                             totp_backup_codes=None))
+
+
+# --------------------------------------------------------------------------
+# Signup rate limits
+
+
+def record_signup_attempt(engine, ip):
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(signup_attempts).values(ip=(ip or 'unknown')[:45]))
+    except Exception:
+        pass
+
+
+def signup_attempts_since(engine, ip, since):
+    try:
+        with engine.connect() as conn:
+            return conn.execute(select(func.count()).select_from(signup_attempts).where(
+                signup_attempts.c.ip == (ip or 'unknown')[:45],
+                signup_attempts.c.created_at >= since)).scalar() or 0
+    except Exception:
+        return 0
+
+
+def orgs_created_since(engine, since):
+    try:
+        with engine.connect() as conn:
+            return conn.execute(select(func.count()).select_from(organizations).where(
+                organizations.c.created_at >= since)).scalar() or 0
+    except Exception:
+        return 0
 
 
 # --------------------------------------------------------------------------
