@@ -508,6 +508,16 @@ def create_promo_code(code, *, percent_off=None, amount_off_cents=None,
     (allow_promotion_codes), so a code made here works the moment this
     returns. Raises on anything Stripe refuses, with Stripe's own message.
     """
+    # Checkout skips collecting a card whenever $0 is due today (see
+    # checkout_session's payment_method_collection). A 100%-off code that
+    # ever stops applying -- 'once' or a fixed 'repeating' window -- would
+    # then renew at full price with no card to charge, so that combination
+    # is refused here regardless of which caller asked for it. Checked before
+    # anything Stripe-shaped, since it has nothing to do with whether Stripe
+    # is even configured.
+    if percent_off == 100 and duration != 'forever':
+        raise ValueError('A 100% discount can only be created with duration '
+                         '"forever" -- see checkout_session for why.')
     import stripe
     key = stripe_key()
     if not key:

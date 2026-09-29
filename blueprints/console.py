@@ -719,6 +719,15 @@ def _promo_form(form):
         duration = form.get('duration') or 'once'
         if duration not in ('once', 'repeating', 'forever'):
             return None, 'Pick how long the discount lasts.'
+        # A 100%-off code makes the checkout $0 due today, which is why
+        # checkout skips asking for a card at all (payment_method_collection
+        # is 'if_required' -- see billing.checkout_session). That is only
+        # safe for a code that stays 100% off forever: a temporary one lapses
+        # into a full-price renewal with no card on file to charge it to.
+        if out['percent_off'] == 100 and duration != 'forever':
+            return None, ('A 100% discount has to last forever -- a temporary '
+                          'one leaves nothing to charge once it ends, because '
+                          'no card was ever collected.')
         out['duration'] = duration
         if duration == 'repeating':
             months = int(form.get('months') or 0)
