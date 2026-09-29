@@ -50,6 +50,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+          # Full history and every branch: test_release.py runs release.py,
+          # which reads origin/stable and origin/main the way it does on a
+          # contributor's machine. A one-commit checkout has neither.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
