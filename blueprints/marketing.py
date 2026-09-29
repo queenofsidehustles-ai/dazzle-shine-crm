@@ -515,7 +515,8 @@ def early_access():
             saved = False
             try:
                 saved = control_plane.add_lead(
-                    provisioning._engine(), source=_lead_source(), **form)
+                    provisioning._engine(), count_repeat=True,
+                    source=_lead_source(), **form)
             except Exception:
                 saved = False
 

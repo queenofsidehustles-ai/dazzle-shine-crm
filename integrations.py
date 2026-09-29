@@ -79,22 +79,47 @@ _OUTBOUND = frozenset({'stripe_secret_key', 'stripe_publishable_key',
                        'google_places_api_key'})
 
 
+# A company's own payment keys. On hosted Akye these come only from that
+# company's own Settings -> Connections, never from the environment: a company
+# that has not connected Stripe would otherwise take its customers' payments --
+# and pay its cleaners -- through whatever account STRIPE_SECRET_KEY belongs
+# to. Not connected means not connected. Two companies sharing one Stripe
+# account is still possible, but only by each saving those keys itself, where
+# it is visible on its own Connections page -- never by an unseen fallback.
+_OWN_MONEY = frozenset({'stripe_secret_key', 'stripe_publishable_key',
+                        'stripe_webhook_secret'})
+
+
+def _env_allowed(name):
+    if name not in _OWN_MONEY:
+        return True
+    if not (os.environ.get('BASE_DOMAIN') or '').strip():
+        return True                      # single-business: the env IS the business
+    import tenancy
+    return not tenancy.is_tenant()
+
+
+def _env(name):
+    env_var = FIELDS.get(name, (None,))[0]
+    if not env_var or not _env_allowed(name):
+        return ''
+    return os.environ.get(env_var, '') or ''
+
+
 def get(name):
     """The key this CRM should actually use. Settings first, environment second."""
     if name in _OUTBOUND:
         import demo_guard
         if demo_guard.active():
             return ''
-    env_var = FIELDS.get(name, (None,))[0]
-    return _stored(name) or (os.environ.get(env_var, '') if env_var else '') or ''
+    return _stored(name) or _env(name) or ''
 
 
 def source(name):
     """Where the value in use came from — for showing the owner what's what."""
     if _stored(name):
         return 'settings'
-    env_var = FIELDS.get(name, (None,))[0]
-    if env_var and os.environ.get(env_var):
+    if _env(name):
         return 'environment'
     return None
 

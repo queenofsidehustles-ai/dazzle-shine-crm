@@ -123,7 +123,9 @@ with app.app_context():
     control_plane.add_console_user(engine, HELPER, 'Helper', PASSWORD, role='helper')
     control_plane.add_console_user(engine, MANAGER, 'Manager', PASSWORD, role='manager')
     for _ in range(2):
-        control_plane.add_lead(engine, name='=HYPERLINK("http://evil")', company='Lead Co',
+        # The early-access form counts somebody asking again (count_repeat).
+        control_plane.add_lead(engine, count_repeat=True,
+                               name='=HYPERLINK("http://evil")', company='Lead Co',
                                email=LEAD, source='direct')
     db.session.remove()
 

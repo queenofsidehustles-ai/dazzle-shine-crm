@@ -38,7 +38,12 @@ from datetime import datetime, timedelta
 
 import product
 
-MAX_BULK = 200
+# Per click, not per day. Each email or text is a call to Resend or Twilio
+# made inside the request, and the web worker gives a request 30-60 seconds:
+# 200 sends ran past that, so the worker was killed half way through and the
+# page errored for everybody. Fifty fits comfortably. Pressing send again picks
+# up the rest, because anyone just reached is skipped for 7 days.
+MAX_BULK = 50
 RECENT = timedelta(days=7)
 SMS_MAX_CHARS = 480            # three segments; past that it is not a text
 STOP_LINE = 'Reply STOP to opt out.'
@@ -271,16 +276,26 @@ def send_many(engine, leads, channel, subject, body_template, sent_by, now_utc=N
         if closed:
             out['skipped'][closed] = len(leads)
             return out
-    for lead in leads[:MAX_BULK]:
+    # The limit counts sends, not ticks: the people skipped (already reached
+    # this week, opted out) do not use it up, so pressing send again with the
+    # same leads ticked moves on to whoever is left.
+    attempted = 0
+    waiting = 0
+    for lead in leads:
         block = (email_block if channel == 'email' else sms_block)(lead, now, bulk=len(leads) > 1)
         if block:
             out['skipped'][block] = out['skipped'].get(block, 0) + 1
             continue
+        if attempted >= MAX_BULK:
+            waiting += 1
+            continue
+        attempted += 1
         if channel == 'email':
             ok, _ = send_email(engine, lead, subject, body_template, sent_by)
         else:
             ok, _ = send_text(engine, lead, body_template, sent_by, now_utc=now)
         out['sent' if ok else 'failed'] += 1
-    if len(leads) > MAX_BULK:
-        out['skipped'][f'over the {MAX_BULK}-per-send limit'] = len(leads) - MAX_BULK
+    if waiting:
+        out['skipped'][f'over the {MAX_BULK}-per-click limit -- press send again '
+                       f'for the rest'] = waiting
     return out
