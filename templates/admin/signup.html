@@ -8,6 +8,11 @@
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
   <form method="post" id="signup">
+    {# Hidden from people and screen readers; bots fill it in (signup.HONEYPOT_FIELD). #}
+    <div aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden">
+      <label for="website">Leave this empty</label>
+      <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" value="">
+    </div>
     <label for="business">Business name</label>
     <input id="business" name="business" required autofocus
            value="{{ form.business or '' }}" placeholder="Sparkle Cleaning Services" />
