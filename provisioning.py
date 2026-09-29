@@ -117,23 +117,28 @@ def migrate_all(quiet=False):
         return [], []
 
     moved, failed = [], []
-    for org in orgs:
-        slug = org.get('slug')
-        schema = tenancy.schema_for(slug) if slug else None
-        if not schema or not schema_exists(engine, schema):
-            continue
-        before = _schema_version(engine, schema)
-        try:
-            migrate_schema(engine, schema)
-        except Exception as e:
-            failed.append((slug, str(e)[:200]))
-            print(f'  ❌ {slug}: {e}')
-            continue
-        after = _schema_version(engine, schema)
-        if before != after:
-            moved.append((slug, before, after))
-            if not quiet:
-                print(f'  ✅ {slug}: {before} → {after}')
+    # Every gunicorn worker runs this at boot. Without the lock they would race
+    # on the same company's ALTER TABLE; with it, the first migrates and the
+    # rest find every company already up to date.
+    import migrate
+    with migrate._lock():
+        for org in orgs:
+            slug = org.get('slug')
+            schema = tenancy.schema_for(slug) if slug else None
+            if not schema or not schema_exists(engine, schema):
+                continue
+            before = _schema_version(engine, schema)
+            try:
+                migrate_schema(engine, schema)
+            except Exception as e:
+                failed.append((slug, str(e)[:200]))
+                print(f'  ❌ {slug}: {e}')
+                continue
+            after = _schema_version(engine, schema)
+            if before != after:
+                moved.append((slug, before, after))
+                if not quiet:
+                    print(f'  ✅ {slug}: {before} → {after}')
 
     if not quiet and not moved and not failed and orgs:
         print(f'  ✅ {len(orgs)} companies already up to date')

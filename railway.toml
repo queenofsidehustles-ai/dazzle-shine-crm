@@ -17,6 +17,10 @@
 #
 # The values below are kept only as a record of what the dashboard should
 # match. If they ever differ, the dashboard is right.
+#
+# Workers and timeout are NOT in the start command: gunicorn reads
+# gunicorn.conf.py from the working directory on its own (3 workers, 60s,
+# overridable with WEB_CONCURRENCY and GUNICORN_TIMEOUT).
 
 [build]
 builder = "nixpacks"

@@ -196,6 +196,13 @@ with app.app_context():
     db.session.remove()
 
     print('\n6-7. Job completion and payment')
+    # On hosted Akye a company takes payments only through the Stripe keys it
+    # saved on its own Connections page -- never the environment's. This
+    # company connects its (fake) Stripe the way a real one does.
+    with tenancy.use_tenant(tenancy.schema_for(SLUG_A)):
+        import integrations
+        integrations.set('stripe_secret_key', 'sk_test_fake')
+    db.session.remove()
     with tenancy.use_tenant(tenancy.schema_for(SLUG_A)):
         booking = Booking.query.get(booking_id)
         booking.price = 150.00
