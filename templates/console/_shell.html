@@ -67,6 +67,8 @@
        class="{{ 'on' if request.endpoint == 'console.log' }}">Record</a>
     <span class="right">
       {{ me.name or me.email }}
+      <a href="{{ url_for('console.security_view') }}"
+         class="{{ 'on' if request.endpoint and request.endpoint.startswith('console.security') }}">Security</a>
       <a href="{{ url_for('console.logout') }}">Sign out</a>
     </span>
   </div>

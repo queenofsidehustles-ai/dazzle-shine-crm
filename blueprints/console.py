@@ -20,6 +20,7 @@ except whoever owns the inbox.
 """
 import functools
 import html
+import os
 import re
 from datetime import datetime, timedelta
 
@@ -36,6 +37,24 @@ console_bp = Blueprint('console', __name__, url_prefix='/console')
 # The session key. Named apart from the CRM's own 'logged_in' so that being
 # signed into a cleaning company can never, by any mistake, be signed in here.
 SESSION_KEY = 'console_email'
+# Right password, code still owed. Never the same key as SESSION_KEY, so a
+# half-finished sign-in cannot open a single console page.
+PENDING_2FA_KEY = 'console_pending_2fa'
+# The pages somebody who must set up two-factor can still reach.
+_TWO_FACTOR_SETUP = frozenset({'console.security_view', 'console.security_start',
+                               'console.security_confirm', 'console.logout'})
+
+
+def two_factor_required():
+    """Every console login must use two-factor on the live product.
+
+    CONSOLE_REQUIRE_2FA=1 or 0 overrides; otherwise it is on in production and
+    off on a laptop, so local runs and the test suite do not need a phone."""
+    raw = (os.environ.get('CONSOLE_REQUIRE_2FA') or '').strip()
+    if raw in ('0', '1'):
+        return raw == '1'
+    import security
+    return security._is_production()
 
 
 def _engine():
@@ -55,6 +74,11 @@ def console_required(f):
             session.pop(SESSION_KEY, None)
             return redirect(url_for('console.login'))
         request.console_user = user
+        if (two_factor_required() and not user.get('totp_enabled')
+                and request.endpoint not in _TWO_FACTOR_SETUP):
+            flash('Set up two-factor sign-in before using the console. It sees '
+                  'every company, so a password alone is not enough.', 'error')
+            return redirect(url_for('console.security_view'))
         return f(*a, **kw)
     return wrapper
 
@@ -84,11 +108,18 @@ def login():
         email = (request.form.get('email') or '').strip()
         user, why = control_plane.check_console_login(
             engine, email, request.form.get('password') or '')
+        nxt = request.args.get('next') or ''
+        nxt = nxt if nxt.startswith('/console') else url_for('console.inbox')
+        if user and user.get('totp_enabled'):
+            session.pop(SESSION_KEY, None)
+            session[PENDING_2FA_KEY] = user['email']
+            session['console_next'] = nxt
+            return redirect(url_for('console.login_code'))
         if user:
+            session.pop(PENDING_2FA_KEY, None)
             session[SESSION_KEY] = user['email']
             control_plane.log_console(engine, user['email'], 'signed in')
-            nxt = request.args.get('next') or url_for('console.inbox')
-            return redirect(nxt if nxt.startswith('/console') else url_for('console.inbox'))
+            return redirect(nxt)
         # One message for both "no such account" and "wrong password". Telling
         # them apart is how somebody learns which addresses are real.
         flash('Too many tries — wait a few minutes.' if why == 'locked'
@@ -99,7 +130,101 @@ def login():
 @console_bp.route('/logout')
 def logout():
     session.pop(SESSION_KEY, None)
+    session.pop(PENDING_2FA_KEY, None)
     return redirect(url_for('console.login'))
+
+
+@console_bp.route('/login/code', methods=['GET', 'POST'])
+def login_code():
+    """The second step: a code from the authenticator app, or a backup code."""
+    email = session.get(PENDING_2FA_KEY)
+    if not email:
+        return redirect(url_for('console.login'))
+    if request.method == 'POST':
+        engine = _engine()
+        user, why = control_plane.check_console_code(
+            engine, email, request.form.get('code') or '')
+        if user:
+            session.pop(PENDING_2FA_KEY, None)
+            nxt = session.pop('console_next', None) or url_for('console.inbox')
+            session[SESSION_KEY] = user['email']
+            control_plane.log_console(engine, user['email'], 'signed in')
+            return redirect(nxt if nxt.startswith('/console') else url_for('console.inbox'))
+        if why == 'locked':
+            session.pop(PENDING_2FA_KEY, None)
+            flash('Too many tries — wait a few minutes.', 'error')
+            return redirect(url_for('console.login'))
+        flash('That code did not match. Try the newest one on your phone.', 'error')
+    return render_template('console/login_code.html')
+
+
+@console_bp.route('/security')
+@console_required
+def security_view():
+    return render_template('console/security.html', me=request.console_user,
+                           required=two_factor_required(), secret=None,
+                           otpauth_uri=None, backup_codes=None,
+                           counts=_counts(_engine()))
+
+
+@console_bp.route('/security/start', methods=['POST'])
+@console_required
+def security_start():
+    import totp
+    me = request.console_user
+    secret = control_plane.start_console_totp(_engine(), me['email'])
+    return render_template('console/security.html', me=dict(me, totp_enabled=False),
+                           required=two_factor_required(),
+                           secret=totp.format_secret(secret),
+                           otpauth_uri=totp.provisioning_uri(
+                               secret, me['email'], f'{product.name()} console'),
+                           backup_codes=None, counts=_counts(_engine()))
+
+
+@console_bp.route('/security/confirm', methods=['POST'])
+@console_required
+def security_confirm():
+    import totp
+    engine = _engine()
+    me = request.console_user
+    codes = control_plane.enable_console_totp(engine, me['email'],
+                                              request.form.get('code') or '')
+    if not codes:
+        flash('That code did not match. Check the time on your phone and try '
+              'the newest code.', 'error')
+        fresh = control_plane.console_user(engine, me['email']) or me
+        secret = fresh.get('totp_secret') or ''
+        return render_template('console/security.html', me=fresh,
+                               required=two_factor_required(),
+                               secret=totp.format_secret(secret) if secret else None,
+                               otpauth_uri=totp.provisioning_uri(
+                                   secret, me['email'], f'{product.name()} console')
+                               if secret else None,
+                               backup_codes=None, counts=_counts(engine))
+    control_plane.log_console(engine, me['email'], 'turned on two-factor')
+    flash('Two-factor sign-in is on.', 'success')
+    # The only time these are shown -- only their hashes are kept.
+    return render_template('console/security.html',
+                           me=control_plane.console_user(engine, me['email']),
+                           required=two_factor_required(), secret=None,
+                           otpauth_uri=None, backup_codes=codes,
+                           counts=_counts(engine))
+
+
+@console_bp.route('/security/disable', methods=['POST'])
+@console_required
+def security_disable():
+    from werkzeug.security import check_password_hash
+    engine = _engine()
+    me = request.console_user
+    if not check_password_hash(me.get('password_hash') or '',
+                               request.form.get('password') or ''):
+        flash('Your password was not correct.', 'error')
+        return redirect(url_for('console.security_view'))
+    control_plane.disable_console_totp(engine, me['email'])
+    control_plane.log_console(engine, me['email'], 'turned off two-factor')
+    flash('Two-factor sign-in is off.', 'success')
+    return redirect(url_for('console.security_view'))
 
 
 @console_bp.route('/', strict_slashes=False)
