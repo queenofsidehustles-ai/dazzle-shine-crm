@@ -1,6 +1,7 @@
 import json
 import os
 import secrets
+import contextvars
 import threading
 from datetime import datetime, date, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for, flash, jsonify,
@@ -2092,7 +2093,13 @@ def apply():
             a.interview_status = 'pending'
             db.session.commit()
             flask_app = current_app._get_current_object()
-            t = threading.Timer(600, _delayed_send_invite, args=[flask_app, a.id])
+            # Run inside a copy of this request's context. A new thread starts
+            # with none, so on Akye it would look for the application in no
+            # company at all -- the invite silently never went, and only the
+            # next day's applicant-followups sweep caught it. The copy carries
+            # the company along, so it goes in ten minutes as intended.
+            ctx = contextvars.copy_context()
+            t = threading.Timer(600, ctx.run, args=[_delayed_send_invite, flask_app, a.id])
             t.daemon = True
             t.start()
 
