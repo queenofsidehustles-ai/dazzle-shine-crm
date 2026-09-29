@@ -38,8 +38,20 @@ def main():
             failed.append(path.name)
             tail = '\n'.join(out.strip().splitlines()[-40:])
             print(f'::group::{path.name} output\n{tail}\n::endgroup::', flush=True)
-    print(f'\n{len(suites) - len(failed)}/{len(suites)} suites passed '
-          f'in {(time.time() - started) / 60:.0f} min')
+    summary = (f'{len(suites) - len(failed)}/{len(suites)} suites passed '
+               f'in {(time.time() - started) / 60:.0f} min')
+    print(f'\n{summary}')
+    # On GitHub Actions the database service's shutdown log follows this and
+    # buries it, so the result also goes where it is read: the job summary,
+    # and one annotation per failing suite on the check itself.
+    step_summary = os.environ.get('GITHUB_STEP_SUMMARY')
+    if step_summary:
+        with open(step_summary, 'a') as fh:
+            fh.write(f'### {summary}\n\n')
+            for name in failed:
+                fh.write(f'- ❌ `{name}`\n')
+    for name in failed:
+        print(f'::error title=Test suite failed::{name}')
     if failed:
         print('Failed: ' + ', '.join(failed))
         sys.exit(1)

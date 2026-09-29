@@ -119,10 +119,13 @@ def dedupe_leads(leads):
     seen = {}
     for lead in leads:                                  # arrive newest first
         key = (lead.get('email') or '').strip().lower() or f"id:{lead.get('id')}"
+        # A repeat ask is counted on the one row now (times_asked); older
+        # repeats are still separate rows. Both add up the same way.
+        asked = lead.get('times_asked') or 1
         if key in seen:
-            seen[key]['times'] += 1
+            seen[key]['times'] += asked
         else:
-            seen[key] = dict(lead, times=1)
+            seen[key] = dict(lead, times=asked)
     return list(seen.values())
 
 
