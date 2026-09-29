@@ -1,0 +1,21 @@
+{% extends "console/_shell.html" %}
+{% block title %}Sign in{% endblock %}
+{% block body %}
+<div style="max-width:360px;margin:12vh auto">
+  <h1 style="font-size:1.35rem;margin-bottom:var(--s2)">One more step</h1>
+  <p style="color:var(--muted);font-size:var(--t-sm);margin-bottom:var(--s5)">
+    Enter the six-digit code from your authenticator app, or one of your backup codes.
+  </p>
+  <form method="post">
+    <label style="display:block;margin-bottom:var(--s5)">
+      <span style="display:block;font-size:var(--t-xs);color:var(--softer);margin-bottom:4px">Code</span>
+      <input type="text" name="code" required autofocus autocomplete="one-time-code"
+             inputmode="numeric" style="width:100%">
+    </label>
+    <button type="submit" class="btn btn-primary" style="width:100%">Sign in</button>
+  </form>
+  <p style="margin-top:var(--s4);font-size:var(--t-xs)">
+    <a href="{{ url_for('console.logout') }}">Start again</a>
+  </p>
+</div>
+{% endblock %}
