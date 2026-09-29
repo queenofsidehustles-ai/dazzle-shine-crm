@@ -165,6 +165,11 @@ product_leads = Table(
     # somebody who asks twice is the warmest lead on the list.
     Column('times_asked', Integer),
     Column('last_asked_at', DateTime),
+    # Somebody here decided this number is not to be texted -- it is on the
+    # National Do Not Call list, say, or the list it came from was bought.
+    # Separate from sms_opted_out_at: that is the person's own STOP, which
+    # their START undoes; this is ours, and only the console undoes it.
+    Column('do_not_text_at', DateTime),
 )
 
 
@@ -661,7 +666,7 @@ def tenants_for_email(engine, email):
         return []
 
 
-def add_lead(engine, count_repeat=False, **fields):
+def add_lead(engine, count_repeat=False, do_not_text=False, **fields):
     """Record somebody who asked for early access. Never raises.
 
     A form that loses the person filling it in is worse than no form. If the
@@ -672,6 +677,10 @@ def add_lead(engine, count_repeat=False, **fields):
     on the list asked again and it was counted on their existing row. False
     for a duplicate that was skipped (an uploaded list repeating somebody) or
     a failed write.
+
+    do_not_text marks the row as not to be texted -- the existing one too, if
+    this is a duplicate, since an upload flagged "do not text" is usually the
+    same people again after checking them against the Do Not Call list.
     """
     allowed = {'name', 'company', 'email', 'phone', 'cleaners', 'note', 'source'}
     row = {k: (v or None) for k, v in fields.items() if k in allowed}
@@ -680,6 +689,8 @@ def add_lead(engine, count_repeat=False, **fields):
     if row.get('phone'):
         row['phone'] = row['phone'].strip()
     row['created_at'] = datetime.utcnow()
+    if do_not_text:
+        row['do_not_text_at'] = row['created_at']
     try:
         ensure_table(engine)
         # A CSV can be uploaded twice, or the same business can appear in two
@@ -704,6 +715,11 @@ def add_lead(engine, count_repeat=False, **fields):
                 existing = conn.execute(select(product_leads.c.id).where(
                     or_(*same)).order_by(product_leads.c.id).limit(1)).scalar()
                 if existing is not None:
+                    if do_not_text:
+                        conn.execute(update(product_leads).where(
+                            product_leads.c.id == existing,
+                            product_leads.c.do_not_text_at.is_(None))
+                            .values(do_not_text_at=row['created_at']))
                     if not count_repeat:
                         return False
                     conn.execute(update(product_leads)
@@ -799,6 +815,17 @@ def mark_leads_unsubscribed(engine, email):
             .where(func.lower(product_leads.c.email) == email,
                    product_leads.c.unsubscribed_at.is_(None))
             .values(unsubscribed_at=datetime.utcnow())).rowcount
+
+
+def set_lead_do_not_text(engine, lead_id, on=True):
+    """Mark one lead as not to be texted, or clear it. True if it changed."""
+    col = product_leads.c.do_not_text_at
+    with engine.begin() as conn:
+        return conn.execute(
+            update(product_leads)
+            .where(product_leads.c.id == lead_id,
+                   col.is_(None) if on else col.isnot(None))
+            .values(do_not_text_at=datetime.utcnow() if on else None)).rowcount > 0
 
 
 def set_leads_sms_opt_out(engine, phone, opted_out=True):

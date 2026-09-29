@@ -19,7 +19,8 @@ whoever presses the button:
   * Every email carries a one-click unsubscribe link and the company's postal
     address (CAN-SPAM). An unsubscribed address is never emailed again.
   * Every text says who it is from and how to stop ("Reply STOP to opt out").
-    A number that replied STOP is never texted again (see sms_inbound()).
+    A number that replied STOP is never texted again (see sms_inbound()), nor
+    is a lead the console marked "do not text" (on the Do Not Call list, say).
   * Texts only go out between 11am and 8pm Eastern -- 8am to 5pm Pacific -- so
     nobody in the continental US gets one before 8am or after 8pm.
   * A bulk send skips anyone reached on that channel in the last 7 days, and
@@ -153,6 +154,8 @@ def sms_block(lead, now=None, bulk=False):
         return 'no usable phone number'
     if lead.get('sms_opted_out_at'):
         return 'replied STOP'
+    if lead.get('do_not_text_at'):
+        return 'marked do not text'
     if bulk and lead.get('last_texted_at') and \
             lead['last_texted_at'] > (now or datetime.utcnow()) - RECENT:
         return 'texted in the last 7 days'
