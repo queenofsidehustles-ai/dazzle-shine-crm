@@ -779,7 +779,11 @@ def leads_view():
     more, invite them, or mark one as reached."""
     import lead_outreach as lo
     engine = _engine()
+    signup_emails = _signup_emails(engine)
     rows = control_plane.all_leads(engine)
+    for r in rows:
+        r['is_customer'] = bool(r.get('email')) and \
+            r['email'].strip().lower() in signup_emails
     email_subject, email_body = lo.default_email()
     return render_template('console/leads.html', rows=rows,
                            can_act=_may_operate(),
@@ -867,11 +871,16 @@ def leads_upload():
     # Case-insensitive, so "Email" and "email" both find the column.
     by_lower = {(h or '').strip().lower(): h for h in reader.fieldnames}
 
+    import notifications
     added = skipped = 0
     for row in reader:
         email = (row.get(by_lower.get('email', ''), '') or '').strip().lower()
         phone = (row.get(by_lower.get('phone', ''), '') or '').strip()
-        email_ok = bool(email and '@' in email and email.rsplit('@', 1)[-1])
+        # notifications.looks_like_email, not just "has an @": "person@example"
+        # passes a bare '@' check and then bounces at Resend. A lead is still
+        # contactable by phone with a bad email in the column, but an address
+        # good enough to store has to be good enough to actually send to.
+        email_ok = notifications.looks_like_email(email)
         # A prospect is contactable if either channel exists. Email is still
         # required for the email-invite action, but not for being a lead.
         if not email_ok and not phone:
@@ -896,6 +905,16 @@ def leads_upload():
                 f'with no usable email or phone.')
     flash(msg, 'success' if added else 'warning')
     return redirect(url_for('console.leads_view'))
+
+
+def _signup_emails(engine):
+    """Every real (non-test) company's owner email, lower-cased -- the same
+    set funnel.py uses to say a lead has already converted. A lead whose
+    address is already on this list has an account; inviting them to sign up
+    again is noise, not outreach."""
+    return {(o.get('owner_email') or '').strip().lower()
+            for o in control_plane.all_orgs(engine)
+            if o.get('owner_email') and not o.get('is_test')}
 
 
 def _send_lead_invite(lead, sent_by='console'):
@@ -923,13 +942,23 @@ def lead_invite(lead_id):
     if not lead:
         flash('That lead no longer exists.', 'error')
         return redirect(url_for('console.leads_view'))
+    if (lead.get('email') or '').strip().lower() in _signup_emails(engine):
+        flash(f'{lead.get("email")} already has an account -- not inviting '
+              f'them to sign up again.', 'warning')
+        return redirect(url_for('console.leads_view'))
+    # Claim before sending, not after: claiming after the email is already
+    # out cannot stop a second click (or a concurrent "invite all") from
+    # sending a second one while this request is still in flight.
+    if not control_plane.mark_lead_invited(engine, lead_id):
+        flash('Already invited.', 'warning')
+        return redirect(url_for('console.leads_view'))
     ok, detail = _send_lead_invite(lead, request.console_user['email'])
     if ok:
-        control_plane.mark_lead_invited(engine, lead_id)
         control_plane.log_console(engine, request.console_user['email'],
                                   'invited', lead.get('email') or f'lead #{lead_id}')
         flash(f'Invited {lead.get("email")}.', 'success')
     else:
+        control_plane.unmark_lead_invited(engine, lead_id)
         flash(f'Could not send that invite: {detail}', 'error')
     return redirect(url_for('console.leads_view'))
 
@@ -943,15 +972,22 @@ def lead_invite_all():
     if not _may_operate():
         return _refuse(url_for('console.leads_view'))
     engine = _engine()
+    signup_emails = _signup_emails(engine)
     due = [l for l in control_plane.all_leads(engine)
-           if not l.get('invited_at') and l.get('email') and not l.get('unsubscribed_at')]
+           if not l.get('invited_at') and l.get('email') and not l.get('unsubscribed_at')
+           and (l.get('email') or '').strip().lower() not in signup_emails]
     sent = failed = 0
     for lead in due:
+        # Claimed here, one row at a time, so a second "invite all" (or a
+        # single invite) running at the same moment skips whatever this one
+        # already claimed instead of sending it twice.
+        if not control_plane.mark_lead_invited(engine, lead['id']):
+            continue
         ok, _detail = _send_lead_invite(lead, request.console_user['email'])
         if ok:
-            control_plane.mark_lead_invited(engine, lead['id'])
             sent += 1
         else:
+            control_plane.unmark_lead_invited(engine, lead['id'])
             failed += 1
     control_plane.log_console(engine, request.console_user['email'],
                               'invited', f'{sent} lead(s)',
