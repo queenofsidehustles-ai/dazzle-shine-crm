@@ -726,17 +726,57 @@
       </form>
     </div>
 
-    {# Only worth asking about a job that hasn't happened. Inviting someone to
-       confirm a cleaning already done — or one they cancelled — is nonsense. #}
+    {# ── Send to customer ─────────────────────────────────────────────────
+       Eight ways to message a customer were spread across two cards: the
+       confirmation and the confirm-request and the payment link and the invoice
+       and the re-dated invoice and the receipts and a plain email, each its own
+       button in its own place, several of them buried under the money. Same
+       messages, same forms, one card — you pick what to send, and only that
+       one's controls are on screen. Receipts for money already taken stay on
+       the money card, where the figure they receipt is. #}
+    <div class="card" data-card-key="send-customer" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">✉️ Send to customer</h2>
+
+    {# Whether they have answered is a fact about the job, so it stays in
+       plain sight rather than behind the chooser below. #}
     {% if booking.status in ['pending', 'confirmed'] %}
-    <!-- Ask the customer to confirm -->
-    <div class="card" data-card-key="waiting-customer" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🤝 Waiting On The Customer</h2>
       {% if booking.confirm_response == 'yes' %}
         <p style="color:var(--good);font-size:0.9rem;margin:0">✅ They confirmed on {{ booking.confirm_responded_at.strftime('%d %B') }}.</p>
       {% elif booking.confirm_response == 'no' %}
         <p style="color:var(--amber-deep);font-size:0.9rem;margin:0">❌ They declined on {{ booking.confirm_responded_at.strftime('%d %B') }}. The job was cancelled.</p>
-      {% else %}
+      {% endif %}
+    {% endif %}
+
+      {# Warn, but do not take the controls away. An invoice raised against a
+         booking with no contact details is still a real invoice — send_invoice
+         says so itself ("share the link manually") — and hiding the chooser
+         here removed the only way to raise one. #}
+      {% if not booking.email and not booking.phone %}
+      <p style="font-size:0.85rem;color:var(--warn);font-weight:600;margin:10px 0 0">
+        ⚠️ No email or phone on this booking, so nothing can be delivered. An invoice
+        can still be raised here and its link shared by hand.</p>
+      {% endif %}
+      <div class="form-group" style="margin:12px 0 14px">
+        <label for="sendKind" style="font-size:0.82rem">What do you want to send?</label>
+        <select id="sendKind" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px">
+          {% if booking.status in ['pending', 'confirmed'] and booking.confirm_response not in ['yes', 'no'] %}
+          <option value="confirm-request">Ask them to confirm — with a Yes / No button</option>
+          {% endif %}
+          {% if not settled %}
+          <option value="confirmation">The booking confirmation</option>
+          <option value="payment-link">A payment request</option>
+          <option value="invoice">{{ 'The invoice — resend ' ~ booking.invoice_number if booking.invoice_number else 'An invoice' }}</option>
+          {% endif %}
+          <option value="freeform">Something in your own words</option>
+        </select>
+      </div>
+
+      {# Every panel is rendered. The script below hides all but the chosen one,
+         so with no JavaScript the page still shows every option rather than
+         none of them. #}
+    {% if booking.status in ['pending', 'confirmed'] %}
+      <div class="send-panel" data-kind="confirm-request">
+      {% if booking.confirm_response not in ['yes', 'no'] %}
         <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px">
           Gone quiet on you? Send them this date and price with a Yes/No button.
           Easier to answer than "are you still interested?" — and you hear back either way.
@@ -795,8 +835,82 @@
           </div>
         </form>
       {% endif %}
-    </div>
+
+      </div>
     {% endif %}
+
+      {% if not settled %}
+      <div class="send-panel" data-kind="confirmation">
+      {# The confirmation used to fire only at the moment a booking was created.
+         If it didn't go then, there was no way to send it at all. #}
+      <div style="background:var(--good-soft);border:1px solid var(--good-soft);border-radius:10px;padding:12px 13px;margin-top:12px">
+        <div style="font-weight:700;font-size:0.88rem;color:var(--good);margin-bottom:3px">📩 Send the booking confirmation</div>
+        <p style="font-size:0.79rem;color:var(--good);margin:0 0 9px">
+          The full details — service, date, time, address and price — by email and text.
+          Add a payment request to the same send if you want one.
+        </p>
+        <a href="{{ url_for('bookings.confirmation_preview', booking_id=booking.id) }}"
+           target="_blank" class="btn btn-outline"
+           style="width:100%;justify-content:center;margin-bottom:9px;background:#fff">👁 Preview the email &amp; text</a>
+        <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
+              style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+          <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--good-soft);border-radius:8px;margin:0">
+            <option value="none" selected>Confirmation only</option>
+            <option value="deposit">+ ask for the deposit</option>
+            <option value="full">+ ask for the full amount</option>
+          </select>
+          <button type="submit" class="btn btn-gold" style="flex-shrink:0">Send</button>
+        </form>
+        <p style="font-size:0.76rem;color:var(--good);margin:8px 0 0">
+          Set to <strong>Confirmation only</strong> — no money is requested unless you change it.
+        </p>
+        {% if not booking.email and not booking.phone %}
+        <p style="font-size:0.78rem;color:var(--warn);margin:8px 0 0">⚠️ This booking has no email or phone — nothing can be sent.</p>
+        {% endif %}
+      </div>      </div>
+      <div class="send-panel" data-kind="payment-link">
+
+      <form method="POST" action="{{ url_for('bookings.send_payment_link_route', booking_id=booking.id) }}" style="margin-top:10px">
+        <input type="hidden" name="kind" value="full">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📩 Email + text this payment link</button>
+      </form>
+      </div>
+      <div class="send-panel" data-kind="invoice">
+      <!-- Real invoice -->
+      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}" style="margin-top:10px">
+        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">🧾 {{ 'Resend invoice ' + booking.invoice_number if booking.invoice_number else 'Send invoice' }}</button>
+      </form>
+      {% if booking.invoice_number %}
+      <p style="text-align:center;font-size:0.78rem;color:var(--softer);margin-top:6px">
+        Invoice <strong>{{ booking.invoice_number }}</strong>{% if booking.invoice_due_date %} · due {{ booking.invoice_due_date }}{% endif %} ·
+        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:var(--amber-deep)">view →</a>
+      </p>
+      {# An invoice already issued keeps its dates. Re-dating one the customer
+         already has is deliberate, never a side effect of resending. #}
+      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}"
+            onsubmit="return confirm('Re-date this invoice to today and resend it? The customer will see the new due date.')"
+            style="margin-top:6px">
+        <input type="hidden" name="reissue_dates" value="1">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:6px;font-size:0.78rem">
+          🗓️ Re-date to today &amp; resend
+        </button>
+      </form>
+      {% elif booking.pay_token %}
+      <p style="text-align:center;font-size:0.78rem;color:var(--softer);margin-top:6px">
+        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:var(--amber-deep)">
+          Preview invoice →</a> — nothing is sent to the customer
+      </p>
+      {% endif %}      </div>
+      {% endif %}
+
+      <div class="send-panel" data-kind="freeform">
+      <a href="{{ url_for('bookings.email_customer', booking_id=booking.id) }}"
+         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">✉️ Email the customer</a>
+        <p style="font-size:0.78rem;color:var(--softer);margin:6px 0 0">
+          Opens a page where you write the message yourself.</p>
+      </div>
+    </div>
+
 
     {% if plan_suggestion %}
     <!-- Recurring cleaning after a one-off job -->
@@ -1146,68 +1260,8 @@
                 class="btn btn-outline" style="padding:6px 12px;font-size:0.75rem;flex-shrink:0">Copy</button>
       </div>
 
-      <form method="POST" action="{{ url_for('bookings.send_payment_link_route', booking_id=booking.id) }}" style="margin-top:10px">
-        <input type="hidden" name="kind" value="full">
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📩 Email + text this payment link</button>
-      </form>
-
-      {# The confirmation used to fire only at the moment a booking was created.
-         If it didn't go then, there was no way to send it at all. #}
-      <div style="background:var(--good-soft);border:1px solid var(--good-soft);border-radius:10px;padding:12px 13px;margin-top:12px">
-        <div style="font-weight:700;font-size:0.88rem;color:var(--good);margin-bottom:3px">📩 Send the booking confirmation</div>
-        <p style="font-size:0.79rem;color:var(--good);margin:0 0 9px">
-          The full details — service, date, time, address and price — by email and text.
-          Add a payment request to the same send if you want one.
-        </p>
-        <a href="{{ url_for('bookings.confirmation_preview', booking_id=booking.id) }}"
-           target="_blank" class="btn btn-outline"
-           style="width:100%;justify-content:center;margin-bottom:9px;background:#fff">👁 Preview the email &amp; text</a>
-        <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
-              style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
-          <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--good-soft);border-radius:8px;margin:0">
-            <option value="none" selected>Confirmation only</option>
-            <option value="deposit">+ ask for the deposit</option>
-            <option value="full">+ ask for the full amount</option>
-          </select>
-          <button type="submit" class="btn btn-gold" style="flex-shrink:0">Send</button>
-        </form>
-        <p style="font-size:0.76rem;color:var(--good);margin:8px 0 0">
-          Set to <strong>Confirmation only</strong> — no money is requested unless you change it.
-        </p>
-        {% if not booking.email and not booking.phone %}
-        <p style="font-size:0.78rem;color:var(--warn);margin:8px 0 0">⚠️ This booking has no email or phone — nothing can be sent.</p>
-        {% endif %}
-      </div>
-
-      <!-- Real invoice -->
-      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}" style="margin-top:10px">
-        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">🧾 {{ 'Resend invoice ' + booking.invoice_number if booking.invoice_number else 'Send invoice' }}</button>
-      </form>
-      {% if booking.invoice_number %}
-      <p style="text-align:center;font-size:0.78rem;color:var(--softer);margin-top:6px">
-        Invoice <strong>{{ booking.invoice_number }}</strong>{% if booking.invoice_due_date %} · due {{ booking.invoice_due_date }}{% endif %} ·
-        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:var(--amber-deep)">view →</a>
-      </p>
-      {# An invoice already issued keeps its dates. Re-dating one the customer
-         already has is deliberate, never a side effect of resending. #}
-      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}"
-            onsubmit="return confirm('Re-date this invoice to today and resend it? The customer will see the new due date.')"
-            style="margin-top:6px">
-        <input type="hidden" name="reissue_dates" value="1">
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:6px;font-size:0.78rem">
-          🗓️ Re-date to today &amp; resend
-        </button>
-      </form>
-      {% elif booking.pay_token %}
-      <p style="text-align:center;font-size:0.78rem;color:var(--softer);margin-top:6px">
-        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:var(--amber-deep)">
-          Preview invoice →</a> — nothing is sent to the customer
-      </p>
-      {% endif %}
 
 
-      <a href="{{ url_for('bookings.email_customer', booking_id=booking.id) }}"
-         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">✉️ Email the customer</a>
 
 
       <!-- Mark as paid manually (cash / Zelle / etc.) -->
@@ -1367,6 +1421,20 @@
   form.addEventListener('change', quote);
   form.addEventListener('input', quote);
   quote();
+})();
+
+// One card, one message at a time. Every panel is in the HTML, so a page with
+// no JavaScript shows all of them rather than none — the old behaviour, just
+// unsorted. The chooser then narrows it to the one she picked.
+(function () {
+  const sel = document.getElementById('sendKind');
+  if (!sel) return;
+  const panels = document.querySelectorAll('.send-panel');
+  function show() {
+    panels.forEach(p => { p.style.display = p.dataset.kind === sel.value ? '' : 'none'; });
+  }
+  sel.addEventListener('change', show);
+  show();
 })();
 
 // Live pay breakdown as you edit the total / lead fee. Ends at what she keeps
