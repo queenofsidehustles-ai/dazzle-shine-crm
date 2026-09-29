@@ -79,22 +79,52 @@ _OUTBOUND = frozenset({'stripe_secret_key', 'stripe_publishable_key',
                        'google_places_api_key'})
 
 
+# A company's own payment keys. On hosted Akye these never fall back to the
+# environment: STRIPE_SECRET_KEY there belongs to whoever set it, and a company
+# that has not connected Stripe would otherwise take its customers' payments --
+# and pay its cleaners -- through that account. Not connected means not
+# connected. STRIPE_ENV_FALLBACK_TENANTS names the companies (by address, comma
+# separated) that do use the environment keys, for a business moved onto Akye
+# whose key was only ever in the environment.
+_OWN_MONEY = frozenset({'stripe_secret_key', 'stripe_publishable_key',
+                        'stripe_webhook_secret'})
+
+
+def _env_allowed(name):
+    if name not in _OWN_MONEY:
+        return True
+    if not (os.environ.get('BASE_DOMAIN') or '').strip():
+        return True                      # single-business: the env IS the business
+    import tenancy
+    if not tenancy.is_tenant():
+        return True
+    allowed = {tenancy.schema_for(slug.strip().lower())
+               for slug in (os.environ.get('STRIPE_ENV_FALLBACK_TENANTS') or '').split(',')
+               if slug.strip()}
+    return tenancy.current_schema() in allowed
+
+
+def _env(name):
+    env_var = FIELDS.get(name, (None,))[0]
+    if not env_var or not _env_allowed(name):
+        return ''
+    return os.environ.get(env_var, '') or ''
+
+
 def get(name):
     """The key this CRM should actually use. Settings first, environment second."""
     if name in _OUTBOUND:
         import demo_guard
         if demo_guard.active():
             return ''
-    env_var = FIELDS.get(name, (None,))[0]
-    return _stored(name) or (os.environ.get(env_var, '') if env_var else '') or ''
+    return _stored(name) or _env(name) or ''
 
 
 def source(name):
     """Where the value in use came from — for showing the owner what's what."""
     if _stored(name):
         return 'settings'
-    env_var = FIELDS.get(name, (None,))[0]
-    if env_var and os.environ.get(env_var):
+    if _env(name):
         return 'environment'
     return None
 

@@ -312,6 +312,10 @@ def test_keys_are_blank_for_the_demo_and_only_the_demo(env):
     import tenancy
     with env['app'].app_context():
         demo_guard.forget_cache()
+        # Both named as allowed to use the environment's Stripe keys, so that
+        # it is the demo guard -- not the hosted-Akye fallback rule -- that
+        # blanks the demo's.
+        os.environ['STRIPE_ENV_FALLBACK_TENANTS'] = f'{REAL},brightnest'
         with tenancy.use_tenant(REAL):
             # The control: the next-door company does reach the environment's
             # keys, so it is the guard -- not a missing key -- that stops the demo.
@@ -323,6 +327,7 @@ def test_keys_are_blank_for_the_demo_and_only_the_demo(env):
                 assert integrations.get(name) == '', name
         with demo_guard.forced():
             assert integrations.stripe_secret_key() == ''
+        os.environ.pop('STRIPE_ENV_FALLBACK_TENANTS', None)
 
 
 def test_sends_are_refused_and_written_to_the_sent_log(env):

@@ -593,6 +593,51 @@ saved.
 
 ---
 
+## Step 13 — Payments belong to each company
+
+On hosted Akye a company only takes payments through **its own** Stripe keys,
+entered in its Settings → Connections. The `STRIPE_SECRET_KEY`,
+`STRIPE_PUBLISHABLE_KEY` and `STRIPE_WEBHOOK_SECRET` variables in Railway are
+no longer a silent fallback for every company. They belonged to whoever set
+them, and a company that never connected Stripe would have taken its customers'
+money, and paid its cleaners, through that account.
+
+**Before this release goes out:**
+
+1. Sign in to each live company, go to **Settings → Connections**, and look at
+   Stripe. If it says *Currently coming from your hosting settings*, that
+   company is using the Railway key today.
+2. For each such company, either paste its own Stripe keys into that page
+   (best), or add its address to this Railway variable, comma separated:
+
+   | Variable | Set it to |
+   |---|---|
+   | `STRIPE_ENV_FALLBACK_TENANTS` | e.g. `dazzleandshine` |
+
+3. After the release, open that company's booking page and check the payment
+   form still loads.
+
+Your own Akye subscription billing is untouched: it uses
+`STRIPE_PLATFORM_SECRET_KEY`, not these.
+
+**✅ Done when:** no company that takes payments shows Stripe as not connected.
+
+---
+
+## Other settings this release adds
+
+All optional. The defaults are what you want on the live product.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `WEB_CONCURRENCY` | `3` | Web workers (see `gunicorn.conf.py`). Raise once memory shows room. |
+| `GUNICORN_TIMEOUT` | `60` | Seconds before a request is cut off. |
+| `CONSOLE_REQUIRE_2FA` | on in production | `0` lets console logins skip two-factor. Leave it on. |
+| `SIGNUP_LIMITS` | on in production | `0` turns off the per-address and daily signup limits. |
+| `SIGNUP_DAILY_CAP` | `50` | Most new companies opened in 24 hours. |
+
+---
+
 ## When you are done
 
 Tell me which step you finished and anything that did not match what I said.

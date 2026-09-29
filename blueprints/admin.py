@@ -57,6 +57,20 @@ def version():
                 out.setdefault('problem', mail['problem'])
     except Exception:
         pass
+
+    # Whether the database schema matches this build. A migration that fails
+    # at boot does not stop the app (migrate.run_at_boot), so without this a
+    # half-applied deploy looks exactly like a healthy one from outside.
+    try:
+        import migrate
+        _has, current, head = migrate.inspect_db()
+        out['migrations'] = 'ok' if current == head else 'behind'
+        if current != head:
+            out.setdefault('problem', 'The database is not on this build\'s schema: '
+                                      'the startup migration did not finish. See the '
+                                      'deploy log for "MIGRATION DID NOT RUN".')
+    except Exception:
+        out['migrations'] = 'unknown'
     return out
 
 

@@ -160,6 +160,11 @@ product_leads = Table(
     Column('last_texted_at', DateTime),
     Column('unsubscribed_at', DateTime),
     Column('sms_opted_out_at', DateTime),
+    # How many times they have asked for early access. One row per person, so
+    # nobody is emailed twice; asking again is counted here instead, because
+    # somebody who asks twice is the warmest lead on the list.
+    Column('times_asked', Integer),
+    Column('last_asked_at', DateTime),
 )
 
 
@@ -638,12 +643,17 @@ def tenants_for_email(engine, email):
         return []
 
 
-def add_lead(engine, **fields):
+def add_lead(engine, count_repeat=False, **fields):
     """Record somebody who asked for early access. Never raises.
 
     A form that loses the person filling it in is worse than no form. If the
     table is missing or the write fails, the caller still emails the details
     on, so the lead reaches a human either way.
+
+    True when a row was added -- or, with count_repeat, when somebody already
+    on the list asked again and it was counted on their existing row. False
+    for a duplicate that was skipped (an uploaded list repeating somebody) or
+    a failed write.
     """
     allowed = {'name', 'company', 'email', 'phone', 'cleaners', 'note', 'source'}
     row = {k: (v or None) for k, v in fields.items() if k in allowed}
@@ -662,16 +672,28 @@ def add_lead(engine, **fields):
         phone_digits = ''.join(ch for ch in (row.get('phone') or '') if ch.isdigit())
         with engine.begin() as conn:
             if email or phone_digits:
-                existing = conn.execute(
-                    select(product_leads.c.email, product_leads.c.phone)
-                ).all()
-                for old_email, old_phone in existing:
-                    same_email = bool(email and old_email and
-                                      old_email.strip().lower() == email)
-                    old_digits = ''.join(ch for ch in (old_phone or '') if ch.isdigit())
-                    same_phone = bool(phone_digits and old_digits == phone_digits)
-                    if same_email or same_phone:
+                # Asked of the database, not by reading every lead into Python
+                # for every row: an upload of a few thousand against a long
+                # list did that thousands of times over and ran out of time.
+                same = []
+                if email:
+                    same.append(func.lower(func.trim(product_leads.c.email)) == email)
+                if phone_digits:
+                    same.append(func.regexp_replace(
+                        func.coalesce(product_leads.c.phone, ''), '[^0-9]', '', 'g')
+                        == phone_digits)
+                from sqlalchemy import or_
+                existing = conn.execute(select(product_leads.c.id).where(
+                    or_(*same)).order_by(product_leads.c.id).limit(1)).scalar()
+                if existing is not None:
+                    if not count_repeat:
                         return False
+                    conn.execute(update(product_leads)
+                                 .where(product_leads.c.id == existing)
+                                 .values(times_asked=func.coalesce(
+                                             product_leads.c.times_asked, 1) + 1,
+                                         last_asked_at=row['created_at']))
+                    return True
             conn.execute(insert(product_leads).values(**row))
         return True
     except Exception:
