@@ -79,13 +79,13 @@ _OUTBOUND = frozenset({'stripe_secret_key', 'stripe_publishable_key',
                        'google_places_api_key'})
 
 
-# A company's own payment keys. On hosted Akye these never fall back to the
-# environment: STRIPE_SECRET_KEY there belongs to whoever set it, and a company
+# A company's own payment keys. On hosted Akye these come only from that
+# company's own Settings -> Connections, never from the environment: a company
 # that has not connected Stripe would otherwise take its customers' payments --
-# and pay its cleaners -- through that account. Not connected means not
-# connected. STRIPE_ENV_FALLBACK_TENANTS names the companies (by address, comma
-# separated) that do use the environment keys, for a business moved onto Akye
-# whose key was only ever in the environment.
+# and pay its cleaners -- through whatever account STRIPE_SECRET_KEY belongs
+# to. Not connected means not connected. Two companies sharing one Stripe
+# account is still possible, but only by each saving those keys itself, where
+# it is visible on its own Connections page -- never by an unseen fallback.
 _OWN_MONEY = frozenset({'stripe_secret_key', 'stripe_publishable_key',
                         'stripe_webhook_secret'})
 
@@ -96,12 +96,7 @@ def _env_allowed(name):
     if not (os.environ.get('BASE_DOMAIN') or '').strip():
         return True                      # single-business: the env IS the business
     import tenancy
-    if not tenancy.is_tenant():
-        return True
-    allowed = {tenancy.schema_for(slug.strip().lower())
-               for slug in (os.environ.get('STRIPE_ENV_FALLBACK_TENANTS') or '').split(',')
-               if slug.strip()}
-    return tenancy.current_schema() in allowed
+    return not tenancy.is_tenant()
 
 
 def _env(name):

@@ -27,7 +27,6 @@ os.environ['PRODUCT_LEGAL_ADDRESS'] = '1 Test Street\nOrlando, FL 32801'
 os.environ['STRIPE_SECRET_KEY'] = 'sk_test_PLATFORM_ENV'
 os.environ['STRIPE_PUBLISHABLE_KEY'] = 'pk_test_PLATFORM_ENV'
 os.environ['STRIPE_WEBHOOK_SECRET'] = 'whsec_PLATFORM_ENV'
-os.environ.pop('STRIPE_ENV_FALLBACK_TENANTS', None)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import notifications
@@ -70,19 +69,32 @@ with app.app_context():
               'the secret key reads as not connected, not as the environment\'s')
         check(integrations.stripe_publishable_key() == '' and integrations.get('stripe_webhook_secret') == '',
               'and so do the publishable key and webhook secret')
-    os.environ['STRIPE_ENV_FALLBACK_TENANTS'] = f' {B.upper()} , someone-else'
+    # The allowlist an earlier draft had is gone: naming a company in the old
+    # variable, left behind in Railway, must not bring the fallback back.
+    os.environ['STRIPE_ENV_FALLBACK_TENANTS'] = f'{A},{B}'
     with tenancy.use_tenant(B):
-        check(integrations.stripe_secret_key() == 'sk_test_PLATFORM_ENV'
-              and integrations.source('stripe_secret_key') == 'environment',
-              'a company named in STRIPE_ENV_FALLBACK_TENANTS does use them')
-    with tenancy.use_tenant(A):
-        check(integrations.stripe_secret_key() == '', 'and naming one company does not open it to the others')
-        integrations.set('stripe_secret_key', 'sk_test_OWN_KEY')
-        check(integrations.stripe_secret_key() == 'sk_test_OWN_KEY'
-              and integrations.source('stripe_secret_key') == 'settings',
-              'a company\'s own saved key is used')
-        integrations.set('stripe_secret_key', '')
+        check(integrations.stripe_secret_key() == '',
+              'no setting brings the environment\'s keys back for any company')
     os.environ.pop('STRIPE_ENV_FALLBACK_TENANTS', None)
+    # Sharing one Stripe account (Akye and Dazzle & Shine) is done in the open:
+    # each company saves the same keys on its own Connections page.
+    SHARED = 'sk_test_SHARED_ACCOUNT'
+    for slug in (A, B):
+        with tenancy.use_tenant(slug):
+            integrations.set('stripe_secret_key', SHARED)
+    for slug in (A, B):
+        with tenancy.use_tenant(slug):
+            check(integrations.stripe_secret_key() == SHARED
+                  and integrations.source('stripe_secret_key') == 'settings',
+                  f'a company that saved the shared keys uses them ({slug[:4]})')
+    with tenancy.use_tenant(B):
+        integrations.set('stripe_secret_key', '')
+        check(integrations.stripe_secret_key() == '',
+              'clearing them reads as not connected again, not as the environment\'s')
+    with tenancy.use_tenant(A):
+        check(integrations.stripe_secret_key() == SHARED,
+              'and does not touch the other company\'s saved keys')
+        integrations.set('stripe_secret_key', '')
     with tenancy.use_tenant(A):
         os.environ['TWILIO_ACCOUNT_SID'] = 'AC_PLATFORM'
         check(integrations.twilio_account_sid() == 'AC_PLATFORM',

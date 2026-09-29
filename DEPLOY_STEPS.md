@@ -595,32 +595,38 @@ saved.
 
 ## Step 13 — Payments belong to each company
 
-On hosted Akye a company only takes payments through **its own** Stripe keys,
-entered in its Settings → Connections. The `STRIPE_SECRET_KEY`,
-`STRIPE_PUBLISHABLE_KEY` and `STRIPE_WEBHOOK_SECRET` variables in Railway are
-no longer a silent fallback for every company. They belonged to whoever set
-them, and a company that never connected Stripe would have taken its customers'
-money, and paid its cleaners, through that account.
+On hosted Akye a company takes payments **only** through the Stripe keys saved
+on its own **Settings → Connections** page. There is no fallback of any kind:
+the `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` and `STRIPE_WEBHOOK_SECRET`
+variables in Railway are never used for a company. A company that has not
+saved keys shows Stripe as not connected, rather than quietly taking its
+customers' money, and paying its cleaners, through somebody else's account.
+
+Akye and Dazzle & Shine share one Stripe account. That stays true, but in the
+open: Dazzle & Shine has that account's keys saved on its own Connections page,
+where anybody looking can see which account it uses.
 
 **Before this release goes out:**
 
-1. Sign in to each live company, go to **Settings → Connections**, and look at
-   Stripe. If it says *Currently coming from your hosting settings*, that
-   company is using the Railway key today.
-2. For each such company, either paste its own Stripe keys into that page
-   (best), or add its address to this Railway variable, comma separated:
-
-   | Variable | Set it to |
-   |---|---|
-   | `STRIPE_ENV_FALLBACK_TENANTS` | e.g. `dazzleandshine` |
-
-3. After the release, open that company's booking page and check the payment
-   form still loads.
+1. Sign in to Dazzle & Shine, go to **Settings → Connections**, and look at
+   Stripe. If it says *Currently coming from your hosting settings*, it is
+   using the Railway key today and would lose payments on release.
+2. Paste the shared account's keys into that page yourself (the secret key,
+   the publishable key, and the webhook signing secret if it shows one) and
+   save. Never paste them into a chat or an email.
+3. Do the same check for any other live company. Each must have its **own**
+   keys saved, or show *not connected* on purpose.
+4. After the release, open Dazzle & Shine's booking page and check the payment
+   form loads.
+5. Once every company shows *Saved*, delete `STRIPE_SECRET_KEY`,
+   `STRIPE_PUBLISHABLE_KEY` and `STRIPE_WEBHOOK_SECRET` from Railway. Nothing
+   on hosted Akye reads them any more.
 
 Your own Akye subscription billing is untouched: it uses
-`STRIPE_PLATFORM_SECRET_KEY`, not these.
+`STRIPE_PLATFORM_SECRET_KEY` and `STRIPE_PLATFORM_WEBHOOK_SECRET`, not these.
 
-**✅ Done when:** no company that takes payments shows Stripe as not connected.
+**✅ Done when:** Dazzle & Shine shows Stripe as *Saved*, and its booking page
+takes a payment.
 
 ---
 

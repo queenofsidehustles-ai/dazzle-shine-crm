@@ -67,9 +67,6 @@ app = create_app()
 BASE = os.environ['BASE_DOMAIN']
 SLUG_A = 'e2ecohort' + secrets.token_hex(4)
 SLUG_B = 'e2eneighbor' + secrets.token_hex(4)
-# On hosted Akye a company only uses the environment's Stripe key when it is
-# named here (integrations._env_allowed); this journey's company is.
-os.environ['STRIPE_ENV_FALLBACK_TENANTS'] = SLUG_A
 HOST_A = f'{SLUG_A}.{BASE}'
 HOST_B = f'{SLUG_B}.{BASE}'
 OWNER_EMAIL = f'owner-{SLUG_A}@example.com'
@@ -199,6 +196,13 @@ with app.app_context():
     db.session.remove()
 
     print('\n6-7. Job completion and payment')
+    # On hosted Akye a company takes payments only through the Stripe keys it
+    # saved on its own Connections page -- never the environment's. This
+    # company connects its (fake) Stripe the way a real one does.
+    with tenancy.use_tenant(tenancy.schema_for(SLUG_A)):
+        import integrations
+        integrations.set('stripe_secret_key', 'sk_test_fake')
+    db.session.remove()
     with tenancy.use_tenant(tenancy.schema_for(SLUG_A)):
         booking = Booking.query.get(booking_id)
         booking.price = 150.00

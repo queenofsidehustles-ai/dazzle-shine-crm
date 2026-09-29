@@ -312,14 +312,18 @@ def test_keys_are_blank_for_the_demo_and_only_the_demo(env):
     import tenancy
     with env['app'].app_context():
         demo_guard.forget_cache()
-        # Both named as allowed to use the environment's Stripe keys, so that
-        # it is the demo guard -- not the hosted-Akye fallback rule -- that
-        # blanks the demo's.
-        os.environ['STRIPE_ENV_FALLBACK_TENANTS'] = f'{REAL},brightnest'
+        # Both companies have Stripe keys saved on their own Connections page
+        # (hosted Akye never falls back to the environment's), so it is the
+        # demo guard -- not a missing key -- that blanks the demo's.
+        saved = 'sk_test_saved_by_the_company'
+        for slug in (REAL, 'brightnest'):
+            with tenancy.use_tenant(slug):
+                integrations.set('stripe_secret_key', saved)
         with tenancy.use_tenant(REAL):
-            # The control: the next-door company does reach the environment's
-            # keys, so it is the guard -- not a missing key -- that stops the demo.
-            assert integrations.stripe_secret_key() == FAKE_KEYS['STRIPE_SECRET_KEY']
+            # The control: the next-door company does reach its keys, and the
+            # platform fallbacks (texting, email) from the environment.
+            assert integrations.stripe_secret_key() == saved
+            assert integrations.twilio_account_sid() == FAKE_KEYS['TWILIO_ACCOUNT_SID']
         with tenancy.use_tenant('brightnest'):
             for name in ('stripe_secret_key', 'stripe_publishable_key', 'stripe_webhook_secret',
                          'twilio_account_sid', 'twilio_auth_token', 'twilio_phone',
@@ -327,7 +331,9 @@ def test_keys_are_blank_for_the_demo_and_only_the_demo(env):
                 assert integrations.get(name) == '', name
         with demo_guard.forced():
             assert integrations.stripe_secret_key() == ''
-        os.environ.pop('STRIPE_ENV_FALLBACK_TENANTS', None)
+        for slug in (REAL, 'brightnest'):
+            with tenancy.use_tenant(slug):
+                integrations.set('stripe_secret_key', '')
 
 
 def test_sends_are_refused_and_written_to_the_sent_log(env):
