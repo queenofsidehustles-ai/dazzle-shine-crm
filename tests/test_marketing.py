@@ -16,7 +16,9 @@ white-label work that came before it is undone. Most of this file is about that.
 """
 import os, sys, tempfile
 TMP = tempfile.mkdtemp()
-os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/mk.db'
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fresh_postgres  # a multi-company app needs PostgreSQL schemas
+os.environ['DATABASE_URL'] = fresh_postgres.url('dsm_test_marketing')
 os.environ['SECRET_KEY'] = 'test'
 os.environ['BASE_DOMAIN'] = 'akye.test'
 os.environ['SIGNUPS_OPEN'] = '1'
@@ -42,10 +44,15 @@ def check(cond, m):
 PRODUCT_HOST = {'Host': 'akye.test'}
 TENANT_HOST = {'Host': 'acme.akye.test'}
 
+import provisioning
+import tenancy
 with app.app_context():
     db.create_all()
-    BusinessSetting.set('business_name', 'Sparkle Cleaning Services')
-    db.session.commit()
+    provisioning.provision('acme', 'Acme Cleaning', quiet=True)
+    with tenancy.use_tenant('acme'):
+        BusinessSetting.set('business_name', 'Sparkle Cleaning Services')
+        db.session.commit()
+    db.session.remove()
 
 c = app.test_client()
 
@@ -166,14 +173,15 @@ print('\n9. Somebody who already pays can get back in from a phone')
 # whole time, which is exactly why it went unnoticed.
 shell = open(os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), 'templates', 'marketing', '_shell.html')).read()
-mobile = shell.split('@media (max-width:760px){')[1].split('}')[0] \
-    if '@media (max-width:760px){' in shell else ''
-check('@media (max-width:760px){' in shell, 'there is still a phone-sized layout')
+import re as _re
+_phone = _re.search(r'@media\s*\(max-width:\s*760px\)\s*\{', shell)
+mobile = shell[_phone.end():].split('}')[0] if _phone else ''
+check(_phone is not None, 'there is still a phone-sized layout')
 check('nav a:not(.btn){ display:none; }' not in shell,
       'the phone layout no longer hides every link that is not the button')
 
 header = shell.split('<header>')[1].split('</header>')[0]
-login = [ln for ln in header.split('\n') if '/login' in ln]
+login = _re.findall(r'<a\b[^>]*href="/login"[^>]*>', header)
 check(len(login) == 1, 'the header has a sign-in link')
 check('wide-only' not in login[0],
       'and it is not one of the things a narrow screen drops')

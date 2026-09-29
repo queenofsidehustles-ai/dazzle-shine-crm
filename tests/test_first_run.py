@@ -18,7 +18,9 @@ who is not confident with software reads a contradiction as their own mistake.
 import os, sys, tempfile
 
 TMP = tempfile.mkdtemp()
-os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/first.db'
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fresh_postgres  # a multi-company app needs PostgreSQL schemas
+os.environ['DATABASE_URL'] = fresh_postgres.url('dsm_test_first_run')
 os.environ['SECRET_KEY'] = 'test'
 os.environ['BASE_DOMAIN'] = 'akye.test'
 os.environ['FLASK_ENV'] = 'development'

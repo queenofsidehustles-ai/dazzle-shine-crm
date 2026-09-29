@@ -16,7 +16,9 @@ The things worth holding still:
 """
 import os, sys, tempfile, json
 TMP = tempfile.mkdtemp()
-os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/book.db'
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fresh_postgres  # a multi-company app needs PostgreSQL schemas
+os.environ['DATABASE_URL'] = fresh_postgres.url('dsm_test_booking_page')
 os.environ['SECRET_KEY'] = 'test'
 os.environ['BASE_DOMAIN'] = 'akye.test'
 os.environ['FLASK_ENV'] = 'development'
@@ -32,8 +34,15 @@ from models import BusinessSetting, Booking
 import brands
 import entitlements
 
+import provisioning
+import tenancy
+
 app = create_app()
-HOST = {'Host': 'sparkle.akye.test'}
+SLUG = 'sparkle'
+with app.app_context(), tenancy.use_tenant(SLUG):
+    provisioning.provision(SLUG, 'Sparkle Cleaning Services', quiet=True)
+    db.session.remove()
+HOST = {'Host': f'{SLUG}.akye.test'}
 
 failures = []
 
@@ -47,14 +56,14 @@ def check(cond, m):
 
 
 def set_plan(plan):
-    with app.app_context():
-        BusinessSetting.set('plan', plan)
-        BusinessSetting.set('plan_status', 'active' if plan != 'free' else '')
-        db.session.commit()
-    entitlements._clear_cache()
+    fresh_postgres.set_company_plan(SLUG, 'solo' if plan == 'free' else plan)
 
 
-with app.app_context():
+def owner_client():
+    return fresh_postgres.owner_client(app, SLUG, 'akye.test')
+
+
+with app.app_context(), tenancy.use_tenant(SLUG):
     BusinessSetting.set('business_name', 'Sparkle Cleaning Services')
     BusinessSetting.set('phone', '407 555 0100')
     db.session.commit()
@@ -90,7 +99,7 @@ check(resp.status_code == 200 and isinstance(quoted.get('total'), (int, float)),
       f'and gets a real number back ({quoted.get("total")})')
 
 from pricing import calculate_price
-with app.app_context():
+with app.app_context(), tenancy.use_tenant(SLUG):
     engine = calculate_price(service_type='deep', bedrooms=3, bathrooms=2,
                              extras='', frequency='one_time')
 check(abs(quoted.get('total', 0) - engine) < 0.01,
@@ -98,7 +107,7 @@ check(abs(quoted.get('total', 0) - engine) < 0.01,
 
 
 print('\n4. Booking through it puts a real job in the CRM')
-with app.app_context():
+with app.app_context(), tenancy.use_tenant(SLUG):
     before = Booking.query.count()
 r = c.post('/api/booking', headers=HOST, json={
     'name': 'Mrs Johnson', 'email': 'j@example.com', 'phone': '4075559999',
@@ -107,7 +116,7 @@ r = c.post('/api/booking', headers=HOST, json={
     'frequency': 'one_time', 'preferred_date': '2026-09-10',
     'preferred_time': '10:00 AM'})
 check(r.status_code in (200, 201), f'the booking is accepted (HTTP {r.status_code})')
-with app.app_context():
+with app.app_context(), tenancy.use_tenant(SLUG):
     check(Booking.query.count() == before + 1, 'and one new job exists')
     b = Booking.query.order_by(Booking.id.desc()).first()
     check(b.name == 'Mrs Johnson', 'under the customer\'s name')
@@ -116,7 +125,7 @@ with app.app_context():
 
 
 print('\n5. Their colours, not ours')
-with app.app_context():
+with app.app_context(), tenancy.use_tenant(SLUG):
     BusinessSetting.set('brand_dark', '#123a5f')
     BusinessSetting.set('brand_accent', '#2563eb')
     db.session.commit()
@@ -147,7 +156,7 @@ for accent, expected, described in cases:
     check(got == expected,
           f'{described} ({accent}) gets {expected} text, not the other one')
 
-with app.app_context():
+with app.app_context(), tenancy.use_tenant(SLUG):
     BusinessSetting.set('brand_accent', '#f5e050')
     BusinessSetting.set('brand_accent_text', '#ffffff')     # wrong on purpose
     db.session.commit()
@@ -157,20 +166,14 @@ check('--b-on:     #111827' in page,
 
 
 print('\n7. Saving colours in Settings tidies them and fixes the contrast')
-admin = app.test_client()
-with admin.session_transaction() as sess:
-    sess['logged_in'] = True
-    sess['role'] = 'owner'
-# No tenant Host here: this SQLite database has no tenant schema, so a request
-# on `sparkle.akye.test` is bounced to the sign-in before it reaches settings.
-# What is under test is the saving, not the routing.
-admin.post('/settings/business', data={
+admin = owner_client()
+admin.post('/settings/business', headers=HOST, data={
     'business_name': 'Sparkle Cleaning Services',
     'brand_dark': '123A5F',            # no hash, wrong case
     'brand_accent': '#F5E050',         # pale, and shouted
     'brand_accent_text': '#ffffff',    # what a person would leave it as
 }, follow_redirects=True)
-with app.app_context():
+with app.app_context(), tenancy.use_tenant(SLUG):
     check(BusinessSetting.get('brand_dark') == '#123a5f',
           'a hex typed without its hash is stored properly')
     check(BusinessSetting.get('brand_accent') == '#f5e050', 'and lower-cased')
@@ -242,17 +245,14 @@ print('\n12. The snippet is a paid feature, and neither page breaks without it')
 # The snippet itself moved to /settings/booking-page, which explains what it
 # is. It was at the bottom of Business Settings, where the first person outside
 # the company to try the product did not find it and had to be told.
-admin2 = app.test_client()
-with admin2.session_transaction() as sess:
-    sess['logged_in'] = True
-    sess['role'] = 'owner'
+admin2 = owner_client()
 for plan in ('free', 'pro', 'scale'):
     set_plan(plan)
     for path in ('/settings/business', '/settings/booking-page'):
-        r = admin2.get(path)
+        r = admin2.get(path, headers=HOST)
         check(r.status_code == 200,
               f'{path} renders on the {plan} plan (HTTP {r.status_code})')
-    html = admin2.get('/settings/booking-page').data.decode('utf8', 'replace')
+    html = admin2.get('/settings/booking-page', headers=HOST).data.decode('utf8', 'replace')
     if plan == 'free':
         check('badge-warn' in html or 'Pro' in html,
               'free sees why it is locked, not a blank space')

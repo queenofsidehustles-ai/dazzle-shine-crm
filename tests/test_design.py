@@ -156,6 +156,7 @@ ALLOWED = {
     'marketing/_shell.html':        (10, 'the lit button gradient stops'),
     'admin/login_shell.html':        (2, 'theme-color meta tag'),
     'admin/login.html':              (2, 'theme-color meta tag'),
+    'admin/login_2fa.html':          (1, 'theme-color meta tag'),
     'admin/signup.html':             (2, 'inherited shell'),
     'marketing/workspace.html':      (2, 'inherited shell'),
     'base_admin.html':               (2, 'theme-color meta tag'),

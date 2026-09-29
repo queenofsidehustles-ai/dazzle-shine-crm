@@ -158,7 +158,13 @@ PATTERNS = [
 # somewhere: a privacy policy with no legal entity on it is not a privacy
 # policy. It goes here rather than in a template so there is exactly one copy,
 # and section 12 below proves it never reaches a cleaning company's CRM.
-EXEMPT = {'legacy_brands.py', 'product.py'}
+#
+# `adopt_tenant.py` and `seed_growth_playbook.py` are operator scripts run from
+# a terminal against the production database: the first moves the original
+# business onto its own tenant (its --help names it as the example), the second
+# writes the founder's growth plan into the console's Playbooks. Neither is
+# served to a cleaning company or rendered in anybody's CRM.
+EXEMPT = {'legacy_brands.py', 'product.py', 'adopt_tenant.py', 'seed_growth_playbook.py'}
 ROOT = pathlib.Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
