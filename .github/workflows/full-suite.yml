@@ -40,6 +40,12 @@ jobs:
     env:
       TEST_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/akye_full_suite
       PGURL: postgresql+psycopg2://postgres:postgres@localhost:5432/akye_full_suite
+      # Keep the service's own log quiet for test sessions. The app's additive
+      # "ADD COLUMN if missing" checks make Postgres log an ERROR per column per
+      # boot, and GitHub prints that whole log after the run -- tens of
+      # thousands of lines burying which suite failed. Superuser sessions may
+      # set these; they change what is logged, not what is run.
+      PGOPTIONS: "-c log_min_messages=fatal -c log_min_error_statement=panic"
     steps:
       - uses: actions/checkout@v4
         with:
