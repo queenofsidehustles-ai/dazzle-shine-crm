@@ -60,6 +60,35 @@ class DirectoryListing(db.Model):
         return self.claimed_at is not None
 
 
+class DirectorySubmission(db.Model):
+    """A business asking to be added, because the public records do not hold it.
+
+    Separate from DirectoryListing on purpose. create_all() at boot builds a
+    missing table but never alters one that exists, so adding columns to the
+    listing table would silently do nothing on production. A submission is also
+    genuinely a different thing: a request, not a record.
+
+    Approved submissions are exported to the generator's extra_<state>.csv,
+    which is merged on every rebuild — so an added business survives the next
+    regeneration instead of being typed in once and lost.
+    """
+    __tablename__ = 'directory_submission'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    city = db.Column(db.String(100))
+    state = db.Column(db.String(2), index=True)
+    phone = db.Column(db.String(40))
+    email = db.Column(db.String(200))
+    website = db.Column(db.String(400))
+    note = db.Column(db.String(500))
+    contact_name = db.Column(db.String(120))
+    # new -> approved -> exported, or rejected
+    status = db.Column(db.String(20), default='new', index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime)
+    exported_at = db.Column(db.DateTime)
+
+
 class DirectoryClaim(db.Model):
     """Somebody saying a listing is theirs, and how far they got proving it."""
     __tablename__ = 'directory_claim'
@@ -206,6 +235,92 @@ def verify(token):
               if left > 0 else "That's too many tries.", 'error')
 
     return render_template('directory/verify.html', claim=claim, listing=listing)
+
+
+# ── adding a business the records missed ────────────────────────────────────
+@directory_bp.route('/listing/add', methods=['GET', 'POST'])
+def add_listing():
+    """Not on the board? Overture does not hold every real company — ours was
+    missing too — and a directory that cannot show the people reading it is
+    no use to them."""
+    if request.method == 'GET':
+        return render_template('directory/add.html',
+                               name=request.args.get('name', ''),
+                               city=request.args.get('city', ''))
+
+    name = (request.form.get('name') or '').strip()
+    email = _norm_email(request.form.get('email'))
+    if not name or not email:
+        flash('A business name and an email address are both needed.', 'error')
+        return redirect(url_for('directory.add_listing'))
+
+    sub = DirectorySubmission(
+        name=name[:200],
+        city=(request.form.get('city') or '').strip()[:100],
+        state=(request.form.get('state') or '').strip().upper()[:2],
+        phone=(request.form.get('phone') or '').strip()[:40],
+        email=email,
+        website=(request.form.get('website') or '').strip()[:400],
+        contact_name=(request.form.get('contact_name') or '').strip()[:120],
+        note=(request.form.get('note') or '').strip()[:500])
+    db.session.add(sub)
+    db.session.commit()
+    return render_template('directory/add_done.html', sub=sub)
+
+
+@directory_bp.route('/admin/listings/submissions')
+@login_required
+def submissions_queue():
+    status = request.args.get('status') or 'new'
+    q = DirectorySubmission.query
+    if status != 'all':
+        q = q.filter_by(status=status)
+    subs = q.order_by(DirectorySubmission.created_at.desc()).limit(300).all()
+    counts = dict(db.session.query(DirectorySubmission.status,
+                                   db.func.count(DirectorySubmission.id))
+                  .group_by(DirectorySubmission.status).all())
+    return render_template('directory/submissions.html', subs=subs,
+                           counts=counts, status=status)
+
+
+@directory_bp.route('/admin/listings/submissions/<int:sub_id>/<action>', methods=['POST'])
+@login_required
+def review_submission(sub_id, action):
+    sub = DirectorySubmission.query.get_or_404(sub_id)
+    if action not in ('approve', 'reject'):
+        abort(404)
+    sub.status = 'approved' if action == 'approve' else 'rejected'
+    sub.reviewed_at = datetime.utcnow()
+    db.session.commit()
+    flash(f'{sub.name} {sub.status}.'
+          + (' Run "flask directory export-submissions" and rebuild to publish it.'
+             if sub.status == 'approved' else ''), 'success')
+    return redirect(url_for('directory.submissions_queue'))
+
+
+@directory_bp.cli.command('export-submissions')
+def export_submissions():
+    """Write approved submissions out as extra_<state>.csv rows.
+
+    Printed to stdout as CSV so it can be appended to the generator's
+    extra_<state>.csv and picked up by the next build. Marks them exported so
+    the same business is not written twice.
+    """
+    import sys
+    subs = DirectorySubmission.query.filter_by(status='approved').all()
+    subs = [s for s in subs if not s.exported_at]
+    if not subs:
+        print('nothing approved and waiting', file=sys.stderr)
+        return
+    w = csv.writer(sys.stdout)
+    w.writerow(['id', 'name', 'city', 'state', 'zip', 'street', 'phone',
+                'email', 'website', 'social', 'operating_status', 'confidence'])
+    for s in subs:
+        w.writerow([f'akye-sub-{s.id}', s.name, s.city, s.state, '', '',
+                    s.phone or '', s.email or '', s.website or '', '', 'open', '1.0'])
+        s.exported_at = datetime.utcnow()
+    db.session.commit()
+    print(f'{len(subs)} exported', file=sys.stderr)
 
 
 # ── the queue the owner actually works ──────────────────────────────────────
