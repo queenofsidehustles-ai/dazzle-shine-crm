@@ -1,0 +1,73 @@
+{# Standalone pages. They live on the app's domain but belong to getakye.com, so
+   they carry that look rather than the admin one, and they don't extend the CRM
+   base — a person mid-claim is not logged in and has no business seeing chrome. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>{% block title %}Claim your listing{% endblock %} — Akye</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>
+ :root{--navy:#0D1526;--navy-2:#16213A;--ink:#13232A;--ink-2:#556870;--ink-3:#7F9199;
+   --line:#E4EDEB;--line-2:#EFF4F3;--page:#fff;--band:#F4F7FA;--green:#0F7B55;
+   --green-2:#0B6244;--green-tint:#E3F3EB;--amber:#B9791C;--amber-tint:#FBF2E2}
+ @media (prefers-color-scheme:dark){:root{--ink:#E7EFED;--ink-2:#A3B6B3;--ink-3:#7D9290;
+   --line:#22383A;--line-2:#1B2E31;--page:#0C1618;--band:#101F21;--green:#3FBE8C;
+   --green-2:#5FD0A2;--green-tint:#102C22;--amber:#D9A45C;--amber-tint:#2A2318}}
+ *,*::before,*::after{box-sizing:border-box}
+ body{margin:0;background:var(--band);color:var(--ink);font-family:Manrope,system-ui,sans-serif;
+   font-size:16.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+ .bar{background:var(--navy);padding:.9rem 20px}
+ .bar a{color:#fff;text-decoration:none;font-weight:800;letter-spacing:-.03em;font-size:1.1rem;
+   display:inline-flex;align-items:center;gap:.5rem}
+ .bar .dot{width:1.6rem;height:1.6rem;border-radius:7px;background:#22365E;display:inline-grid;
+   place-items:center;font-size:.9rem}
+ .wrap{max-width:34rem;margin:2.4rem auto;padding:0 20px}
+ .card{background:var(--page);border:1px solid var(--line);border-radius:14px;
+   padding:1.8rem 1.5rem;box-shadow:0 12px 28px -14px rgba(13,21,38,.2)}
+ h1{font-size:1.65rem;font-weight:800;letter-spacing:-.025em;line-height:1.18;margin:0 0 .8rem}
+ h2{font-size:1.05rem;font-weight:700;margin:1.6rem 0 .7rem}
+ p{margin:0 0 1rem;color:var(--ink-2)}p:last-child{margin-bottom:0}
+ label{display:block;font-size:.83rem;font-weight:700;color:var(--ink);margin:1rem 0 .3rem}
+ input,textarea{width:100%;font:inherit;font-size:1rem;padding:.7rem .8rem;border-radius:9px;
+   border:1.5px solid var(--line);background:var(--page);color:var(--ink)}
+ input:focus,textarea:focus{outline:2px solid var(--green);outline-offset:1px;border-color:transparent}
+ .btn{display:inline-block;width:100%;text-align:center;background:var(--green);color:#fff;
+   font-weight:700;font-size:1rem;padding:.85rem 1.4rem;border:0;border-radius:9px;
+   cursor:pointer;text-decoration:none;margin-top:1.4rem}
+ .btn:hover{background:var(--green-2)}
+ .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+ .kv{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;
+   border-bottom:1px solid var(--line-2);font-size:.93rem}
+ .kv:last-of-type{border-bottom:0}
+ .kv span:first-child{color:var(--ink-3);font-weight:600}
+ .kv span:last-child{font-weight:700;text-align:right}
+ .note{background:var(--band);border-radius:9px;padding:.85rem;font-size:.9rem;
+   color:var(--ink-2);margin:1.1rem 0}
+ .flash{background:var(--amber-tint);color:var(--amber);border-radius:9px;padding:.7rem .85rem;
+   font-size:.92rem;font-weight:600;margin-bottom:1rem}
+ .ok{background:var(--green-tint);color:var(--green)}
+ .code{font-size:1.5rem;letter-spacing:.35em;text-align:center;font-weight:800}
+ .fine{font-size:.85rem;color:var(--ink-3)}
+ table{width:100%;border-collapse:collapse;font-size:.92rem}
+ th,td{text-align:left;padding:.55rem .5rem;border-bottom:1px solid var(--line-2)}
+ th{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+ .pill{font-size:.7rem;font-weight:800;padding:.18rem .5rem;border-radius:999px;
+   background:var(--band);color:var(--ink-2)}
+ .pill.verified{background:var(--green-tint);color:var(--green)}
+ .pill.review{background:var(--amber-tint);color:var(--amber)}
+</style>
+</head>
+<body>
+<div class="bar"><a href="https://getakye.com/"><span class="dot">A</span>Akye</a></div>
+<div class="wrap">
+  {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, m in msgs %}
+    <div class="flash {{ 'ok' if cat == 'success' else '' }}">{{ m }}</div>
+  {% endfor %}{% endwith %}
+  {% block body %}{% endblock %}
+</div>
+</body>
+</html>
