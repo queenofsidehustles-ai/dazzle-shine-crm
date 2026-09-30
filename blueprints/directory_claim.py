@@ -31,6 +31,7 @@ from flask import (Blueprint, render_template, request, abort, url_for,
 from auth import login_required
 from extensions import db
 from notifications import send_email
+from models import BusinessSetting
 import product
 
 directory_bp = Blueprint('directory', __name__)
@@ -87,6 +88,43 @@ class DirectorySubmission(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_at = db.Column(db.DateTime)
     exported_at = db.Column(db.DateTime)
+
+
+class DirectoryTalent(db.Model):
+    """Somebody looking for cleaning work, who agreed to be shown to companies.
+
+    The pool exists because the demand side generates it. A company that
+    interviews ten people hires two; the other eight want cleaning work and are
+    qualified to do it, and today they get a "no" and nothing else. Asked
+    properly, most will happily be shown to other companies nearby.
+
+    Seeded from Indeed to start — one advert per target metro pointing at /work,
+    rather than one advert per company, which is what makes a pool worth having.
+
+    Consent is the whole basis for this table: nobody is listed who did not tick
+    the box, and unticking it takes them out. A new table rather than columns on
+    anything existing, because create_all() at boot builds a missing table but
+    never alters one that is already there.
+    """
+    __tablename__ = 'directory_talent'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(200), index=True)
+    phone = db.Column(db.String(40))
+    city = db.Column(db.String(100))
+    state = db.Column(db.String(2), index=True)
+    zip_code = db.Column(db.String(10))
+    language = db.Column(db.String(5), default='en')      # en | es
+    experience = db.Column(db.String(20))                 # none | some | years
+    has_transport = db.Column(db.Boolean, default=False)
+    days = db.Column(db.String(120))                      # free text: when they can work
+    note = db.Column(db.String(500))
+    source = db.Column(db.String(30), default='web')      # web | indeed | passed-on | referral
+    # shown to companies only while this is true — the person can switch it off
+    share = db.Column(db.Boolean, default=True, index=True)
+    status = db.Column(db.String(20), default='looking', index=True)  # looking | placed | closed
+    opt_out_token = db.Column(db.String(64), unique=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class DirectoryClaim(db.Model):
@@ -235,6 +273,86 @@ def verify(token):
               if left > 0 else "That's too many tries.", 'error')
 
     return render_template('directory/verify.html', claim=claim, listing=listing)
+
+
+# ── people looking for cleaning work ────────────────────────────────────────
+@directory_bp.route('/work', methods=['GET', 'POST'])
+def find_work():
+    """The page an Indeed advert points at. Not tied to one company: somebody
+    applying here is offered to every Akye company near them, which is the only
+    way one advert can serve a whole metro."""
+    if request.method == 'GET':
+        return render_template('directory/work.html',
+                               lang=('es' if (request.args.get('lang') or '').startswith('es')
+                                     else 'en'),
+                               city=request.args.get('city', ''),
+                               state=(request.args.get('state', '') or '').upper(),
+                               source=(request.args.get('src') or 'web')[:30])
+
+    name = (request.form.get('name') or '').strip()
+    email = _norm_email(request.form.get('email'))
+    phone = (request.form.get('phone') or '').strip()
+    if not name or not (email or phone):
+        flash('A name and either an email or a phone number are needed.', 'error')
+        return redirect(url_for('directory.find_work'))
+    if not request.form.get('share'):
+        flash('We can only pass your details on if you tick the box.', 'error')
+        return redirect(url_for('directory.find_work'))
+
+    t = DirectoryTalent(
+        name=name[:120], email=email or None, phone=phone[:40] or None,
+        city=(request.form.get('city') or '').strip()[:100],
+        state=(request.form.get('state') or '').strip().upper()[:2],
+        zip_code=(request.form.get('zip_code') or '').strip()[:10],
+        language=('es' if (request.form.get('language') or '') == 'es' else 'en'),
+        experience=(request.form.get('experience') or '')[:20],
+        has_transport=bool(request.form.get('has_transport')),
+        days=(request.form.get('days') or '').strip()[:120],
+        note=(request.form.get('note') or '').strip()[:500],
+        source=(request.form.get('source') or 'web')[:30],
+        opt_out_token=secrets.token_urlsafe(32))
+    db.session.add(t)
+    db.session.commit()
+    return render_template('directory/work_done.html', t=t)
+
+
+@directory_bp.route('/work/stop/<token>', methods=['GET', 'POST'])
+def stop_sharing(token):
+    """One click out. A pool somebody cannot leave is not a pool, it is a list."""
+    t = DirectoryTalent.query.filter_by(opt_out_token=token).first_or_404()
+    if request.method == 'POST':
+        t.share = False
+        t.status = 'closed'
+        db.session.commit()
+        return render_template('directory/work_stopped.html', t=t)
+    return render_template('directory/work_stop.html', t=t)
+
+
+@directory_bp.route('/admin/talent')
+@login_required
+def talent_pool():
+    """Cleaners near this company who said they are looking.
+
+    Free on every plan for now, deliberately. The pool only becomes an upgrade
+    lever once it has depth, and gating it while it is thin would just teach
+    people it is empty.
+    """
+    import branding
+    here_state = (BusinessSetting.get('state') or '').upper()[:2]
+    here_city = (BusinessSetting.get('city') or '').strip()
+    q = DirectoryTalent.query.filter_by(share=True, status='looking')
+    state = (request.args.get('state') or here_state or '').upper()[:2]
+    if state:
+        q = q.filter(DirectoryTalent.state == state)
+    people = q.order_by(DirectoryTalent.created_at.desc()).limit(300).all()
+    # nearest-feeling first: same town at the top, then the rest of the state
+    people.sort(key=lambda p: (0 if (p.city or '').lower() == here_city.lower() else 1,
+                               -(p.created_at or datetime.min).timestamp()))
+    states = [r[0] for r in db.session.query(DirectoryTalent.state)
+              .filter_by(share=True, status='looking').distinct().all() if r[0]]
+    return render_template('directory/talent.html', people=people, state=state,
+                           states=sorted(states), here_city=here_city,
+                           biz=branding.biz_name())
 
 
 # ── adding a business the records missed ────────────────────────────────────

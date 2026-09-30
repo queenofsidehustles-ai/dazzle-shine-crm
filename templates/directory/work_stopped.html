@@ -1,0 +1,11 @@
+{% set es = (t.language == 'es') %}
+{% extends "directory/_base.html" %}
+{% block title %}{{ 'Hecho' if es else 'Done' }}{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>{{ 'Hecho.' if es else 'Done.' }}</h1>
+  <p>{% if es %}Ya nadie te verá en la lista. Gracias, y mucha suerte.{% else %}Nobody
+     will see you on the list any more. Thanks, and good luck.{% endif %}</p>
+  <a class="btn ghost" href="{{ url_for('directory.find_work', lang=t.language, _external=True) }}">{{ 'Volver a la lista' if es else 'Join again' }}</a>
+</div>
+{% endblock %}

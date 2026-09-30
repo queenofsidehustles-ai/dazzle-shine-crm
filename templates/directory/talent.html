@@ -1,0 +1,51 @@
+{% extends "directory/_base.html" %}
+{% block title %}Cleaners looking for work{% endblock %}
+{% block body %}
+<div class="card" style="max-width:none">
+  <h1>Cleaners looking for work</h1>
+  <p>People who asked to be shown to cleaning companies near them. Everyone here ticked
+    the box, and can take themselves off whenever they like &mdash; so reach out, they are
+    expecting it.{% if here_city %} {{ here_city }} first, then the rest of the state.{% endif %}</p>
+
+  {% if states|length > 1 %}
+  <p>{% for s in states %}
+      <a href="{{ url_for('directory.talent_pool', state=s) }}"
+         style="margin-right:.7rem;{{ 'font-weight:800' if s == state else '' }}">{{ s }}</a>
+     {% endfor %}</p>
+  {% endif %}
+
+  {% if people %}
+  <table>
+    <thead><tr><th>Who</th><th>Where</th><th>Experience</th><th>Reach them</th></tr></thead>
+    <tbody>
+    {% for p in people %}
+      <tr>
+        <td><strong>{{ p.name }}</strong>
+          {% if p.language == 'es' %}<span class="pill">Español</span>{% endif %}
+          {% if p.has_transport %}<br><span class="fine">has transport</span>{% endif %}
+          {% if p.days %}<br><span class="fine">{{ p.days }}</span>{% endif %}</td>
+        <td>{{ p.city }}{% if p.state %}, {{ p.state }}{% endif %}
+          {% if p.zip_code %}<br><span class="fine">{{ p.zip_code }}</span>{% endif %}</td>
+        <td>{{ {'none':'New to it','some':'A little','years':'Years'}.get(p.experience, '—') }}
+          <br><span class="fine">joined {{ p.created_at.strftime('%d %b') }}</span></td>
+        <td>{% if p.phone %}<a href="tel:{{ p.phone }}">{{ p.phone }}</a><br>{% endif %}
+          {% if p.email %}<a href="mailto:{{ p.email }}?subject=Cleaning%20work%20at%20{{ biz|urlencode }}">{{ p.email }}</a>{% endif %}
+          {% if p.note %}<br><span class="fine">&ldquo;{{ p.note }}&rdquo;</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="fine" style="margin-top:1.2rem">Contact them yourself. If you want them on your
+    team properly, send them your own apply link and they&rsquo;ll go through your
+    interview and onboarding like anybody else.</p>
+  {% else %}
+  <div class="note">
+    <p><strong>Nobody here yet{% if state %} in {{ state }}{% endif %}.</strong></p>
+    <p>The pool fills two ways: people who apply at
+      <a href="https://www.akyehq.com/work">akyehq.com/work</a>, and applicants another
+      company passed on who agreed to be shown around. It is new, so it is thin &mdash;
+      that is honest rather than broken.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
