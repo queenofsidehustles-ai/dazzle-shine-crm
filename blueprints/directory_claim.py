@@ -245,29 +245,53 @@ def import_listings():
     """flask directory import-listings < data/fl_urls.csv
 
     Re-running updates rows in place — the Overture id is the key — so a refreshed
-    export never duplicates a listing or drops who claimed it."""
+    export never duplicates a listing or drops who claimed it.
+
+    Reads every existing id in one query rather than asking per row. The first
+    version did a SELECT per line, which is fine against a local database and
+    takes the better part of an hour against a remote one over 60,000 rows.
+    """
     import sys
+    rows = [r for r in csv.DictReader(sys.stdin) if (r.get('id') or '').strip()]
+    if not rows:
+        print('nothing on stdin')
+        return
+
+    known = {r[0] for r in db.session.query(DirectoryListing.id).all()}
     added = updated = 0
-    for row in csv.DictReader(sys.stdin):
-        lid = (row.get('id') or '').strip()
-        if not lid:
-            continue
-        rec = DirectoryListing.query.get(lid)
-        if rec is None:
-            rec = DirectoryListing(id=lid)
-            db.session.add(rec)
-            added += 1
-        else:
-            updated += 1
-        rec.name = (row.get('name') or '')[:200]
-        rec.city = (row.get('city') or '')[:100]
-        rec.state = (row.get('state') or row.get('url', '').split('/')[3][:2].upper())[:2]
-        rec.email = (row.get('email') or None)
-        rec.phone = (row.get('phone') or None)
-        rec.url = (row.get('url') or None)
+
+    def fields(row):
+        state = (row.get('state') or '').strip()
+        if not state:
+            parts = (row.get('url') or '').split('/')
+            state = (parts[3][:2].upper() if len(parts) > 4 else '')
         try:
-            rec.visibility = int(row.get('visibility') or 0)
+            vis = int(row.get('visibility') or 0)
         except ValueError:
-            rec.visibility = 0
+            vis = 0
+        return dict(
+            name=(row.get('name') or '')[:200],
+            city=(row.get('city') or '')[:100],
+            state=state[:2],
+            email=(row.get('email') or None),
+            phone=(row.get('phone') or None),
+            url=(row.get('url') or None),
+            visibility=vis)
+
+    new_rows = []
+    for row in rows:
+        lid = row['id'].strip()
+        if lid in known:
+            db.session.query(DirectoryListing).filter_by(id=lid).update(fields(row))
+            updated += 1
+        else:
+            new_rows.append({'id': lid, **fields(row)})
+            added += 1
+
+    # One round trip per thousand rather than one per row.
+    for i in range(0, len(new_rows), 1000):
+        db.session.bulk_insert_mappings(DirectoryListing, new_rows[i:i + 1000])
+        print(f'  {min(i + 1000, len(new_rows))}/{len(new_rows)}', flush=True)
+
     db.session.commit()
     print(f'{added} added, {updated} updated')
