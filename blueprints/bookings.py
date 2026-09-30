@@ -8,6 +8,7 @@ from pricing import FREQUENCY_LABELS
 from notifications import looks_like_email
 import recurring
 import branding
+import entitlements
 
 bookings_bp = Blueprint('bookings', __name__, url_prefix='/bookings')
 
@@ -94,6 +95,14 @@ def new():
     """Create a booking by hand — for customers who book by phone/text/in person."""
     from pricing import calculate_price, calculate_job, SERVICE_LABELS, EXTRAS, get_lead_fee
     if request.method == 'POST':
+        # The plan's monthly job ceiling. Checked before anything is built, so a
+        # refused job leaves no half-written client or booking behind — and it is
+        # checked here rather than at the model, because the owner needs to be
+        # told which plan lifts it, not handed a failure.
+        ok, why = entitlements.check_limit('jobs_per_month')
+        if not ok:
+            flash(why, 'error')
+            return redirect(url_for('bookings.new'))
         name = request.form.get('name', '').strip()
         if not name:
             flash('Customer name is required.', 'error')
