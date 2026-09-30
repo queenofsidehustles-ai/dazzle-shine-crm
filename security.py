@@ -14,6 +14,29 @@ from urllib.parse import urlparse
 
 from flask import current_app, g, request, session
 
+# getakye.com is a different host but the same company: its directory pages post
+# their "this is my business" form to this app. Naming the origin keeps the check
+# on for everybody else — exempting the path instead would switch it off for the
+# whole internet, which is a much bigger door than the one we need open.
+# Override with ALLOWED_FORM_ORIGINS, comma separated, if the marketing site moves.
+SIBLING_ORIGINS = frozenset(
+    h.strip().lower().lstrip('.') for h in
+    (os.environ.get('ALLOWED_FORM_ORIGINS')
+     or 'getakye.com,www.getakye.com,getakye.netlify.app').split(',')
+    if h.strip())
+
+
+def _is_sibling(url):
+    """True when a form came from one of our own other sites."""
+    if not url:
+        return False
+    try:
+        host = urlparse(url).netloc.split(':')[0].lower()
+    except Exception:
+        return False
+    return bool(host) and host in SIBLING_ORIGINS
+
+
 CSRF_EXEMPT_PATHS = frozenset({
     '/api/quote',
     '/api/commercial-lead',
@@ -352,6 +375,8 @@ def check_request_origin():
         if verdict is None:
             continue
         if verdict:
+            return None
+        if _is_sibling(value):
             return None
         _record_rejected_origin(header, value, path)
         from flask import abort
