@@ -23,6 +23,9 @@ existing table touched.
 import csv
 import re
 import secrets
+from urllib.parse import quote
+
+import click
 from datetime import datetime, timedelta
 
 from flask import (Blueprint, render_template, request, abort, url_for,
@@ -116,7 +119,13 @@ class DirectoryTalent(db.Model):
     zip_code = db.Column(db.String(10))
     language = db.Column(db.String(5), default='en')      # en | es
     experience = db.Column(db.String(20))                 # none | some | years
-    has_transport = db.Column(db.Boolean, default=False)
+    # How they get to work, not whether they own a car. "Do you have reliable
+    # transportation?" quietly disqualifies most of New York, Chicago and Boston,
+    # which between them hold the densest cleaning markets in the country — 1,189
+    # companies within ten miles of Manhattan alone. What an owner actually needs
+    # to know is whether somebody can reach the job on time.
+    travel = db.Column(db.String(20))          # car | transit | rides | walk | unsure
+    travel_miles = db.Column(db.Integer)       # how far they are willing to go
     days = db.Column(db.String(120))                      # free text: when they can work
     note = db.Column(db.String(500))
     source = db.Column(db.String(30), default='web')      # web | indeed | passed-on | referral
@@ -287,6 +296,9 @@ def find_work():
                                      else 'en'),
                                city=request.args.get('city', ''),
                                state=(request.args.get('state', '') or '').upper(),
+                               prefill_name=request.args.get('name', '')[:120],
+                               prefill_email=request.args.get('email', '')[:200],
+                               prefill_phone=request.args.get('phone', '')[:40],
                                source=(request.args.get('src') or 'web')[:30])
 
     name = (request.form.get('name') or '').strip()
@@ -306,7 +318,9 @@ def find_work():
         zip_code=(request.form.get('zip_code') or '').strip()[:10],
         language=('es' if (request.form.get('language') or '') == 'es' else 'en'),
         experience=(request.form.get('experience') or '')[:20],
-        has_transport=bool(request.form.get('has_transport')),
+        travel=(request.form.get('travel') or '')[:20],
+        travel_miles=(int(request.form['travel_miles'])
+                      if (request.form.get('travel_miles') or '').isdigit() else None),
         days=(request.form.get('days') or '').strip()[:120],
         note=(request.form.get('note') or '').strip()[:500],
         source=(request.form.get('source') or 'web')[:30],
@@ -414,6 +428,65 @@ def review_submission(sub_id, action):
           + (' Run "flask directory export-submissions" and rebuild to publish it.'
              if sub.status == 'approved' else ''), 'success')
     return redirect(url_for('directory.submissions_queue'))
+
+
+@directory_bp.cli.command('invite-applicants')
+@click.option('--tenant', required=True, help="the company's slug, e.g. dazzleandshine")
+@click.option('--send', is_flag=True, default=False,
+              help='actually send. Without it you get a preview and nothing leaves.')
+@click.option('--limit', default=200, help='stop after this many')
+def invite_applicants(tenant, send, limit):
+    """Ask people who applied and were never hired whether they want to be shown
+    to other cleaning companies nearby.
+
+    They applied to one company, not to a shared list, so their details are NOT
+    moved anywhere. The email carries a link to /work with their own details
+    filled in, and they tick the consent box themselves — which is the only
+    version of this that is decent as well as lawful.
+
+    Dry run by default. Real people, real inboxes, one chance to get the tone right.
+    """
+    import tenancy
+    from models import ContractorApplication
+    base = product.site_url() if hasattr(product, 'site_url') else 'https://www.akyehq.com'
+
+    with tenancy.use_tenant(tenant):
+        rows = (ContractorApplication.query
+                .filter(~ContractorApplication.status.in_(('hired', 'onboarding')))
+                .filter(ContractorApplication.email.isnot(None))
+                .order_by(ContractorApplication.created_at.desc())
+                .limit(limit).all())
+        biz = branding.biz_name()
+
+        print(f'{len(rows)} past applicants at {biz} who were never hired')
+        if not send:
+            print('DRY RUN — nothing sent. Add --send to actually email them.\n')
+        sent = 0
+        for a in rows:
+            link = (f"{base}/work?src=past-applicant"
+                    f"&name={quote(a.name or '')}&email={quote(a.email or '')}"
+                    f"&phone={quote(a.phone or '')}")
+            if not send:
+                if sent < 3:
+                    print(f'  would email {a.email}  ({a.name})')
+                sent += 1
+                continue
+            ok, _ = send_email(
+                to_email=a.email, to_name=a.name or '',
+                subject=f'Still looking for cleaning work?',
+                html=(f"<p>Hi {(a.name or '').split(' ')[0]},</p>"
+                      f"<p>You applied to {biz} a while back and we weren't able to "
+                      f"take you on. I'm sorry we left it there.</p>"
+                      f"<p>We've since put together a list that cleaning companies near "
+                      f"you can look at when they're hiring. If you'd like to be on it, "
+                      f"it takes a minute and it's free:</p>"
+                      f"<p><a href='{link}'>Yes, show me to cleaning companies near me</a></p>"
+                      f"<p>Your details are already filled in — just check them and tick "
+                      f"the box. You can take yourself off any time, and if you'd rather "
+                      f"not, do nothing at all and you won't hear from us again.</p>"),
+                from_name=biz, api_key=product.resend_api_key() or None)
+            sent += 1 if ok else 0
+        print(f'\n{sent} {"emails sent" if send else "would be emailed"}')
 
 
 @directory_bp.cli.command('export-submissions')

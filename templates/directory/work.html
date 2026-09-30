@@ -25,14 +25,14 @@
     <input type="hidden" name="source" value="{{ source }}">
 
     <label for="name">{{ 'Tu nombre' if es else 'Your name' }}</label>
-    <input id="name" name="name" autocomplete="name" required>
+    <input id="name" name="name" value="{{ prefill_name }}" autocomplete="name" required>
 
     <label for="phone">{{ 'Teléfono' if es else 'Phone' }}</label>
-    <input id="phone" name="phone" type="tel" autocomplete="tel">
+    <input id="phone" name="phone" value="{{ prefill_phone }}" type="tel" autocomplete="tel">
 
     <label for="email">{{ 'Correo electrónico' if es else 'Email' }}
       <span class="fine">{{ '(uno de los dos basta)' if es else '(either one is enough)' }}</span></label>
-    <input id="email" name="email" type="email" autocomplete="email">
+    <input id="email" name="email" value="{{ prefill_email }}" type="email" autocomplete="email">
 
     <label for="city">{{ '¿En qué ciudad?' if es else 'What town or city?' }}</label>
     <input id="city" name="city" value="{{ city }}" autocomplete="address-level2" required>
@@ -55,12 +55,26 @@
     <input id="days" name="days"
            placeholder="{{ 'Mañanas, entre semana…' if es else 'Mornings, weekdays…' }}">
 
-    <p style="margin:1.1rem 0 .2rem">
-      <label style="display:flex;gap:.6rem;align-items:flex-start;font-weight:500">
-        <input type="checkbox" name="has_transport" value="1" style="width:auto;margin-top:.25rem">
-        <span>{{ 'Tengo carro o transporte propio' if es else 'I have my own transport' }}</span>
-      </label>
-    </p>
+    {% set sel = "width:100%;font:inherit;font-size:1rem;padding:.7rem .8rem;border-radius:9px;border:1.5px solid var(--line);background:var(--page);color:var(--ink)" %}
+    <label for="travel">{{ '¿Cómo llegas al trabajo?' if es else 'How do you get to work?' }}</label>
+    <select id="travel" name="travel" style="{{ sel }}">
+      <option value="car">{{ 'Tengo carro' if es else 'I have a car' }}</option>
+      <option value="transit">{{ 'Transporte público' if es else 'Bus or train' }}</option>
+      <option value="rides">{{ 'Alguien me lleva' if es else 'Somebody drives me' }}</option>
+      <option value="walk">{{ 'Camino o bicicleta' if es else 'Walk or bike' }}</option>
+      <option value="unsure">{{ 'Todavía no estoy seguro/a' if es else 'Not sure yet' }}</option>
+    </select>
+    <p class="fine" style="margin:.4rem 0 0">{% if es %}Todas las respuestas sirven. En las
+      ciudades grandes casi nadie usa carro.{% else %}Every answer is fine. In big cities
+      most people don&rsquo;t drive.{% endif %}</p>
+
+    <label for="travel_miles">{{ '¿Qué tan lejos puedes ir?' if es else 'How far can you travel?' }}</label>
+    <select id="travel_miles" name="travel_miles" style="{{ sel }}">
+      <option value="5">{{ 'Hasta 5 millas' if es else 'Up to 5 miles' }}</option>
+      <option value="10" selected>{{ 'Hasta 10 millas' if es else 'Up to 10 miles' }}</option>
+      <option value="20">{{ 'Hasta 20 millas' if es else 'Up to 20 miles' }}</option>
+      <option value="40">{{ 'Más de 20 millas' if es else 'More than 20 miles' }}</option>
+    </select>
 
     <label for="note">{{ 'Algo más que quieras decir' if es else 'Anything else' }}
       <span class="fine">{{ '(opcional)' if es else '(optional)' }}</span></label>

@@ -27,19 +27,36 @@ def send_interview_invite_email(app_rec):
         html=html,
     )
 
+# Six, and every one has to earn its place on a video.
+#
+# The old set asked "do you have reliable transportation?", "are you available
+# weekends?" and "are you comfortable working independently?" — three one-word
+# answers, and nobody has ever said no to the third. Two of them were form fields
+# wearing an interview question's clothes; they are sortable checkboxes on the
+# application now, where an owner can actually filter on them.
+#
+# What is left is behavioural. Q2 cannot be faked by anybody who has not done the
+# work, and Q4 is the one that matters most: these people are alone in strangers'
+# homes, and how somebody handled the thing they broke is the only honest signal
+# there is.
 _QUESTIONS_EN = [
-    "Tell me about your cleaning experience.",
-    "Are you comfortable working independently without supervision?",
-    "Do you have reliable transportation?",
-    "Are you available on weekends?",
+    "Tell me about your cleaning experience — what kind of places, and for how long.",
+    "Walk me through how you'd clean a bathroom, start to finish.",
+    "Tell me about a time a customer wasn't happy with something you did. What happened?",
+    "Tell me about a time something went wrong on a job — something you broke, missed, "
+    "or got wrong. What did you do?",
+    "What would make you want to stay somewhere a long time?",
     "Why do you want to work with {biz}?",
 ]
 
 _QUESTIONS_ES = [
-    "Cuéntame sobre tu experiencia en limpieza.",
-    "¿Te sientes cómodo/a trabajando de forma independiente sin supervisión?",
-    "¿Tienes transporte propio y confiable?",
-    "¿Estás disponible los fines de semana?",
+    "Cuéntame sobre tu experiencia en limpieza — qué tipo de lugares y por cuánto tiempo.",
+    "Explícame cómo limpias un baño, desde el principio hasta el final.",
+    "Cuéntame de una vez que un cliente no quedó contento con algo que hiciste. "
+    "¿Qué pasó?",
+    "Cuéntame de una vez que algo salió mal en un trabajo — algo que rompiste, se te "
+    "olvidó, o hiciste mal. ¿Qué hiciste?",
+    "¿Qué te haría querer quedarte mucho tiempo en un trabajo?",
     "¿Por qué quieres trabajar con {biz}?",
 ]
 

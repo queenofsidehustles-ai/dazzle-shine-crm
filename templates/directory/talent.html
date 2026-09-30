@@ -22,7 +22,10 @@
       <tr>
         <td><strong>{{ p.name }}</strong>
           {% if p.language == 'es' %}<span class="pill">Español</span>{% endif %}
-          {% if p.has_transport %}<br><span class="fine">has transport</span>{% endif %}
+          {% set how = {'car':'has a car','transit':'bus or train','rides':'gets a lift',
+                        'walk':'walks or bikes','unsure':'transport not settled'} %}
+          {% if p.travel %}<br><span class="fine">{{ how.get(p.travel, p.travel) }}{% if p.travel_miles %},
+            travels up to {{ p.travel_miles }} mi{% endif %}</span>{% endif %}
           {% if p.days %}<br><span class="fine">{{ p.days }}</span>{% endif %}</td>
         <td>{{ p.city }}{% if p.state %}, {{ p.state }}{% endif %}
           {% if p.zip_code %}<br><span class="fine">{{ p.zip_code }}</span>{% endif %}</td>
