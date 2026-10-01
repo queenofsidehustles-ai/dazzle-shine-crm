@@ -47,6 +47,22 @@
       claim. Book it as an ordinary job — they are already on your team at this point, so
       you can assign it or broadcast it like any other.
     </p>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin:14px 0">
+      <div style="flex:1 1 150px">
+        <label for="test_clean_pay">What you pay for it</label>
+        <input id="test_clean_pay" name="test_clean_pay" value="{{ current.test_clean_pay }}"
+               placeholder="40" inputmode="decimal">
+      </div>
+      <div style="flex:1 1 150px">
+        <label for="test_clean_length">How long it runs</label>
+        <input id="test_clean_length" name="test_clean_length" value="{{ current.test_clean_length }}"
+               placeholder="2 hours">
+      </div>
+    </div>
+    <p class="muted" style="font-size:.9rem">Both optional, and both go in the offer email
+      when you fill them in &mdash; &ldquo;$40 for about 2 hours&rdquo;. A candidate who knows
+      the number before they say yes is a candidate who turns up.</p>
+
     <label for="test_clean_calendar_link">Booking link for test-clean slots</label>
     <input id="test_clean_calendar_link" name="test_clean_calendar_link" type="url"
            value="{{ current.test_clean_calendar_link }}"

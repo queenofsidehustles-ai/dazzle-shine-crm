@@ -501,6 +501,26 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
     if _test_clean_required():
         from models import BusinessSetting as _BS
         _cal = (_BS.get('test_clean_calendar_link') or '').strip()
+        # The note at the top of this function keeps dollar figures out of the
+        # email, because a job taken with a partner pays each a share and any
+        # example becomes the number somebody remembers. A test clean is a fixed
+        # amount, set by the owner, for one person — so the reasoning does not
+        # reach it, and saying the number is better than making them ask.
+        _pay = (_BS.get('test_clean_pay') or '').strip().lstrip('$')
+        _len = (_BS.get('test_clean_length') or '').strip()
+        if _pay:
+            try:
+                _pay = f"${float(_pay):,.0f}" if float(_pay) == int(float(_pay)) else f"${float(_pay):,.2f}"
+            except ValueError:
+                _pay = f"${_pay}"
+        _terms = ' '.join(x for x in (
+            (f"You will be paid <strong>{_pay}</strong>" if _pay else "It is paid"),
+            (f"for about {_len}" if _len else ""),
+        ) if x).strip() + ("." if _pay or _len else ", the same as any other job.")
+        _terms_es = ' '.join(x for x in (
+            (f"Te pagamos <strong>{_pay}</strong>" if _pay else "Es pagada"),
+            (f"por aproximadamente {_len}" if _len else ""),
+        ) if x).strip() + ("." if _pay or _len else ", igual que cualquier otro trabajo.")
         _pick = (f'<p style="margin:14px 0 0"><a href="{_cal}" '
                  f'style="background:#3b6fb5;color:#fff;padding:12px 26px;border-radius:8px;'
                  f'text-decoration:none;font-weight:700;display:inline-block">'
@@ -510,8 +530,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
       <div style="font-weight:700;color:#16213a;font-size:1.05rem;margin-bottom:10px">🧽 One more step — a test clean</div>
       <p style="color:#33506f;line-height:1.7;margin:0 0 10px">
         Before your first real job we will book you in for a <strong>test clean</strong>,
-        so we can see how you work and you can see how we do things. <strong>It is
-        paid</strong>, the same as any other job.
+        so we can see how you work and you can see how we do things. """ + _terms + """
       </p>
       <p style="color:#33506f;line-height:1.7;margin:0">
         Accept your offer below and we will be in touch with times. Tell us which days
@@ -522,8 +541,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
     <div style="background:#eef6ff;border-radius:10px;padding:16px 24px;margin:-14px 0 22px">
       <p style="color:#33506f;font-size:.92rem;line-height:1.6;margin:0">
         <strong>Prueba de limpieza:</strong> antes de tu primer trabajo te programamos una
-        limpieza de prueba, para ver cómo trabajas. <strong>Es pagada</strong>, igual que
-        cualquier otro trabajo. Dinos qué días te quedan bien.
+        limpieza de prueba, para ver cómo trabajas. """ + _terms_es + """ Dinos qué días te quedan bien.
       </p>
     </div>"""
 

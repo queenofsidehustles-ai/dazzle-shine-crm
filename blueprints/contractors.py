@@ -1350,7 +1350,7 @@ def hiring_settings():
     hiring pages that read these settings, so setting them up and using
     them are in the same place."""
     fields = ['interview_calendar_link', 'bgcheck_provider_name', 'bgcheck_provider_url',
-              'test_clean_calendar_link']
+              'test_clean_calendar_link', 'test_clean_pay', 'test_clean_length']
     # A checkbox that is off submits nothing, so it cannot ride along with the
     # text fields — an unticked box would read as "unchanged" and never turn off.
     flags = ['require_test_clean']
