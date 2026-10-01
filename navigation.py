@@ -88,6 +88,13 @@ SECTIONS = [
         ('contractors.applications', '📥', 'Hiring', False, [
             ('contractors.applications', 'Applications', False),
             ('interviews.admin_interviews', 'Interviews', False),
+            # Finding people, as opposed to processing the ones who turned up.
+            # Three in four applicants never record a video, so the pile of
+            # people who applied and were never hired is the biggest source of
+            # cleaners most companies have and nobody was using it.
+            ('directory.talent_pool', 'Cleaners near you', False),
+            ('directory.invite_past_applicants', 'Invite past applicants', False),
+            ('directory.hiring_ads', 'Job adverts to post', False),
             # Used to be a card on Business Settings -- the interview link and
             # BG-check provider these two pages actually use, moved next to
             # them rather than a click away under Settings.
