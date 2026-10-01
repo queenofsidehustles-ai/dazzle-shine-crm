@@ -1978,6 +1978,56 @@ def _company_answers(form):
     }
 
 
+def _join_talent_pool(name, email, phone, form):
+    """Put an applicant into the shared pool, if they asked to be.
+
+    Asked here rather than later, and of the applicant rather than the owner.
+    Consent belongs to the person it is about, and the moment they will give it
+    is while they are looking for work — not thirty days after an interview
+    invite they never opened, in an email from a company that said no.
+
+    It also means nobody has to remember to do anything. No switch for an owner
+    to find, no campaign to run: one box on the form they are already filling in.
+
+    Visible straight away, deliberately. Somebody who needs work this week is
+    not served by waiting until this company gets round to marking them closed.
+    Being on the list does not take them out of anybody's pipeline.
+    """
+    if 'share_with_other_companies' not in form:
+        return
+    try:
+        from blueprints.directory_claim import DirectoryTalent
+        import secrets as _secrets, branding as _b
+        if not email and not phone:
+            return
+        existing = DirectoryTalent.query.filter(
+            db.func.lower(DirectoryTalent.email) == (email or '').lower()).first()
+        if existing:
+            existing.share = True
+            existing.status = 'looking'
+            db.session.commit()
+            return
+        miles = (form.get('travel_miles') or '').strip()
+        db.session.add(DirectoryTalent(
+            name=name, email=email or None, phone=phone or None,
+            city=(_b.city() if hasattr(_b, 'city') else None) or
+                 (form.get('city') or '').strip()[:100] or None,
+            state=((form.get('state') or '').strip().upper()[:2] or None),
+            language='es' if (form.get('lang') or '').startswith('es') else 'en',
+            experience=(form.get('years_experience') or '')[:20],
+            travel='car' if 'has_transportation' in form else None,
+            travel_miles=int(miles) if miles.isdigit() else None,
+            days=', '.join(form.getlist('availability'))[:120] or None,
+            source=f'applied:{_b.biz_name()}'[:30],
+            share=True, status='looking',
+            opt_out_token=_secrets.token_urlsafe(32)))
+        db.session.commit()
+    except Exception:
+        # Never let the pool break somebody's application. They applied to this
+        # company; that is the thing that must survive.
+        db.session.rollback()
+
+
 @contractors_bp.route('/apply', methods=['GET', 'POST'])
 def apply():
     if request.method == 'POST':
@@ -2008,6 +2058,7 @@ def apply():
             _note = f"Re-applied {datetime.utcnow().strftime('%b %d, %Y')} — info updated, no duplicate created."
             existing.admin_notes = (existing.admin_notes + "\n" + _note) if existing.admin_notes else _note
             db.session.commit()
+            _join_talent_pool(existing.name, existing.email, existing.phone, request.form)
             return render_template('public/apply_done.html', name=existing.name)
 
         a = ContractorApplication(
@@ -2103,6 +2154,7 @@ def apply():
             t.daemon = True
             t.start()
 
+        _join_talent_pool(a.name, a.email, a.phone, request.form)
         return render_template('public/apply_done.html', name=a.name)
     return render_template('public/apply.html')
 
