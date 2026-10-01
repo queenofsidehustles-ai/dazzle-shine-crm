@@ -1353,7 +1353,7 @@ def hiring_settings():
               'test_clean_calendar_link', 'test_clean_pay', 'test_clean_length']
     # A checkbox that is off submits nothing, so it cannot ride along with the
     # text fields — an unticked box would read as "unchanged" and never turn off.
-    flags = ['require_test_clean']
+    flags = ['require_test_clean', 'provide_uniforms']
     if request.method == 'POST':
         for f in fields:
             BusinessSetting.set(f, (request.form.get(f) or '').strip())
@@ -2014,11 +2014,19 @@ def _join_talent_pool(name, email, phone, form):
             db.session.commit()
             return
         miles = (form.get('travel_miles') or '').strip()
+        # The application form asks for neither city nor state, so take the
+        # company's. Somebody applying to a cleaning company in Orlando works in
+        # Orlando — and without this they land in the pool with no location at
+        # all, which means the owner's own view filters them straight back out.
+        # Found by the end-to-end test; invisible to anything smaller.
+        from models import BusinessSetting as _BS
+        city = ((form.get('city') or '').strip()
+                or (_BS.get('city') or '').strip())[:100] or None
+        state = ((form.get('state') or '').strip()
+                 or (_BS.get('state') or '').strip()).upper()[:2] or None
         db.session.add(DirectoryTalent(
             name=name, email=email or None, phone=phone or None,
-            city=(_b.city() if hasattr(_b, 'city') else None) or
-                 (form.get('city') or '').strip()[:100] or None,
-            state=((form.get('state') or '').strip().upper()[:2] or None),
+            city=city, state=state,
             language='es' if (form.get('lang') or '').startswith('es') else 'en',
             experience=(form.get('years_experience') or '')[:20],
             travel='car' if 'has_transportation' in form else None,

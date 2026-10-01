@@ -1182,8 +1182,14 @@ class Staff(db.Model):
         ('shadow_job',        'Test clean / shadow shift'),
         ('first_solo_job',    'First solo job assigned'),
     ]
-    # Steps that only apply to employees (not independent contractors)
-    EMPLOYEE_ONLY_STEPS = {'uniform_size', 'supply_kit'}
+    # Steps that only apply to employees (not independent contractors).
+    #
+    # Uniforms are not one of them. Plenty of companies that pay 1099 still put
+    # their crews in branded shirts, and plenty of employers do not bother — so
+    # it follows the `provide_uniforms` setting rather than the worker model,
+    # and a company that does not issue uniforms never sees the step at all.
+    EMPLOYEE_ONLY_STEPS = {'supply_kit'}
+    UNIFORM_STEPS = {'uniform_size'}
 
     def get_onboarding(self):
         try:
@@ -1192,11 +1198,19 @@ class Staff(db.Model):
             return []
 
     def get_applicable_steps(self):
-        """Return steps relevant to this worker's model (contractor vs employee)."""
+        """Steps relevant to this worker — their model, and what this company does.
+
+        A step nobody will ever tick is worse than a missing one: it sits unticked
+        forever and makes a finished onboarding look unfinished.
+        """
         model = self.worker_model or 'contractor'
-        if model == 'employee':
-            return self.ONBOARDING_STEPS
-        return [(k, v) for k, v in self.ONBOARDING_STEPS if k not in self.EMPLOYEE_ONLY_STEPS]
+        skip = set() if model == 'employee' else set(self.EMPLOYEE_ONLY_STEPS)
+        try:
+            if (BusinessSetting.get('provide_uniforms') or '') != '1':
+                skip |= self.UNIFORM_STEPS
+        except Exception:
+            pass
+        return [(k, v) for k, v in self.ONBOARDING_STEPS if k not in skip]
 
     def pay_label(self):
         if self.pay_type == 'hourly':

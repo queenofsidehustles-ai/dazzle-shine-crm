@@ -545,6 +545,21 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
       </p>
     </div>"""
 
+    # Asked here because it is the one thing the company needs back from them
+    # before a first shift, and an offer email gets read.
+    from models import BusinessSetting as _BS2
+    uniform_block = ''
+    if (_BS2.get('provide_uniforms') or '') == '1':
+        uniform_block = """
+    <div style="background:#f6f4fb;border:2px solid #7c6bb0;border-radius:10px;padding:20px 24px;margin-bottom:22px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.02rem;margin-bottom:8px">👕 We provide the uniform</div>
+      <p style="color:#4a3f63;line-height:1.7;margin:0">
+        Just reply to this email with your <strong>shirt size</strong> and we will have it
+        ready for your first day. &mdash; <em>Responde a este correo con tu
+        <strong>talla de camisa</strong> y la tendremos lista para tu primer día.</em>
+      </p>
+    </div>"""
+
     accept_block = ''
     if accept_url:
         accept_block = f"""
@@ -660,7 +675,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
         <li>You choose your schedule by accepting the jobs that work for you.</li>
       </ul>
     </div>
-    {test_block}{bg_en}
+    {uniform_block}{test_block}{bg_en}
 
     <!-- NEXT STEPS -->
     <div style="margin-bottom:8px">

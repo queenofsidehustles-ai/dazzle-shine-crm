@@ -32,6 +32,19 @@
       • <strong>Free first step</strong>: Always check National Sex Offender Registry → <code>https://www.nsopw.gov</code>
     </div>
   <div class="card" style="margin-top:18px">
+    <h3>Uniforms</h3>
+    <p class="muted">Only if you issue them. Turn this on and the offer email asks for a
+      shirt size, in English and Spanish, and the onboarding checklist gains a uniform
+      step. Leave it off and neither ever appears &mdash; a step nobody will tick makes a
+      finished onboarding look unfinished.</p>
+    <label style="display:flex;gap:10px;align-items:flex-start;font-weight:600;margin:14px 0">
+      <input type="checkbox" name="provide_uniforms" value="1"
+             {{ 'checked' if current.provide_uniforms }} style="width:auto;margin-top:4px">
+      <span>We provide uniforms &mdash; ask new hires for their shirt size</span>
+    </label>
+  </div>
+
+  <div class="card" style="margin-top:18px">
     <h3>Test clean before hiring</h3>
     <p class="muted">Plenty of owners want to watch somebody clean before trusting them in a
       customer's home. Turn this on and the conditional offer says so up front, in English
