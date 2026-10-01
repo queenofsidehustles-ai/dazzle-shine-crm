@@ -137,6 +137,20 @@ class DirectoryTalent(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class DirectoryInvite(db.Model):
+    """Who has already been asked to join the pool, so nobody is asked twice.
+
+    Lives in public alongside the rest of the directory tables, so it records
+    which company the invite came from — the applications themselves live in
+    each company's own schema and cannot be marked from here.
+    """
+    __tablename__ = 'directory_invite'
+    id = db.Column(db.Integer, primary_key=True)
+    company = db.Column(db.String(64), index=True)
+    email = db.Column(db.String(200), index=True)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class DirectoryClaim(db.Model):
     """Somebody saying a listing is theirs, and how far they got proving it."""
     __tablename__ = 'directory_claim'
@@ -367,6 +381,82 @@ def talent_pool():
     return render_template('directory/talent.html', people=people, state=state,
                            states=sorted(states), here_city=here_city,
                            biz=branding.biz_name())
+
+
+# ── inviting your own past applicants into the pool ─────────────────────────
+def _uninvited_applicants(slug):
+    """People who applied here, were never hired, and have not been asked yet."""
+    from models import ContractorApplication
+    rows = (ContractorApplication.query
+            .filter(~ContractorApplication.status.in_(('hired', 'onboarding')))
+            .filter(ContractorApplication.email.isnot(None))
+            .order_by(ContractorApplication.created_at.desc()).all())
+    already = {e.lower() for (e,) in db.session.query(DirectoryInvite.email)
+               .filter_by(company=slug).all() if e}
+    return [a for a in rows if (a.email or '').lower() not in already]
+
+
+@directory_bp.route('/admin/talent/invite', methods=['GET', 'POST'])
+@login_required
+def invite_past_applicants():
+    """Ask the people who applied here and were never hired whether they want
+    other cleaning companies nearby to see them.
+
+    Runs in the app rather than as a command on somebody's laptop, because the
+    mail key lives here — and because every company should be able to do this
+    for itself, not just the one whose developer has a terminal open.
+    """
+    import tenancy
+    slug = (tenancy.current_schema() or '').replace(tenancy.SCHEMA_PREFIX, '') or 'default'
+    people = _uninvited_applicants(slug)
+    biz = branding.biz_name()
+
+    if request.method == 'GET':
+        return render_template('directory/invite.html', people=people[:20],
+                               total=len(people), biz=biz,
+                               can_send=bool(product.resend_api_key()))
+
+    key = product.resend_api_key()
+    if not key:
+        flash('No product mail key is configured, so nothing was sent.', 'error')
+        return redirect(url_for('directory.invite_past_applicants'))
+
+    try:
+        limit = max(1, min(int(request.form.get('limit') or 10), 500))
+    except ValueError:
+        limit = 10
+
+    base = product.site_url() if hasattr(product, 'site_url') else 'https://www.akyehq.com'
+    sent = failed = 0
+    for a in people[:limit]:
+        link = (f"{base}/work?src=past-applicant"
+                f"&name={quote(a.name or '')}&email={quote(a.email or '')}"
+                f"&phone={quote(a.phone or '')}")
+        ok, _why = send_email(
+            to_email=a.email, to_name=a.name or '',
+            subject='Still looking for cleaning work?',
+            html=(f"<p>Hi {(a.name or '').split(' ')[0]},</p>"
+                  f"<p>You applied to {biz} a while back and we weren't able to take you "
+                  f"on. I'm sorry we left it there.</p>"
+                  f"<p>We've since put together a list that cleaning companies near you "
+                  f"can look at when they're hiring. If you'd like to be on it, it takes "
+                  f"a minute and it's free:</p>"
+                  f"<p><a href='{link}'>Yes, show me to cleaning companies near me</a></p>"
+                  f"<p>Your details are already filled in — just check them and tick the "
+                  f"box. You can take yourself off any time, and if you'd rather not, do "
+                  f"nothing at all and you won't hear from us again.</p>"),
+            from_name=biz, api_key=key)
+        # Recorded either way: a bounce is not a reason to pester somebody again.
+        db.session.add(DirectoryInvite(company=slug, email=a.email))
+        sent += 1 if ok else 0
+        failed += 0 if ok else 1
+    db.session.commit()
+
+    if failed:
+        flash(f'{sent} invited, {failed} could not be delivered.', 'error')
+    else:
+        flash(f'{sent} past applicant{"s" if sent != 1 else ""} invited.', 'success')
+    return redirect(url_for('directory.invite_past_applicants'))
 
 
 # ── adding a business the records missed ────────────────────────────────────
