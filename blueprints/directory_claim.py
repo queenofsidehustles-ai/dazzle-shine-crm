@@ -450,6 +450,18 @@ def invite_applicants(tenant, send, limit):
     from models import ContractorApplication
     base = product.site_url() if hasattr(product, 'site_url') else 'https://www.akyehq.com'
 
+    # Refuse early rather than report "0 sent", which reads exactly like "nobody
+    # qualified" and sent me looking in the wrong place for ten minutes. The key
+    # lives in Railway, so running this from a laptop will always send nothing.
+    key = product.resend_api_key()
+    if send and not key:
+        raise click.ClickException(
+            'No PRODUCT_RESEND_API_KEY in this environment, so nothing could be sent.\n'
+            'Run it where the key is — Railway\'s shell — or put the key in front of '
+            'the command:\n'
+            '    PRODUCT_RESEND_API_KEY=re_... flask directory invite-applicants '
+            '--tenant <slug> --send')
+
     with tenancy.use_tenant(tenant):
         rows = (ContractorApplication.query
                 .filter(~ContractorApplication.status.in_(('hired', 'onboarding')))
@@ -461,7 +473,7 @@ def invite_applicants(tenant, send, limit):
         print(f'{len(rows)} past applicants at {biz} who were never hired')
         if not send:
             print('DRY RUN — nothing sent. Add --send to actually email them.\n')
-        sent = 0
+        sent = failed = 0
         for a in rows:
             link = (f"{base}/work?src=past-applicant"
                     f"&name={quote(a.name or '')}&email={quote(a.email or '')}"
@@ -471,7 +483,7 @@ def invite_applicants(tenant, send, limit):
                     print(f'  would email {a.email}  ({a.name})')
                 sent += 1
                 continue
-            ok, _ = send_email(
+            ok, why = send_email(
                 to_email=a.email, to_name=a.name or '',
                 subject=f'Still looking for cleaning work?',
                 html=(f"<p>Hi {(a.name or '').split(' ')[0]},</p>"
@@ -484,9 +496,17 @@ def invite_applicants(tenant, send, limit):
                       f"<p>Your details are already filled in — just check them and tick "
                       f"the box. You can take yourself off any time, and if you'd rather "
                       f"not, do nothing at all and you won't hear from us again.</p>"),
-                from_name=biz, api_key=product.resend_api_key() or None)
-            sent += 1 if ok else 0
-        print(f'\n{sent} {"emails sent" if send else "would be emailed"}')
+                from_name=biz, api_key=key or None)
+            if ok:
+                sent += 1
+            else:
+                failed += 1
+                if failed <= 3:
+                    print(f'  FAILED {a.email}: {why}')
+        if failed:
+            print(f'\n{sent} sent, {failed} failed — see the reasons above.')
+        else:
+            print(f'\n{sent} {"emails sent" if send else "would be emailed"}')
 
 
 @directory_bp.cli.command('export-submissions')
