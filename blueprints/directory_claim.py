@@ -36,6 +36,7 @@ from extensions import db
 from notifications import send_email
 from models import BusinessSetting
 import product
+import branding
 
 directory_bp = Blueprint('directory', __name__)
 
@@ -351,7 +352,6 @@ def talent_pool():
     lever once it has depth, and gating it while it is thin would just teach
     people it is empty.
     """
-    import branding
     here_state = (BusinessSetting.get('state') or '').upper()[:2]
     here_city = (BusinessSetting.get('city') or '').strip()
     q = DirectoryTalent.query.filter_by(share=True, status='looking')
