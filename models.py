@@ -1179,7 +1179,7 @@ class Staff(db.Model):
         ('uniform_size',      'Shirt size & uniform issued'),
         ('orientation',       'Orientation / training completed'),
         ('supply_kit',        'Supply kit issued'),
-        ('shadow_job',        'Shadow / trial shift (optional)'),
+        ('shadow_job',        'Test clean / shadow shift'),
         ('first_solo_job',    'First solo job assigned'),
     ]
     # Steps that only apply to employees (not independent contractors)

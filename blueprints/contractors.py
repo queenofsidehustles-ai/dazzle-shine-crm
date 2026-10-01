@@ -1349,14 +1349,20 @@ def hiring_settings():
     applications it actually configures. Its own tab, next to the two
     hiring pages that read these settings, so setting them up and using
     them are in the same place."""
-    fields = ['interview_calendar_link', 'bgcheck_provider_name', 'bgcheck_provider_url']
+    fields = ['interview_calendar_link', 'bgcheck_provider_name', 'bgcheck_provider_url',
+              'test_clean_calendar_link']
+    # A checkbox that is off submits nothing, so it cannot ride along with the
+    # text fields — an unticked box would read as "unchanged" and never turn off.
+    flags = ['require_test_clean']
     if request.method == 'POST':
         for f in fields:
             BusinessSetting.set(f, (request.form.get(f) or '').strip())
+        for f in flags:
+            BusinessSetting.set(f, '1' if request.form.get(f) else '')
         db.session.commit()
         flash('Hiring settings saved!', 'success')
         return redirect(url_for('contractors.hiring_settings'))
-    current = {f: BusinessSetting.get(f) or '' for f in fields}
+    current = {f: BusinessSetting.get(f) or '' for f in fields + flags}
     return render_template('admin/hiring_settings.html', current=current)
 
 

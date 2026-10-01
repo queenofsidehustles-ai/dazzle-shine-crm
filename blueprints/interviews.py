@@ -474,6 +474,17 @@ def send_invite(app_id):
     return redirect(request.referrer or url_for('interviews.admin_interviews'))
 
 
+def _test_clean_required():
+    """Does this company want a test clean before anybody is really hired?
+
+    Off unless a company turns it on. Plenty of owners want to watch somebody
+    clean before they trust them in a customer's home, and plenty do not — it is
+    not the sort of thing to decide on their behalf.
+    """
+    from models import BusinessSetting
+    return (BusinessSetting.get('require_test_clean') or '') == '1'
+
+
 def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
                          include_bgcheck=True):
     first = (name or 'there').split()[0]
@@ -482,6 +493,40 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
     # against — and a job taken with a partner pays each of them a share, so the
     # remembered figure would be roughly double what they were then offered. The
     # model is explained instead, and the offer on a real job carries the number.
+    # A test clean, where the company asks for one. Said here rather than sprung
+    # later: somebody who finds out at the door that the job was conditional on
+    # an unpaid audition has been misled, and the ones who would have said no
+    # should get to say it now.
+    test_block = ''
+    if _test_clean_required():
+        from models import BusinessSetting as _BS
+        _cal = (_BS.get('test_clean_calendar_link') or '').strip()
+        _pick = (f'<p style="margin:14px 0 0"><a href="{_cal}" '
+                 f'style="background:#3b6fb5;color:#fff;padding:12px 26px;border-radius:8px;'
+                 f'text-decoration:none;font-weight:700;display:inline-block">'
+                 f'Pick a time &rarr;</a></p>') if _cal else ''
+        test_block = """
+    <div style="background:#eef6ff;border:2px solid #3b6fb5;border-radius:10px;padding:22px 24px;margin-bottom:22px">
+      <div style="font-weight:700;color:#16213a;font-size:1.05rem;margin-bottom:10px">🧽 One more step — a test clean</div>
+      <p style="color:#33506f;line-height:1.7;margin:0 0 10px">
+        Before your first real job we will book you in for a <strong>test clean</strong>,
+        so we can see how you work and you can see how we do things. <strong>It is
+        paid</strong>, the same as any other job.
+      </p>
+      <p style="color:#33506f;line-height:1.7;margin:0">
+        Accept your offer below and we will be in touch with times. Tell us which days
+        suit you and we will work around them.
+      </p>
+      """ + _pick + """
+    </div>
+    <div style="background:#eef6ff;border-radius:10px;padding:16px 24px;margin:-14px 0 22px">
+      <p style="color:#33506f;font-size:.92rem;line-height:1.6;margin:0">
+        <strong>Prueba de limpieza:</strong> antes de tu primer trabajo te programamos una
+        limpieza de prueba, para ver cómo trabajas. <strong>Es pagada</strong>, igual que
+        cualquier otro trabajo. Dinos qué días te quedan bien.
+      </p>
+    </div>"""
+
     accept_block = ''
     if accept_url:
         accept_block = f"""
@@ -597,7 +642,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
         <li>You choose your schedule by accepting the jobs that work for you.</li>
       </ul>
     </div>
-    {bg_en}
+    {test_block}{bg_en}
 
     <!-- NEXT STEPS -->
     <div style="margin-bottom:8px">
