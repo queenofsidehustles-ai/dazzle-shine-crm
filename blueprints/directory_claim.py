@@ -383,6 +383,35 @@ def talent_pool():
                            biz=branding.biz_name())
 
 
+@directory_bp.route('/admin/talent/ads')
+@login_required
+def hiring_ads():
+    """Ready-made job adverts, and the link to point them at.
+
+    A company posting its own opening is the employer, so it may post free on
+    Indeed. Akye may not — third parties have to sponsor, which is Indeed's own
+    rule. So the scalable version of filling the pool is not Akye advertising
+    anywhere: it is every company advertising its own real job, for free, and
+    the people they do not hire being invited in afterwards.
+
+    Two versions, because 1099 and W-2 are not a wording preference. An advert
+    that describes a contractor role in employment language — set shifts, we
+    train you, your supervisor — is evidence of misclassification, and the
+    liability lands on the cleaning company, not on us. Handing somebody the
+    wrong template would be handing them a problem.
+    """
+    import tenancy
+    slug = (tenancy.current_schema() or '').replace(tenancy.SCHEMA_PREFIX, '')
+    base = branding.crm_base() or 'https://www.akyehq.com'
+    apply_url = f"{base}/apply"
+    model = (BusinessSetting.get('worker_model') or 'contractor')
+    city = (BusinessSetting.get('city') or 'your area')
+    state = (BusinessSetting.get('state') or '')
+    return render_template('directory/ads.html', biz=branding.biz_name(),
+                           apply_url=apply_url, model=model, city=city,
+                           state=state, slug=slug)
+
+
 # ── inviting your own past applicants into the pool ─────────────────────────
 def _uninvited_applicants(slug):
     """People who applied here, were never hired, and have not been asked yet."""
