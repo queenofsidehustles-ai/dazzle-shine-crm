@@ -22,9 +22,26 @@ branch_labels = None
 depends_on = None
 
 
+def _current_schema():
+    import sqlalchemy as _sa
+    bind = op.get_bind()
+    if bind.dialect.name != 'postgresql':
+        return None
+    return bind.execute(_sa.text('SELECT current_schema()')).scalar()
+
+
 def _has_table(name):
     from sqlalchemy import inspect as sa_inspect
-    return name in set(sa_inspect(op.get_bind()).get_table_names())
+    # Scoped to the schema this migration is actually running against.
+    # Unscoped, get_table_names() can be fooled by a same-named table
+    # elsewhere -- here, specifically, by public.rental_property/
+    # rental_turnover, which app boot's untenanted db.create_all() creates
+    # once in `public` the moment the models exist. Every tenant schema
+    # migrated afterward would see that table "already there" and skip
+    # creating its own, so no company signing up after this shipped would
+    # ever get a working rental_property/rental_turnover table at all.
+    return name in set(sa_inspect(op.get_bind()).get_table_names(
+        schema=_current_schema()))
 
 
 def upgrade():
