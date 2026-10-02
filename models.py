@@ -2225,3 +2225,61 @@ class AssistantProposal(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     used_at = db.Column(db.DateTime)
     outcome = db.Column(db.Text)
+
+
+class RentalProperty(db.Model):
+    """A short-term rental whose calendar we read.
+
+    The host pastes the iCal link their listing already publishes. Everything
+    else here is what a turnover job needs — where it is, what it is worth, and
+    what time the cleaner should be there.
+    """
+    __tablename__ = 'rental_property'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'))
+    name = db.Column(db.String(120), nullable=False)
+    address = db.Column(db.String(200))
+    city = db.Column(db.String(80))
+    zip_code = db.Column(db.String(10))
+    ical_url = db.Column(db.String(600), nullable=False)
+    service_type = db.Column(db.String(50))
+    price = db.Column(Money)
+    clean_time = db.Column(db.String(20))
+    is_active = db.Column(db.Boolean, default=True)
+    last_synced_at = db.Column(db.DateTime)
+    last_error = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    client = db.relationship('Client', backref='rental_properties')
+
+    @property
+    def is_stale(self):
+        """Has this feed gone quiet? A sync that stopped silently is the way a
+        turnover gets missed, so the screen should be able to say so."""
+        import rentals
+        return (not self.last_synced_at
+                or (datetime.utcnow() - self.last_synced_at) > rentals.STALE_AFTER)
+
+
+class RentalTurnover(db.Model):
+    """One stay we have already turned into a cleaning job.
+
+    Keyed on the calendar's own UID plus the checkout date, so reading the same
+    feed again never books the same clean twice — and a guest who changes their
+    dates produces a new row rather than a silently moved job.
+    """
+    __tablename__ = 'rental_turnover'
+    id = db.Column(db.Integer, primary_key=True)
+    property_id = db.Column(db.Integer, db.ForeignKey('rental_property.id'), nullable=False)
+    uid = db.Column(db.String(300), nullable=False)
+    checkout_on = db.Column(db.String(10), nullable=False)
+    next_checkin_on = db.Column(db.String(10))
+    same_day = db.Column(db.Boolean, default=False)
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    property = db.relationship('RentalProperty', backref='turnovers')
+    booking = db.relationship('Booking')
+
+    __table_args__ = (db.UniqueConstraint('property_id', 'uid', 'checkout_on',
+                                          name='ix_rental_turnover_uid'),)

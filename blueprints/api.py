@@ -676,6 +676,27 @@ def applicant_followups():
                     'moved_to_no_response': no_response})
 
 
+@api_bp.route('/rental-turnovers', methods=['POST'])
+def rental_turnovers():
+    """Re-read every active rental calendar and book what it shows.
+
+    Daily rather than hourly on purpose: a guest cancelling at 2am does not need
+    the cleaner's schedule rewritten at 2am, and a feed read too eagerly is a
+    feed that rate-limits. Anything urgent is a button on the page.
+    """
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    if not automations.is_enabled('rental-turnovers'):
+        return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
+
+    import rentals
+    totals = rentals.sync_all()
+    automations.record('rental-turnovers', items=totals['created'])
+    return jsonify({'ok': True, **totals})
+
+
 # ── Lifecycle marketing emails (cron — run daily or every 15 min) ─────────────
 # Final lead drip, morning-of note, review nudge, recurring upsell + nudge, win-back.
 

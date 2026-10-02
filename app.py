@@ -11,6 +11,7 @@ from extensions import db
 from blueprints.admin import admin_bp
 from blueprints.feedback import feedback_bp
 from blueprints.directory_claim import directory_bp
+from blueprints.rentals_routes import rentals_bp
 from blueprints.console import console_bp
 from blueprints.bookings import bookings_bp
 from blueprints.api import api_bp
@@ -210,6 +211,7 @@ def create_app():
     app.register_blueprint(console_bp)
     app.register_blueprint(feedback_bp)
     app.register_blueprint(directory_bp)
+    app.register_blueprint(rentals_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(bookings_bp)
     app.register_blueprint(api_bp)

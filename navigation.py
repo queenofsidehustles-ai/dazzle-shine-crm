@@ -80,6 +80,9 @@ SECTIONS = [
     ]),
 
     ('My Team', [
+        ('rentals.index', '🏖️', 'Rentals', False, [
+            ('rentals.index', 'Properties & turnovers', False),
+        ]),
         ('contractors.team', '🧹', 'Team', False, [
             ('contractors.team', 'Cleaners', False),
             ('team.availability', 'Availability', True),

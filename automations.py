@@ -33,6 +33,8 @@ JOBS = [
      'Keeps quoting leads warm until they book or opt out.', 'daily'),
     ('applicant-followups', 'Applicant follow-ups',
      'Chases candidates who started an application and stalled.', 'daily'),
+    ('rental-turnovers', 'Short-term rental calendars',
+     'Re-reads each property&rsquo;s calendar and books the turnovers it finds.', 'daily'),
     ('lsa-followups', 'Ads Retargeting',
      'Texts the people who called through Google Ads and never booked.', 'daily'),
     # Only does anything for a business using subcontractors. Harmless and
