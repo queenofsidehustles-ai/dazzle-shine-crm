@@ -31,7 +31,7 @@
 {% else %}
 
 {% if can_act %}
-{% set due = rows|selectattr('email')|rejectattr('invited_at')|list %}
+{% set due = rows|selectattr('email')|rejectattr('invited_at')|rejectattr('unsubscribed_at')|rejectattr('is_customer')|list %}
 {% if due %}
 <form method="post" action="{{ url_for('console.lead_invite_all') }}"
       onsubmit="return confirm('Send the signup invite to all {{ due|length }} leads not yet invited?')"
@@ -83,7 +83,9 @@
     <td>{{ l.contacted_at.strftime('%d %b') if l.contacted_at else '—' }}</td>
     <td style="display:flex;gap:6px;flex-wrap:wrap">
       {% if can_act %}
-      {% if l.email and not l.unsubscribed_at %}
+      {% if l.email and l.is_customer %}
+      <span class="lo-tag">already a customer</span>
+      {% elif l.email and not l.unsubscribed_at %}
       <form method="post" action="{{ url_for('console.lead_invite', lead_id=l.id) }}">
         <button class="btn btn-outline btn-sm" type="submit">
           {{ 'Re-invite' if l.invited_at else 'Invite' }}</button>

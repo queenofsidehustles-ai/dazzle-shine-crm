@@ -150,7 +150,19 @@ fo = funnel.compute(with_optout, LEADS, now=NOW, days=None)
 check(fo['stages'][0]['n'] == f['stages'][0]['n'] + 1,
       'she still counts as a signup -- opting out of nudges is not opting out of the funnel')
 check(all(o['name'] != 'Uniform' for rows in fo['follow_up'].values() for o in rows),
-      'but she is never on any list of who to email or call')
+      'but she is off the trial nudge lists -- not_started, ending')
+
+print('\n4d. Opting out of nudges does not hide a payment that actually failed')
+# The checkbox promises no trial emails and no lead-chasing. A failed charge
+# on a real subscription is neither -- it is money owed, and burying it would
+# mean nobody ever collects it.
+with_optout_pastdue = ORGS + [org('Victor', ago(40), owner_email='v@z.test',
+                                  nudges_opted_out=True,
+                                  stripe_subscription_id='sub_v',
+                                  subscription_status='past_due')]
+fp = funnel.compute(with_optout_pastdue, LEADS, now=NOW, days=None)
+check('Victor' in [o['name'] for o in fp['follow_up']['failing']],
+      'an opted-out company with a failing card is still on the "payment failing" list')
 
 print('\n5. Nothing recorded yet does not divide by zero')
 empty = funnel.compute([], [], now=NOW, days=30)
