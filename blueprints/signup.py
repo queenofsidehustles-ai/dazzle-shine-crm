@@ -277,6 +277,18 @@ def signup():
         import attribution
         from flask import after_this_request
         after_this_request(attribution.forget)
+        # The owner's own copy. Sent before the redirect so that somebody who
+        # closes the tab on the next screen still has their address in writing —
+        # which, until now, they did not.
+        try:
+            import welcome_email
+            welcome_email.send(form.get('business') or slug,
+                               form.get('email') or '',
+                               f'{slug}.{base}',
+                               first=(form.get('name') or '').split(' ')[0])
+        except Exception as _e:
+            print(f'  ⚠️  welcome email not sent for {slug!r}: {_e}')
+
         return redirect(f'{scheme}://{slug}.{base}/welcome/{token}')
 
     return render_template('admin/signup.html', form=form, slug='', base=base,

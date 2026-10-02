@@ -355,6 +355,41 @@ def extend_trial(slug):
     return redirect(here)
 
 
+@console_bp.route('/companies/<slug>/welcome', methods=['POST'])
+@console_required
+def send_welcome(slug):
+    """Send (or re-send) the welcome email to a company's owner.
+
+    Signups before this existed got no welcome at all — their own web address
+    was on one confirmation screen and nowhere else. This is how those people
+    get it, and it is also the honest way to re-send for anybody who lost it.
+
+    From the console rather than a command line because the product mail key
+    lives here, on the host, and not on anybody's laptop.
+    """
+    here = url_for('console.company', slug=slug)
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    if not org:
+        flash('No such company.', 'error')
+        return redirect(here)
+    email = (org.get('owner_email') or '').strip()
+    if not email:
+        flash('That company has no owner email on file.', 'error')
+        return redirect(here)
+
+    import welcome_email, product
+    host = f"{slug}.{os.environ.get('BASE_DOMAIN', 'akyehq.com')}"
+    ok, detail = welcome_email.send(org.get('name') or slug, email, host)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'welcome-email', slug, ('sent' if ok else str(detail))[:300])
+    if ok:
+        flash(f'Welcome email sent to {email}.', 'success')
+    else:
+        flash(f'Could not send it: {detail}', 'error')
+    return redirect(here)
+
+
 @console_bp.route('/companies/<slug>/suspend', methods=['POST'])
 @console_required
 def suspend_company(slug):
