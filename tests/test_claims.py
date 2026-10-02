@@ -32,7 +32,7 @@ notifications.send_email = lambda *a, **k: (True, 'stub')
 from datetime import date, timedelta
 from app import create_app
 from extensions import db
-from models import Booking, Staff
+from models import Booking, Staff, BusinessSetting, ErrorLog
 
 app = create_app()
 
@@ -163,6 +163,39 @@ check(reason in page,
       'and the exact warning is on the claim page, before she takes it')
 check('two places at once' in page,
       'in words rather than a code')
+
+
+print('\n8. The claim still counts even if sending the checklist fails -- and it is not silent')
+bid3, sids3 = fresh()
+with app.app_context():
+    BusinessSetting.set('owner_alert_phone', '4075551234')
+    import blueprints.claims as claims
+    b3 = db.session.get(Booking, bid3)
+    claims.broadcast_job(b3)
+    b3 = db.session.get(Booking, bid3)
+    t3 = b3.claim_token
+    s3 = db.session.get(Staff, sids3[0]).agreement_token
+
+    def _boom(*a, **k):
+        raise RuntimeError('Resend is down')
+
+    import blueprints.workorders as workorders
+    real_create = workorders.create_and_send_workorder
+    workorders.create_and_send_workorder = _boom
+    before_errors = ErrorLog.query.count()
+    SENT.clear()
+    try:
+        r = c.post(f'/claim/{t3}/{s3}/claim', follow_redirects=True)
+    finally:
+        workorders.create_and_send_workorder = real_create
+    check(r.status_code == 200, 'the cleaner still sees the claim page, not a 500')
+    b3 = db.session.get(Booking, bid3)
+    check(b3.assigned_cleaner is not None,
+          'the job is still assigned to her -- a failed checklist send does not undo the claim')
+    check(ErrorLog.query.count() == before_errors + 1,
+          'the failure is written to the error log, not swallowed')
+    check(any('checklist' in body.lower() for _, body in SENT),
+          'and the owner is told the checklist did not go out, not just that the job was claimed')
 
 
 if failures:
