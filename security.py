@@ -327,8 +327,15 @@ def validate_booking_payment_intent():
     return None
 
 
+# Every path Twilio is allowed to post to. A path not listed here is not
+# validated at all — which is fine for paths Twilio never calls, and a hole for
+# any that it does, so a new Twilio webhook has to be added here or it is
+# accepting unsigned POSTs from anybody.
+TWILIO_WEBHOOK_PATHS = ('/messages/incoming', '/api/sms-status')
+
+
 def validate_twilio_webhook():
-    if request.path != '/messages/incoming':
+    if request.path not in TWILIO_WEBHOOK_PATHS:
         return None
 
     import integrations

@@ -676,6 +676,60 @@ def applicant_followups():
                     'moved_to_no_response': no_response})
 
 
+@api_bp.route('/sms-status', methods=['POST'])
+def sms_status():
+    """Twilio telling us what became of a text.
+
+    Posted once per status change. The one that matters is the last: delivered,
+    undelivered or failed. Until this existed the log stopped at "Twilio
+    accepted it", so a message filtered by the carrier and a message read on
+    somebody's phone looked exactly the same — which is how an owner ends up
+    being told their text sent when nobody ever saw it.
+
+    Signature-checked like Twilio's other callbacks. An unsigned POST here could
+    rewrite the delivery history.
+    """
+    import security
+    refused = security.validate_twilio_webhook()
+    if refused is not None:
+        return refused
+
+    sid = (request.form.get('MessageSid') or '').strip()
+    status = (request.form.get('MessageStatus') or '').strip().lower()
+    err = (request.form.get('ErrorCode') or '').strip()
+    slug = (request.args.get('t') or '').strip()
+    if not sid or not status:
+        return ('', 204)
+
+    import notifications, tenancy
+    from models import OutboundLog
+
+    def _apply():
+        row = OutboundLog.query.filter_by(provider_id=sid).first()
+        if not row:
+            return
+        row.status = status
+        if status in ('delivered', 'sent', 'queued', 'sending', 'accepted'):
+            row.detail = f'Twilio: {status}.'
+        else:
+            why = notifications.SMS_FAILURE_REASONS.get(err)
+            row.detail = (f'Twilio: {status}'
+                          + (f' ({err}) — {why}' if why else (f' ({err})' if err else ''))
+                          + '.')
+        db.session.commit()
+
+    try:
+        if slug and tenancy.valid_slug(slug):
+            with tenancy.use_tenant(slug):
+                _apply()
+        else:
+            _apply()
+    except Exception:
+        # Never make Twilio retry over a logging problem.
+        db.session.rollback()
+    return ('', 204)
+
+
 @api_bp.route('/rental-turnovers', methods=['POST'])
 def rental_turnovers():
     """Re-read every active rental calendar and book what it shows.

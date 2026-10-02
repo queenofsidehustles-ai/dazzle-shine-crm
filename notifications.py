@@ -392,6 +392,33 @@ def add_to_mailerlite(email, name, group_id=None):
         pass
 
 
+# What Twilio's error codes mean, in words somebody can act on. These four are
+# almost all of it; anything else is printed raw rather than guessed at.
+SMS_FAILURE_REASONS = {
+    '30003': 'the handset was unreachable — off, out of coverage, or the number is dead',
+    '30005': 'that number does not exist',
+    '30006': 'it is a landline, or a carrier that will not take texts',
+    '30007': 'the carrier blocked it as spam — usually a link, or too many at once',
+    '30008': 'the carrier rejected it without saying why',
+    '21610': 'that person replied STOP, so they are unsubscribed',
+}
+
+
+def _status_callback_url():
+    """Where Twilio should report delivery. Empty if we have no public address
+    to be called back on, in which case sending still works and we simply learn
+    less."""
+    try:
+        import branding, tenancy
+        base = (branding.crm_base() or '').rstrip('/')
+        if not base.startswith('https://'):
+            return ''
+        slug = (tenancy.current_schema() or '').replace(tenancy.SCHEMA_PREFIX, '')
+        return f'{base}/api/sms-status' + (f'?t={slug}' if slug else '')
+    except Exception:
+        return ''
+
+
 def send_sms(to_phone, message):
     """Send an SMS via Twilio. Returns (ok: bool, detail: str) so diagnostics
     can surface the real reason a text failed. Existing callers ignore the return."""
@@ -434,7 +461,18 @@ def send_sms(to_phone, message):
         digits = ''.join(filter(str.isdigit, to_phone))
         formatted = ('+1' + digits) if not to_phone.startswith('+') else to_phone
         client = Client(account_sid, auth_token)
-        msg = client.messages.create(body=message, from_=from_phone, to=formatted)
+        # Ask Twilio to tell us what actually happened to it.
+        #
+        # Without this, 'sent' in the log means "Twilio accepted it", which is
+        # not the same as "it arrived" and reads exactly as though it were. A
+        # text filtered by the carrier — the single most common way a message
+        # vanishes — looks identical to one delivered, so the first thing
+        # anybody asks ("did it send?") has always had a misleading answer.
+        kwargs = dict(body=message, from_=from_phone, to=formatted)
+        cb = _status_callback_url()
+        if cb:
+            kwargs['status_callback'] = cb
+        msg = client.messages.create(**kwargs)
         ok, sid = True, msg.sid
         detail = f'Accepted by Twilio for {formatted} (id {sid}).'
     except Exception as e:
