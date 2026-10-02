@@ -151,6 +151,40 @@ class DirectoryInvite(db.Model):
     sent_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class DirectoryProfile(db.Model):
+    """What a business wrote about itself, once it claimed its listing.
+
+    The listing row holds what the public record knows. This holds what they
+    want said — and it is the difference between correcting a phone number and
+    having a page worth sending somebody. For the twenty per cent of cleaning
+    companies with no website at all, this is the website.
+
+    Kept separate from directory_listing on purpose: a re-import of the public
+    data overwrites that table wholesale, and nobody's own words should be
+    destroyed by a refresh of somebody else's records.
+    """
+    __tablename__ = 'directory_profile'
+    id = db.Column(db.Integer, primary_key=True)
+    listing_id = db.Column(db.String(64), unique=True, index=True, nullable=False)
+    headline = db.Column(db.String(160))
+    about = db.Column(db.Text)
+    services = db.Column(db.Text)          # one per line
+    areas = db.Column(db.String(300))      # towns they cover
+    hours = db.Column(db.String(200))
+    # What they want people to use, which may not be what the record holds.
+    phone = db.Column(db.String(40))
+    email = db.Column(db.String(200))
+    website = db.Column(db.String(400))
+    booking_url = db.Column(db.String(400))
+    brand_color = db.Column(db.String(9))  # #RRGGBB
+    founded_year = db.Column(db.String(4))
+    edit_token = db.Column(db.String(64), unique=True, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def service_lines(self):
+        return [x.strip() for x in (self.services or '').splitlines() if x.strip()][:12]
+
+
 class DirectoryClaim(db.Model):
     """Somebody saying a listing is theirs, and how far they got proving it."""
     __tablename__ = 'directory_claim'
@@ -270,7 +304,8 @@ def verify(token):
     listing = DirectoryListing.query.get(claim.listing_id)
 
     if claim.status == 'verified':
-        return render_template('directory/done.html', claim=claim, listing=listing)
+        return render_template('directory/done.html', claim=claim, listing=listing,
+                               prof=_profile_for(claim.listing_id, create=True))
     if claim.status != 'sent':
         return render_template('directory/queued.html', claim=claim)
 
@@ -289,7 +324,11 @@ def verify(token):
                 listing.claimed_at = claim.verified_at
                 listing.claimed_by = claim.email
             db.session.commit()
-            return render_template('directory/done.html', claim=claim, listing=listing)
+            # Verifying is the moment they care most. Hand them the page to
+            # write rather than making them come back for it.
+            prof = _profile_for(claim.listing_id, create=True)
+            return render_template('directory/done.html', claim=claim,
+                                   listing=listing, prof=prof)
         claim.attempts = (claim.attempts or 0) + 1
         db.session.commit()
         left = MAX_ATTEMPTS - claim.attempts
@@ -653,6 +692,69 @@ def export_submissions():
     print(f'{len(subs)} exported', file=sys.stderr)
 
 
+# ── the page a claimed business writes for itself ───────────────────────────
+def _profile_for(listing_id, create=False):
+    prof = DirectoryProfile.query.filter_by(listing_id=listing_id).first()
+    if prof is None and create:
+        prof = DirectoryProfile(listing_id=listing_id,
+                                edit_token=secrets.token_urlsafe(32))
+        db.session.add(prof)
+        db.session.commit()
+    return prof
+
+
+@directory_bp.route('/listing/edit/<token>', methods=['GET', 'POST'])
+def edit_profile(token):
+    """No login. The token came out of a verified claim, which is the only thing
+    that proved anybody owns this listing in the first place — asking them to
+    make an account to fix their own opening hours would lose most of them."""
+    prof = DirectoryProfile.query.filter_by(edit_token=token).first_or_404()
+    listing = DirectoryListing.query.get(prof.listing_id)
+
+    if request.method == 'POST':
+        colour = (request.form.get('brand_color') or '').strip()
+        if colour and not re.fullmatch(r'#[0-9A-Fa-f]{6}', colour):
+            colour = ''
+        prof.headline = (request.form.get('headline') or '').strip()[:160]
+        prof.about = (request.form.get('about') or '').strip()[:4000]
+        prof.services = (request.form.get('services') or '').strip()[:1500]
+        prof.areas = (request.form.get('areas') or '').strip()[:300]
+        prof.hours = (request.form.get('hours') or '').strip()[:200]
+        prof.phone = (request.form.get('phone') or '').strip()[:40]
+        prof.email = _norm_email(request.form.get('email'))[:200]
+        prof.website = (request.form.get('website') or '').strip()[:400]
+        prof.booking_url = (request.form.get('booking_url') or '').strip()[:400]
+        prof.brand_color = colour
+        prof.founded_year = (request.form.get('founded_year') or '').strip()[:4]
+        prof.updated_at = datetime.utcnow()
+        db.session.commit()
+        flash('Saved. Your page updates on the next refresh, usually within a day.',
+              'success')
+        return redirect(url_for('directory.edit_profile', token=token))
+
+    return render_template('directory/edit_profile.html', prof=prof, listing=listing)
+
+
+@directory_bp.cli.command('export-profiles')
+def export_profiles():
+    """flask directory export-profiles > profiles.json
+
+    What claimed businesses wrote, for the generator to fold into their pages.
+    """
+    import json, sys
+    out = {}
+    for p in DirectoryProfile.query.all():
+        out[p.listing_id] = {k: v for k, v in {
+            'headline': p.headline, 'about': p.about,
+            'services': p.service_lines(), 'areas': p.areas, 'hours': p.hours,
+            'phone': p.phone, 'email': p.email, 'website': p.website,
+            'booking_url': p.booking_url, 'brand_color': p.brand_color,
+            'founded_year': p.founded_year,
+        }.items() if v}
+    json.dump(out, sys.stdout, indent=1, sort_keys=True)
+    print(f'\n{len(out)} profiles', file=sys.stderr)
+
+
 # ── the queue the owner actually works ──────────────────────────────────────
 @directory_bp.route('/admin/listings/claims')
 @login_required
@@ -679,8 +781,11 @@ def approve_claim(claim_id):
     if listing:
         listing.claimed_at = claim.verified_at
         listing.claimed_by = claim.email
+    prof = _profile_for(claim.listing_id, create=True)
     db.session.commit()
-    flash(f'{claim.listing_name} marked claimed by {claim.email}.', 'success')
+    flash(f'{claim.listing_name} claimed by {claim.email}. Their page to write: '
+          f'{url_for("directory.edit_profile", token=prof.edit_token, _external=True)}',
+          'success')
     return redirect(url_for('directory.claims_queue'))
 
 
