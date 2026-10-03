@@ -208,11 +208,15 @@ def _follow_up(orgs, leads, signup_emails, now, billing):
     for o in orgs:
         if _gone(o):
             continue
-        if o.get('nudges_opted_out'):
-            continue                    # asked not to be chased, same as not to be emailed
         if _status(o) == 'past_due':
+            # A failed charge on a real subscription is money actually owed,
+            # not a trial nudge or a lead being courted -- the opt-out's own
+            # promise ("trial emails" and "chased as a lead") doesn't cover
+            # it, and hiding it would mean a payment nobody ever collects.
             failing.append(o)
             continue
+        if o.get('nudges_opted_out'):
+            continue                    # asked not to be chased, same as not to be emailed
         if o.get('stripe_subscription_id'):
             continue
         trial = billing.trial_state(o, now)

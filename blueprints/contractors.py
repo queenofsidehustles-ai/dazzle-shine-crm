@@ -1349,14 +1349,20 @@ def hiring_settings():
     applications it actually configures. Its own tab, next to the two
     hiring pages that read these settings, so setting them up and using
     them are in the same place."""
-    fields = ['interview_calendar_link', 'bgcheck_provider_name', 'bgcheck_provider_url']
+    fields = ['interview_calendar_link', 'bgcheck_provider_name', 'bgcheck_provider_url',
+              'test_clean_calendar_link', 'test_clean_pay', 'test_clean_length']
+    # A checkbox that is off submits nothing, so it cannot ride along with the
+    # text fields — an unticked box would read as "unchanged" and never turn off.
+    flags = ['require_test_clean', 'provide_uniforms']
     if request.method == 'POST':
         for f in fields:
             BusinessSetting.set(f, (request.form.get(f) or '').strip())
+        for f in flags:
+            BusinessSetting.set(f, '1' if request.form.get(f) else '')
         db.session.commit()
         flash('Hiring settings saved!', 'success')
         return redirect(url_for('contractors.hiring_settings'))
-    current = {f: BusinessSetting.get(f) or '' for f in fields}
+    current = {f: BusinessSetting.get(f) or '' for f in fields + flags}
     return render_template('admin/hiring_settings.html', current=current)
 
 
@@ -1978,6 +1984,64 @@ def _company_answers(form):
     }
 
 
+def _join_talent_pool(name, email, phone, form):
+    """Put an applicant into the shared pool, if they asked to be.
+
+    Asked here rather than later, and of the applicant rather than the owner.
+    Consent belongs to the person it is about, and the moment they will give it
+    is while they are looking for work — not thirty days after an interview
+    invite they never opened, in an email from a company that said no.
+
+    It also means nobody has to remember to do anything. No switch for an owner
+    to find, no campaign to run: one box on the form they are already filling in.
+
+    Visible straight away, deliberately. Somebody who needs work this week is
+    not served by waiting until this company gets round to marking them closed.
+    Being on the list does not take them out of anybody's pipeline.
+    """
+    if 'share_with_other_companies' not in form:
+        return
+    try:
+        from blueprints.directory_claim import DirectoryTalent
+        import secrets as _secrets, branding as _b
+        if not email and not phone:
+            return
+        existing = DirectoryTalent.query.filter(
+            db.func.lower(DirectoryTalent.email) == (email or '').lower()).first()
+        if existing:
+            existing.share = True
+            existing.status = 'looking'
+            db.session.commit()
+            return
+        miles = (form.get('travel_miles') or '').strip()
+        # The application form asks for neither city nor state, so take the
+        # company's. Somebody applying to a cleaning company in Orlando works in
+        # Orlando — and without this they land in the pool with no location at
+        # all, which means the owner's own view filters them straight back out.
+        # Found by the end-to-end test; invisible to anything smaller.
+        from models import BusinessSetting as _BS
+        city = ((form.get('city') or '').strip()
+                or (_BS.get('city') or '').strip())[:100] or None
+        state = ((form.get('state') or '').strip()
+                 or (_BS.get('state') or '').strip()).upper()[:2] or None
+        db.session.add(DirectoryTalent(
+            name=name, email=email or None, phone=phone or None,
+            city=city, state=state,
+            language='es' if (form.get('lang') or '').startswith('es') else 'en',
+            experience=(form.get('years_experience') or '')[:20],
+            travel='car' if 'has_transportation' in form else None,
+            travel_miles=int(miles) if miles.isdigit() else None,
+            days=', '.join(form.getlist('availability'))[:120] or None,
+            source=f'applied:{_b.biz_name()}'[:30],
+            share=True, status='looking',
+            opt_out_token=_secrets.token_urlsafe(32)))
+        db.session.commit()
+    except Exception:
+        # Never let the pool break somebody's application. They applied to this
+        # company; that is the thing that must survive.
+        db.session.rollback()
+
+
 @contractors_bp.route('/apply', methods=['GET', 'POST'])
 def apply():
     if request.method == 'POST':
@@ -2008,6 +2072,7 @@ def apply():
             _note = f"Re-applied {datetime.utcnow().strftime('%b %d, %Y')} — info updated, no duplicate created."
             existing.admin_notes = (existing.admin_notes + "\n" + _note) if existing.admin_notes else _note
             db.session.commit()
+            _join_talent_pool(existing.name, existing.email, existing.phone, request.form)
             return render_template('public/apply_done.html', name=existing.name)
 
         a = ContractorApplication(
@@ -2103,6 +2168,7 @@ def apply():
             t.daemon = True
             t.start()
 
+        _join_talent_pool(a.name, a.email, a.phone, request.form)
         return render_template('public/apply_done.html', name=a.name)
     return render_template('public/apply.html')
 

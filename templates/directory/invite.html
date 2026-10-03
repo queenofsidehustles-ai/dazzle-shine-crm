@@ -1,0 +1,49 @@
+{% extends "directory/_base.html" %}
+{% block title %}Invite past applicants{% endblock %}
+{% block body %}
+<div class="card" style="max-width:none">
+  <h1>Invite your past applicants</h1>
+  <p>People who applied to <strong>{{ biz }}</strong> and were never hired. Most of them
+    went quiet after the interview invite &mdash; three in four people who want cleaning
+    work never record a video, which is not a reflection on them.</p>
+  <p>This asks whether they&rsquo;d like cleaning companies near them to see that
+    they&rsquo;re looking. Their details are not moved anywhere: the email links to a
+    page with their own details filled in, and <strong>they tick the box
+    themselves</strong>.</p>
+
+  {% if total %}
+    <div class="kv"><span>Never hired, not yet asked</span><span>{{ total }}</span></div>
+    <form method="post">
+      <label for="limit">How many to invite now</label>
+      <input id="limit" name="limit" type="number" min="1" max="500" value="10">
+      <p class="note">Start small. Ten tells you whether people tick the box before you
+        send to everybody &mdash; and nobody is ever asked twice, so you can come back and
+        send more.</p>
+      {% if can_send %}
+        <button class="btn" type="submit">Send the invitations</button>
+      {% else %}
+        <p class="flash">No product mail key is configured here, so nothing can be sent.</p>
+      {% endif %}
+    </form>
+
+    <h2>Who&rsquo;s next in line</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Applied</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for a in people %}
+        <tr><td>{{ a.name }}<br><span class="fine">{{ a.email }}</span></td>
+            <td>{{ a.created_at.strftime('%d %b %Y') if a.created_at else '—' }}</td>
+            <td><span class="pill">{{ a.status or 'new' }}</span></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if total > people|length %}
+      <p class="fine">…and {{ total - people|length }} more.</p>
+    {% endif %}
+  {% else %}
+    <div class="note"><p><strong>Everybody has been asked.</strong> Anyone who applies from
+      now on will show up here once they are not hired.</p></div>
+  {% endif %}
+  <a class="btn ghost" href="{{ url_for('directory.talent_pool') }}">See cleaners near you</a>
+</div>
+{% endblock %}

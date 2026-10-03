@@ -741,8 +741,11 @@ def mark_lead_contacted(engine, lead_id):
 
 
 def mark_lead_invited(engine, lead_id):
-    """This lead has been sent a signup invite. Keeps the first time, so two
-    people working the same uploaded list at once cannot both email it."""
+    """Claim this lead for an invite, before sending. Returns True for
+    whichever caller gets there first; a second caller (two people working
+    the same uploaded list at once, or a bulk invite racing a single one)
+    gets False and must not send -- claiming after the email is already out
+    cannot stop a second one from going too."""
     with engine.begin() as conn:
         result = conn.execute(
             update(product_leads)
@@ -750,6 +753,15 @@ def mark_lead_invited(engine, lead_id):
                    product_leads.c.invited_at.is_(None))
             .values(invited_at=datetime.utcnow()))
         return result.rowcount > 0
+
+
+def unmark_lead_invited(engine, lead_id):
+    """Release a claim from mark_lead_invited() after the send failed, so the
+    lead is eligible again rather than permanently (and wrongly) marked
+    invited for an email that never arrived."""
+    with engine.begin() as conn:
+        conn.execute(update(product_leads).where(product_leads.c.id == lead_id)
+                    .values(invited_at=None))
 
 
 def lead_by_id(engine, lead_id):

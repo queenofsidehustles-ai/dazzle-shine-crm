@@ -1,0 +1,26 @@
+{% extends "directory/_base.html" %}
+{% block title %}Listing claimed{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>{{ claim.listing_name }} is yours.</h1>
+  <p>Thanks &mdash; the listing is verified. We&rsquo;ll email you a link to edit it.</p>
+  {% if prof %}
+  <h2>Now make it yours</h2>
+  <p>Right now your page shows what the public record holds &mdash; which is not much, and
+    none of it in your words. Add what you do, where you work, your hours and your colour,
+    and it becomes a page worth sending somebody.</p>
+  <a class="btn" href="{{ url_for('directory.edit_profile', token=prof.edit_token, _external=True) }}">Write my page</a>
+  <p class="fine" style="margin-top:.8rem">Keep that link &mdash; it is how you come back
+    and change things later. No password to remember.</p>
+  {% endif %}
+
+  <h2>While you&rsquo;re here</h2>
+  <p>Akye is the back office behind this directory. Jobs go out to your whole team and
+    get claimed. Applicants record a video interview and onboard themselves. Payroll adds
+    itself up.</p>
+  <div class="note">The free plan runs a real business &mdash; two cleaners, twenty jobs a
+    month, no card.</div>
+  <a class="btn" href="{{ url_for('marketing.home', _external=True) }}">See what Akye does</a>
+  <a class="btn ghost" href="https://getakye.com/">Back to the directory</a>
+</div>
+{% endblock %}

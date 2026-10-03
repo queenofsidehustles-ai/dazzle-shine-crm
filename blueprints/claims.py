@@ -300,13 +300,27 @@ def claim_do(ctoken, stoken):
         db.session.refresh(booking)
         note = None
 
-    # Send the checklist + notify the owner
+    # Send the checklist + notify the owner. The claim itself is already
+    # committed above -- a failure here must not turn an accepted job into a
+    # 500 for the cleaner, but swallowing it silently is exactly how a
+    # cleaner ends up having "accepted" a job with no idea where it is: no
+    # error anywhere, nobody told, nothing to go on. errors.capture() is the
+    # same path every other best-effort send in this codebase uses, so this
+    # one actually gets logged and emailed to the owner instead of vanishing.
+    workorder_sent = True
     try:
         from blueprints.workorders import create_and_send_workorder
         create_and_send_workorder(booking, recipient=staff)
-    except Exception:
-        pass
+    except Exception as e:
+        workorder_sent = False
+        try:
+            import errors
+            errors.capture(e, path=request.path, method=request.method)
+        except Exception:
+            pass
     msg = f"✅ {staff.name} claimed the {booking.preferred_date} job ({booking.name})."
+    if not workorder_sent:
+        msg += " Could not send them the job checklist -- resend it from the job page."
     _alert_owner(f"{msg} {note}" if note else msg)
     return redirect(url_for('claims.claim_page', ctoken=ctoken, stoken=stoken))
 

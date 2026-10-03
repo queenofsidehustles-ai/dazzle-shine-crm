@@ -27,19 +27,36 @@ def send_interview_invite_email(app_rec):
         html=html,
     )
 
+# Six, and every one has to earn its place on a video.
+#
+# The old set asked "do you have reliable transportation?", "are you available
+# weekends?" and "are you comfortable working independently?" — three one-word
+# answers, and nobody has ever said no to the third. Two of them were form fields
+# wearing an interview question's clothes; they are sortable checkboxes on the
+# application now, where an owner can actually filter on them.
+#
+# What is left is behavioural. Q2 cannot be faked by anybody who has not done the
+# work, and Q4 is the one that matters most: these people are alone in strangers'
+# homes, and how somebody handled the thing they broke is the only honest signal
+# there is.
 _QUESTIONS_EN = [
-    "Tell me about your cleaning experience.",
-    "Are you comfortable working independently without supervision?",
-    "Do you have reliable transportation?",
-    "Are you available on weekends?",
+    "Tell me about your cleaning experience — what kind of places, and for how long.",
+    "Walk me through how you'd clean a bathroom, start to finish.",
+    "Tell me about a time a customer wasn't happy with something you did. What happened?",
+    "Tell me about a time something went wrong on a job — something you broke, missed, "
+    "or got wrong. What did you do?",
+    "What would make you want to stay somewhere a long time?",
     "Why do you want to work with {biz}?",
 ]
 
 _QUESTIONS_ES = [
-    "Cuéntame sobre tu experiencia en limpieza.",
-    "¿Te sientes cómodo/a trabajando de forma independiente sin supervisión?",
-    "¿Tienes transporte propio y confiable?",
-    "¿Estás disponible los fines de semana?",
+    "Cuéntame sobre tu experiencia en limpieza — qué tipo de lugares y por cuánto tiempo.",
+    "Explícame cómo limpias un baño, desde el principio hasta el final.",
+    "Cuéntame de una vez que un cliente no quedó contento con algo que hiciste. "
+    "¿Qué pasó?",
+    "Cuéntame de una vez que algo salió mal en un trabajo — algo que rompiste, se te "
+    "olvidó, o hiciste mal. ¿Qué hiciste?",
+    "¿Qué te haría querer quedarte mucho tiempo en un trabajo?",
     "¿Por qué quieres trabajar con {biz}?",
 ]
 
@@ -457,6 +474,17 @@ def send_invite(app_id):
     return redirect(request.referrer or url_for('interviews.admin_interviews'))
 
 
+def _test_clean_required():
+    """Does this company want a test clean before anybody is really hired?
+
+    Off unless a company turns it on. Plenty of owners want to watch somebody
+    clean before they trust them in a customer's home, and plenty do not — it is
+    not the sort of thing to decide on their behalf.
+    """
+    from models import BusinessSetting
+    return (BusinessSetting.get('require_test_clean') or '') == '1'
+
+
 def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
                          include_bgcheck=True):
     first = (name or 'there').split()[0]
@@ -465,6 +493,73 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
     # against — and a job taken with a partner pays each of them a share, so the
     # remembered figure would be roughly double what they were then offered. The
     # model is explained instead, and the offer on a real job carries the number.
+    # A test clean, where the company asks for one. Said here rather than sprung
+    # later: somebody who finds out at the door that the job was conditional on
+    # an unpaid audition has been misled, and the ones who would have said no
+    # should get to say it now.
+    test_block = ''
+    if _test_clean_required():
+        from models import BusinessSetting as _BS
+        _cal = (_BS.get('test_clean_calendar_link') or '').strip()
+        # The note at the top of this function keeps dollar figures out of the
+        # email, because a job taken with a partner pays each a share and any
+        # example becomes the number somebody remembers. A test clean is a fixed
+        # amount, set by the owner, for one person — so the reasoning does not
+        # reach it, and saying the number is better than making them ask.
+        _pay = (_BS.get('test_clean_pay') or '').strip().lstrip('$')
+        _len = (_BS.get('test_clean_length') or '').strip()
+        if _pay:
+            try:
+                _pay = f"${float(_pay):,.0f}" if float(_pay) == int(float(_pay)) else f"${float(_pay):,.2f}"
+            except ValueError:
+                _pay = f"${_pay}"
+        _terms = ' '.join(x for x in (
+            (f"You will be paid <strong>{_pay}</strong>" if _pay else "It is paid"),
+            (f"for about {_len}" if _len else ""),
+        ) if x).strip() + ("." if _pay or _len else ", the same as any other job.")
+        _terms_es = ' '.join(x for x in (
+            (f"Te pagamos <strong>{_pay}</strong>" if _pay else "Es pagada"),
+            (f"por aproximadamente {_len}" if _len else ""),
+        ) if x).strip() + ("." if _pay or _len else ", igual que cualquier otro trabajo.")
+        _pick = (f'<p style="margin:14px 0 0"><a href="{_cal}" '
+                 f'style="background:#3b6fb5;color:#fff;padding:12px 26px;border-radius:8px;'
+                 f'text-decoration:none;font-weight:700;display:inline-block">'
+                 f'Pick a time &rarr;</a></p>') if _cal else ''
+        test_block = """
+    <div style="background:#eef6ff;border:2px solid #3b6fb5;border-radius:10px;padding:22px 24px;margin-bottom:22px">
+      <div style="font-weight:700;color:#16213a;font-size:1.05rem;margin-bottom:10px">🧽 One more step — a test clean</div>
+      <p style="color:#33506f;line-height:1.7;margin:0 0 10px">
+        Before your first real job we will book you in for a <strong>test clean</strong>,
+        so we can see how you work and you can see how we do things. """ + _terms + """
+      </p>
+      <p style="color:#33506f;line-height:1.7;margin:0">
+        Accept your offer below and we will be in touch with times. Tell us which days
+        suit you and we will work around them.
+      </p>
+      """ + _pick + """
+    </div>
+    <div style="background:#eef6ff;border-radius:10px;padding:16px 24px;margin:-14px 0 22px">
+      <p style="color:#33506f;font-size:.92rem;line-height:1.6;margin:0">
+        <strong>Prueba de limpieza:</strong> antes de tu primer trabajo te programamos una
+        limpieza de prueba, para ver cómo trabajas. """ + _terms_es + """ Dinos qué días te quedan bien.
+      </p>
+    </div>"""
+
+    # Asked here because it is the one thing the company needs back from them
+    # before a first shift, and an offer email gets read.
+    from models import BusinessSetting as _BS2
+    uniform_block = ''
+    if (_BS2.get('provide_uniforms') or '') == '1':
+        uniform_block = """
+    <div style="background:#f6f4fb;border:2px solid #7c6bb0;border-radius:10px;padding:20px 24px;margin-bottom:22px">
+      <div style="font-weight:700;color:#1f1333;font-size:1.02rem;margin-bottom:8px">👕 We provide the uniform</div>
+      <p style="color:#4a3f63;line-height:1.7;margin:0">
+        Just reply to this email with your <strong>shirt size</strong> and we will have it
+        ready for your first day. &mdash; <em>Responde a este correo con tu
+        <strong>talla de camisa</strong> y la tendremos lista para tu primer día.</em>
+      </p>
+    </div>"""
+
     accept_block = ''
     if accept_url:
         accept_block = f"""
@@ -580,7 +675,7 @@ def _build_bgcheck_email(name, biz, upload_url='#', accept_url=None,
         <li>You choose your schedule by accepting the jobs that work for you.</li>
       </ul>
     </div>
-    {bg_en}
+    {uniform_block}{test_block}{bg_en}
 
     <!-- NEXT STEPS -->
     <div style="margin-bottom:8px">

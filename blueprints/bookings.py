@@ -8,6 +8,7 @@ from pricing import FREQUENCY_LABELS
 from notifications import looks_like_email
 import recurring
 import branding
+import entitlements
 
 bookings_bp = Blueprint('bookings', __name__, url_prefix='/bookings')
 
@@ -94,6 +95,14 @@ def new():
     """Create a booking by hand — for customers who book by phone/text/in person."""
     from pricing import calculate_price, calculate_job, SERVICE_LABELS, EXTRAS, get_lead_fee
     if request.method == 'POST':
+        # The plan's monthly job ceiling. Checked before anything is built, so a
+        # refused job leaves no half-written client or booking behind — and it is
+        # checked here rather than at the model, because the owner needs to be
+        # told which plan lifts it, not handed a failure.
+        ok, why = entitlements.check_limit('jobs_per_month')
+        if not ok:
+            flash(why, 'error')
+            return redirect(url_for('bookings.new'))
         name = request.form.get('name', '').strip()
         if not name:
             flash('Customer name is required.', 'error')
@@ -1713,6 +1722,15 @@ def update_service(booking_id):
     except ValueError:
         sqft = booking.sqft
 
+    # A blank date box means "I wasn't changing the date", never "clear it".
+    # preferred_date is a string column, so a date this form can't render —
+    # "next Tuesday", or any non-ISO value — comes back as an empty <input
+    # type="date">, and saving a bedroom count then wiped the confirmed day and
+    # time off a job that was already on the calendar. Clearing a date is what
+    # Put On Hold is for; it tells the customer and the cleaner.
+    new_date = (request.form.get('preferred_date') or '').strip() or booking.preferred_date
+    new_time = (request.form.get('preferred_time') or '').strip() or booking.preferred_time
+
     changes = []
     for label, old, new in (
         ('Service', SERVICE_LABELS.get(booking.service_type, booking.service_type),
@@ -1723,8 +1741,8 @@ def update_service(booking_id):
         ('Frequency', FREQUENCY_LABELS.get(booking.frequency, booking.frequency),
          FREQUENCY_LABELS[frequency]),
         ('Sq ft', booking.sqft, sqft),
-        ('Date', booking.preferred_date, (request.form.get('preferred_date') or '').strip()),
-        ('Time', booking.preferred_time, (request.form.get('preferred_time') or '').strip()),
+        ('Date', booking.preferred_date, new_date),
+        ('Time', booking.preferred_time, new_time),
     ):
         if (old or '') != (new or ''):
             changes.append(f'{label} "{old or "blank"}" → "{new or "blank"}"')
@@ -1735,8 +1753,8 @@ def update_service(booking_id):
     booking.extras = extras
     booking.frequency = frequency
     booking.sqft = sqft
-    booking.preferred_date = (request.form.get('preferred_date') or '').strip()
-    booking.preferred_time = (request.form.get('preferred_time') or '').strip()
+    booking.preferred_date = new_date
+    booking.preferred_time = new_time
 
     # What this configuration is worth now, keeping the lead fee, which is an ad
     # cost rather than anything the house size decides.
@@ -2040,9 +2058,23 @@ def _save_proposal(booking):
         raw = (request.form.get('plan_price') or '').strip().replace('$', '').replace(',', '')
         if raw:
             try:
-                booking.price = round(float(raw), 2)
+                asking = round(float(raw), 2)
             except ValueError:
                 flash('That price is not a number — leaving it as it was.', 'warning')
+            else:
+                # Composing an offer must not re-price work the customer has
+                # already paid against. Their deposit stays put while the total
+                # moves, so what they owe changes without anybody telling them —
+                # the same money-moving-in-silence that update_service() refuses
+                # to do. correct_price() exists to change a seen price and say so.
+                taken = booking.deposit_paid or booking.paid_at
+                if taken and asking != round(booking.price or 0, 2):
+                    flash(f"{booking.name or 'This customer'} has already paid against "
+                          f"${booking.price or 0:.2f}, so the price is left alone. "
+                          f"Use “Correct price & notify customer” to move it to "
+                          f"${asking:.2f} — that tells them.", 'warning')
+                else:
+                    booking.price = asking
     db.session.commit()
 
 

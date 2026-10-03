@@ -161,7 +161,20 @@ def test_all_30_schemas_are_complete_and_at_migration_head(cohort):
     import migrate
 
     engine = create_engine(test_url)
-    declared = set(extensions.db.metadata.tables)
+    # directory_claim.py's six tables are declared as plain db.Model classes
+    # like any tenant table, but provisioning.py never uses create_all() for a
+    # tenant schema -- only the Alembic chain below, migration by migration --
+    # and no migration adds them, on purpose: they're Akye's own cross-company
+    # directory (one row set for the whole platform, written only from
+    # app-boot's un-tenanted db.create_all(), which runs with no tenant
+    # selected and so lands them in `public`), never a cleaning company's own
+    # data. Asserting they exist in every tenant schema would be asserting a
+    # bug, not catching one.
+    PUBLIC_ONLY_TABLES = {
+        'directory_listing', 'directory_submission', 'directory_talent',
+        'directory_invite', 'directory_profile', 'directory_claim',
+    }
+    declared = set(extensions.db.metadata.tables) - PUBLIC_ONLY_TABLES
     head = migrate.ScriptDirectory.from_config(migrate._config()).get_current_head()
 
     with engine.connect() as conn:

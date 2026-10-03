@@ -86,7 +86,12 @@
 {% else %}
 <div class="ops-actions">
   {% if trial %}
-  <form method="post" action="{{ url_for('console.extend_trial', slug=org.slug) }}">
+  
+<form method="post" action="{{ url_for('console.send_welcome', slug=org.slug) }}"
+      style="display:inline" onsubmit="return confirm('Send the welcome email to {{ org.owner_email }}?')">
+  <button type="submit">Send welcome email</button>
+</form>
+<form method="post" action="{{ url_for('console.extend_trial', slug=org.slug) }}">
     <label for="days" class="ops-dim">Extend trial</label>
     <select name="days" id="days"><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option></select>
     <button class="btn btn-outline btn-sm" type="submit">Extend</button>

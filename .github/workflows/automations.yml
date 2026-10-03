@@ -27,18 +27,16 @@ name: Automations
 
 on:
   schedule:
-    # OFF until a business can say how it wants balances collected.
-    #
-    # Charging a card is the one automation that cannot be undone, and today no
-    # business is having it done: nothing has been running. Switching this on
-    # would start charging real customers at four live companies that have never
-    # seen it happen and were never asked -- a surprise landing on their
-    # customers, not just on them.
-    #
-    # It comes back when each business has chosen: charge automatically, tell me
-    # it is due, or never touch the card. Until then the hourly run does not
-    # exist.
-    # - cron: '5 * * * *'
+    # Charging a card is the one automation that cannot be undone, which is why
+    # this stayed off until a business could say how it wants balances
+    # collected. That per-business choice now exists (automations.balance_mode,
+    # set from the Automations page) and is the actual safety gate: the
+    # endpoint only charges anything for a business that has explicitly chosen
+    # "auto" (automations.is_enabled('charge-balances')); "ask" (the default)
+    # and "never" are untouched by this running. So turning the timetable back
+    # on charges nobody who hasn't opted in -- it stops being a no-op only for
+    # whoever already asked for it.
+    - cron: '5 * * * *'
     # Everything else once a day, early enough that a day-before reminder
     # arrives the evening before rather than the morning of.
     - cron: '0 22 * * *'
@@ -47,7 +45,7 @@ on:
       cadence:
         description: Which timetable to run by hand
         type: choice
-        options: [daily]
+        options: [daily, hourly]
         default: daily
       only:
         description: A single company slug, for testing. Blank runs all.

@@ -3,6 +3,7 @@ from auth import login_required, owner_required
 from models import Lead, Booking, Client, User
 from extensions import db
 from pricing import DEPOSIT_AMOUNT, get_deposit
+import entitlements
 
 leads_bp = Blueprint('leads', __name__, url_prefix='/leads')
 
@@ -97,6 +98,11 @@ def detail(lead_id):
 @login_required
 def convert(lead_id):
     lead = Lead.query.get_or_404(lead_id)
+    # Same ceiling as a job typed in by hand — converting a lead is still a job.
+    ok, why = entitlements.check_limit('jobs_per_month')
+    if not ok:
+        flash(why, 'error')
+        return redirect(url_for('leads.detail', lead_id=lead_id))
     client = Client.query.filter_by(email=lead.email.lower()).first()
     if not client:
         client = Client(
