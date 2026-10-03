@@ -771,6 +771,22 @@ def lead_contacted(lead_id):
     return redirect(url_for('console.leads_view'))
 
 
+@console_bp.route('/leads/<int:lead_id>/do-not-text', methods=['POST'])
+@console_required
+def lead_do_not_text(lead_id):
+    """Mark one lead as not to be texted, or allow texting again. Separate
+    from the person's own STOP, which only their START undoes."""
+    if not _may_operate():
+        return _refuse(url_for('console.leads_view'))
+    engine = _engine()
+    on = request.form.get('on') != '0'
+    if control_plane.set_lead_do_not_text(engine, lead_id, on):
+        control_plane.log_console(engine, request.console_user['email'],
+                                  'marked do not text' if on else 'allowed texts',
+                                  f'lead #{lead_id}')
+    return redirect(url_for('console.leads_view'))
+
+
 @console_bp.route('/leads')
 @console_required
 def leads_view():
@@ -841,6 +857,11 @@ def leads_send():
 # file are ignored rather than refused -- an export from a spreadsheet a
 # prospect list was built in almost always carries more than this needs.
 LEAD_CSV_COLUMNS = ('name', 'company', 'email', 'phone', 'cleaners', 'note')
+# An optional column marking single rows "do not text" -- what a list checked
+# against the Do Not Call registry usually carries. Anything but blank or an
+# explicit no counts, so "yes", "x", "DNC" and "1" all do.
+DO_NOT_TEXT_COLUMNS = ('do_not_text', 'do not text', 'dnc')
+_NO = ('', '0', 'no', 'n', 'false', 'f')
 
 
 @console_bp.route('/leads/upload', methods=['POST'])
@@ -871,8 +892,12 @@ def leads_upload():
     # Case-insensitive, so "Email" and "email" both find the column.
     by_lower = {(h or '').strip().lower(): h for h in reader.fieldnames}
 
+    # The box on the form marks the whole file; the column marks single rows.
+    whole_file = request.form.get('do_not_text') == '1'
+    dnt_col = next((by_lower[c] for c in DO_NOT_TEXT_COLUMNS if c in by_lower), None)
+
     import notifications
-    added = skipped = 0
+    added = skipped = already = flagged = failed = 0
     for row in reader:
         email = (row.get(by_lower.get('email', ''), '') or '').strip().lower()
         phone = (row.get(by_lower.get('phone', ''), '') or '').strip()
@@ -891,19 +916,42 @@ def leads_upload():
         fields['email'] = email if email_ok else ''
         fields['phone'] = phone
         fields['source'] = 'console upload'
-        if control_plane.add_lead(engine, **fields):
+        no_text = whole_file or (
+            dnt_col is not None
+            and (row.get(dnt_col, '') or '').strip().lower() not in _NO)
+        result = control_plane.add_lead(engine, do_not_text=no_text, **fields)
+        if result is None:
+            # Nothing was written -- not the row, and not the mark. Saying
+            # "marked do not text" here would be a promise nobody kept.
+            failed += 1
+            continue
+        if result:
             added += 1
         else:
-            skipped += 1
+            already += 1
+        flagged += bool(no_text)
 
     control_plane.log_console(engine, request.console_user['email'],
                               'uploaded', f'{added} lead(s)',
-                              f'{skipped} skipped' if skipped else None)
+                              ', '.join(x for x in (
+                                  f'{skipped + already} skipped' if skipped + already else '',
+                                  f'{flagged} do not text' if flagged else '',
+                                  f'{failed} failed' if failed else '') if x) or None)
     msg = f'Added {added} lead{"s" if added != 1 else ""}.'
     if skipped:
         msg += (f' Skipped {skipped} row{"s" if skipped != 1 else ""} '
                 f'with no usable email or phone.')
-    flash(msg, 'success' if added else 'warning')
+    if already:
+        msg += (f' {already} {"were" if already != 1 else "was"} already on the list '
+                f'and not added again.')
+    if flagged:
+        msg += (f' Marked {flagged} as do not text -- '
+                f'{"they" if flagged != 1 else "it"} can be emailed but not texted.')
+    if failed:
+        msg += (f' {failed} row{"s" if failed != 1 else ""} could not be saved, '
+                f'and {"were" if failed != 1 else "was"} not marked either -- upload '
+                f'the file again.')
+    flash(msg, 'error' if failed else ('success' if added else 'warning'))
     return redirect(url_for('console.leads_view'))
 
 

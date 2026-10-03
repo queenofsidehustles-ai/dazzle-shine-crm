@@ -19,7 +19,8 @@ whoever presses the button:
   * Every email carries a one-click unsubscribe link and the company's postal
     address (CAN-SPAM). An unsubscribed address is never emailed again.
   * Every text says who it is from and how to stop ("Reply STOP to opt out").
-    A number that replied STOP is never texted again (see sms_inbound()).
+    A number that replied STOP is never texted again (see sms_inbound()), nor
+    is a lead the console marked "do not text" (on the Do Not Call list, say).
   * Texts only go out between 11am and 8pm Eastern -- 8am to 5pm Pacific -- so
     nobody in the continental US gets one before 8am or after 8pm.
   * A bulk send skips anyone reached on that channel in the last 7 days, and
@@ -153,6 +154,8 @@ def sms_block(lead, now=None, bulk=False):
         return 'no usable phone number'
     if lead.get('sms_opted_out_at'):
         return 'replied STOP'
+    if lead.get('do_not_text_at'):
+        return 'marked do not text'
     if bulk and lead.get('last_texted_at') and \
             lead['last_texted_at'] > (now or datetime.utcnow()) - RECENT:
         return 'texted in the last 7 days'
@@ -238,7 +241,7 @@ def send_email(engine, lead, subject, body_template, sent_by):
 def send_text(engine, lead, body_template, sent_by, now_utc=None):
     """(ok, detail). Checked, sent from the product's own number, written down."""
     import control_plane
-    block = sms_block(lead)
+    block = sms_block(lead) or control_plane.number_text_block(engine, lead.get('phone'))
     if block:
         return False, block
     creds = sms_credentials()
@@ -283,6 +286,11 @@ def send_many(engine, leads, channel, subject, body_template, sent_by, now_utc=N
     waiting = 0
     for lead in leads:
         block = (email_block if channel == 'email' else sms_block)(lead, now, bulk=len(leads) > 1)
+        if not block and channel == 'sms':
+            # Fresh, and by number: the rows this send was started with can be
+            # stale by the time their turn comes. send_text checks again too.
+            import control_plane
+            block = control_plane.number_text_block(engine, lead.get('phone'))
         if block:
             out['skipped'][block] = out['skipped'].get(block, 0) + 1
             continue
