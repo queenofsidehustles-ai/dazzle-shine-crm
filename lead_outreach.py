@@ -241,7 +241,7 @@ def send_email(engine, lead, subject, body_template, sent_by):
 def send_text(engine, lead, body_template, sent_by, now_utc=None):
     """(ok, detail). Checked, sent from the product's own number, written down."""
     import control_plane
-    block = sms_block(lead)
+    block = sms_block(lead) or control_plane.number_text_block(engine, lead.get('phone'))
     if block:
         return False, block
     creds = sms_credentials()
@@ -286,6 +286,11 @@ def send_many(engine, leads, channel, subject, body_template, sent_by, now_utc=N
     waiting = 0
     for lead in leads:
         block = (email_block if channel == 'email' else sms_block)(lead, now, bulk=len(leads) > 1)
+        if not block and channel == 'sms':
+            # Fresh, and by number: the rows this send was started with can be
+            # stale by the time their turn comes. send_text checks again too.
+            import control_plane
+            block = control_plane.number_text_block(engine, lead.get('phone'))
         if block:
             out['skipped'][block] = out['skipped'].get(block, 0) + 1
             continue

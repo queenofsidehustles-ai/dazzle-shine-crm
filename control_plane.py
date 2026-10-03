@@ -675,8 +675,9 @@ def add_lead(engine, count_repeat=False, do_not_text=False, **fields):
 
     True when a row was added -- or, with count_repeat, when somebody already
     on the list asked again and it was counted on their existing row. False
-    for a duplicate that was skipped (an uploaded list repeating somebody) or
-    a failed write.
+    for a duplicate that was skipped (an uploaded list repeating somebody).
+    None when the write failed -- falsy like a duplicate for callers that only
+    ask "was it added", but distinct for one that has to report what happened.
 
     do_not_text marks the row as not to be texted -- the existing one too, if
     this is a duplicate, since an upload flagged "do not text" is usually the
@@ -731,7 +732,7 @@ def add_lead(engine, count_repeat=False, do_not_text=False, **fields):
             conn.execute(insert(product_leads).values(**row))
         return True
     except Exception:
-        return False
+        return None
 
 
 def all_leads(engine):
@@ -829,15 +830,52 @@ def mark_leads_unsubscribed(engine, email):
             .values(unsubscribed_at=datetime.utcnow())).rowcount
 
 
+def _same_number(phone):
+    """A WHERE clause for every lead whose phone is this number, however it
+    was written: the last ten digits, the way texts are addressed (send_text
+    turns both 555-123-4567 and +1 555 123 4567 into the same destination).
+    None for something too short to be a number."""
+    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())[-10:]
+    if len(digits) < 10:
+        return None
+    return func.right(func.regexp_replace(
+        func.coalesce(product_leads.c.phone, ''), '[^0-9]', '', 'g'), 10) == digits
+
+
 def set_lead_do_not_text(engine, lead_id, on=True):
-    """Mark one lead as not to be texted, or clear it. True if it changed."""
+    """Mark a lead as not to be texted, or clear it. It is the number that is
+    marked: every lead with the same phone changes together, so a second row
+    for the same person cannot be texted around the mark. True if any changed."""
     col = product_leads.c.do_not_text_at
     with engine.begin() as conn:
+        phone = conn.execute(select(product_leads.c.phone).where(
+            product_leads.c.id == lead_id)).scalar()
+        same = _same_number(phone)
+        who = same if same is not None else (product_leads.c.id == lead_id)
         return conn.execute(
             update(product_leads)
-            .where(product_leads.c.id == lead_id,
-                   col.is_(None) if on else col.isnot(None))
+            .where(who, col.is_(None) if on else col.isnot(None))
             .values(do_not_text_at=datetime.utcnow() if on else None)).rowcount > 0
+
+
+def number_text_block(engine, phone):
+    """Why this number cannot be texted right now, read fresh from the database:
+    'replied STOP' or 'marked do not text' if ANY lead with the same number
+    says so, else None. Checked again immediately before every text, because
+    the lead dict a send was started with can be minutes old, and a STOP or a
+    mark on one row has to cover every row with that number."""
+    same = _same_number(phone)
+    if same is None:
+        return None
+    with engine.connect() as conn:
+        row = conn.execute(select(
+            func.count(product_leads.c.sms_opted_out_at),
+            func.count(product_leads.c.do_not_text_at)).where(same)).first()
+    if row and row[0]:
+        return 'replied STOP'
+    if row and row[1]:
+        return 'marked do not text'
+    return None
 
 
 def set_leads_sms_opt_out(engine, phone, opted_out=True):

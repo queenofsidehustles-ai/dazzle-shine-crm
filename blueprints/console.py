@@ -897,7 +897,7 @@ def leads_upload():
     dnt_col = next((by_lower[c] for c in DO_NOT_TEXT_COLUMNS if c in by_lower), None)
 
     import notifications
-    added = skipped = already = flagged = 0
+    added = skipped = already = flagged = failed = 0
     for row in reader:
         email = (row.get(by_lower.get('email', ''), '') or '').strip().lower()
         phone = (row.get(by_lower.get('phone', ''), '') or '').strip()
@@ -919,17 +919,24 @@ def leads_upload():
         no_text = whole_file or (
             dnt_col is not None
             and (row.get(dnt_col, '') or '').strip().lower() not in _NO)
-        flagged += bool(no_text)
-        if control_plane.add_lead(engine, do_not_text=no_text, **fields):
+        result = control_plane.add_lead(engine, do_not_text=no_text, **fields)
+        if result is None:
+            # Nothing was written -- not the row, and not the mark. Saying
+            # "marked do not text" here would be a promise nobody kept.
+            failed += 1
+            continue
+        if result:
             added += 1
         else:
             already += 1
+        flagged += bool(no_text)
 
     control_plane.log_console(engine, request.console_user['email'],
                               'uploaded', f'{added} lead(s)',
                               ', '.join(x for x in (
                                   f'{skipped + already} skipped' if skipped + already else '',
-                                  f'{flagged} do not text' if flagged else '') if x) or None)
+                                  f'{flagged} do not text' if flagged else '',
+                                  f'{failed} failed' if failed else '') if x) or None)
     msg = f'Added {added} lead{"s" if added != 1 else ""}.'
     if skipped:
         msg += (f' Skipped {skipped} row{"s" if skipped != 1 else ""} '
@@ -940,7 +947,11 @@ def leads_upload():
     if flagged:
         msg += (f' Marked {flagged} as do not text -- '
                 f'{"they" if flagged != 1 else "it"} can be emailed but not texted.')
-    flash(msg, 'success' if added else 'warning')
+    if failed:
+        msg += (f' {failed} row{"s" if failed != 1 else ""} could not be saved, '
+                f'and {"were" if failed != 1 else "was"} not marked either -- upload '
+                f'the file again.')
+    flash(msg, 'error' if failed else ('success' if added else 'warning'))
     return redirect(url_for('console.leads_view'))
 
 

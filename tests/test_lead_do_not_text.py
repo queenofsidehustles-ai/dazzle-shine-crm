@@ -158,7 +158,64 @@ TEXTS.clear()
 send('sms', by_email(E))
 check(len(TEXTS) == 1, 'and the lead can be texted again')
 
-print('\n6. A helper cannot change it')
+print('\n6. It is the number that is marked, not one row of it')
+digits = '55' + str(secrets.randbelow(10 ** 8)).zfill(8)
+F, G = f'fay-{TAG}@example.com', f'gus-{TAG}@example.com'
+upload(c, f'name,email,phone\nFay,{F},{digits}\nGus,{G},+1{digits}\n')
+fay, gus = by_email(F), by_email(G)
+check(fay['id'] != gus['id'], 'the same number written two ways is two rows')
+c.post(f'/console/leads/{fay["id"]}/do-not-text', data={'on': '1'})
+check(by_email(G)['do_not_text_at'], 'marking one marks the other row with that number')
+TEXTS.clear()
+r = send('sms', gus)
+check(TEXTS == [] and 'marked do not text' in r.get_data(as_text=True),
+      'so it cannot be texted through the other row')
+c.post(f'/console/leads/{gus["id"]}/do-not-text', data={'on': '0'})
+check(not by_email(F)['do_not_text_at'] and not by_email(G)['do_not_text_at'],
+      'and "Allow texts" clears the number on both')
+
+print('\n7. A mark made while a send is under way still stops the text')
+stale = [by_email(F), by_email(G)]
+with app.app_context():
+    control_plane.set_lead_do_not_text(engine, stale[0]['id'], on=True)
+    TEXTS.clear()
+    out = lead_outreach.send_many(engine, stale, 'sms', '', 'Hi', 'test')
+check(TEXTS == [] and out['skipped'].get('marked do not text') == 2,
+      f'rows read before the mark are checked again before sending ({out})')
+with app.app_context():
+    ok, detail = lead_outreach.send_text(engine, stale[1], 'Hi', 'test')
+check(not ok and detail == 'marked do not text' and TEXTS == [],
+      'and so is a single send')
+# A STOP recorded on one row covers any other row with that number, even one
+# whose own flag says nothing -- as a row added after the STOP would.
+with app.app_context():
+    control_plane.set_lead_do_not_text(engine, stale[0]['id'], on=False)
+    control_plane.set_leads_sms_opt_out(engine, digits, opted_out=True)
+    with engine.begin() as conn:
+        conn.execute(control_plane.product_leads.update()
+                     .where(control_plane.product_leads.c.id == stale[1]['id'])
+                     .values(sms_opted_out_at=None))
+TEXTS.clear()
+r = send('sms', by_email(G))
+check(TEXTS == [] and 'replied STOP' in r.get_data(as_text=True),
+      'a STOP on one row of a number stops texts to every row of it')
+
+print('\n8. A row that could not be saved is not reported as marked')
+real_ensure = control_plane.ensure_table
+
+
+def _broken(engine):
+    raise RuntimeError('database went away')
+
+
+control_plane.ensure_table = _broken
+r = upload(c, f'name,email,phone\nIvy,ivy-{TAG}@example.com,{phone()}\n', whole_file=True)
+control_plane.ensure_table = real_ensure
+body = r.get_data(as_text=True)
+check('could not be saved' in body and 'Marked' not in body and 'already on the list' not in body,
+      'the page says the row was not saved, not that it was marked')
+
+print('\n9. A helper cannot change it')
 h = app.test_client()
 h.post('/console/login', data={'email': HELPER, 'password': PW})
 r = h.post(f'/console/leads/{eve["id"]}/do-not-text', data={'on': '1'})
