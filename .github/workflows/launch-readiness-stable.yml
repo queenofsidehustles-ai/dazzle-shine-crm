@@ -93,6 +93,11 @@ jobs:
           TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/akye_launch_test
         run: python tests/test_launch_reliability.py
 
+      - name: Leads marked "do not text" are emailed, never texted
+        env:
+          TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/akye_launch_test
+        run: python tests/test_lead_do_not_text.py
+
       - name: Demo company is coherent, rebuilt in place, and sends nothing
         run: python -m pytest -q tests/test_demo_company.py --tb=short
 

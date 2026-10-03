@@ -18,10 +18,16 @@
              display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap">
   <input type="file" name="file" accept=".csv" required>
   <button class="btn btn-primary btn-sm" type="submit">Upload CSV</button>
+  <label style="font-size:var(--t-sm);width:100%">
+    <input type="checkbox" name="do_not_text" value="1">
+    Do not text anyone in this file — email only
+  </label>
   <span style="font-size:var(--t-xs);color:var(--softer);width:100%">
     Columns: name, company, email, phone, cleaners, note — email or phone is required.
-    An email address is required only to send an email invitation. Header names are
-    matched without case. Extra columns are ignored.
+    An email address is required only to send an email invitation. To mark single rows,
+    add a <code>do_not_text</code> column (or <code>dnc</code>) and put yes in it. Header
+    names are matched without case. Extra columns are ignored. Somebody already on the
+    list is not added twice, but a do-not-text mark still reaches them.
   </span>
 </form>
 {% endif %}
@@ -55,7 +61,7 @@
   <textarea name="body" rows="7" data-email="{{ email_body }}" data-sms="{{ sms_body }}">{{ email_body }}</textarea>
   <div class="lo-row lo-foot">
     <span>Fills in: <code>{first_name}</code> <code>{company}</code> <code>{name}</code> <code>{signup_link}</code>.
-      Leads who unsubscribed or replied STOP are skipped; in a group send, so is anyone reached on that channel in the last 7 days.</span>
+      Leads who unsubscribed, replied STOP or are marked do not text are skipped; in a group send, so is anyone reached on that channel in the last 7 days.</span>
     <label><input type="checkbox" id="lo-all"> Tick every lead</label>
     <button class="btn btn-primary btn-sm" type="submit" id="lo-send">Send to ticked (0)</button>
   </div>
@@ -75,7 +81,7 @@
     <td>{{ l.name or '—' }}</td>
     <td>{{ l.company or '—' }}</td>
     <td>{% if l.email %}<a href="mailto:{{ l.email }}">{{ l.email }}</a>{% if l.unsubscribed_at %} <span class="lo-tag">unsubscribed</span>{% endif %}{% else %}—{% endif %}</td>
-    <td>{{ l.phone or '—' }}{% if l.sms_opted_out_at %} <span class="lo-tag">STOP</span>{% endif %}</td>
+    <td>{{ l.phone or '—' }}{% if l.sms_opted_out_at %} <span class="lo-tag">STOP</span>{% endif %}{% if l.do_not_text_at %} <span class="lo-tag">do not text</span>{% endif %}</td>
     <td>{{ l.source or '—' }}</td>
     <td>{{ l.invited_at.strftime('%d %b') if l.invited_at else '—' }}</td>
     <td>{{ l.last_emailed_at.strftime('%d %b') if l.last_emailed_at else '—' }}</td>
@@ -89,6 +95,13 @@
       <form method="post" action="{{ url_for('console.lead_invite', lead_id=l.id) }}">
         <button class="btn btn-outline btn-sm" type="submit">
           {{ 'Re-invite' if l.invited_at else 'Invite' }}</button>
+      </form>
+      {% endif %}
+      {% if l.phone %}
+      <form method="post" action="{{ url_for('console.lead_do_not_text', lead_id=l.id) }}">
+        <input type="hidden" name="on" value="{{ 0 if l.do_not_text_at else 1 }}">
+        <button class="btn btn-outline btn-sm" type="submit">
+          {{ 'Allow texts' if l.do_not_text_at else 'Do not text' }}</button>
       </form>
       {% endif %}
       {% if not l.contacted_at %}
