@@ -16,7 +16,9 @@ where the obligations sit with the employer whoever ran the check.
 """
 import os, sys, tempfile, pathlib
 TMP = tempfile.mkdtemp()
-os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/legal.db'
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fresh_postgres  # a multi-company app needs PostgreSQL schemas
+os.environ['DATABASE_URL'] = fresh_postgres.url('dsm_test_legal')
 os.environ['SECRET_KEY'] = 'test'
 os.environ['BASE_DOMAIN'] = 'akye.test'
 os.environ['SIGNUPS_OPEN'] = '1'
@@ -28,9 +30,13 @@ notifications.send_email = lambda *a, **k: (True, 'stub')
 from app import create_app
 from extensions import db
 
+import provisioning
+
 app = create_app()
 with app.app_context():
     db.create_all()
+    provisioning.provision('acme', 'Acme Cleaning', quiet=True)
+    db.session.remove()
 
 PRODUCT = {'Host': 'akye.test'}
 TENANT = {'Host': 'acme.akye.test'}
@@ -138,22 +144,12 @@ print('\n11. The payroll disclaimer is in the product, not only in a document')
 # Payroll and 1099s are paid features, and a fresh hosted database starts free
 # -- so without this the pages redirect to the upgrade screen and the assertion
 # below would be checking an empty room.
-with app.app_context():
-    from models import BusinessSetting
-    BusinessSetting.set('plan', 'scale')
-    BusinessSetting.set('plan_status', 'active')
-    db.session.commit()
-import entitlements as _ent
-_ent._clear_cache()
-
-admin = app.test_client()
-with admin.session_transaction() as sess:
-    sess['logged_in'] = True
-    sess['role'] = 'owner'
+fresh_postgres.set_company_plan('acme', 'scale')
+admin = fresh_postgres.owner_client(app, 'acme', 'akye.test')
 import re as _re
 for path, what in [('/money/tax-forms', 'the 1099 page'),
                    ('/contractors/payroll', 'the payroll page')]:
-    resp = admin.get(path)
+    resp = admin.get(path, headers=TENANT)
     assert resp.status_code == 200, f'{what} did not render: HTTP {resp.status_code}'
     body = _re.sub(r'\s+', ' ', resp.data.decode('utf8', 'replace'))
     check('not a tax filing' in body, f'{what} says these are records, not a filing')

@@ -37,7 +37,7 @@
     text-decoration:none; word-break:break-all;
   }
   .ws .err {
-    background:var(--warn-soft); color:var(--warn); border:1px solid #f6cfcf;
+    background:var(--warn-soft); color:var(--warn); border:1px solid color-mix(in srgb, var(--warn) 25%, transparent);
     border-radius:10px; padding:10px 14px; font-size:.9rem; margin-top:18px;
   }
   .ws .hint { color:var(--softer); font-size:.86rem; margin-top:20px; line-height:1.6; }
@@ -59,8 +59,8 @@
     background:var(--ink); color:#fff; white-space:nowrap;
   }
   .ws .sent {
-    background:var(--good-soft, #eafaf1); color:var(--good, #1a7a4c);
-    border:1px solid var(--good, #1a7a4c); border-radius:10px;
+    background:var(--good-soft); color:var(--good);
+    border:1px solid var(--good); border-radius:10px;
     padding:10px 14px; font-size:.88rem; margin-top:12px; line-height:1.5;
   }
 </style>

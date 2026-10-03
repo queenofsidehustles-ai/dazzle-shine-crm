@@ -18,7 +18,9 @@ from auth import login_required
         ('unknown', 'pay.manage', False),
         ('owner', 'missing.permission', False),
         ('admin', 'booking.manage', True),
-        ('dispatcher', 'booking.manage', True),
+        # Tightened after this matrix was first written: dispatchers book and
+        # dispatch but do not manage bookings (test_role_fail_closed, CI-gated).
+        ('dispatcher', 'booking.manage', False),
         ('cleaner', 'booking.manage', False),
         ('limited', 'booking.manage', False),
         ('team', 'booking.manage', False),
@@ -34,6 +36,18 @@ def test_legacy_team_role_is_canonicalized_to_limited():
     assert rbac.canonical_role('owner') == 'owner'
     assert rbac.canonical_role('bogus') is None
     assert rbac.canonical_role(None) is None
+
+
+@pytest.fixture(autouse=True)
+def _bound_session(monkeypatch):
+    """These tests are about the role matrix, the layer after sign-in. A real
+    session is also bound to its company and to the user's current password
+    (auth.session_matches_current_*, covered by test_session_invalidation and
+    test_role_fail_closed); the bare sessions here would be refused there first
+    and never reach the matrix."""
+    import auth
+    monkeypatch.setattr(auth, 'session_matches_current_tenant', lambda: True)
+    monkeypatch.setattr(auth, 'session_matches_current_user', lambda: True)
 
 
 def _app():

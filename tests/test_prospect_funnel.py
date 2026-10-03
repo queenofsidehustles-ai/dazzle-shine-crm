@@ -35,7 +35,13 @@ with app.app_context():
 import entitlements as _ent
 _ent._clear_cache()
 
-TODAY = date.today().isoformat()
+# The business's date, not the server's: prospecting schedules by local time
+# (scheduling.local_today), and between midnight UTC and midnight Eastern the
+# two disagree -- which failed this file every evening.
+import scheduling as _sched
+with app.app_context():
+    _LOCAL_TODAY = _sched.local_today()
+TODAY = _LOCAL_TODAY.isoformat()
 
 
 def check(cond, m):
@@ -44,7 +50,7 @@ def check(cond, m):
 
 
 def plus(n):
-    return (date.today() + timedelta(days=n)).isoformat()
+    return (_LOCAL_TODAY + timedelta(days=n)).isoformat()
 
 
 with app.app_context():
@@ -245,8 +251,8 @@ with app.app_context():
     print('\n15. A contract renewal wakes the prospect that was resting on it')
     import prospecting
     from datetime import date, timedelta as _td
-    soon = (date.today() + _td(days=prospecting.RENEWAL_LEAD_DAYS - 5)).isoformat()
-    far = (date.today() + _td(days=200)).isoformat()
+    soon = (_LOCAL_TODAY + _td(days=prospecting.RENEWAL_LEAD_DAYS - 5)).isoformat()
+    far = (_LOCAL_TODAY + _td(days=200)).isoformat()
     renewing = Prospect(business_name='Contract Ends Soon Co', category='property_manager',
                         status='not_interested', stage='nurture',
                         next_action='Quarterly check-in', next_action_date=plus(60),
