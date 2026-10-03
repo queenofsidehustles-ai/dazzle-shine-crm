@@ -47,10 +47,13 @@ with app.app_context():
     # Knowledge Base of their own -- and to 23 for Security (My Account,
     # renamed), which moved out of the sidebar footer into Settings and had
     # to sit at the top level of it rather than nested under the owner-only
-    # Settings tabs, since it's every team member's own login. Each of those
-    # was a deliberate decision and had to be argued for. Raising this line
-    # should always feel like that.
-    check(owner_items <= 23, f'{owner_items} sidebar links for the owner, down from 31')
+    # Settings tabs, since it's every team member's own login -- and to 24
+    # when the hiring pages (cleaners near you, invite past applicants, job
+    # adverts) went under My Team -> Hiring, because a page reachable only by
+    # typing its URL does not exist (0c628ca). Each of those was a deliberate
+    # decision and had to be argued for. Raising this line should always feel
+    # like that.
+    check(owner_items <= 24, f'{owner_items} sidebar links for the owner, down from 31')
 
     print('\n3. Nothing the sidebar used to reach was dropped')
     # The full set of pages the old sidebar linked to, written out so that

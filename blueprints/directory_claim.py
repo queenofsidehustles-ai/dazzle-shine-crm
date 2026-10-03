@@ -589,7 +589,7 @@ def review_submission(sub_id, action):
 
 
 @directory_bp.cli.command('invite-applicants')
-@click.option('--tenant', required=True, help="the company's slug, e.g. dazzleandshine")
+@click.option('--tenant', required=True, help="the company's slug, e.g. sparkle-pros")
 @click.option('--send', is_flag=True, default=False,
               help='actually send. Without it you get a preview and nothing leaves.')
 @click.option('--limit', default=200, help='stop after this many')

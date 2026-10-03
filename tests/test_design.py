@@ -55,6 +55,19 @@ def loads_design_system(p):
     return False
 
 
+def defines_own_palette(p):
+    """True if this page, or a template it extends, defines its own :root
+    tokens -- then `var(--ink)` resolves without akye.css."""
+    seen = set()
+    cur = p
+    while cur is not None and cur not in seen and cur.exists():
+        seen.add(cur)
+        if ':root' in cur.read_text(errors='replace'):
+            return True
+        cur = parent_of(cur)
+    return False
+
+
 print('\n1. The stylesheet itself defines the palette')
 css = CSS.read_text()
 for tok in ('--amber', '--ink', '--muted', '--line', '--ground', '--good',
@@ -136,8 +149,8 @@ for p in templates():
         continue
     if parent_of(p) is None and '<html' not in text.lower():
         continue                           # an include, styled by its host
-    if ':root' in text:
-        continue                           # defines its own palette
+    if defines_own_palette(p):
+        continue                           # it, or the page it extends, has a :root
     if not loads_design_system(p):
         offenders.append(str(p.relative_to(ROOT)))
 check(not offenders, f'every page using tokens can resolve them ({offenders[:4]})')
@@ -205,8 +218,14 @@ print('\n7. Every full page is on the system at all')
 # sees. A page with its own <html> renders to somebody; it has to be on the
 # palette or be listed here with a reason.
 OFF_SYSTEM = {
-    # nothing yet -- add a path here only with a reason it cannot use the
-    # stylesheet, e.g. an email body, which no mail client will fetch CSS for
+    # Add a path here only with a reason it cannot use the stylesheet, e.g. an
+    # email body, which no mail client will fetch CSS for.
+    #
+    # The public business directory (claim a listing, job adverts) is the
+    # getakye.com look on purpose, not the CRM's: somebody claiming a listing
+    # is not signed in and is not in the product yet. It carries its own
+    # palette, light and dark, in its own :root.
+    'templates/directory/_base.html',
 }
 stragglers = []
 for p in templates():

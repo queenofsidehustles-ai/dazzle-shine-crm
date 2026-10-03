@@ -14,7 +14,7 @@
   <form method="post">
     <label for="headline">One line about you</label>
     <input id="headline" name="headline" value="{{ prof.headline or '' }}"
-           maxlength="160" placeholder="Family-run house cleaning in Orlando since 2016">
+           maxlength="160" placeholder="Family-run house cleaning since 2016">
 
     <label for="about">About the business</label>
     <textarea id="about" name="about" rows="5"
@@ -26,7 +26,7 @@
 
     <label for="areas">Where you work</label>
     <input id="areas" name="areas" value="{{ prof.areas or '' }}"
-           placeholder="Orlando, Winter Park, Kissimmee, Altamonte Springs">
+           placeholder="The towns and neighborhoods you cover">
 
     <label for="hours">Hours</label>
     <input id="hours" name="hours" value="{{ prof.hours or '' }}"
