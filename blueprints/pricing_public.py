@@ -2,12 +2,12 @@ import json
 from flask import Blueprint, render_template, request, jsonify, make_response
 from auth import login_required
 from pricing import (
-    PRICE_MATRIX_DEFAULTS, HOURS_MATRIX_DEFAULTS, SERVICE_LABELS,
-    SERVICE_MULTIPLIERS_DEFAULTS, EXTRAS, FREQUENCY_DISCOUNTS,
-    FREQUENCY_LABELS, VALID_BATHS, STANDARD_SQFT,
-    get_std_price, get_std_hours, get_multiplier, get_extra_price,
-    get_contractor_split, get_sqft_surcharge_rate, get_deposit,
-    calculate_job, build_full_matrix,
+    PRICE_MATRIX_DEFAULTS, SERVICE_LABELS, SERVICE_MULTIPLIERS_DEFAULTS,
+    EXTRAS, FREQUENCY_DISCOUNTS, FREQUENCY_LABELS,
+    VALID_BATHS, STANDARD_SQFT, get_std_price,
+    get_std_hours, get_multiplier, get_extra_price, get_contractor_split,
+    get_sqft_surcharge_rate, get_deposit, calculate_job,
+    build_full_matrix,
 )
 
 pricing_public_bp = Blueprint('pricing_public', __name__)

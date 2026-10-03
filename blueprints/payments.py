@@ -5,10 +5,10 @@ import os
 import secrets
 from datetime import datetime
 import stripe
-from flask import Blueprint, render_template, request, jsonify, url_for
+from flask import Blueprint, render_template, request, jsonify
 from models import Booking, BusinessSetting
 from extensions import db
-from pricing import DEPOSIT_AMOUNT, get_deposit
+from pricing import get_deposit
 import branding
 import integrations
 

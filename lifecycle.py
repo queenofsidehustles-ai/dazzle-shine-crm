@@ -7,7 +7,6 @@ wording lives in editable EmailTemplate records. See EMAIL_AUTOMATION_PLAN.md.
 from datetime import datetime, timedelta
 from extensions import db
 from notifications import send_triggered_email, is_opted_out, unsubscribe_token
-from pricing import FREQUENCY_DISCOUNTS
 import branding
 
 

@@ -220,13 +220,3 @@ def complete_2fa_login(user):
     nothing and will bind a session for whatever user it is given."""
     bind_authenticated_session(user)
     return {'user_id': user.id, 'role': user.role, 'name': user.name}
-
-
-def check_credentials(username, password):
-    """Backward-compatible env-only check (kept for any legacy callers)."""
-    if not env_login_configured():
-        return False
-    return (
-        username == os.environ.get('ADMIN_USER', '').strip() and
-        password == (os.environ.get('ADMIN_PASS') or '')
-    )

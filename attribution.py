@@ -31,7 +31,6 @@ Short, cleaned strings only -- never a full URL with whatever else was in its
 query string. A referral names a company by its address and is only kept if
 that company exists and is not the one signing up (see control_plane.create).
 """
-import json
 import re
 from datetime import datetime
 

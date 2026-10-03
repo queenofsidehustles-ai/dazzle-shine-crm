@@ -329,7 +329,7 @@ class Builder:
             status='completed', crew=(), discount_pct=0, source='website', group=None,
             created=None, notes=None):
         import pricing
-        from models import Booking, BookingCrew
+        from models import Booking
         from extensions import db
         c = self.clients[i]
         beds, baths = self.size(i)
@@ -429,7 +429,6 @@ class Builder:
     # stage: history ------------------------------------------------------
     def history(self):
         from extensions import db
-        rng = self.rng
         # Recurring plans: past visits, all done. Future visits come in plans().
         # Today's and tomorrow's plans run on whatever day those are; the rest
         # land on weekdays, when a cleaning company does most of its work.
@@ -519,7 +518,6 @@ class Builder:
         import quoting
         from models import Lead
         from extensions import db
-        rng = self.rng
 
         def quote(i, service, extras=(), frequency='one_time', source='website',
                   created=0, discount_pct=0):
@@ -1114,7 +1112,6 @@ def verify():
         for b in jobs if b.frequency in ('weekly', 'biweekly', 'monthly')))
     settled_bad = [b.id for b in jobs if b.paid_at and not is_settled(b)]
     check('every paid job is settled in full', not settled_bad, str(settled_bad[:5]))
-    collected_total = round(sum(collected(b) for b in jobs), 2)
     rev = finance.revenue_between(today - timedelta(days=400), today + timedelta(days=1))
     check('revenue on the reports equals the money collected',
           abs(rev - round(sum(collected(b) for b in jobs if b.paid_at), 2)) < 0.01,

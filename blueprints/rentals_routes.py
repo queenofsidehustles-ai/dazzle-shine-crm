@@ -8,7 +8,7 @@ ways this goes wrong in a way somebody notices.
 from datetime import date, datetime
 
 from flask import (Blueprint, render_template, request, redirect, url_for,
-                   flash, abort)
+                   flash)
 
 from auth import login_required
 from extensions import db

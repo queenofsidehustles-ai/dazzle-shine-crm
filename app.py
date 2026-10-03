@@ -306,7 +306,9 @@ def create_app():
         is true. It runs once per company for the lifetime of the account.
         """
         try:
-            import billing, onboarding, provisioning, tenancy
+            import billing
+            import onboarding
+            import provisioning
             org = billing.current_org()
             if not org:
                 return {'TRIAL': None}
@@ -324,7 +326,7 @@ def create_app():
 
     @app.context_processor
     def inject_product():
-        import product, branding
+        import product
         return {'PRODUCT': product.name(), 'TAGLINE': product.tagline(),
                 'SUPPORT_EMAIL': product.support_email(),
                 'PRODUCT_DOMAIN': product.domain(),
@@ -561,7 +563,7 @@ def _patch_pay_rate_40_to_50():
 
 def _seed_message_templates():
     """Seed the reusable text-message templates once (idempotent by title)."""
-    from models import MessageTemplate, BusinessSetting
+    from models import MessageTemplate
     # No owner_name seed. It used to default to one particular owner's first
     # name, which then signed the welcome texts a different company sent to its
     # own cleaners. Unset, {owner} falls back to the business name.

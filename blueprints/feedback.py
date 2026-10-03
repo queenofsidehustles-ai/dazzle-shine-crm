@@ -11,9 +11,8 @@ filed inside each tenant would mean logging into every company to find out
 what the beta said, which is how feedback stops being read.
 """
 import base64
-from datetime import datetime
 
-from flask import Blueprint, Response, jsonify, render_template, request, session
+from flask import Blueprint, Response, jsonify, request, session
 
 import control_plane
 import product

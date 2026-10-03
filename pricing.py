@@ -419,9 +419,3 @@ def calculate_price(service_type, bedrooms, bathrooms, extras=None, frequency='o
         sqft_val = None
     return calculate_job(service_type, bedrooms, bathrooms, sqft=sqft_val,
                          extras=extras_str, frequency=frequency)['client_price']
-
-
-def get_service_price(service_type, field):
-    if field == 'base':
-        return round(get_std_price(1, 1) * get_multiplier(service_type), 2)
-    return 0

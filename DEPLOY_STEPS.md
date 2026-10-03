@@ -644,6 +644,76 @@ All optional. The defaults are what you want on the live product.
 
 ---
 
+## Settings reference
+
+These are the settings the code reads that the steps above do not cover. Most
+are optional, and Railway sets a few itself.
+
+**Shared connections every company falls back to.** A company that has not
+saved its own keys under Settings → Connections uses these. Stripe is the
+exception: it never falls back (Step 13).
+
+| Variable | What it does |
+|---|---|
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE` | Texting for companies that have not connected their own Twilio. |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Job photos, and the account applicants' interview videos upload to. With no cloud name, applicants see "not set up yet" instead of a broken recorder. |
+| `CLOUDINARY_UPLOAD_PRESET` | The unsigned upload preset interview videos use. Default `interviews`, and it has to exist on whichever Cloudinary account is in use. |
+| `GOOGLE_PLACES_API_KEY` | The lead finder. |
+
+**Akye itself, the product.** These are never used for a cleaning company's own
+messages.
+
+| Variable | What it does |
+|---|---|
+| `PRODUCT_NAME`, `PRODUCT_TAGLINE` | Name and tagline on the marketing site. Default `Akye`. |
+| `PRODUCT_LEGAL_ENTITY`, `PRODUCT_LEGAL_ADDRESS` | Company name and postal address on Terms, Privacy and every outreach email (CAN-SPAM). Set both. |
+| `PRODUCT_RESEND_API_KEY` | Email sent as Akye: console outreach, trial emails, directory invites. |
+| `PRODUCT_TWILIO_ACCOUNT_SID`, `PRODUCT_TWILIO_AUTH_TOKEN`, `PRODUCT_TWILIO_PHONE` | Akye's own number for console texts to leads, and the STOP/START webhook. These are separate from `TWILIO_*`, so Akye never pitches from a company's number. |
+| `PRODUCT_HOST` | Where the scheduler calls the product's own jobs. Default `www.<BASE_DOMAIN>`. |
+| `LEGAL_UPDATED`, `SECURITY_UPDATED` | The "last updated" date on the legal and security pages. Change it when you change the text. |
+| `ALLOWED_FORM_ORIGINS` | Other sites, comma separated, allowed to post forms to the app, such as the getakye.com directory's claim form. The default is `getakye.com,www.getakye.com,getakye.netlify.app`; setting this replaces it. |
+| `ALLOWED_ORIGINS` | Extra sites, comma separated, allowed to call the booking API from a browser. Each company's own website is allowed automatically. |
+
+**Nana, the assistant, and her voice.**
+
+| Variable | Default | What it does |
+|---|---|---|
+| `ASSISTANT_MODEL` | `anthropic/claude-haiku-4.5` | Model for lookups, through OpenRouter. |
+| `ASSISTANT_THINK_MODEL` | `openai/gpt-5-mini` | Model for advice questions. |
+| `ASSISTANT_MONTHLY_LIMIT` | `300` | Questions per company per month. |
+| `ASSISTANT_MAX_STEPS` | `6` | Most lookups per question. |
+| `OPENAI_API_KEY` | none | Optional. Speech goes straight to OpenAI when set, otherwise through OpenRouter. |
+| `SPEECH_MODEL`, `SPEECH_VOICE`, `SPEECH_MANNER` | `gpt-4o-mini-tts`, `sage` | The speaking voice. |
+| `SPEECH_MODELS_ROUTER` | a list | Voice models tried in order through OpenRouter. |
+| `SPEECH_CAP_CHARS` | `60000` | Characters of speech per company per month. |
+
+**Single-business installs only.** On hosted Akye each company sets these in its
+own Settings, so leave them blank there.
+
+| Variable | What it does |
+|---|---|
+| `BUSINESS_NAME`, `BUSINESS_PHONE`, `WEBSITE`, `OWNER_EMAIL`, `REPLY_TO_EMAIL` | The business's details, if not saved in Settings. |
+| `BUSINESS_TZ` | Its time zone. Default Eastern. |
+| `WORKER_MODEL` | `contractor` (1099) or `employee` (W-2), if not chosen in Settings. |
+
+**Operations, backups and scripts.**
+
+| Variable | What it does |
+|---|---|
+| `AKYE_DATABASE_URL` | GitHub Actions secret for the scheduler. Railway's public Postgres URL, used to read the company list. |
+| `BACKUP_DIR`, `BACKUP_KEEP_DAYS`, `BACKUP_VERIFY_URL` | Where backups go, how long they are kept (default 30 days), and the scratch Postgres a restore is checked against. |
+| `DEMO_CITY` | The city the demo company is set in. |
+| `SOURCE_DATABASE_URL`, `TENANT_SLUG` | Arguments to `adopt_tenant.py` and `seed_huntsville_pricing.py` when run by hand. |
+| `FLASK_ENV` | `development` turns off the production protections locally. Never set it on Railway. |
+| `FLASK_SECRET_KEY` | Older name for `SECRET_KEY`. Only read when `SECRET_KEY` is missing. |
+
+**Set by Railway or the release script. Do not set these yourself:**
+`RAILWAY_ENVIRONMENT`, `RAILWAY_PROJECT_ID`, `RAILWAY_GIT_BRANCH`,
+`RAILWAY_GIT_COMMIT_SHA`, `SOURCE_COMMIT`, `RELEASE_SHA`, `RELEASE_TAG`,
+`RELEASE_HANDED_OVER`.
+
+---
+
 ## When you are done
 
 Tell me which step you finished and anything that did not match what I said.

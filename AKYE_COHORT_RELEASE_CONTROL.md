@@ -4,7 +4,7 @@ Release-control contract for the first external cohort. This document closes the
 
 ## Release posture
 
-Akye ships from `akye-stable`. The working/remediation branch must never be a customer deployment source. A candidate may be promoted only after the exact candidate revision passes `.github/workflows/launch-readiness-stable.yml` and the operator records the evidence below. The stable certification runs on pull requests targeting `akye-stable` and again after a push/merge to `akye-stable`; the older `.github/workflows/launch-readiness.yml` is remediation/history evidence and is not the authoritative stable release gate.
+Akye ships from `akye-stable`. The working/remediation branch must never be a customer deployment source. A candidate may be promoted only after the exact candidate revision passes `.github/workflows/launch-readiness-stable.yml` and the operator records the evidence below. The stable certification runs on pull requests targeting `akye-stable` and again after a push/merge to `akye-stable`; the older `.github/workflows/launch-readiness.yml` (cohort-30 remediation evidence) has been retired; it remains in git history and was never the authoritative stable release gate.
 
 Expansion is staged: internal/synthetic tenants -> 3-5 design partners -> 10 tenants -> 30 tenants. Each expansion is a new release decision; success at one stage does not authorize the next.
 

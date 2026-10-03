@@ -18,7 +18,7 @@ from datetime import datetime
 import branding
 from extensions import db
 from models import Lead, Booking, Client, ChecklistTemplate
-from pricing import DEPOSIT_AMOUNT, get_deposit
+from pricing import get_deposit
 
 
 def expanded(items):

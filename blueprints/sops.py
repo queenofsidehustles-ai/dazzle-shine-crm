@@ -27,7 +27,6 @@ CLEANER_CATEGORIES = ['cleaning', 'commercial', 'quality']
 @sops_bp.route('/library')
 def library():
     """Public SOP library cleaners can reference anytime (job-relevant categories only)."""
-    from models import BusinessSetting
     biz = branding.biz_name()
     label_map = dict(SOP.CATEGORIES)
     groups = []

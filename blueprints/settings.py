@@ -374,7 +374,7 @@ def followup_texts():
 @settings_bp.route('/pricing', methods=['GET', 'POST'])
 @owner_required
 def pricing():
-    from pricing import get_labor_rate, LABOR_RATE_DEFAULT
+    from pricing import get_labor_rate
     if request.method == 'POST':
         # Save deposit
         PricingSetting.set('deposit_amount', request.form.get('deposit_amount', DEPOSIT_AMOUNT))

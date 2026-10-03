@@ -29,7 +29,7 @@ import click
 from datetime import datetime, timedelta
 
 from flask import (Blueprint, render_template, request, abort, url_for,
-                   redirect, flash, current_app)
+                   redirect, flash)
 
 from auth import login_required
 from extensions import db

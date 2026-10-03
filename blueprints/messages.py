@@ -48,7 +48,6 @@ def sent_log():
     """A single 'Sent' history of every outbound text and email the system has
     sent from anywhere in the app (pay updates, work orders, confirmations,
     reminders, payment links, custom customer emails)."""
-    import os as _os
     channel = request.args.get('channel', '')
     q = OutboundLog.query
     if channel in ('sms', 'email'):

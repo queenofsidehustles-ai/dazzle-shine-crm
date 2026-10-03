@@ -57,7 +57,7 @@ def index():
 @login_required
 def price_preview():
     """Live running total for the New Booking form — mirrors new()'s save math exactly."""
-    from pricing import calculate_price, get_lead_fee
+    from pricing import calculate_price
     service = request.args.get('service_type', 'standard')
     beds = request.args.get('bedrooms', '1')
     baths = request.args.get('bathrooms', '1')
@@ -93,7 +93,7 @@ def price_preview():
 @login_required
 def new():
     """Create a booking by hand — for customers who book by phone/text/in person."""
-    from pricing import calculate_price, calculate_job, SERVICE_LABELS, EXTRAS, get_lead_fee
+    from pricing import calculate_job, SERVICE_LABELS, EXTRAS, get_lead_fee
     if request.method == 'POST':
         # The plan's monthly job ceiling. Checked before anything is built, so a
         # refused job leaves no half-written client or booking behind — and it is
@@ -810,7 +810,6 @@ def notify_pay(booking_id):
     """Text the cleaner their current (corrected) pay for this job. On a crew job
     every member gets their own share, not the job total."""
     import secrets as _secrets
-    from models import BusinessSetting
     from notifications import send_sms
     from translate import translate
     b = Booking.query.get_or_404(booking_id)
@@ -1083,8 +1082,6 @@ def reschedule(booking_id):
 @login_required
 def notify_moved(booking_id):
     """Text whoever is on this job that its date changed."""
-    import secrets as _secrets
-    from models import BusinessSetting
     from notifications import send_sms
     from translate import translate
     b = Booking.query.get_or_404(booking_id)
@@ -1644,7 +1641,6 @@ def send_invoice(booking_id):
     import invoicing
     from blueprints.payments import payment_link_url, amount_due
     from notifications import send_email
-    from models import BusinessSetting
     # An invoice already issued keeps its dates unless she asks for new ones —
     # a document the customer already has shouldn't change under them silently.
     if request.form.get('reissue_dates'):

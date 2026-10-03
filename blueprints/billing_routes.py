@@ -15,7 +15,6 @@ shared, bookmarked or typed by anybody. If arriving there upgraded the account,
 the plan could be upgraded by visiting a page. So it says thank you and nothing
 else, and the entitlement changes when Stripe tells us, over a signed webhook.
 """
-import os
 
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    jsonify, abort, flash)
