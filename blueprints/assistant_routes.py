@@ -15,7 +15,6 @@ import assistant
 import speech
 from auth import login_required, owner_required
 from entitlements import requires_plan
-from extensions import db
 
 assistant_bp = Blueprint('assistant', __name__)
 

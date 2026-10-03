@@ -45,8 +45,7 @@ Called daily from `/api/trial-nudges` and by hand with
 `python3 provisioning.py nudges --dry-run`, which sends nothing and prints
 exactly what a real run would do.
 """
-import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import billing
 import control_plane

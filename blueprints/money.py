@@ -5,8 +5,7 @@ the CRM already knows it paid. Owner-only — this is the money.
 """
 import csv
 import io
-import os
-from datetime import date, datetime
+from datetime import date
 
 from flask import (Blueprint, Response, abort, flash, g, redirect, render_template,
                    request, url_for)

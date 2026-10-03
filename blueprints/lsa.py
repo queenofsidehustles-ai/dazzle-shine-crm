@@ -16,7 +16,7 @@ job and these screens are provably doing the same thing.
 from datetime import datetime
 
 from flask import (Blueprint, render_template, request, redirect, url_for,
-                   flash, session)
+                   flash)
 from auth import login_required
 from extensions import db
 from models import LsaLead

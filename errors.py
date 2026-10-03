@@ -93,7 +93,7 @@ def install(app):
 
         # Never show a stack trace to a customer or a cleaner. They cannot act
         # on it and it describes the inside of the application to a stranger.
-        from flask import render_template, request
+        from flask import render_template
         try:
             return render_template('error.html'), 500
         except Exception:

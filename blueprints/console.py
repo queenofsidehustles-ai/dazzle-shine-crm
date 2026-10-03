@@ -378,7 +378,7 @@ def send_welcome(slug):
         flash('That company has no owner email on file.', 'error')
         return redirect(here)
 
-    import welcome_email, product
+    import welcome_email
     host = f"{slug}.{os.environ.get('BASE_DOMAIN', 'akyehq.com')}"
     ok, detail = welcome_email.send(org.get('name') or slug, email, host)
     control_plane.log_console(engine, request.console_user['email'],

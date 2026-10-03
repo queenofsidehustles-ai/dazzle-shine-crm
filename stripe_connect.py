@@ -4,7 +4,6 @@ Every function is defensive: returns (ok: bool, data_or_error). Nothing here
 moves money except create_transfer(), which is only called from the guarded
 admin "Pay" route. Works in whichever mode STRIPE_SECRET_KEY is (test or live).
 """
-import os
 import stripe
 import integrations
 

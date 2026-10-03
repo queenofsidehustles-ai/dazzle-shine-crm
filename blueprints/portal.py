@@ -4,12 +4,11 @@ Shows their upcoming cleanings, history, and invoices, and lets them save a card
 for automatic morning-of billing (auto-pay). The card is stored on the *client*
 (via Stripe), so it carries across every visit in a recurring series.
 """
-import os
 import secrets
 from datetime import date, datetime
 import stripe
 from flask import Blueprint, render_template, request, jsonify, abort, session, redirect, url_for
-from models import Client, BusinessSetting
+from models import Client
 from extensions import db
 from blueprints.payments import amount_due, ensure_pay_token, is_settled
 import branding

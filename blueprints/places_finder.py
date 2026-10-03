@@ -14,7 +14,6 @@ import json
 from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response)
-from markupsafe import escape
 from entitlements import requires_plan
 from auth import login_required
 from extensions import db
@@ -395,13 +394,6 @@ def export_csv():
     stamp = local_today().isoformat()
     return Response(buf.getvalue(), mimetype='text/csv', headers={
         'Content-Disposition': f'attachment; filename=call-list-{stamp}.csv'})
-
-
-def _prepend_entry(prospect, header):
-    """One dated line above the existing notes."""
-    from scheduling import local_now
-    stamp = local_now().strftime('[%b %d] ')
-    return (stamp + header + '\n\n' + (prospect.notes or '')).strip()
 
 
 def _prepend_log(prospect, form):

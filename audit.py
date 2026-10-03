@@ -2,7 +2,7 @@
 Full CRM walkthrough audit — identifies UI gaps, broken flows, missing steps.
 Run: python3 audit.py
 """
-import os, sys, time
+import os
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 BASE = os.environ.get("CRM_BASE", "http://localhost:5000").rstrip("/")
@@ -162,7 +162,6 @@ def audit_bookings(page):
             gap("Bookings", f'"{status}" filter missing')
 
     # Open a booking and check cleaner assignment
-    links = page.query_selector_all('a[href*="/bookings/"][href$="/"]')
     booking_links = [l for l in page.query_selector_all('a')
                      if '/bookings/' in (l.get_attribute('href') or '')
                      and l.get_attribute('href') != '/bookings/']

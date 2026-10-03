@@ -1,7 +1,7 @@
 import os
 import secrets
 from datetime import datetime
-from flask import Blueprint, render_template, request, jsonify, abort, url_for, flash, redirect
+from flask import Blueprint, render_template, request, jsonify, url_for, flash, redirect
 from entitlements import requires_plan
 from auth import login_required
 from models import ContractorApplication, InterviewResponse, ContractorDocument
@@ -12,20 +12,6 @@ import branding
 
 interviews_bp = Blueprint('interviews', __name__)
 
-
-def send_interview_invite_email(app_rec):
-    """Send the bilingual interview + background check invitation email.
-    Can be called from the admin manual route OR the auto-filter delayed timer."""
-    biz = branding.biz_name()
-    interview_url = url_for('interviews.interview_page',
-                            token=app_rec.interview_token, _external=True)
-    html = _build_invite_html(app_rec.name, interview_url, biz)
-    send_email(
-        to_email=app_rec.email,
-        to_name=app_rec.name,
-        subject=f"Next Steps: Video Interview + Background Check — {biz}",
-        html=html,
-    )
 
 # Six, and every one has to earn its place on a video.
 #
@@ -85,12 +71,22 @@ def interview_page(token):
     if app_rec.interview_status == 'completed':
         return render_template('interview/complete.html', app=app_rec, already_done=True)
 
+    # The company's own Cloudinary if it saved one, else the platform's
+    # (CLOUDINARY_CLOUD_NAME), the same lookup job photos use. There used to be
+    # a hard-coded account here as the last resort, so every company's
+    # applicant videos went to one account whatever it had connected. With
+    # nothing connected the applicant is told so, rather than recording an
+    # answer that can only fail to upload.
+    import integrations
+    cloud_name = integrations.cloudinary_cloud_name()
+    if not cloud_name:
+        return render_template('interview/unavailable.html', app=app_rec)
+
     if app_rec.interview_status == 'sent':
         app_rec.interview_status = 'in_progress'
         db.session.commit()
 
     answered = [r.question_index for r in app_rec.responses]
-    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dasgvqtyk')
     upload_preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'interviews')
 
     return render_template('interview/interview.html',

@@ -1,9 +1,8 @@
-import os
 import stripe
 from flask import Blueprint, render_template, request, jsonify
 from models import Booking
 from extensions import db
-from pricing import DEPOSIT_AMOUNT, get_deposit
+from pricing import get_deposit
 import integrations
 
 deposit_bp = Blueprint('deposit', __name__)

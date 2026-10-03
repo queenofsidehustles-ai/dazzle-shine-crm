@@ -12,7 +12,7 @@ import secrets
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
-from flask import current_app, g, request, session
+from flask import current_app, g, request
 
 # getakye.com is a different host but the same company: its directory pages post
 # their "this is my business" form to this app. Naming the origin keeps the check
@@ -436,6 +436,11 @@ def record_login(username, ok):
             ok=bool(ok),
         ))
         db.session.commit()
+        # Only the last LOCKOUT_WINDOW is ever read back; keep a month for
+        # "was anyone trying?" and let the rest go, rather than a table that
+        # grows by every sign-in forever. created_at is indexed, so this is
+        # cheap enough to do on every write.
+        prune_login_attempts()
     except Exception:
         try:
             from extensions import db

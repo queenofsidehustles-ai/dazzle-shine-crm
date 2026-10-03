@@ -5,7 +5,7 @@ from datetime import date, timedelta, datetime
 from flask import Blueprint, request, jsonify
 from models import Booking, Client
 from extensions import db
-from pricing import calculate_price, SERVICES, EXTRAS, FREQUENCY_LABELS, DEPOSIT_AMOUNT, get_deposit
+from pricing import calculate_price, FREQUENCY_LABELS, get_deposit
 from notifications import send_email, send_sms, add_to_mailerlite
 import branding
 import integrations
@@ -1271,7 +1271,6 @@ def _send_deposit_request(booking: Booking):
     """Tentative booking: confirm we received it, but make clear it's NOT locked in
     until the $50 deposit is paid. Includes a secure Pay Deposit link."""
     from flask import url_for
-    from models import BusinessSetting
     notify_email = branding.owner_email()
     biz = branding.biz_name()
     freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')

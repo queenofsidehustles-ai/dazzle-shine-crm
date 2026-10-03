@@ -1,5 +1,4 @@
 import json
-import os
 import secrets
 import contextvars
 import threading
@@ -192,7 +191,6 @@ def sms_test():
 @login_required
 def email_test():
     """Diagnostic: send a real test email and show exactly what Resend says."""
-    import os as _os
     to = request.args.get('to') or BusinessSetting.get('email') or \
         branding.owner_email()
     from_email = branding.from_email()
@@ -398,7 +396,6 @@ def add_applicant():
 @login_required
 def send_application_link(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     apply_url = url_for('contractors.apply', _external=True)
     send_email(
@@ -433,7 +430,6 @@ def send_application_link(app_id):
 @login_required
 def send_interview_invite(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     cal_link = BusinessSetting.get('interview_calendar_link', '')
     if not cal_link:
@@ -474,7 +470,6 @@ def send_interview_invite(app_id):
 @login_required
 def send_spanish_interview(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     owner_email = branding.owner_email()
     send_email(
@@ -516,7 +511,6 @@ def send_spanish_interview(app_id):
 @login_required
 def send_bgcheck_request(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     owner_email = branding.owner_email()
     provider_url = BusinessSetting.get('bgcheck_provider_url', '')
@@ -567,7 +561,6 @@ def send_bgcheck_request(app_id):
 @login_required
 def send_rejection(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     send_email(
         to_email=a.email, to_name=a.name,
@@ -671,7 +664,6 @@ def hire(app_id):
     db.session.commit()
 
     if s.email:
-        import os
         biz = branding.biz_name()
         owner_email = branding.owner_email()
         hub_url = url_for('contractors.onboarding_hub', token=token, _external=True, _scheme='https')
@@ -2100,7 +2092,6 @@ def apply():
         db.session.commit()
 
         # ── Notify Monica of new application ──────────────────────────────────
-        import os
         notify = branding.owner_email()
         send_email(
             to_email=notify, to_name=branding.biz_name(),
@@ -2268,7 +2259,6 @@ def resend_join_invite(staff_id):
 @contractors_bp.route('/team/<int:staff_id>/resend-agreement', methods=['POST'])
 @login_required
 def resend_agreement(staff_id):
-    import os
     s = Staff.query.get_or_404(staff_id)
     if not s.email:
         flash('No email on file for this team member.', 'error')

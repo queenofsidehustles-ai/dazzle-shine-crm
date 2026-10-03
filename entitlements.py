@@ -35,7 +35,7 @@ here because it is a real migration, not a doc update.
 Everything routes through `state()` so that change is one function, not a
 hundred call sites. Do not read the plan setting anywhere else.
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import wraps
 
 # Plan order. A feature needing 'pro' is available to 'pro' and 'scale'.
@@ -253,18 +253,6 @@ def set_plan(plan, status='active'):
     BusinessSetting.set('plan_status', status)
     db.session.commit()
     _clear_cache()
-
-
-def start_trial(days=TRIAL_DAYS):
-    """Begin a Pro trial. Idempotent — calling it twice does not extend one."""
-    from models import BusinessSetting
-    from extensions import db
-    if (BusinessSetting.get('trial_ends_at') or '').strip():
-        return False
-    BusinessSetting.set('trial_ends_at', (datetime.utcnow() + timedelta(days=days)).isoformat())
-    db.session.commit()
-    _clear_cache()
-    return True
 
 
 def _clear_cache():

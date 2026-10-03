@@ -13,7 +13,7 @@ company's own schema, which is both absurd and a leak.
 Nothing here is created or read on an instance that has no organisations. The
 business running today never touches it.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
                         LargeBinary, Text, UniqueConstraint,
@@ -1198,6 +1198,10 @@ def record_signup_attempt(engine, ip):
     try:
         with engine.begin() as conn:
             conn.execute(insert(signup_attempts).values(ip=(ip or 'unknown')[:45]))
+            # Only the last day is ever counted (signup._refused). A week is
+            # kept for looking back at a flood; anything older goes.
+            conn.execute(signup_attempts.delete().where(
+                signup_attempts.c.created_at < datetime.utcnow() - timedelta(days=7)))
     except Exception:
         pass
 
@@ -1276,13 +1280,6 @@ def console_log_all(engine, limit=300):
         rows = conn.execute(select(console_log).order_by(
             console_log.c.created_at.desc()).limit(limit)).mappings().all()
     return [dict(r) for r in rows]
-
-
-def set_console_role(engine, email, role):
-    with engine.begin() as conn:
-        conn.execute(update(console_users)
-                     .where(console_users.c.email == (email or '').strip().lower())
-                     .values(role=role))
 
 
 # --------------------------------------------------------------------------

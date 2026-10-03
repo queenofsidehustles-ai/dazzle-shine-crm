@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from auth import login_required, owner_required
 from models import Lead, Booking, Client, User
 from extensions import db
-from pricing import DEPOSIT_AMOUNT, get_deposit
+from pricing import get_deposit
 import entitlements
 
 leads_bp = Blueprint('leads', __name__, url_prefix='/leads')

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video interview — {{ BIZ }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", system-ui, sans-serif; background: var(--ground);
+           color: var(--ink); min-height: 100vh; display: flex; align-items: center;
+           justify-content: center; padding: 40px 20px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+            padding: 40px 32px; max-width: 520px; width: 100%; text-align: center; }
+    h1 { font-size: 1.5rem; margin-bottom: 12px; }
+    p { color: var(--muted); line-height: 1.7; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Thanks, {{ (app.name or '').split(' ')[0] or 'and welcome' }}</h1>
+    <p>{{ BIZ }} has not finished setting up video interviews yet, so there is
+       nothing to record today.</p>
+    <p>Your application is safe and nothing is lost. Keep this link: it will
+       work once they are ready, and they can reach you at the details you gave.</p>
+  </div>
+</body>
+</html>

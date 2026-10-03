@@ -14,7 +14,6 @@ one, so its quotes simply go out under the single name it actually uses.
 The stored keys 'lm' and 'dazzle' predate this and still exist on old Quote
 rows, so they are kept as aliases rather than rewritten in the database.
 """
-import os
 
 PRIMARY = 'primary'
 COMMERCIAL = 'commercial'

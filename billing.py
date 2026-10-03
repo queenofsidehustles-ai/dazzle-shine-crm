@@ -30,7 +30,6 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import control_plane
-import tenancy
 
 # What each plan is called at Stripe. Price IDs live in the environment because
 # they differ between test and live mode, and a test price ID in production is a

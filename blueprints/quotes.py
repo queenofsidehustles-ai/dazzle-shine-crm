@@ -1,7 +1,6 @@
-import os
 import secrets
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash
 from entitlements import requires_plan
 from auth import owner_required
 from models import CommercialQuote, CommercialAccount

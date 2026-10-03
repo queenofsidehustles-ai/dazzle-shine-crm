@@ -18,7 +18,6 @@ happened, and only the inbox knows the difference.
 The same address cannot be asked for repeatedly. Without that, anybody can use
 the form to fill somebody else's inbox, from a page that requires no login.
 """
-import os
 from datetime import datetime, timedelta
 
 from flask import (Blueprint, render_template, request, redirect, url_for,

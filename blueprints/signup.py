@@ -437,17 +437,6 @@ def _create_everything(slug, form, password, attribution=None, terms_accepted=Fa
             raise
 
 
-def _cleanup(slug):
-    """Legacy/manual cleanup helper; never used by the signup exception path."""
-    engine = _engine()
-    schema = tenancy.schema_for(slug)
-    with _slug_lock(engine, slug):
-        if control_plane.find(engine, slug):
-            raise RuntimeError(f'refusing to clean up registered tenant {slug!r}')
-        if provisioning.schema_exists(engine, schema):
-            provisioning.drop_schema(engine, schema)
-
-
 @signup_bp.route('/welcome/<token>')
 def welcome(token):
     """Spend the signup token and start the session, on the company's own host."""

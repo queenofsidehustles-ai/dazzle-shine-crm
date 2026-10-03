@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from flask import (Blueprint, flash, redirect, render_template, request,
                    url_for)
 
-from auth import login_required, owner_required
+from auth import owner_required
 from extensions import db
 from models import Availability, BusinessSetting, Staff
 from notifications import send_email, send_sms

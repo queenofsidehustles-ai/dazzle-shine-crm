@@ -1097,31 +1097,6 @@ def _grounded(answer, sources):
     return _numbers(answer) <= nums and _periods(answer) <= pers
 
 
-# What she reads before thinking about a broad question. "How do I get more
-# customers" is not answerable from one lookup, and running none is what made
-# her say "I did not follow that" to a perfectly ordinary business question.
-ADVICE_CONTEXT = ('leads_waiting', 'commercial_pipeline', 'unassigned_jobs',
-                  'jobs_this_week', 'money_owed', 'money_made')
-
-
-def _standing_facts(already):
-    """The state of the business, for a question that needs it all."""
-    out = []
-    for name in ADVICE_CONTEXT:
-        if name in already:
-            continue
-        try:
-            fn = TOOLS[name][0]
-            text = fn()
-        except Exception:
-            continue
-        if isinstance(text, dict):
-            text = text.get('say')
-        if text:
-            out.append(text)
-    return out
-
-
 def _compose(question, facts, api_key=None, kind='lookup', profile=None):
     """Turn the facts into the answer a person would give. None if it can't.
 
@@ -1215,20 +1190,6 @@ def _compose(question, facts, api_key=None, kind='lookup', profile=None):
     except Exception as e:
         _record(f'could not write the answer: {type(e).__name__}')
         return None
-
-
-def _run(name, args):
-    """One lookup. Its own text, or None if it could not be read."""
-    fn = TOOLS[name][0]
-    try:
-        out = fn(**args)
-    except TypeError:
-        out = fn()
-    except Exception:
-        return None
-    if isinstance(out, dict):
-        return out.get('say')
-    return out
 
 
 def ask(question, api_key=None, history=None):
