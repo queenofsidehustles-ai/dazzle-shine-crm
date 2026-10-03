@@ -1,0 +1,33 @@
+{% extends "directory/_base.html" %}
+{% block title %}Listing claims{% endblock %}
+{% block body %}
+<div class="card" style="max-width:none">
+  <h1>Listing claims</h1>
+  <p>
+    {% for s in ['review','sent','verified','expired','all'] %}
+      <a href="{{ url_for('directory.claims_queue', status=s) }}"
+         style="margin-right:.8rem;{{ 'font-weight:800' if s == status else '' }}">{{ s }}
+        {% if counts.get(s) %}({{ counts[s] }}){% endif %}</a>
+    {% endfor %}
+  </p>
+  {% if claims %}
+  <table>
+    <thead><tr><th>Business</th><th>Who</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for c in claims %}
+      <tr>
+        <td>{{ c.listing_name }}<br><span class="fine">{{ c.created_at.strftime('%d %b') }}</span></td>
+        <td>{{ c.name }}<br><span class="fine">{{ c.email }}{% if c.phone %} &middot; {{ c.phone }}{% endif %}</span>
+          {% if c.note %}<br><span class="fine">&ldquo;{{ c.note }}&rdquo;</span>{% endif %}</td>
+        <td><span class="pill {{ c.status }}">{{ c.status }}</span></td>
+        <td>{% if c.status != 'verified' %}
+          <form method="post" action="{{ url_for('directory.approve_claim', claim_id=c.id) }}">
+            <button class="btn" style="margin:0;padding:.4rem .8rem;font-size:.85rem;width:auto">Approve</button>
+          </form>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p>Nothing here.</p>{% endif %}
+</div>
+{% endblock %}

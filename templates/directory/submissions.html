@@ -1,0 +1,45 @@
+{% extends "directory/_base.html" %}
+{% block title %}Businesses asking to be added{% endblock %}
+{% block body %}
+<div class="card" style="max-width:none">
+  <h1>Businesses asking to be added</h1>
+  <p>
+    {% for s in ['new','approved','rejected','all'] %}
+      <a href="{{ url_for('directory.submissions_queue', status=s) }}"
+         style="margin-right:.8rem;{{ 'font-weight:800' if s == status else '' }}">{{ s }}
+        {% if counts.get(s) %}({{ counts[s] }}){% endif %}</a>
+    {% endfor %}
+  </p>
+  {% if subs %}
+  <table>
+    <thead><tr><th>Business</th><th>Contact</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for s in subs %}
+      <tr>
+        <td><strong>{{ s.name }}</strong><br>
+          <span class="fine">{{ s.city }}{% if s.state %}, {{ s.state }}{% endif %}
+            &middot; {{ s.created_at.strftime('%d %b') }}</span>
+          {% if s.website %}<br><span class="fine">{{ s.website }}</span>{% endif %}</td>
+        <td>{{ s.contact_name or '—' }}<br>
+          <span class="fine">{{ s.email }}{% if s.phone %} &middot; {{ s.phone }}{% endif %}</span>
+          {% if s.note %}<br><span class="fine">&ldquo;{{ s.note }}&rdquo;</span>{% endif %}</td>
+        <td><span class="pill {{ 'verified' if s.status == 'approved' else 'review' }}">{{ s.status }}</span>
+          {% if s.exported_at %}<br><span class="fine">exported</span>{% endif %}</td>
+        <td>{% if s.status == 'new' %}
+          <form method="post" action="{{ url_for('directory.review_submission', sub_id=s.id, action='approve') }}" style="display:inline">
+            <button class="btn" style="margin:0;padding:.35rem .7rem;font-size:.82rem;width:auto">Approve</button>
+          </form>
+          <form method="post" action="{{ url_for('directory.review_submission', sub_id=s.id, action='reject') }}" style="display:inline">
+            <button class="btn ghost" style="margin:0;padding:.35rem .7rem;font-size:.82rem;width:auto">Reject</button>
+          </form>
+        {% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="fine" style="margin-top:1.2rem">Approved businesses go live on the next
+    rebuild: <code>flask directory export-submissions >> data/extra_&lt;state&gt;.csv</code>,
+    then regenerate and deploy.</p>
+  {% else %}<p>Nothing here.</p>{% endif %}
+</div>
+{% endblock %}

@@ -321,6 +321,13 @@ def commercial():
                            cfg=cp.get_config(), category_labels=Prospect.CATEGORY_LABELS)
 
 
+# An actual opt-out instruction, not just the word appearing somewhere --
+# "we can stop by tomorrow" contains "stop" and tells nobody how to leave the
+# list. Requires "reply" or "text" near the standalone word STOP, matching
+# every shipped default's own wording ("Reply STOP to opt out.").
+_OPT_OUT_RE = re.compile(r'\b(reply|text)\b[^.!?]{0,20}\bstop\b', re.I)
+
+
 @settings_bp.route('/followup-texts', methods=['GET', 'POST'])
 @owner_required
 def followup_texts():
@@ -341,7 +348,7 @@ def followup_texts():
         for track, label in lsa.TRACKS:
             for step in (1, 2, 3):
                 body = request.form.get(f'msg_{track}_{step}', '')
-                if body.strip() and 'stop' not in body.lower():
+                if body.strip() and not _OPT_OUT_RE.search(body):
                     rejected.append(f'{label} — message {step}')
                     continue
                 lsa.save_template(track, step, body)

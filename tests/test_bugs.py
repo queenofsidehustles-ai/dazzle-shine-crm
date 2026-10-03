@@ -107,4 +107,54 @@ with app.app_context():
     check(Booking.query.get(b3.id).invoice_due_date == date.today().isoformat(),
           'and re-dating is a deliberate, separate action')
 
-print('\n🎉 Clients get created, and invoices are due when they are issued.')
+    print('\n9. Correcting what was booked cannot wipe the day off the job')
+    # preferred_date is a string column, so a date the form cannot render —
+    # "next Tuesday", or any non-ISO value — reaches the browser as an empty
+    # <input type="date">. Saving a bedroom count then took the confirmed day
+    # and time off a job that was already on the calendar.
+    b4 = Booking(service_type='standard', name='Keeps Her Slot', address='9 Oak Rd',
+                 price=200, bedrooms='3', bathrooms='2', status='confirmed',
+                 preferred_date='2026-10-15', preferred_time='10:00 AM')
+    db.session.add(b4); db.session.commit()
+    c.post(f'/bookings/{b4.id}/service', data={
+        'service_type': 'standard', 'bedrooms': '4', 'bathrooms': '2',
+        'frequency': 'one_time', 'preferred_date': '', 'preferred_time': ''},
+        follow_redirects=True)
+    db.session.expire_all(); b4 = Booking.query.get(b4.id)
+    check(b4.bedrooms == '4', 'the correction she meant to make is saved')
+    check(b4.preferred_date == '2026-10-15', 'and the confirmed date survives a blank box')
+    check(b4.preferred_time == '10:00 AM', 'as does the time')
+    # A date she actually typed still moves it.
+    c.post(f'/bookings/{b4.id}/service', data={
+        'service_type': 'standard', 'bedrooms': '4', 'bathrooms': '2',
+        'frequency': 'one_time', 'preferred_date': '2026-10-22',
+        'preferred_time': '2:00 PM'}, follow_redirects=True)
+    db.session.expire_all(); b4 = Booking.query.get(b4.id)
+    check(b4.preferred_date == '2026-10-22' and b4.preferred_time == '2:00 PM',
+          'a date she does type is still the one that sticks')
+
+    print('\n10. Composing an offer cannot re-price a job already paid against')
+    # The confirm card writes the price it is offering, which is right on a job
+    # nobody has paid for. On one carrying a deposit it moved what was owed with
+    # nobody told — the money-in-silence update_service() already refuses.
+    b5 = Booking(service_type='standard', name='Paid A Deposit', address='4 Pine Ave',
+                 email='paid@example.com', phone='4075550123', price=200.0,
+                 bedrooms='3', bathrooms='2', status='confirmed',
+                 deposit_paid=True, deposit_amount_paid=50.0)
+    db.session.add(b5); db.session.commit()
+    c.post(f'/bookings/{b5.id}/proposal/preview', data={'plan_price': '285'})
+    db.session.expire_all()
+    check(Booking.query.get(b5.id).price == 200.0,
+          'her deposit still sits against the price she agreed to')
+
+    b6 = Booking(service_type='standard', name='Owes Nothing Yet', address='5 Pine Ave',
+                 email='unpaid@example.com', phone='4075550124', price=200.0,
+                 bedrooms='3', bathrooms='2', status='pending')
+    db.session.add(b6); db.session.commit()
+    c.post(f'/bookings/{b6.id}/proposal/preview', data={'plan_price': '285'})
+    db.session.expire_all()
+    check(Booking.query.get(b6.id).price == 285.0,
+          'while an unpaid job is still priced on the card, in one trip')
+
+print('\n🎉 Clients get created, invoices are due when issued, and no card')
+print('   silently wipes a date or moves money the customer has already paid.')

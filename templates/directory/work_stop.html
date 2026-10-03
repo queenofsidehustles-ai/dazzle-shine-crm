@@ -1,0 +1,12 @@
+{% set es = (t.language == 'es') %}
+{% extends "directory/_base.html" %}
+{% block title %}{{ 'Quitarme de la lista' if es else 'Take me off' }}{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>{{ '¿Quitarte de la lista?' if es else 'Take yourself off?' }}</h1>
+  <p>{% if es %}Las empresas de limpieza dejarán de verte. Puedes volver cuando
+     quieras.{% else %}Cleaning companies will stop seeing you. You can come back any
+     time.{% endif %}</p>
+  <form method="post"><button class="btn" type="submit">{{ 'Sí, quítame' if es else 'Yes, take me off' }}</button></form>
+</div>
+{% endblock %}

@@ -197,15 +197,50 @@ with app.app_context():
     check(f'Funnel<span class="pill" title="New leads nobody has contacted yet">{after}</span>' in body,
           'and so does the Funnel item in the top bar')
 
+    print('\n9. A malformed address (no TLD) is rejected, even with a real phone')
+    r = c.post('/console/leads/upload',
+               data={'file': (io.BytesIO(
+                   f'Name,Email,Phone\nBad Email,bad-{TAG}@nodot,555-0900\n'.encode()),
+                   'bad-email.csv')},
+               content_type='multipart/form-data', follow_redirects=True)
+    with engine.connect() as conn:
+        bad = conn.execute(select(control_plane.product_leads).where(
+            control_plane.product_leads.c.phone == '555-0900')).mappings().first()
+    check(bad is not None, 'the row is still added -- the phone makes it contactable')
+    check(bad is not None and not bad['email'],
+          'but the unsendable address is not stored as if it were real')
+
+    print('\n10. A lead who already has an account is never (re-)invited')
+    customer_email = f'customer-{TAG}@example.com'
+    org = control_plane.create(engine, f'cust-{TAG}', 'Customer Co',
+                               owner_email=customer_email)
+    control_plane.add_lead(engine, name='Already Signed Up', email=customer_email,
+                           source='console upload')
+    SENT.clear()
+    body = c.get('/console/leads').data.decode()
+    check('already a customer' in body, 'the row is flagged as an existing customer')
+    with engine.connect() as conn:
+        cust_lead = conn.execute(select(control_plane.product_leads).where(
+            control_plane.product_leads.c.email == customer_email)).mappings().first()
+    r = c.post(f'/console/leads/{cust_lead["id"]}/invite', follow_redirects=True)
+    check('already has an account' in r.data.decode(),
+          'a direct invite POST is refused with an explanation')
+    check(SENT == [], 'and no email was actually sent')
+    r = c.post('/console/leads/invite-all', follow_redirects=True)
+    check(customer_email not in SENT, '"invite all" also skips an existing customer')
+
     with engine.begin() as conn:
         conn.execute(text(
             "DELETE FROM public.product_leads WHERE email = ANY(:emails)"),
-            {'emails': [f'one-{TAG}@example.com', f'two-{TAG}@example.com', fresh_email]})
-        conn.execute(text("DELETE FROM public.product_leads WHERE phone = '555-0300'"))
+            {'emails': [f'one-{TAG}@example.com', f'two-{TAG}@example.com', fresh_email,
+                        customer_email]})
+        conn.execute(text("DELETE FROM public.product_leads WHERE phone IN ('555-0300', '555-0900')"))
         conn.execute(text("DELETE FROM public.console_log WHERE actor IN (:a, :h)"),
                      {'a': CONSOLE_EMAIL, 'h': HELPER_EMAIL})
         conn.execute(text("DELETE FROM public.console_users WHERE email IN (:a, :h)"),
                      {'a': CONSOLE_EMAIL, 'h': HELPER_EMAIL})
+        conn.execute(text("DELETE FROM public.organizations WHERE owner_email = :e"),
+                     {'e': customer_email})
 
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')

@@ -313,6 +313,23 @@
         </label>
       </div>
 
+      {# Not required, and not pre-ticked. The person decides, here, while they
+         are looking for work — rather than the business deciding for them later,
+         or nobody deciding and the answer being no by default. #}
+      <div class="card-sub">
+        <label class="check-item" style="font-weight:600">
+          <input type="checkbox" name="share_with_other_companies" />
+          <span class="t" data-en="If this doesn&rsquo;t work out, show me to other cleaning companies near me."
+                data-es="Si esto no funciona, muéstrame a otras empresas de limpieza cerca de mí.">
+            If this doesn&rsquo;t work out, show me to other cleaning companies near me.</span>
+        </label>
+        <span class="t" style="display:block;font-size:.86rem;opacity:.75;margin-top:6px"
+              data-en="Optional. They see your name, your area, when you can work and how you get around — not this application. You can take yourself off at any time."
+              data-es="Opcional. Verán tu nombre, tu zona, cuándo puedes trabajar y cómo te transportas — no esta solicitud. Puedes quitarte cuando quieras.">
+          Optional. They see your name, your area, when you can work and how you get
+          around &mdash; not this application. You can take yourself off at any time.</span>
+      </div>
+
       <button type="submit" class="btn t"
               data-en="Submit Application" data-es="Enviar Solicitud">Submit Application</button>
     </form>

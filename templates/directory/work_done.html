@@ -1,0 +1,29 @@
+{% set es = (t.language == 'es') %}
+{% extends "directory/_base.html" %}
+{% block title %}{{ 'Listo' if es else 'You&rsquo;re in' }}{% endblock %}
+{% block body %}
+<div class="card">
+  {% if es %}
+    <h1>Listo, {{ t.name.split()[0] }}.</h1>
+    <p>Las empresas de limpieza en <strong>{{ t.city }}{% if t.state %}, {{ t.state }}{% endif %}</strong>
+      ya pueden verte. Cuando una quiera hablar contigo, te llamará o te escribirá
+      directamente.</p>
+    <p>No tienes que hacer nada más. Si consigues trabajo o cambias de opinión,
+      <a href="{{ url_for('directory.stop_sharing', token=t.opt_out_token, _external=True) }}">quítate de la lista aquí</a>.</p>
+    <h2>Mientras tanto</h2>
+    <p>¿Estás pensando en trabajar por tu cuenta algún día? Akye es para eso también
+      &mdash; te dice cuánto cobrar, organiza tus trabajos y lleva tus cuentas. Gratis
+      para empezar.</p>
+  {% else %}
+    <h1>You&rsquo;re in, {{ t.name.split()[0] }}.</h1>
+    <p>Cleaning companies in <strong>{{ t.city }}{% if t.state %}, {{ t.state }}{% endif %}</strong>
+      can see you now. When one wants to talk, they&rsquo;ll call or message you directly.</p>
+    <p>Nothing else to do. If you find work or change your mind,
+      <a href="{{ url_for('directory.stop_sharing', token=t.opt_out_token, _external=True) }}">take yourself off here</a>.</p>
+    <h2>While you&rsquo;re here</h2>
+    <p>Ever thought about working for yourself? Akye does that too &mdash; it tells you
+      what to charge, books your jobs and keeps your money straight. Free to start.</p>
+  {% endif %}
+  <a class="btn" href="{{ url_for('marketing.home', _external=True) }}">{{ 'Ver Akye' if es else 'See Akye' }}</a>
+</div>
+{% endblock %}

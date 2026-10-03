@@ -1,0 +1,103 @@
+{% extends "directory/_base.html" %}
+{% block title %}Job adverts you can post{% endblock %}
+{% block body %}
+<div class="card" style="max-width:none">
+  <h1>Job adverts you can post</h1>
+  <p>You are the employer, so you can post these free on Indeed, Facebook groups,
+    Craigslist or Nextdoor. Akye can&rsquo;t &mdash; third parties have to pay to sponsor,
+    which is Indeed&rsquo;s own rule. Your own opening is the one that posts for nothing.</p>
+
+  <h2>Point the advert here</h2>
+  <div class="kv"><span>Your apply page</span><span>{{ apply_url }}</span></div>
+  <p class="note">On Indeed choose <strong>&ldquo;apply on company website&rdquo;</strong> and
+    paste that in. Applicants land in your own hiring pipeline &mdash; video interview,
+    background check, onboarding &mdash; instead of in an Indeed inbox you have to work
+    through by hand. Add <code>?src=indeed</code> to the end if you want to know which
+    advert produced which person.</p>
+
+  <h2>Which version to use</h2>
+  <p>Your settings say you work with
+    <strong>{{ '1099 independent contractors' if model == 'contractor' else 'W-2 employees' }}</strong>,
+    so {{ 'the first' if model == 'contractor' else 'the second' }} advert is yours.
+    Change it in Settings &rarr; Business if that&rsquo;s wrong.</p>
+  <div class="note">
+    <p><strong>Do not mix the two.</strong> An advert that offers a contractor a set
+      schedule, training, supplies and a supervisor is describing an employee. If the
+      classification is ever questioned, the words you advertised are evidence &mdash; and
+      the back taxes and penalties land on you, not on Indeed and not on us.</p>
+  </div>
+
+  <h2 id="c">1099 &mdash; independent contractor</h2>
+  <p class="fine">Use this one if you pay per job and issue 1099s.</p>
+  <pre style="white-space:pre-wrap;background:var(--band);padding:1rem;border-radius:9px;font:inherit;font-size:.95rem">House Cleaner — Independent Contractor ({{ city }}{% if state %}, {{ state }}{% endif %})
+
+{{ biz }} is looking for experienced cleaners to take on residential jobs as
+independent contractors.
+
+• Paid per job, not per hour — you see the pay before you accept
+• You choose which jobs you take and when you work
+• Steady work available if you want it; no minimum required
+• You provide your own transport and supplies
+• 1099 contractor — you are responsible for your own taxes
+
+What we look for: experience cleaning homes, your own reliable way to get to
+jobs, and doing the job the way the customer asked.
+
+How to apply: {{ apply_url }}
+It takes a few minutes and you can do it from your phone, in English or Spanish.</pre>
+
+  <h2 id="e">W-2 &mdash; employee</h2>
+  <p class="fine">Use this one if you withhold taxes and set the schedule.</p>
+  <pre style="white-space:pre-wrap;background:var(--band);padding:1rem;border-radius:9px;font:inherit;font-size:.95rem">House Cleaner — {{ city }}{% if state %}, {{ state }}{% endif %}
+
+{{ biz }} is hiring cleaners for residential work.
+
+• Hourly pay, taxes withheld
+• Set weekly schedule — you know your hours in advance
+• Training provided; no experience necessary if you are willing to learn
+• Cleaning supplies and equipment provided
+• Paid travel between jobs
+
+What we look for: dependable, on time, and careful in somebody else's home.
+
+How to apply: {{ apply_url }}
+It takes a few minutes and you can do it from your phone, in English or Spanish.</pre>
+
+  <h2>Español</h2>
+  <p class="fine">Post this one as its own advert, not as a translation underneath the
+    English. Almost nobody advertises cleaning work in Spanish, which is why it works.</p>
+  <pre style="white-space:pre-wrap;background:var(--band);padding:1rem;border-radius:9px;font:inherit;font-size:.95rem">{% if model == 'contractor' %}Limpiador(a) de Casas — Contratista Independiente ({{ city }}{% if state %}, {{ state }}{% endif %})
+
+{{ biz }} busca personas con experiencia para limpiar casas como contratistas
+independientes.
+
+• Pago por trabajo, no por hora — ves el pago antes de aceptar
+• Tú eliges qué trabajos tomas y cuándo trabajas
+• Hay trabajo constante si lo quieres; no hay mínimo
+• Necesitas tu propio transporte y tus materiales
+• Contratista 1099 — tú eres responsable de tus impuestos{% else %}Limpiador(a) de Casas — {{ city }}{% if state %}, {{ state }}{% endif %}
+
+{{ biz }} está contratando personal de limpieza para casas.
+
+• Pago por hora, con impuestos retenidos
+• Horario fijo cada semana — sabes tus horas por adelantado
+• Te entrenamos; no necesitas experiencia si tienes ganas de aprender
+• Nosotros ponemos los materiales y el equipo
+• Se paga el tiempo de viaje entre trabajos{% endif %}
+
+No necesitas currículum y no necesitas hablar inglés.
+
+Para aplicar: {{ apply_url }}
+Toma unos minutos y lo puedes hacer desde tu teléfono.</pre>
+
+  <h2>Where to post, for free</h2>
+  <ul class="feat">
+    <li>Indeed — three free postings a month. Sponsoring is optional, not required, because the job is yours</li>
+    <li>Facebook groups — cleaning and housekeeping groups in your area. Read each group&rsquo;s rules first; some remove recruiting posts</li>
+    <li>Nextdoor — free business posts, and local by design</li>
+    <li>Craigslist — the gigs section is free in most places</li>
+  </ul>
+
+  <a class="btn ghost" href="{{ url_for('directory.invite_past_applicants') }}">Invite the applicants you didn&rsquo;t hire</a>
+</div>
+{% endblock %}

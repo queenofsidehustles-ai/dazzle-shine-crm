@@ -1,0 +1,34 @@
+{% extends "directory/_base.html" %}
+{% block title %}Add your business{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>Add your business</h1>
+  <p>The board is built from public business records, and those records miss
+    plenty of real companies &mdash; ours included. If you&rsquo;re not on it, that
+    isn&rsquo;t a judgement about your business. It just means the record
+    doesn&rsquo;t have you.</p>
+  <p>Tell us who you are and we&rsquo;ll add you. It&rsquo;s free, and it stays free.</p>
+  <form method="post">
+    <label for="name">Business name</label>
+    <input id="name" name="name" value="{{ name }}" required>
+    <label for="city">City</label>
+    <input id="city" name="city" value="{{ city }}" required>
+    <label for="state">State</label>
+    <input id="state" name="state" maxlength="2" placeholder="FL" required
+           style="text-transform:uppercase">
+    <label for="contact_name">Your name</label>
+    <input id="contact_name" name="contact_name" autocomplete="name">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" required>
+    <label for="phone">Phone</label>
+    <input id="phone" name="phone" type="tel" autocomplete="tel">
+    <label for="website">Website <span class="fine">(if you have one)</span></label>
+    <input id="website" name="website" type="url" placeholder="https://">
+    <label for="note">Anything else? <span class="fine">(optional)</span></label>
+    <textarea id="note" name="note" rows="2"></textarea>
+    <p class="note">Every one of these is checked by a person before it goes up, so
+      nobody can list a business that isn&rsquo;t theirs.</p>
+    <button class="btn" type="submit">Add my business</button>
+  </form>
+</div>
+{% endblock %}

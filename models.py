@@ -1179,11 +1179,17 @@ class Staff(db.Model):
         ('uniform_size',      'Shirt size & uniform issued'),
         ('orientation',       'Orientation / training completed'),
         ('supply_kit',        'Supply kit issued'),
-        ('shadow_job',        'Shadow / trial shift (optional)'),
+        ('shadow_job',        'Test clean / shadow shift'),
         ('first_solo_job',    'First solo job assigned'),
     ]
-    # Steps that only apply to employees (not independent contractors)
-    EMPLOYEE_ONLY_STEPS = {'uniform_size', 'supply_kit'}
+    # Steps that only apply to employees (not independent contractors).
+    #
+    # Uniforms are not one of them. Plenty of companies that pay 1099 still put
+    # their crews in branded shirts, and plenty of employers do not bother — so
+    # it follows the `provide_uniforms` setting rather than the worker model,
+    # and a company that does not issue uniforms never sees the step at all.
+    EMPLOYEE_ONLY_STEPS = {'supply_kit'}
+    UNIFORM_STEPS = {'uniform_size'}
 
     def get_onboarding(self):
         try:
@@ -1192,11 +1198,19 @@ class Staff(db.Model):
             return []
 
     def get_applicable_steps(self):
-        """Return steps relevant to this worker's model (contractor vs employee)."""
+        """Steps relevant to this worker — their model, and what this company does.
+
+        A step nobody will ever tick is worse than a missing one: it sits unticked
+        forever and makes a finished onboarding look unfinished.
+        """
         model = self.worker_model or 'contractor'
-        if model == 'employee':
-            return self.ONBOARDING_STEPS
-        return [(k, v) for k, v in self.ONBOARDING_STEPS if k not in self.EMPLOYEE_ONLY_STEPS]
+        skip = set() if model == 'employee' else set(self.EMPLOYEE_ONLY_STEPS)
+        try:
+            if (BusinessSetting.get('provide_uniforms') or '') != '1':
+                skip |= self.UNIFORM_STEPS
+        except Exception:
+            pass
+        return [(k, v) for k, v in self.ONBOARDING_STEPS if k not in skip]
 
     def pay_label(self):
         if self.pay_type == 'hourly':
@@ -2211,3 +2225,61 @@ class AssistantProposal(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     used_at = db.Column(db.DateTime)
     outcome = db.Column(db.Text)
+
+
+class RentalProperty(db.Model):
+    """A short-term rental whose calendar we read.
+
+    The host pastes the iCal link their listing already publishes. Everything
+    else here is what a turnover job needs — where it is, what it is worth, and
+    what time the cleaner should be there.
+    """
+    __tablename__ = 'rental_property'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'))
+    name = db.Column(db.String(120), nullable=False)
+    address = db.Column(db.String(200))
+    city = db.Column(db.String(80))
+    zip_code = db.Column(db.String(10))
+    ical_url = db.Column(db.String(600), nullable=False)
+    service_type = db.Column(db.String(50))
+    price = db.Column(Money)
+    clean_time = db.Column(db.String(20))
+    is_active = db.Column(db.Boolean, default=True)
+    last_synced_at = db.Column(db.DateTime)
+    last_error = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    client = db.relationship('Client', backref='rental_properties')
+
+    @property
+    def is_stale(self):
+        """Has this feed gone quiet? A sync that stopped silently is the way a
+        turnover gets missed, so the screen should be able to say so."""
+        import rentals
+        return (not self.last_synced_at
+                or (datetime.utcnow() - self.last_synced_at) > rentals.STALE_AFTER)
+
+
+class RentalTurnover(db.Model):
+    """One stay we have already turned into a cleaning job.
+
+    Keyed on the calendar's own UID plus the checkout date, so reading the same
+    feed again never books the same clean twice — and a guest who changes their
+    dates produces a new row rather than a silently moved job.
+    """
+    __tablename__ = 'rental_turnover'
+    id = db.Column(db.Integer, primary_key=True)
+    property_id = db.Column(db.Integer, db.ForeignKey('rental_property.id'), nullable=False)
+    uid = db.Column(db.String(300), nullable=False)
+    checkout_on = db.Column(db.String(10), nullable=False)
+    next_checkin_on = db.Column(db.String(10))
+    same_day = db.Column(db.Boolean, default=False)
+    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    property = db.relationship('RentalProperty', backref='turnovers')
+    booking = db.relationship('Booking')
+
+    __table_args__ = (db.UniqueConstraint('property_id', 'uid', 'checkout_on',
+                                          name='ix_rental_turnover_uid'),)

@@ -1,0 +1,95 @@
+{% extends "base_admin.html" %}
+{% block page_title %}Short-term rentals{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin-top:0">Add a property</h2>
+  <p class="muted">Ask the host for the calendar link their listing already publishes.
+    On Airbnb that is <em>Listing &rarr; Availability &rarr; Connect to another website
+    &rarr; Export calendar</em>. VRBO and Booking.com have the same thing. Paste it here
+    and every check-out becomes a cleaning job on that date.</p>
+  <form method="post" action="{{ url_for('rentals.add') }}">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+      <div><label for="name">Property name</label>
+        <input id="name" name="name" required placeholder="Beach condo, Unit 4B"></div>
+      <div><label for="client_id">Customer</label>
+        <select id="client_id" name="client_id">
+          <option value="">— not linked —</option>
+          {% for c in clients %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select></div>
+      <div><label for="address">Address</label><input id="address" name="address"></div>
+      <div><label for="city">City</label><input id="city" name="city"></div>
+      <div><label for="zip_code">Zip</label><input id="zip_code" name="zip_code"></div>
+      <div><label for="price">Price per turnover</label>
+        <input id="price" name="price" inputmode="decimal" placeholder="120"></div>
+      <div><label for="clean_time">Usual start time</label>
+        <input id="clean_time" name="clean_time" placeholder="11:00 AM"></div>
+    </div>
+    <label for="ical_url" style="margin-top:12px">Calendar link</label>
+    <input id="ical_url" name="ical_url" required
+           placeholder="https://www.airbnb.com/calendar/ical/12345.ics?s=...">
+    <button class="btn" type="submit" style="margin-top:14px">Add and read the calendar</button>
+  </form>
+</div>
+
+{% if props %}
+<div class="card" style="margin-top:18px">
+  <h2 style="margin-top:0">Properties</h2>
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr style="text-align:left"><th>Property</th><th>Last read</th><th></th></tr></thead>
+    <tbody>
+    {% for p in props %}
+      <tr style="border-top:1px solid var(--line)">
+        <td style="padding:10px 6px">
+          <strong>{{ p.name }}</strong>{% if not p.is_active %} <span class="muted">· paused</span>{% endif %}
+          <br><span class="muted" style="font-size:.86rem">
+            {{ p.city or '—' }}{% if p.price %} · ${{ '%.0f'|format(p.price) }} a turn{% endif %}
+            · {{ p.turnovers|length }} booked</span>
+          {% if p.last_error %}<br><span style="color:var(--warn);font-size:.86rem">{{ p.last_error }}</span>{% endif %}
+        </td>
+        <td style="padding:10px 6px" class="muted">
+          {% if p.last_synced_at %}{{ p.last_synced_at.strftime('%d %b %H:%M') }}
+            {% if p.is_stale %}<br><span style="color:var(--warn)">not read in a while</span>{% endif %}
+          {% else %}never{% endif %}
+        </td>
+        <td style="padding:10px 6px;text-align:right;white-space:nowrap">
+          <form method="post" action="{{ url_for('rentals.sync_one', pid=p.id) }}" style="display:inline">
+            <button class="btn" style="padding:6px 12px;font-size:.85rem">Read now</button></form>
+          <form method="post" action="{{ url_for('rentals.toggle', pid=p.id) }}" style="display:inline">
+            <button class="btn ghost" style="padding:6px 12px;font-size:.85rem">{{ 'Pause' if p.is_active else 'Resume' }}</button></form>
+          <form method="post" action="{{ url_for('rentals.delete', pid=p.id) }}" style="display:inline"
+                onsubmit="return confirm('Stop watching this calendar? Jobs already booked stay on the schedule.')">
+            <button class="btn ghost" style="padding:6px 12px;font-size:.85rem">Remove</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:18px">
+  <h2 style="margin-top:0">Turnovers coming up</h2>
+  {% if upcoming %}
+  <p class="muted">A <strong>same-day</strong> turn means the next guest arrives the day
+    the last one leaves &mdash; a few hours, not a day. Those are the ones to staff first.</p>
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr style="text-align:left"><th>Check-out</th><th>Property</th><th>Next guest</th><th>Job</th></tr></thead>
+    <tbody>
+    {% for t in upcoming %}
+      <tr style="border-top:1px solid var(--line);{{ 'background:var(--amber-soft)' if t.same_day }}">
+        <td style="padding:9px 6px"><strong>{{ t.checkout_on }}</strong>
+          {% if t.same_day %}<br><span style="color:var(--amber-deep);font-size:.82rem;font-weight:700">SAME-DAY</span>{% endif %}</td>
+        <td style="padding:9px 6px">{{ t.property.name if t.property else '—' }}</td>
+        <td style="padding:9px 6px" class="muted">{{ t.next_checkin_on or 'nobody yet' }}</td>
+        <td style="padding:9px 6px">
+          {% if t.booking_id %}<a href="{{ url_for('bookings.detail', booking_id=t.booking_id) }}">open</a>
+          {% else %}<span class="muted">—</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Nothing yet. Add a property above and its calendar is read straight away.</p>
+  {% endif %}
+</div>
+{% endblock %}
