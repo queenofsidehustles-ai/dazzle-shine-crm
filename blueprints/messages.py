@@ -502,8 +502,25 @@ def relay():
         return _blank_twiml()
 
     import tenancy
-    with tenancy.use_tenant(slug):
-        return _handle_inbound(link_base=_company_base(slug))
+    from flask import g
+    # The schema is only half of being inside a company. billing.current_org()
+    # -- which is what tells entitlements which plan this company is on --
+    # reads g.tenant_slug, and that is set from the request's host. This
+    # request arrived on the shared host, so without this it is nobody: the
+    # plan falls back to Solo, and Solo includes no texting, so the alert to
+    # the owner is refused on a plan she is not on. send_sms returns on that
+    # check before it writes to the Sent Log, so the text leaves no trace at
+    # all -- no row, no error, nothing to find.
+    prev_slug = getattr(g, 'tenant_slug', None)
+    prev_org = getattr(g, '_org', None)
+    g.tenant_slug = slug
+    g._org = None                    # look this company up, not the last one
+    try:
+        with tenancy.use_tenant(slug):
+            return _handle_inbound(link_base=_company_base(slug))
+    finally:
+        g.tenant_slug = prev_slug
+        g._org = prev_org
 
 
 def _company_owning_number(to_number):

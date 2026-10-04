@@ -130,8 +130,10 @@ with app.app_context():
     landed = {}
     real_handle, real_stored = M._handle_inbound, integrations._stored
     real_execute, real_orgs3 = db.session.execute, control_plane.all_orgs
+    from flask import g as _g
     M._handle_inbound = lambda link_base=None: (
-        landed.update(schema=tenancy.current_schema(), base=link_base), M._blank_twiml())[1]
+        landed.update(schema=tenancy.current_schema(), base=link_base,
+                      slug=getattr(_g, 'tenant_slug', None)), M._blank_twiml())[1]
     integrations._stored = _fake_stored
     db.session.execute = _fake_execute
     control_plane.all_orgs = lambda engine: ORGS
@@ -151,6 +153,8 @@ with app.app_context():
               'but a stranger writing in falls to the company that owns the line')
         check(landed.get('base') == 'https://dazzle.akyehq.com',
               'and the alert link is built for that company')
+        check(landed.get('slug') == 'dazzle',
+              'and the request is that company, so its plan is read and not Solo')
     finally:
         M._handle_inbound, integrations._stored = real_handle, real_stored
         db.session.execute, control_plane.all_orgs = real_execute, real_orgs3
