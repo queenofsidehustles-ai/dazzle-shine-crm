@@ -490,6 +490,8 @@ def pricing():
 @owner_required
 def business():
     fields = ['business_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'website',
+              # Where a customer's reply is announced. Blank uses 'phone'.
+              'owner_alert_phone',
               'worker_model', 'reception_model', 'agreement_template',
               'customer_terms',
               # Branding — what customers see on emails, quotes and review prompts.

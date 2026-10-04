@@ -103,8 +103,20 @@ def _kind_for_log(log):
 
 
 def owner_alert_phone():
-    """Where inbound-message alerts go, or None if the owner hasn't set one."""
-    return (BusinessSetting.get('owner_alert_phone') or '').strip() or None
+    """Where inbound-message alerts go. The business's own phone if unset.
+
+    There was no default at all, for a good reason: it once fell back to one
+    particular owner's mobile, so a second company's customers texted a
+    stranger. The business phone is not that -- it is this company's own
+    number, typed in by this company, on its own Settings page.
+
+    Without a fallback the alert was dead for everybody. The setting had no
+    field in Settings to set it from, so not one company had ever set one, and
+    every reply landed in the inbox with nobody told. Claim alerts, team
+    alerts and confirmations all already fall back this way; this was the only
+    one that went quiet instead."""
+    return ((BusinessSetting.get('owner_alert_phone') or '').strip()
+            or (BusinessSetting.get('phone') or '').strip() or None)
 
 
 def resolve_contact(phone10):

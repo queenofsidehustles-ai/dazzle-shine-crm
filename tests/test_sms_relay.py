@@ -20,7 +20,7 @@ What is worth protecting here:
     unlisted Twilio path accepts unsigned POSTs from anybody, and a gated one
     could never be reached at all
 """
-import os, sys, tempfile
+import io, os, sys, tempfile
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/relay.db'
 os.environ['SECRET_KEY'] = 'test-key-that-is-long-enough-for-prod-check'
@@ -183,7 +183,28 @@ check('/messages/relay' not in security.PROVIDER_WEBHOOK_PATHS,
 check('/messages/incoming' in security.PROVIDER_WEBHOOK_PATHS,
       'while a company with its own number still is')
 
-print('\n7. A company with its own number is untouched')
+print('\n7. The owner is actually told, without having to find a setting')
+with app.app_context():
+    from models import BusinessSetting
+    BusinessSetting.set('owner_alert_phone', '')
+    BusinessSetting.set('phone', '+19374773090')
+    db.session.commit()
+    check(M.owner_alert_phone() == '+19374773090',
+          'blank falls back to the business phone, not to silence')
+    BusinessSetting.set('owner_alert_phone', '4075551212')
+    db.session.commit()
+    check(M.owner_alert_phone() == '4075551212',
+          'and an alert phone she typed in wins over it')
+    BusinessSetting.set('owner_alert_phone', '')
+    BusinessSetting.set('phone', '')
+    db.session.commit()
+    check(M.owner_alert_phone() is None,
+          'with neither set it is still silent rather than texting a stranger')
+    check('owner_alert_phone' in io.open('templates/admin/settings_business.html',
+                                         encoding='utf-8').read(),
+          'and there is a field on the Settings page to set it from')
+
+print('\n8. A company with its own number is untouched')
 check(app.view_functions['messages.incoming'].__name__ == 'incoming',
       'the original webhook is still the registered handler for /incoming')
 
