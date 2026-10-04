@@ -474,11 +474,17 @@ def relay():
     a company that has never texted this number is never a candidate, so the
     most recent sender is in practice the right one.
 
-    Unmatched is not guessed at. A text from somebody nobody has written to is
-    recorded for a person to read rather than dropped into whichever inbox
-    happened to come first."""
+    Nobody to match is not the end of it. A first text from a stranger -- a
+    customer who found the number and wrote before anyone wrote to them -- has
+    no recent text to trace back, so it falls to whoever owns the number it
+    arrived on. That is where such a text landed before any of this existed,
+    and a company sharing its own line with the platform must not start losing
+    them. Only a text to a number no company claims is recorded as unmatched,
+    rather than dropped into whichever inbox happened to come first."""
     phone10 = norm_phone(request.form.get('From', ''))
-    slug = _company_that_texted(phone10) if phone10 else ''
+    slug = (_company_that_texted(phone10) if phone10 else '')
+    if not slug:
+        slug = _company_owning_number(request.form.get('To', ''))
     if not slug:
         _record_unrouted(phone10, request.form.get('Body') or '')
         return _blank_twiml()
@@ -486,6 +492,37 @@ def relay():
     import tenancy
     with tenancy.use_tenant(slug):
         return _handle_inbound(link_base=_company_base(slug))
+
+
+def _company_owning_number(to_number):
+    """The company that has this exact number saved as its own line.
+
+    Read with integrations._stored and not integrations.get: get() falls back
+    to the platform's own environment number, which every company would then
+    appear to own, and the first one asked would take every stray text."""
+    want = norm_phone(to_number)
+    if not want:
+        return ''
+    import control_plane
+    import integrations
+    import tenancy
+    from extensions import db
+    try:
+        orgs = control_plane.all_orgs(db.engine)
+    except Exception:
+        return ''
+    for org in orgs:
+        slug = (org.get('slug') or '').strip()
+        if not slug:
+            continue
+        try:
+            with tenancy.use_tenant(slug):
+                own = integrations._stored('twilio_phone')
+        except Exception:
+            continue
+        if own and norm_phone(own) == want:
+            return slug
+    return ''
 
 
 def _company_base(slug):

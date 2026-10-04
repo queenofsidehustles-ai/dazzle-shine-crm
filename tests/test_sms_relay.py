@@ -37,7 +37,7 @@ from app import create_app
 from extensions import db
 from models import ErrorLog
 from blueprints import messages as M
-import control_plane, tenancy, security
+import control_plane, tenancy, security, integrations
 
 app = create_app()
 failures = []
@@ -56,7 +56,14 @@ ROWS = {
     'tenant_final_touch': [('+1 (407) 555-1234', NOW - timedelta(minutes=10))],
     'tenant_other':       [('3215551234', NOW - timedelta(minutes=1))],
 }
-ORGS = [{'slug': 'kojo'}, {'slug': 'final-touch'}, {'slug': 'other'}]
+ORGS = [{'slug': 'kojo'}, {'slug': 'final-touch'}, {'slug': 'other'}, {'slug': 'dazzle'}]
+# Dazzle shares its own line with the platform: it is the number the shared
+# traffic goes out on, and it is still Dazzle's business line.
+OWN_NUMBERS = {'tenant_dazzle': '+1 (689) 407-4848'}
+
+
+def _fake_stored(name):
+    return OWN_NUMBERS.get(tenancy.current_schema(), '') if name == 'twilio_phone' else ''
 
 
 class _Result:
@@ -103,7 +110,53 @@ try:
 finally:
     del os.environ['BASE_DOMAIN']
 
-print('\n3. A reply matching nobody is written down, not guessed at')
+print('\n3. A first text from a stranger goes to whoever owns the number')
+with app.app_context():
+    real_stored = integrations._stored
+    real_orgs2 = control_plane.all_orgs
+    integrations._stored = _fake_stored
+    control_plane.all_orgs = lambda engine: ORGS
+    try:
+        check(M._company_owning_number('+16894074848') == 'dazzle',
+              'a text to Dazzle\'s own line is Dazzle\'s, as it was before any of this')
+        check(M._company_owning_number('+14075550000') == '',
+              'a number no company claims is still nobody\'s')
+    finally:
+        integrations._stored, control_plane.all_orgs = real_stored, real_orgs2
+
+print('\n4. Who texted them last outranks who owns the number')
+os.environ['BASE_DOMAIN'] = 'akyehq.com'   # so the link assertion below is real
+with app.app_context():
+    landed = {}
+    real_handle, real_stored = M._handle_inbound, integrations._stored
+    real_execute, real_orgs3 = db.session.execute, control_plane.all_orgs
+    M._handle_inbound = lambda link_base=None: (
+        landed.update(schema=tenancy.current_schema(), base=link_base), M._blank_twiml())[1]
+    integrations._stored = _fake_stored
+    db.session.execute = _fake_execute
+    control_plane.all_orgs = lambda engine: ORGS
+    try:
+        with app.test_request_context('/messages/relay', method='POST',
+                                      data={'From': '+14075551234', 'To': '+16894074848',
+                                            'Body': 'yes 2pm works'}):
+            M.relay()
+        check(landed.get('schema') == 'tenant_final_touch',
+              'a reply to a text Final Touch sent is Final Touch\'s, not Dazzle\'s')
+        landed.clear()
+        with app.test_request_context('/messages/relay', method='POST',
+                                      data={'From': '+19375550000', 'To': '+16894074848',
+                                            'Body': 'hi do you clean carpets'}):
+            M.relay()
+        check(landed.get('schema') == 'tenant_dazzle',
+              'but a stranger writing in falls to the company that owns the line')
+        check(landed.get('base') == 'https://dazzle.akyehq.com',
+              'and the alert link is built for that company')
+    finally:
+        M._handle_inbound, integrations._stored = real_handle, real_stored
+        db.session.execute, control_plane.all_orgs = real_execute, real_orgs3
+        del os.environ['BASE_DOMAIN']
+
+print('\n5. A reply matching nobody is written down, not guessed at')
 with app.app_context():
     real = M._company_that_texted
     M._company_that_texted = lambda phone10, **k: ''
@@ -120,7 +173,7 @@ with app.app_context():
     finally:
         M._company_that_texted = real
 
-print('\n4. The endpoint is signed, and reachable')
+print('\n6. The endpoint is signed, and reachable')
 check('/messages/relay' in security.TWILIO_WEBHOOK_PATHS,
       'it is signature-checked -- an unlisted Twilio path takes unsigned POSTs')
 check('/messages/relay' in security.CSRF_EXEMPT_PATHS,
@@ -130,7 +183,7 @@ check('/messages/relay' not in security.PROVIDER_WEBHOOK_PATHS,
 check('/messages/incoming' in security.PROVIDER_WEBHOOK_PATHS,
       'while a company with its own number still is')
 
-print('\n5. A company with its own number is untouched')
+print('\n7. A company with its own number is untouched')
 check(app.view_functions['messages.incoming'].__name__ == 'incoming',
       'the original webhook is still the registered handler for /incoming')
 
