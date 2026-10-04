@@ -37,6 +37,7 @@ data-brand="{{ p.brand or default_brand }}"
 <div class="filter-tabs">
   {% set views = [('today', '📞 Today', due.overdue + due.today + due.unscheduled),
                   ('pipeline', '📊 Pipeline', live_count),
+                  ('month', '🗓 Month', None),
                   ('contacts', '📇 Contacts', counts.all),
                   ('find', '🎯 Find new', None)] %}
   {% for key, label, n in views %}
@@ -46,6 +47,55 @@ data-brand="{{ p.brand or default_brand }}"
   </a>
   {% endfor %}
 </div>
+
+{# ── MONTH ─────────────────────────────────────────────────────────────── #}
+{% if view == 'month' %}
+<div class="card" style="margin-bottom:18px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <h3 style="margin:0">{{ cal_month_name }} {{ cal_year }}</h3>
+    <div style="display:flex;gap:8px">
+      <a class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem"
+         href="{{ url_for('places_finder.dashboard', view='month', year=prev_year, month=prev_month) }}">←</a>
+      <a class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem"
+         href="{{ url_for('places_finder.dashboard', view='month') }}">This month</a>
+      <a class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem"
+         href="{{ url_for('places_finder.dashboard', view='month', year=next_year, month=next_month) }}">→</a>
+    </div>
+  </div>
+  <p style="color:var(--softer);font-size:0.84rem;margin:0 0 12px">
+    Every follow-up you promised, by the day you promised it. Walkthroughs also
+    show on your main calendar, with the jobs.
+  </p>
+
+  <div class="cal-dows">
+    {% for d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] %}
+    <div class="cal-dow">{{ d }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="cal-grid">
+    {% for week in cal %}
+      {% for day in week %}
+        {% if day == 0 %}
+        <div class="daycell blank"></div>
+        {% else %}
+          {% set items = by_day.get(day, []) %}
+          <div class="daycell">
+            <div class="daynum">{{ day }}</div>
+            {% for p in items %}
+            <a href="{{ url_for('places_finder.call_sheet', prospect_id=p.id) }}"
+               class="{{ 'walkchip' if (p.next_action or '').lower().startswith('walkthrough') else 'leadtask' }}"
+               title="{{ p.business_name }} — {{ p.next_action or 'follow up' }}">
+              {{ '🚶' if (p.next_action or '').lower().startswith('walkthrough') else '☎' }} {{ p.business_name }}
+            </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 {# ── TODAY ─────────────────────────────────────────────────────────────── #}
 {% if view == 'today' %}

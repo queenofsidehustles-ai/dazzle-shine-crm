@@ -113,10 +113,18 @@ with app.app_context():
           'the date they agreed, not the table\'s "book it in two days"')
     check(p.next_action == 'Walkthrough', 'and it says what it is')
 
-    # The calendar reads next_action_date, so anything with one lands on it.
-    from models import Prospect as _P
-    in_november = _P.query.filter(_P.next_action_date.like('2026-11%')).all()
-    check(p in in_november, 'so the calendar for that month will draw it')
+    # The jobs calendar draws walkthroughs and nothing else: a walkthrough is
+    # somewhere she has to be, a callback is a four-minute task with no time.
+    walk = (p.next_action or '').strip().lower().startswith('walkthrough')
+    check(walk, 'so the jobs calendar will draw it, beside the cleans')
+
+    cb = Prospect(business_name='Callback Co', category='office', status='new', stage='new')
+    db.session.add(cb); db.session.commit()
+    bp._log_call(cb, Form(), 'callback')
+    db.session.commit()
+    check(bool(cb.next_action_date), 'a callback is still scheduled')
+    check(not (cb.next_action or '').lower().startswith('walkthrough'),
+          'but it is not a walkthrough, so it stays off the jobs calendar')
 
     print('\n6. The free plan cannot reach it')
     BusinessSetting.set('plan', 'solo')

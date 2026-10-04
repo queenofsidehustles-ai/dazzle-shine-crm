@@ -186,7 +186,7 @@ def _email_templates():
 def dashboard():
     """Today by default — what is due, not everything ever imported."""
     view = request.args.get('view', 'today')
-    if view not in ('today', 'pipeline', 'contacts', 'find'):
+    if view not in ('today', 'pipeline', 'contacts', 'find', 'month'):
         view = 'today'
     rows = _backfilled()
 
@@ -204,10 +204,48 @@ def dashboard():
                                             prospecting.due_sort_key(p)))
     elif view == 'contacts':
         shown = sorted(rows, key=lambda p: (p.business_name or '').lower())
+    elif view == 'month':
+        # The commercial month. Callbacks are not appointments -- they have no
+        # time and take four minutes -- so they do not belong on the jobs
+        # calendar. They do belong somewhere you can see a fortnight ahead and
+        # notice that the week of the 14th has eleven of them in it.
+        shown = sorted(rows, key=prospecting.due_sort_key)
     else:
         shown = sorted(rows, key=prospecting.due_sort_key)
 
-    return render_template('admin/find_leads.html', **_view_args(view, rows, shown=shown))
+    extra = {}
+    if view == 'month':
+        import calendar as cal_module
+        from datetime import date as _date
+        try:
+            year = int(request.args.get('year', local_today().year))
+            month = int(request.args.get('month', local_today().month))
+            _date(year, month, 1)
+        except (TypeError, ValueError):
+            year, month = local_today().year, local_today().month
+        stamp = f'{year}-{month:02d}'
+        by_day = {}
+        for p in rows:
+            if (p.next_action_date or '').startswith(stamp):
+                try:
+                    by_day.setdefault(int(p.next_action_date.split('-')[2]), []).append(p)
+                except (IndexError, ValueError):
+                    pass
+        for d in by_day:
+            by_day[d].sort(key=lambda r: (r.business_name or '').lower())
+        extra = dict(
+            cal=cal_module.Calendar(firstweekday=6).monthdayscalendar(year, month),
+            cal_year=year, cal_month=month,
+            cal_month_name=cal_module.month_name[month],
+            by_day=by_day,
+            prev_year=(year if month > 1 else year - 1),
+            prev_month=(month - 1 if month > 1 else 12),
+            next_year=(year if month < 12 else year + 1),
+            next_month=(month + 1 if month < 12 else 1),
+        )
+
+    return render_template('admin/find_leads.html',
+                           **_view_args(view, rows, shown=shown, **extra))
 
 
 @places_finder_bp.route('/search', methods=['POST'])

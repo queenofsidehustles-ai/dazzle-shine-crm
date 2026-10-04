@@ -946,14 +946,25 @@ small.dim, small.muted { font-size:var(--t-xs); }
 .jobchip[draggable="true"] { cursor:grab; }
 .jobchip:hover { filter:brightness(.96); }
 
-/* A call you promised to make, sitting next to the cleans you promised to do.
-   Deliberately quieter than a job chip, and dashed rather than filled: the
-   day's actual work comes first, and a follow-up is a reminder, not a job. */
-.leadchip { display:block; font-size:var(--t-xs); padding:2px 5px; margin-top:2px;
+/* A walkthrough is somewhere she has to BE, so it belongs on the same grid as
+   the cleans — but it is not one. Nobody is assigned to it, nothing is owed on
+   it, and it cannot be dragged. Drawn as an outline rather than a filled chip
+   so it reads as an appointment among jobs, not as another job. */
+.walkchip { display:block; font-size:var(--t-xs); padding:2px 5px; margin-top:2px;
+            border-radius:5px; border:1.5px solid var(--info, #4a7fb5);
+            background:transparent; color:var(--info, #4a7fb5); font-weight:600;
+            text-decoration:none; overflow:hidden; text-overflow:ellipsis;
+            white-space:nowrap; }
+.walkchip:hover { background:var(--info-soft, rgba(74,127,181,0.12)); }
+
+/* A callback on the commercial month. Quiet on purpose: it is a task, not an
+   appointment, and a month with thirty of them should read as a workload
+   rather than as thirty things shouting. */
+.leadtask { display:block; font-size:var(--t-xs); padding:2px 5px; margin-top:2px;
             border-radius:4px; border:1px dashed var(--line); color:var(--softer);
             text-decoration:none; overflow:hidden; text-overflow:ellipsis;
             white-space:nowrap; }
-.leadchip:hover { border-style:solid; color:var(--ink); }
+.leadtask:hover { border-style:solid; color:var(--ink); }
 .jobchip.s-pending   { background:var(--amber-soft); color:var(--amber-deep); }
 .jobchip.s-confirmed { background:var(--info-soft);  color:var(--info); }
 .jobchip.s-completed { background:var(--good-soft);  color:var(--good); }

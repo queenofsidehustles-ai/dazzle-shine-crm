@@ -275,31 +275,38 @@ def calendar():
     for d in bookings_by_day:
         bookings_by_day[d].sort(key=lambda b: b.preferred_time or '')
 
-    # Follow-ups belong on the calendar too. A date to ring somebody back is a
-    # commitment made on a phone call, and it lived only on a list the owner
-    # had to remember to open -- so the month she was looking at showed her
-    # cleans and hid the business she had promised to call on the 14th.
+    # Walkthroughs, and only walkthroughs. A walkthrough is somewhere she has
+    # to physically be at a given hour, so it competes with a clean for the
+    # same morning and has to be on the same grid or she will double-book
+    # herself and find out on the day.
+    #
+    # A callback is not that. "Ring Harbour Point sometime today" has no time,
+    # takes four minutes, and on a month grid beside real jobs it is noise --
+    # it lives on the commercial to-do instead. Both were drawn here at first;
+    # that was one screen doing two jobs.
     #
     # Lead work is a paid feature, so a company without it sees exactly the
     # calendar it saw before.
-    followups_by_day = {}
+    walkthroughs_by_day = {}
     try:
         import entitlements
         if entitlements.can('lead_finder'):
             from models import Prospect
             for pr in Prospect.query.filter(
                     Prospect.next_action_date.like(f"{month_str}%")).all():
+                if not (pr.next_action or '').strip().lower().startswith('walkthrough'):
+                    continue
                 try:
                     day = int(pr.next_action_date.split('-')[2])
                 except (IndexError, ValueError, AttributeError):
                     continue
-                followups_by_day.setdefault(day, []).append(pr)
-            for day in followups_by_day:
-                followups_by_day[day].sort(
+                walkthroughs_by_day.setdefault(day, []).append(pr)
+            for day in walkthroughs_by_day:
+                walkthroughs_by_day[day].sort(
                     key=lambda r: (r.business_name or '').lower())
     except Exception:
-        # A calendar that cannot draw a follow-up still has to draw the cleans.
-        followups_by_day = {}
+        # A calendar that cannot draw a walkthrough still has to draw the cleans.
+        walkthroughs_by_day = {}
 
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
@@ -314,7 +321,7 @@ def calendar():
         year=year, month=month,
         month_name=cal_module.month_name[month],
         bookings_by_day=bookings_by_day,
-        followups_by_day=followups_by_day,
+        walkthroughs_by_day=walkthroughs_by_day,
         today=today,
         prev_year=prev_year, prev_month=prev_month,
         next_year=next_year, next_month=next_month,
