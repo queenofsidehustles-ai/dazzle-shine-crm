@@ -477,5 +477,20 @@ def send_sms(to_phone, message):
         detail = f'Accepted by Twilio for {formatted} (id {sid}).'
     except Exception as e:
         ok, sid, detail = False, '', f'Twilio error: {e}'
+        # 21610: this person has told Twilio to stop, and we never saw them do
+        # it -- they can opt out by replying to any number, including one that
+        # was never ours. Without writing it down the only trace is a failed
+        # row in the Sent Log that reads like a glitch, so the same three
+        # people were refused five times each and nobody knew they were
+        # unreachable. Marked 'carrier' rather than 'stop' because she did not
+        # ask US to stop, and that difference matters if she ever asks why.
+        if getattr(e, 'code', None) == 21610 or 'unsubscribed recipient' in str(e).lower():
+            try:
+                record_sms_opt_out(to_phone, reason='carrier')
+                detail = ('Not delivered — this number has opted out of texts with '
+                          'the carrier. Added to your do-not-text list; they can '
+                          'undo it by texting START.')
+            except Exception:
+                pass
     _log_outbound('sms', to_phone, None, None, message, ok, detail, provider_id=sid)
     return ok, detail

@@ -265,6 +265,7 @@ def search():
                            **_view_args('find', rows,
                                         shown=sorted(rows, key=prospecting.due_sort_key),
                                         results=results, demo=demo,
+                                        demo_reason=finder.demo_reason(),
                                         search_category=category,
                                         search_brand=picked_brand,
                                         search_location=location))

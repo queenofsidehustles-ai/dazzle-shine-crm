@@ -21,9 +21,15 @@ data-brand="{{ p.brand or default_brand }}"
 
 {% if demo %}
 <div class="card" style="border-left:4px solid var(--amber);background:rgba(211,168,79,0.10);margin-bottom:18px">
-  <strong>👀 Demo mode.</strong> You're seeing <em>sample</em> businesses so you can try the whole flow.
-  Add a <code>GOOGLE_PLACES_API_KEY</code> and real businesses will show up instead.
-  <span style="color:var(--softer)">(The fake numbers below are 555 placeholders — don't call them 😊)</span>
+  {% if demo_reason == 'demo_company' %}
+  <strong>👀 Sample businesses.</strong> This is the demo company, so the lead finder shows made-up
+  results — you can click through the whole flow without calling anybody or spending a search.
+  <span style="color:var(--softer)">(The numbers below are 555 placeholders.)</span>
+  {% else %}
+  <strong>👀 Sample businesses.</strong> Real listings aren't switched on for this CRM yet.
+  Set <code>GOOGLE_PLACES_API_KEY</code> on the server and real businesses appear here instead.
+  <span style="color:var(--softer)">(The numbers below are 555 placeholders.)</span>
+  {% endif %}
 </div>
 {% endif %}
 

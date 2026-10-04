@@ -31,6 +31,22 @@ FIELD_MASK = (
 )
 
 
+def demo_reason():
+    """Why sample businesses are showing, in the words the reader needs.
+
+    Two different situations wore one message. On hosted Akye the only one a
+    customer can hit is the demo company, and the message told her to set an
+    environment variable -- something only the person running the servers can
+    do, which on a product she is paying for reads as "this is broken and it
+    is your fault". The other case is a single-business install, where setting
+    that variable is exactly right and the person reading is the one who can.
+    """
+    import demo_guard
+    if demo_guard.active():
+        return 'demo_company'
+    return 'no_key'
+
+
 def own_key():
     """True when the company is searching on its own Google account.
 
