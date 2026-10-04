@@ -649,9 +649,11 @@ All optional. The defaults are what you want on the live product.
 These are the settings the code reads that the steps above do not cover. Most
 are optional, and Railway sets a few itself.
 
-**Shared connections every company falls back to.** A company that has not
-saved its own keys under Settings → Connections uses these. Stripe is the
-exception: it never falls back (Step 13).
+**Connections Akye provides to every company.** On hosted Akye every company
+uses these master accounts. A company cannot see the values on its Connections
+page or replace them, and any copy it saved earlier is ignored. Stripe is the
+exception: each company connects its own, and it never falls back (Step 13).
+On a single-business install these are simply the business's own keys.
 
 | Variable | What it does |
 |---|---|

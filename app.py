@@ -324,6 +324,13 @@ def create_app():
         except Exception:
             return {'TRIAL': None}          # never take a page down for a banner
 
+    def _connections_provided():
+        try:
+            import integrations
+            return integrations.hosted_company()
+        except Exception:
+            return False
+
     @app.context_processor
     def inject_product():
         import product
@@ -341,7 +348,10 @@ def create_app():
                 # named a host that 404s on every path but "/".
                 'PRODUCT_BASE': product.canonical_base().rstrip('/'),
                 'LEGAL_ENTITY': product.legal_entity(),
-                'LEGAL_ADDRESS': product.legal_address()}
+                'LEGAL_ADDRESS': product.legal_address(),
+                # Texting, email, photos and lead search come from Akye, not
+                # from the company (integrations._PLATFORM).
+                'CONNECTIONS_PROVIDED': _connections_provided()}
 
     # How far a brand-new business has got towards its first real job. None
     # once they are up and running, so the banner disappears by itself rather

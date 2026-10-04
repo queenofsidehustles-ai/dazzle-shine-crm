@@ -1,9 +1,9 @@
 """Loose ends from the pre-launch sweep.
 
 What each of these would cost if it regressed:
-  * every company's applicant videos uploading to one hard-coded Cloudinary
-    account, whatever the company had connected -- or, with nothing
-    connected, an applicant recording answers that can only fail to upload;
+  * applicant videos uploading to a Cloudinary account hard-coded in the
+    source instead of the one Akye configures -- or, with nothing configured,
+    an applicant recording answers that can only fail to upload;
   * the sign-in and signup attempt tables growing by every attempt forever,
     when only the last day or so is ever read back.
 
@@ -55,7 +55,7 @@ with app.app_context():
     provisioning.provision(SLUG, 'Loose Ends Cleaning', quiet=True)
     db.session.remove()
 
-print('\n1. Interview videos go to the company\'s Cloudinary, never a built-in one')
+print('\n1. Interview videos go to the configured Cloudinary, never a built-in one')
 check('dasgvqtyk' not in (ROOT / 'blueprints' / 'interviews.py').read_text(),
       'no Cloudinary account is written into the code')
 token = secrets.token_urlsafe(16)
@@ -83,8 +83,10 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     integrations.set('cloudinary_cloud_name', 'company-own-cloud')
     db.session.remove()
 body = c.get(f'/interview/{token}', headers=HOST).get_data(as_text=True)
-check('"company-own-cloud"' in body and '"platform-cloud"' not in body,
-      'and the company\'s own, once it saves one')
+# On hosted Akye job photos and interview videos are Akye's, like texting and
+# email (test_platform_connections.py): a cloud a company saved is ignored.
+check('"platform-cloud"' in body and '"company-own-cloud"' not in body,
+      'and still Akye\'s, even if the company saved one of its own')
 os.environ.pop('CLOUDINARY_CLOUD_NAME', None)
 
 print('\n2. Sign-in attempts older than a month are cleared as new ones come in')

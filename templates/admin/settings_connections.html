@@ -39,7 +39,9 @@
       {% if status.texting.ready %}
         <div style="color:var(--good);font-size:0.86rem">Connected. Your cleaners get job offers by text.</div>
       {% else %}
+        {% if managed %}<div style="color:var(--amber-deep);font-size:0.86rem">Not switched on yet. {{ PRODUCT }} provides this; nothing for you to do.</div>{% else %}
         <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.texting.missing|join(', ') }}.<br>Job offers will go by email instead.</div>
+        {% endif %}
       {% endif %}
     </div>
 
@@ -48,7 +50,9 @@
       {% if status.email.ready %}
         <div style="color:var(--good);font-size:0.86rem">Connected. Confirmations and invoices are sending.</div>
       {% else %}
+        {% if managed %}<div style="color:var(--amber-deep);font-size:0.86rem">Not switched on yet. {{ PRODUCT }} provides this; nothing for you to do.</div>{% else %}
         <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Customers won't receive confirmations, invoices or receipts.</div>
+        {% endif %}
       {% endif %}
     </div>
 
@@ -57,7 +61,9 @@
       {% if status.photos.ready %}
         <div style="color:var(--good);font-size:0.86rem">Connected. Cleaners can upload before/after photos.</div>
       {% else %}
+        {% if managed %}<div style="color:var(--amber-deep);font-size:0.86rem">Not switched on yet. {{ PRODUCT }} provides this; nothing for you to do.</div>{% else %}
         <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.photos.missing|join(', ') }}.<br>Cleaners will not be able to upload before/after photos.</div>
+        {% endif %}
       {% endif %}
     </div>
 
@@ -66,7 +72,9 @@
       {% if status.lead_finder.ready %}
         <div style="color:var(--good);font-size:0.86rem">Connected. The lead finder can search for businesses.</div>
       {% else %}
+        {% if managed %}<div style="color:var(--amber-deep);font-size:0.86rem">Not switched on yet. {{ PRODUCT }} provides this; nothing for you to do.</div>{% else %}
         <div style="color:var(--amber-deep);font-size:0.86rem">Not connected. Still needed: {{ status.lead_finder.missing|join(', ') }}.</div>
+        {% endif %}
       {% endif %}
     </div>
 
@@ -119,6 +127,7 @@
     <button type="submit" class="btn btn-gold">Save Stripe Keys</button>
   </div>
 
+  {% if not managed %}
   <!-- Texting -->
   <div class="card" style="margin-top:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Texting</h2>
@@ -272,7 +281,27 @@
     </div>
     <button type="submit" class="btn btn-gold">Save Lead Generation</button>
   </div>
+  {% endif %}
 </form>
+
+{% if managed %}
+<div class="card" style="margin-top:20px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Texting, email, job photos and lead search</h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:14px">
+    {{ PRODUCT }} provides these for you. There is nothing to sign up for and no keys to paste in.
+  </p>
+  {% for key, label in [('texting', '💬 Texting'), ('email', '✉️ Email'), ('photos', '📷 Job photos'), ('lead_finder', '🔎 Lead search')] %}
+  <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line-soft);font-size:0.9rem">
+    <span>{{ label }}</span>
+    {% if status[key].ready %}
+      <span style="color:var(--good)">Working</span>
+    {% else %}
+      <span style="color:var(--amber-deep)">Not switched on yet{% if SUPPORT_EMAIL %} — <a href="mailto:{{ SUPPORT_EMAIL }}">tell us</a>{% endif %}</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 
 <!-- Tests -->
 <div class="card" style="margin-top:20px">

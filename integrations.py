@@ -99,6 +99,42 @@ def _env_allowed(name):
     return not tenancy.is_tenant()
 
 
+# Everything else a company needs -- texting, email, job photos, lead search --
+# Akye provides on hosted Akye: one master Twilio, Resend, Cloudinary and Google
+# account, from the environment. A company neither sees those keys nor edits
+# them, and anything it saved here before is ignored. Otherwise a company
+# pressing Save on a pre-filled form froze copies of the master keys into its
+# own settings, where rotating them later would break it, and every owner could
+# read the master account's SID, phone number and Cloudinary key off the page.
+_PLATFORM = frozenset({'twilio_account_sid', 'twilio_auth_token', 'twilio_phone',
+                       'resend_api_key', 'cloudinary_cloud_name',
+                       'cloudinary_api_key', 'cloudinary_api_secret',
+                       'google_places_api_key'})
+
+
+def hosted_company():
+    """True inside a company on hosted Akye. False on the product site itself
+    and on a single-business install, where the environment is the business."""
+    if not (os.environ.get('BASE_DOMAIN') or '').strip():
+        return False
+    import tenancy
+    return tenancy.is_tenant()
+
+
+def platform_managed(name):
+    """True for a key Akye provides and the company cannot see or change."""
+    return name in _PLATFORM and hosted_company()
+
+
+def editable(name):
+    return name in FIELDS and not platform_managed(name)
+
+
+def _own(name):
+    """What the company saved for itself, if it is allowed to have its own."""
+    return '' if platform_managed(name) else _stored(name)
+
+
 def _env(name):
     env_var = FIELDS.get(name, (None,))[0]
     if not env_var or not _env_allowed(name):
@@ -112,12 +148,12 @@ def get(name):
         import demo_guard
         if demo_guard.active():
             return ''
-    return _stored(name) or _env(name) or ''
+    return _own(name) or _env(name) or ''
 
 
 def source(name):
     """Where the value in use came from — for showing the owner what's what."""
-    if _stored(name):
+    if _own(name):
         return 'settings'
     if _env(name):
         return 'environment'
