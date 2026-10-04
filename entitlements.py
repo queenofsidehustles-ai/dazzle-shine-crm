@@ -66,6 +66,7 @@ PLANS = {
             'checklist_templates': 1,
             'office_logins': 1,
             'sms_per_month': 0,        # see note below
+            'lead_searches_per_month': 0,
         },
         'features': set(),
     },
@@ -80,6 +81,7 @@ PLANS = {
             'checklist_templates': None,
             'office_logins': None,
             'sms_per_month': 1000,     # fair use; metered past this, not cut off
+            'lead_searches_per_month': 200,   # ~4,000 businesses
         },
         'features': {
             'sms', 'crew_pay', 'payroll', 'tax_forms', 'hiring', 'interviews',
@@ -104,6 +106,7 @@ PLANS = {
             'checklist_templates': None,
             'office_logins': None,
             'sms_per_month': 5000,
+            'lead_searches_per_month': 600,   # ~12,000 businesses
         },
         'features': None,   # None means "everything" — see can()
     },
@@ -153,6 +156,7 @@ LIMIT_LABELS = {
     'checklist_templates': 'checklist templates',
     'office_logins': 'office logins',
     'sms_per_month': 'texts this month',
+    'lead_searches_per_month': 'lead searches this month',
 }
 
 
@@ -339,6 +343,32 @@ def _count_field_workers():
     return Staff.query.filter_by(is_active=True).count()
 
 
+def lead_search_key(when=None):
+    """The counter key for this month's lead searches.
+
+    Counted here rather than from a table of rows, like the assistant's own
+    monthly usage: Google bills per search whatever comes back, so what has to
+    be counted is the call, not its results."""
+    from datetime import date as _d
+    return f'lead_searches_{(when or _d.today()):%Y-%m}'
+
+
+def record_lead_search():
+    """One search made against the platform's Google key."""
+    from models import BusinessSetting
+    from extensions import db
+    BusinessSetting.set(lead_search_key(), str(_count_lead_searches_this_month() + 1))
+    db.session.commit()
+
+
+def _count_lead_searches_this_month():
+    from models import BusinessSetting
+    try:
+        return int(BusinessSetting.get(lead_search_key()) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _count_jobs_this_month():
     from models import Booking
     return Booking.query.filter(Booking.created_at >= _month_start()).count()
@@ -375,6 +405,7 @@ _USAGE = {
     'checklist_templates': _count_checklist_templates,
     'office_logins': _count_office_logins,
     'sms_per_month': _count_sms_this_month,
+    'lead_searches_per_month': _count_lead_searches_this_month,
 }
 
 

@@ -14,6 +14,7 @@ import json
 from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response)
+import entitlements
 from entitlements import requires_plan
 from auth import login_required
 from extensions import db
@@ -88,8 +89,26 @@ def _view_args(view, prospects, **extra):
     import brands
     live = [p for p in prospects if p.is_open]
     emails = _email_templates()
+    left = entitlements.remaining('lead_searches_per_month')
+    plan_now = entitlements.effective_plan()
+    nxt = entitlements._next_plan()
+    next_plan = None
+    if nxt:
+        next_plan = {
+            'label': entitlements.PLANS[nxt]['label'],
+            'searches': entitlements.PLANS[nxt]['limits'].get(
+                'lead_searches_per_month') or 0,
+        }
     args = dict(
+        plan_limits=entitlements.PLANS[plan_now]['limits'],
+        next_plan=next_plan,
         view=view,
+        searches_left=left,
+        # What the owner actually came for. Up to 20 a search, so it is a
+        # ceiling and the wording says so.
+        businesses_left=(None if left is None else left * 20),
+        own_google_key=finder.own_key(),
+        search_capped=False,
         prospects=prospects,
         results=None,
         counts=_status_counts(),
@@ -193,6 +212,7 @@ def dashboard():
 
 @places_finder_bp.route('/search', methods=['POST'])
 @login_required
+@requires_plan('lead_finder')
 def search():
     import brands
     category = request.form.get('category', 'property_manager')
@@ -208,10 +228,28 @@ def search():
         return redirect(url_for('places_finder.dashboard'))
 
     demo = not finder.api_key_present()
+    capped, count_it = finder.allowance()
+
+    if capped:
+        entitlements.record_denial('limit:lead_searches_per_month',
+                                   path='/find-leads/search')
+        rows = _backfilled()
+        return render_template('admin/find_leads.html',
+                               **_view_args('find', rows,
+                                            shown=sorted(rows, key=prospecting.due_sort_key),
+                                            search_capped=True,
+                                            search_category=category,
+                                            search_brand=picked_brand,
+                                            search_location=location))
+
     if demo:
         results, error = finder.demo_listings(category, location), ''
     else:
         ok, results, error = finder.search_businesses(category, location)
+        if ok and count_it:
+            # Counted after the call, because Google bills for the call. A
+            # search that never reached them is not one of hers.
+            entitlements.record_lead_search()
         if not ok:
             flash(f'Search failed: {error}', 'error')
             results = []

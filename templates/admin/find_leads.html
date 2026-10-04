@@ -275,7 +275,34 @@ data-brand="{{ p.brand or default_brand }}"
     <button type="submit" class="btn" style="padding:11px 22px">🎯 Find Businesses</button>
     <a href="{{ url_for('places_finder.dashboard', view='find') }}" class="btn btn-outline" style="padding:11px 18px">✕ Clear</a>
   </form>
+  {# What is left, in both units: we are billed per search, she is counting
+     businesses to call. Shown during normal use, not only at the end. #}
+  {% if own_google_key %}
+  <p style="margin:10px 0 0;font-size:0.78rem;color:var(--softer)">Searching on your own Google account — no limit from us.</p>
+  {% elif searches_left is not none %}
+  <p style="margin:10px 0 0;font-size:0.78rem;color:var(--softer)">
+    {{ searches_left }} search{{ '' if searches_left == 1 else 'es' }} left this month · up to about {{ '{:,}'.format(businesses_left) }} businesses
+  </p>
+  {% endif %}
 </div>
+
+{% if search_capped %}
+<div class="card" style="margin-bottom:18px;border-left:3px solid var(--accent)">
+  <h3 style="margin:0 0 6px">You've used every lead search included this month</h3>
+  <p style="color:var(--softer);font-size:0.9rem;margin:0 0 14px">
+    That was up to about {{ '{:,}'.format(plan_limits['lead_searches_per_month'] * 20) }} businesses.
+    Your searches come back on the 1st.
+  </p>
+  <p style="font-size:0.9rem;margin:0 0 8px"><strong>Need more now?</strong></p>
+  <ul style="margin:0 0 14px 18px;font-size:0.9rem;line-height:1.7">
+    {% if next_plan %}
+    <li><a href="{{ url_for('billing.upgrade') }}">Move up to {{ next_plan.label }}</a> — {{ '{:,}'.format(next_plan.searches) }} searches a month</li>
+    {% endif %}
+    <li><a href="{{ url_for('settings.connections') }}">Use your own Google account</a> — no limit, and you pay Google directly. Usually a few cents a search.</li>
+    <li>Or wait until the 1st — nothing to do, they come back on their own.</li>
+  </ul>
+</div>
+{% endif %}
 
 {% if results is not none %}
 <div class="card" style="margin-bottom:18px">

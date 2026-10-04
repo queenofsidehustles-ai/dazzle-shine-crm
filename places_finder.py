@@ -31,6 +31,40 @@ FIELD_MASK = (
 )
 
 
+def own_key():
+    """True when the company is searching on its own Google account.
+
+    Then the searches are not ours to ration: they are billed to them, by
+    Google, directly. integrations._stored and not get(), because get() falls
+    back to the platform key and every company would look like it had brought
+    its own."""
+    import integrations
+    try:
+        return bool((integrations._stored('google_places_api_key') or '').strip())
+    except Exception:
+        return False
+
+
+def allowance():
+    """Whose allowance this search spends, and whether it is already spent.
+
+    Returns (capped, count_it):
+
+      * demo company -- no call to Google, so nothing to ration or record
+      * their own Google key -- their account, their bill, no cap of ours
+      * otherwise it comes out of the plan's monthly searches
+
+    One function because the route had the same three cases spread across its
+    branches, where no test could reach them.
+    """
+    if not api_key_present():
+        return False, False
+    if own_key():
+        return False, False
+    import entitlements
+    return entitlements.at_limit('lead_searches_per_month'), True
+
+
 def api_key_present():
     import demo_guard
     import integrations
