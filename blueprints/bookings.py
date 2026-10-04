@@ -275,6 +275,32 @@ def calendar():
     for d in bookings_by_day:
         bookings_by_day[d].sort(key=lambda b: b.preferred_time or '')
 
+    # Follow-ups belong on the calendar too. A date to ring somebody back is a
+    # commitment made on a phone call, and it lived only on a list the owner
+    # had to remember to open -- so the month she was looking at showed her
+    # cleans and hid the business she had promised to call on the 14th.
+    #
+    # Lead work is a paid feature, so a company without it sees exactly the
+    # calendar it saw before.
+    followups_by_day = {}
+    try:
+        import entitlements
+        if entitlements.can('lead_finder'):
+            from models import Prospect
+            for pr in Prospect.query.filter(
+                    Prospect.next_action_date.like(f"{month_str}%")).all():
+                try:
+                    day = int(pr.next_action_date.split('-')[2])
+                except (IndexError, ValueError, AttributeError):
+                    continue
+                followups_by_day.setdefault(day, []).append(pr)
+            for day in followups_by_day:
+                followups_by_day[day].sort(
+                    key=lambda r: (r.business_name or '').lower())
+    except Exception:
+        # A calendar that cannot draw a follow-up still has to draw the cleans.
+        followups_by_day = {}
+
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
     next_month = month + 1 if month < 12 else 1
@@ -288,6 +314,7 @@ def calendar():
         year=year, month=month,
         month_name=cal_module.month_name[month],
         bookings_by_day=bookings_by_day,
+        followups_by_day=followups_by_day,
         today=today,
         prev_year=prev_year, prev_month=prev_month,
         next_year=next_year, next_month=next_month,

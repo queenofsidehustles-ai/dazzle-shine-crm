@@ -334,6 +334,7 @@ def log_call(prospect_id):
         p.status = outcome
     p.called_at = datetime.utcnow()
     _log_call(p, request.form, outcome)
+
     db.session.commit()
 
     if p.next_action and p.next_action_date:
@@ -510,13 +511,21 @@ def _log_call(prospect, form, outcome):
     # date and what they actually said survive the next call.
     prospect.notes = _prepend_log(prospect, form)
 
+    # A booked walkthrough is what the call was for, so the date they agreed
+    # becomes the next action outright, rather than the table's "book the
+    # walkthrough in two days" -- which is advice for a call that has not
+    # happened yet. It then shows on the calendar beside the cleans, which is
+    # where somebody looks the night before.
+    walkthrough = (form.get('walkthrough_date') or '').strip()
+    action = (form.get('next_action') or '').strip() or None
+    when = (form.get('next_action_date') or '').strip() or None
+    if outcome == 'interested' and walkthrough:
+        action, when = 'Walkthrough', walkthrough
+
     # Where they are now, and what happens next. A blank action here means the
     # caller took the suggestion; an explicit one overrules it.
     return prospecting.apply_outcome(
-        prospect, outcome,
-        next_action=(form.get('next_action') or '').strip() or None,
-        next_action_date=(form.get('next_action_date') or '').strip() or None,
-    )
+        prospect, outcome, next_action=action, next_action_date=when)
 
 
 def _prepend_log(prospect, form):

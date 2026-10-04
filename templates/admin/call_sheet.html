@@ -95,6 +95,14 @@
         </div>
       </div>
 
+      <div class="form-group" style="margin-top:4px">
+        <label>If they agreed to a walkthrough, when?</label>
+        <input type="date" name="walkthrough_date" min="{{ today }}">
+        <span style="display:block;font-size:0.76rem;color:var(--softer)">
+          Goes straight onto your calendar. Leave blank if no date was agreed.
+        </span>
+      </div>
+
       <p style="font-weight:600;margin:14px 0 8px">What did they say?</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button type="submit" name="outcome" value="interested" class="btn btn-gold" style="padding:12px 20px">Booked a walkthrough 🎉</button>

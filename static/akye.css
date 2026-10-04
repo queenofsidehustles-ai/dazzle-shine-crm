@@ -945,6 +945,15 @@ small.dim, small.muted { font-size:var(--t-xs); }
 }
 .jobchip[draggable="true"] { cursor:grab; }
 .jobchip:hover { filter:brightness(.96); }
+
+/* A call you promised to make, sitting next to the cleans you promised to do.
+   Deliberately quieter than a job chip, and dashed rather than filled: the
+   day's actual work comes first, and a follow-up is a reminder, not a job. */
+.leadchip { display:block; font-size:var(--t-xs); padding:2px 5px; margin-top:2px;
+            border-radius:4px; border:1px dashed var(--line); color:var(--softer);
+            text-decoration:none; overflow:hidden; text-overflow:ellipsis;
+            white-space:nowrap; }
+.leadchip:hover { border-style:solid; color:var(--ink); }
 .jobchip.s-pending   { background:var(--amber-soft); color:var(--amber-deep); }
 .jobchip.s-confirmed { background:var(--info-soft);  color:var(--info); }
 .jobchip.s-completed { background:var(--good-soft);  color:var(--good); }

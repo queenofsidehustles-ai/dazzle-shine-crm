@@ -103,7 +103,22 @@ with app.app_context():
     check(p.renewal_note == 'March 2027',
           'and when their contract ends — the reason a no is worth keeping')
 
-    print('\n5. The free plan cannot reach it')
+    print('\n5. A booked walkthrough is the date they agreed, on the calendar')
+    p = Prospect(business_name='Harbour Group', category='property_manager',
+                 status='new', stage='new')
+    db.session.add(p); db.session.commit()
+    bp._log_call(p, Form(walkthrough_date='2026-11-12', contact='Ray'), 'interested')
+    db.session.commit()
+    check(p.next_action_date == '2026-11-12',
+          'the date they agreed, not the table\'s "book it in two days"')
+    check(p.next_action == 'Walkthrough', 'and it says what it is')
+
+    # The calendar reads next_action_date, so anything with one lands on it.
+    from models import Prospect as _P
+    in_november = _P.query.filter(_P.next_action_date.like('2026-11%')).all()
+    check(p in in_november, 'so the calendar for that month will draw it')
+
+    print('\n6. The free plan cannot reach it')
     BusinessSetting.set('plan', 'solo')
     db.session.commit()
     import entitlements as E
