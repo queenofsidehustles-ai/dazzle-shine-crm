@@ -271,6 +271,80 @@ def search():
                                         search_location=location))
 
 
+@places_finder_bp.route('/call')
+@places_finder_bp.route('/call/<int:prospect_id>')
+@login_required
+@requires_plan('lead_finder')
+def call_sheet(prospect_id=None):
+    """One business at a time, with the script on the page and nothing else.
+
+    The list view answers "who is there"; this answers "who am I ringing now".
+    Those are different jobs and the list was doing both badly -- the script
+    lived in a side drawer, the fields in another, and nothing carried you from
+    one call to the next, so a morning's calling was a morning of navigating.
+
+    Most calls end without a conversation, so the screen opens with three
+    buttons and no form. Two of them are one click and the next business
+    loads. Only "Spoke to someone" asks for anything, because only then is
+    there anything to write down.
+    """
+    today = local_today().isoformat()
+    rows = _backfilled()
+    queue = sorted([p for p in rows if p.is_due(today)],
+                   key=prospecting.due_sort_key)
+    done = sum(1 for p in rows
+               if p.called_at and p.called_at.date().isoformat() == today)
+
+    current = Prospect.query.get_or_404(prospect_id) if prospect_id else (
+        queue[0] if queue else None)
+
+    scripts = []
+    if current is not None:
+        import brands
+        key = brands.brand_for_prospect(current)
+        scripts = _call_scripts().get(key, {}).get(current.category, [])
+
+    return render_template(
+        'admin/call_sheet.html',
+        current=current,
+        queue_left=len(queue),
+        done_today=done,
+        scripts=scripts,
+        quick_actions=prospecting.QUICK_ACTIONS,
+        today=today,
+        status_labels=Prospect.STATUS_LABELS,
+        category_labels=Prospect.CATEGORY_LABELS,
+    )
+
+
+@places_finder_bp.route('/call/<int:prospect_id>/log', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def log_call(prospect_id):
+    """Write the call down and go straight to the next one.
+
+    Always stamps called_at, even for a phone that rang out: the count on the
+    page is calls made, and a morning of nobody answering is still a morning's
+    work. Without it the counter would say nought and the queue would look
+    untouched.
+    """
+    p = Prospect.query.get_or_404(prospect_id)
+    outcome = (request.form.get('outcome') or '').strip()
+    if outcome in Prospect.STATUS_LABELS:
+        p.status = outcome
+    p.called_at = datetime.utcnow()
+    _log_call(p, request.form, outcome)
+    db.session.commit()
+
+    if p.next_action and p.next_action_date:
+        when = 'today' if p.next_action_date == local_today().isoformat() \
+            else f'on {p.next_action_date}'
+        flash(f'{p.business_name} — next: {p.next_action} {when}.', 'success')
+    else:
+        flash(f'{p.business_name} — closed for now.', 'success')
+    return redirect(url_for('places_finder.call_sheet'))
+
+
 @places_finder_bp.route('/import', methods=['POST'])
 @login_required
 def import_selected():
@@ -334,25 +408,7 @@ def update_status(prospect_id):
             p.called_at = datetime.utcnow()
 
     if logged:
-        # Details worth having as fields rather than buried in prose: you can't
-        # email a note, and "call them before the renewal" needs a date.
-        for field, attr in (('contact', 'contact_name'), ('email', 'email'),
-                            ('renewal', 'renewal_note')):
-            val = (request.form.get(field) or '').strip()
-            if val:
-                setattr(p, attr, val)
-
-        # Each save prepends a dated entry instead of overwriting, so the
-        # renewal date and what they actually said survive the next call.
-        p.notes = _prepend_log(p, request.form)
-
-        # Where they are now, and what happens next. A blank action here means
-        # the caller took the suggestion; an explicit one overrules it.
-        prospecting.apply_outcome(
-            p, new_status,
-            next_action=(request.form.get('next_action') or '').strip() or None,
-            next_action_date=(request.form.get('next_action_date') or '').strip() or None,
-        )
+        _log_call(p, request.form, new_status)
     elif 'notes' in request.form:
         # The quick inline edit in the table still replaces outright.
         p.notes = request.form.get('notes', '')
@@ -433,6 +489,34 @@ def export_csv():
     stamp = local_today().isoformat()
     return Response(buf.getvalue(), mimetype='text/csv', headers={
         'Content-Disposition': f'attachment; filename=call-list-{stamp}.csv'})
+
+
+def _log_call(prospect, form, outcome):
+    """Write down a call and schedule whatever comes next.
+
+    Lifted out of update_status so the call sheet records a call exactly the
+    way the drawer always has -- one way of writing a call down, not two that
+    drift apart.
+    """
+    # Details worth having as fields rather than buried in prose: you can't
+    # email a note, and "call them before the renewal" needs a date.
+    for field, attr in (('contact', 'contact_name'), ('email', 'email'),
+                        ('renewal', 'renewal_note')):
+        val = (form.get(field) or '').strip()
+        if val:
+            setattr(prospect, attr, val)
+
+    # Each save prepends a dated entry instead of overwriting, so the renewal
+    # date and what they actually said survive the next call.
+    prospect.notes = _prepend_log(prospect, form)
+
+    # Where they are now, and what happens next. A blank action here means the
+    # caller took the suggestion; an explicit one overrules it.
+    return prospecting.apply_outcome(
+        prospect, outcome,
+        next_action=(form.get('next_action') or '').strip() or None,
+        next_action_date=(form.get('next_action_date') or '').strip() or None,
+    )
 
 
 def _prepend_log(prospect, form):

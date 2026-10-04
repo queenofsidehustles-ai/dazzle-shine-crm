@@ -1,0 +1,129 @@
+{% extends "base_admin.html" %}
+{% block title %}Calling — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Calling{% endblock %}
+
+{% block content %}
+{% if current is none %}
+<div class="card" style="text-align:center;padding:40px 20px">
+  <h2 style="margin:0 0 8px">Nothing left to call today</h2>
+  <p style="color:var(--softer);margin:0 0 20px">
+    {% if done_today %}{{ done_today }} call{{ '' if done_today == 1 else 's' }} made today. {% endif %}
+    Anything due comes back on its own date.
+  </p>
+  <a href="{{ url_for('places_finder.dashboard', view='find') }}" class="btn btn-gold">Find more businesses</a>
+  <a href="{{ url_for('places_finder.dashboard') }}" class="btn btn-outline">Back to the list</a>
+</div>
+
+{% else %}
+<p style="color:var(--softer);font-size:0.85rem;margin:0 0 10px">
+  {{ done_today }} done today · {{ queue_left }} left
+</p>
+
+<div class="card">
+  <h2 style="margin:0 0 2px">{{ current.business_name }}</h2>
+  <p style="color:var(--softer);font-size:0.86rem;margin:0 0 14px">
+    {{ category_labels.get(current.category, current.category) }}
+    {% if current.address %} · {{ current.address }}{% endif %}
+    {% if current.rating %} · ★ {{ current.rating }}{% endif %}
+  </p>
+
+  {% if current.phone %}
+  <p style="margin:0 0 14px">
+    <a href="tel:{{ current.phone }}" class="btn btn-gold" style="font-size:1.05rem;padding:12px 26px">
+      📞 {{ current.phone }}
+    </a>
+    {% if current.website %}
+    <a href="{{ current.website }}" target="_blank" rel="noopener" class="btn btn-outline">Their website</a>
+    {% endif %}
+  </p>
+  {% endif %}
+
+  {% if current.attempts or current.notes or current.contact_name %}
+  <div style="background:var(--surface-2,rgba(0,0,0,0.03));border-radius:8px;padding:12px;margin-bottom:16px">
+    <p style="margin:0;font-size:0.84rem">
+      {% if current.attempts %}Attempt {{ current.attempts + 1 }}{% endif %}
+      {% if current.contact_name %} · last spoke to {{ current.contact_name }}{% endif %}
+      {% if current.next_action %} · was due: {{ current.next_action }}{% endif %}
+    </p>
+    {% if current.notes %}
+    <pre style="margin:8px 0 0;white-space:pre-wrap;font:inherit;font-size:0.82rem;color:var(--softer);max-height:140px;overflow:auto">{{ current.notes }}</pre>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if scripts %}
+  <details open style="margin-bottom:18px">
+    <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">What to say</summary>
+    {% for s in scripts %}
+    <div style="margin-top:10px">
+      <p style="font-weight:600;font-size:0.85rem;margin:0 0 4px">{{ s.title }}</p>
+      <pre style="white-space:pre-wrap;font:inherit;font-size:0.86rem;margin:0;color:var(--softer)">{{ s.content }}</pre>
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('places_finder.log_call', prospect_id=current.id) }}">
+    <p style="font-weight:600;margin:0 0 8px">How did it go?</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+      <button type="submit" name="outcome" value="no_answer" class="btn btn-outline" style="padding:12px 20px">No answer</button>
+      <button type="submit" name="outcome" value="voicemail" class="btn btn-outline" style="padding:12px 20px">Left a message</button>
+      <button type="button" class="btn btn-gold" style="padding:12px 20px"
+              onclick="document.getElementById('spoke').style.display='block';this.style.display='none'">
+        Spoke to someone
+      </button>
+    </div>
+    <input type="hidden" name="mode" value="log">
+
+    <div id="spoke" style="display:none;margin-top:18px;border-top:1px solid var(--line);padding-top:18px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-group">
+          <label>Who did you speak to?</label>
+          <input type="text" name="contact" value="{{ current.contact_name or '' }}" placeholder="Name and job title">
+        </div>
+        <div class="form-group">
+          <label>Their email</label>
+          <input type="email" name="email" value="{{ current.email or '' }}" placeholder="name@company.com">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>When does their current contract end?</label>
+          <input type="text" name="renewal" value="{{ current.renewal_note or '' }}" placeholder="e.g. March 2027 — worth more than it sounds">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Anything else worth remembering</label>
+          <textarea name="log_note" rows="3" placeholder="What they actually said"></textarea>
+        </div>
+      </div>
+
+      <p style="font-weight:600;margin:14px 0 8px">What did they say?</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" name="outcome" value="interested" class="btn btn-gold" style="padding:12px 20px">Booked a walkthrough 🎉</button>
+        <button type="submit" name="outcome" value="send_info" class="btn btn-outline" style="padding:12px 20px">Send me information</button>
+        <button type="submit" name="outcome" value="callback" class="btn btn-outline" style="padding:12px 20px">Call me back</button>
+        <button type="submit" name="outcome" value="not_interested" class="btn btn-outline" style="padding:12px 20px">We're under contract</button>
+        <button type="submit" name="outcome" value="backup" class="btn btn-outline" style="padding:12px 20px">Use us as backup</button>
+        <button type="submit" name="outcome" value="do_not_contact" class="btn btn-outline" style="padding:12px 20px">Don't call again</button>
+      </div>
+
+      <details style="margin-top:16px">
+        <summary style="cursor:pointer;font-size:0.85rem;color:var(--softer)">Set the follow-up date yourself</summary>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">
+          <div class="form-group" style="flex:1;min-width:200px">
+            <label>What needs doing next</label>
+            <input type="text" name="next_action" placeholder="Leave blank and we'll pick for you">
+          </div>
+          <div class="form-group">
+            <label>When</label>
+            <input type="date" name="next_action_date">
+          </div>
+        </div>
+      </details>
+    </div>
+  </form>
+</div>
+
+<p style="margin-top:14px">
+  <a href="{{ url_for('places_finder.dashboard') }}" style="font-size:0.85rem;color:var(--softer)">Back to the list</a>
+</p>
+{% endif %}
+{% endblock %}

@@ -25,6 +25,10 @@ RULES = {
     'new':            ('new',        'First call',                    0,  False),
     'called':         ('working',    'Follow-up call',                4,  True),
     'no_answer':      ('working',    'Call back — no answer',         2,  True),
+    # A message left is not the same as a phone that rang out. They know who
+    # you are now, so giving them a day to ring back before trying again is
+    # the difference between persistent and pestering.
+    'voicemail':      ('working',    'Call back — left a message',    3,  True),
     'callback':       ('working',    'Call back — they asked',        3,  True),
     'interested':     ('interested', 'Book the walkthrough',          2,  True),
     'won':            ('won',        'Convert to a commercial account', 0, True),

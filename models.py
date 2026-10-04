@@ -1833,6 +1833,16 @@ class Prospect(db.Model):
         'interested': 'Interested',
         'not_interested': 'Not Interested',
         'won': 'Won 🎉',
+        # The rest of what prospecting.RULES already knows how to schedule.
+        # These four drove the stage and the follow-up date but were refused
+        # by `if new_status in STATUS_LABELS`, so the status field quietly
+        # kept whatever it said before -- a call list showing "No Answer"
+        # against somebody who had asked for information a fortnight ago.
+        'voicemail': 'Left a message',
+        'send_info': 'Send info',
+        'backup': 'Backup',
+        'keep_in_touch': 'Keep in touch',
+        'do_not_contact': 'Do not contact',
     }
 
     # Ordered — this is the funnel, drawn left to right on the pipeline board.
