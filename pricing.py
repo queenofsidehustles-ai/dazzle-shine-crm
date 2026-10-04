@@ -300,8 +300,10 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
       client_price, contractor_earnings, hours, hourly_rate
     Plus breakdown fields for display.
     """
-    beds = min(int(str(beds).replace('+', '') or 1), 5)
-    baths = int(str(baths).replace('+', '') or 1)
+    # float() first: a form can send "2.5" bathrooms, and int("2.5") raises.
+    # A half bath prices as the whole bathrooms below it, as before.
+    beds = min(int(float(str(beds).replace('+', '') or 1)), 5)
+    baths = int(float(str(baths).replace('+', '') or 1))
 
     std_price  = get_std_price(beds, baths)
     multiplier = get_multiplier(service_type)

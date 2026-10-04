@@ -390,6 +390,52 @@ def send_welcome(slug):
     return redirect(here)
 
 
+@console_bp.route('/companies/<slug>/errors/resolve', methods=['POST'])
+@console_required
+def resolve_errors(slug):
+    """Mark one of a company's open errors sorted -- or all of them -- from
+    here, rather than waiting for the owner to find her own Errors page.
+
+    The same rule as hers: if it happens again it comes straight back
+    (ErrorLog.record reopens it), so this is "somebody has looked at this",
+    not "be quiet"."""
+    import console_data
+    import tenancy
+    from extensions import db
+    from models import ErrorLog
+    here = url_for('console.company', slug=slug)
+    if not _may_operate():
+        return _refuse(here)
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    if not org or not console_data.schema_ready(slug):
+        flash('That company\'s data cannot be read from here.', 'error')
+        return redirect(here)
+    one = request.form.get('error_id', '')
+    db.session.remove()
+    try:
+        with tenancy.use_tenant(slug):
+            q = ErrorLog.query.filter_by(resolved=False).filter(
+                ErrorLog.kind != 'blocked')
+            if one.isdigit():
+                q = q.filter(ErrorLog.id == int(one))
+            rows = q.all()
+            for row in rows:
+                row.resolved = True
+            db.session.commit()
+            done = [f'{r.kind} at {r.path}' for r in rows]
+    finally:
+        db.session.remove()
+    if done:
+        control_plane.log_console(engine, request.console_user['email'],
+                                  'resolved errors', slug, '; '.join(done)[:300])
+        flash(f'Marked {len(done)} error{"s" if len(done) != 1 else ""} sorted. '
+              f'Any that happens again will reopen.', 'success')
+    else:
+        flash('Nothing to mark: no open error matched.', 'info')
+    return redirect(here)
+
+
 @console_bp.route('/companies/<slug>/suspend', methods=['POST'])
 @console_required
 def suspend_company(slug):

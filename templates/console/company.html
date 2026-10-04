@@ -69,15 +69,28 @@
 <h3 class="ops-h">Open errors ({{ snap.open_errors }})</h3>
 {% if snap.errors %}
 <div class="ops-scroll"><table class="con">
-  <tr><th>What</th><th>Where</th><th>Times</th><th>Last</th></tr>
+  <tr><th>What</th><th>Where</th><th>Times</th><th>Last</th>{% if may_operate %}<th></th>{% endif %}</tr>
   {% for e in snap.errors %}
   <tr><td><strong>{{ e.kind }}</strong><br><span class="ops-dim">{{ e.message }}</span></td>
       <td>{{ e.path }}</td><td>{{ e.count }}</td>
-      <td>{{ e.last_seen.strftime('%d %b %H:%M') if e.last_seen }}</td></tr>
+      <td>{{ e.last_seen.strftime('%d %b %H:%M') if e.last_seen }}</td>
+      {% if may_operate %}<td>
+        <form method="post" action="{{ url_for('console.resolve_errors', slug=org.slug) }}" style="margin:0">
+          <input type="hidden" name="error_id" value="{{ e.id }}">
+          <button class="btn btn-outline btn-sm" type="submit">Mark sorted</button>
+        </form></td>{% endif %}</tr>
   {% endfor %}
 </table></div>
-<p class="ops-dim">The owner marks these resolved from their own Errors page, where the traceback is.</p>
+{% if may_operate %}
+<form method="post" action="{{ url_for('console.resolve_errors', slug=org.slug) }}"
+      onsubmit="return confirm('Mark all {{ snap.open_errors }} open errors sorted? Any that happens again will reopen.')"
+      style="margin:8px 0">
+  <button class="btn btn-outline btn-sm" type="submit">Mark all sorted</button>
+</form>
+{% endif %}
+<p class="ops-dim">Marking one sorted means somebody has looked at it; if it happens again it reopens. The owner sees the same list, with the traceback, on her own Errors page.</p>
 {% else %}<div class="con-empty">No open errors.</div>{% endif %}
+{% if snap.blocked %}<p class="ops-dim">{{ snap.blocked }} cross-site form submission{{ 's' if snap.blocked != 1 }} refused. That is the protection working, so they are not counted as errors.</p>{% endif %}
 {% endif %}
 
 <h3 class="ops-h">Actions</h3>
