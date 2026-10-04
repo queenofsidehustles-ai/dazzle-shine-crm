@@ -54,6 +54,7 @@ CSRF_EXEMPT_PATHS = frozenset({
     '/api/lifecycle-emails',
     '/api/stripe/webhook',
     '/messages/incoming',
+    '/messages/relay',
 })
 
 QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
@@ -81,6 +82,15 @@ CRON_PATHS = QUERY_SECRET_FORBIDDEN_PATHS
 # signature check is what authenticates it, per SECURITY.md); it makes the
 # documented endpoint URL permanently unreachable, since the platform's own
 # subscription webhook has no tenant to resolve.
+#
+# /messages/relay is deliberately NOT here either, for the opposite reason to
+# /api/stripe/webhook's. It serves the one shared number used by every company
+# that has not connected its own, so there is no company in its host to
+# resolve -- working out which company a reply belongs to is the whole job of
+# the endpoint (blueprints/messages.relay). It is still signature-checked
+# below: the shared number belongs to the platform's own Twilio account, so
+# integrations.twilio_auth_token() outside a tenant returns the platform token
+# that signed the request.
 PROVIDER_WEBHOOK_PATHS = frozenset({
     '/messages/incoming',
 })
@@ -331,7 +341,8 @@ def validate_booking_payment_intent():
 # validated at all — which is fine for paths Twilio never calls, and a hole for
 # any that it does, so a new Twilio webhook has to be added here or it is
 # accepting unsigned POSTs from anybody.
-TWILIO_WEBHOOK_PATHS = ('/messages/incoming', '/api/sms-status')
+TWILIO_WEBHOOK_PATHS = ('/messages/incoming', '/messages/relay',
+                        '/api/sms-status')
 
 
 def validate_twilio_webhook():
