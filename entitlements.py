@@ -188,6 +188,56 @@ def state():
     return st
 
 
+def _org_plan():
+    """What this company is actually paying for, from the control plane.
+
+    A hosted company's plan is sold, trialled and cancelled in `public.
+    organizations` -- that is where signup writes it and where the Stripe
+    webhook keeps it. It was never read back. Every tenant's own schema has no
+    `plan` setting at all, so every one of them fell to DEFAULT_PLAN and ran
+    as Solo: no texting, no reports, no automations, 20 jobs a month, however
+    much they were paying. The denials table had been recording it for weeks
+    (feature=sms, plan=solo) with nobody reading it.
+
+    Looked up by schema name, not by slug. schema_for() turns every hyphen in
+    a slug into an underscore and the two cannot be told apart afterwards, so
+    a company like final-touch-group-llc cannot be found by reversing it.
+
+    Returns None when there is nothing to say -- a single-business install,
+    no control plane, an unreadable one -- and the caller then does what it
+    has always done and reads BusinessSetting.
+    """
+    try:
+        import tenancy
+        if not tenancy.is_tenant():
+            return None
+    except Exception:
+        return None
+    try:
+        from extensions import db
+        from sqlalchemy import text as _sa_text
+        row = db.session.execute(_sa_text(
+            'SELECT plan, subscription_status, trial_ends_at '
+            'FROM public.organizations WHERE schema_name = :s'),
+            {'s': tenancy.current_schema()}).mappings().first()
+    except Exception:
+        # A plan lookup must never be the reason a page fails to render.
+        try:
+            from extensions import db as _db
+            _db.session.rollback()
+        except Exception:
+            pass
+        return None
+    if not row:
+        return None
+    plan = (row['plan'] or DEFAULT_PLAN).strip().lower()
+    return {
+        'plan': plan if plan in PLANS else DEFAULT_PLAN,
+        'status': (row['subscription_status'] or 'active').strip().lower(),
+        'trial_ends': row['trial_ends_at'],
+    }
+
+
 def _load_state():
     plan = DEFAULT_PLAN
     status = 'active'
@@ -212,6 +262,16 @@ def _load_state():
         # reason a page fails to render, so fall back to the free plan and let
         # the page decide what it can show.
         pass
+
+    # On hosted Akye the control plane is what was sold, so it decides. The
+    # settings above remain the whole answer for a single-business install,
+    # which has no control plane to ask.
+    try:
+        org = _org_plan()
+    except Exception:
+        org = None          # belt and braces: it guards itself too
+    if org:
+        plan, status, trial_ends = org['plan'], org['status'], org['trial_ends']
 
     on_trial = bool(trial_ends and datetime.utcnow() < trial_ends and plan == 'solo')
     days_left = 0
