@@ -325,20 +325,15 @@
         </div>
       </div>
     </div>
-    {# "Only switch this on once your domain is verified with your email
-       provider" assumes the reader knows what verifying a domain is, who their
-       email provider is, and how to tell when it is done. Most people running a
-       cleaning company know none of the three — and getting it wrong stops
-       every email the CRM sends, silently. #}
     <div class="form-group">
       <label>Send Email From Your Own Domain</label>
-      <select name="brand_domain_verified">
-        <option value="" {{ '' if current.brand_domain_verified == '1' else 'selected' }}>Not yet — send from the default address</option>
-        <option value="1" {{ 'selected' if current.brand_domain_verified == '1' }}>Yes — my domain is verified</option>
-      </select>
+      <p style="font-size:0.86rem;margin:0 0 6px">
+        <a href="{{ url_for('settings.sending_domain') }}">Set up your sending domain →</a>
+      </p>
       <span style="font-size:0.76rem;color:var(--softer)">
-        Leave this on “Not yet” unless you have done the steps below. Your emails
-        still send either way — this only changes the address they come from.
+        Your emails send either way. Proving your domain changes the address they
+        come from, and it is required before you can email businesses you have
+        never worked with.
       </span>
     </div>
 
@@ -439,14 +434,11 @@
     </div>
     <div class="form-group">
       <label>Send From The Commercial Domain</label>
-      <select name="commercial_domain_verified">
-        <option value="" {{ '' if current.commercial_domain_verified == '1' else 'selected' }}>Not yet — send from the default address</option>
-        <option value="1" {{ 'selected' if current.commercial_domain_verified == '1' }}>Yes — that domain is verified</option>
-      </select>
+      <span style="font-size:0.76rem;color:var(--softer)">
+        Uses the same proven domain as the rest of your email —
+        <a href="{{ url_for('settings.sending_domain') }}">set it up here</a>.
+      </span>
     </div>
-    <button type="submit" class="btn btn-gold">Save Commercial Brand</button>
-  </form>
-</div>
 
 
 <style>

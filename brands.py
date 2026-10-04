@@ -33,6 +33,23 @@ _DEFAULT_ACCENT = '#2563eb'
 _DEFAULT_ACCENT_TEXT = '#ffffff'
 
 
+def _domain_proven(from_email):
+    """Is this address on a domain the company has actually proven?
+
+    It used to be a dropdown the owner set herself, checked by nobody. Ticking
+    it without doing the DNS did not make mail send from her domain; it made
+    it fail, while the setting read "verified". Asked of the email service
+    now, so it is true or it is not.
+    """
+    try:
+        import email_domains
+        return email_domains.may_send_as(from_email)
+    except Exception:
+        # Never let this be the reason an email cannot be addressed: unproven
+        # falls back to the platform's verified sender, which always works.
+        return False
+
+
 def _setting(key, default=''):
     try:
         from models import BusinessSetting
@@ -70,7 +87,7 @@ def get_brand(key):
         'dark': _setting('brand_dark', _DEFAULT_DARK),
         'accent': _setting('brand_accent', _DEFAULT_ACCENT),
         'accent_text': _setting('brand_accent_text', _DEFAULT_ACCENT_TEXT),
-        'domain_verified': _setting('brand_domain_verified', '') == '1',
+        'domain_verified': _domain_proven(branding.from_email()),
     }
 
     if key == COMMERCIAL:
@@ -88,7 +105,7 @@ def get_brand(key):
             'accent_text': _setting('commercial_accent_text'),
         }
         identity.update({k: v for k, v in overrides.items() if v})
-        identity['domain_verified'] = _setting('commercial_domain_verified', '') == '1'
+        identity['domain_verified'] = _domain_proven(identity['from_email'])
 
     return identity
 
@@ -217,7 +234,20 @@ def send_identity(key):
     still reads as that brand and replies still reach the right inbox."""
     import branding
     b = get_brand(key)
+    # The fallback has to be an address the email provider has actually
+    # verified, or nothing sends. branding.from_email() is FROM_EMAIL when the
+    # operator set one and the company's OWN address when they did not -- and
+    # that address is on a domain nobody has verified, so every email would
+    # fail. On the hosted product the safe answer is the product's own sender;
+    # on a single-business install there is no product sender and
+    # branding.from_email() is exactly right, which is what it was written for.
     verified_default = branding.from_email()
+    try:
+        import product
+        if product.domain():                 # hosted: many companies, one sender
+            verified_default = product.from_email() or verified_default
+    except Exception:
+        pass
     from_addr = b['from_email'] if b.get('domain_verified') else verified_default
     return b['name'], from_addr, b['reply_to']
 

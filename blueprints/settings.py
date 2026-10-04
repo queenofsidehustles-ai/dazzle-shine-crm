@@ -493,6 +493,71 @@ def pricing():
                            current=current)
 
 
+@settings_bp.route('/sending-domain', methods=['GET', 'POST'])
+@owner_required
+def sending_domain():
+    """Prove the company owns the domain it wants to send cold email from.
+
+    The page it replaces asked her to tick a box saying the domain was
+    verified. Nothing checked it, so ticking it without doing the DNS made
+    every email fail while the setting read "verified". Here the answer comes
+    from the email service, so it is true or it is not, and she is never asked
+    to assert something she has no way of knowing.
+    """
+    import email_domains
+    import demo_guard
+    if request.method == 'POST' and demo_guard.active():
+        flash(demo_guard.FIXED_DETAIL, 'info')
+        return redirect(url_for('settings.sending_domain'))
+
+    if request.method == 'POST':
+        action = request.form.get('action', '')
+        if action == 'register':
+            name = request.form.get('domain', '')
+            ok, data, err = email_domains.register(name)
+            if ok:
+                email_domains.save(name=name, domain_id=data.get('id'),
+                                   state=data.get('status') or '')
+                flash('Domain added. Add the three records below to your DNS, '
+                      'then come back and press Check.', 'success')
+            else:
+                flash(err, 'error')
+        elif action == 'check':
+            saved = email_domains.saved()
+            ok, data, err = email_domains.verify(saved['id'])
+            if ok:
+                email_domains.save(state=data.get('status') or '')
+                if email_domains.is_verified(data):
+                    flash('Verified — your email now goes out from your own '
+                          'domain.', 'success')
+                else:
+                    flash('Not showing yet. DNS changes can take a few hours; '
+                          'the records are below if you want to check them.', 'info')
+            else:
+                flash(err, 'error')
+        elif action == 'forget':
+            email_domains.save(name='', domain_id='', state='')
+            flash('Domain removed. Email goes out from the shared address '
+                  'again.', 'info')
+        return redirect(url_for('settings.sending_domain'))
+
+    saved = email_domains.saved()
+    records, live_status, lookup_error = [], saved['status'], ''
+    if saved['id']:
+        ok, data, err = email_domains.status(saved['id'])
+        if ok:
+            records = data.get('records') or []
+            live_status = data.get('status') or ''
+            if live_status != saved['status']:
+                email_domains.save(state=live_status)
+        else:
+            lookup_error = err
+    return render_template('admin/settings_sending_domain.html',
+                           domain=saved['name'], status=live_status,
+                           records=records, lookup_error=lookup_error,
+                           verified=(live_status == email_domains.VERIFIED))
+
+
 @settings_bp.route('/business', methods=['GET', 'POST'])
 @owner_required
 def business():
@@ -505,12 +570,11 @@ def business():
               'google_review_link', 'content_business_description',
               'timezone', 'charge_hour',
               'brand_tagline', 'brand_dark', 'brand_accent', 'brand_accent_text',
-              'brand_domain_verified',
               # An optional second trading name for commercial work.
               'commercial_name', 'commercial_tagline', 'commercial_from_email',
               'commercial_reply_to', 'commercial_phone', 'commercial_website',
               'commercial_dark', 'commercial_accent', 'commercial_accent_text',
-              'commercial_domain_verified']
+              ]
     import demo_guard
     if request.method == 'POST' and demo_guard.active():
         flash(demo_guard.IDENTITY_DETAIL, 'info')

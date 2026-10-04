@@ -1,0 +1,86 @@
+{% extends "base_admin.html" %}
+{% block title %}Sending Domain — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Sending Domain{% endblock %}
+
+{% block content %}
+<div class="card">
+  {% if verified %}
+    <h2 style="margin:0 0 8px">✅ {{ domain }} is verified</h2>
+    <p style="color:var(--softer);margin:0 0 4px">
+      Your email now goes out from your own domain. Nothing else to do.
+    </p>
+    <form method="POST" style="margin-top:16px">
+      <input type="hidden" name="action" value="forget">
+      <button type="submit" class="btn btn-outline"
+              onclick="return confirm('Remove {{ domain }}? Your email will go back to the shared address, and you will not be able to email new businesses until you set a domain up again.')">
+        Remove this domain
+      </button>
+    </form>
+
+  {% elif domain %}
+    <h2 style="margin:0 0 8px">One step left for {{ domain }}</h2>
+    <p style="margin:0 0 16px">
+      Add these three records where your domain is managed — GoDaddy, Namecheap,
+      Cloudflare, wherever you bought it. Then press Check.
+    </p>
+
+    {% if records %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Type</th><th>Name</th><th>Value</th></tr></thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <td>{{ r.type }}</td>
+            <td style="word-break:break-all;font-family:monospace;font-size:0.8rem">{{ r.name }}</td>
+            <td style="word-break:break-all;font-family:monospace;font-size:0.8rem">{{ r.value }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif lookup_error %}
+    <p style="color:var(--softer)">Could not fetch the records just now: {{ lookup_error }}</p>
+    {% endif %}
+
+    <p style="color:var(--softer);font-size:0.86rem;margin:14px 0 0">
+      DNS changes usually show within an hour, sometimes longer. Nothing breaks
+      while you wait — your email keeps sending from the shared address.
+    </p>
+
+    <form method="POST" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+      <input type="hidden" name="action" value="check">
+      <button type="submit" class="btn btn-gold">I've added them — check now</button>
+    </form>
+    <form method="POST" style="margin-top:10px">
+      <input type="hidden" name="action" value="forget">
+      <button type="submit" class="btn btn-outline" style="font-size:0.85rem">Start over with a different domain</button>
+    </form>
+
+  {% else %}
+    <h2 style="margin:0 0 8px">Send email from your own domain</h2>
+    <p style="margin:0 0 6px">
+      Right now your email goes out from a shared Akye address with your business
+      name on it. That is fine for customers who already know you.
+    </p>
+    <p style="margin:0 0 16px">
+      To email businesses who have <em>never</em> heard of you — property managers,
+      realtors, offices — you need your own domain on the message. It is three
+      records, once, and then you never think about it again.
+    </p>
+    <form method="POST" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <input type="hidden" name="action" value="register">
+      <div style="flex:1;min-width:240px">
+        <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">What domain do you send from?</label>
+        <input type="text" name="domain" placeholder="yourbusiness.com"
+               style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:0.95rem">
+      </div>
+      <button type="submit" class="btn btn-gold" style="padding:11px 22px">Start</button>
+    </form>
+    <p style="color:var(--softer);font-size:0.78rem;margin:10px 0 0">
+      Just the domain — no www, no https. If your email is
+      sarah@brightclean.com, type brightclean.com.
+    </p>
+  {% endif %}
+</div>
+{% endblock %}
