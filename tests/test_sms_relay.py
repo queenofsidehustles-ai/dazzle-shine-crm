@@ -204,6 +204,31 @@ with app.app_context():
                                          encoding='utf-8').read(),
           'and there is a field on the Settings page to set it from')
 
+    # The owner's own mobile is very often the business phone, and it is the
+    # number she texts the business from. Falling back must not start throwing
+    # those away.
+    from models import Message
+    BusinessSetting.set('owner_alert_phone', '')
+    BusinessSetting.set('phone', '+19374773090')
+    db.session.commit()
+    before = Message.query.filter_by(direction='in').count()
+    with app.test_request_context('/messages/incoming', method='POST',
+                                  data={'From': '+19374773090', 'Body': 'Test'}):
+        M.incoming()
+    check(Message.query.filter_by(direction='in').count() == before + 1,
+          'a text from the business phone is kept, not taken for an alert reply')
+
+    BusinessSetting.set('owner_alert_phone', '+14075551212')
+    db.session.commit()
+    before = Message.query.filter_by(direction='in').count()
+    with app.test_request_context('/messages/incoming', method='POST',
+                                  data={'From': '+14075551212', 'Body': 'ok thanks'}):
+        M.incoming()
+    check(Message.query.filter_by(direction='in').count() == before,
+          'but her reply to an alert, from the phone she nominated, still is not')
+    BusinessSetting.set('owner_alert_phone', '')
+    db.session.commit()
+
 print('\n8. A company with its own number is untouched')
 check(app.view_functions['messages.incoming'].__name__ == 'incoming',
       'the original webhook is still the registered handler for /incoming')

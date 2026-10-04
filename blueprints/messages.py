@@ -635,11 +635,20 @@ def _handle_inbound(link_base=None):
     sid = request.form.get('MessageSid')
     phone10 = norm_phone(from_num)
 
-    # Ignore texts from the owner's own cell (e.g. replies to alert texts) and
-    # empties. norm_phone(None) is '', which would match any unparseable number,
-    # so an unset alert phone must not be compared at all.
+    # Ignore empties, and texts from a phone she deliberately nominated for
+    # alerts, so her reply to one does not come back looking like a customer
+    # message. norm_phone(None) is '', which would match any unparseable
+    # number, so an unset phone must not be compared at all.
+    #
+    # Deliberately the stored setting and not owner_alert_phone(): that falls
+    # back to the business phone, which is usually the owner's own mobile and
+    # the number she texts the business from. Comparing against the fallback
+    # threw those away silently -- a real message lost to avoid a cosmetic
+    # one. If she nominates a separate alert phone the loop is suppressed as
+    # before; if she has not, a stray line in the thread beats a dropped text.
     alert_to = owner_alert_phone()
-    if not phone10 or not body or (alert_to and phone10 == norm_phone(alert_to)):
+    nominated = (BusinessSetting.get('owner_alert_phone') or '').strip()
+    if not phone10 or not body or (nominated and phone10 == norm_phone(nominated)):
         return Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
                         mimetype='text/xml')
 
