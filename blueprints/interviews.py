@@ -71,12 +71,11 @@ def interview_page(token):
     if app_rec.interview_status == 'completed':
         return render_template('interview/complete.html', app=app_rec, already_done=True)
 
-    # The company's own Cloudinary if it saved one, else the platform's
-    # (CLOUDINARY_CLOUD_NAME), the same lookup job photos use. There used to be
-    # a hard-coded account here as the last resort, so every company's
-    # applicant videos went to one account whatever it had connected. With
-    # nothing connected the applicant is told so, rather than recording an
-    # answer that can only fail to upload.
+    # Akye's master Cloudinary (CLOUDINARY_CLOUD_NAME), read through
+    # integrations like job photos: on hosted Akye no company has its own
+    # (integrations._PLATFORM). There used to be a hard-coded account here as
+    # the last resort. With nothing configured the applicant is told so,
+    # rather than recording an answer that can only fail to upload.
     import integrations
     cloud_name = integrations.cloudinary_cloud_name()
     if not cloud_name:
