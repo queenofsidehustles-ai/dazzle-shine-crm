@@ -215,7 +215,10 @@ def connections():
     if request.method == 'POST':
         pending = {}
         for name, (_env, label, is_secret) in integrations.FIELDS.items():
-            if name not in request.form:
+            # Keys Akye provides are not the company's to set, whatever the
+            # form sends -- the page does not show them, so nothing should
+            # arrive, and a hand-made POST must not change them either.
+            if name not in request.form or not integrations.editable(name):
                 continue
             value = (request.form.get(name) or '').strip()
             # A secret is shown back masked. If it comes back unchanged, the
@@ -251,11 +254,15 @@ def connections():
         flash(f"Saved: {', '.join(saved)}." if saved else 'Nothing changed.', 'success')
         return redirect(url_for('settings.connections'))
 
-    fields = {n: {'label': lbl, 'secret': sec, 'value': integrations.masked(n),
-                  'source': integrations.source(n)}
+    # A key Akye provides is never sent to the page, not even masked: the
+    # master account's SID, number and Cloudinary key are not a company's to read.
+    fields = {n: {'label': lbl, 'secret': sec,
+                  'value': integrations.masked(n) if integrations.editable(n) else '',
+                  'source': integrations.source(n) if integrations.editable(n) else None}
               for n, (_e, lbl, sec) in integrations.FIELDS.items()}
     return render_template('admin/settings_connections.html',
-                           fields=fields, status=integrations.status())
+                           fields=fields, status=integrations.status(),
+                           managed=integrations.hosted_company())
 
 
 @settings_bp.route('/connections/test-stripe', methods=['POST'])

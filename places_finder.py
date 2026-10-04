@@ -55,6 +55,8 @@ def own_key():
     back to the platform key and every company would look like it had brought
     its own."""
     import integrations
+    if integrations.platform_managed('google_places_api_key'):
+        return False                     # hosted Akye: Akye's key, Akye's allowance
     try:
         return bool((integrations._stored('google_places_api_key') or '').strip())
     except Exception:

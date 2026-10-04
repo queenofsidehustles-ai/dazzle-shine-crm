@@ -90,6 +90,10 @@ def checklist():
             'critical': False,
         },
     ]
+    if integrations.hosted_company():
+        # Akye provides email and texting; there is nothing for the owner to
+        # connect, so they are not steps on her list.
+        items = [i for i in items if i['key'] not in ('email', 'texting')]
     return items
 
 

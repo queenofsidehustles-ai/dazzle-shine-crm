@@ -304,7 +304,9 @@ data-brand="{{ p.brand or default_brand }}"
     {% if next_plan %}
     <li><a href="{{ url_for('billing.upgrade') }}">Move up to {{ next_plan.label }}</a> — {{ '{:,}'.format(next_plan.searches) }} searches a month</li>
     {% endif %}
+    {% if not CONNECTIONS_PROVIDED %}
     <li><a href="{{ url_for('settings.connections') }}">Use your own Google account</a> — no limit, and you pay Google directly. Usually a few cents a search.</li>
+    {% endif %}
     <li>Or wait until the 1st — nothing to do, they come back on their own.</li>
   </ul>
 </div>
