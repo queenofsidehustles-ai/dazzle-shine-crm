@@ -29,6 +29,22 @@ VERIFIED = 'verified'
 
 
 def _key():
+    """The key allowed to manage domains, which is not the sending key.
+
+    A sending key is restricted to sending, which is right: it is the one in
+    use on every email the platform sends, and the blast radius of a leak
+    should be "somebody can send mail", not "somebody can repoint where our
+    customers' mail comes from". Resend refuses domain calls made with it, in
+    those words.
+
+    So domain management gets its own key, falling back to the sending one for
+    a deployment that has not split them -- where the refusal is now passed
+    through plainly enough to say what to do about it.
+    """
+    import os
+    explicit = (os.environ.get('RESEND_DOMAINS_API_KEY') or '').strip()
+    if explicit:
+        return explicit
     import product
     return product.resend_api_key()
 
@@ -38,13 +54,27 @@ def _headers(key):
 
 
 def _fail(resp):
-    """Resend's own words where it has them, rather than a status code."""
+    """Resend's own words, said as something the reader can act on.
+
+    "This API key is restricted to only send emails" is true, accurate, and
+    means nothing to somebody running a cleaning company who has pressed Start
+    and watched nothing happen. It read as a stray sentence above the form
+    rather than as a refusal, so the one cause we can name is now named.
+    """
     try:
         payload = resp.json()
     except Exception:
-        return f'Email service returned {resp.status_code}.'
-    msg = (payload.get('message') or payload.get('error') or '').strip()
-    return msg or f'Email service returned {resp.status_code}.'
+        return 'The email service refused that (%s).' % resp.status_code
+    msg = str(payload.get('message') or payload.get('error') or '').strip()
+    low = msg.lower()
+    if 'restricted' in low and 'send' in low:
+        return ('Your domain could not be added: the email key on this server '
+                'is only allowed to send mail, not to set up domains. That is '
+                'a server setting rather than anything you have done -- '
+                'RESEND_DOMAINS_API_KEY needs a key with domain access.')
+    if not msg:
+        return 'The email service refused that (%s).' % resp.status_code
+    return 'Your domain could not be added - the email service said: ' + msg
 
 
 def register(domain):

@@ -118,7 +118,34 @@ with app.app_context():
     finally:
         notifications.send_email = real_send
 
-print('\n7. The dropdown that lied is gone')
+    print('\n7. A refusal that says what to do about it')
+
+    class Resp:
+        status_code = 401
+
+        def __init__(self, msg):
+            self._msg = msg
+
+        def json(self):
+            return {'message': self._msg}
+
+    said = email_domains._fail(Resp('This API key is restricted to only send emails'))
+    check('server setting' in said,
+          "a sending-only key is named as a server problem, not hers")
+    check('RESEND_DOMAINS_API_KEY' in said, 'and the thing to change is named')
+    said = email_domains._fail(Resp('Domain already exists'))
+    check(said.startswith('Your domain could not be added'),
+          'any other refusal still reads as a refusal rather than a stray line')
+
+    import os as _os
+    _os.environ['RESEND_DOMAINS_API_KEY'] = 'rk_domains'
+    try:
+        check(email_domains._key() == 'rk_domains',
+              'domain work uses its own key, so the sending key stays sending-only')
+    finally:
+        del _os.environ['RESEND_DOMAINS_API_KEY']
+
+print('\n8. The dropdown that lied is gone')
 for f in ('templates/admin/settings_business.html', 'blueprints/settings.py'):
     src = open(f, encoding='utf-8').read()
     check('brand_domain_verified' not in src and 'commercial_domain_verified' not in src,
