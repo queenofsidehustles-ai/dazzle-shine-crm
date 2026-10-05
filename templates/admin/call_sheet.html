@@ -3,7 +3,18 @@
 {% block page_title %}Calling{% endblock %}
 
 {% block content %}
-{% if current is none %}
+{% if current is none and stint_over %}
+<div class="card" style="text-align:center;padding:40px 20px">
+  <h2 style="margin:0 0 8px">That's {{ done_today }} calls. Nice work.</h2>
+  <p style="color:var(--softer);margin:0 0 20px">
+    {{ queue_left }} still waiting, and they'll keep. Twenty calls is a good
+    morning — the rest is there whenever you want it.
+  </p>
+  <a href="{{ url_for('places_finder.call_sheet', more=1) }}" class="btn btn-gold">Keep going anyway</a>
+  <a href="{{ url_for('places_finder.dashboard') }}" class="btn btn-outline">I'm done for now</a>
+</div>
+
+{% elif current is none %}
 <div class="card" style="text-align:center;padding:40px 20px">
   <h2 style="margin:0 0 8px">Nothing left to call today</h2>
   <p style="color:var(--softer);margin:0 0 20px">
@@ -64,6 +75,7 @@
   {% endif %}
 
   <form method="POST" action="{{ url_for('places_finder.log_call', prospect_id=current.id) }}">
+    {% if request.args.get('more') == '1' %}<input type="hidden" name="more" value="1">{% endif %}
     <p style="font-weight:600;margin:0 0 8px">How did it go?</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
       <button type="submit" name="outcome" value="no_answer" class="btn btn-outline" style="padding:12px 20px">No answer</button>

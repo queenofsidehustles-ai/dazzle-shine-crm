@@ -138,6 +138,20 @@ with app.app_context():
         guard = head.rsplit('@places_finder_bp.route', 1)[-1]
         check("@requires_plan('lead_finder')" in guard, f'{route} is gated')
 
+print('\n7. A morning that ends, and old links that still work')
+import blueprints.places_finder as _bp
+src = open('blueprints/places_finder.py', encoding='utf-8').read()
+check(_bp.DAILY_STINT == 20, 'a sitting is twenty calls, not an endless queue')
+check("request.args.get('more')" in src,
+      'and "keep going" is one click — a finish line, not a cap')
+check("{'pipeline': 'everyone', 'contacts': 'everyone'}" in src,
+      'the two merged tabs still resolve, so old links and bookmarks work')
+tpl = open('templates/admin/find_leads.html', encoding='utf-8').read()
+check('overdue</strong>' not in tpl,
+      'a backlog is not shouted at her in red every time she opens the page')
+check(tpl.count("('today', '📞 Calls'") == 1 and "'pipeline', '📊" not in tpl,
+      'three tabs, not five')
+
 print()
 if failures:
     print(f'{len(failures)} FAILED:')

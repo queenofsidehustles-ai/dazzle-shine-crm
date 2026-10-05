@@ -25,6 +25,10 @@ from scheduling import local_today
 
 places_finder_bp = Blueprint('places_finder', __name__, url_prefix='/find-leads')
 
+# How many calls one sitting offers before it says you are done. Not a cap on
+# what anybody may do -- "keep going" is one click -- but a morning that ends.
+DAILY_STINT = 20
+
 CATEGORIES = ['property_manager', 'realtor', 'airbnb', 'apartment',
               'daycare', 'medical_office', 'general_contractor', 'office', 'other']
 
@@ -186,8 +190,14 @@ def _email_templates():
 def dashboard():
     """Today by default — what is due, not everything ever imported."""
     view = request.args.get('view', 'today')
-    if view not in ('today', 'pipeline', 'contacts', 'find', 'month'):
+    # 'pipeline' and 'contacts' were the same 64 businesses twice -- once
+    # grouped by stage, once alphabetically. That is one screen with a filter,
+    # not two screens, so they became 'everyone'. The old names still work:
+    # they are in links, bookmarks and anything already open.
+    view = {'pipeline': 'everyone', 'contacts': 'everyone'}.get(view, view)
+    if view not in ('today', 'everyone', 'find', 'month'):
         view = 'today'
+    stage_filter = (request.args.get('stage') or '').strip()
     rows = _backfilled()
 
     if view == 'today':
@@ -197,13 +207,10 @@ def dashboard():
         today = local_today().isoformat()
         shown = sorted([p for p in rows if p.is_due(today)],
                        key=prospecting.due_sort_key)
-    elif view == 'pipeline':
-        order = [k for k, _ in Prospect.STAGE_LABELS]
-        shown = sorted(rows, key=lambda p: (order.index(p.stage)
-                                            if p.stage in order else 99,
-                                            prospecting.due_sort_key(p)))
-    elif view == 'contacts':
-        shown = sorted(rows, key=lambda p: (p.business_name or '').lower())
+    elif view == 'everyone':
+        pool = [p for p in rows if (p.stage or 'new') == stage_filter] \
+            if stage_filter else rows
+        shown = sorted(pool, key=lambda p: (p.business_name or '').lower())
     elif view == 'month':
         # The commercial month. Callbacks are not appointments -- they have no
         # time and take four minutes -- so they do not belong on the jobs
@@ -245,7 +252,8 @@ def dashboard():
         )
 
     return render_template('admin/find_leads.html',
-                           **_view_args(view, rows, shown=shown, **extra))
+                           **_view_args(view, rows, shown=shown,
+                                        stage_filter=stage_filter, **extra))
 
 
 @places_finder_bp.route('/search', methods=['POST'])
@@ -333,8 +341,16 @@ def call_sheet(prospect_id=None):
     done = sum(1 for p in rows
                if p.called_at and p.called_at.date().isoformat() == today)
 
+    # A sitting worth of calls, then a finish line. An endless queue is how a
+    # backlog becomes a screen nobody opens: there is no version of today where
+    # you get to the bottom, so there is no reason to start. Twenty is a
+    # morning. Anybody who wants to keep going says so.
+    stint_over = (done_today >= DAILY_STINT
+                  and not prospect_id
+                  and request.args.get('more') != '1')
+
     current = Prospect.query.get_or_404(prospect_id) if prospect_id else (
-        queue[0] if queue else None)
+        None if stint_over else (queue[0] if queue else None))
 
     scripts = []
     if current is not None:
@@ -347,6 +363,8 @@ def call_sheet(prospect_id=None):
         current=current,
         queue_left=len(queue),
         done_today=done,
+        stint_over=stint_over,
+        daily_stint=DAILY_STINT,
         scripts=scripts,
         quick_actions=prospecting.QUICK_ACTIONS,
         today=today,
@@ -381,7 +399,10 @@ def log_call(prospect_id):
         flash(f'{p.business_name} — next: {p.next_action} {when}.', 'success')
     else:
         flash(f'{p.business_name} — closed for now.', 'success')
-    return redirect(url_for('places_finder.call_sheet'))
+    # Carry the "keep going" through to the next call, or the twenty-first
+    # would hand her the finish line again.
+    more = '1' if request.form.get('more') == '1' else None
+    return redirect(url_for('places_finder.call_sheet', more=more))
 
 
 @places_finder_bp.route('/import', methods=['POST'])

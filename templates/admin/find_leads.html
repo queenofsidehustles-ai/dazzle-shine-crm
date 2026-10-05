@@ -35,10 +35,8 @@ data-brand="{{ p.brand or default_brand }}"
 
 <!-- ── Which view ───────────────────────────────────────────── -->
 <div class="filter-tabs">
-  {% set views = [('today', '📞 Today', due.overdue + due.today + due.unscheduled),
-                  ('pipeline', '📊 Pipeline', live_count),
-                  ('month', '🗓 Month', None),
-                  ('contacts', '📇 Contacts', counts.all),
+  {% set views = [('today', '📞 Calls', due.overdue + due.today + due.unscheduled),
+                  ('everyone', '🏢 Everyone', counts.all),
                   ('find', '🎯 Find new', None)] %}
   {% for key, label, n in views %}
   <a href="{{ url_for('places_finder.dashboard', view=key) }}"
@@ -47,6 +45,17 @@ data-brand="{{ p.brand or default_brand }}"
   </a>
   {% endfor %}
 </div>
+
+{% if view in ('today', 'month') %}
+<div style="display:flex;gap:8px;margin:0 0 14px">
+  <a href="{{ url_for('places_finder.dashboard', view='today') }}"
+     class="btn {{ 'btn-gold' if view == 'today' else 'btn-outline' }}"
+     style="padding:6px 16px;font-size:0.85rem">Today</a>
+  <a href="{{ url_for('places_finder.dashboard', view='month') }}"
+     class="btn {{ 'btn-gold' if view == 'month' else 'btn-outline' }}"
+     style="padding:6px 16px;font-size:0.85rem">This month</a>
+</div>
+{% endif %}
 
 {# ── MONTH ─────────────────────────────────────────────────────────────── #}
 {% if view == 'month' %}
@@ -103,13 +112,20 @@ data-brand="{{ p.brand or default_brand }}"
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div>
       <h3 style="margin:0 0 4px">📞 Today's calls</h3>
+      {# A two-month backlog shown as "57 OVERDUE" in red, every time you open
+         the page, is a reason to stop opening the page. It is a list of
+         businesses nobody has got to yet, which is an ordinary thing in a
+         company that also has cleaning to do. Said plainly, and the button
+         promises a morning that ends. #}
       <p style="color:var(--softer);font-size:0.85rem;margin:0">
-        {% if due.overdue %}<strong style="color:var(--amber-deep)">{{ due.overdue }} overdue</strong> ·{% endif %}
-        {{ due.today }} due today{% if due.later %} · {{ due.later }} scheduled ahead{% endif %}.
+        {% set waiting = due.overdue + due.today %}
+        {% if waiting %}{{ waiting }} business{{ '' if waiting == 1 else 'es' }} waiting on a call{% else %}Nothing waiting{% endif %}{% if due.later %} · {{ due.later }} scheduled ahead{% endif %}.
         Log every call — the next step gets set for you.
       </p>
       <p style="margin:10px 0 0">
-        <a href="{{ url_for('places_finder.call_sheet') }}" class="btn btn-gold" style="padding:11px 22px">Start calling →</a>
+        <a href="{{ url_for('places_finder.call_sheet') }}" class="btn btn-gold" style="padding:11px 22px">
+          {% if waiting > 20 %}Call the next 20 →{% else %}Start calling →{% endif %}
+        </a>
       </p>
     </div>
     <a href="{{ url_for('places_finder.dashboard', view='find') }}" class="btn btn-outline"
@@ -193,62 +209,22 @@ data-brand="{{ p.brand or default_brand }}"
 {% endif %}
 {% endif %}
 
-{# ── PIPELINE ──────────────────────────────────────────────────────────── #}
-{% if view == 'pipeline' %}
-<div class="card" style="margin-bottom:16px">
-  <h3 style="margin:0 0 12px">📊 Where everyone stands</h3>
-  <div style="display:flex;gap:10px;flex-wrap:wrap">
-    {% for key, label in stages %}
-    <div style="flex:1;min-width:104px;background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:12px 14px">
-      <div style="font-size:1.5rem;font-weight:800;color:{{ 'var(--amber-deep)' if stage_counts[key] else 'var(--info-soft)' }}">{{ stage_counts[key] }}</div>
-      <div style="font-size:0.78rem;color:var(--muted);font-weight:600">{{ label }}</div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-
-{% for key, label in stages %}
-{% set group = shown | selectattr('stage', 'equalto', key) | list %}
-{% if group %}
-<div class="card" style="margin-bottom:14px">
-  <h3 style="margin:0 0 10px;font-size:0.95rem">{{ label }} <span style="color:var(--softer);font-weight:400">({{ group|length }})</span></h3>
-  <div class="table-wrap">
-    <table>
-      <tbody>
-        {% for p in group %}
-        <tr>
-          <td>
-            <strong>{{ p.business_name }}</strong>
-            <div style="font-size:0.78rem;color:var(--softer)">
-              {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
-              {% if p.renewal_note %} · renewal {{ p.renewal_note }}{% endif %}
-            </div>
-          </td>
-          <td style="font-size:0.84rem">
-            {% if p.next_action %}{{ p.next_action }}<br>
-              <span style="color:{{ 'var(--amber-deep)' if p.due_state(today) == 'overdue' else 'var(--softer)' }};font-size:0.78rem">{{ p.next_action_date }}</span>
-            {% else %}<span style="color:var(--softer)">—</span>{% endif %}
-          </td>
-          <td style="text-align:right;white-space:nowrap">
-            <button type="button" class="btn btn-outline open-script" {{ prospect_data(p) }}
-                    style="padding:5px 11px;font-size:0.78rem">📋 Log</button>
-            {% if p.stage in ('interested', 'proposal', 'won') %}
-            <a href="{{ url_for('commercial.convert', prospect_id=p.id) }}" class="btn"
-               style="padding:5px 11px;font-size:0.78rem" title="Won them? Turn into a commercial account">🎉 Convert</a>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
-{% endfor %}
-{% endif %}
-
 {# ── CONTACTS ──────────────────────────────────────────────────────────── #}
-{% if view == 'contacts' %}
+{% if view == 'everyone' %}
+{# The stage counts were a screen you could look at and not act on. As filters
+   they answer the same question and then take you to the rows, which is what
+   the number was for. #}
+<div class="card" style="margin-bottom:14px">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="{{ url_for('places_finder.dashboard', view='everyone') }}"
+       class="filter-tab {{ 'active' if not stage_filter }}">All ({{ counts.all }})</a>
+    {% for key, label in stages %}{% if stage_counts[key] %}
+    <a href="{{ url_for('places_finder.dashboard', view='everyone', stage=key) }}"
+       class="filter-tab {{ 'active' if stage_filter == key }}">{{ label }} ({{ stage_counts[key] }})</a>
+    {% endif %}{% endfor %}
+  </div>
+</div>
+
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div>
