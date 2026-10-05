@@ -326,6 +326,17 @@ def send_outreach(prospect, subject, body, to=None):
     html = ('<div style="font-family:Inter,Arial,sans-serif;font-size:15px;'
             'line-height:1.65;color:#1f1333;white-space:pre-wrap">'
             + escape(body) + '</div>')
+    # Give this message its own return address, so a reply comes back to the
+    # record it belongs to instead of disappearing into her inbox while the
+    # chase carries on nagging somebody who has already answered.
+    try:
+        import email_replies
+        own = email_replies.address_for(email_replies.current_slug(), prospect.id)
+        if own:
+            reply_to = own
+    except Exception:
+        pass        # no return address is survivable; a failed send is not
+
     ok, detail = send_email(to, prospect.contact_name or prospect.business_name,
                             subject, html, from_name=from_name,
                             from_email=from_email, reply_to=reply_to)

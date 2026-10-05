@@ -676,6 +676,127 @@ def applicant_followups():
                     'moved_to_no_response': no_response})
 
 
+def _resend_signature_ok(raw):
+    """Is this really from the email service?
+
+    Resend signs with Svix: the signed payload is "<id>.<timestamp>.<body>",
+    the secret is base64 after a whsec_ prefix, and the header carries one or
+    more space-separated "v1,<signature>" values because a secret being
+    rotated means two are valid at once.
+
+    No secret configured means we cannot tell, and something we cannot
+    authenticate does not get to write into a customer's records.
+    """
+    import base64
+    import hashlib
+    import hmac
+    import os
+
+    secret = (os.environ.get('RESEND_WEBHOOK_SECRET') or '').strip()
+    if not secret:
+        return False
+    msg_id = request.headers.get('svix-id', '')
+    stamp = request.headers.get('svix-timestamp', '')
+    header = request.headers.get('svix-signature', '')
+    if not (msg_id and stamp and header):
+        return False
+    try:
+        key = base64.b64decode(secret.split('_', 1)[1] if secret.startswith('whsec_')
+                               else secret)
+    except Exception:
+        return False
+    signed = f'{msg_id}.{stamp}.'.encode() + raw
+    expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+    for part in header.split():
+        _, _, value = part.partition(',')
+        if value and hmac.compare_digest(value, expected):
+            return True
+    return False
+
+
+@api_bp.route('/email-reply', methods=['POST'])
+def email_reply():
+    """A prospect answered an introduction.
+
+    The address it was sent to says which company and which business, so
+    unlike an inbound text there is nothing to work out. What there is to do
+    is be the company before writing to it: switching the schema is only half
+    of that, and billing, entitlements and every link built from here read
+    g.tenant_slug. The texting relay learned this the hard way -- it changed
+    the schema, stayed nobody, and had its own alert refused on a plan the
+    company was not on.
+    """
+    import email_replies
+
+    raw = request.get_data() or b''
+    if not _resend_signature_ok(raw):
+        from flask import abort
+        abort(403)
+
+    payload = request.get_json(silent=True) or {}
+    data = payload.get('data') or payload
+    found = email_replies.pick_address(data)
+    if not found:
+        _record_unrouted_reply(data)
+        return jsonify({'ok': True}), 200
+
+    slug, prospect_id = found
+    import tenancy
+    from flask import g
+    prev_slug, prev_org = getattr(g, 'tenant_slug', None), getattr(g, '_org', None)
+    g.tenant_slug, g._org = slug, None
+    try:
+        with tenancy.use_tenant(slug):
+            ok, said = email_replies.record(
+                slug, prospect_id,
+                _first_address(data.get('from')),
+                (data.get('subject') or '').strip(),
+                _reply_text(data))
+    except Exception:
+        ok, said = False, 'Could not record that reply.'
+    finally:
+        g.tenant_slug, g._org = prev_slug, prev_org
+
+    return jsonify({'ok': bool(ok), 'detail': said}), 200
+
+
+def _first_address(value):
+    import re
+    found = re.findall(r'[^\s<>,;"]+@[^\s<>,;"]+', str(value or ''))
+    return found[0] if found else ''
+
+
+def _reply_text(data):
+    """What they actually wrote. Plain text where there is any, else the HTML
+    with its tags taken out -- a reply is read by a person, not rendered."""
+    import re
+    text = (data.get('text') or '').strip()
+    if text:
+        return text
+    html = (data.get('html') or '')
+    return re.sub(r'<[^>]+>', ' ', html).strip()
+
+
+def _record_unrouted_reply(data):
+    """Mail to the reply domain that is not an answer to anything we sent."""
+    try:
+        from models import ErrorLog
+        from extensions import db
+        ErrorLog.record(
+            kind='email',
+            message=('Inbound reply matched no prospect: from '
+                     f'{_first_address(data.get("from")) or "unknown"} — '
+                     f'{(data.get("subject") or "")[:90]}'),
+            path='/api/email-reply', method='POST', endpoint='api.email_reply')
+        db.session.commit()
+    except Exception:
+        try:
+            from extensions import db
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 @api_bp.route('/sms-status', methods=['POST'])
 def sms_status():
     """Twilio telling us what became of a text.
