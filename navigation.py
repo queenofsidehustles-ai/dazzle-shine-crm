@@ -147,6 +147,10 @@ SECTIONS = [
         ('settings.business', '⚙️', 'Settings', True, [
             ('settings.business', 'Business', True),
             ('settings.connections', 'Connections', True),
+            # Needs its own tab: it was reachable only from a link part-way
+            # down the Business page, which means it was reachable only by
+            # somebody who already knew it was there.
+            ('settings.sending_domain', 'Sending domain', True),
             ('settings.automations_page', 'Automations', True),
             ('team_logins.index', 'Team logins', True),
             ('settings.commercial', 'Commercial brand', True),
