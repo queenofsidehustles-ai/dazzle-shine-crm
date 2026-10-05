@@ -62,16 +62,24 @@
   </div>
   {% endif %}
 
-  {% if scripts %}
-  <details open style="margin-bottom:18px">
-    <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">What to say</summary>
-    {% for s in scripts %}
+  {# Open the first one -- what to say when they pick up -- and leave the rest
+     shut. They are for the moments a call goes sideways, and you open the one
+     you need while it is happening. #}
+  {% for label, rows in scripts %}
+  <details {{ 'open' if loop.first }} style="margin-bottom:8px;border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+    <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">{{ label }}</summary>
+    {% for s in rows %}
     <div style="margin-top:10px">
-      <p style="font-weight:600;font-size:0.85rem;margin:0 0 4px">{{ s.title }}</p>
-      <pre style="white-space:pre-wrap;font:inherit;font-size:0.86rem;margin:0;color:var(--softer)">{{ s.content }}</pre>
+      <p style="font-weight:600;font-size:0.84rem;margin:0 0 4px">{{ s.title }}</p>
+      <pre style="white-space:pre-wrap;font:inherit;font-size:0.88rem;margin:0;color:var(--ink);line-height:1.6">{{ s.content }}</pre>
     </div>
     {% endfor %}
   </details>
+  {% endfor %}
+  {% if not scripts %}
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:14px">
+    No call scripts yet — <a href="{{ url_for('scripts.index') }}">write one</a> and it shows up here.
+  </p>
   {% endif %}
 
   <form method="POST" action="{{ url_for('places_finder.log_call', prospect_id=current.id) }}">

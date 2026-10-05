@@ -138,7 +138,50 @@ with app.app_context():
         guard = head.rsplit('@places_finder_bp.route', 1)[-1]
         check("@requires_plan('lead_finder')" in guard, f'{route} is gated')
 
-    print('\n7. The page actually renders')
+    print('\n7. The right script for the business being rung')
+    from models import Script
+    for cat, title in (
+            ('outbound', '🏢 Cold Call Opening + Discovery — Commercial (offices · daycares · medical)'),
+            ('outbound', '🏘️ Cold Call Opening + Discovery — [Your Company] (apartments · property managers)'),
+            ('outbound', '🏘️ Cold Call Opening + Discovery — Bright Clean (apartments · property managers)'),
+            ('outbound', '🔑 Cold Call Opening + Discovery — Realtors'),
+            ('general', '🔑 Gatekeeper — Getting to the Decision-Maker'),
+            ('general', '📵 Voicemail Scripts That Actually Get Callbacks'),
+            ('objection', 'Objection — "I Already Have a Cleaner"'),
+            ('closing', 'Closing — Pencil You In')):
+        db.session.add(Script(category=cat, title=title, content='Say this.'))
+    db.session.commit()
+
+    office = Prospect(business_name='Civic Offices', category='office', status='new', stage='new')
+    flats = Prospect(business_name='Harbour Flats', category='apartment', status='new', stage='new')
+    db.session.add_all([office, flats]); db.session.commit()
+
+    import brands
+    sec = dict(bp._scripts_for(office, brands.COMMERCIAL))
+    titles = [r['title'] for r in sec.get('What to say', [])]
+    check(any('offices' in t for t in titles),
+          'an office gets the offices opening, not every opening there is')
+    check(not any('Realtors' in t for t in titles), 'and not the realtor one')
+
+    sec = dict(bp._scripts_for(flats, brands.COMMERCIAL))
+    titles = [r['title'] for r in sec.get('What to say', [])]
+    check(any('apartments' in t for t in titles), 'a block of flats gets the apartments one')
+    check(not any('[Your Company]' in t for t in titles),
+          "and the version she has made her own, not the seeded placeholder")
+
+    labels = [label for label, _ in bp._scripts_for(office, brands.COMMERCIAL)]
+    check('If it goes to voicemail' in labels and 'If they push back' in labels,
+          'with the moments a call goes sideways each behind their own heading')
+    check(labels[0] == 'What to say',
+          'and what to say when they pick up first, since that is the one that is open')
+
+    none_known = Prospect(business_name='Odd Co', category='other', status='new', stage='new')
+    db.session.add(none_known); db.session.commit()
+    sec = dict(bp._scripts_for(none_known, brands.COMMERCIAL))
+    check(len(sec.get('What to say', [])) > 0,
+          'a business nothing matches gets every opening, not a blank panel')
+
+    print('\n8. The page actually renders')
     # The gap that let a NameError reach production: every check above
     # exercised the helper that writes a call down, and none of them ever
     # asked the view to draw itself. A route that cannot render is not a
@@ -163,7 +206,7 @@ with app.app_context():
     r = c.get('/find-leads/?view=pipeline')
     check(r.status_code in (200, 302), 'and an old bookmark still goes somewhere')
 
-print('\n8. A morning that ends, and old links that still work')
+print('\n9. A morning that ends, and old links that still work')
 import blueprints.places_finder as _bp
 src = open('blueprints/places_finder.py', encoding='utf-8').read()
 check(_bp.DAILY_STINT == 20, 'a sitting is twenty calls, not an endless queue')

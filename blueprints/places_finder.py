@@ -33,6 +33,67 @@ CATEGORIES = ['property_manager', 'realtor', 'airbnb', 'apartment',
               'daycare', 'medical_office', 'general_contractor', 'office', 'other']
 
 
+# Which opening belongs to which kind of business. The scripts are filed by
+# what part of a call they are for -- outbound, objection, closing -- and the
+# vertical lives in the title, because one company's "cold call opening" is
+# several scripts and they differ by who is picking up. The call sheet asked
+# for a script category named 'office' and there has never been one, so the
+# panel was empty on every call.
+VERTICAL_HINTS = {
+    'office':             ('office', 'daycare', 'medical'),
+    'medical_office':     ('medical', 'office'),
+    'daycare':            ('daycare', 'office'),
+    'apartment':          ('apartment', 'property manager'),
+    'property_manager':   ('property manager', 'apartment'),
+    'realtor':            ('realtor',),
+    'airbnb':             ('airbnb', 'str ', 'turnover'),
+    'general_contractor': ('office',),
+}
+
+
+def _pick_openings(outbound, category):
+    """The openings worth reading before this particular call.
+
+    Falls back to every opening rather than none: a script that is not quite
+    for this business still beats a blank panel on a call that is about to
+    start.
+    """
+    hints = VERTICAL_HINTS.get(category, ())
+    matched = [s for s in outbound
+               if any(h in (s.get('title') or '').lower() for h in hints)] if hints else []
+    chosen = matched or outbound
+
+    # The seeded "[Your Company]" versions sit beside the ones she has made
+    # her own. Hers win; the generic is what is left when she has not written
+    # one yet.
+    named = [s for s in chosen if '[your company]' not in (s.get('title') or '').lower()]
+    return named or chosen
+
+
+def _scripts_for(prospect, brand_key):
+    """Everything to say on this call, in the order a call goes.
+
+    Returned as sections so each can be opened on its own. Twenty scripts in
+    one list is a document; four headings is something you can use with a
+    phone against your ear.
+    """
+    groups = _call_scripts().get(brand_key, {})
+    general = groups.get('general', [])
+
+    def titled(rows, *words):
+        return [r for r in rows
+                if any(w in (r.get('title') or '').lower() for w in words)]
+
+    sections = [
+        ('What to say', _pick_openings(groups.get('outbound', []), prospect.category)),
+        ('Getting past the gatekeeper', titled(general, 'gatekeeper')),
+        ('If it goes to voicemail', titled(general, 'voicemail')),
+        ('If they push back', groups.get('objection', [])),
+        ('Booking the walkthrough', groups.get('closing', [])),
+    ]
+    return [(label, rows) for label, rows in sections if rows]
+
+
 def _call_scripts():
     """Scripts for the call drawer, as {brand: {category: [scripts]}}.
 
@@ -356,7 +417,7 @@ def call_sheet(prospect_id=None):
     if current is not None:
         import brands
         key = brands.brand_for_prospect(current)
-        scripts = _call_scripts().get(key, {}).get(current.category, [])
+        scripts = _scripts_for(current, key)
         # Outreach always goes out under the commercial identity, so the
         # templates offered here are that side's, whatever the call is about.
         emails = _email_templates().get(brands.COMMERCIAL, [])
