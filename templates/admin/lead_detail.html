@@ -64,6 +64,51 @@
       </form>
     </div>
 
+    {% if quote_link %}
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Share This Quote</h2>
+      <p style="font-size:0.88rem;color:var(--muted);margin-bottom:14px">The person who booked and the person paying are often not the same — a builder and the homeowner, a tenant and the landlord. This sends the same quote, at the same price, to someone else. {{ lead.name }} is not emailed again and their own quote link does not change.</p>
+
+      <div class="form-group">
+        <label>Quote link</label>
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <input type="text" id="quote-link" value="{{ quote_link }}" readonly
+                 onclick="this.select()" style="flex:1;font-size:0.78rem;min-width:0">
+          <button type="button" id="copy-link-btn" class="btn btn-outline"
+                  style="white-space:nowrap;padding:8px 14px;font-size:0.85rem">Copy</button>
+        </div>
+      </div>
+
+      <form method="POST" action="{{ url_for('leads.send_copy', lead_id=lead.id) }}">
+        <div class="form-group">
+          <label>Send a copy to</label>
+          <input type="email" name="copy_email" required placeholder="homeowner@example.com">
+        </div>
+        <div class="form-group">
+          <label>Their name
+            <span style="font-weight:400;color:var(--softer);font-size:0.8rem">(optional)</span>
+          </label>
+          <input type="text" name="copy_name" placeholder="So the email opens with their name">
+        </div>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Send a Copy</button>
+      </form>
+    </div>
+    <script>
+      document.getElementById('copy-link-btn').addEventListener('click', function () {
+        var btn = this, field = document.getElementById('quote-link');
+        function done() { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1800); }
+        // clipboard API needs HTTPS; the select-and-copy fallback is what works
+        // on a phone browser over plain http.
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(field.value).then(done, function () { field.select(); });
+        } else {
+          field.select();
+          try { document.execCommand('copy'); done(); } catch (e) { /* left selected to copy by hand */ }
+        }
+      });
+    </script>
+    {% endif %}
+
     {% if lead.status != 'converted' %}
     <div class="card">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Convert to Booking</h2>

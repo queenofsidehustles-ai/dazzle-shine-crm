@@ -429,15 +429,22 @@ def scope_note(lead):
     return '\n\n'.join(bits)
 
 
-def send_quote(lead):
+def send_quote(lead, to_email=None, to_name=None):
     """Email the quote. Returns (ok, detail).
+
+    to_email sends the same quote to somebody who is not the lead -- see
+    send_quote_copy. The lead is left exactly as it was in that case.
 
     Goes through the editable lead_quote template so the wording stays hers.
     The checklist is appended rather than required to be in the template: the
     template already exists on every running instance, and a variable added to
     the default today would never appear in a copy she had already edited."""
     from notifications import send_triggered_email
-    if not lead.email:
+    # A copy goes to somebody who isn't the lead, so the address is resolved
+    # once here rather than read off the lead further down.
+    recipient = (to_email or lead.email or '').strip()
+    is_copy = bool(to_email)
+    if not recipient:
         return False, 'No email address on this lead.'
 
     items = checklist_for(lead)
@@ -473,8 +480,8 @@ def send_quote(lead):
 
     ok = send_triggered_email(
         trigger='lead_quote',
-        to_email=lead.email,
-        to_name=lead.name,
+        to_email=recipient,
+        to_name=(to_name or '').strip() or lead.name,
         variables={
             'service_type': lead.service_label,
             'beds': lead.bedrooms or '—',
@@ -498,9 +505,32 @@ def send_quote(lead):
     if not ok:
         return False, ('The "Instant Quote Email" template is missing or switched '
                        'off — check Settings → Email templates.')
-    lead.quote_sent_at = datetime.utcnow()
-    db.session.commit()
+    # A copy is not the moment the customer was quoted, and the follow-up drip
+    # hangs off this timestamp -- stamping it here would start chasing somebody
+    # who was only ever cc'd.
+    if not is_copy:
+        lead.quote_sent_at = datetime.utcnow()
+        db.session.commit()
     return True, ''
+
+
+def send_quote_copy(lead, to_email, to_name=''):
+    """Send this same quote to a third party. Returns (ok, detail).
+
+    The contractor who rings about a post-construction clean and the homeowner
+    who lives there are almost never the same person, and both need the number
+    in writing. Re-typing the quote against the homeowner's address would
+    re-point the lead's own quote link at them, so the copy reuses the existing
+    link and leaves the lead -- its address, its price, its drip -- alone.
+    """
+    from notifications import looks_like_email
+    to_email = (to_email or '').strip()
+    if not looks_like_email(to_email):
+        return False, ('That email address does not look right -- check it and '
+                       'try again.')
+    if not lead.quote_token:
+        return False, 'There is no quote on this lead yet to send a copy of.'
+    return send_quote(lead, to_email=to_email, to_name=to_name)
 
 
 def text_quote(lead):

@@ -90,8 +90,12 @@ def detail(lead_id):
         db.session.commit()
         flash('Lead updated.', 'success')
         return redirect(url_for('leads.detail', lead_id=lead_id))
+    import quoting
     vas = User.query.filter_by(role='team').order_by(User.name).all()
-    return render_template('admin/lead_detail.html', lead=lead, vas=vas)
+    # Only a lead that was actually quoted has a link worth showing -- quote_url
+    # falls back to the generic booking form, which is not this lead's quote.
+    return render_template('admin/lead_detail.html', lead=lead, vas=vas,
+                           quote_link=quoting.quote_url(lead) if lead.quote_token else '')
 
 
 @leads_bp.route('/<int:lead_id>/convert', methods=['POST'])
@@ -133,6 +137,28 @@ def convert(lead_id):
     db.session.commit()
     flash('Lead converted to booking!', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking.id))
+
+
+@leads_bp.route('/<int:lead_id>/send-copy', methods=['POST'])
+@login_required
+def send_copy(lead_id):
+    """Email this quote to somebody other than the lead.
+
+    On a post-construction job the person who rang is the builder and the
+    person paying is often the homeowner. Before this, the only way to get the
+    quote to the second one was to re-send the form against their address,
+    which moved the lead's own quote onto them."""
+    import quoting
+    lead = Lead.query.get_or_404(lead_id)
+    to_email = (request.form.get('copy_email') or '').strip()
+    ok, err = quoting.send_quote_copy(
+        lead, to_email, request.form.get('copy_name') or '')
+    if ok:
+        flash(f'Copy of the quote sent to {to_email}. '
+              f'{lead.name} was not emailed again.', 'success')
+    else:
+        flash(err, 'warning')
+    return redirect(url_for('leads.detail', lead_id=lead_id))
 
 
 @leads_bp.route('/<int:lead_id>/delete', methods=['POST'])
