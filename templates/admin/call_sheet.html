@@ -69,9 +69,23 @@
   <details {{ 'open' if loop.first }} style="margin-bottom:8px;border:1px solid var(--line);border-radius:8px;padding:10px 12px">
     <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">{{ label }}</summary>
     {% for s in rows %}
-    <div style="margin-top:10px">
-      <p style="font-weight:600;font-size:0.84rem;margin:0 0 4px">{{ s.title }}</p>
-      <pre style="white-space:pre-wrap;font:inherit;font-size:0.88rem;margin:0;color:var(--ink);line-height:1.6">{{ s.content }}</pre>
+    <div style="margin-top:12px">
+      <p style="font-weight:600;font-size:0.84rem;margin:0 0 6px;color:var(--softer)">{{ s.title }}</p>
+      {# The words to say and the reason they work were the same size, the same
+         colour, in one block -- so on a live call you are reading coaching to a
+         property manager. They are written apart already: a spoken line opens
+         with a quote, a note with 💡, a stage direction with a bracket. #}
+      <div class="script">
+        {% for line in s.content.split('\n') %}
+          {% set t = line.strip() %}
+          {% if not t %}<div class="s-gap"></div>
+          {% elif t.startswith('"') %}<p class="s-say">{{ t }}</p>
+          {% elif t.startswith('💡') %}<p class="s-why">{{ t }}</p>
+          {% elif t.startswith('[') %}<p class="s-cue">{{ t }}</p>
+          {% else %}<p class="s-plain">{{ t }}</p>
+          {% endif %}
+        {% endfor %}
+      </div>
     </div>
     {% endfor %}
   </details>

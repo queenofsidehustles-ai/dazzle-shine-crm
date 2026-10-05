@@ -181,7 +181,35 @@ with app.app_context():
     check(len(sec.get('What to say', [])) > 0,
           'a business nothing matches gets every opening, not a blank panel')
 
-    print('\n8. The page actually renders')
+    print('\n8. You can tell the words from the coaching')
+    real = Script.query.filter_by(category='outbound').first()
+    real.category = 'outbound'
+    real.content = ('[When they answer]\n'
+                    '"Hi, this is Monica — did I catch you at a bad time?"\n'
+                    '💡 "Bad time?" invites a safe no and disarms.\n\n'
+                    '"Who handles your turnover cleans right now?"')
+    db.session.commit()
+
+    BusinessSetting.set('plan', 'scale')
+    db.session.commit()
+    E._clear_cache()
+    c = app.test_client()
+    with c.session_transaction() as sess:
+        sess['logged_in'] = True
+        sess['role'] = 'owner'
+    page = c.get(f'/find-leads/call/{flats.id}').get_data(as_text=True)
+
+    check('s-say' in page, 'the words to say are marked as their own thing')
+    check('s-why' in page, 'and the coaching note as another')
+    check('s-cue' in page, 'and a stage direction as a third')
+    say_at = page.index('s-say')
+    why_at = page.index('s-why')
+    check(say_at < why_at, 'with what to say coming before why it works')
+    css = open('static/akye.css', encoding='utf-8').read()
+    check('.script .s-say' in css and '.script .s-why' in css,
+          'and all three are actually styled, not just labelled')
+
+    print('\n9. The page actually renders')
     # The gap that let a NameError reach production: every check above
     # exercised the helper that writes a call down, and none of them ever
     # asked the view to draw itself. A route that cannot render is not a
@@ -206,7 +234,7 @@ with app.app_context():
     r = c.get('/find-leads/?view=pipeline')
     check(r.status_code in (200, 302), 'and an old bookmark still goes somewhere')
 
-print('\n9. A morning that ends, and old links that still work')
+print('\n10. A morning that ends, and old links that still work')
 import blueprints.places_finder as _bp
 src = open('blueprints/places_finder.py', encoding='utf-8').read()
 check(_bp.DAILY_STINT == 20, 'a sitting is twenty calls, not an endless queue')

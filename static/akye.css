@@ -965,6 +965,29 @@ small.dim, small.muted { font-size:var(--t-xs); }
             text-decoration:none; overflow:hidden; text-overflow:ellipsis;
             white-space:nowrap; }
 .leadtask:hover { border-style:solid; color:var(--ink); }
+
+/* A call script read while the phone is ringing. The words you SAY and the
+   reason they work used to be one block at one size, which means reading
+   coaching aloud to a property manager. Three kinds of line, three weights. */
+.script { margin:0; }
+.script p { margin:0 0 2px; }
+/* What you actually say. Everything else on the page is quieter than this. */
+.script .s-say {
+  font-size:1rem; font-weight:600; line-height:1.55; color:var(--ink);
+  border-left:3px solid var(--amber); padding:4px 0 4px 10px; margin:0 0 4px;
+}
+/* Why it works. Useful the first ten times, noise on the hundredth. */
+.script .s-why {
+  font-size:0.8rem; line-height:1.5; color:var(--softer); font-style:italic;
+  padding-left:13px;
+}
+/* [When they answer] — a direction to you, not a word to anybody. */
+.script .s-cue {
+  font-size:0.76rem; color:var(--softer); text-transform:uppercase;
+  letter-spacing:0.08em; font-weight:600; margin-top:8px;
+}
+.script .s-plain { font-size:0.88rem; line-height:1.55; color:var(--ink); }
+.script .s-gap { height:8px; }
 .jobchip.s-pending   { background:var(--amber-soft); color:var(--amber-deep); }
 .jobchip.s-confirmed { background:var(--info-soft);  color:var(--info); }
 .jobchip.s-completed { background:var(--good-soft);  color:var(--good); }
