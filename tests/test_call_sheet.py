@@ -138,7 +138,32 @@ with app.app_context():
         guard = head.rsplit('@places_finder_bp.route', 1)[-1]
         check("@requires_plan('lead_finder')" in guard, f'{route} is gated')
 
-print('\n7. A morning that ends, and old links that still work')
+    print('\n7. The page actually renders')
+    # The gap that let a NameError reach production: every check above
+    # exercised the helper that writes a call down, and none of them ever
+    # asked the view to draw itself. A route that cannot render is not a
+    # subtle failure -- it is the whole screen, and the tests were green.
+    BusinessSetting.set('plan', 'scale')
+    db.session.commit()
+    E._clear_cache()
+    c = app.test_client()
+    with c.session_transaction() as sess:
+        sess['logged_in'] = True
+        sess['role'] = 'owner'
+
+    r = c.get('/find-leads/call')
+    check(r.status_code == 200, 'the call sheet renders with businesses waiting')
+
+    r = c.get('/find-leads/?view=today')
+    check(r.status_code == 200, 'and so does the list it is started from')
+    r = c.get('/find-leads/?view=month')
+    check(r.status_code == 200, 'and the month')
+    r = c.get('/find-leads/?view=everyone')
+    check(r.status_code == 200, 'and everyone')
+    r = c.get('/find-leads/?view=pipeline')
+    check(r.status_code in (200, 302), 'and an old bookmark still goes somewhere')
+
+print('\n8. A morning that ends, and old links that still work')
 import blueprints.places_finder as _bp
 src = open('blueprints/places_finder.py', encoding='utf-8').read()
 check(_bp.DAILY_STINT == 20, 'a sitting is twenty calls, not an endless queue')

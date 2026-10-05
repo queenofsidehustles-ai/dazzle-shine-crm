@@ -345,7 +345,7 @@ def call_sheet(prospect_id=None):
     # backlog becomes a screen nobody opens: there is no version of today where
     # you get to the bottom, so there is no reason to start. Twenty is a
     # morning. Anybody who wants to keep going says so.
-    stint_over = (done_today >= DAILY_STINT
+    stint_over = (done >= DAILY_STINT
                   and not prospect_id
                   and request.args.get('more') != '1')
 
