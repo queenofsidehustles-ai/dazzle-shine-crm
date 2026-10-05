@@ -209,7 +209,28 @@ with app.app_context():
     check('.script .s-say' in css and '.script .s-why' in css,
           'and all three are actually styled, not just labelled')
 
-    print('\n9. The page actually renders')
+    print('\n9. "They asked for info" says whether anything was sent')
+    with c.session_transaction() as sess:
+        sess['logged_in'] = True
+        sess['role'] = 'owner'
+    target = Prospect(business_name='Askfor Ltd', category='apartment',
+                      email='ray@askfor.com', status='new', stage='new')
+    db.session.add(target); db.session.commit()
+
+    r = c.post(f'/find-leads/call/{target.id}/log',
+               data={'outcome': 'send_info', 'mode': 'log'},
+               follow_redirects=True)
+    page = r.get_data(as_text=True)
+    check('Nothing was emailed' in page,
+          'pressing it without composing one says so, rather than moving on silently')
+    check('Sending Domain' in page or 'introduction' in page,
+          'and says what would make it possible')
+
+    tpl = open('templates/admin/call_sheet.html', encoding='utf-8').read()
+    check('Send me information</button>' not in tpl,
+          'the button no longer promises to send something it does not send')
+
+    print('\n10. The page actually renders')
     # The gap that let a NameError reach production: every check above
     # exercised the helper that writes a call down, and none of them ever
     # asked the view to draw itself. A route that cannot render is not a
@@ -234,7 +255,7 @@ with app.app_context():
     r = c.get('/find-leads/?view=pipeline')
     check(r.status_code in (200, 302), 'and an old bookmark still goes somewhere')
 
-print('\n10. A morning that ends, and old links that still work')
+print('\n11. A morning that ends, and old links that still work')
 import blueprints.places_finder as _bp
 src = open('blueprints/places_finder.py', encoding='utf-8').read()
 check(_bp.DAILY_STINT == 20, 'a sitting is twenty calls, not an endless queue')

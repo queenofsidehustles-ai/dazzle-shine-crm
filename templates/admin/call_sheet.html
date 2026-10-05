@@ -134,7 +134,7 @@
          remember to visit afterwards. Folded shut until she opens it: most
          calls do not get this far. #}
       {% if emails %}
-      <details style="margin-top:4px">
+      <details {{ 'open' if can_email and current.email }} style="margin-top:4px">
         <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">
           Send them an introduction
         </summary>
@@ -198,7 +198,7 @@
       <p style="font-weight:600;margin:14px 0 8px">What did they say?</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button type="submit" name="outcome" value="interested" class="btn btn-gold" style="padding:12px 20px">Booked a walkthrough 🎉</button>
-        <button type="submit" name="outcome" value="send_info" class="btn btn-outline" style="padding:12px 20px">Send me information</button>
+        <button type="submit" name="outcome" value="send_info" class="btn btn-outline" style="padding:12px 20px">They asked for info</button>
         <button type="submit" name="outcome" value="callback" class="btn btn-outline" style="padding:12px 20px">Call me back</button>
         <button type="submit" name="outcome" value="not_interested" class="btn btn-outline" style="padding:12px 20px">We're under contract</button>
         <button type="submit" name="outcome" value="backup" class="btn btn-outline" style="padding:12px 20px">Use us as backup</button>

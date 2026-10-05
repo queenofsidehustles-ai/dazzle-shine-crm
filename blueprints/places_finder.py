@@ -474,15 +474,37 @@ def log_call(prospect_id):
         sent_note = ' ' + said
         if not ok:
             flash(said, 'error')
+    elif outcome == 'send_info':
+        # The outcome that means "they asked me to email something" is the one
+        # outcome where saying nothing is a lie by omission: she pressed a
+        # button about sending information and the screen moved on to the next
+        # business. Whether or not an email went, she finds out here.
+        import email_domains
+        import product
+        try:
+            import brands
+            _, from_email, _ = brands.send_identity(brands.COMMERCIAL)
+            allowed = (not product.domain()) or email_domains.may_send_as(from_email)
+        except Exception:
+            allowed = False
+        if not allowed:
+            sent_note = (' Nothing was emailed — introductions need your own '
+                         'domain first (Settings → Sending Domain).')
+        elif not (p.email or '').strip():
+            sent_note = (' Nothing was emailed — no address for them yet.')
+        else:
+            sent_note = (' Nothing was emailed — open “Send them an '
+                         'introduction” on the call to write one.')
 
     db.session.commit()
 
     if p.next_action and p.next_action_date:
         when = 'today' if p.next_action_date == local_today().isoformat() \
             else f'on {p.next_action_date}'
-        flash(f'{p.business_name} — next: {p.next_action} {when}.', 'success')
+        flash(f'{p.business_name} — next: {p.next_action} {when}.{sent_note}',
+              'success' if not sent_note.startswith(' Nothing') else 'info')
     else:
-        flash(f'{p.business_name} — closed for now.', 'success')
+        flash(f'{p.business_name} — closed for now.{sent_note}', 'success')
     # Carry the "keep going" through to the next call, or the twenty-first
     # would hand her the finish line again.
     more = '1' if request.form.get('more') == '1' else None
