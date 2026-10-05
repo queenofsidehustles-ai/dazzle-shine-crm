@@ -296,6 +296,33 @@ def send_outreach(prospect, subject, body, to=None):
     # customer's booking confirmation should not share a sender reputation:
     # the mail that can be marked as spam is not the mail that has to arrive.
     from_name, from_email, reply_to = brands.send_identity(brands.COMMERCIAL)
+
+    # Cold outreach leaves the company's own domain or it does not leave at
+    # all. A stranger receiving mail from a company they have never heard of,
+    # sent from an address belonging to a company they have ALSO never heard
+    # of, is the shape of every phishing email ever written -- and if it is
+    # marked as spam often enough, the domain it was sent from stops reaching
+    # anybody. On a shared sender that is every other cleaning company's work
+    # orders and invoices paying for one company's prospecting.
+    #
+    # The check is here rather than in the screens because the drawer, the
+    # call sheet and the assistant all send through this function, and a rule
+    # enforced in two of three places is not a rule.
+    #
+    # A single-business install has no platform to protect and no registration
+    # flow to use: whoever runs the server set FROM_EMAIL and owns the DNS, so
+    # the question has already been answered by somebody who could answer it.
+    try:
+        import product
+        hosted = bool(product.domain())
+    except Exception:
+        hosted = False
+    if hosted:
+        import email_domains
+        if not email_domains.may_send_as(from_email):
+            return False, ('Introductions have to come from your own domain, or '
+                           'they land in spam. It is a one-time setup in '
+                           'Settings → Sending Domain.')
     html = ('<div style="font-family:Inter,Arial,sans-serif;font-size:15px;'
             'line-height:1.65;color:#1f1333;white-space:pre-wrap">'
             + escape(body) + '</div>')

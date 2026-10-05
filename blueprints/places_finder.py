@@ -352,11 +352,20 @@ def call_sheet(prospect_id=None):
     current = Prospect.query.get_or_404(prospect_id) if prospect_id else (
         None if stint_over else (queue[0] if queue else None))
 
-    scripts = []
+    scripts, emails, can_email = [], [], False
     if current is not None:
         import brands
         key = brands.brand_for_prospect(current)
         scripts = _call_scripts().get(key, {}).get(current.category, [])
+        # Outreach always goes out under the commercial identity, so the
+        # templates offered here are that side's, whatever the call is about.
+        emails = _email_templates().get(brands.COMMERCIAL, [])
+        try:
+            import email_domains, product
+            _, from_email, _ = brands.send_identity(brands.COMMERCIAL)
+            can_email = (not product.domain()) or email_domains.may_send_as(from_email)
+        except Exception:
+            can_email = False
 
     return render_template(
         'admin/call_sheet.html',
@@ -366,6 +375,8 @@ def call_sheet(prospect_id=None):
         stint_over=stint_over,
         daily_stint=DAILY_STINT,
         scripts=scripts,
+        emails=emails,
+        can_email=can_email,
         quick_actions=prospecting.QUICK_ACTIONS,
         today=today,
         status_labels=Prospect.STATUS_LABELS,
@@ -390,6 +401,18 @@ def log_call(prospect_id):
         p.status = outcome
     p.called_at = datetime.utcnow()
     _log_call(p, request.form, outcome)
+
+    # The introduction, sent from the call rather than from a screen she has
+    # to remember to go to afterwards. Sent after the outcome is written down,
+    # so a refused send never costs her the call she just made.
+    sent_note = ''
+    if request.form.get('send_intro') == '1':
+        ok, said = prospecting.send_outreach(
+            p, request.form.get('email_subject'), request.form.get('email_body'),
+            to=request.form.get('email'))
+        sent_note = ' ' + said
+        if not ok:
+            flash(said, 'error')
 
     db.session.commit()
 

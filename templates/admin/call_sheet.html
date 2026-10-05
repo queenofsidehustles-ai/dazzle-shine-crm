@@ -107,6 +107,64 @@
         </div>
       </div>
 
+      {# "Send me your information" is the commonest useful answer a cold call
+         gets, so the email is written here rather than on a screen she has to
+         remember to visit afterwards. Folded shut until she opens it: most
+         calls do not get this far. #}
+      {% if emails %}
+      <details style="margin-top:4px">
+        <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">
+          Send them an introduction
+        </summary>
+        {% if can_email %}
+        <div style="margin-top:10px">
+          <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Which one?</label>
+          <select id="tplPick" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px">
+            <option value="">— pick a template —</option>
+            {% for e in emails %}
+            <option value="{{ loop.index0 }}">{{ e.title }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-group" style="margin-top:10px">
+            <label>Subject</label>
+            <input type="text" name="email_subject" id="emailSubject">
+          </div>
+          <div class="form-group">
+            <label>Message</label>
+            <textarea name="email_body" id="emailBody" rows="8"></textarea>
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:0.9rem">
+            <input type="checkbox" name="send_intro" value="1">
+            Send it when I save this call
+          </label>
+          <p style="font-size:0.76rem;color:var(--softer);margin:6px 0 0">
+            Goes to the address above, from your own domain.
+          </p>
+        </div>
+        <script>
+          (function () {
+            var tpl = {{ emails | map(attribute='subject') | list | tojson }};
+            var bodies = {{ emails | map(attribute='body') | list | tojson }};
+            var pick = document.getElementById('tplPick');
+            if (!pick) return;
+            pick.addEventListener('change', function () {
+              var i = this.value;
+              if (i === '') return;
+              document.getElementById('emailSubject').value = tpl[i] || '';
+              document.getElementById('emailBody').value = bodies[i] || '';
+            });
+          })();
+        </script>
+        {% else %}
+        <p style="margin:10px 0 0;font-size:0.88rem">
+          Before you can email businesses who don't know you, your own domain
+          has to be set up — otherwise it lands in spam.
+          <a href="{{ url_for('settings.sending_domain') }}">It's a one-time setup →</a>
+        </p>
+        {% endif %}
+      </details>
+      {% endif %}
+
       <div class="form-group" style="margin-top:4px">
         <label>If they agreed to a walkthrough, when?</label>
         <input type="date" name="walkthrough_date" min="{{ today }}">

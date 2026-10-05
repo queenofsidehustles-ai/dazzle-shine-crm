@@ -89,7 +89,36 @@ with app.app_context():
         ok, _, err = email_domains.register(bad)
         check(ok is False, f'refused: {bad!r}')
 
-print('\n6. The dropdown that lied is gone')
+    print('\n6. Cold outreach waits for the domain')
+    import notifications, prospecting
+    from models import Prospect
+    sent = []
+    real_send = notifications.send_email
+    notifications.send_email = lambda *a, **k: (sent.append(a[0]), (True, 'stub'))[1]
+    try:
+        pr = Prospect(business_name='Lakeside PM', category='property_manager',
+                      email='dana@lakeside.com', status='new', stage='new')
+        db.session.add(pr); db.session.commit()
+
+        email_domains.save(name='brightclean.com', domain_id='d_1', state='pending')
+        BusinessSetting.set('commercial_from_email', 'sales@brightclean.com')
+        db.session.commit()
+        ok, said = prospecting.send_outreach(pr, 'Hello', 'We clean offices.')
+        check(ok is False, 'an unproven domain cannot send cold introductions')
+        check('Sending Domain' in said, 'and she is told exactly where to fix it')
+        check(not sent, 'nothing left the building')
+
+        email_domains.save(state='verified')
+        ok, said = prospecting.send_outreach(pr, 'Hello', 'We clean offices.')
+        check(ok is True, 'proven, and it goes')
+        check(sent == ['dana@lakeside.com'], 'to the address she took on the call')
+
+        ok, said = prospecting.send_outreach(pr, 'Hello', 'Hi', to='')
+        check(ok is True, 'the saved address is used when none is given')
+    finally:
+        notifications.send_email = real_send
+
+print('\n7. The dropdown that lied is gone')
 for f in ('templates/admin/settings_business.html', 'blueprints/settings.py'):
     src = open(f, encoding='utf-8').read()
     check('brand_domain_verified' not in src and 'commercial_domain_verified' not in src,
