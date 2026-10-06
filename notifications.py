@@ -217,7 +217,8 @@ def send_marketing_sms(to_phone, message):
 
 
 def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe_url=None,
-                         append_text=None, append_unless=None, cc=None):
+                         append_text=None, append_unless=None, cc=None,
+                         always_append=None):
     """Look up an EmailTemplate by trigger key, fill in variables, and send.
     If unsubscribe_url is given, an unsubscribe line is added to the footer
     (use for marketing emails). Returns True if sent, False otherwise.
@@ -246,6 +247,12 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
     raw_body = tmpl.body or ''
     if append_text and not (append_unless and append_unless in raw_body):
         raw_body = raw_body.rstrip() + '\n\n' + append_text
+    # append_text is skipped when the template places that block itself.
+    # always_append is not: it is for wording that has to reach the customer
+    # whatever the owner has done to her copy of the template -- the service
+    # terms, which decide a chargeback months later.
+    if always_append:
+        raw_body = raw_body.rstrip() + '\n\n' + always_append
     body_text = _sub(raw_body, v)
     html = _wrap_html(body_text, biz, unsubscribe_url=unsubscribe_url)
     send_email(to_email=to_email, to_name=to_name, subject=subject,

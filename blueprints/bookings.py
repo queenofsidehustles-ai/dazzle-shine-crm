@@ -2808,6 +2808,28 @@ def confirmation_content(booking):
     </ul>
   </div>"""
 
+    # The terms travel with the confirmation, in the email itself rather than
+    # behind a link. Most bookings are taken over the phone, so the customer
+    # never passes through a checkout page and never ticks anything -- the
+    # confirmation is the only moment they are told the rules at all. Putting
+    # them here also means the Sent log holds the exact wording that was sent
+    # and the day it went, which is what a card network asks for.
+    #
+    # The window is first and in its own box because it is the clause that
+    # decides a dispute, and nobody reads to the bottom of a terms block.
+    import customer_terms
+    terms_block = f"""
+  <div style="background:#fffaf0;border:1px solid #f0dcb4;border-radius:10px;padding:14px 16px;margin:18px 0">
+    <p style="margin:0 0 6px;font-weight:700;color:#8a5a12">If something isn't right — tell us within 24 hours</p>
+    <p style="margin:0;font-size:0.88rem;line-height:1.6;color:#3f3a52">We would much rather fix it than argue about it. If
+      something was missed, contact us within <strong>24 hours</strong> of the cleaning and we will come back and re-clean
+      the affected areas at no charge. That is how we put an unsatisfactory clean right.</p>
+  </div>
+  <details style="margin:16px 0">
+    <summary style="cursor:pointer;font-size:0.85rem;font-weight:700;color:#9a95ad">Our full service terms</summary>
+    <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.8rem;line-height:1.55;color:#5f5878;margin:10px 0 0">{customer_terms.get_terms()}</pre>
+  </details>"""
+
     subject = f"You're booked with {biz}! ✨"
     html = f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -2822,12 +2844,14 @@ def confirmation_content(booking):
   <p style="font-size:0.82rem;color:#9a95ad;background:#f6f5fb;border-radius:8px;padding:10px 12px">💡 Your price is based on an average-size home for this many bedrooms. Larger homes may have a small size adjustment — always confirmed with you first. No surprises!</p>
 {included}
   <p>If anything changes or you have questions, just reply to this email or text us — we're happy to help.</p>
+{terms_block}
   <p style="margin-top:18px">See you soon!<br><strong>{biz}</strong></p>
 </div>"""
     sms = (f"Hi {first}! ✨ Your {biz} cleaning is booked for {when}."
            + (f" Total {price_text}." if price_text else "")
            + (f" The full list of all {len(items)} things we'll do is in your email."
               if items else "")
+           + " If anything's not right, tell us within 24 hours and we'll come back and redo it."
            + " Reply here with any questions. Reply STOP to opt out.")
     return subject, html, sms
 

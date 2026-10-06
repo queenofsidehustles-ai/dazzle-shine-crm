@@ -1306,6 +1306,20 @@ def stripe_webhook():
 
 # ── Notification helpers ───────────────────────────────────────────────────────
 
+def _confirmation_terms():
+    """The clause that decides a dispute, then the rest of the terms."""
+    import customer_terms
+    return (
+        "IF SOMETHING ISN'T RIGHT \u2014 TELL US WITHIN 24 HOURS\n\n"
+        'We would much rather fix it than argue about it. If something was '
+        'missed, contact us within 24 hours of the cleaning and we will come '
+        'back and re-clean the affected areas at no charge. That is how we put '
+        'an unsatisfactory clean right.\n\n'
+        '\u2014 \u2014 \u2014\n\nOUR FULL SERVICE TERMS\n\n'
+        + customer_terms.get_terms()
+    )
+
+
 def _send_confirmation(booking: Booking):
     notify_email = branding.owner_email()
     freq_label = FREQUENCY_LABELS.get(booking.frequency or 'one_time', 'One-Time')
@@ -1354,6 +1368,13 @@ def _send_confirmation(booking: Booking):
         },
         append_text=checklist,
         append_unless='{{checklist}}',
+        # Always, not appended-unless: most bookings are taken over the phone,
+        # so the customer never reaches a checkout page and never ticks
+        # anything. This confirmation is the only moment they are told the
+        # rules, and a template an owner has edited must not be able to drop
+        # them. Sending the wording also puts it in the Sent log, dated, which
+        # is what a card network asks to see.
+        always_append=_confirmation_terms(),
     )
 
     # SMS to customer
