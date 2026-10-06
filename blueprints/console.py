@@ -355,6 +355,79 @@ def extend_trial(slug):
     return redirect(here)
 
 
+@console_bp.route('/companies/<slug>/plan', methods=['POST'])
+@console_required
+def set_plan(slug):
+    """Put a company on a plan, with or without a subscription behind it.
+
+    Two records disagree about what a company has bought, and until now only
+    one of them could be written. The control-plane row is what billing and
+    Stripe believe; `BusinessSetting('plan')` inside the company's own schema
+    is what the application actually reads when it decides whether to show
+    Quotes or Invoices (see entitlements._load_state). A company whose schema
+    has never had that row falls back to DEFAULT_PLAN -- solo, whose feature
+    set is empty -- however healthy the control-plane row looks. That is how a
+    paying company ends up staring at a product with most of it missing.
+
+    So this writes both, in that order, and says so in the log. Nothing here
+    touches Stripe: a plan set from the console is a plan granted, which is
+    exactly what is wanted for the operator's own business and for anyone
+    being carried deliberately.
+    """
+    import entitlements as ent
+    import tenancy
+    import console_data
+    from extensions import db
+    here = url_for('console.company', slug=slug)
+    if not _may_operate():
+        return _refuse(here)
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    if not org:
+        flash(f'No company at {slug}.', 'error')
+        return redirect(url_for('console.companies'))
+
+    plan = (request.form.get('plan') or '').strip().lower()
+    if plan not in ent.PLANS:
+        flash(f'“{plan}” is not a plan.', 'error')
+        return redirect(here)
+    if not console_data.schema_ready(slug):
+        flash('That company has no schema yet, so there is nothing to set a '
+              'plan on.', 'error')
+        return redirect(here)
+
+    free = bool(request.form.get('free'))
+    # The schema first. If this fails the company keeps the plan it had, which
+    # is a better outcome than a control-plane row promising a plan the
+    # application will not honour.
+    db.session.remove()
+    try:
+        with tenancy.use_tenant(slug):
+            from models import BusinessSetting
+            BusinessSetting.set('plan', plan)
+            BusinessSetting.set('plan_status', 'active')
+            if free:
+                BusinessSetting.set('grandfathered', '1')
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Could not set the plan on their data — {e}', 'error')
+        return redirect(here)
+    finally:
+        db.session.remove()
+
+    fields = {'plan': plan, 'subscription_status': 'active'}
+    if free:
+        fields['grandfathered'] = True
+    control_plane.set_billing(engine, slug, **fields)
+    control_plane.log_console(
+        engine, request.console_user['email'], 'set plan', slug,
+        f'{plan}' + (', free of charge' if free else '') + ' (schema and control plane)')
+    flash(f'{org.get("name") or slug} is on {ent.PLANS[plan]["label"]}'
+          + (', free of charge.' if free else '.'), 'success')
+    return redirect(here)
+
+
 @console_bp.route('/companies/<slug>/welcome', methods=['POST'])
 @console_required
 def send_welcome(slug):

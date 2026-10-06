@@ -98,6 +98,21 @@
 <p class="ops-dim">Only a manager or the owner can change a company.</p>
 {% else %}
 <div class="ops-actions">
+  {# The plan the application actually enforces lives in the company's own
+     schema, not in the billing row beside it. Setting it here writes both, so
+     a company cannot be sold Scale and shown Solo. #}
+  <form method="post" action="{{ url_for('console.set_plan', slug=org.slug) }}">
+    <label for="plan" class="ops-dim">Plan</label>
+    <select name="plan" id="plan">
+      <option value="solo" {{ 'selected' if org.plan == 'solo' }}>Solo — free</option>
+      <option value="pro" {{ 'selected' if org.plan == 'pro' }}>Pro — $79</option>
+      <option value="scale" {{ 'selected' if org.plan == 'scale' }}>Scale — $249</option>
+    </select>
+    <label class="ops-dim" style="margin-left:var(--s2)">
+      <input type="checkbox" name="free" value="1"> free of charge
+    </label>
+    <button class="btn btn-outline btn-sm" type="submit">Set plan</button>
+  </form>
   {% if trial %}
   
 <form method="post" action="{{ url_for('console.send_welcome', slug=org.slug) }}"
