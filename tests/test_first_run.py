@@ -127,13 +127,24 @@ check('#bookform { padding-bottom' in book,
       'and the form can scroll clear of it')
 check('flex:0 0 auto; margin:0;' in book, 'the button no longer takes a line of its own')
 
-print('\n9. Settings is six tabs, not nine')
+print('\n9. Settings is the set-once config, and stays that way')
 # Pricing and Follow-up texts moved out to Toolkit -- they are worked with
 # again and again as jobs come and go, which is what separates them from the
-# set-once config that is left.
+# set-once config that is left. Sending domain joined later (0b17a47): it is
+# configured once when the company starts sending its own mail and then left
+# alone, which is exactly the test this guard applies.
+#
+# The number is asserted rather than the names so that adding a tab is a
+# deliberate act -- someone has to come here and agree it belongs. Counting
+# six when there were seven did not catch sprawl, it just failed every run
+# until nobody read the result.
 settings_tabs = [t for _g, items in navigation.SECTIONS for it in items
                  if it[2] == 'Settings' for t in it[4]]
-check(len(settings_tabs) == 6, f'{len(settings_tabs)} tabs across the top of Settings')
+check(len(settings_tabs) == 7, f'{len(settings_tabs)} tabs across the top of Settings')
+daily = {'settings.pricing', 'settings.followup_texts', 'email_templates.index',
+         'workorders.templates'}
+check(not (daily & {t[0] for t in settings_tabs}),
+      'and nothing worked with daily has drifted back into it')
 names = [t[1] for t in settings_tabs]
 check('What is left to do' not in names,
       'the setup list is not a settings tab — it is the Getting started card')
