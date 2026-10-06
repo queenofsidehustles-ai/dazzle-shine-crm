@@ -58,8 +58,10 @@
             <video controls
                    style="width:100%;height:100%;display:block;object-fit:contain;background:#000"
                    preload="metadata">
-              <source src="{{ r.cloudinary_url }}" type="video/mp4">
-              <source src="{{ r.cloudinary_url }}" type="video/webm">
+              {# Through the application, behind the office login, rather than
+                 straight at a provider URL anybody holding the link could open. #}
+              <source src="{{ url_for('interviews.response_video', response_id=r.id) }}" type="video/mp4">
+              <source src="{{ url_for('interviews.response_video', response_id=r.id) }}" type="video/webm">
               Your browser does not support video playback.
             </video>
           </div>

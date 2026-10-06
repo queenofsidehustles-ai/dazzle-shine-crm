@@ -1,7 +1,8 @@
 import os
 import secrets
 from datetime import datetime
-from flask import Blueprint, render_template, request, jsonify, url_for, flash, redirect
+from flask import (Blueprint, render_template, request, jsonify, url_for, flash,
+                   redirect, abort)
 from entitlements import requires_plan
 from auth import login_required
 from models import ContractorApplication, InterviewResponse, ContractorDocument
@@ -128,6 +129,41 @@ def translate_response(resp_id):
                     url_for('interviews.review_interview', app_id=r.application_id))
 
 
+def _media_tenant_slug():
+    """Trusted media namespace for this request.
+
+    Taken from the request host by app.before_request, never from the page or
+    the applicant. The whole point of signing the upload is that the folder is
+    decided here and not by the browser.
+    """
+    from flask import g
+    return getattr(g, 'tenant_slug', None) or 'single-business'
+
+
+MEDIA_KIND = 'interview'
+
+
+@interviews_bp.route('/interview/<token>/upload-params')
+def upload_params(token):
+    """Signed parameters so the applicant's browser can upload directly.
+
+    The recording never passes through this server -- it is far too large --
+    but the folder and the delivery type travel inside Cloudinary's signature,
+    so the browser cannot put the file anywhere except this tenant's own
+    private folder.
+    """
+    ContractorApplication.query.filter_by(interview_token=token).first_or_404()
+    import private_media
+    if not private_media.is_ready():
+        return jsonify({'error': 'Video storage is not configured.'}), 503
+    try:
+        return jsonify(private_media.upload_params(
+            tenant_slug=_media_tenant_slug(), kind=MEDIA_KIND,
+            resource_type='video'))
+    except Exception:
+        return jsonify({'error': 'Could not prepare the upload.'}), 503
+
+
 @interviews_bp.route('/interview/<token>/save', methods=['POST'])
 def save_response(token):
     app_rec = ContractorApplication.query.filter_by(interview_token=token).first_or_404()
@@ -142,6 +178,17 @@ def save_response(token):
 
     if q_index is None or not public_id or not url:
         return jsonify({'error': 'Missing fields'}), 400
+
+    # A signed upload lands in this tenant's own folder, and what gets stored is
+    # a reference this server minted rather than a URL the browser handed over.
+    # The old shape still has to be accepted: recordings made before signing
+    # existed are flat `interviews/` objects with a plain URL, and they must
+    # keep playing rather than vanishing from the review page.
+    import private_media
+    ref = private_media.ref_from_upload(
+        data, tenant_slug=_media_tenant_slug(), kind=MEDIA_KIND)
+    if ref:
+        url = ref
 
     existing = InterviewResponse.query.filter_by(
         application_id=app_rec.id, question_index=q_index
@@ -291,6 +338,35 @@ def review_interview(app_id):
         .order_by(InterviewResponse.question_index).all()
     return render_template('admin/interview_review.html',
         app=app_rec, responses=responses, questions_en=QUESTIONS_EN())
+
+
+@interviews_bp.route('/admin/interviews/response/<int:response_id>/video')
+@login_required
+def response_video(response_id):
+    """Play one recording, behind the office login.
+
+    A signed reference is redirected to a signed Cloudinary URL rather than
+    proxied: a recording is tens of megabytes and the player asks for ranges of
+    it, so putting the bytes through a worker would tie one up for the length of
+    the interview.
+
+    A recording made before signing existed has a plain URL and no tenant in its
+    path. There is nothing to verify and nothing to sign, so it is served as it
+    always was -- the alternative is an empty review page for every applicant
+    already interviewed. New recordings are signed; these are the backlog, and
+    they are listed in the record as such.
+    """
+    r = InterviewResponse.query.get_or_404(response_id)
+    import private_media
+    if not private_media.is_private_ref(r.cloudinary_url):
+        if not r.cloudinary_url:
+            abort(404)
+        return redirect(r.cloudinary_url)
+    url = private_media.signed_url(
+        r.cloudinary_url, tenant_slug=_media_tenant_slug(), kind=MEDIA_KIND)
+    if not url:
+        abort(404)
+    return redirect(url)
 
 
 @interviews_bp.route('/admin/interviews/<int:app_id>/language', methods=['POST'])

@@ -688,16 +688,25 @@
         this.recState = 'uploading';
         this.errorMsg = '';
         try {
+          // The folder and the delivery type are decided by the server and
+          // travel inside Cloudinary's signature, so this page cannot put the
+          // recording anywhere but this company's own private folder. The file
+          // still goes straight to Cloudinary -- it is far too big to post
+          // through the application.
+          const paramsRes = await fetch(`/interview/${TOKEN}/upload-params`);
+          if (!paramsRes.ok) throw new Error('Could not prepare the upload.');
+          const up = await paramsRes.json();
+
           const formData = new FormData();
           const ext = this.videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
           formData.append('file', this.videoBlob, `answer_q${this.currentQ}.${ext}`);
-          formData.append('upload_preset', UPLOAD_PRESET);
-          formData.append('folder', 'interviews');
+          formData.append('api_key', up.api_key);
+          formData.append('timestamp', up.timestamp);
+          formData.append('signature', up.signature);
+          formData.append('folder', up.folder);
+          formData.append('type', up.type);
 
-          const res = await fetch(
-            `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,
-            { method: 'POST', body: formData }
-          );
+          const res = await fetch(up.url, { method: 'POST', body: formData });
           const cloud = await res.json();
 
           if (cloud.error) throw new Error(cloud.error.message);
