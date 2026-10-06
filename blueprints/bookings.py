@@ -706,20 +706,57 @@ def email_customer(booking_id):
         if not subject or not message:
             flash('Please fill in both a subject and a message.', 'warning')
             return redirect(url_for('bookings.email_customer', booking_id=booking_id))
-        # Keep the booking's email in sync if it was corrected or added here.
-        if to_email != (booking.email or ''):
-            booking.email = to_email
-            db.session.commit()
+        # This used to copy `to_email` onto the booking whenever the two
+        # differed, on the theory that a changed address here was a correction.
+        # It is just as often a second person -- the homeowner behind the
+        # builder who booked -- and writing it to the booking moved the payer,
+        # taking every later invoice and payment link with it. Correcting the
+        # customer's address is its own control on this page; this form sends
+        # mail and nothing else. A second recipient belongs in cc.
+        cc = (request.form.get('cc_email') or '').strip() or (booking.cc_email or '')
+        if cc and not looks_like_email(cc):
+            flash(f'“{cc}” doesn\'t look like a complete email address — '
+                  f'check for a missing .com.', 'warning')
+            return redirect(url_for('bookings.email_customer', booking_id=booking_id))
         from notifications import send_email, _wrap_html
         html = _wrap_html(message, branding.biz_name())
         ok, detail = send_email(to_email=to_email, to_name=(booking.name or 'there'),
-                                subject=subject, html=html)
+                                subject=subject, html=html, cc=cc)
         if ok:
-            flash(f'Email sent to {booking.email} ✅', 'success')
+            flash(f'Email sent to {to_email}'
+                  + (f', copied to {cc}' if cc else '') + ' ✅', 'success')
             return redirect(url_for('bookings.detail', booking_id=booking_id))
         flash(f'Could not send the email — {detail}', 'warning')
         return redirect(url_for('bookings.email_customer', booking_id=booking_id))
     return render_template('admin/email_customer.html', booking=booking)
+
+
+@bookings_bp.route('/<int:booking_id>/cc', methods=['POST'])
+@login_required
+def set_cc(booking_id):
+    """Set or clear the second person kept in the loop on this booking.
+
+    Deliberately not the same control as correcting the customer's address.
+    The customer is who the job belongs to and who the invoice goes to; this is
+    somebody who only ever receives a copy. Keeping them apart is the whole
+    point -- they were one field, and the result was that copying the homeowner
+    in moved the booking onto them."""
+    booking = Booking.query.get_or_404(booking_id)
+    cc = (request.form.get('cc_email') or '').strip()
+    if cc and not looks_like_email(cc):
+        flash(f'“{cc}” doesn\'t look like a complete email address — '
+              f'check for a missing .com.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if cc and cc.lower() == (booking.email or '').strip().lower():
+        flash('That is already the customer\'s own address, so there is '
+              'nobody extra to copy.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    booking.cc_email = cc or None
+    booking.cc_name = (request.form.get('cc_name') or '').strip() or None
+    db.session.commit()
+    flash(f'{booking.cc_name or cc} will be copied on updates for this job.'
+          if cc else 'Nobody is copied on this job any more.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
 @bookings_bp.route('/<int:booking_id>/correct-price', methods=['GET', 'POST'])
@@ -1439,6 +1476,7 @@ def _tell_customer_held(booking):
         try:
             ok, _ = send_email(
                 to_email=booking.email, to_name=booking.name,
+                cc=booking.cc_email,
                 subject=f'Your cleaning is on hold — {biz}',
                 html=f"""
 <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1f1333">
@@ -2802,7 +2840,7 @@ def _send_booking_confirmation(booking):
 
     if booking.email:
         send_email(to_email=booking.email, to_name=booking.name,
-                   subject=subject, html=html)
+                   subject=subject, html=html, cc=booking.cc_email)
 
     if booking.phone:
         try:

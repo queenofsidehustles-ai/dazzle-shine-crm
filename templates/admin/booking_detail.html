@@ -80,6 +80,58 @@
           <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save details</button>
         </form>
       </details>
+
+      {# Who else hears about this job, as opposed to who the job belongs to.
+         Kept visually and structurally apart from the box above: the builder
+         books a post-construction clean and pays for it, the homeowner lives
+         there and wants to know when it is happening, and collapsing the two
+         into one field is what used to move the booking onto the wrong one. #}
+      <div class="detail-row">
+        <span class="dl">Also copied</span>
+        <span class="dv">
+          {% if booking.cc_email %}
+            {{ booking.cc_name or booking.cc_email }}
+            {% if booking.cc_name %}<span style="color:var(--softer);font-size:0.82rem">&lt;{{ booking.cc_email }}&gt;</span>{% endif %}
+          {% else %}
+            <span style="color:var(--softer)">Nobody</span>
+          {% endif %}
+          <a href="#" onclick="document.getElementById('ccBox').open=true;this.blur();return false"
+             style="font-size:0.78rem;color:var(--amber-deep);margin-left:6px">✎ change</a>
+        </span>
+      </div>
+
+      <details id="ccBox" style="margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">
+          ✉️ Keep someone else in the loop
+        </summary>
+        <form method="POST" action="{{ url_for('bookings.set_cc', booking_id=booking.id) }}"
+              style="padding:0 13px 14px">
+          <p style="font-size:0.82rem;color:var(--muted);margin:0 0 10px">
+            They are copied on the booking confirmation, reminders, schedule
+            changes and anything you write yourself. They are
+            <strong>not</strong> copied on invoices or payment requests, and the
+            job stays in {{ booking.name or 'the customer' }}'s name.
+          </p>
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Their email</label>
+            <input type="email" name="cc_email" value="{{ booking.cc_email or '' }}"
+                   placeholder="homeowner@example.com"
+                   style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.78rem">Their name
+              <span style="font-weight:400;color:var(--softer)">(optional)</span></label>
+            <input type="text" name="cc_name" value="{{ booking.cc_name or '' }}"
+                   placeholder="So you can tell at a glance who it is"
+                   style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
+          </div>
+          <p style="font-size:0.78rem;color:var(--softer);margin:0 0 10px">
+            Clear the email box and save to stop copying them.
+          </p>
+          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save</button>
+        </form>
+      </details>
+
       <div class="detail-row">
         <span class="dl">Address</span>
         <span class="dv">

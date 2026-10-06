@@ -19,7 +19,14 @@
       <div class="form-group">
         <label>To — {{ booking.name or 'Customer' }}'s email</label>
         <input type="email" name="to_email" required value="{{ booking.email or '' }}" placeholder="customer@example.com" />
-        <span style="font-size:0.78rem;color:var(--softer)">You can edit this. Sends from your {{ BIZ }} address · any reply comes to your inbox.</span>
+        <span style="font-size:0.78rem;color:var(--softer)">Sends from your {{ BIZ }} address · any reply comes to your inbox. Changing this address here sends one email elsewhere; it does not move the booking.</span>
+      </div>
+      <div class="form-group">
+        <label>Copy to <span style="font-weight:400;color:var(--softer);font-size:0.8rem">(optional)</span></label>
+        <input type="email" name="cc_email" value="{{ booking.cc_email or '' }}" placeholder="homeowner@example.com" />
+        <span style="font-size:0.78rem;color:var(--softer)">
+          {% if booking.cc_email %}Already kept in the loop on this job. Clear the box to leave them off this one email.
+          {% else %}Someone who should see this but is not the customer.{% endif %}</span>
       </div>
       <div class="form-group">
         <label>Subject</label>

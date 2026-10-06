@@ -1336,6 +1336,7 @@ def _send_confirmation(booking: Booking):
         trigger='booking_confirmed',
         to_email=booking.email,
         to_name=booking.name,
+        cc=booking.cc_email,
         variables={
             'service_type': booking.service_label,
             'frequency': freq_label,
@@ -1495,6 +1496,7 @@ def _send_reminder(booking: Booking):
         trigger='booking_reminder_24h',
         to_email=booking.email,
         to_name=booking.name,
+        cc=booking.cc_email,
         variables={
             'service_type': booking.service_label,
             'booking_date': date_text,

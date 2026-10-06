@@ -109,6 +109,15 @@ class Booking(db.Model):
     address = db.Column(db.String(200))
     city = db.Column(db.String(50))
     zip_code = db.Column(db.String(10))
+    # Somebody who is kept in the loop but is not the customer. On a
+    # post-construction job the builder books the clean and pays for it; the
+    # homeowner lives there and wants to know it is happening. Before this the
+    # only way to reach the second person was to type their address into the
+    # email form, which overwrote `email` above and moved the whole booking --
+    # every later invoice and payment link with it -- onto somebody who was
+    # never the customer. The payer stays in `email`; this is the passenger.
+    cc_email = db.Column(db.String(120))
+    cc_name = db.Column(db.String(120))
 
     # Payment
     stripe_payment_intent = db.Column(db.String(100))

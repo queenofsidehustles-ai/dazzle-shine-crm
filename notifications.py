@@ -217,7 +217,7 @@ def send_marketing_sms(to_phone, message):
 
 
 def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe_url=None,
-                         append_text=None, append_unless=None):
+                         append_text=None, append_unless=None, cc=None):
     """Look up an EmailTemplate by trigger key, fill in variables, and send.
     If unsubscribe_url is given, an unsubscribe line is added to the footer
     (use for marketing emails). Returns True if sent, False otherwise.
@@ -249,7 +249,7 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
     body_text = _sub(raw_body, v)
     html = _wrap_html(body_text, biz, unsubscribe_url=unsubscribe_url)
     send_email(to_email=to_email, to_name=to_name, subject=subject,
-               html=html, from_name=biz)
+               html=html, from_name=biz, cc=cc)
     return True
 
 
@@ -289,11 +289,16 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
 
 
 def send_email(to_email, to_name, subject, html, from_name=None,
-               from_email=None, reply_to=None, api_key=None):
+               from_email=None, reply_to=None, api_key=None, cc=None):
     """Send via Resend. Returns (ok: bool, detail: str) so callers/diagnostics
     can see what happened. Existing callers that ignore the return value are
     unaffected. from_email/reply_to let a branded caller (e.g. a commercial
     quote) override the sender identity per brand.
+
+    `cc` copies a second address that is NOT the customer -- a homeowner behind
+    the builder who booked, a landlord behind the tenant. It is dropped when it
+    is blank or the same address as `to_email`, so nobody is sent two copies of
+    their own email.
 
     `api_key` exists for mail the PRODUCT sends — a trial reminder, a crash
     alert — as opposed to mail a cleaning company sends its own customers.
@@ -324,6 +329,11 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     # sent "from" the branded domain address.
     reply_to = reply_to or os.environ.get('REPLY_TO_EMAIL') or \
         branding.owner_email()
+    # A copy to the same person is not a copy, and a blank one is a Resend
+    # validation error rather than a quietly ignored field.
+    cc = (cc or '').strip()
+    if not looks_like_email(cc) or cc.lower() == (to_email or '').strip().lower():
+        cc = ''
     try:
         resp = http_requests.post(
             'https://api.resend.com/emails',
@@ -337,6 +347,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
                 'reply_to': reply_to,
                 'subject': subject,
                 'html': html,
+                **({'cc': [cc]} if cc else {}),
             },
             timeout=10,
         )
@@ -354,6 +365,12 @@ def send_email(to_email, to_name, subject, html, from_name=None,
                 msg_id = ''
             detail = f'Accepted by Resend from {from_email}'
             detail += f' (id {msg_id}).' if msg_id else '. No message id returned.'
+            # Who else received it belongs in the Sent log. A copy that leaves
+            # no trace is indistinguishable from one that was never sent, and
+            # the whole point of copying somebody is being able to say later
+            # that they were told.
+            if cc:
+                detail += f' Copied to {cc}.'
             ok = True
         else:
             ok, msg_id = False, ''
