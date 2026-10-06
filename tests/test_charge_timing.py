@@ -117,7 +117,13 @@ with app.app_context():
     for b in Booking.query.all():
         db.session.delete(b)
     db.session.commit()
-    now_local = scheduling.local_now()
+    # Pinned to noon. Run for real, this failed in the minute after midnight
+    # (00:00-00:01 local), when the "already started" 12:01 AM job had not
+    # started yet -- and CI does run at midnight. Noon makes 12:01 AM always
+    # past and 11:59 PM always ahead, which is what this section is about.
+    real_local_now = scheduling.local_now
+    now_local = real_local_now().replace(hour=12, minute=0, second=0, microsecond=0)
+    scheduling.local_now = lambda: now_local
     early = Booking(service_type='standard', name='Later Today', address='2 St', price=150,
                     preferred_date=now_local.date().isoformat(), preferred_time='11:59 PM',
                     status='confirmed', stripe_customer_id='cus_a', stripe_payment_method_id='pm_a')
@@ -138,5 +144,6 @@ with app.app_context():
     check(any('11:59 PM' in (w.get('due_at') or '')
               for w in body['waiting_for_their_appointment']),
           'with the time it will charge at')
+    scheduling.local_now = real_local_now
 
 print('\n🎉 Cards are charged when the appointment starts — never before you turn up.')
