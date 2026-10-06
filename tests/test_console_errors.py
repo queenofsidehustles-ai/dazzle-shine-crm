@@ -80,6 +80,13 @@ r = calculate_job('standard', 3, '2.5')
 check(r['client_price'] == calculate_job('standard', 3, 2)['client_price'],
       '"2.5" bathrooms prices as 2, as the public calculator already did')
 check(calculate_job('standard', '3.0', 2.0)['client_price'] > 0, 'and "3.0" bedrooms works too')
+for bad in ('abc', 'inf', 'nan'):
+    try:
+        calculate_job('standard', 3, bad)
+        raised = None
+    except Exception as e:
+        raised = type(e).__name__
+    check(raised == 'ValueError', f'a room count of {bad!r} is a ValueError, as callers expect ({raised})')
 
 print('\n4. The console counts real errors only, and can mark them sorted')
 app = create_app()
@@ -97,12 +104,13 @@ with app.app_context():
         ErrorLog.record('RuntimeError', 'Nana: something', path='/ask')
         ErrorLog.record('ValueError', "invalid literal for int() with base 10: '2.5'",
                         path='/api/calculate')
-        ErrorLog.record('blocked', 'Cross-site form submission refused (Origin: https://evil.example.com)',
-                        path='/settings/business')
+        for _ in range(2):        # one row, two attempts
+            ErrorLog.record('blocked', 'Cross-site form submission refused (Origin: https://evil.example.com)',
+                            path='/settings/business')
         db.session.remove()
     snap = console_data.snapshot(SLUG)
-check(snap['open_errors'] == 2 and snap['blocked'] == 1,
-      f'two real errors; the refused form is counted apart ({snap["open_errors"]}, {snap["blocked"]})')
+check(snap['open_errors'] == 2 and snap['blocked'] == 2,
+      f'two real errors; the two refused attempts are counted apart ({snap["open_errors"]}, {snap["blocked"]})')
 check(all(e['kind'] != 'blocked' for e in snap['errors']), 'and is not in the error list')
 
 PRODUCT = {'Host': 'akyehq.test'}

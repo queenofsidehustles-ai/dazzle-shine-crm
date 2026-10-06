@@ -294,6 +294,16 @@ def get_deposit():
 
 # ── Core calculation ───────────────────────────────────────────────────────────
 
+def _whole_rooms(value):
+    """'3', 3, '2.5', 2.5 and '5+' as a whole number of rooms. Anything that
+    is not a finite number -- 'abc', 'inf', 'nan' -- is a ValueError, the one
+    error callers already expect from a bad room count."""
+    n = float(str(value).replace('+', '').strip() or 1)
+    if n != n or n in (float('inf'), float('-inf')):
+        raise ValueError(f'not a room count: {value!r}')
+    return int(n)
+
+
 def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='one_time'):
     """
     Returns a dict with all four key numbers:
@@ -302,8 +312,8 @@ def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='
     """
     # float() first: a form can send "2.5" bathrooms, and int("2.5") raises.
     # A half bath prices as the whole bathrooms below it, as before.
-    beds = min(int(float(str(beds).replace('+', '') or 1)), 5)
-    baths = int(float(str(baths).replace('+', '') or 1))
+    beds = min(_whole_rooms(beds), 5)
+    baths = _whole_rooms(baths)
 
     std_price  = get_std_price(beds, baths)
     multiplier = get_multiplier(service_type)
