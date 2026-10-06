@@ -376,6 +376,32 @@ def guide():
     return render_template('marketing/guide.html', g=guide_content)
 
 
+@marketing_bp.route('/blog')
+def blog_index():
+    """Every post, newest first.
+
+    The long guide is listed here too but keeps its own URL. It is indexed and
+    it ranks; moving an address that already works, to tidy up a menu, is how a
+    page stops being found."""
+    _require_product_site()
+    import blog as blog_content
+    return render_template('marketing/blog_index.html', b=blog_content,
+                           entries=blog_content.index_entries())
+
+
+@marketing_bp.route('/blog/<slug>')
+def blog_post(slug):
+    """One post. A slug that is not a post is a 404, not the index -- a reader
+    who followed a stale link should be told it is gone rather than quietly
+    landed somewhere else and left to work it out."""
+    _require_product_site()
+    import blog as blog_content
+    post = blog_content.find(slug)
+    if not post:
+        abort(404)
+    return render_template('marketing/blog_post.html', b=blog_content, post=post)
+
+
 @marketing_bp.route('/robots.txt')
 def robots():
     """What a crawler may look at.
@@ -414,11 +440,17 @@ def sitemap():
         # Ranked with pricing on purpose: it is the page most strangers will
         # arrive on, months before they are looking for software at all.
         (url_for('marketing.guide'), '0.9'),
+        (url_for('marketing.blog_index'), '0.7'),
         (url_for('marketing.security'), '0.5'),
         (url_for('marketing.terms'), '0.3'),
         (url_for('marketing.privacy'), '0.3'),
         (url_for('marketing.subprocessors'), '0.2'),
     ]
+    # Every post, or publishing one means waiting for a crawler to stumble on
+    # it. The index alone is not enough: it is the posts that answer anything.
+    import blog as blog_content
+    pages += [(url_for('marketing.blog_post', slug=p['slug']), '0.6')
+              for p in blog_content.POSTS]
     urls = '\n'.join(
         f'  <url><loc>{base}{path}</loc><priority>{pri}</priority></url>'
         for path, pri in pages)
