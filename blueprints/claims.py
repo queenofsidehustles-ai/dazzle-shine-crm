@@ -198,12 +198,34 @@ def _claim_state(booking, staff):
     return 'taken'
 
 
+def _friendly_date(iso):
+    """"Tomorrow", or "Monday 1 September". Nobody reads a job off an ISO date."""
+    from datetime import date as _date
+    if not iso:
+        return 'Date to be confirmed'
+    try:
+        d = _date.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return iso
+    delta = (d - _date.today()).days
+    if delta == 0:
+        return 'Today'
+    if delta == 1:
+        return 'Tomorrow'
+    return d.strftime('%A %-d %B')
+
+
 @claims_bp.route('/claim/<ctoken>/<stoken>')
 def claim_page(ctoken, stoken):
     booking = Booking.query.filter_by(claim_token=ctoken).first_or_404()
     staff = Staff.query.filter_by(agreement_token=stoken).first_or_404()
     state = _claim_state(booking, staff)
+    # The text that brought them here was in their language; the page it opens
+    # has to match, or the translation was worse than useless.
+    import i18n
+    i18n.set_person(staff)
     return render_template('public/claim.html', b=booking, s=staff,
+                           when_label=_friendly_date(booking.preferred_date),
                            pay=_pay_for(booking, staff), state=state,
                            hours_each=booking.hours_each(), labor_rate=get_labor_rate(),
                            clash=clash_reason(staff, booking) if state == 'open' else None,
@@ -248,6 +270,7 @@ def claim_do(ctoken, stoken):
     reason = clash_reason(staff, booking)
     if reason:
         return render_template('public/claim.html', b=booking, s=staff,
+                               when_label=_friendly_date(booking.preferred_date),
                                pay=_pay_for(booking, staff),
                                hours_each=booking.hours_each(), labor_rate=get_labor_rate(),
                                state='clash', clash=reason, biz=_biz(),
@@ -277,13 +300,27 @@ def claim_do(ctoken, stoken):
         db.session.refresh(booking)
         note = None
 
-    # Send the checklist + notify the owner
+    # Send the checklist + notify the owner. The claim itself is already
+    # committed above -- a failure here must not turn an accepted job into a
+    # 500 for the cleaner, but swallowing it silently is exactly how a
+    # cleaner ends up having "accepted" a job with no idea where it is: no
+    # error anywhere, nobody told, nothing to go on. errors.capture() is the
+    # same path every other best-effort send in this codebase uses, so this
+    # one actually gets logged and emailed to the owner instead of vanishing.
+    workorder_sent = True
     try:
         from blueprints.workorders import create_and_send_workorder
         create_and_send_workorder(booking, recipient=staff)
-    except Exception:
-        pass
+    except Exception as e:
+        workorder_sent = False
+        try:
+            import errors
+            errors.capture(e, path=request.path, method=request.method)
+        except Exception:
+            pass
     msg = f"✅ {staff.name} claimed the {booking.preferred_date} job ({booking.name})."
+    if not workorder_sent:
+        msg += " Could not send them the job checklist -- resend it from the job page."
     _alert_owner(f"{msg} {note}" if note else msg)
     return redirect(url_for('claims.claim_page', ctoken=ctoken, stoken=stoken))
 

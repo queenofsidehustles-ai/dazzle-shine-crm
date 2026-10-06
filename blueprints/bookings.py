@@ -8,6 +8,7 @@ from pricing import FREQUENCY_LABELS
 from notifications import looks_like_email
 import recurring
 import branding
+import entitlements
 
 bookings_bp = Blueprint('bookings', __name__, url_prefix='/bookings')
 
@@ -18,12 +19,18 @@ def index():
     status_filter = request.args.get('status', '')
     group = (request.args.get('series') or '').strip()
     show_every_visit = group == 'all'
+    q = (request.args.get('q') or '').strip()
 
     query = Booking.query.order_by(Booking.created_at.desc())
     if status_filter:
         query = query.filter_by(status=status_filter)
     if group and not show_every_visit:
         query = query.filter_by(recurring_group=group)
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Booking.name.ilike(like), Booking.email.ilike(like),
+            Booking.phone.ilike(like), Booking.address.ilike(like)))
     bookings = query.all()
 
     # A recurring plan is one row unless asked otherwise. Twelve months of the
@@ -43,14 +50,14 @@ def index():
     }
     return render_template('admin/bookings.html', bookings=bookings, counts=counts,
                            status_filter=status_filter, series=group,
-                           show_every_visit=show_every_visit)
+                           show_every_visit=show_every_visit, q=q)
 
 
 @bookings_bp.route('/price-preview')
 @login_required
 def price_preview():
     """Live running total for the New Booking form — mirrors new()'s save math exactly."""
-    from pricing import calculate_price, get_lead_fee
+    from pricing import calculate_price
     service = request.args.get('service_type', 'standard')
     beds = request.args.get('bedrooms', '1')
     baths = request.args.get('bathrooms', '1')
@@ -86,8 +93,16 @@ def price_preview():
 @login_required
 def new():
     """Create a booking by hand — for customers who book by phone/text/in person."""
-    from pricing import calculate_price, calculate_job, SERVICE_LABELS, EXTRAS, get_lead_fee
+    from pricing import calculate_job, SERVICE_LABELS, EXTRAS, get_lead_fee
     if request.method == 'POST':
+        # The plan's monthly job ceiling. Checked before anything is built, so a
+        # refused job leaves no half-written client or booking behind — and it is
+        # checked here rather than at the model, because the owner needs to be
+        # told which plan lifts it, not handed a failure.
+        ok, why = entitlements.check_limit('jobs_per_month')
+        if not ok:
+            flash(why, 'error')
+            return redirect(url_for('bookings.new'))
         name = request.form.get('name', '').strip()
         if not name:
             flash('Customer name is required.', 'error')
@@ -260,6 +275,39 @@ def calendar():
     for d in bookings_by_day:
         bookings_by_day[d].sort(key=lambda b: b.preferred_time or '')
 
+    # Walkthroughs, and only walkthroughs. A walkthrough is somewhere she has
+    # to physically be at a given hour, so it competes with a clean for the
+    # same morning and has to be on the same grid or she will double-book
+    # herself and find out on the day.
+    #
+    # A callback is not that. "Ring Harbour Point sometime today" has no time,
+    # takes four minutes, and on a month grid beside real jobs it is noise --
+    # it lives on the commercial to-do instead. Both were drawn here at first;
+    # that was one screen doing two jobs.
+    #
+    # Lead work is a paid feature, so a company without it sees exactly the
+    # calendar it saw before.
+    walkthroughs_by_day = {}
+    try:
+        import entitlements
+        if entitlements.can('lead_finder'):
+            from models import Prospect
+            for pr in Prospect.query.filter(
+                    Prospect.next_action_date.like(f"{month_str}%")).all():
+                if not (pr.next_action or '').strip().lower().startswith('walkthrough'):
+                    continue
+                try:
+                    day = int(pr.next_action_date.split('-')[2])
+                except (IndexError, ValueError, AttributeError):
+                    continue
+                walkthroughs_by_day.setdefault(day, []).append(pr)
+            for day in walkthroughs_by_day:
+                walkthroughs_by_day[day].sort(
+                    key=lambda r: (r.business_name or '').lower())
+    except Exception:
+        # A calendar that cannot draw a walkthrough still has to draw the cleans.
+        walkthroughs_by_day = {}
+
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
     next_month = month + 1 if month < 12 else 1
@@ -273,6 +321,7 @@ def calendar():
         year=year, month=month,
         month_name=cal_module.month_name[month],
         bookings_by_day=bookings_by_day,
+        walkthroughs_by_day=walkthroughs_by_day,
         today=today,
         prev_year=prev_year, prev_month=prev_month,
         next_year=next_year, next_month=next_month,
@@ -657,20 +706,57 @@ def email_customer(booking_id):
         if not subject or not message:
             flash('Please fill in both a subject and a message.', 'warning')
             return redirect(url_for('bookings.email_customer', booking_id=booking_id))
-        # Keep the booking's email in sync if it was corrected or added here.
-        if to_email != (booking.email or ''):
-            booking.email = to_email
-            db.session.commit()
+        # This used to copy `to_email` onto the booking whenever the two
+        # differed, on the theory that a changed address here was a correction.
+        # It is just as often a second person -- the homeowner behind the
+        # builder who booked -- and writing it to the booking moved the payer,
+        # taking every later invoice and payment link with it. Correcting the
+        # customer's address is its own control on this page; this form sends
+        # mail and nothing else. A second recipient belongs in cc.
+        cc = (request.form.get('cc_email') or '').strip() or (booking.cc_email or '')
+        if cc and not looks_like_email(cc):
+            flash(f'“{cc}” doesn\'t look like a complete email address — '
+                  f'check for a missing .com.', 'warning')
+            return redirect(url_for('bookings.email_customer', booking_id=booking_id))
         from notifications import send_email, _wrap_html
         html = _wrap_html(message, branding.biz_name())
         ok, detail = send_email(to_email=to_email, to_name=(booking.name or 'there'),
-                                subject=subject, html=html)
+                                subject=subject, html=html, cc=cc)
         if ok:
-            flash(f'Email sent to {booking.email} ✅', 'success')
+            flash(f'Email sent to {to_email}'
+                  + (f', copied to {cc}' if cc else '') + ' ✅', 'success')
             return redirect(url_for('bookings.detail', booking_id=booking_id))
         flash(f'Could not send the email — {detail}', 'warning')
         return redirect(url_for('bookings.email_customer', booking_id=booking_id))
     return render_template('admin/email_customer.html', booking=booking)
+
+
+@bookings_bp.route('/<int:booking_id>/cc', methods=['POST'])
+@login_required
+def set_cc(booking_id):
+    """Set or clear the second person kept in the loop on this booking.
+
+    Deliberately not the same control as correcting the customer's address.
+    The customer is who the job belongs to and who the invoice goes to; this is
+    somebody who only ever receives a copy. Keeping them apart is the whole
+    point -- they were one field, and the result was that copying the homeowner
+    in moved the booking onto them."""
+    booking = Booking.query.get_or_404(booking_id)
+    cc = (request.form.get('cc_email') or '').strip()
+    if cc and not looks_like_email(cc):
+        flash(f'“{cc}” doesn\'t look like a complete email address — '
+              f'check for a missing .com.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if cc and cc.lower() == (booking.email or '').strip().lower():
+        flash('That is already the customer\'s own address, so there is '
+              'nobody extra to copy.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    booking.cc_email = cc or None
+    booking.cc_name = (request.form.get('cc_name') or '').strip() or None
+    db.session.commit()
+    flash(f'{booking.cc_name or cc} will be copied on updates for this job.'
+          if cc else 'Nobody is copied on this job any more.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
 @bookings_bp.route('/<int:booking_id>/correct-price', methods=['GET', 'POST'])
@@ -795,7 +881,6 @@ def notify_pay(booking_id):
     """Text the cleaner their current (corrected) pay for this job. On a crew job
     every member gets their own share, not the job total."""
     import secrets as _secrets
-    from models import BusinessSetting
     from notifications import send_sms
     from translate import translate
     b = Booking.query.get_or_404(booking_id)
@@ -851,7 +936,11 @@ def broadcast(booking_id):
             flash(f'📣 Offered to {n} cleaner(s) — the first {left} to claim get the {left} open spot(s).', 'success')
     else:
         flash(f'📣 Offered to {n} cleaner(s) — first to claim it gets it.', 'success')
-    return redirect(url_for('bookings.detail', booking_id=booking_id))
+    # Offered from the list, not just the detail page (see bookings.html's row
+    # actions) -- land back where the click happened rather than forcing a
+    # detour through the job it was about.
+    return redirect(request.form.get('next') or request.referrer
+                    or url_for('bookings.detail', booking_id=booking_id))
 
 
 def _apply_hours(booking, form):
@@ -1064,8 +1153,6 @@ def reschedule(booking_id):
 @login_required
 def notify_moved(booking_id):
     """Text whoever is on this job that its date changed."""
-    import secrets as _secrets
-    from models import BusinessSetting
     from notifications import send_sms
     from translate import translate
     b = Booking.query.get_or_404(booking_id)
@@ -1168,6 +1255,39 @@ def send_crew(booking_id):
         flash('Nobody is on this job yet — add a cleaner first.', 'warning')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
     return _send_job_to(b, [c.staff for c in rows])
+
+
+@bookings_bp.route('/<int:booking_id>/crew/<int:crew_id>/use-clocked', methods=['POST'])
+@login_required
+def use_clocked_pay(booking_id, crew_id):
+    """Set one cleaner's pay on this job to what their clock says it is worth.
+
+    A deliberate press, not something that happens on clock-out. The owner
+    decides what somebody is paid; the clock only offers a figure. Money that
+    changes itself between one look at a page and the next is how an owner
+    stops trusting the numbers.
+
+    Refused once the money has gone out — a payment already made is a record,
+    not a draft.
+    """
+    b = Booking.query.get_or_404(booking_id)
+    row = BookingCrew.query.filter_by(id=crew_id, booking_id=b.id).first_or_404()
+
+    if row.paid_at:
+        flash('That cleaner has already been paid for this job.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    due = row.staff.hourly_pay_for(b) if row.staff else None
+    if due is None:
+        flash('No clocked hours to work from yet.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    row.pay_amount = due
+    db.session.commit()
+    hours = row.staff.hours_on(b)
+    flash(f'{row.staff.name} set to ${due:.2f} — {hours:.2f} hours at '
+          f'${row.staff.pay_rate:.2f}/hr.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=b.id))
 
 
 @bookings_bp.route('/<int:booking_id>/crew/remove/<int:crew_id>', methods=['POST'])
@@ -1356,6 +1476,7 @@ def _tell_customer_held(booking):
         try:
             ok, _ = send_email(
                 to_email=booking.email, to_name=booking.name,
+                cc=booking.cc_email,
                 subject=f'Your cleaning is on hold — {biz}',
                 html=f"""
 <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;color:#1f1333">
@@ -1400,7 +1521,11 @@ def hold(booking_id):
     date. Every automation in the CRM selects on an explicit list of statuses,
     and none of them contain this one."""
     b = Booking.query.get_or_404(booking_id)
-    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    # Held from the list, not just the detail page (see bookings.html's row
+    # actions) -- every early return below shares this, so the list-hold
+    # button lands back on the list whichever branch it hits.
+    back = redirect(request.form.get('next') or request.referrer
+                    or url_for('bookings.detail', booking_id=booking_id))
     if b.status in ('completed', 'cancelled'):
         flash(f'That job is {b.status_label.lower()} — there is nothing to put on hold.',
               'warning')
@@ -1588,7 +1713,6 @@ def send_invoice(booking_id):
     import invoicing
     from blueprints.payments import payment_link_url, amount_due
     from notifications import send_email
-    from models import BusinessSetting
     # An invoice already issued keeps its dates unless she asks for new ones —
     # a document the customer already has shouldn't change under them silently.
     if request.form.get('reissue_dates'):
@@ -1666,6 +1790,15 @@ def update_service(booking_id):
     except ValueError:
         sqft = booking.sqft
 
+    # A blank date box means "I wasn't changing the date", never "clear it".
+    # preferred_date is a string column, so a date this form can't render —
+    # "next Tuesday", or any non-ISO value — comes back as an empty <input
+    # type="date">, and saving a bedroom count then wiped the confirmed day and
+    # time off a job that was already on the calendar. Clearing a date is what
+    # Put On Hold is for; it tells the customer and the cleaner.
+    new_date = (request.form.get('preferred_date') or '').strip() or booking.preferred_date
+    new_time = (request.form.get('preferred_time') or '').strip() or booking.preferred_time
+
     changes = []
     for label, old, new in (
         ('Service', SERVICE_LABELS.get(booking.service_type, booking.service_type),
@@ -1676,8 +1809,8 @@ def update_service(booking_id):
         ('Frequency', FREQUENCY_LABELS.get(booking.frequency, booking.frequency),
          FREQUENCY_LABELS[frequency]),
         ('Sq ft', booking.sqft, sqft),
-        ('Date', booking.preferred_date, (request.form.get('preferred_date') or '').strip()),
-        ('Time', booking.preferred_time, (request.form.get('preferred_time') or '').strip()),
+        ('Date', booking.preferred_date, new_date),
+        ('Time', booking.preferred_time, new_time),
     ):
         if (old or '') != (new or ''):
             changes.append(f'{label} "{old or "blank"}" → "{new or "blank"}"')
@@ -1688,8 +1821,8 @@ def update_service(booking_id):
     booking.extras = extras
     booking.frequency = frequency
     booking.sqft = sqft
-    booking.preferred_date = (request.form.get('preferred_date') or '').strip()
-    booking.preferred_time = (request.form.get('preferred_time') or '').strip()
+    booking.preferred_date = new_date
+    booking.preferred_time = new_time
 
     # What this configuration is worth now, keeping the lead fee, which is an ad
     # cost rather than anything the house size decides.
@@ -1993,9 +2126,23 @@ def _save_proposal(booking):
         raw = (request.form.get('plan_price') or '').strip().replace('$', '').replace(',', '')
         if raw:
             try:
-                booking.price = round(float(raw), 2)
+                asking = round(float(raw), 2)
             except ValueError:
                 flash('That price is not a number — leaving it as it was.', 'warning')
+            else:
+                # Composing an offer must not re-price work the customer has
+                # already paid against. Their deposit stays put while the total
+                # moves, so what they owe changes without anybody telling them —
+                # the same money-moving-in-silence that update_service() refuses
+                # to do. correct_price() exists to change a seen price and say so.
+                taken = booking.deposit_paid or booking.paid_at
+                if taken and asking != round(booking.price or 0, 2):
+                    flash(f"{booking.name or 'This customer'} has already paid against "
+                          f"${booking.price or 0:.2f}, so the price is left alone. "
+                          f"Use “Correct price & notify customer” to move it to "
+                          f"${asking:.2f} — that tells them.", 'warning')
+                else:
+                    booking.price = asking
     db.session.commit()
 
 
@@ -2167,7 +2314,7 @@ def start_plan(booking_id):
 
     start = (request.form.get('start_date') or '').strip()
     if not start:
-        flash('Pick the date of the first ongoing cleaning.', 'error')
+        flash('Pick the date of the first recurring cleaning.', 'error')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     price_raw = (request.form.get('plan_price') or '').strip().replace('$', '').replace(',', '')
@@ -2197,7 +2344,7 @@ def start_plan(booking_id):
     _link_client(seed)
 
     made = recurring.generate_series(seed)
-    flash(f'📅 Ongoing {frequency} cleanings set up for {seed.name} — '
+    flash(f'📅 Recurring {frequency} cleanings set up for {seed.name} — '
           f'{made + 1} visits on the calendar, starting {start}.', 'success')
     return redirect(url_for('bookings.detail', booking_id=seed.id))
 
@@ -2210,6 +2357,62 @@ def stop_recurring(booking_id):
         removed = recurring.stop_series(booking.recurring_group)
         flash(f'Recurring plan stopped — removed {removed} upcoming visit{"s" if removed != 1 else ""}.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/reassign-series', methods=['POST'])
+@login_required
+def reassign_series(booking_id):
+    """Swap the cleaner on this visit and every future one in the same
+    recurring plan — for someone off it for good, not just out for one visit.
+
+    A single visit already gets reassigned from its own Crew card; this
+    exists because a recurring plan can run a year of future visits, and
+    walking each one by hand is the kind of chore that quietly never
+    happens, leaving old visits pointed at somebody who's gone."""
+    from models import Staff
+    booking = Booking.query.get_or_404(booking_id)
+    staff_id = (request.form.get('staff_id') or '').strip()
+    new_staff = Staff.query.get(int(staff_id)) if staff_id.isdigit() else None
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    if not new_staff:
+        flash('Pick a cleaner to reassign to.', 'error')
+        return back
+    if not booking.recurring_group:
+        flash('This job is not part of a recurring plan.', 'error')
+        return back
+
+    today = date.today().isoformat()
+    visits = Booking.query.filter(
+        Booking.recurring_group == booking.recurring_group,
+        Booking.status.notin_(Booking.OFF_SCHEDULE),
+        Booking.preferred_date >= today,
+    ).all()
+    old_name = booking.assigned_cleaner
+    for v in visits:
+        v.assigned_cleaner = new_staff.name
+        # A fresh person on the job hasn't accepted or declined it yet.
+        v.cleaner_response = None
+        v.cleaner_notified_at = None
+    db.session.commit()
+
+    # Only the very next visit gets a fresh heads-up text. A dozen "you have
+    # a job on [date]" messages for visits months out would be noise nobody
+    # reads before it matters — the day-before reminder already covers those
+    # once their own date comes round.
+    next_visit = min(visits, key=lambda v: v.preferred_date or '') if visits else None
+    notified = False
+    if next_visit and new_staff.phone:
+        from notifications import send_sms
+        ok, _ = send_sms(new_staff.phone,
+            f"You're now on {next_visit.name}'s recurring clean, starting {next_visit.preferred_date}.")
+        notified = ok
+
+    msg = (f'🔁 Reassigned {len(visits)} upcoming visit{"s" if len(visits) != 1 else ""} '
+           f'from {old_name or "nobody"} to {new_staff.name}.')
+    if notified:
+        msg += f' Texted {new_staff.name.split()[0]} about the next one.'
+    flash(msg, 'success')
+    return back
 
 
 @bookings_bp.route('/<int:booking_id>/delete', methods=['POST'])
@@ -2229,14 +2432,63 @@ def delete(booking_id):
 @bookings_bp.route('/clients')
 @login_required
 def clients():
-    all_clients = Client.query.order_by(Client.created_at.desc()).all()
+    q = (request.args.get('q') or '').strip()
+    query = Client.query
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Client.name.ilike(like), Client.email.ilike(like), Client.phone.ilike(like)))
+    all_clients = query.order_by(Client.created_at.desc()).all()
     # Bookings that never got a customer record — offer to build them.
     unlinked = Booking.query.filter(
         Booking.client_id.is_(None),
         db.or_(db.and_(Booking.email.isnot(None), Booking.email != ''),
                db.and_(Booking.phone.isnot(None), Booking.phone != '')),
     ).count()
-    return render_template('admin/clients.html', clients=all_clients, unlinked=unlinked)
+    return render_template('admin/clients.html', clients=all_clients, unlinked=unlinked, q=q)
+
+
+@bookings_bp.route('/clients/new', methods=['GET', 'POST'])
+@login_required
+def new_client():
+    """Add a customer by hand.
+
+    There was no way to do this. A Client only ever appeared as a side effect
+    of something else — a booking coming in from the website, a lead being
+    converted, or the rebuild that walks old bookings. So the getting-started
+    list said "Add a customer", linked to a page with no button on it, and
+    stopped anybody who followed it in order.
+    """
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        if not name:
+            flash('A customer needs a name.', 'error')
+            return render_template('admin/client_new.html',
+                                   form=request.form.to_dict())
+
+        typed_email = (request.form.get('email') or '').strip()
+        if typed_email and not looks_like_email(typed_email):
+            flash(f'“{typed_email}” doesn\'t look like a complete email '
+                  f'address — check for a missing .com.', 'error')
+            return render_template('admin/client_new.html',
+                                   form=request.form.to_dict())
+
+        c = Client(
+            name=name,
+            email=(request.form.get('email') or '').strip().lower(),
+            phone=(request.form.get('phone') or '').strip(),
+            address=(request.form.get('address') or '').strip(),
+            city=(request.form.get('city') or '').strip(),
+            zip_code=(request.form.get('zip_code') or '').strip(),
+            notes=(request.form.get('notes') or '').strip(),
+        )
+        db.session.add(c)
+        db.session.commit()
+        flash(f'{c.name} added. Book them a job whenever you are ready.',
+              'success')
+        return redirect(url_for('bookings.client_detail', client_id=c.id))
+
+    return render_template('admin/client_new.html', form={})
 
 
 @bookings_bp.route('/clients/<int:client_id>')
@@ -2588,7 +2840,7 @@ def _send_booking_confirmation(booking):
 
     if booking.email:
         send_email(to_email=booking.email, to_name=booking.name,
-                   subject=subject, html=html)
+                   subject=subject, html=html, cc=booking.cc_email)
 
     if booking.phone:
         try:

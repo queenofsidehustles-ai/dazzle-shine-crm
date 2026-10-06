@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from entitlements import requires_plan
 from auth import login_required
 from models import SOP
 from extensions import db
@@ -9,6 +10,7 @@ sops_bp = Blueprint('sops', __name__, url_prefix='/sops')
 
 @sops_bp.route('/')
 @login_required
+@requires_plan('sops')
 def index():
     category = request.args.get('cat', 'cleaning')
     sops = SOP.query.filter_by(category=category).order_by(SOP.sort_order, SOP.id).all()
@@ -25,7 +27,6 @@ CLEANER_CATEGORIES = ['cleaning', 'commercial', 'quality']
 @sops_bp.route('/library')
 def library():
     """Public SOP library cleaners can reference anytime (job-relevant categories only)."""
-    from models import BusinessSetting
     biz = branding.biz_name()
     label_map = dict(SOP.CATEGORIES)
     groups = []

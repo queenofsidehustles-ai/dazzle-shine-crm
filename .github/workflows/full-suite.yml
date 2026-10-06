@@ -1,0 +1,63 @@
+name: Full regression suite
+
+# Every tests/test_*.py, not only the curated launch gates. Before this, about a
+# quarter of the suites ran in CI; the rest could break unnoticed (nine of them
+# had quietly been testing an error page for weeks). Runs on every change bound
+# for akye-stable, alongside the stable certification.
+
+on:
+  pull_request:
+    branches:
+      - akye-stable
+  push:
+    branches:
+      - akye-stable
+  workflow_dispatch:
+
+concurrency:
+  group: full-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-suite:
+    name: Every test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: akye_full_suite
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d akye_full_suite"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/akye_full_suite
+      PGURL: postgresql+psycopg2://postgres:postgres@localhost:5432/akye_full_suite
+      # Keep the service's own log quiet for test sessions. The app's additive
+      # "ADD COLUMN if missing" checks make Postgres log an ERROR per column per
+      # boot, and GitHub prints that whole log after the run -- tens of
+      # thousands of lines burying which suite failed. Superuser sessions may
+      # set these; they change what is logged, not what is run.
+      PGOPTIONS: "-c log_min_messages=fatal -c log_min_error_statement=panic"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          # Full history and every branch: test_release.py runs release.py,
+          # which reads origin/stable and origin/main the way it does on a
+          # contributor's machine. A one-commit checkout has neither.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run every suite
+        run: python tests/run_all.py

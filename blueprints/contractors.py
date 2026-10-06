@@ -1,11 +1,12 @@
 import json
-import os
 import secrets
+import contextvars
 import threading
 from datetime import datetime, date, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for, flash, jsonify,
-                   current_app, abort)
-from auth import login_required, owner_required
+                   current_app, abort, session)
+from entitlements import requires_plan
+from auth import login_required, owner_required, is_owner_session
 from models import (Staff, ContractorApplication, Booking, BookingCrew, BusinessSetting,
                     ContractorPayment, ContractorDocument)
 from extensions import db
@@ -190,7 +191,6 @@ def sms_test():
 @login_required
 def email_test():
     """Diagnostic: send a real test email and show exactly what Resend says."""
-    import os as _os
     to = request.args.get('to') or BusinessSetting.get('email') or \
         branding.owner_email()
     from_email = branding.from_email()
@@ -279,6 +279,7 @@ def _reconcile_hired():
 
 @contractors_bp.route('/applications')
 @login_required
+@requires_plan('hiring')
 def applications():
     _reconcile_hired()
     status_filter = request.args.get('status', '')
@@ -395,7 +396,6 @@ def add_applicant():
 @login_required
 def send_application_link(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     apply_url = url_for('contractors.apply', _external=True)
     send_email(
@@ -430,11 +430,10 @@ def send_application_link(app_id):
 @login_required
 def send_interview_invite(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     cal_link = BusinessSetting.get('interview_calendar_link', '')
     if not cal_link:
-        flash('Add your calendar link in Settings → Business first.', 'warning')
+        flash('Add your calendar link under Hiring → Hiring settings first.', 'warning')
         return redirect(url_for('contractors.application_detail', app_id=app_id))
     send_email(
         to_email=a.email, to_name=a.name,
@@ -471,7 +470,6 @@ def send_interview_invite(app_id):
 @login_required
 def send_spanish_interview(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     owner_email = branding.owner_email()
     send_email(
@@ -513,13 +511,12 @@ def send_spanish_interview(app_id):
 @login_required
 def send_bgcheck_request(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     owner_email = branding.owner_email()
     provider_url = BusinessSetting.get('bgcheck_provider_url', '')
     provider_name = BusinessSetting.get('bgcheck_provider_name', 'the provider below')
     if not provider_url:
-        flash('Add a background check provider URL in Settings → Business first.', 'warning')
+        flash('Add a background check provider URL under Hiring → Hiring settings first.', 'warning')
         return redirect(url_for('contractors.application_detail', app_id=app_id))
     send_email(
         to_email=a.email, to_name=a.name,
@@ -564,7 +561,6 @@ def send_bgcheck_request(app_id):
 @login_required
 def send_rejection(app_id):
     a = ContractorApplication.query.get_or_404(app_id)
-    import os
     biz = branding.biz_name()
     send_email(
         to_email=a.email, to_name=a.name,
@@ -668,7 +664,6 @@ def hire(app_id):
     db.session.commit()
 
     if s.email:
-        import os
         biz = branding.biz_name()
         owner_email = branding.owner_email()
         hub_url = url_for('contractors.onboarding_hub', token=token, _external=True, _scheme='https')
@@ -1070,6 +1065,121 @@ def onboarding_start_date(token):
     return redirect(url_for('contractors.onboarding_hub', token=token))
 
 
+def _open_entry(booking_id, staff_id):
+    """This cleaner's running spell on this job, if they are clocked in."""
+    from models import TimeEntry
+    return (TimeEntry.query
+            .filter_by(booking_id=booking_id, staff_id=staff_id,
+                       clock_out_at=None)
+            .order_by(TimeEntry.id.desc()).first())
+
+
+def _staff_is_on_booking(s, b):
+    """Same test my_day() uses to decide which jobs even show a clock button.
+
+    my_day()'s job list already filters to this — solo assignment by name, or
+    a BookingCrew row. clock_in/clock_out took booking_id from the POST body
+    and never repeated it: the button only appears for a worker's own jobs,
+    but nothing stopped a request crafted by hand from naming any booking_id
+    in the tenant and clocking (paid) hours against a job that worker was
+    never on.
+    """
+    if (b.assigned_cleaner or '').strip().lower() == (s.name or '').strip().lower():
+        return True
+    return b.crew_row_for(s) is not None
+
+
+@contractors_bp.route('/my-day/<token>/clock-in/<int:booking_id>', methods=['POST'])
+def clock_in(token, booking_id):
+    """Start the clock for the cleaner holding this link.
+
+    The token says who they are, which is why this lives on My Day rather than
+    on the checklist: a checklist belongs to the job and cannot tell one member
+    of a crew from another.
+    """
+    from models import TimeEntry
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    b = Booking.query.get_or_404(booking_id)
+    if not _staff_is_on_booking(s, b):
+        abort(403, description='You are not assigned to this job.')
+
+    # Already running? Do nothing rather than open a second spell. Somebody
+    # double-tapping on a phone with a poor signal must not end up being paid
+    # twice for the same hour.
+    if not _open_entry(b.id, s.id):
+        db.session.add(TimeEntry(booking_id=b.id, staff_id=s.id,
+                                 clock_in_at=datetime.utcnow()))
+        db.session.commit()
+    return redirect(url_for('contractors.my_day', token=token))
+
+
+@contractors_bp.route('/my-day/<token>/clock-out/<int:booking_id>', methods=['POST'])
+def clock_out(token, booking_id):
+    """Stop the clock. Closes only the spell that is actually open."""
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    b = Booking.query.get_or_404(booking_id)
+    if not _staff_is_on_booking(s, b):
+        abort(403, description='You are not assigned to this job.')
+    entry = _open_entry(b.id, s.id)
+    if entry:
+        entry.clock_out_at = datetime.utcnow()
+        db.session.commit()
+    return redirect(url_for('contractors.my_day', token=token))
+
+
+@contractors_bp.route('/join/<token>', methods=['GET', 'POST'])
+def join_team(token):
+    """Where a Staff record with no linked login sets one up -- created by
+    the Migration Toolbox's bulk import, or by resend_join_invite for a Staff
+    record made some other way. Public, token-gated, same family as
+    /my-day/<token> and /sign-agreement/<token>.
+
+    role defaults to 'cleaner' (assigned_work.use only, per rbac.py) --
+    the narrowest real role, not an assumption this person should see
+    anything beyond their own jobs. An owner can grant more from Team Logins
+    afterward if this person's role in the business is broader than that.
+    """
+    from auth import bind_authenticated_session
+    from models import User
+    s = Staff.query.filter_by(agreement_token=token).first_or_404()
+    if s.user_id:
+        flash('This account is already set up — sign in instead.', 'error')
+        return redirect(url_for('admin.login'))
+
+    error = None
+    if request.method == 'POST':
+        username = (request.form.get('username') or s.email or '').strip().lower()
+        password = request.form.get('password') or ''
+        confirm = request.form.get('confirm') or ''
+        phone = (request.form.get('phone') or '').strip()
+        if not username:
+            error = 'Please enter an email to sign in with.'
+        elif len(password) < 8:
+            error = 'Please use at least 8 characters.'
+        elif password != confirm:
+            error = 'The two passwords do not match.'
+        elif User.query.filter_by(username=username).first():
+            error = f'"{username}" is already in use — try signing in instead.'
+        else:
+            u = User(name=s.name, username=username, role='cleaner', active=True)
+            u.set_password(password)
+            db.session.add(u)
+            db.session.flush()
+            s.user_id = u.id
+            if phone:
+                s.phone = phone
+            db.session.commit()
+            bind_authenticated_session(u)
+            session.permanent = True
+            session['logged_in'] = True
+            session['role'] = u.role
+            session['user_id'] = u.id
+            session['user_name'] = u.name
+            flash(f'Welcome, {u.name.split()[0]}!', 'success')
+            return redirect(url_for('contractors.my_day', token=s.agreement_token))
+    return render_template('public/join_team.html', s=s, error=error)
+
+
 @contractors_bp.route('/my-day/<token>')
 def my_day(token):
     """A cleaner's personal daily job board — today + next 7 days, with navigate,
@@ -1090,9 +1200,41 @@ def my_day(token):
     days = {}
     for b in jobs:
         days.setdefault(b.preferred_date, []).append(b)
+    # The keys stay ISO because the template compares them against today, but
+    # nobody reads "2026-08-30" off a phone screen at seven in the morning.
+    labels = {}
+    for iso in days:
+        try:
+            d = date.fromisoformat(iso)
+        except (TypeError, ValueError):
+            labels[iso] = iso or 'Date to be confirmed'
+            continue
+        delta = (d - today).days
+        if delta == 0:
+            labels[iso] = 'Today'
+        elif delta == 1:
+            labels[iso] = 'Tomorrow'
+        else:
+            labels[iso] = d.strftime('%A %-d %B')
+    # Per job: is this cleaner's clock running, and what have they logged so
+    # far. Worked out here rather than in the template so the page stays a
+    # page and does not start querying.
+    clocked = {}
+    for b in jobs:
+        clocked[b.id] = {
+            'open': _open_entry(b.id, s.id) is not None,
+            'hours': s.hours_on(b),
+        }
+
+    # Whose language this page is in: the cleaner holding the link. A toggle
+    # on the page still overrides it for this browser.
+    import i18n
+    i18n.set_person(s)
+
     biz = branding.biz_name()
     return render_template('public/my_day.html', s=s, days=days,
-                           today=today.isoformat(), biz=biz)
+                           day_labels=labels, today=today.isoformat(),
+                           clocked=clocked, biz=biz)
 
 
 @contractors_bp.route('/sample-day')
@@ -1188,6 +1330,34 @@ def training_guide():
     return render_template('admin/training_guide_edit.html', guide=guide)
 
 
+@contractors_bp.route('/hiring-settings', methods=['GET', 'POST'])
+@owner_required
+@requires_plan('hiring')
+def hiring_settings():
+    """The interview link and background-check provider that power the
+    one-click email buttons on each application.
+
+    Used to live as a card on Business Settings, one page away from the
+    applications it actually configures. Its own tab, next to the two
+    hiring pages that read these settings, so setting them up and using
+    them are in the same place."""
+    fields = ['interview_calendar_link', 'bgcheck_provider_name', 'bgcheck_provider_url',
+              'test_clean_calendar_link', 'test_clean_pay', 'test_clean_length']
+    # A checkbox that is off submits nothing, so it cannot ride along with the
+    # text fields — an unticked box would read as "unchanged" and never turn off.
+    flags = ['require_test_clean', 'provide_uniforms']
+    if request.method == 'POST':
+        for f in fields:
+            BusinessSetting.set(f, (request.form.get(f) or '').strip())
+        for f in flags:
+            BusinessSetting.set(f, '1' if request.form.get(f) else '')
+        db.session.commit()
+        flash('Hiring settings saved!', 'success')
+        return redirect(url_for('contractors.hiring_settings'))
+    current = {f: BusinessSetting.get(f) or '' for f in fields + flags}
+    return render_template('admin/hiring_settings.html', current=current)
+
+
 # ── Paying contractors ─────────────────────────────────────────────────────────
 
 @contractors_bp.route('/team/<int:staff_id>/refresh-stripe', methods=['POST'])
@@ -1200,7 +1370,7 @@ def refresh_stripe(staff_id):
 
 
 @contractors_bp.route('/team/<int:staff_id>/pay', methods=['POST'])
-@login_required
+@owner_required
 def pay_contractor(staff_id):
     s = Staff.query.get_or_404(staff_id)
     try:
@@ -1249,7 +1419,7 @@ def _told(s, amount, method, when=None):
 
 
 @contractors_bp.route('/team/<int:staff_id>/pay-manual', methods=['POST'])
-@login_required
+@owner_required
 def pay_manual(staff_id):
     """Record a payment made outside Stripe (Venmo/Zelle/cash/check)."""
     s = Staff.query.get_or_404(staff_id)
@@ -1302,8 +1472,14 @@ def delete_staff(staff_id):
 @contractors_bp.route('/team')
 @login_required
 def team():
-    staff = Staff.query.order_by(Staff.is_active.desc(), Staff.name).all()
-    return render_template('admin/team.html', staff=staff, exp_levels=EXP_LEVELS)
+    q = (request.args.get('q') or '').strip()
+    query = Staff.query
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Staff.name.ilike(like), Staff.email.ilike(like), Staff.phone.ilike(like)))
+    staff = query.order_by(Staff.is_active.desc(), Staff.name).all()
+    return render_template('admin/team.html', staff=staff, exp_levels=EXP_LEVELS, q=q)
 
 
 @contractors_bp.route('/team/<int:staff_id>/language', methods=['POST'])
@@ -1337,6 +1513,11 @@ def staff_detail(staff_id):
         # "Update Pay" form never wipes checkboxes it doesn't contain.
         section = request.form.get('section', 'profile')
         if section == 'pay':
+            # Compensation is owner-only everywhere else in this app (payroll,
+            # the team-page payout buttons); this form had no matching check,
+            # so any logged-in role could set what a worker earns.
+            if not is_owner_session():
+                abort(403, description='Your account is not permitted to perform this action.')
             s.experience_level = request.form.get('experience_level', s.experience_level)
             s.pay_type = request.form.get('pay_type', s.pay_type)
             if (request.form.get('pay_rate') or '') != '':
@@ -1390,8 +1571,69 @@ def staff_toggle_active(staff_id):
 
 # ── Payroll ────────────────────────────────────────────────────────────────────
 
+@contractors_bp.route('/timesheet')
+@owner_required
+@requires_plan('payroll')
+def timesheet():
+    """Hours worked per cleaner for a week, from the clock.
+
+    Deliberately hours and nothing else. No overtime, no break deduction, no
+    state rounding rules — those are regulated, they differ by state, and the
+    terms of service say plainly that this is not a payroll provider. What a
+    business needs from us is an accurate record of who worked when; their
+    payroll provider applies the rules to it.
+    """
+    from models import TimeEntry
+    today = date.today()
+    start_str = request.args.get(
+        'start', (today - timedelta(days=today.weekday())).isoformat())
+    try:
+        start = date.fromisoformat(start_str)
+    except ValueError:
+        start = today - timedelta(days=today.weekday())
+    end = start + timedelta(days=6)
+
+    entries = (TimeEntry.query
+               .filter(TimeEntry.clock_in_at >= datetime.combine(start, datetime.min.time()),
+                       TimeEntry.clock_in_at < datetime.combine(end + timedelta(days=1),
+                                                                datetime.min.time()))
+               .order_by(TimeEntry.clock_in_at).all())
+
+    # Group by cleaner, then by day, so the table reads the way a week does.
+    days = [start + timedelta(days=i) for i in range(7)]
+    rows = {}
+    for e in entries:
+        person = rows.setdefault(e.staff_id, {
+            'staff': e.staff,
+            'by_day': {d.isoformat(): 0.0 for d in days},
+            'total': 0.0,
+            'open': 0,
+            'entries': [],
+        })
+        key = e.clock_in_at.date().isoformat()
+        if e.is_open:
+            person['open'] += 1
+        if key in person['by_day']:
+            person['by_day'][key] += e.hours
+        person['total'] = round(person['total'] + e.hours, 2)
+        person['entries'].append(e)
+
+    ordered = sorted(rows.values(), key=lambda r: (r['staff'].name or '').lower())
+    grand = round(sum(r['total'] for r in ordered), 2)
+    day_totals = {d.isoformat(): round(sum(r['by_day'][d.isoformat()] for r in ordered), 2)
+                  for d in days}
+
+    return render_template('admin/timesheet.html',
+                           rows=ordered, days=days, start=start, end=end,
+                           grand=grand, day_totals=day_totals,
+                           prev_start=(start - timedelta(days=7)).isoformat(),
+                           next_start=(start + timedelta(days=7)).isoformat(),
+                           today_iso=today.isoformat())
+
+
 @contractors_bp.route('/payroll')
 @owner_required
+@requires_plan('payroll')
 def payroll():
     today = date.today()
     # Default: this week (Mon-Sun)
@@ -1676,7 +1918,7 @@ def fix_payment_date(payment_id):
 
 
 @contractors_bp.route('/payroll/statement/<int:staff_id>')
-@login_required
+@owner_required
 def pay_statement(staff_id):
     """Printable pay statement for one cleaner over a date range (Save as PDF)."""
     s = Staff.query.get_or_404(staff_id)
@@ -1734,6 +1976,64 @@ def _company_answers(form):
     }
 
 
+def _join_talent_pool(name, email, phone, form):
+    """Put an applicant into the shared pool, if they asked to be.
+
+    Asked here rather than later, and of the applicant rather than the owner.
+    Consent belongs to the person it is about, and the moment they will give it
+    is while they are looking for work — not thirty days after an interview
+    invite they never opened, in an email from a company that said no.
+
+    It also means nobody has to remember to do anything. No switch for an owner
+    to find, no campaign to run: one box on the form they are already filling in.
+
+    Visible straight away, deliberately. Somebody who needs work this week is
+    not served by waiting until this company gets round to marking them closed.
+    Being on the list does not take them out of anybody's pipeline.
+    """
+    if 'share_with_other_companies' not in form:
+        return
+    try:
+        from blueprints.directory_claim import DirectoryTalent
+        import secrets as _secrets, branding as _b
+        if not email and not phone:
+            return
+        existing = DirectoryTalent.query.filter(
+            db.func.lower(DirectoryTalent.email) == (email or '').lower()).first()
+        if existing:
+            existing.share = True
+            existing.status = 'looking'
+            db.session.commit()
+            return
+        miles = (form.get('travel_miles') or '').strip()
+        # The application form asks for neither city nor state, so take the
+        # company's. Somebody applying to a cleaning company in Orlando works in
+        # Orlando — and without this they land in the pool with no location at
+        # all, which means the owner's own view filters them straight back out.
+        # Found by the end-to-end test; invisible to anything smaller.
+        from models import BusinessSetting as _BS
+        city = ((form.get('city') or '').strip()
+                or (_BS.get('city') or '').strip())[:100] or None
+        state = ((form.get('state') or '').strip()
+                 or (_BS.get('state') or '').strip()).upper()[:2] or None
+        db.session.add(DirectoryTalent(
+            name=name, email=email or None, phone=phone or None,
+            city=city, state=state,
+            language='es' if (form.get('lang') or '').startswith('es') else 'en',
+            experience=(form.get('years_experience') or '')[:20],
+            travel='car' if 'has_transportation' in form else None,
+            travel_miles=int(miles) if miles.isdigit() else None,
+            days=', '.join(form.getlist('availability'))[:120] or None,
+            source=f'applied:{_b.biz_name()}'[:30],
+            share=True, status='looking',
+            opt_out_token=_secrets.token_urlsafe(32)))
+        db.session.commit()
+    except Exception:
+        # Never let the pool break somebody's application. They applied to this
+        # company; that is the thing that must survive.
+        db.session.rollback()
+
+
 @contractors_bp.route('/apply', methods=['GET', 'POST'])
 def apply():
     if request.method == 'POST':
@@ -1764,6 +2064,7 @@ def apply():
             _note = f"Re-applied {datetime.utcnow().strftime('%b %d, %Y')} — info updated, no duplicate created."
             existing.admin_notes = (existing.admin_notes + "\n" + _note) if existing.admin_notes else _note
             db.session.commit()
+            _join_talent_pool(existing.name, existing.email, existing.phone, request.form)
             return render_template('public/apply_done.html', name=existing.name)
 
         a = ContractorApplication(
@@ -1791,7 +2092,6 @@ def apply():
         db.session.commit()
 
         # ── Notify Monica of new application ──────────────────────────────────
-        import os
         notify = branding.owner_email()
         send_email(
             to_email=notify, to_name=branding.biz_name(),
@@ -1849,10 +2149,17 @@ def apply():
             a.interview_status = 'pending'
             db.session.commit()
             flask_app = current_app._get_current_object()
-            t = threading.Timer(600, _delayed_send_invite, args=[flask_app, a.id])
+            # Run inside a copy of this request's context. A new thread starts
+            # with none, so on Akye it would look for the application in no
+            # company at all -- the invite silently never went, and only the
+            # next day's applicant-followups sweep caught it. The copy carries
+            # the company along, so it goes in ten minutes as intended.
+            ctx = contextvars.copy_context()
+            t = threading.Timer(600, ctx.run, args=[_delayed_send_invite, flask_app, a.id])
             t.daemon = True
             t.start()
 
+        _join_talent_pool(a.name, a.email, a.phone, request.form)
         return render_template('public/apply_done.html', name=a.name)
     return render_template('public/apply.html')
 
@@ -1925,10 +2232,33 @@ def sign_agreement(token):
                            agreement_label=agreement_label)
 
 
+@contractors_bp.route('/team/<int:staff_id>/resend-join-invite', methods=['POST'])
+@login_required
+def resend_join_invite(staff_id):
+    """Resend the set-up-your-login link the Migration Toolbox sent when this
+    Staff record was created (or send it for the first time, for a Staff
+    record made some other way). Reuses migration.send_join_invite so there
+    is one copy of that email, not two that can drift apart."""
+    from blueprints.migration import send_join_invite
+    s = Staff.query.get_or_404(staff_id)
+    if s.user_id:
+        flash(f'{s.name} already has a sign-in set up.', 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+    if not s.email:
+        flash('No email on file for this team member.', 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+    ok, detail = send_join_invite(s)
+    db.session.commit()
+    if ok:
+        flash(f'Invite email sent to {s.email}.', 'success')
+    else:
+        flash(f'Could not send the invite: {detail}', 'error')
+    return redirect(url_for('contractors.staff_detail', staff_id=staff_id))
+
+
 @contractors_bp.route('/team/<int:staff_id>/resend-agreement', methods=['POST'])
 @login_required
 def resend_agreement(staff_id):
-    import os
     s = Staff.query.get_or_404(staff_id)
     if not s.email:
         flash('No email on file for this team member.', 'error')

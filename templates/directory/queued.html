@@ -1,0 +1,13 @@
+{% extends "directory/_base.html" %}
+{% block title %}We&rsquo;ll check this{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>We&rsquo;ll check this by hand.</h1>
+  <p>The public record for <strong>{{ claim.listing_name }}</strong> doesn&rsquo;t hold a
+    contact detail we can check your answer against &mdash; which is itself worth knowing,
+    because it means customers can&rsquo;t reach you there either.</p>
+  <p>A person will look at it, usually within a day, and email
+    <strong>{{ claim.email }}</strong> either way.</p>
+  <a class="btn ghost" href="https://getakye.com/">Back to the directory</a>
+</div>
+{% endblock %}

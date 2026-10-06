@@ -4,7 +4,7 @@ import os, sys, tempfile
 from datetime import date, timedelta
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/portal.db'
-os.environ['SECRET_KEY'] = 'test'
+os.environ['SECRET_KEY'] = 'test-secret-key-not-for-production-use'
 os.environ['CRM_BASE'] = 'https://crm.example.com'
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -38,11 +38,14 @@ with app.app_context():
     with c.session_transaction() as s:
         s['logged_in'] = True; s['role'] = 'owner'
 
-    # The 9th of a month safely ahead of today. A fixed date passed on 9 Sept
-    # 2026 and the preview — which rightly shows only upcoming visits — stopped
-    # mentioning it, failing a test about nothing that had changed.
+    # The next 9th after today. A fixed date passed on 9 Sept 2026 and the
+    # preview — which rightly shows only upcoming visits — stopped mentioning
+    # it, failing a test about nothing that had changed. Not two months out,
+    # either: the plan fills 52 weeks from TODAY, so a first visit two months
+    # away leaves only nine more before the horizon whenever today is before
+    # the 9th -- the test then failed on the 1st to the 8th of every month.
     _t = date.today()
-    _m = _t.month + 2
+    _m = _t.month + (1 if _t.day >= 9 else 0)
     FIRST = date(_t.year + (_m - 1) // 12, (_m - 1) % 12 + 1, 9)
     FIRST_WORDS = f'{FIRST:%A} {FIRST.day} {FIRST:%B}'
 

@@ -1,0 +1,517 @@
+{% extends "base_admin.html" %}
+{% block title %}Ask {{ name }} — {{ BIZ }}{% endblock %}
+
+{% block content %}
+<style>
+  .ask-wrap { max-width:680px; }
+  .ask-box { display:flex; gap:10px; align-items:stretch; margin:14px 0 6px; }
+  .ask-box input {
+    flex:1; min-width:0; padding:14px 16px; font-size:1.02rem; font-family:inherit;
+    border:1px solid var(--line); border-radius:var(--r); background:var(--surface);
+    color:var(--ink);
+  }
+  .ask-box input:focus { outline:none; border-color:var(--amber); box-shadow:var(--ring); }
+  .ask-box button { flex:0 0 auto; padding:0 22px; min-height:52px; }
+
+  /* Big, because it is pressed with a thumb by somebody whose other hand is
+     full. Hidden entirely when the browser cannot hear -- a dead microphone
+     button is worse than none. */
+  #mic {
+    flex:0 0 auto; width:56px; min-height:52px; padding:0;
+    border:1px solid var(--line); border-radius:var(--r);
+    background:var(--surface); cursor:pointer; font-size:1.3rem; line-height:1;
+  }
+  #mic[hidden] { display:none; }
+  #mic.listening {
+    background:var(--warn-soft); border-color:var(--warn); color:var(--warn);
+    animation:pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.55 } }
+  @media (prefers-reduced-motion: reduce) { #mic.listening { animation:none } }
+
+  .voice-row {
+    display:flex; align-items:center; gap:8px; margin-top:10px;
+    font-size:0.85rem; color:var(--muted);
+  }
+  .heard { color:var(--softer); font-size:0.85rem; margin-top:8px; min-height:1.2em; }
+
+  /* Answers stack newest-first: the one you just asked for is the one you want
+     to read, and scrolling to find it defeats the point of asking. */
+  .said {
+    background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--amber);
+    border-radius:var(--r); padding:14px 16px; margin-top:12px;
+    white-space:pre-wrap; line-height:1.6; font-size:0.97rem;
+  }
+  .said .q { color:var(--softer); font-size:0.82rem; display:block; margin-bottom:6px; }
+  .said form { margin-top:12px; }
+  .suggest { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .suggest button {
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--r-pill);
+    padding:7px 14px; font-size:0.85rem; font-family:inherit; color:var(--muted);
+    cursor:pointer;
+  }
+  .suggest button:hover { border-color:var(--amber); color:var(--ink); }
+</style>
+
+<div class="ask-wrap">
+
+  {% if not configured %}
+  <div class="card" style="border-left:3px solid var(--amber-deep);margin-bottom:16px">
+    <strong>{{ name }} is not switched on yet.</strong>
+    <p style="color:var(--muted);font-size:0.9rem;margin:6px 0 0;line-height:1.6">
+      Everything else in here works as normal. Ask your account manager to turn
+      it on and this page starts answering.
+    </p>
+  </div>
+  {% endif %}
+
+  <form class="ask-box" id="askform" onsubmit="return askIt(event)">
+    <input id="q" name="q" autocomplete="off" autofocus
+           placeholder="How much came in last month?" aria-label="Ask {{ name }}" />
+    <button type="button" id="mic" hidden aria-label="Ask out loud"
+            onclick="listen()">🎙️</button>
+    <button type="submit" class="btn">Ask</button>
+  </form>
+
+  <div class="heard" id="heard"></div>
+
+  <div class="voice-row" id="voicerow" hidden>
+    <label style="display:flex;align-items:center;gap:7px;cursor:pointer">
+      <input type="checkbox" id="speak" onchange="rememberSpeak()" />
+      Read answers out loud
+    </label>
+    {# Which voice actually spoke. The fallback is deliberately silent to the
+       owner mid-job, but silent to everybody meant nobody could tell the good
+       voice had stopped working -- including the person who built it. #}
+    <span id="voicenote" style="color:var(--softer);font-size:0.78rem"></span>
+    {# Stopping it matters more than starting it. An answer read out in the
+       wrong moment -- a customer walks in, somebody picks up the phone -- has
+       to be stoppable without closing the page. #}
+    <button type="button" id="hush" class="btn btn-outline btn-sm" hidden
+            onclick="hush()">Stop</button>
+    {# She remembers the last few turns now, so there has to be a way to make
+       her stop remembering. Every assistant needs one: without it a wrong
+       assumption follows you for the rest of the session. #}
+    <button type="button" class="btn btn-outline btn-sm" onclick="forget()">
+      Start over</button>
+    {# Which voice, when the device has more than one worth choosing between. #}
+    <select id="voicepick" class="voice-pick" hidden onchange="rememberVoice()"
+            aria-label="Voice"></select>
+  </div>
+
+  <div class="suggest">
+    {# The last three are the point of the rewrite. Every chip used to be a
+       lookup, so the page taught people she was a search box -- and they asked
+       her search-box questions and found her dull. #}
+    {% for s in ['What should I focus on this week?',
+                 'How do I get more customers this month?',
+                 'Where am I losing money?',
+                 'What is booked tomorrow?', 'How much came in last month?',
+                 'Any new enquiries?', 'What is owed?'] %}
+    <button type="button" onclick="fill(this.innerText)">{{ s }}</button>
+    {% endfor %}
+  </div>
+
+  {# Used to lead the page -- three paragraphs of explanation before the box
+     you actually came to use. The box is the point; this is context for
+     somebody who scrolls down for it, not the price of admission to ask a
+     question. #}
+  <p style="color:var(--muted);line-height:1.65;margin:22px 0 0">
+    Ask about your own business in your own words — what came in, what is booked,
+    who is waiting on a reply, what to do first this week. <strong>{{ name }}
+    reads your books and answers out of them.</strong> Every figure is worked out
+    by the system and checked against your records before you see it, so she
+    cannot make a number up.
+  </p>
+  <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:8px 0 0">
+    She writes your emails. Nothing leaves without you: she can send one
+    outreach email to one commercial prospect, and only after you have read
+    every word and pressed send. Everything else she writes is yours to copy.
+    She never texts anybody and never charges a card.
+  </p>
+  <p style="color:var(--softer);font-size:0.85rem;line-height:1.6;margin:6px 0 0">
+    Tap the microphone and ask out loud — hands full, phone on the seat. Tick
+    <em>read answers out loud</em> and you never have to look at it.
+    <strong>Not while you are driving</strong>: pull over, or wait.
+  </p>
+
+  <div id="answers"></div>
+
+  <p style="color:var(--softer);font-size:0.8rem;margin-top:22px">
+    {{ left }} of {{ limit }} questions left this month.
+  </p>
+</div>
+
+<script>
+  // Speech recognition is the browser's, not ours: no service to sign up to,
+  // nothing to pay for, and the audio never reaches this server. Chrome and
+  // Safari have it; anything else gets the typing box it always had, which is
+  // why the button starts hidden and is only revealed when it will work.
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const canSpeak = 'speechSynthesis' in window;
+  const REAL_VOICE = {{ 'true' if real_voice else 'false' }};
+  let rec = null, listening = false;
+
+  if (Rec) { document.getElementById('mic').hidden = false; }
+  // The toggle is worth showing if either voice can do the job. A browser
+  // without speechSynthesis can still play an mp3 the server sends back.
+  if (canSpeak || REAL_VOICE) {
+    const row = document.getElementById('voicerow');
+    row.hidden = false;
+    try {
+      document.getElementById('speak').checked =
+        localStorage.getItem('nana-speak') === '1';
+    } catch (e) {}
+  }
+
+  function rememberSpeak() {
+    try {
+      localStorage.setItem('nana-speak',
+        document.getElementById('speak').checked ? '1' : '0');
+    } catch (e) {}
+  }
+
+  function listen() {
+    if (!Rec) return;
+    const mic = document.getElementById('mic');
+    const heard = document.getElementById('heard');
+    if (listening) { rec && rec.stop(); return; }
+
+    rec = new Rec();
+    rec.lang = document.documentElement.lang || 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+
+    rec.onstart = () => { listening = true; mic.classList.add('listening');
+                          heard.textContent = 'Listening…'; };
+    rec.onerror = (e) => {
+      heard.textContent = e.error === 'not-allowed'
+        ? 'Microphone is blocked for this site — allow it in your browser settings.'
+        : 'Did not catch that.';
+    };
+    rec.onend = () => { listening = false; mic.classList.remove('listening'); };
+
+    rec.onresult = (e) => {
+      let said = '';
+      for (const r of e.results) said += r[0].transcript;
+      document.getElementById('q').value = said;
+      heard.textContent = said;
+      // Only once it has stopped changing. Submitting on a partial result asks
+      // half a question.
+      if (e.results[e.results.length - 1].isFinal) {
+        heard.textContent = '';
+        document.getElementById('askform').requestSubmit();
+      }
+    };
+    rec.start();
+  }
+
+  // Every device ships several voices and picks the worst one by default -- the
+  // flat robot everybody recognises. The good ones are already installed, they
+  // just have to be asked for by name.
+  const NICE_VOICES = ['Samantha', 'Ava', 'Allison', 'Serena', 'Karen', 'Moira',
+                       'Google UK English Female', 'Google US English',
+                       'Microsoft Aria', 'Microsoft Jenny', 'Zira'];
+  let chosenVoice = null;
+
+  function englishVoices() {
+    const all = speechSynthesis.getVoices();
+    const english = all.filter(v => (v.lang || '').toLowerCase().startsWith('en'));
+    return english.length ? english : all;
+  }
+
+  function pickVoice() {
+    if (!canSpeak) return;
+    const pool = englishVoices();
+    if (!pool.length) return;                // not loaded yet; the event re-runs this
+
+    // A voice chosen here before wins over anything we would guess.
+    let saved = null;
+    try { saved = localStorage.getItem('nana-voice'); } catch (e) {}
+    if (saved) {
+      const mine = pool.find(v => v.name === saved);
+      if (mine) { chosenVoice = mine; fillVoicePicker(pool); return; }
+    }
+
+    for (const want of NICE_VOICES) {
+      const hit = pool.find(v => (v.name || '').indexOf(want) === 0);
+      if (hit) { chosenVoice = hit; fillVoicePicker(pool); return; }
+    }
+    // Nothing known by name: a downloaded voice still beats the built-in one.
+    chosenVoice = pool.find(v => v.localService === false) || pool[0] || null;
+    fillVoicePicker(pool);
+  }
+
+  // Only the ones worth choosing between. A device lists dozens of voices,
+  // most of them the same engine at different qualities, and offering all of
+  // them is a chore rather than a choice.
+  function goodOnes(pool) {
+    const named = [];
+    for (const want of NICE_VOICES) {
+      const hit = pool.find(v => (v.name || '').indexOf(want) === 0);
+      if (hit && named.indexOf(hit) < 0) named.push(hit);
+      if (named.length >= 4) break;
+    }
+    if (named.length >= 2) return named;
+    // Nothing recognised: the downloaded voices, which beat the built-in ones.
+    const network = pool.filter(v => v.localService === false).slice(0, 4);
+    return network.length >= 2 ? network : pool.slice(0, 4);
+  }
+
+  function fillVoicePicker(all) {
+    const sel = document.getElementById('voicepick');
+    const pool = goodOnes(all);
+    if (!sel || pool.length < 2) return;     // no choice is not a choice
+    if (sel.options.length === pool.length) { sel.hidden = false; return; }
+    sel.innerHTML = '';
+    for (const v of pool) {
+      const o = document.createElement('option');
+      o.value = v.name;
+      o.textContent = v.name;
+      if (chosenVoice && v.name === chosenVoice.name) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.hidden = false;
+  }
+
+  function rememberVoice() {
+    const sel = document.getElementById('voicepick');
+    const pool = englishVoices();
+    const picked = pool.find(v => v.name === sel.value);
+    if (!picked) return;
+    chosenVoice = picked;
+    try { localStorage.setItem('nana-voice', picked.name); } catch (e) {}
+    // Say the name in the voice, so choosing one is a decision you can hear.
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('This is how I sound.');
+      u.voice = picked; u.lang = picked.lang; u.rate = 0.97; u.pitch = 1.06;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  function forget() {
+    fetch('{{ url_for("assistant.forget") }}', { method: 'POST' })
+      .then(function () {
+        document.getElementById('answers').innerHTML = '';
+      }).catch(function () {});
+  }
+
+  function hush() {
+    // Both kinds of voice, because either one might be mid-sentence.
+    try { speechSynthesis.cancel(); } catch (e) {}
+    if (player) { try { player.pause(); } catch (e) {} }
+    const b = document.getElementById('hush');
+    if (b) b.hidden = true;
+  }
+
+  function showHush(on) {
+    const b = document.getElementById('hush');
+    if (b) b.hidden = !on;
+  }
+
+  if (canSpeak) {
+    pickVoice();
+    speechSynthesis.onvoiceschanged = pickVoice;   // Chrome fills the list late
+  }
+
+  // A question typed into the sidebar quick-ask bar arrives here as ?q=... .
+  // Auto-submitting it, rather than just pre-filling the box, is what makes
+  // that bar feel like one action instead of a redirect plus a second click.
+  {% if prefill_q %}
+  (function () {
+    document.getElementById('q').value = {{ prefill_q | tojson }};
+    document.getElementById('askform').requestSubmit();
+    // The question is now in the answer thread below; the URL keeping it in
+    // the address bar would re-ask it on every reload of this page.
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, '', '{{ url_for("assistant.page") }}');
+    }
+  })();
+  {% endif %}
+
+  // The browser voice. Kept as the floor, never the first choice.
+  function browserVoice(text) {
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (!chosenVoice) pickVoice();
+      if (chosenVoice) { u.voice = chosenVoice; u.lang = chosenVoice.lang; }
+      else { u.lang = document.documentElement.lang || 'en-US'; }
+      // Slightly under the default pace, and off the floor of the pitch range.
+      // Read aloud at 1.0/1.0 a money figure lands like a train announcement.
+      u.rate = 0.97;
+      u.pitch = 1.06;
+      u.onstart = function () { showHush(true); };
+      u.onend = function () { showHush(false); };
+      u.onerror = function () { showHush(false); };
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  let player = null;
+
+  function noteVoice(which) {
+    const el = document.getElementById('voicenote');
+    if (!el) return;
+    el.textContent = which === 'natural' ? '· natural voice'
+                                         : '· your device\u2019s voice';
+  }
+
+  function esc(t) {
+    const d = document.createElement('div');
+    d.textContent = t == null ? '' : String(t);
+    return d.innerHTML;
+  }
+
+  function sayOutLoud(text) {
+    if (!document.getElementById('speak').checked || !text) return;
+    if (!REAL_VOICE) { noteVoice('device'); if (canSpeak) browserVoice(text); return; }
+    // Ask for the good voice. A 204 means "you read it" -- no key, allowance
+    // spent, service down. None of those are the owner's problem to hear
+    // about, so nothing is said and the browser picks it up.
+    fetch('{{ url_for("assistant.voice") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    }).then(function (r) {
+      if (r.status !== 200) throw new Error('read it yourself');
+      noteVoice('natural');
+      return r.blob();
+    }).then(function (b) {
+      if (player) { player.pause(); URL.revokeObjectURL(player.src); }
+      player = new Audio(URL.createObjectURL(b));
+      player.onplay = function () { showHush(true); };
+      player.onended = function () { showHush(false); };
+      player.onpause = function () { showHush(false); };
+      player.play().catch(function () {
+        noteVoice('device');
+        if (canSpeak) browserVoice(text);
+      });
+    }).catch(function () {
+      noteVoice('device');
+      if (canSpeak) browserVoice(text);
+    });
+  }
+
+  function fill(t) { document.getElementById('q').value = t; document.getElementById('q').focus(); }
+
+  async function askIt(e) {
+    e.preventDefault();
+    const box = document.getElementById('q');
+    const q = box.value.trim();
+    if (!q) return false;
+    box.value = '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'said';
+    // Three dots that actually move. A still ellipsis is indistinguishable
+    // from a page that did nothing, and a question that takes a few seconds to
+    // think about looks broken without it.
+    wrap.innerHTML = '<span class="q"></span>'
+                   + '<span class="thinking" aria-label="Thinking">'
+                   + '<i></i><i></i><i></i></span>';
+    wrap.querySelector('.q').textContent = q;
+    const answers = document.getElementById('answers');
+    answers.prepend(wrap);
+
+    let data;
+    try {
+      const r = await fetch('{{ url_for("assistant.ask") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'q=' + encodeURIComponent(q),
+      });
+      data = await r.json();
+    } catch (err) {
+      data = { say: 'Could not reach it just then. Try again.' };
+    }
+
+    // Text as text, never as markup: the answer carries customer names and
+    // addresses straight out of the database.
+    wrap.textContent = '';
+    const qs = document.createElement('span');
+    qs.className = 'q';
+    qs.textContent = q;
+    wrap.appendChild(qs);
+    wrap.appendChild(document.createTextNode(data.say || ''));
+
+    // A draft is shown in a box you can edit and copy. It is not sent from here
+    // and there is deliberately no button that would.
+    if (data.draft && data.draft.body) {
+      if (data.draft.facts && data.draft.facts.length) {
+        const f = document.createElement('div');
+        f.style.cssText = 'margin-top:10px;font-size:0.8rem;color:var(--softer);line-height:1.5';
+        f.textContent = 'Written from: ' + data.draft.facts.join(' · ');
+        wrap.appendChild(f);
+      }
+      // Recipient and subject, shown as plainly as the body. You cannot
+      // approve an email whose subject line you were never told.
+      if (data.draft.to || data.draft.subject) {
+        const h = document.createElement('div');
+        h.className = 'draft-head';
+        if (data.draft.to) {
+          const r = document.createElement('div');
+          r.innerHTML = '<span>To</span> ' + esc(data.draft.to);
+          h.appendChild(r);
+        }
+        if (data.draft.subject) {
+          const sj = document.createElement('div');
+          sj.innerHTML = '<span>Subject</span> ' + esc(data.draft.subject);
+          h.appendChild(sj);
+        }
+        wrap.appendChild(h);
+      }
+      const ta = document.createElement('textarea');
+      ta.style.cssText = 'width:100%;margin-top:10px;padding:12px;border:1px solid var(--line);'
+                       + 'border-radius:10px;font-family:inherit;font-size:0.95rem;'
+                       + 'line-height:1.6;background:var(--surface);color:var(--ink)';
+      ta.rows = Math.min(12, (data.draft.body.split('\n').length + 3));
+      ta.value = data.draft.body;
+      wrap.appendChild(ta);
+
+      const copy = document.createElement('button');
+      copy.type = 'button'; copy.className = 'btn btn-outline btn-sm';
+      copy.style.marginTop = '8px';
+      copy.textContent = 'Copy';
+      copy.onclick = () => {
+        ta.select();
+        try { document.execCommand('copy'); copy.textContent = 'Copied'; } catch (e) {}
+        setTimeout(() => { copy.textContent = 'Copy'; }, 1600);
+      };
+      wrap.appendChild(copy);
+    }
+
+    // Something to do comes back as a button, never as an action already taken.
+    // The form carries a token and nothing else: what runs is read back from
+    // what was written down when it was offered, so it cannot differ from the
+    // sentence above the button.
+    if (data.confirm && data.confirm.token) {
+      const f = document.createElement('form');
+      f.method = 'POST';
+      f.action = '{{ url_for("assistant.confirm") }}';
+      const i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'token'; i.value = data.confirm.token;
+      f.appendChild(i);
+      const b = document.createElement('button');
+      b.type = 'submit'; b.className = 'btn';
+      b.textContent = data.confirm.label || 'Do it';
+      f.appendChild(b);
+      // Whether it can be walked back, said before the press rather than
+      // discovered after it. The code decides this, not the model.
+      if (data.confirm.reversible === false) {
+        const n = document.createElement('span');
+        n.className = 'confirm-note';
+        n.textContent = 'This cannot be undone.';
+        f.appendChild(n);
+      }
+      wrap.appendChild(f);
+    }
+
+    // The other half of hands-free. Reading the screen defeats the point of
+    // having asked out loud.
+    sayOutLoud(data.say || '');
+    return false;
+  }
+</script>
+{% endblock %}

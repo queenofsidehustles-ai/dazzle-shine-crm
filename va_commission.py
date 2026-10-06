@@ -64,7 +64,6 @@ def commission_for_month(agent, year, month):
     if not agent:
         return _empty(agent, year, month)
     from models import Booking, CommercialAccount
-    from extensions import db
     start, end = _month_bounds(year, month)
     R = get_rates()
     lines = []

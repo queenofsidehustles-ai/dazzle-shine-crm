@@ -1,0 +1,91 @@
+{% extends "base_admin.html" %}
+{% block title %}Hiring Settings — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Hiring Settings{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:640px">
+  <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Hiring Workflow</h2>
+  <p style="color:var(--softer);font-size:0.85rem;margin-bottom:20px">These power the one-click email buttons on each application. Set them once and the CRM does the rest.</p>
+  <form method="POST">
+    <div class="form-group">
+      <label>Interview Calendar Link</label>
+      <input type="url" name="interview_calendar_link" value="{{ current.interview_calendar_link }}"
+             placeholder="https://calendly.com/yourname/phone-interview" />
+      <span style="font-size:0.76rem;color:var(--softer)">Your Calendly, Google Calendar booking link, or any scheduling URL. Used by "Send Interview Invite" button.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px">
+      <div class="form-group">
+        <label>BG Check Provider Name</label>
+        <input type="text" name="bgcheck_provider_name" value="{{ current.bgcheck_provider_name }}"
+               placeholder="e.g. FDLE, Checkr, Care.com" />
+      </div>
+      <div class="form-group">
+        <label>BG Check Provider Link</label>
+        <input type="url" name="bgcheck_provider_url" value="{{ current.bgcheck_provider_url }}"
+               placeholder="https://bg.fdle.state.fl.us or https://checkr.com/applicants" />
+      </div>
+    </div>
+    <div style="background:var(--line-soft);border-radius:8px;padding:12px;font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+      <strong style="color:var(--ink-2)">A good starting point:</strong><br>
+      • <strong>FDLE</strong> (Florida state check, ~$24, applicant pays) → <code>https://bg.fdle.state.fl.us</code><br>
+      • <strong>Checkr for Individuals</strong> (~$30) → <code>https://checkr.com/applicants</code><br>
+      • <strong>Free first step</strong>: Always check National Sex Offender Registry → <code>https://www.nsopw.gov</code>
+    </div>
+  <div class="card" style="margin-top:18px">
+    <h3>Uniforms</h3>
+    <p class="muted">Only if you issue them. Turn this on and the offer email asks for a
+      shirt size, in English and Spanish, and the onboarding checklist gains a uniform
+      step. Leave it off and neither ever appears &mdash; a step nobody will tick makes a
+      finished onboarding look unfinished.</p>
+    <label style="display:flex;gap:10px;align-items:flex-start;font-weight:600;margin:14px 0">
+      <input type="checkbox" name="provide_uniforms" value="1"
+             {{ 'checked' if current.provide_uniforms }} style="width:auto;margin-top:4px">
+      <span>We provide uniforms &mdash; ask new hires for their shirt size</span>
+    </label>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <h3>Test clean before hiring</h3>
+    <p class="muted">Plenty of owners want to watch somebody clean before trusting them in a
+      customer's home. Turn this on and the conditional offer says so up front, in English
+      and Spanish, rather than springing it on somebody at the door.</p>
+    <label style="display:flex;gap:10px;align-items:flex-start;font-weight:600;margin:14px 0">
+      <input type="checkbox" name="require_test_clean" value="1"
+             {{ 'checked' if current.require_test_clean }} style="width:auto;margin-top:4px">
+      <span>Require a test clean before anybody is really hired</span>
+    </label>
+    <p class="muted" style="font-size:.9rem">
+      <strong>Pay them for it.</strong> A test clean on a real customer's home is work, and
+      unpaid work that benefits the business is the kind of thing that turns into a wage
+      claim. Book it as an ordinary job — they are already on your team at this point, so
+      you can assign it or broadcast it like any other.
+    </p>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin:14px 0">
+      <div style="flex:1 1 150px">
+        <label for="test_clean_pay">What you pay for it</label>
+        <input id="test_clean_pay" name="test_clean_pay" value="{{ current.test_clean_pay }}"
+               placeholder="40" inputmode="decimal">
+      </div>
+      <div style="flex:1 1 150px">
+        <label for="test_clean_length">How long it runs</label>
+        <input id="test_clean_length" name="test_clean_length" value="{{ current.test_clean_length }}"
+               placeholder="2 hours">
+      </div>
+    </div>
+    <p class="muted" style="font-size:.9rem">Both optional, and both go in the offer email
+      when you fill them in &mdash; &ldquo;$40 for about 2 hours&rdquo;. A candidate who knows
+      the number before they say yes is a candidate who turns up.</p>
+
+    <label for="test_clean_calendar_link">Booking link for test-clean slots</label>
+    <input id="test_clean_calendar_link" name="test_clean_calendar_link" type="url"
+           value="{{ current.test_clean_calendar_link }}"
+           placeholder="https://calendly.com/you/test-clean">
+    <p class="muted" style="font-size:.9rem">Optional. Whatever you already use — Calendly,
+      Google, anything with a link. It goes in the offer email so they can pick a time
+      without a round of texts. Leave it blank and you arrange it yourself.</p>
+  </div>
+
+    <button type="submit" class="btn btn-gold">Save Hiring Settings</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,6 +1,11 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+import csv
+import io
+import re
+
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
+from entitlements import requires_plan
 from auth import login_required, owner_required
-from models import PricingSetting, BusinessSetting, Prospect
+from models import PricingSetting, BusinessSetting, Prospect, Client, Booking, Staff
 from extensions import db
 from pricing import SERVICES, EXTRAS, DEPOSIT_AMOUNT
 import branding
@@ -46,6 +51,104 @@ def setup():
     return render_template('admin/setup.html', s=onboarding.summary())
 
 
+@settings_bp.route('/booking-page')
+@login_required
+def booking_page():
+    """What the booking page is, where it lives, and how to put it to work.
+
+    The getting-started list used to send people straight to `/book` — the
+    customer-facing page itself, with no explanation and nothing on it saying
+    what it was or what to do with it. Two things went wrong with that.
+
+    Opening it ticked the step off. So the list said "Share your booking page"
+    with a line through it, to a business that had shared nothing, because the
+    only thing the tick ever meant was that somebody had clicked the link on
+    the list. A checklist item that completes itself when you look at it is
+    worse than no checklist item.
+
+    And it answered none of the questions people actually have — the owner of
+    this product had to explain it to her first beta tester by hand, which is
+    the clearest possible signal that a screen is missing.
+    """
+    import branding as _b, entitlements as _ent
+    base = _b.crm_base().rstrip('/')
+    return render_template(
+        'admin/booking_page.html',
+        booking_url=f'{base}/book',
+        embed_snippet=f'<script src="{base}/embed.js" async></script>',
+        embed_allowed=_ent.can('booking_widget'),
+        shared=BusinessSetting.get('booking_page_shared'))
+
+
+@settings_bp.route('/booking-page/shared', methods=['POST'])
+@login_required
+def booking_page_shared():
+    """They copied the link or the snippet. That is the step, not looking.
+
+    Recorded from an explicit action so the tick means something a person did
+    on purpose. It can also be undone — somebody who ticks it by accident
+    should not be stuck looking at a finished list with an unfinished job.
+    """
+    on = request.form.get('undo') != '1'
+    BusinessSetting.set('booking_page_shared', '1' if on else '')
+    db.session.commit()
+    return {'ok': True, 'shared': on}
+
+
+@settings_bp.route('/getting-started')
+@login_required
+def getting_started():
+    """The first screen a brand-new business sees.
+
+    Deliberately not the configuration checklist. Somebody who signed up two
+    minutes ago does not yet know what a Stripe key is for; what they need is
+    one thing to do next and a sense that it ends somewhere."""
+    import onboarding
+    return render_template('admin/getting_started.html', p=onboarding.progress())
+
+
+@settings_bp.route('/automations/save', methods=['POST'])
+@owner_required
+def save_automation():
+    """Record what this business wants done on its behalf.
+
+    Kept deliberately small. The jobs read the setting themselves, so this only
+    has to write it down -- nothing here decides whether anything runs.
+    """
+    import automations as _auto
+    job = (request.form.get('job') or '').strip()
+    known = {k for k, _l, _b, _c in _auto.JOBS}
+    # Not a job of its own -- the cleaner half of "reminders" shares that
+    # job's one cron address, so it isn't in JOBS, but it does need its own
+    # entry here to be turned on and off separately from the customer half.
+    if job not in known and job != 'reminders-cleaner':
+        flash('That is not one of the automations.', 'error')
+        return redirect(url_for('settings.automations_page'))
+
+    if job == 'charge-balances':
+        mode = (request.form.get('mode') or '').strip()
+        _auto.set_balance_mode(mode)
+        db.session.commit()
+        flash({'auto':  'Balances will be charged on the day.',
+               'ask':   'Balances will show as owed. Nothing will be charged for you.',
+               'never': 'Balances will never be charged from here.'}
+              .get(_auto.balance_mode(), 'Saved.'), 'success')
+    elif job == 'reminders-cleaner':
+        on = (request.form.get('on') or '') == '1'
+        _auto.set_cleaner_reminders_enabled(on)
+        db.session.commit()
+        flash(f'Cleaner reminders are now {"on" if on else "off"}.', 'success')
+    else:
+        on = (request.form.get('on') or '') == '1'
+        _auto.set_enabled(job, on)
+        db.session.commit()
+        label = 'Customer reminders' if job == 'reminders' else \
+            next((l for k, l, _b, _c in _auto.JOBS if k == job), job)
+        flash(f'{label} is now {"on" if on else "off"}.', 'success')
+
+    return redirect(url_for('settings.automations_page'))
+
+
 @settings_bp.route('/setup/confirm/<key>', methods=['POST'])
 @owner_required
 def setup_confirm(key):
@@ -66,6 +169,7 @@ def setup_confirm(key):
 
 @settings_bp.route('/automations')
 @owner_required
+@requires_plan('automations')
 def automations_page():
     """Whether the scheduled jobs are alive.
 
@@ -74,8 +178,21 @@ def automations_page():
     import automations as _auto
     from models import CronRun
     first = CronRun.query.order_by(CronRun.ran_at.asc()).first()
+    # On Akye we run the timetable, so the cron-job.org instructions below are
+    # not this business's job any more -- telling them to set it up is the
+    # self-hosted assumption we just removed. On a single-business install the
+    # owner does run the instance, and the instructions are still right.
+    try:
+        import tenancy
+        managed = tenancy.is_tenant()
+    except Exception:
+        managed = False
     return render_template('admin/automations.html',
                            data=_auto.summary(),
+                           balance_mode=_auto.balance_mode(),
+                           customer_reminders_on=_auto.is_enabled('reminders'),
+                           cleaner_reminders_on=_auto.cleaner_reminders_enabled(),
+                           managed=managed,
                            base=branding.crm_base(),
                            tracking_since=(first.ran_at.strftime('%b %-d, %Y')
                                            if first else 'when this page shipped'))
@@ -91,10 +208,17 @@ def connections():
     which made that person a permanent dependency for every business using the
     CRM — and left them holding other people's payment credentials."""
     import integrations
+    import demo_guard
+    if request.method == 'POST' and demo_guard.active():
+        flash(demo_guard.FIXED_DETAIL, 'info')
+        return redirect(url_for('settings.connections'))
     if request.method == 'POST':
         pending = {}
         for name, (_env, label, is_secret) in integrations.FIELDS.items():
-            if name not in request.form:
+            # Keys Akye provides are not the company's to set, whatever the
+            # form sends -- the page does not show them, so nothing should
+            # arrive, and a hand-made POST must not change them either.
+            if name not in request.form or not integrations.editable(name):
                 continue
             value = (request.form.get(name) or '').strip()
             # A secret is shown back masked. If it comes back unchanged, the
@@ -130,11 +254,15 @@ def connections():
         flash(f"Saved: {', '.join(saved)}." if saved else 'Nothing changed.', 'success')
         return redirect(url_for('settings.connections'))
 
-    fields = {n: {'label': lbl, 'secret': sec, 'value': integrations.masked(n),
-                  'source': integrations.source(n)}
+    # A key Akye provides is never sent to the page, not even masked: the
+    # master account's SID, number and Cloudinary key are not a company's to read.
+    fields = {n: {'label': lbl, 'secret': sec,
+                  'value': integrations.masked(n) if integrations.editable(n) else '',
+                  'source': integrations.source(n) if integrations.editable(n) else None}
               for n, (_e, lbl, sec) in integrations.FIELDS.items()}
     return render_template('admin/settings_connections.html',
-                           fields=fields, status=integrations.status())
+                           fields=fields, status=integrations.status(),
+                           managed=integrations.hosted_company())
 
 
 @settings_bp.route('/connections/test-stripe', methods=['POST'])
@@ -166,6 +294,7 @@ def test_stripe():
 
 @settings_bp.route('/commercial', methods=['GET', 'POST'])
 @owner_required
+@requires_plan('multi_brand')
 def commercial():
     import commercial_pricing as cp
     if request.method == 'POST':
@@ -175,16 +304,35 @@ def commercial():
         except ValueError:
             pct = 40
         PricingSetting.set('comm_target_labor', round(pct / 100.0, 4))
-        PricingSetting.set('comm_min_visit', request.form.get('comm_min_visit') or 80)
+        PricingSetting.set('comm_min_visit', request.form.get('comm_min_visit') or 125)
+        PricingSetting.set('comm_drive_minutes',
+                           request.form.get('comm_drive_minutes') or 30)
         for c in cp.PROD_RATES:
             v = request.form.get(f'comm_prod_{c}')
             if v:
                 PricingSetting.set(f'comm_prod_{c}', v)
+        # Add-ons are typed as whole percents and stored as decimals, the same
+        # way target labor is, so the form never asks anyone to write 0.08.
+        for key, _lbl, _pct in cp.EXTRAS:
+            v = request.form.get(f'comm_extra_{key}')
+            if v in (None, ''):
+                continue
+            try:
+                PricingSetting.set(f'comm_extra_{key}', round(float(v) / 100.0, 4))
+            except ValueError:
+                pass
         db.session.commit()
         flash('Commercial pricing updated.', 'success')
         return redirect(url_for('settings.commercial'))
     return render_template('admin/settings_commercial.html',
                            cfg=cp.get_config(), category_labels=Prospect.CATEGORY_LABELS)
+
+
+# An actual opt-out instruction, not just the word appearing somewhere --
+# "we can stop by tomorrow" contains "stop" and tells nobody how to leave the
+# list. Requires "reply" or "text" near the standalone word STOP, matching
+# every shipped default's own wording ("Reply STOP to opt out.").
+_OPT_OUT_RE = re.compile(r'\b(reply|text)\b[^.!?]{0,20}\bstop\b', re.I)
 
 
 @settings_bp.route('/followup-texts', methods=['GET', 'POST'])
@@ -197,12 +345,28 @@ def followup_texts():
     deploy to change a sentence would mean the wording never actually improves."""
     import lsa
     if request.method == 'POST':
-        for track, _label in lsa.TRACKS:
+        # These are unsolicited marketing texts to somebody who never booked —
+        # exactly the message TCPA requires an opt-out on. The shipped wording
+        # always carries "Reply STOP to opt out", but this page lets that
+        # wording be replaced by anything, so nothing enforced it staying.
+        # Refuse to save a rewrite that drops it rather than let an edited
+        # template quietly start breaking the law on its next send.
+        rejected = []
+        for track, label in lsa.TRACKS:
             for step in (1, 2, 3):
-                lsa.save_template(track, step,
-                                  request.form.get(f'msg_{track}_{step}', ''))
-        flash('Follow-up texts saved. Anyone mid-sequence gets the new wording '
-              'from their next message on.', 'success')
+                body = request.form.get(f'msg_{track}_{step}', '')
+                if body.strip() and not _OPT_OUT_RE.search(body):
+                    rejected.append(f'{label} — message {step}')
+                    continue
+                lsa.save_template(track, step, body)
+        if rejected:
+            flash('Not saved (missing an opt-out): ' + ', '.join(rejected) +
+                  '. Every follow-up text has to tell people how to stop '
+                  'getting them — keep "Reply STOP to opt out" somewhere in '
+                  'the message.', 'error')
+        else:
+            flash('Follow-up texts saved. Anyone mid-sequence gets the new wording '
+                  'from their next message on.', 'success')
         return redirect(url_for('settings.followup_texts'))
 
     messages = {(t, s): lsa.template_for(t, s)
@@ -217,7 +381,7 @@ def followup_texts():
 @settings_bp.route('/pricing', methods=['GET', 'POST'])
 @owner_required
 def pricing():
-    from pricing import get_labor_rate, LABOR_RATE_DEFAULT
+    from pricing import get_labor_rate
     if request.method == 'POST':
         # Save deposit
         PricingSetting.set('deposit_amount', request.form.get('deposit_amount', DEPOSIT_AMOUNT))
@@ -233,13 +397,39 @@ def pricing():
             if val not in (None, ''):     # 0 is a legitimate answer
                 PricingSetting.set(key, val)
 
-        # Save service prices
-        for svc_key in SERVICES:
-            for field in ('base', 'per_extra_bed', 'per_extra_bath'):
-                form_key = f"{svc_key}_{field}"
-                val = request.form.get(form_key)
-                if val:
-                    PricingSetting.set(form_key, val)
+        # The price list, one price per house size. This is what every quote
+        # actually reads.
+        #
+        # What used to be here saved `{service}_base`, `{service}_per_extra_bed`
+        # and `{service}_per_extra_bath` -- a formula from an older version that
+        # nothing has read for a long time. So the page appeared to set prices
+        # and set nothing, while the list that does drive every quote could not
+        # be edited anywhere in the product at all. A company in another city
+        # was stuck on the prices this was first built with.
+        import pricing as _pricing
+        for beds, baths in _pricing.matrix_sizes():
+            val = request.form.get(f'std_price_{beds}_{baths}')
+            if val not in (None, ''):
+                try:
+                    _pricing.set_std_price(beds, baths, round(float(val), 2))
+                except (TypeError, ValueError):
+                    pass          # a typo in one box must not lose the others
+
+        # Deep and move-out are a multiple of the standard price, so a business
+        # sets one list rather than three.
+        for svc_key in ('deep', 'moveout'):
+            val = request.form.get(f'{svc_key}_multiplier')
+            if val not in (None, ''):
+                try:
+                    PricingSetting.set(f'{svc_key}_multiplier', round(float(val), 2))
+                except (TypeError, ValueError):
+                    pass
+
+        # Somebody has now looked at their prices, which is what the
+        # getting-started list is asking about. BusinessSetting, not
+        # PricingSetting: onboarding reads the former, and writing to the
+        # wrong one leaves a step that can never be ticked.
+        BusinessSetting.set('pricing_reviewed', '1')
 
         # Save extras — price and the time each one takes
         for extra_name in EXTRAS:
@@ -275,28 +465,120 @@ def pricing():
         current[f'extra_{slug}'] = PricingSetting.get(f'extra_{slug}', price)
         current[f'extrahrs_{slug}'] = get_extra_hours(extra_name)
 
+    import pricing as _pricing
+    sizes = _pricing.matrix_sizes()
+    matrix = _pricing.current_matrix()
+    # The anchor is whatever they charge for the commonest house. Shown as the
+    # one question, with the rest of the list underneath it.
+    anchor = (2, 2)
+    # A company that has never set prices is here because Getting started sent
+    # it, and the page it lands on has around forty inputs. The one question at
+    # the top answers most of them, so on the first visit everything else waits
+    # behind a fold rather than competing with it.
+    first_time = False
+    try:
+        import onboarding
+        first_time = not next((st['done'] for st in onboarding.journey()
+                               if st['key'] == 'pricing'), True)
+    except Exception:
+        pass
     return render_template('admin/settings_pricing.html',
+                           first_time=first_time,
                            services=SERVICES, extras=EXTRAS,
+                           sizes=sizes, matrix=matrix, anchor=anchor,
+                           anchor_price=matrix.get(anchor, 0),
+                           multipliers={k: _pricing.get_multiplier(k)
+                                        for k in ('standard', 'deep', 'moveout')},
+                           service_labels=_pricing.SERVICE_LABELS,
                            current=current)
+
+
+@settings_bp.route('/sending-domain', methods=['GET', 'POST'])
+@owner_required
+def sending_domain():
+    """Prove the company owns the domain it wants to send cold email from.
+
+    The page it replaces asked her to tick a box saying the domain was
+    verified. Nothing checked it, so ticking it without doing the DNS made
+    every email fail while the setting read "verified". Here the answer comes
+    from the email service, so it is true or it is not, and she is never asked
+    to assert something she has no way of knowing.
+    """
+    import email_domains
+    import demo_guard
+    if request.method == 'POST' and demo_guard.active():
+        flash(demo_guard.FIXED_DETAIL, 'info')
+        return redirect(url_for('settings.sending_domain'))
+
+    if request.method == 'POST':
+        action = request.form.get('action', '')
+        if action == 'register':
+            name = request.form.get('domain', '')
+            ok, data, err = email_domains.register(name)
+            if ok:
+                email_domains.save(name=name, domain_id=data.get('id'),
+                                   state=data.get('status') or '')
+                flash('Domain added. Add the three records below to your DNS, '
+                      'then come back and press Check.', 'success')
+            else:
+                flash(err, 'error')
+        elif action == 'check':
+            saved = email_domains.saved()
+            ok, data, err = email_domains.verify(saved['id'])
+            if ok:
+                email_domains.save(state=data.get('status') or '')
+                if email_domains.is_verified(data):
+                    flash('Verified — your email now goes out from your own '
+                          'domain.', 'success')
+                else:
+                    flash('Not showing yet. DNS changes can take a few hours; '
+                          'the records are below if you want to check them.', 'info')
+            else:
+                flash(err, 'error')
+        elif action == 'forget':
+            email_domains.save(name='', domain_id='', state='')
+            flash('Domain removed. Email goes out from the shared address '
+                  'again.', 'info')
+        return redirect(url_for('settings.sending_domain'))
+
+    saved = email_domains.saved()
+    records, live_status, lookup_error = [], saved['status'], ''
+    if saved['id']:
+        ok, data, err = email_domains.status(saved['id'])
+        if ok:
+            records = data.get('records') or []
+            live_status = data.get('status') or ''
+            if live_status != saved['status']:
+                email_domains.save(state=live_status)
+        else:
+            lookup_error = err
+    return render_template('admin/settings_sending_domain.html',
+                           domain=saved['name'], status=live_status,
+                           records=records, lookup_error=lookup_error,
+                           verified=(live_status == email_domains.VERIFIED))
 
 
 @settings_bp.route('/business', methods=['GET', 'POST'])
 @owner_required
 def business():
     fields = ['business_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'website',
+              # Where a customer's reply is announced. Blank uses 'phone'.
+              'owner_alert_phone',
               'worker_model', 'reception_model', 'agreement_template',
-              'interview_calendar_link', 'bgcheck_provider_url', 'bgcheck_provider_name',
               'customer_terms',
               # Branding — what customers see on emails, quotes and review prompts.
               'google_review_link', 'content_business_description',
               'timezone', 'charge_hour',
               'brand_tagline', 'brand_dark', 'brand_accent', 'brand_accent_text',
-              'brand_domain_verified',
               # An optional second trading name for commercial work.
               'commercial_name', 'commercial_tagline', 'commercial_from_email',
               'commercial_reply_to', 'commercial_phone', 'commercial_website',
               'commercial_dark', 'commercial_accent', 'commercial_accent_text',
-              'commercial_domain_verified']
+              ]
+    import demo_guard
+    if request.method == 'POST' and demo_guard.active():
+        flash(demo_guard.IDENTITY_DETAIL, 'info')
+        return redirect(url_for('settings.business'))
     if request.method == 'POST':
         # Save only the fields this particular form actually submitted. The page
         # has several separate forms, and writing every field on every save
@@ -304,6 +586,37 @@ def business():
         for f in fields:
             if f in request.form:
                 BusinessSetting.set(f, request.form.get(f, ''))
+
+        # Colours are tidied and the readable text colour is worked out here as
+        # well as in the browser. The page computes it live so the owner can see
+        # what she is choosing; this recomputes it on the way in so a form
+        # posted with scripting off, or by hand, still cannot produce a booking
+        # page whose only button is unreadable.
+        import brands as _brands
+        for accent_key, text_key in (('brand_accent', 'brand_accent_text'),
+                                     ('commercial_accent', 'commercial_accent_text')):
+            if accent_key in request.form:
+                clean = _brands.normalise_hex(request.form.get(accent_key, ''))
+                BusinessSetting.set(accent_key, clean)
+                if clean:
+                    BusinessSetting.set(text_key, _brands.readable_on(clean))
+        for dark_key in ('brand_dark', 'commercial_dark'):
+            if dark_key in request.form:
+                BusinessSetting.set(dark_key,
+                                    _brands.normalise_hex(request.form.get(dark_key, '')))
+
+        # Markets is a multi-select: a deselect-everything save submits no
+        # 'markets' values at all, indistinguishable from this form's other
+        # fields simply not being on the page this POST came from. The
+        # hidden marker says "this section really was submitted."
+        if 'markets_submitted' in request.form:
+            import customer_terms as _ct
+            selected = request.form.getlist('markets')
+            _ct.set_markets(selected)
+            for code in selected:
+                key = f'market_note_{code}'
+                if key in request.form:
+                    _ct.set_market_note(code, request.form.get(key, ''))
         db.session.commit()
         # Typing the original business name back in is enough to trigger the
         # one-time restore of its commercial brand, palette and review link —
@@ -314,6 +627,14 @@ def business():
         return redirect(url_for('settings.business'))
 
     current = {f: BusinessSetting.get(f) for f in fields}
+    # The snippet is built here rather than in the template so there is one
+    # copy of it, and so the plan check that decides whether to show it lives
+    # next to the thing it is gating.
+    import branding as _b, entitlements as _ent
+    embed_base = _b.crm_base().rstrip('/')
+    current['_embed_snippet'] = f'<script src="{embed_base}/embed.js" async></script>'
+    current['_embed_allowed'] = _ent.can('booking_widget')
+    current['_booking_url'] = f'{embed_base}/book'
     if not current.get('customer_terms'):
         import customer_terms as _ct
         current['customer_terms'] = _ct.DEFAULT_TERMS
@@ -321,7 +642,31 @@ def business():
         current['worker_model'] = 'contractor'
     if not current['reception_model']:
         current['reception_model'] = 'va'
-    return render_template('admin/settings_business.html', current=current)
+    # The agreement cleaners actually sign today, so the page can show it rather
+    # than describing it. An empty box labelled "Work Agreement Template" read
+    # as homework; nobody could tell there was already a complete one in there.
+    from blueprints.contractors import _default_agreement
+    import branding as _b
+    import customer_terms as _ct
+    current_markets = _ct.markets()
+
+    # Only a company on Akye has a subscription to show. This business's own
+    # CRM (no BASE_DOMAIN, no control plane) is not on any plan at all, so the
+    # card that shows one has nowhere to send this page's other users.
+    import billing
+    org = billing.current_org()
+    subscription = None
+    if org is not None:
+        import entitlements
+        subscription = {'state': entitlements.state(), 'plans': entitlements.PLANS}
+
+    return render_template('admin/settings_business.html', current=current,
+                           default_agreement=_default_agreement(
+                               _b.biz_name(), current['worker_model']),
+                           us_states=_ct.US_STATES, us_state_names=_ct.US_STATE_NAMES,
+                           current_markets=current_markets,
+                           market_notes={c: _ct.market_note(c) for c in current_markets},
+                           subscription=subscription)
 
 
 # ── What has broken lately ──────────────────────────────────────────────────
@@ -359,3 +704,77 @@ def resolve_error(error_id):
     flash('Marked as sorted. It will reappear if it happens again.'
           if row.resolved else 'Reopened.', 'success')
     return redirect(url_for('settings.errors_page'))
+
+
+def _csv_response(rows, header, filename_stem):
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(header)
+    for row in rows:
+        w.writerow(row)
+    slug = re.sub(r'[^a-z0-9]+', '-', branding.biz_name().lower()).strip('-') or 'business'
+    fname = f'{slug}-{filename_stem}.csv'
+    return Response(buf.getvalue(), mimetype='text/csv',
+                    headers={'Content-Disposition': f'attachment; filename={fname}'})
+
+
+@settings_bp.route('/export')
+@owner_required
+def export():
+    """Where to get your own data out. Every download here is scoped to this
+    company's own schema the same way every other query in the app is —
+    there is no separate export code path to audit for a tenant-isolation
+    mistake."""
+    return render_template('admin/export.html',
+        customer_count=Client.query.count(),
+        job_count=Booking.query.count(),
+        worker_count=Staff.query.count())
+
+
+@settings_bp.route('/export/customers.csv')
+@owner_required
+def export_customers_csv():
+    rows = []
+    for c in Client.query.order_by(Client.created_at.asc()).all():
+        rows.append([
+            c.id, c.name, c.email, c.phone or '', c.address or '', c.city or '',
+            c.zip_code or '', len(c.bookings), c.autopay,
+            c.created_at.isoformat() if c.created_at else '', (c.notes or '').replace('\n', ' '),
+        ])
+    header = ['ID', 'Name', 'Email', 'Phone', 'Address', 'City', 'Zip',
+              'Total Bookings', 'Autopay', 'Customer Since', 'Notes']
+    return _csv_response(rows, header, 'customers')
+
+
+@settings_bp.route('/export/jobs.csv')
+@owner_required
+def export_jobs_csv():
+    rows = []
+    for b in Booking.query.order_by(Booking.created_at.asc()).all():
+        rows.append([
+            b.id, b.name or '', b.email or '', b.phone or '', b.address or '',
+            b.city or '', b.service_type, b.bedrooms or '', b.bathrooms or '',
+            b.preferred_date or '', b.preferred_time or '', b.frequency,
+            b.status, f'{b.price:.2f}' if b.price is not None else '',
+            f'{b.discount_amount:.2f}' if b.discount_amount else '0.00',
+            b.assigned_cleaner or '',
+            b.created_at.isoformat() if b.created_at else '',
+        ])
+    header = ['ID', 'Client Name', 'Email', 'Phone', 'Address', 'City',
+              'Service', 'Bedrooms', 'Bathrooms', 'Date', 'Time', 'Frequency',
+              'Status', 'Price', 'Discount', 'Assigned To', 'Created']
+    return _csv_response(rows, header, 'jobs')
+
+
+@settings_bp.route('/export/workers.csv')
+@owner_required
+def export_workers_csv():
+    rows = []
+    for s in Staff.query.order_by(Staff.name.asc()).all():
+        rows.append([
+            s.id, s.name, s.email or '', s.phone or '', s.is_active,
+            s.pay_type, s.pay_rate, s.experience_level or '',
+        ])
+    header = ['ID', 'Name', 'Email', 'Phone', 'Active', 'Pay Type', 'Pay Rate',
+              'Experience Level']
+    return _csv_response(rows, header, 'workers')

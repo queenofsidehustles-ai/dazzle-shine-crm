@@ -13,8 +13,8 @@ existed went through Stripe, because there was no other way to take one.
 from alembic import op
 import sqlalchemy as sa
 
-revision = '0010_deposit_method'
-down_revision = '0009_company_applicants'
+revision = '0018_deposit_method'
+down_revision = '0017_prospect_sequences'
 branch_labels = None
 depends_on = None
 

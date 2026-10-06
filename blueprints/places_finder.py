@@ -14,7 +14,8 @@ import json
 from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response)
-from markupsafe import escape
+import entitlements
+from entitlements import requires_plan
 from auth import login_required
 from extensions import db
 from models import Prospect
@@ -24,8 +25,73 @@ from scheduling import local_today
 
 places_finder_bp = Blueprint('places_finder', __name__, url_prefix='/find-leads')
 
+# How many calls one sitting offers before it says you are done. Not a cap on
+# what anybody may do -- "keep going" is one click -- but a morning that ends.
+DAILY_STINT = 20
+
 CATEGORIES = ['property_manager', 'realtor', 'airbnb', 'apartment',
               'daycare', 'medical_office', 'general_contractor', 'office', 'other']
+
+
+# Which opening belongs to which kind of business. The scripts are filed by
+# what part of a call they are for -- outbound, objection, closing -- and the
+# vertical lives in the title, because one company's "cold call opening" is
+# several scripts and they differ by who is picking up. The call sheet asked
+# for a script category named 'office' and there has never been one, so the
+# panel was empty on every call.
+VERTICAL_HINTS = {
+    'office':             ('office', 'daycare', 'medical'),
+    'medical_office':     ('medical', 'office'),
+    'daycare':            ('daycare', 'office'),
+    'apartment':          ('apartment', 'property manager'),
+    'property_manager':   ('property manager', 'apartment'),
+    'realtor':            ('realtor',),
+    'airbnb':             ('airbnb', 'str ', 'turnover'),
+    'general_contractor': ('office',),
+}
+
+
+def _pick_openings(outbound, category):
+    """The openings worth reading before this particular call.
+
+    Falls back to every opening rather than none: a script that is not quite
+    for this business still beats a blank panel on a call that is about to
+    start.
+    """
+    hints = VERTICAL_HINTS.get(category, ())
+    matched = [s for s in outbound
+               if any(h in (s.get('title') or '').lower() for h in hints)] if hints else []
+    chosen = matched or outbound
+
+    # The seeded "[Your Company]" versions sit beside the ones she has made
+    # her own. Hers win; the generic is what is left when she has not written
+    # one yet.
+    named = [s for s in chosen if '[your company]' not in (s.get('title') or '').lower()]
+    return named or chosen
+
+
+def _scripts_for(prospect, brand_key):
+    """Everything to say on this call, in the order a call goes.
+
+    Returned as sections so each can be opened on its own. Twenty scripts in
+    one list is a document; four headings is something you can use with a
+    phone against your ear.
+    """
+    groups = _call_scripts().get(brand_key, {})
+    general = groups.get('general', [])
+
+    def titled(rows, *words):
+        return [r for r in rows
+                if any(w in (r.get('title') or '').lower() for w in words)]
+
+    sections = [
+        ('What to say', _pick_openings(groups.get('outbound', []), prospect.category)),
+        ('Getting past the gatekeeper', titled(general, 'gatekeeper')),
+        ('If it goes to voicemail', titled(general, 'voicemail')),
+        ('If they push back', groups.get('objection', [])),
+        ('Booking the walkthrough', groups.get('closing', [])),
+    ]
+    return [(label, rows) for label, rows in sections if rows]
 
 
 def _call_scripts():
@@ -88,8 +154,26 @@ def _view_args(view, prospects, **extra):
     import brands
     live = [p for p in prospects if p.is_open]
     emails = _email_templates()
+    left = entitlements.remaining('lead_searches_per_month')
+    plan_now = entitlements.effective_plan()
+    nxt = entitlements._next_plan()
+    next_plan = None
+    if nxt:
+        next_plan = {
+            'label': entitlements.PLANS[nxt]['label'],
+            'searches': entitlements.PLANS[nxt]['limits'].get(
+                'lead_searches_per_month') or 0,
+        }
     args = dict(
+        plan_limits=entitlements.PLANS[plan_now]['limits'],
+        next_plan=next_plan,
         view=view,
+        searches_left=left,
+        # What the owner actually came for. Up to 20 a search, so it is a
+        # ceiling and the wording says so.
+        businesses_left=(None if left is None else left * 20),
+        own_google_key=finder.own_key(),
+        search_capped=False,
         prospects=prospects,
         results=None,
         counts=_status_counts(),
@@ -163,34 +247,79 @@ def _email_templates():
 
 @places_finder_bp.route('/')
 @login_required
+@requires_plan('lead_finder')
 def dashboard():
     """Today by default — what is due, not everything ever imported."""
     view = request.args.get('view', 'today')
-    if view not in ('today', 'pipeline', 'contacts', 'find'):
+    # 'pipeline' and 'contacts' were the same 64 businesses twice -- once
+    # grouped by stage, once alphabetically. That is one screen with a filter,
+    # not two screens, so they became 'everyone'. The old names still work:
+    # they are in links, bookmarks and anything already open.
+    view = {'pipeline': 'everyone', 'contacts': 'everyone'}.get(view, view)
+    if view not in ('today', 'everyone', 'find', 'month'):
         view = 'today'
+    stage_filter = (request.args.get('stage') or '').strip()
     rows = _backfilled()
 
     if view == 'today':
+        # Prospect.is_due is the one definition of due, shared with the
+        # dashboard count. It was written out longhand here, and a prospect
+        # resting in nurture could never satisfy it however overdue it got.
         today = local_today().isoformat()
-        shown = sorted([p for p in rows
-                        if p.is_open and (not p.next_action_date
-                                          or p.next_action_date <= today)],
+        shown = sorted([p for p in rows if p.is_due(today)],
                        key=prospecting.due_sort_key)
-    elif view == 'pipeline':
-        order = [k for k, _ in Prospect.STAGE_LABELS]
-        shown = sorted(rows, key=lambda p: (order.index(p.stage)
-                                            if p.stage in order else 99,
-                                            prospecting.due_sort_key(p)))
-    elif view == 'contacts':
-        shown = sorted(rows, key=lambda p: (p.business_name or '').lower())
+    elif view == 'everyone':
+        pool = [p for p in rows if (p.stage or 'new') == stage_filter] \
+            if stage_filter else rows
+        shown = sorted(pool, key=lambda p: (p.business_name or '').lower())
+    elif view == 'month':
+        # The commercial month. Callbacks are not appointments -- they have no
+        # time and take four minutes -- so they do not belong on the jobs
+        # calendar. They do belong somewhere you can see a fortnight ahead and
+        # notice that the week of the 14th has eleven of them in it.
+        shown = sorted(rows, key=prospecting.due_sort_key)
     else:
         shown = sorted(rows, key=prospecting.due_sort_key)
 
-    return render_template('admin/find_leads.html', **_view_args(view, rows, shown=shown))
+    extra = {}
+    if view == 'month':
+        import calendar as cal_module
+        from datetime import date as _date
+        try:
+            year = int(request.args.get('year', local_today().year))
+            month = int(request.args.get('month', local_today().month))
+            _date(year, month, 1)
+        except (TypeError, ValueError):
+            year, month = local_today().year, local_today().month
+        stamp = f'{year}-{month:02d}'
+        by_day = {}
+        for p in rows:
+            if (p.next_action_date or '').startswith(stamp):
+                try:
+                    by_day.setdefault(int(p.next_action_date.split('-')[2]), []).append(p)
+                except (IndexError, ValueError):
+                    pass
+        for d in by_day:
+            by_day[d].sort(key=lambda r: (r.business_name or '').lower())
+        extra = dict(
+            cal=cal_module.Calendar(firstweekday=6).monthdayscalendar(year, month),
+            cal_year=year, cal_month=month,
+            cal_month_name=cal_module.month_name[month],
+            by_day=by_day,
+            prev_year=(year if month > 1 else year - 1),
+            prev_month=(month - 1 if month > 1 else 12),
+            next_year=(year if month < 12 else year + 1),
+            next_month=(month + 1 if month < 12 else 1),
+        )
+
+    return render_template('admin/find_leads.html',
+                           **_view_args(view, rows, shown=shown,
+                                        stage_filter=stage_filter, **extra))
 
 
 @places_finder_bp.route('/search', methods=['POST'])
 @login_required
+@requires_plan('lead_finder')
 def search():
     import brands
     category = request.form.get('category', 'property_manager')
@@ -206,10 +335,28 @@ def search():
         return redirect(url_for('places_finder.dashboard'))
 
     demo = not finder.api_key_present()
+    capped, count_it = finder.allowance()
+
+    if capped:
+        entitlements.record_denial('limit:lead_searches_per_month',
+                                   path='/find-leads/search')
+        rows = _backfilled()
+        return render_template('admin/find_leads.html',
+                               **_view_args('find', rows,
+                                            shown=sorted(rows, key=prospecting.due_sort_key),
+                                            search_capped=True,
+                                            search_category=category,
+                                            search_brand=picked_brand,
+                                            search_location=location))
+
     if demo:
         results, error = finder.demo_listings(category, location), ''
     else:
         ok, results, error = finder.search_businesses(category, location)
+        if ok and count_it:
+            # Counted after the call, because Google bills for the call. A
+            # search that never reached them is not one of hers.
+            entitlements.record_lead_search()
         if not ok:
             flash(f'Search failed: {error}', 'error')
             results = []
@@ -225,9 +372,143 @@ def search():
                            **_view_args('find', rows,
                                         shown=sorted(rows, key=prospecting.due_sort_key),
                                         results=results, demo=demo,
+                                        demo_reason=finder.demo_reason(),
                                         search_category=category,
                                         search_brand=picked_brand,
                                         search_location=location))
+
+
+@places_finder_bp.route('/call')
+@places_finder_bp.route('/call/<int:prospect_id>')
+@login_required
+@requires_plan('lead_finder')
+def call_sheet(prospect_id=None):
+    """One business at a time, with the script on the page and nothing else.
+
+    The list view answers "who is there"; this answers "who am I ringing now".
+    Those are different jobs and the list was doing both badly -- the script
+    lived in a side drawer, the fields in another, and nothing carried you from
+    one call to the next, so a morning's calling was a morning of navigating.
+
+    Most calls end without a conversation, so the screen opens with three
+    buttons and no form. Two of them are one click and the next business
+    loads. Only "Spoke to someone" asks for anything, because only then is
+    there anything to write down.
+    """
+    today = local_today().isoformat()
+    rows = _backfilled()
+    queue = sorted([p for p in rows if p.is_due(today)],
+                   key=prospecting.due_sort_key)
+    done = sum(1 for p in rows
+               if p.called_at and p.called_at.date().isoformat() == today)
+
+    # A sitting worth of calls, then a finish line. An endless queue is how a
+    # backlog becomes a screen nobody opens: there is no version of today where
+    # you get to the bottom, so there is no reason to start. Twenty is a
+    # morning. Anybody who wants to keep going says so.
+    stint_over = (done >= DAILY_STINT
+                  and not prospect_id
+                  and request.args.get('more') != '1')
+
+    current = Prospect.query.get_or_404(prospect_id) if prospect_id else (
+        None if stint_over else (queue[0] if queue else None))
+
+    scripts, emails, can_email = [], [], False
+    if current is not None:
+        import brands
+        key = brands.brand_for_prospect(current)
+        scripts = _scripts_for(current, key)
+        # Outreach always goes out under the commercial identity, so the
+        # templates offered here are that side's, whatever the call is about.
+        emails = _email_templates().get(brands.COMMERCIAL, [])
+        try:
+            import email_domains, product
+            _, from_email, _ = brands.send_identity(brands.COMMERCIAL)
+            can_email = (not product.domain()) or email_domains.may_send_as(from_email)
+        except Exception:
+            can_email = False
+
+    return render_template(
+        'admin/call_sheet.html',
+        current=current,
+        queue_left=len(queue),
+        done_today=done,
+        stint_over=stint_over,
+        daily_stint=DAILY_STINT,
+        scripts=scripts,
+        emails=emails,
+        can_email=can_email,
+        quick_actions=prospecting.QUICK_ACTIONS,
+        today=today,
+        status_labels=Prospect.STATUS_LABELS,
+        category_labels=Prospect.CATEGORY_LABELS,
+    )
+
+
+@places_finder_bp.route('/call/<int:prospect_id>/log', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def log_call(prospect_id):
+    """Write the call down and go straight to the next one.
+
+    Always stamps called_at, even for a phone that rang out: the count on the
+    page is calls made, and a morning of nobody answering is still a morning's
+    work. Without it the counter would say nought and the queue would look
+    untouched.
+    """
+    p = Prospect.query.get_or_404(prospect_id)
+    outcome = (request.form.get('outcome') or '').strip()
+    if outcome in Prospect.STATUS_LABELS:
+        p.status = outcome
+    p.called_at = datetime.utcnow()
+    _log_call(p, request.form, outcome)
+
+    # The introduction, sent from the call rather than from a screen she has
+    # to remember to go to afterwards. Sent after the outcome is written down,
+    # so a refused send never costs her the call she just made.
+    sent_note = ''
+    if request.form.get('send_intro') == '1':
+        ok, said = prospecting.send_outreach(
+            p, request.form.get('email_subject'), request.form.get('email_body'),
+            to=request.form.get('email'))
+        sent_note = ' ' + said
+        if not ok:
+            flash(said, 'error')
+    elif outcome == 'send_info':
+        # The outcome that means "they asked me to email something" is the one
+        # outcome where saying nothing is a lie by omission: she pressed a
+        # button about sending information and the screen moved on to the next
+        # business. Whether or not an email went, she finds out here.
+        import email_domains
+        import product
+        try:
+            import brands
+            _, from_email, _ = brands.send_identity(brands.COMMERCIAL)
+            allowed = (not product.domain()) or email_domains.may_send_as(from_email)
+        except Exception:
+            allowed = False
+        if not allowed:
+            sent_note = (' Nothing was emailed — introductions need your own '
+                         'domain first (Settings → Sending Domain).')
+        elif not (p.email or '').strip():
+            sent_note = (' Nothing was emailed — no address for them yet.')
+        else:
+            sent_note = (' Nothing was emailed — open “Send them an '
+                         'introduction” on the call to write one.')
+
+    db.session.commit()
+
+    if p.next_action and p.next_action_date:
+        when = 'today' if p.next_action_date == local_today().isoformat() \
+            else f'on {p.next_action_date}'
+        flash(f'{p.business_name} — next: {p.next_action} {when}.{sent_note}',
+              'success' if not sent_note.startswith(' Nothing') else 'info')
+    else:
+        flash(f'{p.business_name} — closed for now.{sent_note}', 'success')
+    # Carry the "keep going" through to the next call, or the twenty-first
+    # would hand her the finish line again.
+    more = '1' if request.form.get('more') == '1' else None
+    return redirect(url_for('places_finder.call_sheet', more=more))
 
 
 @places_finder_bp.route('/import', methods=['POST'])
@@ -293,25 +574,7 @@ def update_status(prospect_id):
             p.called_at = datetime.utcnow()
 
     if logged:
-        # Details worth having as fields rather than buried in prose: you can't
-        # email a note, and "call them before the renewal" needs a date.
-        for field, attr in (('contact', 'contact_name'), ('email', 'email'),
-                            ('renewal', 'renewal_note')):
-            val = (request.form.get(field) or '').strip()
-            if val:
-                setattr(p, attr, val)
-
-        # Each save prepends a dated entry instead of overwriting, so the
-        # renewal date and what they actually said survive the next call.
-        p.notes = _prepend_log(p, request.form)
-
-        # Where they are now, and what happens next. A blank action here means
-        # the caller took the suggestion; an explicit one overrules it.
-        prospecting.apply_outcome(
-            p, new_status,
-            next_action=(request.form.get('next_action') or '').strip() or None,
-            next_action_date=(request.form.get('next_action_date') or '').strip() or None,
-        )
+        _log_call(p, request.form, new_status)
     elif 'notes' in request.form:
         # The quick inline edit in the table still replaces outright.
         p.notes = request.form.get('notes', '')
@@ -354,43 +617,14 @@ def snooze(prospect_id):
 def send_outreach(prospect_id):
     """Send one of the outreach emails to a prospect and log it as a touch."""
     p = Prospect.query.get_or_404(prospect_id)
-    subject = (request.form.get('subject') or '').strip()
-    body = (request.form.get('body') or '').strip()
-    to = (request.form.get('email') or p.email or '').strip()
     view = request.args.get('view', 'today')
-
-    if not to:
-        flash('No email address for this business yet — ask for one on the call.', 'error')
-        return redirect(url_for('places_finder.dashboard', view=view))
-    if not subject or not body:
-        flash('The email needs a subject and a body.', 'error')
-        return redirect(url_for('places_finder.dashboard', view=view))
-
-    p.email = to
-    from notifications import send_email
-    import brands
-    from_name, from_email, reply_to = brands.send_identity(brands.COMMERCIAL)
-    html = ('<div style="font-family:Inter,Arial,sans-serif;font-size:15px;'
-            'line-height:1.65;color:#1f1333;white-space:pre-wrap">'
-            + escape(body) + '</div>')
-    ok, detail = send_email(to, p.contact_name or p.business_name, subject, html,
-                            from_name=from_name, from_email=from_email,
-                            reply_to=reply_to)
-
-    if ok:
-        p.last_emailed_at = datetime.utcnow()
-        p.notes = _prepend_entry(p, f'Emailed — {subject}')
-        if p.stage in (None, 'new'):
-            p.stage = 'working'
-        # An email is a touch like any other: it earns a follow-up date, or it
-        # is just another thing sent into a void.
-        p.next_action = 'Follow up on the email'
-        p.next_action_date = (local_today() + timedelta(days=4)).isoformat()
-        db.session.commit()
-        flash(f'Sent to {to}. Follow up {p.next_action_date}.', 'success')
-    else:
-        db.session.commit()
-        flash(f'Could not send: {detail}', 'error')
+    # The sending itself lives in prospecting.send_outreach, because the
+    # assistant offers this too and two copies of it is how one of them stops
+    # logging the touch without anybody noticing.
+    ok, said = prospecting.send_outreach(
+        p, request.form.get('subject'), request.form.get('body'),
+        to=request.form.get('email'))
+    flash(said, 'success' if ok else 'error')
     return redirect(url_for('places_finder.dashboard', view=view))
 
 
@@ -423,11 +657,40 @@ def export_csv():
         'Content-Disposition': f'attachment; filename=call-list-{stamp}.csv'})
 
 
-def _prepend_entry(prospect, header):
-    """One dated line above the existing notes."""
-    from scheduling import local_now
-    stamp = local_now().strftime('[%b %d] ')
-    return (stamp + header + '\n\n' + (prospect.notes or '')).strip()
+def _log_call(prospect, form, outcome):
+    """Write down a call and schedule whatever comes next.
+
+    Lifted out of update_status so the call sheet records a call exactly the
+    way the drawer always has -- one way of writing a call down, not two that
+    drift apart.
+    """
+    # Details worth having as fields rather than buried in prose: you can't
+    # email a note, and "call them before the renewal" needs a date.
+    for field, attr in (('contact', 'contact_name'), ('email', 'email'),
+                        ('renewal', 'renewal_note')):
+        val = (form.get(field) or '').strip()
+        if val:
+            setattr(prospect, attr, val)
+
+    # Each save prepends a dated entry instead of overwriting, so the renewal
+    # date and what they actually said survive the next call.
+    prospect.notes = _prepend_log(prospect, form)
+
+    # A booked walkthrough is what the call was for, so the date they agreed
+    # becomes the next action outright, rather than the table's "book the
+    # walkthrough in two days" -- which is advice for a call that has not
+    # happened yet. It then shows on the calendar beside the cleans, which is
+    # where somebody looks the night before.
+    walkthrough = (form.get('walkthrough_date') or '').strip()
+    action = (form.get('next_action') or '').strip() or None
+    when = (form.get('next_action_date') or '').strip() or None
+    if outcome == 'interested' and walkthrough:
+        action, when = 'Walkthrough', walkthrough
+
+    # Where they are now, and what happens next. A blank action here means the
+    # caller took the suggestion; an explicit one overrules it.
+    return prospecting.apply_outcome(
+        prospect, outcome, next_action=action, next_action_date=when)
 
 
 def _prepend_log(prospect, form):

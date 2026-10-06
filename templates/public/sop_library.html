@@ -4,22 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cleaning SOPs — {{ biz }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
-    body { font-family: Inter, -apple-system, sans-serif; background:#f6f5fb; margin:0; color:#1f1333; }
+    body { font-family: Inter, -apple-system, sans-serif; background:var(--ground); margin:0; color:var(--ink); }
     .wrap { max-width:640px; margin:0 auto; padding:20px 14px 60px; }
-    .hero { background:linear-gradient(135deg,#1f1333,#3b2460); border-radius:14px; padding:24px 20px; text-align:center; }
-    .hero h1 { color:#d3a84f; margin:0 0 4px; font-size:1.3rem; }
-    .hero p { color:#c9b8e8; margin:0; font-size:0.85rem; }
+    .hero { background:linear-gradient(135deg,var(--ink),var(--ink-2)); border-radius:14px; padding:24px 20px; text-align:center; }
+    .hero h1 { color:var(--amber); margin:0 0 4px; font-size:1.3rem; }
+    .hero p { color:var(--info-soft); margin:0; font-size:0.85rem; }
     .cat { margin-top:22px; }
-    .cat h2 { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.1em; color:#9a95ad; margin:0 0 8px; }
-    details.sop { background:#fff; border:1px solid #e4dfef; border-radius:12px; margin-bottom:10px; overflow:hidden; }
-    details.sop summary { cursor:pointer; padding:15px 18px; font-weight:700; font-size:0.98rem; list-style:none; color:#1f1333; }
+    .cat h2 { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--softer); margin:0 0 8px; }
+    details.sop { background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:10px; overflow:hidden; }
+    details.sop summary { cursor:pointer; padding:15px 18px; font-weight:700; font-size:0.98rem; list-style:none; color:var(--ink); }
     details.sop summary::-webkit-details-marker { display:none; }
-    details.sop[open] summary { border-bottom:1px solid #f0eef7; color:#b98a33; }
+    details.sop[open] summary { border-bottom:1px solid var(--info-soft); color:var(--amber-deep); }
     .sop-body { padding:16px 18px; }
     pre.content { white-space:pre-wrap; word-wrap:break-word; font-family:Inter,-apple-system,sans-serif;
-                  font-size:0.9rem; line-height:1.7; color:#2a2340; margin:0; }
-    .empty { background:#fff; border:1px solid #e4dfef; border-radius:12px; padding:24px; text-align:center; color:#9a95ad; margin-top:18px; }
+                  font-size:0.9rem; line-height:1.7; color:var(--info); margin:0; }
+    .empty { background:#fff; border:1px solid var(--line); border-radius:12px; padding:24px; text-align:center; color:var(--softer); margin-top:18px; }
   </style>
 </head>
 <body>

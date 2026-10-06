@@ -8,7 +8,7 @@ import os, sys, tempfile
 from datetime import date, timedelta
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/confirm.db'
-os.environ['SECRET_KEY'] = 'test'
+os.environ['SECRET_KEY'] = 'test-secret-key-not-for-production-use'
 os.environ['CRM_BASE'] = 'https://crm.example.com'
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -228,7 +228,9 @@ print('\n🎉 Confirm, suggest another time, or decline — and none of it needs
 
 # ── It should not offer to ask about a job that already happened. ────────────
 with app.app_context():
-    print('\n16. No confirm card on a job that is done or cancelled')
+    # The confirm request is now an option in the Send to customer card
+    # rather than a card of its own, so this asks after the option.
+    print('\n16. No confirm option on a job that is done or cancelled')
     done = pencilled_in('Past Customer', 'past@example.com')
     done.status = 'completed'; db.session.commit()
     page = c.get(f'/bookings/{done.id}').get_data(as_text=True)
@@ -238,11 +240,12 @@ with app.app_context():
     gone = pencilled_in('Cancelled Customer', 'gone@example.com')
     gone.status = 'cancelled'; db.session.commit()
     page = c.get(f'/bookings/{gone.id}').get_data(as_text=True)
-    check('Waiting On The Customer' not in page, 'nor a cancelled one')
+    check('Ask them to confirm' not in page, 'nor a cancelled one')
 
     live = pencilled_in('Still Deciding', 'live@example.com')
     page = c.get(f'/bookings/{live.id}').get_data(as_text=True)
-    check('Waiting On The Customer' in page, 'but a pending job still offers it')
+    check('Ask them to confirm' in page, 'but a pending job still offers it')
+    check('/proposal/send' in page, 'and the form that does it is really on the page')
 
 print('\n🎉 Only jobs still ahead of you can be sent for confirmation.')
 

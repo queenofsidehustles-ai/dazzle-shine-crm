@@ -1,0 +1,46 @@
+{% extends "marketing/_shell.html" %}
+{% block title %}{{ b.TITLE }} — practical writing for cleaning business owners{% endblock %}
+{% block description %}{{ b.SUBTITLE }}{% endblock %}
+
+{% block head_extra %}
+<style>
+  .blog { max-width: 720px; margin: 0 auto; }
+  .blog h1 { font-size: clamp(2rem, 5vw, 2.9rem); line-height: 1.1;
+             letter-spacing: -.03em; margin: 0 0 var(--s4); }
+  .blog .lede { font-size: 1.12rem; line-height: 1.65; color: var(--muted);
+                margin: 0 0 var(--s8); }
+  .posts { display: flex; flex-direction: column; gap: var(--s5);
+           margin: 0; padding: 0; list-style: none; }
+  .post-card { border-top: 1px solid var(--line); padding-top: var(--s5); }
+  .post-card:first-child { border-top: 0; padding-top: 0; }
+  .post-card h2 { font-size: 1.32rem; line-height: 1.25; letter-spacing: -.02em;
+                  margin: 0 0 var(--s2); }
+  .post-card h2 a { color: var(--ink); text-decoration: none; }
+  .post-card h2 a:hover { color: var(--amber-deep); }
+  .post-card p { line-height: 1.7; margin: 0; color: var(--muted); }
+  .post-meta { display: block; font-size: var(--t-xs); text-transform: uppercase;
+               letter-spacing: .1em; color: var(--softer); font-weight: 700;
+               margin: 0 0 var(--s2); }
+</style>
+{% endblock %}
+
+{% block body %}
+<section>
+  <div class="wrap">
+<article class="blog">
+  <h1>{{ b.TITLE }}</h1>
+  <p class="lede">{{ b.SUBTITLE }}</p>
+
+  <ul class="posts">
+    {% for e in entries %}
+    <li class="post-card">
+      <span class="post-meta">{{ e.date }}</span>
+      <h2><a href="{{ url_for(e.endpoint) if e.endpoint else url_for('marketing.blog_post', slug=e.slug) }}">{{ e.title }}</a></h2>
+      <p>{{ e.dek }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+</article>
+  </div>
+</section>
+{% endblock %}

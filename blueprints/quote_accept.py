@@ -9,7 +9,7 @@ different number from the one they were told on the phone. Here the figure is
 read off the quote and carried straight into the booking.
 """
 from flask import (Blueprint, render_template, request, redirect, url_for,
-                   abort, flash)
+                   flash)
 from models import Lead
 import quoting
 

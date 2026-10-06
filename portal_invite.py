@@ -32,7 +32,6 @@ def _money(v):
 
 
 def _shell(inner, biz):
-    accent = '#b98a33'
     return f"""
 <div style="font-family:Inter,-apple-system,Segoe UI,sans-serif;max-width:540px;margin:0 auto;color:#1f1333;line-height:1.6">
 {inner}

@@ -7,7 +7,6 @@ movement, so this reads it rather than guessing.
 
 Safe to call repeatedly: syncing a month replaces that month's stored number.
 """
-import os
 from calendar import monthrange
 from datetime import datetime, timezone
 
@@ -33,7 +32,9 @@ def fetch_month_fees(year, month):
     Returns (ok, amount_or_error)."""
     if not is_configured():
         return False, 'Stripe is not configured (missing STRIPE_SECRET_KEY).'
-    stripe.api_key = os.environ['STRIPE_SECRET_KEY']
+    # This company's own key, the one is_configured() just checked -- not the
+    # environment's, which is another Stripe account's balance.
+    stripe.api_key = integrations.stripe_secret_key()
     start = _epoch(year, month, 1)
     end = _epoch(year, month, monthrange(year, month)[1], end=True)
     total = 0

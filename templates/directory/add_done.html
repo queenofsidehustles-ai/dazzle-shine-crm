@@ -1,0 +1,17 @@
+{% extends "directory/_base.html" %}
+{% block title %}Thanks{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>We&rsquo;ve got it.</h1>
+  <p><strong>{{ sub.name }}</strong>{% if sub.city %} in {{ sub.city }}{% endif %} is in
+    the queue. A person checks each one so nobody can list a business that
+    isn&rsquo;t theirs, then it goes up on the next update.</p>
+  <p>We&rsquo;ll email <strong>{{ sub.email }}</strong> when it&rsquo;s live.</p>
+  <h2>While you wait</h2>
+  <p>Akye is the back office behind this board. Jobs go out to your whole team and get
+    claimed, applicants record a video interview and onboard themselves, and payroll
+    adds itself up. The free plan runs a real business &mdash; no card.</p>
+  <a class="btn" href="{{ url_for('marketing.home', _external=True) }}">See what Akye does</a>
+  <a class="btn ghost" href="https://getakye.com/">Back to the board</a>
+</div>
+{% endblock %}

@@ -27,7 +27,9 @@ def check(cond, m):
     print(f'  ✅ {m}')
 
 app = create_app()
-with app.app_context():
+# A successful authenticate() binds the browser session (auth.bind_session_to_current_tenant),
+# so the checks run inside a request, as a real sign-in does.
+with app.test_request_context('/login', method='POST'):
     db.create_all()
 
     print('\n1. A fresh instance with nothing configured lets nobody in')

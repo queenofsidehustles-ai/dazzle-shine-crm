@@ -1,0 +1,10 @@
+{% extends "directory/_base.html" %}
+{% block title %}That code has expired{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>That code has expired.</h1>
+  <p>Codes last thirty minutes, and there&rsquo;s a limit on tries. Start again and
+    we&rsquo;ll send a fresh one.</p>
+  <a class="btn" href="{{ url_for('directory.claim_start', listing_id=claim.listing_id) }}">Try again</a>
+</div>
+{% endblock %}

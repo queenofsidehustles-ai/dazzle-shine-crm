@@ -31,6 +31,10 @@ FIELDS = {
     'twilio_phone':           ('TWILIO_PHONE', 'Twilio phone number', False),
     'resend_api_key':         ('RESEND_API_KEY', 'Resend API key', True),
     'stripe_webhook_secret':  ('STRIPE_WEBHOOK_SECRET', 'Stripe webhook signing secret', True),
+    'cloudinary_cloud_name':  ('CLOUDINARY_CLOUD_NAME', 'Cloudinary cloud name', False),
+    'cloudinary_api_key':     ('CLOUDINARY_API_KEY', 'Cloudinary API key', False),
+    'cloudinary_api_secret':  ('CLOUDINARY_API_SECRET', 'Cloudinary API secret', True),
+    'google_places_api_key':  ('GOOGLE_PLACES_API_KEY', 'Google Places API key', True),
 }
 
 _PREFIX = 'int_'
@@ -66,18 +70,92 @@ def _stored(name):
         return ''
 
 
+# Keys that would let a company reach the outside world. A demo company gets
+# none of them -- not its own and not the platform's environment fallback --
+# so every Stripe, Twilio and Resend path sees "not connected" (demo_guard.py).
+_OUTBOUND = frozenset({'stripe_secret_key', 'stripe_publishable_key',
+                       'stripe_webhook_secret', 'twilio_account_sid',
+                       'twilio_auth_token', 'twilio_phone', 'resend_api_key',
+                       'google_places_api_key'})
+
+
+# A company's own payment keys. On hosted Akye these come only from that
+# company's own Settings -> Connections, never from the environment: a company
+# that has not connected Stripe would otherwise take its customers' payments --
+# and pay its cleaners -- through whatever account STRIPE_SECRET_KEY belongs
+# to. Not connected means not connected. Two companies sharing one Stripe
+# account is still possible, but only by each saving those keys itself, where
+# it is visible on its own Connections page -- never by an unseen fallback.
+_OWN_MONEY = frozenset({'stripe_secret_key', 'stripe_publishable_key',
+                        'stripe_webhook_secret'})
+
+
+def _env_allowed(name):
+    if name not in _OWN_MONEY:
+        return True
+    if not (os.environ.get('BASE_DOMAIN') or '').strip():
+        return True                      # single-business: the env IS the business
+    import tenancy
+    return not tenancy.is_tenant()
+
+
+# Everything else a company needs -- texting, email, job photos, lead search --
+# Akye provides on hosted Akye: one master Twilio, Resend, Cloudinary and Google
+# account, from the environment. A company neither sees those keys nor edits
+# them, and anything it saved here before is ignored. Otherwise a company
+# pressing Save on a pre-filled form froze copies of the master keys into its
+# own settings, where rotating them later would break it, and every owner could
+# read the master account's SID, phone number and Cloudinary key off the page.
+_PLATFORM = frozenset({'twilio_account_sid', 'twilio_auth_token', 'twilio_phone',
+                       'resend_api_key', 'cloudinary_cloud_name',
+                       'cloudinary_api_key', 'cloudinary_api_secret',
+                       'google_places_api_key'})
+
+
+def hosted_company():
+    """True inside a company on hosted Akye. False on the product site itself
+    and on a single-business install, where the environment is the business."""
+    if not (os.environ.get('BASE_DOMAIN') or '').strip():
+        return False
+    import tenancy
+    return tenancy.is_tenant()
+
+
+def platform_managed(name):
+    """True for a key Akye provides and the company cannot see or change."""
+    return name in _PLATFORM and hosted_company()
+
+
+def editable(name):
+    return name in FIELDS and not platform_managed(name)
+
+
+def _own(name):
+    """What the company saved for itself, if it is allowed to have its own."""
+    return '' if platform_managed(name) else _stored(name)
+
+
+def _env(name):
+    env_var = FIELDS.get(name, (None,))[0]
+    if not env_var or not _env_allowed(name):
+        return ''
+    return os.environ.get(env_var, '') or ''
+
+
 def get(name):
     """The key this CRM should actually use. Settings first, environment second."""
-    env_var = FIELDS.get(name, (None,))[0]
-    return _stored(name) or (os.environ.get(env_var, '') if env_var else '') or ''
+    if name in _OUTBOUND:
+        import demo_guard
+        if demo_guard.active():
+            return ''
+    return _own(name) or _env(name) or ''
 
 
 def source(name):
     """Where the value in use came from — for showing the owner what's what."""
-    if _stored(name):
+    if _own(name):
         return 'settings'
-    env_var = FIELDS.get(name, (None,))[0]
-    if env_var and os.environ.get(env_var):
+    if _env(name):
         return 'environment'
     return None
 
@@ -116,6 +194,10 @@ def twilio_auth_token():      return get('twilio_auth_token')
 def twilio_phone():           return get('twilio_phone')
 def resend_api_key():         return get('resend_api_key')
 def stripe_webhook_secret():  return get('stripe_webhook_secret')
+def cloudinary_cloud_name():  return get('cloudinary_cloud_name')
+def cloudinary_api_key():     return get('cloudinary_api_key')
+def cloudinary_api_secret():  return get('cloudinary_api_secret')
+def google_places_api_key():  return get('google_places_api_key')
 
 
 def stripe_ready():
@@ -128,6 +210,14 @@ def texting_ready():
 
 def email_ready():
     return bool(resend_api_key())
+
+
+def photos_ready():
+    return all((cloudinary_cloud_name(), cloudinary_api_key(), cloudinary_api_secret()))
+
+
+def lead_finder_ready():
+    return bool(google_places_api_key())
 
 
 def stripe_mode():
@@ -145,6 +235,8 @@ def missing_for(area):
         'stripe': ['stripe_secret_key', 'stripe_publishable_key'],
         'texting': ['twilio_account_sid', 'twilio_auth_token', 'twilio_phone'],
         'email': ['resend_api_key'],
+        'photos': ['cloudinary_cloud_name', 'cloudinary_api_key', 'cloudinary_api_secret'],
+        'lead_finder': ['google_places_api_key'],
     }
     return [FIELDS[n][1] for n in groups.get(area, []) if not get(n)]
 
@@ -156,4 +248,6 @@ def status():
                    'missing': missing_for('stripe')},
         'texting': {'ready': texting_ready(), 'missing': missing_for('texting')},
         'email': {'ready': email_ready(), 'missing': missing_for('email')},
+        'photos': {'ready': photos_ready(), 'missing': missing_for('photos')},
+        'lead_finder': {'ready': lead_finder_ready(), 'missing': missing_for('lead_finder')},
     }

@@ -1,0 +1,20 @@
+{% extends "console/_shell.html" %}
+{% block title %}{{ 'Edit playbook' if doc else 'Add a playbook' }}{% endblock %}
+{% block body %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s4)">{{ 'Edit playbook' if doc else 'Add a playbook' }}</h2>
+<form method="post" style="background:var(--surface);border:1px solid var(--line);
+             border-radius:var(--r);padding:var(--s4);max-width:760px">
+  <input type="text" name="title" placeholder="Title" required
+         value="{{ doc.title if doc else '' }}"
+         style="width:100%;margin-bottom:var(--s3)">
+  <textarea name="content" rows="24" required
+            placeholder="Paste the plan here — plain text or markdown, shown as written."
+            style="width:100%;margin-bottom:var(--s3);font-family:inherit">{{ doc.content if doc else '' }}</textarea>
+  <button class="btn btn-primary btn-sm" type="submit">Save</button>
+  {% if doc %}
+  <a href="{{ url_for('console.playbook_view', doc_id=doc.id) }}" class="btn btn-outline btn-sm">Cancel</a>
+  {% else %}
+  <a href="{{ url_for('console.playbooks') }}" class="btn btn-outline btn-sm">Cancel</a>
+  {% endif %}
+</form>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "marketing/_shell.html" %}
+{% block title %}{{ post.title }}{% endblock %}
+{% block description %}{{ post.dek }}{% endblock %}
+
+{% block head_extra %}
+{# Built from the same dict the page renders, for the same reason the guide
+   does it: two hand-written copies drift and this is the one nobody reads. #}
+<script type="application/ld+json">
+{{ b.structured_data(post, PRODUCT, PRODUCT_BASE + request.path) | tojson }}
+</script>
+<style>
+  .post { max-width: 720px; margin: 0 auto; }
+  .post h1 { font-size: clamp(1.9rem, 5vw, 2.7rem); line-height: 1.12;
+             letter-spacing: -.03em; margin: 0 0 var(--s4); }
+  .post .lede { font-size: 1.12rem; line-height: 1.65; color: var(--muted);
+                margin: 0 0 var(--s7); }
+  .post h2 { font-size: 1.36rem; line-height: 1.25; letter-spacing: -.02em;
+             margin: var(--s9) 0 var(--s4); scroll-margin-top: var(--s6); }
+  .post p { line-height: 1.75; margin: 0 0 var(--s4); color: var(--ink); }
+  .post-meta { display: block; font-size: var(--t-xs); text-transform: uppercase;
+               letter-spacing: .1em; color: var(--softer); font-weight: 700;
+               margin: 0 0 var(--s3); }
+  .back { display: inline-block; margin-top: var(--s8); color: var(--muted);
+          text-decoration: none; font-size: var(--t-sm); }
+  .back:hover { color: var(--amber-deep); }
+</style>
+{% endblock %}
+
+{% block body %}
+<section>
+  <div class="wrap">
+<article class="post">
+  <span class="post-meta">{{ post.date }}</span>
+  <h1>{{ post.title }}</h1>
+  <p class="lede">{{ post.dek }}</p>
+
+  {% for s in post.sections %}
+  <h2 id="{{ s.id }}">{{ s.h }}</h2>
+  {% for para in s.body %}<p>{{ para }}</p>{% endfor %}
+  {% endfor %}
+
+  <a class="back" href="{{ url_for('marketing.blog_index') }}">← All posts</a>
+</article>
+  </div>
+</section>
+{% endblock %}

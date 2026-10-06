@@ -178,6 +178,49 @@ def get_std_price(beds, baths):
                    PRICE_MATRIX_DEFAULTS.get((beds, baths), 0))
 
 
+def set_std_price(beds, baths, value):
+    """Set the price for one house size. This is what every quote reads."""
+    from models import PricingSetting
+    PricingSetting.set(f'std_price_{int(beds)}_{int(baths)}', value)
+
+
+def suggest_matrix(anchor_price, anchor=(2, 2)):
+    """A whole price list, scaled from the one price somebody actually knows.
+
+    Asking a cleaning company for "base price, plus per bedroom, plus per
+    bathroom" asks them to describe their pricing as a formula. Almost nobody
+    prices that way, which is why that form was left on its defaults and why
+    the owner of a cleaning company said it confused her.
+
+    Everybody can answer "what do you charge for a two-bed two-bath standard
+    clean". So this takes that one number and scales the rest of the list in
+    the same proportions as the defaults, giving a starting point that is
+    roughly right everywhere and exactly right where it was anchored. Every
+    cell stays editable afterwards -- these are suggestions, not a formula
+    they now have to live inside.
+    """
+    base = PRICE_MATRIX_DEFAULTS.get(tuple(anchor))
+    if not base or not anchor_price:
+        return dict(PRICE_MATRIX_DEFAULTS)
+    factor = float(anchor_price) / float(base)
+    out = {}
+    for size, default in PRICE_MATRIX_DEFAULTS.items():
+        # Rounded to the nearest 5. Nobody quotes $237.42, and a suggestion
+        # that looks calculated invites less trust than one that looks chosen.
+        out[size] = int(round(default * factor / 5.0) * 5)
+    return out
+
+
+def matrix_sizes():
+    """Every house size the price list covers, smallest first."""
+    return sorted(PRICE_MATRIX_DEFAULTS.keys())
+
+
+def current_matrix():
+    """What this business charges right now, per size."""
+    return {size: get_std_price(*size) for size in matrix_sizes()}
+
+
 def get_std_hours(beds, baths):
     beds, baths = nearest_baths(beds, baths)
     return _db_get(f'std_hours_{beds}_{baths}',
@@ -251,14 +294,26 @@ def get_deposit():
 
 # ── Core calculation ───────────────────────────────────────────────────────────
 
+def _whole_rooms(value):
+    """'3', 3, '2.5', 2.5 and '5+' as a whole number of rooms. Anything that
+    is not a finite number -- 'abc', 'inf', 'nan' -- is a ValueError, the one
+    error callers already expect from a bad room count."""
+    n = float(str(value).replace('+', '').strip() or 1)
+    if n != n or n in (float('inf'), float('-inf')):
+        raise ValueError(f'not a room count: {value!r}')
+    return int(n)
+
+
 def calculate_job(service_type, beds, baths, sqft=None, extras=None, frequency='one_time'):
     """
     Returns a dict with all four key numbers:
       client_price, contractor_earnings, hours, hourly_rate
     Plus breakdown fields for display.
     """
-    beds = min(int(str(beds).replace('+', '') or 1), 5)
-    baths = int(str(baths).replace('+', '') or 1)
+    # float() first: a form can send "2.5" bathrooms, and int("2.5") raises.
+    # A half bath prices as the whole bathrooms below it, as before.
+    beds = min(_whole_rooms(beds), 5)
+    baths = _whole_rooms(baths)
 
     std_price  = get_std_price(beds, baths)
     multiplier = get_multiplier(service_type)
@@ -376,9 +431,3 @@ def calculate_price(service_type, bedrooms, bathrooms, extras=None, frequency='o
         sqft_val = None
     return calculate_job(service_type, bedrooms, bathrooms, sqft=sqft_val,
                          extras=extras_str, frequency=frequency)['client_price']
-
-
-def get_service_price(service_type, field):
-    if field == 'base':
-        return round(get_std_price(1, 1) * get_multiplier(service_type), 2)
-    return 0

@@ -27,18 +27,16 @@ name: Automations
 
 on:
   schedule:
-    # OFF until a business can say how it wants balances collected.
-    #
-    # Charging a card is the one automation that cannot be undone, and today no
-    # business is having it done: nothing has been running. Switching this on
-    # would start charging real customers at four live companies that have never
-    # seen it happen and were never asked -- a surprise landing on their
-    # customers, not just on them.
-    #
-    # It comes back when each business has chosen: charge automatically, tell me
-    # it is due, or never touch the card. Until then the hourly run does not
-    # exist.
-    # - cron: '5 * * * *'
+    # Charging a card is the one automation that cannot be undone, which is why
+    # this stayed off until a business could say how it wants balances
+    # collected. That per-business choice now exists (automations.balance_mode,
+    # set from the Automations page) and is the actual safety gate: the
+    # endpoint only charges anything for a business that has explicitly chosen
+    # "auto" (automations.is_enabled('charge-balances')); "ask" (the default)
+    # and "never" are untouched by this running. So turning the timetable back
+    # on charges nobody who hasn't opted in -- it stops being a no-op only for
+    # whoever already asked for it.
+    - cron: '5 * * * *'
     # Everything else once a day, early enough that a day-before reminder
     # arrives the evening before rather than the morning of.
     - cron: '0 22 * * *'
@@ -47,18 +45,13 @@ on:
       cadence:
         description: Which timetable to run by hand
         type: choice
-        # 'hourly' is charge-balances and is deliberately not offered until the
-        # per-business setting exists. Running it by hand would charge cards at
-        # every company at once.
-        options: [daily]
+        options: [daily, hourly]
         default: daily
       only:
         description: A single company slug, for testing. Blank runs all.
         type: string
         default: ''
 
-# One at a time. Two runs charging the same balances at once is the failure
-# worth designing out, whatever the endpoints do about it themselves.
 concurrency:
   group: automations
   cancel-in-progress: false
@@ -70,12 +63,19 @@ jobs:
       contents: read
 
     steps:
-      # The companies are on Akye, so the code that knows what a company is
-      # comes from Akye's released branch — not from main, which has no tenancy
-      # and no control plane to read.
+      # Exact-release provenance matters for a launch gate. Do not silently
+      # substitute a hard-coded branch here: checkout must use the same ref/SHA
+      # that triggered this workflow. For a scheduled run GitHub supplies the
+      # default-branch commit containing the workflow; for workflow_dispatch it
+      # uses the selected ref. That makes the code that runs auditable from the
+      # workflow run itself instead of being an implicit second release.
       - uses: actions/checkout@v4
-        with:
-          ref: akye-stable
+
+      - name: Record scheduler source revision
+        run: |
+          echo "scheduler_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "Scheduler source: $(git rev-parse HEAD)"
+        id: source
 
       - uses: actions/setup-python@v5
         with:
@@ -105,12 +105,11 @@ jobs:
             ${{ inputs.only && format('--only {0}', inputs.only) || '' }} \
             | tee run.log
 
-      # The whole point of moving this off the customer is that a failure
-      # becomes ours to notice. A red run is the notice.
       - name: Say what happened
         if: always()
         run: |
           echo "### Automations — ${{ steps.which.outputs.cadence }}" >> $GITHUB_STEP_SUMMARY
+          echo "Scheduler source: ${{ steps.source.outputs.scheduler_sha }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           tail -40 run.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(no output)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

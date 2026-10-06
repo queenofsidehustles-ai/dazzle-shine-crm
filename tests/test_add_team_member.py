@@ -23,6 +23,19 @@ from extensions import db
 from models import Staff, Booking
 app = create_app()
 
+# PLAN FOR THIS TEST. A fresh database starts on the free plan, which allows two
+# cleaners and sends no texts -- correct for a brand-new signup, and not what
+# this file is about. Say which plan is being exercised rather than leaving it
+# to a default that will change again.
+with app.app_context():
+    from models import BusinessSetting as _BS
+    from extensions import db as _db
+    _BS.set('plan', 'scale')
+    _BS.set('plan_status', 'active')
+    _db.session.commit()
+import entitlements as _ent
+_ent._clear_cache()
+
 
 def check(cond, m):
     assert cond, f'FAILED: {m}'
@@ -103,5 +116,46 @@ with app.app_context():
     check(not s.is_active, 'unticking Active deactivates them')
     detail = c.get(f'/bookings/{b.id}').get_data(as_text=True)
     check('Nextdoor Neighbour' not in detail, 'and they drop off the job picker')
+
+    print('\nRenaming a cleaner keeps the pay she has already earned')
+    # A solo job records its cleaner as a NAME. Renaming the Staff row used to
+    # leave every such job pointing at the old string: payroll matched on the new
+    # name, found nothing, and work she had done but not been paid for dropped
+    # off the only screen that could pay her. Worse, a later hire with the old
+    # name inherited it and would have been paid for her work.
+    import contractor_pay
+    maria = Staff(name='Maria', phone='4075551111', email='maria@example.com',
+                  is_active=True, pay_type='percent', pay_rate=50.0)
+    db.session.add(maria); db.session.commit()
+    for n, price in enumerate([200.0, 180.0, 240.0], start=1):
+        db.session.add(Booking(service_type='standard', name=f'Rename Client {n}',
+                               address=f'{n} Rename St', price=price, bedrooms='3',
+                               bathrooms='2', status='completed',
+                               preferred_date=f'2026-09-0{n}', assigned_cleaner='Maria'))
+    db.session.commit()
+    before = contractor_pay.summary_for(maria)
+    check(before['jobs'] == 3 and before['owed'] == 310.0,
+          f"she is owed ${before['owed']:.2f} across {before['jobs']} finished jobs")
+
+    c.post(f'/staff/{maria.id}', data={'name': 'Maria Delgado', 'phone': '4075551111',
+           'email': 'maria@example.com', 'is_active': 'on',
+           'pay_type': 'percent', 'pay_rate': '50'}, follow_redirects=True)
+    db.session.expire_all(); maria = Staff.query.get(maria.id)
+    check(maria.name == 'Maria Delgado', 'she is renamed')
+    after = contractor_pay.summary_for(maria)
+    check(after['owed'] == 310.0, 'and is still owed every cent of it')
+    check(Booking.query.filter_by(assigned_cleaner='Maria').count() == 0,
+          'no job is left pointing at the name she no longer has')
+
+    print('\nTwo cleaners cannot share one name, because pay follows the name')
+    r = c.post('/staff/new', data={'name': 'maria delgado', 'phone': '4075552222',
+               'email': 'other@example.com', 'is_active': 'on',
+               'pay_type': 'percent', 'pay_rate': '50'}, follow_redirects=True)
+    check(Staff.query.filter(db.func.lower(Staff.name) == 'maria delgado').count() == 1,
+          'a second Maria Delgado is refused, whatever the capitals')
+    check('already have a team member' in r.get_data(as_text=True),
+          'and she is told why, not just bounced')
+    check(contractor_pay.summary_for(Staff.query.get(maria.id))['owed'] == 310.0,
+          "so nobody else can end up holding Maria's wages")
 
     print('\nAll add-team-member checks passed.')

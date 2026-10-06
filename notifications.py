@@ -57,6 +57,49 @@ def _log_outbound(channel, to_address, to_name, subject, body, ok, detail,
         pass
 
 
+def _demo_blocked(channel, to_address, to_name, subject, body):
+    """(False, why) if this is a demo company's message, which never leaves.
+
+    Checked before any key is looked up, so it holds even when a caller hands
+    in a key of its own. Logged like any other failure, so the Sent Log shows
+    what the demo would have sent. See demo_guard.py."""
+    import demo_guard
+    if not demo_guard.active():
+        return None
+    if channel == 'email' and _is_our_support_inbox(to_address):
+        # Akye's own crash alert or feedback notice about the demo, to Akye.
+        # Nobody fictional is contacted, and a prospect's crash is one to hear about.
+        return None
+    _log_outbound(channel, to_address, to_name, subject, body, False,
+                  demo_guard.BLOCKED_DETAIL)
+    _say_demo_blocked_once()
+    return False, demo_guard.BLOCKED_DETAIL
+
+
+def _is_our_support_inbox(address):
+    try:
+        import product
+        ours = (product.support_email() or '').strip().lower()
+    except Exception:
+        return False
+    return bool(ours) and (address or '').strip().lower() == ours
+
+
+def _say_demo_blocked_once():
+    """Tell whoever pressed the button, once per request, that nothing went.
+
+    Many pages report "Sent" from having asked rather than from the answer, so
+    without this a demo would claim texts and emails it never sent."""
+    try:
+        from flask import flash, g, has_request_context
+        if has_request_context() and not g.get('demo_blocked_said'):
+            g.demo_blocked_said = True
+            flash('Demo company: nothing was actually sent — every email and text '
+                  'is written to the Sent Log instead.', 'info')
+    except Exception:
+        pass
+
+
 # ── Marketing opt-out (unsubscribe) ─────────────────────────────────────────────
 
 def _unsub_secret():
@@ -163,6 +206,9 @@ def send_marketing_sms(to_phone, message):
     deliberately do not: someone who stopped marketing still needs to be told
     their cleaner is outside, and Twilio makes the final call on a number that
     has genuinely opted out of everything."""
+    blocked = _demo_blocked('sms', to_phone, None, None, message)
+    if blocked:
+        return blocked
     if sms_opted_out(to_phone):
         detail = 'Not sent — this number has asked us to stop texting.'
         _log_outbound('sms', to_phone, None, None, message, False, detail)
@@ -171,7 +217,7 @@ def send_marketing_sms(to_phone, message):
 
 
 def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe_url=None,
-                         append_text=None, append_unless=None):
+                         append_text=None, append_unless=None, cc=None):
     """Look up an EmailTemplate by trigger key, fill in variables, and send.
     If unsubscribe_url is given, an unsubscribe line is added to the footer
     (use for marketing emails). Returns True if sent, False otherwise.
@@ -203,7 +249,7 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
     body_text = _sub(raw_body, v)
     html = _wrap_html(body_text, biz, unsubscribe_url=unsubscribe_url)
     send_email(to_email=to_email, to_name=to_name, subject=subject,
-               html=html, from_name=biz)
+               html=html, from_name=biz, cc=cc)
     return True
 
 
@@ -243,12 +289,28 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
 
 
 def send_email(to_email, to_name, subject, html, from_name=None,
-               from_email=None, reply_to=None):
+               from_email=None, reply_to=None, api_key=None, cc=None):
     """Send via Resend. Returns (ok: bool, detail: str) so callers/diagnostics
     can see what happened. Existing callers that ignore the return value are
     unaffected. from_email/reply_to let a branded caller (e.g. a commercial
-    quote) override the sender identity per brand."""
-    api_key = integrations.resend_api_key()
+    quote) override the sender identity per brand.
+
+    `cc` copies a second address that is NOT the customer -- a homeowner behind
+    the builder who booked, a landlord behind the tenant. It is dropped when it
+    is blank or the same address as `to_email`, so nobody is sent two copies of
+    their own email.
+
+    `api_key` exists for mail the PRODUCT sends — a trial reminder, a crash
+    alert — as opposed to mail a cleaning company sends its own customers.
+    Without it the key comes from `integrations`, which reads whichever
+    company's settings the current request belongs to. So a crash inside a
+    customer's CRM would have emailed us through that customer's Resend
+    account: billed to them, in their logs, and failing outright if they had
+    never connected one. Those are our emails and they go out on our key."""
+    blocked = _demo_blocked('email', to_email, to_name, subject, html)
+    if blocked:
+        return blocked
+    api_key = (api_key or '').strip() or integrations.resend_api_key()
     from_email = from_email or branding.from_email()
     if not from_name:
         from_name = branding.biz_name()
@@ -267,6 +329,11 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     # sent "from" the branded domain address.
     reply_to = reply_to or os.environ.get('REPLY_TO_EMAIL') or \
         branding.owner_email()
+    # A copy to the same person is not a copy, and a blank one is a Resend
+    # validation error rather than a quietly ignored field.
+    cc = (cc or '').strip()
+    if not looks_like_email(cc) or cc.lower() == (to_email or '').strip().lower():
+        cc = ''
     try:
         resp = http_requests.post(
             'https://api.resend.com/emails',
@@ -280,6 +347,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
                 'reply_to': reply_to,
                 'subject': subject,
                 'html': html,
+                **({'cc': [cc]} if cc else {}),
             },
             timeout=10,
         )
@@ -297,6 +365,12 @@ def send_email(to_email, to_name, subject, html, from_name=None,
                 msg_id = ''
             detail = f'Accepted by Resend from {from_email}'
             detail += f' (id {msg_id}).' if msg_id else '. No message id returned.'
+            # Who else received it belongs in the Sent log. A copy that leaves
+            # no trace is indistinguishable from one that was never sent, and
+            # the whole point of copying somebody is being able to say later
+            # that they were told.
+            if cc:
+                detail += f' Copied to {cc}.'
             ok = True
         else:
             ok, msg_id = False, ''
@@ -309,6 +383,9 @@ def send_email(to_email, to_name, subject, html, from_name=None,
 
 
 def add_to_mailerlite(email, name, group_id=None):
+    import demo_guard
+    if demo_guard.active():
+        return
     api_key = os.environ.get('MAILERLITE_API_KEY')
     if not group_id:
         group_id = os.environ.get('MAILERLITE_GROUP_ID', '189490896944760797')
@@ -332,9 +409,54 @@ def add_to_mailerlite(email, name, group_id=None):
         pass
 
 
+# What Twilio's error codes mean, in words somebody can act on. These four are
+# almost all of it; anything else is printed raw rather than guessed at.
+SMS_FAILURE_REASONS = {
+    '30003': 'the handset was unreachable — off, out of coverage, or the number is dead',
+    '30005': 'that number does not exist',
+    '30006': 'it is a landline, or a carrier that will not take texts',
+    '30007': 'the carrier blocked it as spam — usually a link, or too many at once',
+    '30008': 'the carrier rejected it without saying why',
+    '21610': 'that person replied STOP, so they are unsubscribed',
+}
+
+
+def _status_callback_url():
+    """Where Twilio should report delivery. Empty if we have no public address
+    to be called back on, in which case sending still works and we simply learn
+    less."""
+    try:
+        import branding, tenancy
+        base = (branding.crm_base() or '').rstrip('/')
+        if not base.startswith('https://'):
+            return ''
+        slug = (tenancy.current_schema() or '').replace(tenancy.SCHEMA_PREFIX, '')
+        return f'{base}/api/sms-status' + (f'?t={slug}' if slug else '')
+    except Exception:
+        return ''
+
+
 def send_sms(to_phone, message):
     """Send an SMS via Twilio. Returns (ok: bool, detail: str) so diagnostics
     can surface the real reason a text failed. Existing callers ignore the return."""
+    blocked = _demo_blocked('sms', to_phone, None, None, message)
+    if blocked:
+        return blocked
+    # The free plan sends no texts, and this is the only limit in the product
+    # that is about money rather than product design: every message costs real
+    # cash, every month, forever, to somebody who has never paid anything. It is
+    # enforced here rather than at each of the two dozen call sites, because one
+    # of those would eventually be missed and nobody would notice until the bill.
+    #
+    # Email is untouched, so a free business is never unable to reach its
+    # customers -- only unable to do it by text.
+    try:
+        import entitlements
+        if not entitlements.can('sms'):
+            entitlements.record_denial('sms', path='send_sms')
+            return False, 'Texting is part of the Pro plan. This was not sent.'
+    except Exception:
+        pass          # never let a plan check be the reason a text fails
     account_sid = integrations.twilio_account_sid()
     auth_token = integrations.twilio_auth_token()
     from_phone = integrations.twilio_phone()
@@ -356,10 +478,36 @@ def send_sms(to_phone, message):
         digits = ''.join(filter(str.isdigit, to_phone))
         formatted = ('+1' + digits) if not to_phone.startswith('+') else to_phone
         client = Client(account_sid, auth_token)
-        msg = client.messages.create(body=message, from_=from_phone, to=formatted)
+        # Ask Twilio to tell us what actually happened to it.
+        #
+        # Without this, 'sent' in the log means "Twilio accepted it", which is
+        # not the same as "it arrived" and reads exactly as though it were. A
+        # text filtered by the carrier — the single most common way a message
+        # vanishes — looks identical to one delivered, so the first thing
+        # anybody asks ("did it send?") has always had a misleading answer.
+        kwargs = dict(body=message, from_=from_phone, to=formatted)
+        cb = _status_callback_url()
+        if cb:
+            kwargs['status_callback'] = cb
+        msg = client.messages.create(**kwargs)
         ok, sid = True, msg.sid
         detail = f'Accepted by Twilio for {formatted} (id {sid}).'
     except Exception as e:
         ok, sid, detail = False, '', f'Twilio error: {e}'
+        # 21610: this person has told Twilio to stop, and we never saw them do
+        # it -- they can opt out by replying to any number, including one that
+        # was never ours. Without writing it down the only trace is a failed
+        # row in the Sent Log that reads like a glitch, so the same three
+        # people were refused five times each and nobody knew they were
+        # unreachable. Marked 'carrier' rather than 'stop' because she did not
+        # ask US to stop, and that difference matters if she ever asks why.
+        if getattr(e, 'code', None) == 21610 or 'unsubscribed recipient' in str(e).lower():
+            try:
+                record_sms_opt_out(to_phone, reason='carrier')
+                detail = ('Not delivered — this number has opted out of texts with '
+                          'the carrier. Added to your do-not-text list; they can '
+                          'undo it by texting START.')
+            except Exception:
+                pass
     _log_outbound('sms', to_phone, None, None, message, ok, detail, provider_id=sid)
     return ok, detail

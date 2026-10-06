@@ -1,0 +1,222 @@
+"""A new business being told what to do next, and being left alone once it is.
+
+The configuration checklist that already existed is the right list and the wrong
+first screen: somebody who signed up two minutes ago does not know what a Stripe
+key is for, and eight equally-weighted items with no order is a shape people
+close the tab on.
+
+So this is about a different question. Has the software done its job once? A
+business is only really using a CRM when a real job is on the calendar with a
+real cleaner assigned to it, and that milestone -- not signups, not logins -- is
+the number worth watching.
+
+The two ways to get this wrong are opposite. Say nothing, and a new owner sits
+on an empty dashboard wondering what they bought. Keep nagging after they are
+working, and it becomes furniture they learn to ignore.
+"""
+import os, sys, tempfile
+TMP = tempfile.mkdtemp()
+os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/gs.db'
+os.environ['SECRET_KEY'] = 'test'
+os.environ['ADMIN_USER'] = 'owner'
+os.environ['ADMIN_PASS'] = 'pw-for-the-test'
+os.environ['FLASK_ENV'] = 'development'
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import notifications
+notifications.send_sms = lambda *a, **k: (True, 'stub')
+notifications.send_email = lambda *a, **k: (True, 'stub')
+from app import create_app
+from extensions import db
+from models import BusinessSetting, Staff, Client, Booking, BookingCrew
+import onboarding
+
+app = create_app()
+
+
+def check(cond, m):
+    assert cond, f'FAILED: {m}'
+    print(f'  ✅ {m}')
+
+
+def client():
+    c = app.test_client()
+    with c.session_transaction() as s:
+        s['logged_in'] = True
+        s['role'] = 'owner'
+    return c
+
+
+with app.app_context():
+    db.create_all()
+
+print('\n1. A brand-new business is told one thing to do')
+with app.app_context():
+    p = onboarding.progress()
+check(p['done'] == 0 and p['percent'] == 0, 'nothing done yet')
+check(p['activated'] is False, 'and not activated')
+check(p['next']['key'] == 'business', 'the first thing asked for is the business name')
+# Counted from the journey rather than typed in. Adding a step is a product
+# decision, not a regression, and this assertion existed to check that a fresh
+# account has nothing done -- not to freeze the number at five.
+with app.app_context():
+    _total = len(onboarding.journey())
+check(len([s for s in p['steps'] if not s['done']]) == _total,
+      f'all {_total} steps are outstanding on a brand-new account')
+check(_total >= 5, f'and the journey has not been quietly gutted ({_total} steps)')
+
+c = client()
+r = c.get('/settings/getting-started')
+check(r.status_code == 200, 'the getting-started page loads')
+check(b'Next' in r.data, 'and shows a single next action')
+check(b'0%' in r.data or b'done' in r.data, 'with progress on it')
+
+print('\n2. The dashboard says the same thing, without being asked')
+r = c.get('/')
+check(b'Getting started' in r.data, 'a new business sees it on the dashboard')
+check(b'Tell us about your business' in r.data, 'naming the next step')
+
+print('\n3. Each step done moves it along, in order')
+# Read the order from the journey rather than restating it. What is being
+# checked is that finishing a step advances to the *next* one, not that the
+# list has a particular length -- adding a step is a product decision.
+with app.app_context():
+    expected = [s['key'] for s in onboarding.journey()]
+    for i, key in enumerate(expected):
+        p = onboarding.progress()
+        check(p['next']['key'] == key,
+              f'step {i + 1} of {len(expected)} asks for {key!r}')
+        # Do that step the way a real owner would.
+        if key == 'business':
+            BusinessSetting.set('business_name', 'Sparkle Cleaning')
+        elif key == 'pricing':
+            BusinessSetting.set('pricing_reviewed', '1')
+        elif key == 'booking_page':
+            # Marked when somebody copies the link or says they have shared it.
+            # It used to be marked by opening /book — which is where this very
+            # step's button pointed, so the step completed itself the moment
+            # anybody clicked it. See test_booking_page_setup.
+            BusinessSetting.set('booking_page_shared', '1')
+        elif key == 'team':
+            db.session.add(Staff(name='Maria', is_active=True))
+        elif key == 'client':
+            db.session.add(Client(name='Mrs Johnson', email='j@x.test'))
+        elif key == 'job':
+            b = Booking(service_type='deep', name='Thursday deep clean',
+                        status='confirmed', price=280.0)
+            db.session.add(b)
+            db.session.commit()
+            db.session.add(BookingCrew(booking_id=b.id, staff_id=1, pay_amount=129.0))
+        db.session.commit()
+
+print('\n4. A job with nobody on it is not the finish line')
+# Booking something and never assigning it is exactly the state a business gets
+# stuck in, and calling that "done" would hide the one step that matters.
+#
+# `complete`, not `activated`. Those were one flag and are now two questions:
+# `activated` is "have they put their real world in here" — a cleaner and a
+# customer, which is what starts the 14-day trial — and `complete` is "is every
+# setup step done", which is what puts the getting-started card away. Using one
+# answer for both meant the trial clock only began after all six steps, while
+# the banner promised it began at the first assigned job.
+with app.app_context():
+    BookingCrew.query.delete()
+    db.session.commit()
+    p = onboarding.progress()
+check(p['complete'] is False, 'an unassigned job does not finish the setup')
+check(p['activated'] is True,
+      'though the trial has started — they have a cleaner and a customer')
+check(p['next']['key'] == 'job', 'and the remaining step is still the job')
+with app.app_context():
+    _n = len(onboarding.journey())
+check(p['done'] == _n - 1,
+      f'every step but the last is done ({p["done"]} of {_n})')
+check(p['percent'] == round((_n - 1) / _n * 100),
+      f'and the percentage matches ({p["percent"]}%)')
+
+print('\n5. Assigning it is the moment it counts')
+with app.app_context():
+    b = Booking.query.first()
+    db.session.add(BookingCrew(booking_id=b.id, staff_id=1, pay_amount=129.0))
+    db.session.commit()
+    p = onboarding.progress()
+check(p['complete'] is True, 'a job with a cleaner on it finishes the setup')
+check(p['percent'] == 100, '100%')
+check(p['next'] is None, 'and there is nothing left to tell them to do')
+
+print('\n6. And then it gets out of the way')
+c = client()
+r = c.get('/')
+# The banner, not the words. There is now a permanent "Getting started" link
+# in the sidebar — added because a business that half-finished had no way back
+# to the list once the banner had gone — so the string is on every page by
+# design. What must disappear is the card.
+check(b'class="onboard-card"' not in r.data,
+      'the dashboard banner disappears by itself — nothing to dismiss')
+check(b'getting-started' in r.data,
+      'but the sidebar link stays, so the list can always be found again')
+r = c.get('/settings/getting-started')
+check(b'up and running' in r.data,
+      'and the page itself says so rather than showing an empty list')
+
+print('\n7. The older single-cleaner field counts too')
+# Jobs created before crews existed name the cleaner on the booking instead.
+# An established business must not be told to go and do its first job.
+with app.app_context():
+    BookingCrew.query.delete()
+    b = Booking.query.first()
+    b.assigned_cleaner = 'Maria'
+    db.session.commit()
+    p = onboarding.progress()
+check(p['activated'] is True,
+      'a job assigned the old way still counts as activated')
+
+print('\n8. Nothing here can take a page down')
+with app.app_context():
+    import models as m
+    real = m.Booking
+
+    class Broken:
+        @property
+        def query(self):
+            raise RuntimeError('database unreachable')
+
+    m.Booking = Broken()
+    try:
+        c2 = client()
+        r = c2.get('/settings/business')
+        ok = r.status_code == 200
+    finally:
+        m.Booking = real
+check(ok, 'a page still renders when the progress check cannot run')
+
+print('\nSetup progress is visible from every screen, not just the setup page')
+# A beta tester asked for this: they could not tell how much was left, and a
+# job that looks endless is the one that gets abandoned. The numbers already
+# existed in onboarding.progress() -- they were just only ever shown on the
+# one page somebody had to go looking for.
+shell = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates', 'base_admin.html')).read()
+check('SETUP and not SETUP.complete' in shell,
+      'the meter is drawn only while there is setup left to do')
+check('SETUP.percent' in shell and 'SETUP.done' in shell,
+      'and shows how far along they are')
+check('SETUP.next' in shell, 'and names the one thing to do next')
+
+# Dismissible, and only once a day. A reminder that cannot be put away is an
+# obstacle, and it annoys the person who has already decided to do it later.
+# Excludes both the dashboard AND the getting-started page itself -- each
+# already carries the full getting-started card, so the floating nudge would
+# otherwise repeat the same "what's next" message a second time on the same
+# screen.
+check("request.endpoint not in ('admin.dashboard', 'settings.getting_started')" in shell,
+      'the reminder stays off both pages that already carry the full card')
+check('hideNudge' in shell, 'the daily reminder can be dismissed')
+check("'setup-nudge-' + new Date()" in shell,
+      'and is keyed by the date, so it returns tomorrow rather than never')
+
+# The cost question: an established business must not recompute its onboarding
+# on every page load for the rest of its life.
+appsrc = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app.py')).read()
+check('if not setup_done and session.get(\'role\') == \'owner\'' in appsrc,
+      'progress is only worked out for an owner who has not finished')
+
+print('\n\n✅ All getting-started tests passed.\n')

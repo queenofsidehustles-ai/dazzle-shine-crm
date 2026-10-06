@@ -1,0 +1,65 @@
+{% extends "directory/_base.html" %}
+{% block title %}Your page{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>Your page</h1>
+  <p>This is what people see when they find
+    <strong>{{ listing.name if listing else 'your business' }}</strong>
+    {% if listing and listing.city %}in {{ listing.city }}{% endif %}. Fill in what you
+    like and leave the rest &mdash; anything blank simply does not appear.</p>
+  {% if listing and listing.url %}
+    <div class="kv"><span>Your page</span><span><a href="{{ listing.url }}">{{ listing.url }}</a></span></div>
+  {% endif %}
+
+  <form method="post">
+    <label for="headline">One line about you</label>
+    <input id="headline" name="headline" value="{{ prof.headline or '' }}"
+           maxlength="160" placeholder="Family-run house cleaning since 2016">
+
+    <label for="about">About the business</label>
+    <textarea id="about" name="about" rows="5"
+      placeholder="Who you are, what you are careful about, why somebody should call you rather than the next one down the page.">{{ prof.about or '' }}</textarea>
+
+    <label for="services">What you do <span class="fine">(one per line)</span></label>
+    <textarea id="services" name="services" rows="5"
+      placeholder="Regular house cleaning&#10;Deep cleans&#10;Move-in and move-out&#10;Short-term rental turnovers&#10;Offices">{{ prof.services or '' }}</textarea>
+
+    <label for="areas">Where you work</label>
+    <input id="areas" name="areas" value="{{ prof.areas or '' }}"
+           placeholder="The towns and neighborhoods you cover">
+
+    <label for="hours">Hours</label>
+    <input id="hours" name="hours" value="{{ prof.hours or '' }}"
+           placeholder="Mon–Fri 8–6, Saturdays by arrangement">
+
+    <label for="founded_year">Year you started <span class="fine">(optional)</span></label>
+    <input id="founded_year" name="founded_year" value="{{ prof.founded_year or '' }}"
+           maxlength="4" inputmode="numeric" placeholder="2016">
+
+    <h2>How people reach you</h2>
+    <label for="phone">Phone</label>
+    <input id="phone" name="phone" type="tel" value="{{ prof.phone or '' }}">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" value="{{ prof.email or '' }}">
+    <label for="website">Website <span class="fine">(if you have one)</span></label>
+    <input id="website" name="website" type="url" value="{{ prof.website or '' }}" placeholder="https://">
+    <label for="booking_url">Booking link <span class="fine">(if you take bookings online)</span></label>
+    <input id="booking_url" name="booking_url" type="url" value="{{ prof.booking_url or '' }}" placeholder="https://">
+
+    <h2>Your colour</h2>
+    <p class="fine">Used for the heading and the button on your page. Leave it alone if you
+      have no strong feeling &mdash; the default looks fine.</p>
+    <div style="display:flex;gap:12px;align-items:center;margin-top:8px">
+      <input type="color" name="brand_color" value="{{ prof.brand_color or '#0D1526' }}"
+             style="width:64px;height:44px;padding:4px;border-radius:9px;border:1.5px solid var(--line);background:var(--page)">
+      <span class="fine">{{ prof.brand_color or 'default' }}</span>
+    </div>
+
+    <button class="btn" type="submit">Save my page</button>
+  </form>
+
+  <p class="fine" style="margin-top:1.4rem">Saved changes appear on your page at the next
+    refresh, usually within a day. Bookmark this link to come back &mdash; there is no
+    password.</p>
+</div>
+{% endblock %}

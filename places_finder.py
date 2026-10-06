@@ -8,7 +8,6 @@ info on purpose); never private consumer data.
 House style mirrors payment_service.py: read the key from env, return a
 (success, data, error) tuple, never raise.
 """
-import os
 import requests
 
 # What we actually type into Google for each category the user picks.
@@ -32,8 +31,62 @@ FIELD_MASK = (
 )
 
 
+def demo_reason():
+    """Why sample businesses are showing, in the words the reader needs.
+
+    Two different situations wore one message. On hosted Akye the only one a
+    customer can hit is the demo company, and the message told her to set an
+    environment variable -- something only the person running the servers can
+    do, which on a product she is paying for reads as "this is broken and it
+    is your fault". The other case is a single-business install, where setting
+    that variable is exactly right and the person reading is the one who can.
+    """
+    import demo_guard
+    if demo_guard.active():
+        return 'demo_company'
+    return 'no_key'
+
+
+def own_key():
+    """True when the company is searching on its own Google account.
+
+    Then the searches are not ours to ration: they are billed to them, by
+    Google, directly. integrations._stored and not get(), because get() falls
+    back to the platform key and every company would look like it had brought
+    its own."""
+    import integrations
+    if integrations.platform_managed('google_places_api_key'):
+        return False                     # hosted Akye: Akye's key, Akye's allowance
+    try:
+        return bool((integrations._stored('google_places_api_key') or '').strip())
+    except Exception:
+        return False
+
+
+def allowance():
+    """Whose allowance this search spends, and whether it is already spent.
+
+    Returns (capped, count_it):
+
+      * demo company -- no call to Google, so nothing to ration or record
+      * their own Google key -- their account, their bill, no cap of ours
+      * otherwise it comes out of the plan's monthly searches
+
+    One function because the route had the same three cases spread across its
+    branches, where no test could reach them.
+    """
+    if not api_key_present():
+        return False, False
+    if own_key():
+        return False, False
+    import entitlements
+    return entitlements.at_limit('lead_searches_per_month'), True
+
+
 def api_key_present():
-    return bool(os.environ.get('GOOGLE_PLACES_API_KEY'))
+    import demo_guard
+    import integrations
+    return not demo_guard.active() and bool(integrations.google_places_api_key())
 
 
 def search_businesses(category, location, api_key=None):
@@ -42,7 +95,12 @@ def search_businesses(category, location, api_key=None):
     Returns (success: bool, listings: list[dict], error: str).
     Each listing: {place_id, business_name, phone, website, address, city, rating}.
     """
-    api_key = api_key or os.environ.get('GOOGLE_PLACES_API_KEY')
+    import demo_guard
+    if demo_guard.active():
+        return True, demo_listings(category, location), ''
+    if not api_key:
+        import integrations
+        api_key = integrations.google_places_api_key()
     if not api_key:
         return False, [], 'Google Places API key not configured'
 

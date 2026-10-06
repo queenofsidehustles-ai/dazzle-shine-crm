@@ -29,3 +29,4 @@ playwright-report/
 # Database backups — customer data, never committed
 backups/
 *.json.gz
+audit_report.txt

@@ -3,84 +3,248 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
+{# Today's list. Only shown once a business is past setup: a company with no
+   customers does not need telling that nobody is waiting on a reply, and the
+   getting-started card is a better use of that space. Everything on it is a
+   real count that disappears when it stops being true, so a quiet day looks
+   quiet rather than inventing something to do. #}
+{% if plan and ONBOARDING and ONBOARDING.complete %}
+<div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber)">
+  <div class="eyebrow" style="margin-bottom:10px">Today</div>
+  {% if plan.nothing %}
+  <p style="margin:0;color:var(--muted);line-height:1.6">{{ plan.say }}</p>
+  {% else %}
+  <div style="display:flex;flex-direction:column;gap:9px">
+    {% for urgency, text, link in plan['items'] %}
+    <a href="{{ link }}" style="display:flex;gap:11px;align-items:baseline;
+              text-decoration:none;color:inherit;line-height:1.55">
+      <span style="flex:0 0 auto;font-size:0.68rem;font-weight:700;letter-spacing:0.09em;
+                   text-transform:uppercase;padding:2px 8px;border-radius:999px;
+                   background:{{ 'var(--warn-soft)' if urgency == 'now' else 'var(--ground)' }};
+                   color:{{ 'var(--warn)' if urgency == 'now' else 'var(--softer)' }};
+                   border:1px solid {{ 'var(--warn)' if urgency == 'now' else 'var(--line)' }}">
+        {{ urgency }}
+      </span>
+      <span>{{ text }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# Until a business has a job on the calendar with a cleaner on it, the most
+   useful thing this page can do is say what to do next. It disappears by
+   itself the moment that happens -- nothing to dismiss, nothing to configure,
+   and it never nags a business that is already working. #}
+{% if ONBOARDING and not ONBOARDING.complete and ONBOARDING.next %}
+<a href="{{ url_for('settings.getting_started') }}" class="onboard-card">
+  <div>
+    <div class="eyebrow">Getting started — {{ ONBOARDING.done }} of {{ ONBOARDING.total }}</div>
+    <div class="t">{{ ONBOARDING.next.title }}</div>
+    <div class="w">{{ ONBOARDING.next.why }}</div>
+  </div>
+  <span class="btn btn-primary" style="pointer-events:none">{{ ONBOARDING.next.cta }} →</span>
+</a>
+{% endif %}
+
+{# ── What needs you ────────────────────────────────────────────────────────
+   Ordered by how soon it hurts. An unassigned job tomorrow morning is a
+   phone call from an angry customer; an unconfirmed booking is a maybe.
+   Rows only appear when the count is above zero, so this section is empty
+   most days and that is the point -- when something shows up here, it means
+   something.                                                              #}
+{% set has_attn = unassigned_tomorrow or unassigned_soon or pending or unpaid_done or open_claims %}
+{% if has_attn %}
+<div class="attn">
+  {% if unassigned_tomorrow %}
+  <a href="{{ url_for('bookings.index') }}" class="attn-item is-urgent">
+    <span class="n">{{ unassigned_tomorrow|length }}</span>
+    <span class="what">
+      <b>{{ 'job' if unassigned_tomorrow|length == 1 else 'jobs' }} tomorrow with nobody on them</b>
+      <span>{% for b in unassigned_tomorrow[:3] %}{{ b.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% if unassigned_tomorrow|length > 3 %} and {{ unassigned_tomorrow|length - 3 }} more{% endif %}</span>
+    </span>
+    <span class="go">›</span>
+  </a>
+  {% endif %}
+  {# Further out than tomorrow. Less urgent, so it sits below — but a job with
+     nobody on it is far easier to fill four days ahead than the night before,
+     which is the only moment this used to mention it. #}
+  {% if unassigned_soon %}
+  <a href="{{ url_for('bookings.index') }}" class="attn-item is-warn">
+    <span class="n">{{ unassigned_soon|length }}</span>
+    <span class="what">
+      <b>later {{ 'job' if unassigned_soon|length == 1 else 'jobs' }} with nobody assigned</b>
+      <span>{% for b in unassigned_soon[:3] %}{{ b.name }} ({{ b.preferred_date }}){% if not loop.last %}, {% endif %}{% endfor %}{% if unassigned_soon|length > 3 %} and {{ unassigned_soon|length - 3 }} more{% endif %}</span>
+    </span>
+    <span class="go">›</span>
+  </a>
+  {% endif %}
+  {% if open_claims %}
+  <a href="{{ url_for('bookings.index') }}" class="attn-item is-warn">
+    <span class="n">{{ open_claims }}</span>
+    <span class="what">
+      <b>out to the team, unclaimed</b>
+      <span>nobody has picked {{ 'it' if open_claims == 1 else 'them' }} up yet</span>
+    </span>
+    <span class="go">›</span>
+  </a>
+  {% endif %}
+  {% if pending %}
+  <a href="{{ url_for('bookings.index', status='pending') }}" class="attn-item is-warn">
+    <span class="n">{{ pending }}</span>
+    <span class="what">
+      <b>waiting on your confirmation</b>
+      <span>the customer has not heard back</span>
+    </span>
+    <span class="go">›</span>
+  </a>
+  {% endif %}
+  {% if unpaid_done %}
+  <a href="{{ url_for('bookings.index', status='completed') }}" class="attn-item is-info">
+    <span class="n">{{ unpaid_done }}</span>
+    <span class="what">
+      <b>finished but not paid</b>
+      <span>work done, money not collected</span>
+    </span>
+    <span class="go">›</span>
+  </a>
+  {% endif %}
+</div>
+{% elif total_bookings %}
+<div class="attn-clear">
+  <span style="font-size:1.1rem">✓</span>
+  <span><b>Nothing needs you.</b> Every job has somebody on it and nothing is waiting on a reply.</span>
+</div>
+{% endif %}
+
+{# ── The numbers ───────────────────────────────────────────────────────────
+   Above the day's list rather than below it. This sat under Today and
+   Tomorrow, so on a quiet morning the first thing on the page was a large
+   panel saying nothing was booked -- and the figures, which are true every
+   day, were somewhere below the fold.
+
+   Cards rather than one joined strip: four boxes with air between them read
+   as four separate facts, which is what they are. #}
 {% if money %}
-<!-- This month's money, cash basis — what actually landed and what's left -->
-<div class="stat-grid" style="margin-bottom:22px">
-  <a href="{{ url_for('money.pnl') }}" class="stat-card" style="text-decoration:none;color:inherit">
+<div class="stat-grid">
+  <a href="{{ url_for('money.pnl') }}" class="stat-card pos">
     <div class="label">Money in — {{ this_month }}</div>
-    <div class="value" style="color:#065f46">${{ '%.2f' % money.revenue }}</div>
+    <div class="value">${{ '%.2f' % money.revenue }}</div>
     <div class="sub">{{ money.jobs_paid }} job{{ 's' if money.jobs_paid != 1 }} paid</div>
   </a>
-  <a href="{{ url_for('money.expenses') }}" class="stat-card" style="text-decoration:none;color:inherit">
+  <a href="{{ url_for('money.expenses') }}" class="stat-card neg">
     <div class="label">Money out — {{ this_month }}</div>
-    <div class="value" style="color:#b91c1c">${{ '%.2f' % money.total_out }}</div>
+    <div class="value">${{ '%.2f' % money.total_out }}</div>
     <div class="sub">pay, fees &amp; expenses</div>
   </a>
-  <a href="{{ url_for('money.pnl') }}" class="stat-card" style="text-decoration:none;color:inherit;border-color:#d3a84f;background:linear-gradient(135deg,#fff9ec,#fff)">
-    <div class="label">Net profit — {{ this_month }}</div>
-    <div class="value" style="color:{{ '#b98a33' if money.net_profit >= 0 else '#b91c1c' }}">${{ '%.2f' % money.net_profit }}</div>
+  <a href="{{ url_for('money.pnl') }}" class="stat-card hero">
+    <div class="label">Kept — {{ this_month }}</div>
+    <div class="value"{% if money.net_profit < 0 %} style="color:var(--warn)"{% endif %}>${{ '%.2f' % money.net_profit }}</div>
     <div class="sub">{{ '%.1f' % money.margin }}% margin</div>
   </a>
-  <div class="stat-card">
+  <div class="stat-card owed">
     <div class="label">Still owed to you</div>
-    <div class="value" style="color:#c05621">${{ '%.2f' % money.unpaid_outstanding }}</div>
+    <div class="value">${{ '%.2f' % money.unpaid_outstanding }}</div>
     <div class="sub">booked or done, not paid</div>
   </div>
 </div>
 {% endif %}
 
+{# The four counts were being computed and passed to this page and then not
+   drawn at all. They answer "how much work is in the building", which the
+   money figures do not. #}
 <div class="stat-grid">
-  <div class="stat-card">
+  <a href="{{ url_for('bookings.index', status='pending') }}" class="stat-card warn">
     <div class="label">Pending</div>
-    <div class="value" style="color:#92400e">{{ pending }}</div>
-    <div class="sub">Need confirmation</div>
-  </div>
-  <div class="stat-card">
+    <div class="value">{{ pending }}</div>
+    <div class="sub">need confirming</div>
+  </a>
+  <a href="{{ url_for('bookings.index', status='confirmed') }}" class="stat-card info">
     <div class="label">Confirmed</div>
-    <div class="value" style="color:#1e40af">{{ confirmed }}</div>
-    <div class="sub">Upcoming jobs</div>
-  </div>
-  <div class="stat-card">
+    <div class="value">{{ confirmed }}</div>
+    <div class="sub">upcoming jobs</div>
+  </a>
+  <a href="{{ url_for('bookings.index', status='completed') }}" class="stat-card pos">
     <div class="label">Completed</div>
-    <div class="value" style="color:#065f46">{{ completed }}</div>
-    <div class="sub">All time</div>
-  </div>
-  <div class="stat-card">
-    <div class="label">Total Clients</div>
+    <div class="value">{{ completed }}</div>
+    <div class="sub">all time</div>
+  </a>
+  <a href="{{ url_for('bookings.clients') }}" class="stat-card">
+    <div class="label">Clients</div>
     <div class="value">{{ total_clients }}</div>
-    <div class="sub">In your database</div>
-  </div>
+    <div class="sub">in your database</div>
+  </a>
 </div>
 
-{% if today_bookings %}
-<div class="card" style="margin-bottom:22px">
+{# ── Today ─────────────────────────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:var(--s6)">
   <div class="section-header">
-    <h2>Today's Jobs</h2>
+    <h2>Today</h2>
+    <a href="{{ url_for('bookings.calendar') }}" class="btn btn-outline btn-sm">Calendar</a>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Client</th><th>Service</th><th>Time</th><th>Address</th><th>Status</th><th></th></tr></thead>
-      <tbody>
-        {% for b in today_bookings %}
-        <tr>
-          <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}">{{ b.name }}</a><br><small style="color:#9a95ad">{{ b.phone }}</small></td>
-          <td>{{ b.service_label }}</td>
-          <td>{{ b.preferred_time or '—' }}</td>
-          <td style="color:#5f5878;font-size:0.88rem">{{ b.address }}</td>
-          <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
-          <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  {% if today_bookings %}
+  <div class="day">
+    {% for b in today_bookings %}
+    <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="day-row">
+      <span class="day-time">
+        {{ b.preferred_time or '—' }}
+        <small>{{ b.status }}</small>
+      </span>
+      <span class="day-who">
+        <b>{{ b.name }}</b>
+        <span>{{ b.service_label }}{% if b.address %} · {{ b.address }}{% endif %}</span>
+      </span>
+      <span class="day-crew">
+        {% if b.crew_label %}{{ b.crew_label }}{% else %}<span class="none">nobody assigned</span>{% endif %}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  {# One line, not a panel. An empty day is the least interesting thing on
+     the page and it was taking the most room on it. #}
+  <div class="day-none">
+    Nothing booked today.
+    <a href="{{ url_for('bookings.new') }}">Book a job</a>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Tomorrow ──────────────────────────────────────────────────────────────
+   Shown only when there is something on it. Tomorrow is the day an owner can
+   still do something about; by today it is already too late to find cover. #}
+{% if tomorrow_jobs %}
+<div class="card" style="margin-bottom:var(--s6)">
+  <div class="section-header">
+    <h2>Tomorrow</h2>
+    <span class="badge">{{ tomorrow_jobs|length }} job{{ 's' if tomorrow_jobs|length != 1 }}</span>
+  </div>
+  <div class="day">
+    {% for b in tomorrow_jobs %}
+    <a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="day-row">
+      <span class="day-time">
+        {{ b.preferred_time or '—' }}
+        <small>{{ b.status }}</small>
+      </span>
+      <span class="day-who">
+        <b>{{ b.name }}</b>
+        <span>{{ b.service_label }}{% if b.address %} · {{ b.address }}{% endif %}</span>
+      </span>
+      <span class="day-crew">
+        {% if b.crew_label %}{{ b.crew_label }}{% else %}<span class="none">nobody assigned</span>{% endif %}
+      </span>
+    </a>
+    {% endfor %}
   </div>
 </div>
 {% endif %}
 
+{# ── Recent ────────────────────────────────────────────────────────────── #}
 <div class="card">
   <div class="section-header">
-    <h2>Recent Bookings</h2>
-    <a href="{{ url_for('bookings.index') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">See all</a>
+    <h2>Recent bookings</h2>
+    <a href="{{ url_for('bookings.index') }}" class="btn btn-outline btn-sm">See all</a>
   </div>
   {% if recent %}
   <div class="table-wrap">
@@ -91,24 +255,27 @@
         <tr>
           <td>
             <a href="{{ url_for('bookings.detail', booking_id=b.id) }}">{{ b.name }}</a>
-            <br><small style="color:#9a95ad">{{ b.email }}</small>
+            <br><small class="dim">{{ b.email }}</small>
           </td>
           <td>
             {{ b.service_label }}
             {% if b.series_hidden %}
-            <br><small style="color:#9a95ad">🔁 next of {{ b.series_total }} visits</small>
+            <br><small class="dim">🔁 next of {{ b.series_total }} visits</small>
             {% endif %}
           </td>
-          <td style="color:#5f5878">{{ b.preferred_date or '—' }}</td>
+          <td class="dim">{{ b.preferred_date or '—' }}</td>
           <td><span class="status status-{{ b.status }}">{{ b.status }}</span></td>
-          <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">View</a></td>
+          <td><a href="{{ url_for('bookings.detail', booking_id=b.id) }}" class="btn btn-outline btn-sm">View</a></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <p style="color:#9a95ad;text-align:center;padding:30px 0">No bookings yet. They'll appear here once customers fill out the form.</p>
+  <div class="empty">
+    <div class="icon">📋</div>
+    <p>No bookings yet. They'll appear here once customers fill out the form.</p>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

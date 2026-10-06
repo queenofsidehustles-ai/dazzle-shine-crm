@@ -11,7 +11,8 @@ screen was from a cleaner's profile or the inbox list."""
 from datetime import datetime
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, Response, jsonify)
-from auth import login_required
+from entitlements import requires_plan
+from auth import login_required, owner_required
 from extensions import db
 from models import (Message, Staff, ContractorApplication, BusinessSetting,
                     MessageTemplate, OutboundLog, Client, Booking)
@@ -47,7 +48,6 @@ def sent_log():
     """A single 'Sent' history of every outbound text and email the system has
     sent from anywhere in the app (pay updates, work orders, confirmations,
     reminders, payment links, custom customer emails)."""
-    import os as _os
     channel = request.args.get('channel', '')
     q = OutboundLog.query
     if channel in ('sms', 'email'):
@@ -103,8 +103,20 @@ def _kind_for_log(log):
 
 
 def owner_alert_phone():
-    """Where inbound-message alerts go, or None if the owner hasn't set one."""
-    return (BusinessSetting.get('owner_alert_phone') or '').strip() or None
+    """Where inbound-message alerts go. The business's own phone if unset.
+
+    There was no default at all, for a good reason: it once fell back to one
+    particular owner's mobile, so a second company's customers texted a
+    stranger. The business phone is not that -- it is this company's own
+    number, typed in by this company, on its own Settings page.
+
+    Without a fallback the alert was dead for everybody. The setting had no
+    field in Settings to set it from, so not one company had ever set one, and
+    every reply landed in the inbox with nobody told. Claim alerts, team
+    alerts and confirmations all already fall back this way; this was the only
+    one that went quiet instead."""
+    return ((BusinessSetting.get('owner_alert_phone') or '').strip()
+            or (BusinessSetting.get('phone') or '').strip() or None)
 
 
 def resolve_contact(phone10):
@@ -264,6 +276,7 @@ def fill_template(phone):
 # ── Manage reusable templates ───────────────────────────────────────────────
 @messages_bp.route('/templates', methods=['GET', 'POST'])
 @login_required
+@requires_plan('templates')
 def templates():
     if request.method == 'POST':
         title = (request.form.get('title') or '').strip()
@@ -406,7 +419,7 @@ def send(phone):
 
 # ── One-tap: ask an applicant to re-upload their background check ────────────
 @messages_bp.route('/thread/<phone>/request-bgcheck', methods=['POST'])
-@login_required
+@owner_required
 def request_bgcheck(phone):
     phone10 = norm_phone(phone)
     contact = resolve_contact(phone10)
@@ -447,18 +460,212 @@ def _stop_lsa_sequence(phone10, reason):
 
 
 # ── Twilio webhook: an inbound text landed on the business number ───────────
+def _blank_twiml():
+    return Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+                    mimetype='text/xml')
+
+
 @messages_bp.route('/incoming', methods=['POST'])
 def incoming():
+    """A reply to this company's own number, arriving on this company's host.
+
+    Nothing here has to work out whose message this is. A company that
+    connects its own Twilio number points that number at its own address, so
+    the host answered the question before this ran."""
+    return _handle_inbound()
+
+
+@messages_bp.route('/relay', methods=['POST'])
+def relay():
+    """A reply to the one shared number every company without its own sends from.
+
+    A phone number can point at exactly one web address, so the shared number
+    cannot name a company the way a company's own number does. The company is
+    worked out from the message instead: whoever texted this person most
+    recently owns the reply. People answer a text soon after they get it, and
+    a company that has never texted this number is never a candidate, so the
+    most recent sender is in practice the right one.
+
+    Nobody to match is not the end of it. A first text from a stranger -- a
+    customer who found the number and wrote before anyone wrote to them -- has
+    no recent text to trace back, so it falls to whoever owns the number it
+    arrived on. That is where such a text landed before any of this existed,
+    and a company sharing its own line with the platform must not start losing
+    them. Only a text to a number no company claims is recorded as unmatched,
+    rather than dropped into whichever inbox happened to come first."""
+    phone10 = norm_phone(request.form.get('From', ''))
+    slug = (_company_that_texted(phone10) if phone10 else '')
+    if not slug:
+        slug = _company_owning_number(request.form.get('To', ''))
+    if not slug:
+        _record_unrouted(phone10, request.form.get('Body') or '')
+        return _blank_twiml()
+
+    import tenancy
+    from flask import g
+    # The schema is only half of being inside a company. billing.current_org()
+    # -- which is what tells entitlements which plan this company is on --
+    # reads g.tenant_slug, and that is set from the request's host. This
+    # request arrived on the shared host, so without this it is nobody: the
+    # plan falls back to Solo, and Solo includes no texting, so the alert to
+    # the owner is refused on a plan she is not on. send_sms returns on that
+    # check before it writes to the Sent Log, so the text leaves no trace at
+    # all -- no row, no error, nothing to find.
+    prev_slug = getattr(g, 'tenant_slug', None)
+    prev_org = getattr(g, '_org', None)
+    g.tenant_slug = slug
+    g._org = None                    # look this company up, not the last one
+    try:
+        with tenancy.use_tenant(slug):
+            return _handle_inbound(link_base=_company_base(slug))
+    finally:
+        g.tenant_slug = prev_slug
+        g._org = prev_org
+
+
+def _company_owning_number(to_number):
+    """The company that has this exact number saved as its own line.
+
+    Read with integrations._stored and not integrations.get: get() falls back
+    to the platform's own environment number, which every company would then
+    appear to own, and the first one asked would take every stray text."""
+    want = norm_phone(to_number)
+    if not want:
+        return ''
+    import control_plane
+    import integrations
+    import tenancy
+    from extensions import db
+    try:
+        orgs = control_plane.all_orgs(db.engine)
+    except Exception:
+        return ''
+    for org in orgs:
+        slug = (org.get('slug') or '').strip()
+        if not slug:
+            continue
+        try:
+            with tenancy.use_tenant(slug):
+                own = integrations._stored('twilio_phone')
+        except Exception:
+            continue
+        if own and norm_phone(own) == want:
+            return slug
+    return ''
+
+
+def _company_base(slug):
+    """This company's own address, built from the slug we actually hold.
+
+    branding.crm_base() reads the host when it is inside a request, which here
+    is the shared address Twilio posted to and not the company's own. It
+    cannot be rebuilt from the schema either: schema_for() turns every hyphen
+    in a slug into an underscore, and nothing can tell the two apart again."""
+    try:
+        import product
+        domain = product.domain()
+        if domain:
+            return f'{product.scheme_for(domain)}://{slug}.{domain}'
+    except Exception:
+        pass
+    return ''
+
+
+def _company_that_texted(phone10, within_days=30):
+    """The company whose most recent text to this number is the latest of all.
+
+    Only texts that actually went out count. A row the provider refused is a
+    text the person never received, so it cannot be what they are replying to
+    -- and that covers the demo company, whose every message is recorded and
+    never sent.
+
+    Read with raw SQL on purpose. The same row id exists in every company's
+    schema, so loading OutboundLog objects for one company and then another
+    would have the session hand back the first company's row for the second
+    company's id."""
+    from datetime import timedelta
+    from sqlalchemy import text as sa_text
+    import control_plane
+    import tenancy
+    from extensions import db
+
+    cutoff = datetime.utcnow() - timedelta(days=within_days)
+    try:
+        orgs = control_plane.all_orgs(db.engine)
+    except Exception:
+        return ''
+
+    best_slug, best_at = '', None
+    for org in orgs:
+        slug = (org.get('slug') or '').strip()
+        if not slug:
+            continue
+        try:
+            with tenancy.use_tenant(slug):
+                rows = db.session.execute(sa_text(
+                    'SELECT to_address, created_at FROM outbound_log '
+                    "WHERE channel = 'sms' AND status = 'sent' "
+                    'AND created_at >= :cutoff AND to_address LIKE :tail '
+                    'ORDER BY created_at DESC LIMIT 20'),
+                    {'cutoff': cutoff, 'tail': f'%{phone10[-7:]}%'}).fetchall()
+        except Exception:
+            # One company with a missing or half-migrated table must not stop
+            # the reply reaching the company it actually belongs to -- but the
+            # failed statement has to be rolled back first. PostgreSQL refuses
+            # every later statement on an aborted transaction, so without this
+            # one unreadable company would take the real write down with it.
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            continue
+        for to_address, created_at in rows:
+            if norm_phone(to_address) != phone10 or created_at is None:
+                continue
+            if best_at is None or created_at > best_at:
+                best_slug, best_at = slug, created_at
+            break
+    return best_slug
+
+
+def _record_unrouted(phone10, body):
+    """A reply that matches no company. Kept where a person will see it."""
+    from extensions import db
+    try:
+        from models import ErrorLog
+        ErrorLog.record(
+            kind='sms',
+            message=(f'Inbound text from {pretty_phone(phone10) or "an unknown number"} '
+                     f'matched no company that has texted them: {body[:120]}'),
+            path='/messages/relay', method='POST', endpoint='messages.relay')
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
+def _handle_inbound(link_base=None):
     from_num = request.form.get('From', '')
     body = (request.form.get('Body') or '').strip()
     sid = request.form.get('MessageSid')
     phone10 = norm_phone(from_num)
 
-    # Ignore texts from the owner's own cell (e.g. replies to alert texts) and
-    # empties. norm_phone(None) is '', which would match any unparseable number,
-    # so an unset alert phone must not be compared at all.
+    # Ignore empties, and texts from a phone she deliberately nominated for
+    # alerts, so her reply to one does not come back looking like a customer
+    # message. norm_phone(None) is '', which would match any unparseable
+    # number, so an unset phone must not be compared at all.
+    #
+    # Deliberately the stored setting and not owner_alert_phone(): that falls
+    # back to the business phone, which is usually the owner's own mobile and
+    # the number she texts the business from. Comparing against the fallback
+    # threw those away silently -- a real message lost to avoid a cosmetic
+    # one. If she nominates a separate alert phone the loop is suppressed as
+    # before; if she has not, a stray line in the thread beats a dropped text.
     alert_to = owner_alert_phone()
-    if not phone10 or not body or (alert_to and phone10 == norm_phone(alert_to)):
+    nominated = (BusinessSetting.get('owner_alert_phone') or '').strip()
+    if not phone10 or not body or (nominated and phone10 == norm_phone(nominated)):
         return Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
                         mimetype='text/xml')
 
@@ -498,7 +705,8 @@ def incoming():
     who = opt_note + (contact['name'] or pretty_phone(phone10))
     alert_body = translated or body
     snippet = alert_body if len(alert_body) <= 90 else alert_body[:90] + '…'
-    link = f"{branding.crm_base()}{url_for('messages.thread', phone=phone10)}"
+    base = link_base or branding.crm_base()
+    link = f"{base}{url_for('messages.thread', phone=phone10)}"
     # No alert phone set: the message is already saved and will be waiting in the
     # inbox. Better silent than texted to whoever used to be the default.
     if alert_to:

@@ -3,14 +3,14 @@
 {% block page_title %}{{ a.business_name }}{% endblock %}
 
 {% block content %}
-<div style="margin-bottom:14px"><a href="{{ url_for('commercial.index') }}" style="color:#9a95ad;font-size:0.9rem">← All commercial accounts</a></div>
+<div style="margin-bottom:14px"><a href="{{ url_for('commercial.index') }}" style="color:var(--softer);font-size:0.9rem">← All commercial accounts</a></div>
 
 <div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
   <div>
-    <div style="font-size:0.8rem;color:#9a95ad">Estimated monthly value</div>
-    <div style="font-size:1.8rem;font-weight:800;color:#b98a33">${{ '%.0f' % a.monthly_value }}<span style="font-size:0.95rem;color:#9a95ad">/mo</span></div>
+    <div style="font-size:0.8rem;color:var(--softer)">Estimated monthly value</div>
+    <div style="font-size:1.8rem;font-weight:800;color:var(--amber-deep)">${{ '%.0f' % a.monthly_value }}<span style="font-size:0.95rem;color:var(--softer)">/mo</span></div>
   </div>
-  <div style="font-size:0.82rem;color:#9a95ad;text-align:right">
+  <div style="font-size:0.82rem;color:var(--softer);text-align:right">
     {{ a.category_label }} · {{ a.frequency_label }}<br>
     {% if a.source == 'find_leads' %}📞 closed from Find Leads{% else %}✍️ added by hand{% endif %}
   </div>
@@ -52,9 +52,9 @@
   <div style="font-size:0.9rem">
     💵 <strong>First invoice:</strong>
     {% if a.first_paid_at %}
-      <span style="color:#276749">paid {{ a.first_paid_at.strftime('%b %d, %Y') }}</span> — landing bonus + residuals are counting{% if a.agent %} for <strong>{{ a.agent }}</strong>{% endif %}.
+      <span style="color:var(--good)">paid {{ a.first_paid_at.strftime('%b %d, %Y') }}</span> — landing bonus + residuals are counting{% if a.agent %} for <strong>{{ a.agent }}</strong>{% endif %}.
     {% else %}
-      <span style="color:#c05621">not paid yet</span> — commission starts once you mark it paid.
+      <span style="color:var(--amber-deep)">not paid yet</span> — commission starts once you mark it paid.
     {% endif %}
   </div>
   {% if not a.first_paid_at %}
@@ -65,17 +65,17 @@
 </div>
 
 <!-- Roadmap hint -->
-<div class="card" style="margin-top:18px;border-left:4px solid #d3a84f;background:rgba(211,168,79,0.08)">
+<div class="card" style="margin-top:18px;border-left:4px solid var(--amber);background:rgba(211,168,79,0.08)">
   <strong>Coming next (Phase 2):</strong> auto-repeating visits on your calendar and monthly invoices for this account. 🗓️🧾
 </div>
 
 <form method="POST" action="{{ url_for('commercial.delete', account_id=a.id) }}"
       onsubmit="return confirm('Delete {{ a.business_name }}? This cannot be undone.')" style="margin-top:16px">
-  <button type="submit" class="btn btn-outline" style="padding:7px 14px;font-size:0.82rem;color:#e53e3e">Delete account</button>
+  <button type="submit" class="btn btn-outline" style="padding:7px 14px;font-size:0.82rem;color:var(--warn)">Delete account</button>
 </form>
 
 <style>
-  .lbl{display:block;font-size:0.78rem;color:#9a95ad;margin-bottom:4px}
-  .inp{width:100%;padding:9px;border:1px solid #e3e0ec;border-radius:8px;font-size:0.92rem;font-family:inherit}
+  .lbl{display:block;font-size:0.78rem;color:var(--softer);margin-bottom:4px}
+  .inp{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:0.92rem;font-family:inherit}
 </style>
 {% endblock %}

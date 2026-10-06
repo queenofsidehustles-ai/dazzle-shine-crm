@@ -1,5 +1,4 @@
 import os
-import secrets
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify
 from models import BookingRating

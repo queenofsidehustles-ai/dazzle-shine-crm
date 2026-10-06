@@ -1,0 +1,28 @@
+{% extends "directory/_base.html" %}
+{% block title %}Claim {{ listing_name }}{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>Is this your business?</h1>
+  <p>Claiming lets you correct what&rsquo;s wrong and add what&rsquo;s missing. It&rsquo;s
+    free, and it stays free.</p>
+  <div class="kv"><span>Business</span><span>{{ listing_name or 'This listing' }}</span></div>
+  {% if listing %}<div class="kv"><span>Area</span><span>{{ listing.city }}, {{ listing.state }}</span></div>{% endif %}
+
+  <form method="post" action="{{ url_for('directory.claim_submit') }}">
+    <input type="hidden" name="listing_id" value="{{ listing_id }}">
+    <input type="hidden" name="listing_name" value="{{ listing_name }}">
+    <label for="name">Your name</label>
+    <input id="name" name="name" autocomplete="name" required>
+    <label for="email">Your email</label>
+    <input id="email" name="email" type="email" autocomplete="email" required>
+    <label for="phone">Your phone</label>
+    <input id="phone" name="phone" type="tel" autocomplete="tel">
+    <p class="note">If what you enter matches the contact details already on the public
+      record, we&rsquo;ll email you a code straight away. If it doesn&rsquo;t, a person
+      checks it by hand &mdash; that usually takes a day.</p>
+    <label for="note">Anything we should know? <span class="fine">(optional)</span></label>
+    <textarea id="note" name="note" rows="2"></textarea>
+    <button class="btn" type="submit">Claim this listing</button>
+  </form>
+</div>
+{% endblock %}
