@@ -51,6 +51,14 @@ jobs:
         run: python -m pytest -q tests/test_tenant_data_lifecycle_no_bypass.py --tb=short
       - name: Tenant-bounded private media purge
         run: python -m pytest -q tests/test_tenant_data_lifecycle_media.py --tb=short
+      # The media sweep above is scoped to the job-photo prefix. Interview video
+      # has no tenant segment in its path, so the sweep never matched one and a
+      # purged company left its applicants' recordings behind. Proved separately
+      # because it is proved differently: from the tenant's own rows, not a prefix.
+      - name: Purged tenant takes its interview recordings
+        run: python tests/test_purge_interview_video.py
+      - name: Interview recordings are namespaced, signed and private
+        run: python tests/test_interview_video_private.py
       - name: PostgreSQL retention and purge falsification
         run: python -m pytest -q tests/test_tenant_data_lifecycle_postgres.py --tb=short
       - name: Cohort-30 colliding-ID tenant isolation
