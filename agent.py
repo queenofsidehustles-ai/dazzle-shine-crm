@@ -37,6 +37,7 @@ about somebody's business.
 So: what is true *of this business* comes from a tool, always. How the world
 works, she may simply know, and say so plainly as general knowledge.
 """
+import re
 import json
 import os
 
@@ -269,9 +270,21 @@ GOALS = ('aim ', 'target', 'goal', 'try to', 'try for', 'go after', 'push for',
          'that would', 'each ', 'per week', 'per day', 'a week', 'a day')
 
 
+# A list marker is not a figure. "3) Send interview links to the promising
+# ones" failed the check because the 3 was nowhere in the tools -- so every
+# answer written as a numbered list was thrown away, and logged as an error the
+# owner could do nothing about. Only a marker followed by a space counts, so
+# "5.5% of jobs" and "3 jobs are unassigned" are still checked as figures.
+_LIST_MARKER = re.compile(r'^\s*(?:(?:step\s+)?\(?\d{1,2}[.):](?=\s|$)|[-*•](?=\s))\s*', re.I)
+
+
 def _sentences(text):
-    import re
-    return [p for p in re.split(r'(?<=[.!?])\s+|\n+', text or '') if p.strip()]
+    out = []
+    for p in re.split(r'(?<=[.!?])\s+|\n+', text or ''):
+        p = _LIST_MARKER.sub('', p, count=1)
+        if p.strip():
+            out.append(p)
+    return out
 
 
 def _figures_ok(said, sources):
@@ -326,13 +339,16 @@ def _finish(said, seen, question, proposal, retry=None):
         return _wrap(said, proposal)
 
     bad = _unbacked(said, sources)
-    assistant._record(f'agent figure not in the tools: {bad[:160]}')
     if retry:
         fixed = retry(bad)
         if fixed and _figures_ok(fixed, sources):
+            # Caught and corrected: the check doing its job, not a fault. It
+            # used to be recorded as an error anyway, which filled the owner's
+            # Errors page -- and the console -- with things nobody could fix.
             return _wrap(fixed, proposal)
-        if fixed:
-            assistant._record('agent could not restate it without the figure')
+    # Recorded only when the owner actually got the fallback below instead of
+    # an answer, which is the case worth somebody looking at.
+    assistant._record(f'agent figure not in the tools, and not corrected: {bad[:160]}')
 
     # Still not right. Say what is certain, and never the profile -- that is
     # context for her, not an answer for anybody.

@@ -659,7 +659,7 @@ On a single-business install these are simply the business's own keys.
 |---|---|
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE` | Texting for companies that have not connected their own Twilio. |
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Job photos, and the account applicants' interview videos upload to. With no cloud name, applicants see "not set up yet" instead of a broken recorder. |
-| `CLOUDINARY_UPLOAD_PRESET` | The unsigned upload preset interview videos use. Default `interviews`, and it has to exist on whichever Cloudinary account is in use. |
+| `CLOUDINARY_UPLOAD_PRESET` | The unsigned upload preset interview videos use. Default `interviews`; create it once on Akye's master Cloudinary account. |
 | `GOOGLE_PLACES_API_KEY` | The lead finder. |
 
 **Akye itself, the product.** These are never used for a cleaning company's own

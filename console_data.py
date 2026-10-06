@@ -23,6 +23,8 @@ to take the page down: one company's snapshot is not worth everybody's.
 """
 from datetime import datetime, timedelta
 
+from sqlalchemy import func
+
 # Statuses whose schema is expected to exist and be read. A closed company's
 # data is retained but deliberately not looked through.
 READABLE = ('active', 'suspended')
@@ -70,8 +72,13 @@ def snapshot(slug, now=None):
                     'ran_at': last.ran_at if last else None,
                     'detail': (last.detail or '') if last else '',
                 })
-            open_q = ErrorLog.query.filter_by(resolved=False)
+            # A refused cross-site form is the guard working, not a fault:
+            # the owner's own Errors page already keeps those apart, and the
+            # console counting them made a healthy company look broken.
+            open_q = ErrorLog.query.filter_by(resolved=False).filter(
+                ErrorLog.kind != 'blocked')
             errors = [{
+                'id': e.id,
                 'kind': e.kind, 'message': e.message, 'path': e.path,
                 'count': e.count or 1, 'first_seen': e.first_seen,
                 'last_seen': e.last_seen,
@@ -87,6 +94,10 @@ def snapshot(slug, now=None):
                                    if j['state'] in ('never', 'stale', 'failing')),
                 'errors': errors,
                 'open_errors': open_q.count(),
+                # Occurrences, not rows: one row stands for every repeat.
+                'blocked': int(db.session.query(func.coalesce(
+                    func.sum(ErrorLog.count), 0)).filter(
+                    ErrorLog.kind == 'blocked').scalar() or 0),
                 'users': sum(1 for u in users if u.active),
                 'last_login': max(logins) if logins else None,
                 'owner_last_login': max(owner_logins) if owner_logins else None,
