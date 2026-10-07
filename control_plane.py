@@ -326,6 +326,21 @@ tenant_logins = Table(
 )
 
 
+# One switch token, once. The city switcher hands the browser a short-lived
+# signed token and redirects it to the other city, which trades the token for a
+# session there -- a session cannot simply be carried across, because sessions
+# are bound to one tenant on purpose (see auth.bind_session_to_current_tenant).
+# The signature and the ninety-second expiry are what make the token hard to
+# forge; this table is what stops a token that leaked -- into a log, a Referer,
+# somebody's shoulder -- being spent twice.
+switch_tokens = Table(
+    'switch_tokens', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('jti', String(64), nullable=False, unique=True, index=True),
+    Column('used_at', DateTime, default=datetime.utcnow),
+)
+
+
 # One row per "find my company" email lookup, purely to throttle it -- the
 # same address cannot be asked for repeatedly, the same reason the reset-
 # password form is throttled (see blueprints/account.py). Without this, the
@@ -439,6 +454,7 @@ def ensure_table(engine):
         engine, tables=[organizations, product_leads, feedback,
                         console_users, support_requests, console_log,
                         tenant_logins, login_lookup_requests, console_docs,
+                        switch_tokens,
                         promo_codes, product_lead_messages, signup_attempts])
     ensure_columns(engine)
 
@@ -1317,3 +1333,22 @@ def update_console_doc(engine, doc_id, title, content):
                      .where(console_docs.c.id == doc_id)
                      .values(title=title, content=content,
                              updated_at=datetime.utcnow()))
+
+
+def claim_switch_token(engine, jti):
+    """True the first time this token id is seen, False ever after.
+
+    The uniqueness constraint does the work rather than a read-then-write: two
+    requests arriving together both find nothing, and without the constraint
+    both would proceed. Here the second insert raises and that request is
+    refused, which is the behaviour wanted from a token that may be spent once.
+    """
+    jti = (jti or '').strip()
+    if not jti:
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(switch_tokens).values(jti=jti))
+        return True
+    except Exception:
+        return False

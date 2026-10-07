@@ -332,6 +332,32 @@ def create_app():
             return False
 
     @app.context_processor
+    def inject_cities():
+        """The owner's other cities, for the sidebar switcher.
+
+        Never raises and never blocks a page: a switcher that cannot be built
+        is a missing menu, while an exception here would be a blank CRM. Only
+        for a signed-in owner, and only when there is more than one city --
+        otherwise it is a menu with nothing in it.
+        """
+        try:
+            from flask import session, g
+            if not session.get('logged_in') or session.get('role') != 'owner':
+                return {'OTHER_CITIES': []}
+            here = (getattr(g, 'tenant_slug', None) or '').strip().lower()
+            if not here:
+                return {'OTHER_CITIES': []}
+            from models import User
+            user = User.query.get(session.get('user_id') or 0)
+            if not user:
+                return {'OTHER_CITIES': []}
+            import city_switch
+            return {'OTHER_CITIES': [c for c in city_switch.cities_for(user.username)
+                                     if c['slug'] != here]}
+        except Exception:
+            return {'OTHER_CITIES': []}
+
+    @app.context_processor
     def inject_product():
         import product
         return {'PRODUCT': product.name(), 'TAGLINE': product.tagline(),

@@ -1,0 +1,161 @@
+"""One owner, two cities, one login — without a session crossing between them.
+
+Orlando and Huntsville are separate companies because a company holds exactly
+one price book and the two markets are priced differently on purpose. Keeping
+them apart is what makes each city's prices right; the cost was a second login,
+and this closes that and nothing else.
+
+A session cannot simply be carried over. auth.bind_session_to_current_tenant
+says why: a cookie minted for one company, replayed by hand against another,
+would otherwise be honoured there. So a switch hands the browser a signed token
+and the destination issues a session of its own, after checking for itself that
+the person belongs.
+
+What has to hold, and what this proves:
+
+- a token works once, at the city it names, for ninety seconds;
+- a token for Huntsville is refused by Orlando;
+- an edited token is refused;
+- a spent token is refused the second time;
+- a stranger's token is refused however well-formed;
+- and a switch never creates access -- the account must already exist there.
+
+Against a real disposable Postgres, because two companies in one database is
+the whole point.
+"""
+import os
+import secrets
+import sys
+import time
+
+os.environ['DATABASE_URL'] = os.environ.get(
+    'TEST_POSTGRES_URL', 'postgresql://app_user:localtest@127.0.0.1:5432/postgres')
+os.environ['SECRET_KEY'] = 'test-secret-for-switching'
+os.environ['BASE_DOMAIN'] = 'akyehq.test'
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import notifications
+notifications.send_email = lambda *a, **k: (True, 'stub')
+notifications.send_sms = lambda *a, **k: (True, 'stub')
+
+from app import create_app
+from extensions import db
+import control_plane
+import provisioning
+import tenancy
+import city_switch
+
+app = create_app()
+failures = []
+
+
+def check(cond, m):
+    if cond:
+        print(f'  ✅ {m}')
+    else:
+        print(f'  ❌ {m}')
+        failures.append(m)
+
+
+TAG = secrets.token_hex(4)
+ORL, HSV, OTHER = f'orl{TAG}', f'hsv{TAG}', f'other{TAG}'
+OWNER = f'owner-{TAG}@example.com'
+STRANGER = f'stranger-{TAG}@example.com'
+
+with app.app_context():
+    engine = provisioning._engine()
+    control_plane.ensure_table(engine)
+    db.session.remove()
+
+    for slug, name, email in ((ORL, 'Dazzle Orlando', OWNER),
+                              (HSV, 'Dazzle Huntsville', OWNER),
+                              (OTHER, 'Someone Else Cleaning', STRANGER)):
+        provisioning.provision(slug, name, owner_email=email, quiet=True)
+        control_plane.record_tenant_login(engine, email, slug)
+        db.session.remove()
+        with tenancy.use_tenant(slug):
+            from models import User
+            u = User(name='Owner', username=email, role='owner', active=True)
+            u.set_password('a-real-password-123')
+            db.session.add(u); db.session.commit()
+        db.session.remove()
+
+    print('\n1. The menu offers the owner both of her cities, and nobody else\'s')
+    mine = {c['slug'] for c in city_switch.cities_for(OWNER)}
+    check(mine == {ORL, HSV}, f'both of hers, and only hers ({sorted(mine)})')
+    check(OTHER not in mine, "another company's city is not in her menu")
+    theirs = {c['slug'] for c in city_switch.cities_for(STRANGER)}
+    check(theirs == {OTHER}, 'and the stranger sees only their own')
+
+    print('\n2. Entitlement is checked, not assumed')
+    check(city_switch.may_switch(OWNER, HSV), 'she may switch to Huntsville')
+    check(not city_switch.may_switch(OWNER, OTHER),
+          "she may not switch into a company she does not own")
+    check(not city_switch.may_switch(STRANGER, ORL),
+          'and a stranger may not switch into hers')
+
+    print('\n3. A token works once, at the city it names')
+    t = city_switch.mint(OWNER, HSV)
+    check(city_switch.verify(t, HSV) == OWNER, 'it verifies at Huntsville')
+    check(city_switch.verify(t, HSV) is None,
+          'and is refused the second time — a leaked token is spent, not reusable')
+
+    print('\n4. A token is useless anywhere but its destination')
+    t2 = city_switch.mint(OWNER, HSV)
+    check(city_switch.verify(t2, ORL) is None,
+          'a Huntsville token is refused by Orlando')
+    check(city_switch.verify(t2, HSV) == OWNER,
+          'while still being good for Huntsville')
+
+    print('\n5. A token cannot be edited into something else')
+    t3 = city_switch.mint(OWNER, HSV)
+    body, sig = t3[len(city_switch._PREFIX):].split('.', 1)
+    forged = city_switch._PREFIX + body + '.' + ('A' * len(sig))
+    check(city_switch.verify(forged, HSV) is None, 'a replaced signature is refused')
+    import base64, json
+    raw = json.loads(city_switch._unb64(body))
+    raw['email'] = STRANGER
+    swapped = (city_switch._PREFIX
+               + city_switch._b64(json.dumps(raw, separators=(',', ':'), sort_keys=True).encode())
+               + '.' + sig)
+    check(city_switch.verify(swapped, HSV) is None,
+          'and swapping the email inside it invalidates the signature')
+
+    print('\n6. A token expires')
+    old = city_switch.TTL_SECONDS
+    try:
+        city_switch.TTL_SECONDS = -1
+        stale = city_switch.mint(OWNER, HSV)
+    finally:
+        city_switch.TTL_SECONDS = old
+    check(city_switch.verify(stale, HSV) is None, 'an expired token is refused')
+
+    print('\n7. A stranger cannot mint their way in')
+    bad = city_switch.mint(STRANGER, ORL)
+    check(city_switch.verify(bad, ORL) is None,
+          'a well-formed token for a city they do not own is still refused')
+
+    print('\n8. Switching never creates access')
+    nouser = f'ghost-{TAG}@example.com'
+    # record_tenant_login alone is enough for may_switch to pass: that is the
+    # point of this check. Entitlement says yes, and the switch still refuses,
+    # because there is no account at that company to hand a session to.
+    control_plane.record_tenant_login(engine, nouser, HSV)
+    check(city_switch.may_switch(nouser, HSV),
+          'entitlement says yes for somebody with no account there')
+    ghost = city_switch.mint(nouser, HSV)
+    db.session.remove()
+    c = app.test_client()
+    r = c.get(f'/switch-city/accept?t={ghost}', headers={'Host': f'{HSV}.akyehq.test'},
+              follow_redirects=False)
+    check(r.status_code in (301, 302), 'the request is handled')
+    check('login' in (r.headers.get('Location') or ''),
+          'somebody with no account there is sent to log in, not given a session')
+    db.session.remove()
+
+if failures:
+    print(f'\n❌ {len(failures)} failed:')
+    for f in failures:
+        print(f'   - {f}')
+    raise SystemExit(1)
+print('\n🎉 One login, two cities, and nothing carried across that should not be.')
