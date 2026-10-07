@@ -19,14 +19,15 @@ happens in the code. What this removes is reports being invisible to everybody
 except whoever owns the inbox.
 """
 import functools
+import hmac
 import html
 import os
 import re
 from datetime import datetime, timedelta
 
 import markdown
-from flask import (Blueprint, Response, flash, redirect, render_template,
-                   request, session, url_for)
+from flask import (Blueprint, Response, flash, jsonify, redirect,
+                   render_template, request, session, url_for)
 
 import control_plane
 import product
@@ -644,6 +645,92 @@ def health():
 def _automation_jobs():
     import automations
     return automations.JOBS
+
+
+# ── Metrics, for something other than a person ────────────────────────────────
+
+def _metrics_key_ok():
+    """A caller holding METRICS_API_KEY, compared in constant time.
+
+    Trimmed on both sides, for the same reason every other key in this
+    application is: a value pasted with a trailing newline is not a different
+    key, and the 403 it produces is indistinguishable from a report that was
+    never wired up.
+
+    No key configured means no key access -- never "allow everybody". An
+    endpoint that lists every company and what it pays must not become public
+    because an environment variable is missing.
+    """
+    expected = os.environ.get('METRICS_API_KEY', '').strip()
+    if not expected:
+        return False
+    given = (request.headers.get('X-Api-Key')
+             or request.args.get('api_key', '')).strip()
+    return hmac.compare_digest(given, expected)
+
+
+def _metrics_session_ok():
+    """A console account signed in, held to exactly the bar console_required
+    holds a console page to.
+
+    Checked against the list rather than trusted from the cookie, because a
+    session is not a standing permission: access removed while somebody is
+    signed in has to take effect on the next request.
+
+    Two-factor is enforced here as well, and that is the point of writing this
+    out rather than reusing a shorter check. console_required will not let an
+    account without TOTP reach /console/companies on the live product, and
+    this endpoint returns the same companies in one document. A reader that
+    skipped the second factor would be a way round it, not a convenience.
+    """
+    email = session.get(SESSION_KEY)
+    if not email:
+        return False
+    user = control_plane.console_user(_engine(), email)
+    if not user or not user.get('active'):
+        return False
+    if two_factor_required() and not user.get('totp_enabled'):
+        return False
+    return True
+
+
+@console_bp.route('/metrics.json')
+def metrics_json():
+    """Every tenant, what it pays, and whether its automations collect.
+
+    The console already shows all of this, built for somebody with a browser
+    and a TOTP code. A weekly operator report is not that, so the figures it
+    needed were being read out of the source tree instead -- which is how a
+    customer count comes to be inferred from code describing intent rather
+    than from the database holding fact. This is the same data, once, as JSON.
+
+    Read-only: it opens no transaction that writes and takes no parameters
+    that change anything. See console_metrics for what each figure means and,
+    in particular, why test companies are counted apart and why
+    balance_collection is reported at all.
+    """
+    import console_metrics
+    if not (_metrics_key_ok() or _metrics_session_ok()):
+        # Deliberately the same answer either way. Which of the two
+        # credentials failed is not a caller's business.
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    if not product.domain():
+        # BASE_DOMAIN is empty, which is how a single-business deployment is
+        # known (product.domain). It has no control plane and so no tenants to
+        # report. Saying so beats an empty object that reads as "no customers"
+        # -- the whole point of this endpoint is that a missing number must
+        # not look like a zero.
+        return jsonify({'ok': False,
+                        'error': 'No control plane on this instance.'}), 404
+    try:
+        data = console_metrics.collect(_engine())
+    except Exception as exc:
+        # A report that cannot be produced must say so. Returning partial
+        # figures as though they were complete is the failure this endpoint
+        # exists to end.
+        return jsonify({'ok': False,
+                        'error': f'{type(exc).__name__}: {exc}'}), 500
+    return jsonify(dict(data, ok=True))
 
 
 @console_bp.route('/health/test-email', methods=['POST'])
