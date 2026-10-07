@@ -630,6 +630,55 @@ takes a payment.
 
 ---
 
+## Step 14 — Move the hourly charging clock off GitHub
+
+**Why.** The hourly job that charges outstanding balances is scheduled as a
+GitHub Actions workflow. GitHub drops scheduled runs under load and promises no
+delivery: on 7 October 2026 it was set to run hourly and ran about four times.
+A balance still gets charged the same day, because the next run picks it up, so
+nothing is lost today — but a clock that silently runs a sixth as often as it
+says is not a clock to put real money on.
+
+**Order matters.** Do these in order. Steps 1–3 add a second clock, which is
+safe (the endpoint now refuses to run twice for the same company at once — see
+`_one_charge_run_at_a_time` in `blueprints/api.py`). Step 4 removes the old one.
+Never do step 4 first, or there is a window with no clock at all.
+
+1. **Railway → the Akye service → Settings → Cron Schedule.** Add a schedule of
+   `5 * * * *` with the command:
+
+   ```
+   python scheduler.py --cadence hourly
+   ```
+
+   The service already has `DATABASE_URL`, `BASE_DOMAIN` and
+   `REMINDER_API_KEY`, which is everything the scheduler reads — no secrets to
+   copy. It falls back from `AKYE_DATABASE_URL` to `DATABASE_URL` on its own.
+
+2. **Watch one run.** Railway → the service → the cron execution's logs. It
+   should print `N companies × 1 job` and a line per company. A company that has
+   not chosen automatic collection prints `turned off by this business`, which
+   is correct and not a fault.
+
+3. **Let both clocks run for a day.** They cannot collide: whichever arrives
+   second is told another run is in progress and does nothing. If you see that
+   message occasionally in the logs, the guard is working.
+
+4. **Then, and only then, take the hourly line out of GitHub.** In
+   `.github/workflows/automations.yml`, delete `- cron: '5 * * * *'` and the
+   comment above it. Leave `- cron: '0 22 * * *'`: the daily jobs — reminders,
+   follow-ups, rental turnovers, the owner digest — are not money and a missed
+   run costs nothing that the next day does not fix.
+
+   That workflow lives on the default branch, so the change has to land there to
+   take effect. See **The third branch choice** in `RELEASING.md`.
+
+**✅ Done when:** Railway shows an hourly cron execution succeeding, and
+`.github/workflows/automations.yml` on the default branch has one `cron:` line
+left.
+
+---
+
 ## Other settings this release adds
 
 All optional. The defaults are what you want on the live product.
