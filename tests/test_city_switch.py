@@ -205,7 +205,25 @@ with app.app_context():
           f'and that same session is refused back at Orlando (got {r4.status_code})')
     db.session.remove()
 
-    print('\n10. Switching never creates access')
+    print('\n10. The switcher is actually on the page, and not hidden')
+    # Nothing covered the rendering, so a switcher that worked perfectly could
+    # still be invisible -- which is what happened: it shipped inside a
+    # collapsed <details> behind a small uppercase summary, and was reported as
+    # "I do not see the cities".
+    page = c.get('/bookings/', headers={'Host': f'{ORL}.akyehq.test'})
+    check(page.status_code == 200, 'a page loads for the signed-in owner')
+    body = page.get_data(as_text=True)
+    check('Switch city' in body, 'the switcher is on the page')
+    check('Huntsville' in body, 'and names the other city')
+    check(f'/switch-city/{HSV}' in body, 'linking to it')
+    check('Orlando' not in body.split('city-switch')[1][:400] if 'city-switch' in body else True,
+          'without offering the city you are already in')
+    # Visible on load: no disclosure element wrapping it.
+    seg = body.split('city-switch', 1)[1][:500] if 'city-switch' in body else ''
+    check('<details' not in body[max(0, body.find('city-switch') - 300):body.find('city-switch')],
+          'and is not tucked inside a collapsed <details>')
+
+    print('\n11. Switching never creates access')
     nouser = f'ghost-{TAG}@example.com'
     # record_tenant_login alone is enough for may_switch to pass: that is the
     # point of this check. Entitlement says yes, and the switch still refuses,
