@@ -639,43 +639,81 @@ A balance still gets charged the same day, because the next run picks it up, so
 nothing is lost today — but a clock that silently runs a sixth as often as it
 says is not a clock to put real money on.
 
-**Order matters.** Do these in order. Steps 1–3 add a second clock, which is
-safe (the endpoint now refuses to run twice for the same company at once — see
-`_one_charge_run_at_a_time` in `blueprints/api.py`). Step 4 removes the old one.
-Never do step 4 first, or there is a window with no clock at all.
+### Read this before you click anything
 
-1. **Railway → the Akye service → Settings → Cron Schedule.** Add a schedule of
-   `5 * * * *` with the command:
+**This is a new service, not a setting on the Akye service.** Railway cron runs
+the service's *own start command* on the schedule, and the service has to exit
+when it is finished. The Akye service runs gunicorn, which never exits. Putting
+a cron schedule on it would mean "run the website on a timetable": the first run
+would never finish, every later run would be skipped, and you would be gambling
+the site on it. The clock gets its own service, sharing the repo and the
+database.
+
+**Do these in order.** Steps 1–2 make overlap safe and must come first. Steps
+3–8 add a second clock, which is harmless once step 1 is live. Step 10 removes
+the old clock. Never remove the old clock first, or there is a window with no
+clock at all.
+
+1. **Merge and deploy the double-charge guard** (`fix/charge-balances-no-double-run`,
+   PR #61). Two clocks running at once would otherwise charge the same card
+   twice — see `_one_charge_run_at_a_time` in `blueprints/api.py`.
+2. **Check it is actually live** before going on: `https://www.akyehq.com/version`
+   should report a `build` matching the merge. A guard that is merged but not
+   deployed is not a guard.
+3. **Railway → the Akye project → `+ New` → `GitHub Repo` → `dazzle-shine-crm`.**
+   This creates a second service in the same project.
+4. **That new service → Settings → Source → Branch: `akye-stable`.** The same
+   branch the Akye service serves, so the clock and the app are never different
+   code.
+5. **Settings → Deploy → Custom Start Command:**
 
    ```
    python scheduler.py --cadence hourly
    ```
 
-   The service already has `DATABASE_URL`, `BASE_DOMAIN` and
-   `REMINDER_API_KEY`, which is everything the scheduler reads — no secrets to
-   copy. It falls back from `AKYE_DATABASE_URL` to `DATABASE_URL` on its own.
+   There is no separate command box for a cron job — the start command *is* what
+   the schedule runs. `--cadence hourly` resolves to exactly one job,
+   `charge-balances`; the eight daily jobs are untouched.
+6. **Settings → Deploy → Cron Schedule:** `5 * * * *`
 
-2. **Watch one run.** Railway → the service → the cron execution's logs. It
-   should print `N companies × 1 job` and a line per company. A company that has
-   not chosen automatic collection prints `turned off by this business`, which
-   is correct and not a fault.
+   Railway's minimum gap is 5 minutes, so hourly is well within it. Schedules
+   are UTC, which does not matter here: each business's charge timing comes from
+   its own time zone (`scheduling.local_now`), not the server's.
+7. **Settings → Networking: add no domain.** It serves nothing. If Railway has
+   generated one, remove it.
+8. **Variables.** Add three:
 
-3. **Let both clocks run for a day.** They cannot collide: whichever arrives
-   second is told another run is in progress and does nothing. If you see that
-   message occasionally in the logs, the guard is working.
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | A reference to the same Postgres service the Akye service uses — pick it from Railway's variable picker rather than pasting the string. |
+   | `BASE_DOMAIN` | `akyehq.com` |
+   | `REMINDER_API_KEY` | The same value the Akye service has. A different one makes every call come back 403, which looks exactly like nothing running. |
 
-4. **Then, and only then, take the hourly line out of GitHub.** In
-   `.github/workflows/automations.yml`, delete `- cron: '5 * * * *'` and the
-   comment above it. Leave `- cron: '0 22 * * *'`: the daily jobs — reminders,
-   follow-ups, rental turnovers, the owner digest — are not money and a missed
-   run costs nothing that the next day does not fix.
+   Nothing else. The scheduler reads only these, and falls back from
+   `AKYE_DATABASE_URL` to `DATABASE_URL` on its own.
+9. **Watch one run.** Deploy, then open the service's logs. A good run prints
+   `N companies × 1 job` and a line per company. A company that has not chosen
+   automatic collection prints `turned off by this business` — correct, not a
+   fault. The script exits non-zero if any company failed, so a red cron
+   execution in Railway means a real failure rather than a dropped run.
+10. **Let both clocks run for a day, then remove the old one.** They cannot
+    collide: whichever arrives second is told another run is in progress and
+    does nothing, so seeing that occasionally in the logs is the guard working.
+    When you are satisfied, delete `- cron: '5 * * * *'` and the comment above
+    it from `.github/workflows/automations.yml`, keeping `- cron: '0 22 * * *'`
+    — the daily jobs are reminders and digests, where a missed run costs nothing
+    the next day does not fix.
 
-   That workflow lives on the default branch, so the change has to land there to
-   take effect. See **The third branch choice** in `RELEASING.md`.
+    That workflow only runs from the default branch, so the change has to land
+    there. See **The third branch choice** in `RELEASING.md`.
 
-**✅ Done when:** Railway shows an hourly cron execution succeeding, and
+**✅ Done when:** Railway shows an hourly cron execution succeeding on its own
+service, the Akye service is still serving the website normally, and
 `.github/workflows/automations.yml` on the default branch has one `cron:` line
 left.
+
+**Cost:** a cron service bills only while it runs. The hourly job takes about
+ten seconds for twelve companies, so this is a few minutes of compute a day.
 
 ---
 
