@@ -61,6 +61,54 @@ def _engine():
     return provisioning._engine()
 
 
+def _labels(names: dict) -> dict:
+    """Short labels for a set of companies: {slug: label}.
+
+    The sidebar already carries the business name above this menu, so repeating
+    "Dazzle & Shine Maids" against every entry says nothing and makes two
+    entries look alike at a glance. What distinguishes them is the city.
+
+    Worked out from the names alone, with no database access of any kind. The
+    first version read each company's own `city` setting, which meant entering
+    every other tenant's schema from inside a context processor that runs on
+    every page render -- and calling db.session.remove() while a request was
+    mid-flight, which discarded the live session and turned every page into a
+    500. A label is cosmetic; it has no business touching the session.
+
+    Two passes, cheapest first: a name with a dash is already "brand - place",
+    so take what follows it. Otherwise strip whatever opening words every
+    company shares, which is the brand by definition when a business names its
+    locations after itself.
+    """
+    out = {}
+    for slug, name in names.items():
+        label = (name or '').strip()
+        for sep in ('\u2014', '\u2013', ' - '):
+            if sep in label:
+                tail = label.rsplit(sep, 1)[1].strip()
+                if tail:
+                    label = tail
+                break
+        out[slug] = label or slug
+
+    # Still identical openings? Drop the words they all share.
+    parts = {k: v.split() for k, v in out.items() if v}
+    if len(parts) > 1:
+        shared = 0
+        shortest = min(len(w) for w in parts.values())
+        while shared < shortest - 1:
+            here = {tuple(w[:shared + 1]) for w in parts.values()}
+            if len(here) != 1:
+                break
+            shared += 1
+        if shared:
+            for k, words in parts.items():
+                trimmed = ' '.join(words[shared:]).strip()
+                if trimmed:
+                    out[k] = trimmed
+    return out
+
+
 def cities_for(email: str) -> list[dict]:
     """Every company this email can sign into, newest first, name included.
 
@@ -81,6 +129,9 @@ def cities_for(email: str) -> list[dict]:
         if not org or (org.get('status') or 'active') != 'active':
             continue
         out.append({'slug': slug, 'name': org.get('name') or slug})
+    labels = _labels({c['slug']: c['name'] for c in out})
+    for c in out:
+        c['label'] = labels.get(c['slug'], c['name'])
     return out
 
 

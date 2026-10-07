@@ -87,7 +87,7 @@
         <summary>Switch city</summary>
         <ul>
           {% for c in OTHER_CITIES %}
-          <li><a href="{{ url_for('admin.switch_city', slug=c.slug) }}">{{ c.name }}</a></li>
+          <li><a href="{{ url_for('admin.switch_city', slug=c.slug) }}" title="{{ c.name }}">{{ c.label }}</a></li>
           {% endfor %}
         </ul>
       </details>

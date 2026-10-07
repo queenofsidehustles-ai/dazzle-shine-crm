@@ -87,27 +87,51 @@ with app.app_context():
     theirs = {c['slug'] for c in city_switch.cities_for(STRANGER)}
     check(theirs == {OTHER}, 'and the stranger sees only their own')
 
-    print('\n2. Entitlement is checked, not assumed')
+    print('\n2. The menu says the city, not the company name again')
+    # Derived from the names alone. The first version read each company's own
+    # `city` setting, which meant entering other tenants' schemas from a context
+    # processor that runs on every render -- and removing the session
+    # mid-request, which 500'd every page. A label is cosmetic and must not go
+    # near the session.
+    for names, want, why in [
+        ({'a': 'Dazzle & Shine Maids \u2014 Huntsville',
+          'b': 'Dazzle & Shine Maids \u2014 Orlando'},
+         {'a': 'Huntsville', 'b': 'Orlando'}, 'brand and city split by a dash'),
+        ({'a': 'Dazzle & Shine Maids Huntsville',
+          'b': 'Dazzle & Shine Maids Orlando'},
+         {'a': 'Huntsville', 'b': 'Orlando'}, 'no dash, shared opening words'),
+        ({'a': 'Huntsville', 'b': 'Orlando'},
+         {'a': 'Huntsville', 'b': 'Orlando'}, 'already just cities'),
+        ({'a': 'Sparkle Co'}, {'a': 'Sparkle Co'},
+         'one company, nothing to strip'),
+    ]:
+        got = city_switch._labels(names)
+        check(got == want, f'{why}: {list(got.values())}')
+
+    labels = {c['slug']: c['label'] for c in city_switch.cities_for(OWNER)}
+    check(all(labels.values()), f'every city in the real menu has a label ({list(labels.values())})')
+
+    print('\n3. Entitlement is checked, not assumed')
     check(city_switch.may_switch(OWNER, HSV), 'she may switch to Huntsville')
     check(not city_switch.may_switch(OWNER, OTHER),
           "she may not switch into a company she does not own")
     check(not city_switch.may_switch(STRANGER, ORL),
           'and a stranger may not switch into hers')
 
-    print('\n3. A token works once, at the city it names')
+    print('\n4. A token works once, at the city it names')
     t = city_switch.mint(OWNER, HSV)
     check(city_switch.verify(t, HSV) == OWNER, 'it verifies at Huntsville')
     check(city_switch.verify(t, HSV) is None,
           'and is refused the second time — a leaked token is spent, not reusable')
 
-    print('\n4. A token is useless anywhere but its destination')
+    print('\n5. A token is useless anywhere but its destination')
     t2 = city_switch.mint(OWNER, HSV)
     check(city_switch.verify(t2, ORL) is None,
           'a Huntsville token is refused by Orlando')
     check(city_switch.verify(t2, HSV) == OWNER,
           'while still being good for Huntsville')
 
-    print('\n5. A token cannot be edited into something else')
+    print('\n6. A token cannot be edited into something else')
     t3 = city_switch.mint(OWNER, HSV)
     body, sig = t3[len(city_switch._PREFIX):].split('.', 1)
     forged = city_switch._PREFIX + body + '.' + ('A' * len(sig))
@@ -121,7 +145,7 @@ with app.app_context():
     check(city_switch.verify(swapped, HSV) is None,
           'and swapping the email inside it invalidates the signature')
 
-    print('\n6. A token expires')
+    print('\n7. A token expires')
     old = city_switch.TTL_SECONDS
     try:
         city_switch.TTL_SECONDS = -1
@@ -130,12 +154,12 @@ with app.app_context():
         city_switch.TTL_SECONDS = old
     check(city_switch.verify(stale, HSV) is None, 'an expired token is refused')
 
-    print('\n7. A stranger cannot mint their way in')
+    print('\n8. A stranger cannot mint their way in')
     bad = city_switch.mint(STRANGER, ORL)
     check(city_switch.verify(bad, ORL) is None,
           'a well-formed token for a city they do not own is still refused')
 
-    print('\n8. The switch actually works, end to end through the routes')
+    print('\n9. The switch actually works, end to end through the routes')
     # The gap that let a broken happy path ship: every check above exercised a
     # refusal, and refusals return before a session is ever created. A route
     # calling a function that does not exist passes all of them and 500s the
@@ -181,7 +205,7 @@ with app.app_context():
           f'and that same session is refused back at Orlando (got {r4.status_code})')
     db.session.remove()
 
-    print('\n9. Switching never creates access')
+    print('\n10. Switching never creates access')
     nouser = f'ghost-{TAG}@example.com'
     # record_tenant_login alone is enough for may_switch to pass: that is the
     # point of this check. Entitlement says yes, and the switch still refuses,
