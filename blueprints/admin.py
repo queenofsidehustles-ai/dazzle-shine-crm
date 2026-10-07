@@ -326,8 +326,9 @@ def accept_city_switch():
     create access that was not already granted.
     """
     import city_switch
-    from flask import request, redirect, url_for, flash, session, g
-    slug = (getattr(g, 'tenant_slug', None) or '').strip().lower()
+    from flask import request, redirect, url_for, flash, session
+    import auth as _auth
+    slug = (_auth.current_tenant_slug() or '').strip().lower()
     email = city_switch.verify(request.args.get('t') or '', slug)
     if not email:
         flash('That link has expired. Sign in and switch again.', 'warning')
@@ -341,7 +342,11 @@ def accept_city_switch():
     # left should survive into this one.
     session.clear()
     import auth
-    auth.start_session(user)
+    # bind_authenticated_session, not a hand-assigned set of session keys: it
+    # sets the tenant binding and the credential fingerprint together, and its
+    # own docstring records that forgetting the fingerprint is exactly how a
+    # new signup was silently logged out on its next request.
+    auth.bind_authenticated_session(user)
     return redirect(url_for('bookings.index'))
 
 

@@ -135,7 +135,53 @@ with app.app_context():
     check(city_switch.verify(bad, ORL) is None,
           'a well-formed token for a city they do not own is still refused')
 
-    print('\n8. Switching never creates access')
+    print('\n8. The switch actually works, end to end through the routes')
+    # The gap that let a broken happy path ship: every check above exercised a
+    # refusal, and refusals return before a session is ever created. A route
+    # calling a function that does not exist passes all of them and 500s the
+    # one time it matters.
+    # A real login, not hand-assigned session keys. A session without the
+    # credential fingerprint is rejected on its next request -- which is what
+    # bind_authenticated_session's docstring warns about, and what made the
+    # first version of this check redirect to a login page instead of leaving.
+    c = app.test_client()
+    r0 = c.post('/login', data={'username': OWNER, 'password': 'a-real-password-123'},
+                headers={'Host': f'{ORL}.akyehq.test'}, follow_redirects=False)
+    check(r0.status_code in (301, 302), f'the owner can log into Orlando (got {r0.status_code})')
+    db.session.remove()
+    r = c.get(f'/switch-city/{HSV}', headers={'Host': f'{ORL}.akyehq.test'},
+              follow_redirects=False)
+    check(r.status_code in (301, 302), f'leaving Orlando redirects (got {r.status_code})')
+    dest = r.headers.get('Location') or ''
+    check(f'{HSV}.akyehq.test' in dest, 'to Huntsville')
+    check('/switch-city/accept?t=' in dest, 'carrying a token')
+
+    token = dest.split('t=', 1)[1]
+    arrive = app.test_client()
+    r2 = arrive.get(f'/switch-city/accept?t={token}',
+                    headers={'Host': f'{HSV}.akyehq.test'}, follow_redirects=False)
+    check(r2.status_code in (301, 302), f'arriving is handled (got {r2.status_code})')
+    loc = r2.headers.get('Location') or ''
+    check('login' not in loc, f'and is NOT bounced to a login ({loc[-40:]})')
+    # Checked by using the session rather than reading the cookie: the cookie is
+    # host-scoped, and session_transaction() has no Host, so it would inspect a
+    # different session than the one just created. A protected page answering
+    # 200 on the next request is the real proof -- it is also the thing that
+    # broke silently for new signups when the fingerprint was missing.
+    r3 = arrive.get('/bookings/', headers={'Host': f'{HSV}.akyehq.test'},
+                    follow_redirects=False)
+    check(r3.status_code == 200,
+          f'the next request at Huntsville is authenticated (got {r3.status_code})')
+
+    # And the session belongs to Huntsville only: the same cookie at Orlando
+    # must not be honoured, which is the boundary auth.py exists to hold.
+    r4 = arrive.get('/bookings/', headers={'Host': f'{ORL}.akyehq.test'},
+                    follow_redirects=False)
+    check(r4.status_code != 200,
+          f'and that same session is refused back at Orlando (got {r4.status_code})')
+    db.session.remove()
+
+    print('\n9. Switching never creates access')
     nouser = f'ghost-{TAG}@example.com'
     # record_tenant_login alone is enough for may_switch to pass: that is the
     # point of this check. Entitlement says yes, and the switch still refuses,
