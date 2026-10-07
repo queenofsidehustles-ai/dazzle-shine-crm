@@ -88,28 +88,48 @@ with app.app_context():
     check(theirs == {OTHER}, 'and the stranger sees only their own')
 
     print('\n2. The menu says the city, not the company name again')
-    # Derived from the names alone. The first version read each company's own
-    # `city` setting, which meant entering other tenants' schemas from a context
-    # processor that runs on every render -- and removing the session
-    # mid-request, which 500'd every page. A label is cosmetic and must not go
-    # near the session.
-    for names, want, why in [
-        ({'a': 'Dazzle & Shine Maids \u2014 Huntsville',
-          'b': 'Dazzle & Shine Maids \u2014 Orlando'},
-         {'a': 'Huntsville', 'b': 'Orlando'}, 'brand and city split by a dash'),
-        ({'a': 'Dazzle & Shine Maids Huntsville',
-          'b': 'Dazzle & Shine Maids Orlando'},
-         {'a': 'Huntsville', 'b': 'Orlando'}, 'no dash, shared opening words'),
-        ({'a': 'Huntsville', 'b': 'Orlando'},
-         {'a': 'Huntsville', 'b': 'Orlando'}, 'already just cities'),
-        ({'a': 'Sparkle Co'}, {'a': 'Sparkle Co'},
-         'one company, nothing to strip'),
-    ]:
-        got = city_switch._labels(names)
-        check(got == want, f'{why}: {list(got.values())}')
+    # Names alone are not enough and this is the case that proved it: the real
+    # companies are "Dazzle and Shine HSV" and "Dazzle & Shine", which share
+    # only the word "Dazzle" -- and Orlando's name does not contain its city at
+    # all. The company's own city setting is the only source that knows.
+    with tenancy.use_tenant(ORL):
+        from models import BusinessSetting
+        BusinessSetting.set('city', 'Orlando'); db.session.commit()
+    db.session.remove()
+    with tenancy.use_tenant(HSV):
+        from models import BusinessSetting
+        BusinessSetting.set('city', 'Huntsville'); db.session.commit()
+    db.session.remove()
 
     labels = {c['slug']: c['label'] for c in city_switch.cities_for(OWNER)}
-    check(all(labels.values()), f'every city in the real menu has a label ({list(labels.values())})')
+    check(labels.get(ORL) == 'Orlando', f'Orlando is called Orlando ({labels.get(ORL)})')
+    check(labels.get(HSV) == 'Huntsville', f'Huntsville is called Huntsville ({labels.get(HSV)})')
+    check(not any('Shine' in (v or '') or 'Dazzle' in (v or '') for v in labels.values()),
+          'and no fragment of the business name leaks into either')
+
+    print('\n2b. Reading a city never touches the request session')
+    # The first version entered each tenant with use_tenant and called
+    # db.session.remove() from a context processor, which discarded the live
+    # session mid-render and 500'd every page in the CRM.
+    # The docstring explains what not to do, so read the executable body only.
+    import ast, inspect
+    fn = ast.parse(inspect.getsource(city_switch._city_of).strip()).body[0]
+    body = fn.body[1:] if (fn.body and isinstance(fn.body[0], ast.Expr)
+                           and isinstance(fn.body[0].value, ast.Constant)) else fn.body
+    code = '\n'.join(ast.unparse(n) for n in body)
+    check('session' not in code, 'the reader never touches the session')
+    check('use_tenant' not in code, 'and never switches the request into another tenant')
+
+    print('\n2c. A company with no city set still gets something usable')
+    nocity = f'nocity{TAG}'
+    provisioning.provision(nocity, 'Dazzle & Shine Maids \u2014 Tampa',
+                           owner_email=OWNER, quiet=True)
+    control_plane.record_tenant_login(engine, OWNER, nocity)
+    db.session.remove()
+    lab = {c['slug']: c['label'] for c in city_switch.cities_for(OWNER)}
+    check(lab.get(nocity) == 'Tampa', f'falls back to the name after the dash ({lab.get(nocity)})')
+    check(lab.get(ORL) == 'Orlando',
+          'and a real city is never trimmed because of what the fallbacks share')
 
     print('\n3. Entitlement is checked, not assumed')
     check(city_switch.may_switch(OWNER, HSV), 'she may switch to Huntsville')

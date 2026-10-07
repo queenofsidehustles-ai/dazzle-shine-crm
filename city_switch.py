@@ -61,27 +61,56 @@ def _engine():
     return provisioning._engine()
 
 
+def _city_of(slug: str) -> str:
+    """The city this company says it is in, or ''.
+
+    Read with raw SQL on its own connection, never through the ORM session.
+    This runs from a context processor on every page render, and the first
+    version used tenancy.use_tenant plus db.session.remove() -- which discarded
+    the live request's session mid-render and turned every page into a 500.
+    A label has no business touching the session; the same raw-SQL pattern the
+    tenant purge uses avoids it entirely.
+
+    The schema name is derived from a slug that has already passed valid_slug,
+    never taken from anything a visitor can set.
+    """
+    try:
+        import provisioning
+        import tenancy
+        from sqlalchemy import text
+        schema = tenancy.schema_for(slug)
+        with provisioning._engine().connect() as conn:
+            row = conn.execute(
+                text(f'SELECT value FROM "{schema}".business_setting '
+                     "WHERE key = 'city' LIMIT 1")).first()
+        return (row[0] or '').strip() if row else ''
+    except Exception:
+        return ''
+
+
 def _labels(names: dict) -> dict:
     """Short labels for a set of companies: {slug: label}.
 
     The sidebar already carries the business name above this menu, so repeating
-    "Dazzle & Shine Maids" against every entry says nothing and makes two
-    entries look alike at a glance. What distinguishes them is the city.
+    it against every entry says nothing and makes two entries look alike. What
+    distinguishes them is the city.
 
-    Worked out from the names alone, with no database access of any kind. The
-    first version read each company's own `city` setting, which meant entering
-    every other tenant's schema from inside a context processor that runs on
-    every page render -- and calling db.session.remove() while a request was
-    mid-flight, which discarded the live session and turned every page into a
-    500. A label is cosmetic; it has no business touching the session.
+    The company's own `city` setting first, because it is the only source that
+    actually knows. Names were tried alone and are not enough: "Dazzle and
+    Shine HSV" beside "Dazzle & Shine" share just the word "Dazzle", so
+    stripping what they have in common produced "and Shine HSV" and "& Shine" --
+    and Orlando's name does not contain its city at all, so no parsing could
+    ever have recovered it.
 
-    Two passes, cheapest first: a name with a dash is already "brand - place",
-    so take what follows it. Otherwise strip whatever opening words every
-    company shares, which is the brand by definition when a business names its
-    locations after itself.
+    Falling back, a name with a dash is already brand-then-place; then whatever
+    opening words every company shares; then the name itself.
     """
     out = {}
     for slug, name in names.items():
+        city = _city_of(slug)
+        if city:
+            out[slug] = city
+            continue
         label = (name or '').strip()
         for sep in ('\u2014', '\u2013', ' - '):
             if sep in label:
@@ -91,18 +120,20 @@ def _labels(names: dict) -> dict:
                 break
         out[slug] = label or slug
 
-    # Still identical openings? Drop the words they all share.
-    parts = {k: v.split() for k, v in out.items() if v}
-    if len(parts) > 1:
+    # Only trim shared words off names that had to fall back -- a real city
+    # name must never be shortened because another city happens to start the
+    # same way.
+    fallbacks = {k: v.split() for k, v in out.items()
+                 if not _city_of(k) and v}
+    if len(fallbacks) > 1:
         shared = 0
-        shortest = min(len(w) for w in parts.values())
+        shortest = min(len(w) for w in fallbacks.values())
         while shared < shortest - 1:
-            here = {tuple(w[:shared + 1]) for w in parts.values()}
-            if len(here) != 1:
+            if len({tuple(w[:shared + 1]) for w in fallbacks.values()}) != 1:
                 break
             shared += 1
         if shared:
-            for k, words in parts.items():
+            for k, words in fallbacks.items():
                 trimmed = ' '.join(words[shared:]).strip()
                 if trimmed:
                     out[k] = trimmed
