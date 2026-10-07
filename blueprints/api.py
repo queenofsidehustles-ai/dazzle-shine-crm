@@ -1,8 +1,10 @@
 import os
 import secrets
 import stripe
+from contextlib import contextmanager
 from datetime import date, timedelta, datetime
 from flask import Blueprint, request, jsonify
+from sqlalchemy import text
 from models import Booking, Client
 from extensions import db
 from pricing import calculate_price, FREQUENCY_LABELS, get_deposit
@@ -18,6 +20,60 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 # other company's site could ever reach its own CRM.
 DEV_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:5500']
 
+
+@contextmanager
+def _one_charge_run_at_a_time():
+    """Let only one balance-charging run per company be in flight at once.
+
+    Nothing stopped two from overlapping. The endpoint selects the bookings
+    whose balance is outstanding, then charges them one at a time, and the flag
+    that says a booking has been settled is written as each charge succeeds --
+    so a second run that starts while the first is partway through its list
+    selects the same bookings the first has not reached yet and charges them
+    again. The customer is debited twice and Stripe is told to do it twice,
+    because nothing in either request knows about the other.
+
+    That was survivable while one timetable existed. Moving the clock means a
+    window with two, and a card charged twice is the one fault in this
+    application that cannot be put right by correcting a record.
+
+    A Postgres advisory lock, as blueprints/signup.py and
+    tenant_data_lifecycle.py already use, held on its own connection so the
+    commits inside the charge loop cannot release it. Keyed per company: one
+    business's run must not make another's wait.
+
+    `pg_try_advisory_lock`, not `pg_advisory_lock`: the second run returns at
+    once saying so, rather than blocking until the scheduler's 120-second
+    timeout and then being counted as a failure. When it comes back the first
+    run's work is already recorded, so there is nothing left for it to do.
+
+    Not an idempotency key on the Stripe call, which is the other obvious
+    answer and is wrong here: Stripe saves and replays the response to a
+    repeated key, card declines included, for 24 hours. A customer whose card
+    was declined at nine and fixed at two would have the morning's decline
+    replayed at every attempt for the rest of the day.
+
+    Yields True when this run holds the lock, False when another already does.
+    """
+    import tenancy
+    if db.engine.dialect.name != 'postgresql':
+        # SQLite is one process, and a single-business install has one clock.
+        yield True
+        return
+    # The company's own schema, which tenancy derives -- never request input.
+    key = f'akye:charge-balances:{tenancy.current_schema() or "public"}'
+    with db.engine.connect() as conn:
+        got = bool(conn.execute(
+            text('SELECT pg_try_advisory_lock(hashtext(:key))'),
+            {'key': key}).scalar())
+        try:
+            yield got
+        finally:
+            if got:
+                conn.execute(
+                    text('SELECT pg_advisory_unlock(hashtext(:key))'),
+                    {'key': key})
+                conn.commit()
 
 def allowed_origins():
     import branding
@@ -158,6 +214,20 @@ def charge_balances():
     if not automations.is_enabled('charge-balances'):
         return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
 
+    # One run per company at a time. See _one_charge_run_at_a_time: two
+    # overlapping runs charge the same cards twice, and the window for that
+    # opens the moment a second timetable exists.
+    with _one_charge_run_at_a_time() as mine:
+        if not mine:
+            automations.record('charge-balances', items=0, ok=True,
+                               detail='another run was already in progress')
+            return jsonify({'ok': True, 'charged': 0,
+                            'skipped': 'another run is already in progress'}), 200
+        return _charge_balances_work()
+
+
+def _charge_balances_work():
+    """Charge every outstanding balance due today. Called holding the lock."""
     import scheduling
     from payment_service import charge_balance as do_charge
     # The business's own date, not the server's — in the evening the server
