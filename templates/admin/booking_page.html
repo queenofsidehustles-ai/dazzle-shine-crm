@@ -84,9 +84,22 @@
     <li>Save and look at the page. The form appears, and grows to fit — you do
       not have to set a height.</li>
   </ol>
+  <p style="color:var(--muted);line-height:1.75;margin:14px 0 0">
+    <strong>If your website asks for a web address instead of code</strong>
+    (a block called "Embed a website", or an <code>&lt;iframe&gt;</code> your
+    website person writes by hand), give it this one, not the link at the top
+    of the page — the link at the top is for sending people to, and websites
+    are not allowed to show it inside themselves:
+  </p>
+  <div style="background:var(--surface-2);border:1px solid var(--line);
+              border-radius:10px;padding:12px 14px;display:flex;gap:10px;
+              align-items:center;flex-wrap:wrap;margin-top:8px">
+    <code id="embedurl" style="font-size:0.88rem;word-break:break-all;flex:1">{{ embed_url }}</code>
+    <button type="button" class="btn btn-outline btn-sm" id="copyembedurl">Copy</button>
+  </div>
   <p style="color:var(--softer);font-size:0.85rem;line-height:1.7;margin:14px 0 0">
-    If your website person does it for you, send them that one line and nothing
-    else. It is all they need.
+    If your website person does it for you, send them that one line of code
+    and nothing else. It is all they need.
   </p>
   {% else %}
   <div style="background:var(--surface-2);border:1px solid var(--line);
@@ -150,6 +163,7 @@ function save(on) {
 }
 wire('copyurl', 'bookurl', 'Copy link');
 wire('copysnippet', 'snippet', 'Copy');
+wire('copyembedurl', 'embedurl', 'Copy');
 document.getElementById('sharedbox').addEventListener('change', e => save(e.target.checked));
 </script>
 {% endblock %}
