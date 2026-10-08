@@ -17,6 +17,7 @@ data-email="{{ p.email or '' }}"
 data-renewal="{{ p.renewal_note or '' }}"
 data-attempts="{{ p.attempts or 0 }}"
 data-brand="{{ p.brand or default_brand }}"
+data-kind="{{ 'commercial' if p.is_commercial else 'residential' }}"
 {%- endmacro %}
 
 {% if demo %}
@@ -145,7 +146,7 @@ data-brand="{{ p.brand or default_brand }}"
             <strong>{{ p.business_name }}</strong>
             {% if p.rating %}<span style="font-size:0.78rem;color:var(--softer)"> ⭐{{ '%.1f' % p.rating }}</span>{% endif %}
             <div style="font-size:0.78rem;color:var(--softer)">
-              {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
+              <span class="kind-badge">{{ p.kind_label }}</span> · {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
               {% if p.contact_name %} · {{ p.contact_name }}{% endif %}
             </div>
             {% if p.website %}<a href="{{ p.website }}" target="_blank" style="font-size:0.78rem;color:var(--amber-deep)">website ↗</a>{% endif %}
@@ -248,6 +249,7 @@ data-brand="{{ p.brand or default_brand }}"
         <tr>
           <td>
             <strong>{{ p.business_name }}</strong>
+            <br><span class="kind-badge">{{ p.kind_label }}</span>
             {% if p.website %}<br><a href="{{ p.website }}" target="_blank" style="font-size:0.76rem;color:var(--amber-deep)">website ↗</a>{% endif %}
           </td>
           <td style="font-size:0.84rem">{{ p.contact_name or '—' }}</td>
@@ -280,6 +282,16 @@ data-brand="{{ p.brand or default_brand }}"
 </div>
 {% endif %}
 
+<style>
+  .kind-toggle { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; background:var(--surface); }
+  .kind-toggle label, .kind-toggle button { display:inline-flex; align-items:center; gap:4px; margin:0;
+    padding:7px 13px; font-size:0.85rem; font-weight:600; color:var(--muted); cursor:pointer;
+    border:0; background:transparent; font-family:inherit; }
+  .kind-toggle input { position:absolute; opacity:0; pointer-events:none; }
+  .kind-toggle label:has(input:checked), .kind-toggle button.on { background:var(--ink); color:#fff; }
+  .kind-badge { font-size:0.72rem; font-weight:700; color:var(--muted); white-space:nowrap; }
+</style>
+
 {# ── ADD ONE BY HAND ───────────────────────────────────────────────────── #}
 {# The leads search can never find: somebody met at a networking breakfast, a
    property manager a customer passed on, the office down the road. #}
@@ -309,13 +321,16 @@ data-brand="{{ p.brand or default_brand }}"
       </select>
     </div>
     <div>
-      <label for="addBrand" style="{{ lbl }}">For which brand?</label>
-      <select name="brand" id="addBrand" style="{{ fld }}">
-        <option value="all">Work it out from the kind of business</option>
-        {% for key, label in brand_choices %}{% if key != 'all' %}
-        <option value="{{ key }}" {{ 'selected' if key == brand_lens }}>{{ label }}</option>
-        {% endif %}{% endfor %}
-      </select>
+      <span style="{{ lbl }}">What are they buying?</span>
+      {# Decides which quote they get: a per-home price, or a cleaning
+         contract. Follows the kind of business until you pick one. #}
+      <div class="kind-toggle" id="addKind">
+        <label><input type="radio" name="kind" value="residential"> 🏠 Residential</label>
+        <label><input type="radio" name="kind" value="commercial" checked> 🏢 Commercial</label>
+      </div>
+      <div style="font-size:0.74rem;color:var(--softer);margin-top:4px">
+        Residential: homes, units, turnovers. Commercial: offices and facilities on a contract.
+      </div>
     </div>
     <div>
       <label for="addContact" style="{{ lbl }}">Who to ask for</label>
@@ -351,6 +366,26 @@ data-brand="{{ p.brand or default_brand }}"
     </div>
   </form>
 </div>
+{% endif %}
+
+{% if view == 'add' %}
+<script>
+  // Follow the kind of business until somebody picks for themselves.
+  (function () {
+    const COMMERCIAL = {{ commercial_categories | tojson }};
+    const cat = document.getElementById('addCat');
+    const radios = document.querySelectorAll('#addKind input');
+    let picked = false;
+    radios.forEach(r => r.addEventListener('change', () => { picked = true; }));
+    const follow = () => {
+      if (picked) return;
+      const kind = COMMERCIAL.includes(cat.value) ? 'commercial' : 'residential';
+      radios.forEach(r => { r.checked = (r.value === kind); });
+    };
+    cat.addEventListener('change', follow);
+    follow();
+  })();
+</script>
 {% endif %}
 
 {# ── FIND NEW ──────────────────────────────────────────────────────────── #}
@@ -519,10 +554,20 @@ data-brand="{{ p.brand or default_brand }}"
       {# Texting goes through the ordinary inbox: the conversation, STOP and
          the reply all land where every other text does. #}
       <a id="cdText" href="#" class="btn btn-outline" style="padding:8px 14px;font-size:.9rem;display:none">💬 Text</a>
-      {% if can_quote %}
-      <a id="cdQuote" href="#" class="btn btn-outline" style="padding:8px 14px;font-size:.9rem">📝 Quote</a>
-      {% endif %}
+      <a id="cdQuote" href="#" class="btn btn-outline" style="padding:8px 14px;font-size:.9rem;display:none">📝 Quote</a>
     </div>
+    {# Which kind of work this is decides the quote it gets. One tap to
+       change it, from where the decision is made: on the call. #}
+    <form id="cdKindForm" method="POST" style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      {# Both carry a class: the stylesheet paints any class-less submit button
+         as the page's main orange action, which made the unpicked side look picked. #}
+      <div class="kind-toggle">
+        <button type="submit" name="kind" value="residential" id="cdKindRes" class="kt">🏠 Residential</button>
+        <button type="submit" name="kind" value="commercial" id="cdKindCom" class="kt">🏢 Commercial</button>
+      </div>
+      <span id="cdKindHint" style="font-size:.74rem;color:var(--softer)"></span>
+    </form>
   </div>
 
   <div class="cd-body">
@@ -654,7 +699,11 @@ data-brand="{{ p.brand or default_brand }}"
   const CD_ACTION   = "{{ url_for('places_finder.update_status', prospect_id=0, view=view) }}";
   const CD_EMAIL_ACTION = "{{ url_for('places_finder.send_outreach', prospect_id=0, view=view) }}";
   const CD_TEXT_BASE  = "{{ url_for('messages.thread', phone='0000000000') }}";
-  const CD_QUOTE_URL  = "{{ url_for('quotes.new', prospect_id=0) if can_quote else '' }}";
+  // A commercial lead gets a contract quote (owner, commercial plan); a
+  // residential one gets the per-home quote anyone on the team can send.
+  const CD_QUOTE_COM  = "{{ url_for('quotes.new', prospect_id=0) if can_quote else '' }}";
+  const CD_QUOTE_RES  = "{{ url_for('leads.new_quote', prospect_id=0) }}";
+  const CD_KIND_ACTION = "{{ url_for('places_finder.set_kind', prospect_id=0) }}";
 
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -740,8 +789,22 @@ data-brand="{{ p.brand or default_brand }}"
     } else {
       txt.style.display = 'none';
     }
+    const commercial = d.kind === 'commercial';
     const qb = document.getElementById('cdQuote');
-    if (qb) qb.href = CD_QUOTE_URL.replace('prospect_id=0', 'prospect_id=' + d.id);
+    const qurl = commercial ? CD_QUOTE_COM : CD_QUOTE_RES;
+    if (qurl) {
+      qb.href = qurl.replace('prospect_id=0', 'prospect_id=' + d.id);
+      qb.textContent = commercial ? '📝 Contract quote' : '📝 Home quote';
+      qb.style.display = 'inline-flex';
+    } else {
+      qb.style.display = 'none';
+    }
+    document.getElementById('cdKindForm').action = CD_KIND_ACTION.replace('/0/', '/' + d.id + '/');
+    document.getElementById('cdKindRes').classList.toggle('on', !commercial);
+    document.getElementById('cdKindCom').classList.toggle('on', commercial);
+    document.getElementById('cdKindHint').textContent = commercial
+      ? 'Quoted as a cleaning contract'
+      : 'Quoted per home — beds, baths, turnovers';
 
     const openerCat = CD_MAP[d.cat] || 'call_office';
     const opener = CD_SCRIPTS[openerCat] || [];

@@ -641,6 +641,9 @@ class Lead(db.Model):
     source = db.Column(db.String(50), default='website')
     agent = db.Column(db.String(100))                 # team member (VA) credited for commission
     notes = db.Column(db.Text)
+    # The call-list lead this residential quote was written for, if any. See
+    # migration 0021 and CommercialQuote.prospect_id.
+    prospect_id = db.Column(db.Integer, index=True)
     # Residential or commercial side of the business. NULL on anything that
     # predates the split; brands.brand_for_lead works it out from service_type.
     brand = db.Column(db.String(20), index=True)
@@ -1916,6 +1919,19 @@ class Prospect(db.Model):
     @property
     def category_label(self):
         return self.CATEGORY_LABELS.get(self.category, self.category or 'Other')
+
+    @property
+    def is_commercial(self):
+        """Commercial work (an office contract) or residential (homes, units,
+        turnovers -- even when a business is buying them). Stored as the brand,
+        which also picks the scripts and the sender, and set from the category
+        until somebody flips it by hand."""
+        import brands
+        return (self.brand or brands.brand_for_prospect(self)) == brands.COMMERCIAL
+
+    @property
+    def kind_label(self):
+        return '🏢 Commercial' if self.is_commercial else '🏠 Residential'
 
     @property
     def status_label(self):

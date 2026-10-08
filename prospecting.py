@@ -355,3 +355,31 @@ def send_outreach(prospect, subject, body, to=None):
 
     db.session.commit()
     return False, f'Could not send: {detail}'
+
+
+def quote_moved(prospect_id, stage, status, next_action, days, note):
+    """Keep a call-list lead in step with what happened to its quote.
+
+    Without this the two drifted apart: a proposal sat in somebody's inbox
+    while the call list still said "Book the walkthrough", and a business that
+    had signed stayed due a follow-up call. Shared by both kinds of quote -- a
+    commercial contract and a residential per-home price -- so they cannot move
+    a lead differently. Never fatal: a quote that cannot update its lead is
+    still a quote that was sent or accepted. Callers commit.
+    """
+    if not prospect_id:
+        return None
+    try:
+        from models import Prospect
+        p = Prospect.query.get(prospect_id)
+        if p is None:
+            return None
+        p.stage = stage
+        if status:
+            p.status = status
+        p.next_action = next_action
+        p.next_action_date = _plus(days) if days is not None else None
+        p.notes = note_entry(p, note)
+        return p
+    except Exception:
+        return None

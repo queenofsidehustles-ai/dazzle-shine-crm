@@ -14,6 +14,8 @@
   <div style="font-size:0.82rem;color:var(--softer);margin-top:4px">
     Sending it moves them to Proposal with a follow-up in three days; when they
     accept, they are marked won and become an account.
+    {% if not quote %}Pricing homes or unit turnovers instead?
+    <a href="{{ url_for('leads.new_quote', prospect_id=lead.id) }}" style="color:var(--amber-deep)">Write a residential quote →</a> ·{% endif %}
     <a href="{{ url_for('places_finder.dashboard', view='everyone') }}" style="color:var(--amber-deep)">Back to the call list →</a>
   </div>
 </div>

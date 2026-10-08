@@ -84,30 +84,10 @@ def _lead_for(q):
 
 
 def _lead_moved(q, stage, status, next_action, days, note):
-    """Keep the lead on the call list in step with what happened to its quote.
-
-    Without this the two drifted apart: a proposal sat in the inbox while the
-    call list still said "Book the walkthrough", and a business that had signed
-    stayed due for a follow-up call. Never fatal -- a quote that cannot update
-    its lead is still a quote that was sent or accepted. Callers commit.
-    """
-    p = _lead_for(q)
-    if not p:
-        return None
-    try:
-        import prospecting
-        from datetime import timedelta
-        from scheduling import local_today
-        p.stage = stage
-        if status:
-            p.status = status
-        p.next_action = next_action
-        p.next_action_date = ((local_today() + timedelta(days=days)).isoformat()
-                              if days is not None else None)
-        p.notes = prospecting.note_entry(p, note)
-    except Exception:
-        return None
-    return p
+    """See prospecting.quote_moved. Callers commit."""
+    import prospecting
+    return prospecting.quote_moved(getattr(q, 'prospect_id', None), stage, status,
+                                   next_action, days, note)
 
 
 @quotes_bp.route('/')

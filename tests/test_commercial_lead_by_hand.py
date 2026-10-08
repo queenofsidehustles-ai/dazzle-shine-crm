@@ -1,4 +1,4 @@
-"""A commercial lead you found yourself: on the call list, quoted, and talked to.
+"""A lead you found yourself: on the call list, quoted the right way, and talked to.
 
 Search was the only way onto the call list, so the leads a cleaning company
 values most -- the office manager met at a networking breakfast, the property
@@ -13,7 +13,10 @@ lead it was for, so what would go wrong without each of these:
   * a lead texting back and showing in the inbox as an Unknown number, with
     Thursday's follow-up still set for somebody who answered on Tuesday;
   * the Send button on a quote quietly saving instead of sending, because it
-    sat in a form nested inside another.
+    sat in a form nested inside another;
+  * a property manager buying unit turnovers quoted as an office contract --
+    or an office quoted per bedroom -- because the call list could not say
+    which kind of work a lead was.
 
 Against a disposable Postgres, like the rest of the multi-company suite.
 """
@@ -58,6 +61,8 @@ HOST = f'http://{SLUG}.akye.test'
 with app.app_context():
     provisioning.provision(SLUG, 'Gleam Cleaning', quiet=True)
     db.session.remove()
+# The starter templates a real signup gets -- the residential quote email is one.
+provisioning.seed(app, SLUG)
 fresh_postgres.set_company_plan(SLUG, 'scale')
 c = fresh_postgres.owner_client(app, SLUG, 'akye.test')
 TODAY = local_today().isoformat()
@@ -236,6 +241,75 @@ with app.test_request_context('/', base_url=HOST):
     from flask import session
     session['role'] = 'team'
     check(PF._can_quote() is False, 'a team member\'s drawer has no Quote button')
+
+print('\n8. Residential or commercial: a toggle, and the quote follows it')
+page = c.get('/find-leads/?view=add', base_url=HOST).get_data(as_text=True)
+check('name="kind" value="residential"' in page and 'name="kind" value="commercial"' in page,
+      'the add form asks what they are buying')
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Oakline Property Management', 'category': 'property_manager',
+    'contact_name': 'Jo Park', 'phone': '3015550311', 'email': 'jo@oakline.example',
+    'address': '9 Main St', 'city': 'Gaithersburg'})
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Ridge Realty Offices', 'category': 'realtor', 'kind': 'commercial'})
+oak, ridge = lead('Oakline Property Management'), lead('Ridge Realty Offices')
+check(oak['brand'] == 'primary', 'left alone, a property manager is residential — turnovers are home cleaning')
+check(ridge['brand'] == 'commercial', 'but picking Commercial overrides the guess')
+everyone = c.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
+check('🏠 Residential' in everyone and '🏢 Commercial' in everyone,
+      'every lead shows which it is')
+check('data-kind="residential"' in everyone and '/leads/quote/new?prospect_id=0' in everyone,
+      'and the drawer knows, with the home quote to hand')
+
+sheet = c.get(f'/find-leads/call/{oak["id"]}', base_url=HOST).get_data(as_text=True)
+check(f'/leads/quote/new?prospect_id={oak["id"]}' in sheet and 'Home quote' in sheet
+      and f'/quotes/new?prospect_id={oak["id"]}' not in sheet,
+      'a residential lead\'s call sheet offers the per-home quote, not a contract')
+
+form = c.get(f'/leads/quote/new?prospect_id={oak["id"]}', base_url=HOST).get_data(as_text=True)
+check('value="Jo Park"' in form and 'value="jo@oakline.example"' in form
+      and 'value="3015550311"' in form and 'value="9 Main St"' in form,
+      'the home quote opens filled in from the lead')
+check(re.search(r'<option value="moveout"\s+selected', form)
+      and f'name="prospect_id" value="{oak["id"]}"' in form
+      and 'Residential quote for' in form,
+      'as a move-out/turnover, saying which lead it is for')
+SENT.clear()
+c.post('/leads/quote/new', base_url=HOST, data={
+    'prospect_id': oak['id'], 'name': 'Jo Park', 'email': 'jo@oakline.example',
+    'phone': '3015550311', 'service_type': 'moveout', 'bedrooms': '2', 'bathrooms': '1',
+    'frequency': 'one_time', 'address': '9 Main St', 'city': 'Gaithersburg'})
+oak = lead('Oakline Property Management')
+from models import Lead
+with app.app_context(), tenancy.use_tenant(SLUG):
+    res = Lead.query.filter_by(email='jo@oakline.example').first()
+    res_link, res_id = (res.prospect_id, res.id) if res else (None, None)
+    db.session.remove()
+check(res_link == oak['id'], 'the residential quote remembers its lead')
+check(any(k.get('to_email') == 'jo@oakline.example' or (a and a[0] == 'jo@oakline.example')
+          for a, k in SENT), 'and is emailed to them')
+check(oak['stage'] == 'proposal' and oak['next_action'] == 'Follow up on the quote'
+      and 'Residential quote' in (oak['notes'] or ''),
+      'sending it moves the lead to Proposal, like a contract quote')
+
+import quoting
+with app.app_context(), tenancy.use_tenant(SLUG):
+    quoting.accept_quote(db.session.get(Lead, res_id), '2026-11-02')
+    db.session.remove()
+oak = lead('Oakline Property Management')
+check(oak['stage'] == 'won' and not oak['next_action_date'],
+      'and when they book from it, the lead is won')
+
+r = c.post(f'/find-leads/{ridge["id"]}/kind', base_url=HOST,
+           data={'kind': 'residential', 'next': 'https://evil.example/'})
+check(lead('Ridge Realty Offices')['brand'] == 'primary', 'one tap flips a lead to residential')
+check(r.headers.get('Location', '').startswith('/find-leads'),
+      'and sends you back to the call list, never off-site')
+c.post(f'/find-leads/{ridge["id"]}/kind', base_url=HOST, data={'kind': 'nonsense'})
+check(lead('Ridge Realty Offices')['brand'] == 'primary', 'anything else changes nothing')
+form = c.get(f'/quotes/new?prospect_id={ridge["id"]}', base_url=HOST).get_data(as_text=True)
+check(f'/leads/quote/new?prospect_id={ridge["id"]}' in form,
+      'and a contract quote started by mistake links across to the home quote')
 
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')

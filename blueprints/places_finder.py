@@ -209,6 +209,9 @@ def _view_args(view, prospects, **extra):
         # Quotes are an owner's page on a plan that has commercial work, so
         # the drawer only offers the button to someone it will open for.
         can_quote=_can_quote(),
+        commercial_categories=list(brands._COMMERCIAL_CATEGORIES),
+        brand_primary=brands.PRIMARY,
+        brand_commercial=brands.COMMERCIAL,
     )
     args.update(extra)
     return args
@@ -616,7 +619,13 @@ def add_by_hand():
     website = (f.get('website') or '').strip()
     if website and not website.startswith(('http://', 'https://')):
         website = 'https://' + website
-    picked = brands.normalize_lens(f.get('brand'))
+    # Residential or commercial, if they said; otherwise worked out from the
+    # kind of business, the same way an imported lead is.
+    kind = f.get('kind')
+    if kind in ('residential', 'commercial'):
+        picked = brands.COMMERCIAL if kind == 'commercial' else brands.PRIMARY
+    else:
+        picked = brands.normalize_lens(f.get('brand'))
     p = Prospect(
         business_name=name,
         category=category,
@@ -643,6 +652,31 @@ def add_by_hand():
     db.session.commit()
     flash(f'{name} is on your call list — first call due today.', 'success')
     return redirect(url_for('places_finder.dashboard', view='today'))
+
+
+@places_finder_bp.route('/<int:prospect_id>/kind', methods=['POST'])
+@login_required
+def set_kind(prospect_id):
+    """Residential or commercial, said by a person rather than guessed.
+
+    The category decides it until somebody knows better, and the guess is
+    often wrong in both directions: a property manager who also runs an office
+    block wants a janitorial contract, and a general contractor wants a house
+    cleaned after a build. Which way it goes decides the quote it gets, the
+    scripts read to it, and whose name the emails go out under.
+    """
+    import brands
+    p = Prospect.query.get_or_404(prospect_id)
+    kind = request.form.get('kind')
+    if kind in ('residential', 'commercial'):
+        p.brand = brands.COMMERCIAL if kind == 'commercial' else brands.PRIMARY
+        db.session.commit()
+        flash(f'{p.business_name} is now {p.kind_label.split(" ", 1)[1].lower()} — '
+              f'its quote, scripts and emails follow.', 'success')
+    back = request.form.get('next') or ''
+    if not back.startswith('/') or back.startswith('//') or '\\' in back:
+        back = url_for('places_finder.dashboard', view='everyone')
+    return redirect(back)
 
 
 @places_finder_bp.route('/<int:prospect_id>/status', methods=['POST'])
