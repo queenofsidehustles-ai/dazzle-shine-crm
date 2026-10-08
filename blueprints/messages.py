@@ -128,7 +128,7 @@ def resolve_contact(phone10):
     number. They are checked last, after the team and applicants, because a
     cleaner who is also a customer should read as a cleaner here."""
     blank = {'name': None, 'staff_id': None, 'application_id': None,
-             'client_id': None, 'lead_id': None, 'lsa': False}
+             'client_id': None, 'lead_id': None, 'lsa': False, 'prospect_id': None}
 
     for s in Staff.query.filter(Staff.phone.isnot(None)).all():
         if norm_phone(s.phone) == phone10:
@@ -163,6 +163,17 @@ def resolve_contact(phone10):
     # so the number stands in — but where they came from is worth knowing.
     if from_google:
         return {**blank, 'lsa': True}
+
+    # A business on the call list. Last, so that one which has since booked or
+    # asked for a quote reads as what it has become. Named by the business,
+    # with the person if we know them -- "Dana (Sunrise Pediatrics)" is who
+    # you are actually talking to.
+    from models import Prospect
+    for pr in Prospect.query.filter(Prospect.phone.isnot(None)).all():
+        if norm_phone(pr.phone) == phone10:
+            name = (f'{pr.contact_name} ({pr.business_name})' if pr.contact_name
+                    else pr.business_name)
+            return {**blank, 'name': name, 'prospect_id': pr.id}
     return blank
 
 
@@ -175,6 +186,7 @@ CONTACT_KINDS = {
     'customer':  {'label': 'Customer',  'colour': '#1a7f5a', 'tint': '#e6f6ef', 'icon': '🏠'},
     'google':    {'label': 'Google Ads', 'colour': '#1a56c4', 'tint': '#e7effc', 'icon': '📣'},
     'lead':      {'label': 'Lead',      'colour': '#8a5a00', 'tint': '#fdf3e0', 'icon': '💡'},
+    'prospect':  {'label': 'Business lead', 'colour': '#9a3412', 'tint': '#fff1e6', 'icon': '🏢'},
     'unknown':   {'label': 'Unknown',   'colour': '#6f6885', 'tint': '#efecf6', 'icon': '❓'},
 }
 
@@ -192,6 +204,8 @@ def contact_kind(contact):
     # whether a reply is a job to service or a sale still to win.
     if contact.get('lead_id') or contact.get('lsa'):
         return 'google' if contact.get('lsa') else 'lead'
+    if contact.get('prospect_id'):
+        return 'prospect'
     if contact.get('name'):
         # A name with no id at all came from a Booking.
         return 'customer'
@@ -646,6 +660,39 @@ def _record_unrouted(phone10, body):
             pass
 
 
+def _note_prospect_text(prospect_id, body, stopped):
+    """A business on the call list texted back: put it where the next call is
+    made from.
+
+    The same as an emailed reply (email_replies): the answer goes on the
+    record, whatever was scheduled stops, and what is due today is that
+    somebody reads it -- otherwise Thursday's follow-up call goes to somebody
+    who answered on Tuesday. A STOP is written down instead, so nobody on the
+    call list texts them again by hand. Never fatal: the text is already saved
+    in the inbox.
+    """
+    try:
+        from models import Prospect
+        import prospecting
+        from scheduling import local_today
+        pr = Prospect.query.get(prospect_id)
+        if pr is None:
+            return
+        if stopped:
+            pr.notes = prospecting.note_entry(pr, 'Texted STOP — do not text them again')
+        else:
+            said = body if len(body) <= 400 else body[:400] + '…'
+            pr.notes = prospecting.note_entry(pr, f'Texted back:\n{said}')
+            pr.next_action = 'They texted back — reply'
+            pr.next_action_date = local_today().isoformat()
+            if pr.stage in (None, 'new', 'working'):
+                pr.stage = 'interested'
+            pr.sequence = None
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 def _handle_inbound(link_base=None):
     from_num = request.form.get('From', '')
     body = (request.form.get('Body') or '').strip()
@@ -700,6 +747,8 @@ def _handle_inbound(link_base=None):
                 application_id=contact['application_id'], created_at=datetime.utcnow())
     db.session.add(m)
     db.session.commit()
+    if contact.get('prospect_id'):
+        _note_prospect_text(contact['prospect_id'], translated or body, stop_word)
 
     # Ping the owner's cell so she never has to sit in the CRM (in English).
     who = opt_note + (contact['name'] or pretty_phone(phone10))

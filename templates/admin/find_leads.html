@@ -37,7 +37,8 @@ data-brand="{{ p.brand or default_brand }}"
 <div class="filter-tabs">
   {% set views = [('today', '📞 Calls', due.overdue + due.today + due.unscheduled),
                   ('everyone', '🏢 Everyone', counts.all),
-                  ('find', '🎯 Find new', None)] %}
+                  ('find', '🎯 Find new', None),
+                  ('add', '➕ Add one', None)] %}
   {% for key, label, n in views %}
   <a href="{{ url_for('places_finder.dashboard', view=key) }}"
      class="filter-tab {{ 'active' if view == key }}">
@@ -279,6 +280,79 @@ data-brand="{{ p.brand or default_brand }}"
 </div>
 {% endif %}
 
+{# ── ADD ONE BY HAND ───────────────────────────────────────────────────── #}
+{# The leads search can never find: somebody met at a networking breakfast, a
+   property manager a customer passed on, the office down the road. #}
+{% if view == 'add' %}
+{% set fld = 'width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:0.95rem' %}
+{% set lbl = 'display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px' %}
+<div class="card" style="margin-bottom:18px;max-width:760px">
+  <h3 style="margin:0 0 4px">➕ Add a business yourself</h3>
+  <p style="color:var(--softer);font-size:0.85rem;margin:0 0 16px">
+    Someone you met, were referred to, or found on your own. It joins your call
+    list as a first call due today, and from there it works like any other lead:
+    log calls, email, text, and quote them.
+  </p>
+  <form method="POST" action="{{ url_for('places_finder.add_by_hand') }}"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 14px">
+    <div style="grid-column:1/-1">
+      <label for="addName" style="{{ lbl }}">Business name *</label>
+      <input type="text" name="business_name" id="addName" required style="{{ fld }}"
+             placeholder="Sunrise Pediatrics">
+    </div>
+    <div>
+      <label for="addCat" style="{{ lbl }}">What kind of business?</label>
+      <select name="category" id="addCat" style="{{ fld }}">
+        {% for c in categories %}
+        <option value="{{ c }}" {{ 'selected' if c == 'office' }}>{{ category_labels[c] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="addBrand" style="{{ lbl }}">For which brand?</label>
+      <select name="brand" id="addBrand" style="{{ fld }}">
+        <option value="all">Work it out from the kind of business</option>
+        {% for key, label in brand_choices %}{% if key != 'all' %}
+        <option value="{{ key }}" {{ 'selected' if key == brand_lens }}>{{ label }}</option>
+        {% endif %}{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="addContact" style="{{ lbl }}">Who to ask for</label>
+      <input type="text" name="contact_name" id="addContact" style="{{ fld }}" placeholder="Name + title">
+    </div>
+    <div>
+      <label for="addPhone" style="{{ lbl }}">Phone</label>
+      <input type="tel" name="phone" id="addPhone" style="{{ fld }}" placeholder="(301) 555-0123">
+    </div>
+    <div>
+      <label for="addEmail" style="{{ lbl }}">Email</label>
+      <input type="email" name="email" id="addEmail" style="{{ fld }}" placeholder="name@company.com">
+    </div>
+    <div>
+      <label for="addWeb" style="{{ lbl }}">Website</label>
+      <input type="text" name="website" id="addWeb" style="{{ fld }}" placeholder="company.com">
+    </div>
+    <div>
+      <label for="addAddr" style="{{ lbl }}">Address</label>
+      <input type="text" name="address" id="addAddr" style="{{ fld }}">
+    </div>
+    <div>
+      <label for="addCity" style="{{ lbl }}">City</label>
+      <input type="text" name="city" id="addCity" style="{{ fld }}">
+    </div>
+    <div style="grid-column:1/-1">
+      <label for="addNotes" style="{{ lbl }}">Anything worth remembering</label>
+      <textarea name="notes" id="addNotes" rows="3" style="{{ fld }}"
+                placeholder="Met at the chamber breakfast — wants a quote for nightly cleaning, 3 restrooms"></textarea>
+    </div>
+    <div style="grid-column:1/-1">
+      <button type="submit" class="btn btn-gold" style="padding:11px 22px">➕ Add to my call list</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
 {# ── FIND NEW ──────────────────────────────────────────────────────────── #}
 {% if view == 'find' %}
 <div class="card" style="margin-bottom:18px">
@@ -440,7 +514,15 @@ data-brand="{{ p.brand or default_brand }}"
       <button type="button" id="cdClose" class="btn btn-outline"
               style="padding:5px 11px;font-size:.85rem;flex-shrink:0">✕</button>
     </div>
-    <a id="cdPhone" href="#" class="btn" style="padding:8px 16px;font-size:.9rem;margin-top:10px;display:none">📞 Call</a>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <a id="cdPhone" href="#" class="btn" style="padding:8px 16px;font-size:.9rem;display:none">📞 Call</a>
+      {# Texting goes through the ordinary inbox: the conversation, STOP and
+         the reply all land where every other text does. #}
+      <a id="cdText" href="#" class="btn btn-outline" style="padding:8px 14px;font-size:.9rem;display:none">💬 Text</a>
+      {% if can_quote %}
+      <a id="cdQuote" href="#" class="btn btn-outline" style="padding:8px 14px;font-size:.9rem">📝 Quote</a>
+      {% endif %}
+    </div>
   </div>
 
   <div class="cd-body">
@@ -571,6 +653,8 @@ data-brand="{{ p.brand or default_brand }}"
   const CD_RULES    = {{ next_rules | tojson }};
   const CD_ACTION   = "{{ url_for('places_finder.update_status', prospect_id=0, view=view) }}";
   const CD_EMAIL_ACTION = "{{ url_for('places_finder.send_outreach', prospect_id=0, view=view) }}";
+  const CD_TEXT_BASE  = "{{ url_for('messages.thread', phone='0000000000') }}";
+  const CD_QUOTE_URL  = "{{ url_for('quotes.new', prospect_id=0) if can_quote else '' }}";
 
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -647,6 +731,17 @@ data-brand="{{ p.brand or default_brand }}"
     } else {
       tel.style.display = 'none';
     }
+    const txt = document.getElementById('cdText');
+    const digits = (d.phone || '').replace(/\D/g, '').slice(-10);
+    // Somebody who asked not to be contacted is not offered a text either.
+    if (digits.length === 10 && d.status !== 'do_not_contact') {
+      txt.href = CD_TEXT_BASE.replace('0000000000', digits) + '?name=' + encodeURIComponent(d.name);
+      txt.style.display = 'inline-flex';
+    } else {
+      txt.style.display = 'none';
+    }
+    const qb = document.getElementById('cdQuote');
+    if (qb) qb.href = CD_QUOTE_URL.replace('prospect_id=0', 'prospect_id=' + d.id);
 
     const openerCat = CD_MAP[d.cat] || 'call_office';
     const opener = CD_SCRIPTS[openerCat] || [];

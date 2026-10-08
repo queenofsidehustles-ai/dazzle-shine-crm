@@ -1081,6 +1081,9 @@ class CommercialQuote(db.Model):
     sent_at = db.Column(db.DateTime)
     viewed_at = db.Column(db.DateTime)      # first time the contact opened the proposal
     responded_at = db.Column(db.DateTime)
+    # The call-list lead this was written for, if any. Sending moves the lead to
+    # Proposal; accepting wins it. See migration 0021.
+    prospect_id = db.Column(db.Integer, index=True)
 
 
 class Staff(db.Model):
