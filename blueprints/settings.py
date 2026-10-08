@@ -76,6 +76,7 @@ def booking_page():
         'admin/booking_page.html',
         booking_url=f'{base}/book',
         embed_snippet=f'<script src="{base}/embed.js" async></script>',
+        embed_url=f'{base}/book?embed=1',
         embed_allowed=_ent.can('booking_widget'),
         shared=BusinessSetting.get('booking_page_shared'))
 

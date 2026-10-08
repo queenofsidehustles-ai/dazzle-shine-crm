@@ -226,6 +226,11 @@ body = js.data.decode('utf8', 'replace')
 check(js.status_code == 200, f'/embed.js serves (HTTP {js.status_code})')
 check('javascript' in js.headers.get('Content-Type', ''), 'as javascript')
 check('/book?embed=1' in body, 'and points the frame at the embedded page')
+# Pasted into a header -- a site-wide "custom code" box, or a builder's HTML
+# block whose whole document is the one line -- the script runs in <head>, and
+# an iframe put next to it there is never drawn. The form just did not appear.
+check('document.body.contains(s)' in body and 'DOMContentLoaded' in body,
+      'and when it was pasted into the page header, the form goes into the page body')
 
 print('\n11. The frame only listens to itself')
 # A page receives messages from anywhere. Acting on them is the careful part:
@@ -262,6 +267,12 @@ for plan in ('free', 'pro', 'scale'):
         check('id="copysnippet"' not in html, 'with no copy button to press')
     else:
         check('copysnippet' in html, f'{plan} gets the snippet to copy')
+        # A builder's "embed a website" box, or a hand-written <iframe>, takes
+        # an address rather than code. Given the plain link it shows "refused
+        # to connect" -- that link is for sending people to, not for framing --
+        # which is how Cleaning Wonder's site lost its booking form.
+        check('id="copyembedurl"' in html and '/book?embed=1</code>' in html,
+              f'{plan} also gets the address to use where a website wants a link')
 set_plan('free')
 
 
