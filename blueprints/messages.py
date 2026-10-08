@@ -424,6 +424,15 @@ def send(phone):
     if not body:
         flash('Type a message first.', 'warning')
         return redirect(url_for('messages.thread', phone=phone10))
+    # They replied STOP. Nothing is sent and nothing is recorded as sent: the
+    # carrier would drop it anyway, and a thread showing it as delivered would
+    # be a lie about having texted somebody who asked us not to. A START from
+    # them clears it (see _handle_inbound).
+    from notifications import sms_opted_out
+    if sms_opted_out(phone10):
+        flash('Not sent — this number replied STOP. They can text START to '
+              'hear from you again; until then, call or email.', 'warning')
+        return redirect(url_for('messages.thread', phone=phone10))
     contact = resolve_contact(phone10)
     ok, detail = deliver(phone10, body, contact)
     if not ok:

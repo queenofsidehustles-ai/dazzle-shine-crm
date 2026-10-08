@@ -141,6 +141,7 @@ def new():
             # where the next call will be made from.
             lead.contact_name = lead.contact_name or q.contact_name or None
             lead.email = lead.email or q.email or None
+            lead.phone = lead.phone or q.phone or None
         db.session.add(q)
         db.session.commit()
         flash('Quote created!', 'success')

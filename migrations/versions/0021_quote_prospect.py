@@ -19,9 +19,17 @@ depends_on = None
 
 
 def _has_column(table, column):
+    """In the schema being migrated. A company's schema is migrated with
+    `<company>, public` on the search path, and public is migrated first -- so
+    asking without a schema can find public's new column and skip the
+    company's. Same shape as 0003 and 0014: SQLite has no schemas."""
     from sqlalchemy import inspect as sa_inspect
     bind = op.get_bind()
-    return column in {c['name'] for c in sa_inspect(bind).get_columns(table)}
+    schema = None
+    if bind.dialect.name == 'postgresql':
+        schema = bind.execute(sa.text('SELECT current_schema()')).scalar()
+    return column in {c['name']
+                      for c in sa_inspect(bind).get_columns(table, schema=schema)}
 
 
 _TABLES = ('commercial_quote', 'lead')

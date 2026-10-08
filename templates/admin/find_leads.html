@@ -18,6 +18,7 @@ data-renewal="{{ p.renewal_note or '' }}"
 data-attempts="{{ p.attempts or 0 }}"
 data-brand="{{ p.brand or default_brand }}"
 data-kind="{{ 'commercial' if p.is_commercial else 'residential' }}"
+data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
 {%- endmacro %}
 
 {% if demo %}
@@ -783,7 +784,9 @@ data-kind="{{ 'commercial' if p.is_commercial else 'residential' }}"
     const txt = document.getElementById('cdText');
     const digits = (d.phone || '').replace(/\D/g, '').slice(-10);
     // Somebody who asked not to be contacted is not offered a text either.
-    if (digits.length === 10 && d.status !== 'do_not_contact') {
+    // Nor anybody who replied STOP: Twilio would refuse it anyway, and the
+    // button would be offering something the law says not to do.
+    if (digits.length === 10 && d.status !== 'do_not_contact' && !d.smsstop) {
       txt.href = CD_TEXT_BASE.replace('0000000000', digits) + '?name=' + encodeURIComponent(d.name);
       txt.style.display = 'inline-flex';
     } else {

@@ -71,6 +71,7 @@ def new_quote():
                 f'Residential quote ${float(lead.quoted_price or 0):,.2f} sent to {lead.email}')
             prospect.contact_name = prospect.contact_name or lead.name or None
             prospect.email = prospect.email or lead.email or None
+            prospect.phone = prospect.phone or lead.phone or None
             db.session.commit()
             return redirect(url_for('places_finder.dashboard', view='everyone'))
         return redirect(url_for('leads.index') if quoting.was_delivered(lead)

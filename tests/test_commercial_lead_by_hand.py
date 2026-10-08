@@ -115,6 +115,13 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     db.session.remove()
 check(n == 1, 'and a blank name adds nothing')
 
+c.post('/find-leads/add', base_url=HOST, data={'business_name': 'Bright Smiles Dental'})
+c.post('/find-leads/add', base_url=HOST, data={'business_name': 'Bright Smiles Dental'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    n = Prospect.query.filter_by(business_name='Bright Smiles Dental').count()
+    db.session.remove()
+check(n == 2, 'but a name alone, with no town, is not a duplicate — franchises share names')
+
 print('\n3. From the lead: text them and quote them')
 everyone = c.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
 check('id="cdText"' in everyone and 'id="cdQuote"' in everyone,
@@ -177,6 +184,9 @@ check(acc_lead == p['id'], 'and the new account knows which lead it came from')
 today = c.get('/find-leads/?view=today', base_url=HOST).get_data(as_text=True)
 check('Sunrise Pediatrics' not in today.split('Today\'s calls', 1)[-1].split('callDrawer')[0],
       'so nobody rings a business that has just signed')
+c.post(f'/quotes/{qid}/send', base_url=HOST)
+check(lead('Sunrise Pediatrics')['stage'] == 'won',
+      'resending the accepted quote leaves them won, not back in Proposal')
 
 c.post('/find-leads/add', base_url=HOST, data={
     'business_name': 'Maple Office Park', 'category': 'office', 'phone': '3015550199'})
@@ -191,6 +201,13 @@ with app.app_context(), tenancy.use_tenant(SLUG):
 check(lead('Maple Office Park')['email'] == 'lee@maple.example'
       and lead('Maple Office Park')['contact_name'] == 'Lee',
       'who the quote went to is kept on the lead for the next call')
+c.post('/find-leads/add', base_url=HOST, data={'business_name': 'Quiet Office Co', 'city': 'Laurel'})
+qo = lead('Quiet Office Co')
+c.post('/quotes/new', base_url=HOST, data={
+    'prospect_id': qo['id'], 'company': 'Quiet Office Co', 'contact_name': 'Sam',
+    'email': 'sam@quiet.example', 'phone': '(301) 555-0400', 'property_type': 'Office Building'})
+check(lead('Quiet Office Co')['phone'] == '(301) 555-0400',
+      'a phone number first given on the quote is kept on the lead too')
 c.post(f'/quotes/{q2.id}/send', base_url=HOST)
 anon.post(f'/quotes/view/{t2}/decline', base_url=HOST)
 m = lead('Maple Office Park')
@@ -234,6 +251,21 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     db.session.remove()
 check('Texted STOP' in (lead('Harbor Daycare')['notes'] or ''),
       'a STOP is written on the lead, so nobody texts them again by hand')
+
+# Twilio refuses a STOPped number anyway, but the CRM must not offer or try.
+everyone = c.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
+harbor_row = everyone.split('data-name="Harbor Daycare"', 1)[1].split('>', 1)[0]
+check('data-smsstop="1"' in harbor_row, 'after STOP the drawer stops offering Text')
+sheet = c.get(f'/find-leads/call/{h["id"]}', base_url=HOST).get_data(as_text=True)
+check('/messages/thread/2405550177' not in sheet, 'and so does the call sheet')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    before = Message.query.filter_by(phone='2405550177', direction='out').count()
+    db.session.remove()
+c.post('/messages/thread/2405550177/send', base_url=HOST, data={'body': 'Just checking in!'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after = Message.query.filter_by(phone='2405550177', direction='out').count()
+    db.session.remove()
+check(after == before, 'and a text typed into their conversation is refused, not sent')
 
 print('\n7. Only the owner is offered a quote')
 from blueprints import places_finder as PF

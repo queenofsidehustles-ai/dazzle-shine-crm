@@ -374,6 +374,11 @@ def quote_moved(prospect_id, stage, status, next_action, days, note):
         p = Prospect.query.get(prospect_id)
         if p is None:
             return None
+        # A business that has signed stays signed. Resending an accepted quote,
+        # or re-quoting a customer, must not put them back on the call list as
+        # a proposal to chase.
+        if p.stage == 'won' and stage != 'won':
+            return None
         p.stage = stage
         if status:
             p.status = status

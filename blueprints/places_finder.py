@@ -209,12 +209,24 @@ def _view_args(view, prospects, **extra):
         # Quotes are an owner's page on a plan that has commercial work, so
         # the drawer only offers the button to someone it will open for.
         can_quote=_can_quote(),
+        sms_stopped=_sms_stopped(prospects),
         commercial_categories=list(brands._COMMERCIAL_CATEGORIES),
         brand_primary=brands.PRIMARY,
         brand_commercial=brands.COMMERCIAL,
     )
     args.update(extra)
     return args
+
+
+def _sms_stopped(prospects):
+    """Ids of the leads whose number has replied STOP. One query for the page,
+    not one per row."""
+    from models import SmsOptOut
+    try:
+        stopped = {row.phone for row in SmsOptOut.query.all()}
+    except Exception:
+        return set()
+    return {p.id for p in prospects if _phone10(p.phone) in stopped}
 
 
 def _can_quote():
@@ -457,7 +469,9 @@ def call_sheet(prospect_id=None):
         status_labels=Prospect.STATUS_LABELS,
         category_labels=Prospect.CATEGORY_LABELS,
         can_quote=_can_quote(),
-        text_phone=_phone10(current.phone) if current else '',
+        # Not offered to a number that has replied STOP.
+        text_phone=(_phone10(current.phone)
+                    if current and current.id not in _sms_stopped([current]) else ''),
     )
 
 
@@ -606,11 +620,12 @@ def add_by_hand():
 
     # The same business twice means two people calling it, which is the one
     # thing a call list exists to prevent. Same number, or same name in the
-    # same town, is the same business.
+    # same town, is the same business. A name alone is not: two referrals
+    # to a franchise, neither with a town yet, are two businesses.
     mine = _phone10(phone)
     for p in Prospect.query.all():
         if ((mine and _phone10(p.phone) == mine)
-                or ((p.business_name or '').strip().lower() == name.lower()
+                or (city and (p.business_name or '').strip().lower() == name.lower()
                     and (p.city or '').strip().lower() == city.lower())):
             flash(f'{p.business_name} is already on your list ({p.stage_label}).', 'info')
             return redirect(url_for('places_finder.dashboard', view='everyone'))
