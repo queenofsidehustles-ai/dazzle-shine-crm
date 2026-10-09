@@ -248,6 +248,51 @@ with app.app_context():
           or not shown,
           'and the dashboard links there when there is anything to do')
 
+    print('\n14b. The renewal month typed on a call is what wakes them later')
+    # The gap this closes: the drawer has always had a "Contract renewal" box,
+    # and it wrote free text to renewal_note. wake_renewals() reads
+    # renewal_date. Nothing wrote renewal_date, so every renewal month ever
+    # collected sat in a string nobody could act on, and the wake-up could not
+    # fire however many of them there were.
+    from datetime import date as _date, timedelta as _td2
+    import prospecting as _pr
+    soon_month = (_date.today() + _td2(days=_pr.RENEWAL_LEAD_DAYS + 5)).strftime('%Y-%m')
+    locked = Prospect(business_name='Under Contract Ltd', category='property_manager',
+                      status='new', stage='new')
+    db.session.add(locked); db.session.commit()
+    c.post(f'/find-leads/{locked.id}/status', follow_redirects=True, data={
+        'mode': 'log', 'status': 'not_interested',
+        'contact': 'Jo Mensah', 'email': 'jo@undercontract.test',
+        'renewal_date': soon_month,
+        'renewal': 'incumbent is mid-contract, review in the spring'})
+    locked = Prospect.query.get(locked.id)
+    check(locked.renewal_date == soon_month + '-01',
+          f'the month is stored as a date ({locked.renewal_date})')
+    check(locked.renewal_note.startswith('incumbent'),
+          'and the free-text note is kept alongside it, not replaced')
+    check(locked.stage == 'nurture', 'a no rests rather than closing')
+
+    # Now the half that was dead: the waker can actually find it.
+    woken_now = prospecting.wake_renewals(
+        today=(_date.today() + _td2(days=10)).isoformat())
+    locked = Prospect.query.get(locked.id)
+    check(woken_now >= 1 and locked.stage == 'working',
+          'and it comes back onto the call list before the contract ends')
+
+    # The call sheet is the primary calling flow -- "Start calling" goes there,
+    # not to the drawer -- and it posts to a different route. Both have to
+    # capture the month or half the calls lose it, which is exactly how the
+    # original gap went unnoticed.
+    sheet = Prospect(business_name='Via The Call Sheet Co', category='property_manager',
+                     status='new', stage='new')
+    db.session.add(sheet); db.session.commit()
+    c.post(f'/find-leads/call/{sheet.id}/log', follow_redirects=True, data={
+        'status': 'backup', 'contact': 'Lee Park',
+        'email': 'lee@viathecallsheet.test', 'renewal_date': soon_month})
+    sheet = Prospect.query.get(sheet.id)
+    check(sheet.renewal_date == soon_month + '-01',
+          'the call sheet records the renewal month too, not only the drawer')
+
     print('\n15. A contract renewal wakes the prospect that was resting on it')
     import prospecting
     from datetime import date, timedelta as _td
@@ -311,6 +356,48 @@ with app.app_context():
     info = Prospect.query.get(info.id)
     check(n == 1 and info.drip_step == 2,
           'a backdated run sends one step, not the whole sequence at once')
+
+    print('\n16b. A send that failed does not spend the step')
+    # The bug this covers: _send_prospect_drip returned send_email's (ok,
+    # detail) tuple, and a two-item tuple is truthy however false its first
+    # item is. So on a CRM with no email key connected every drip "succeeded",
+    # drip_step advanced, and the whole sequence burned through in silence --
+    # connecting the key later fixed nothing, because the steps were spent.
+    import notifications as _nt
+    lifecycle._send_prospect_drip = real_send          # the real one, briefly
+    broke = Prospect(business_name='No Mail Key Ltd', category='property_manager',
+                     status='new', stage='new', contact_name='Ada Boateng',
+                     email='ada@nomailkey.test')
+    db.session.add(broke); db.session.commit()
+    c.post(f'/find-leads/{broke.id}/status', follow_redirects=True,
+           data={'mode': 'log', 'status': 'send_info'})
+
+    real_email = _nt.send_email
+    # Exactly what notifications.send_email returns with no key configured.
+    _nt.send_email = lambda *a, **k: (
+        False, 'Email not connected — add your email service key in Settings → Connections.')
+    n = lifecycle.run_prospect_sequences(now=_dt.utcnow() + _td(days=2))
+    broke = Prospect.query.get(broke.id)
+    check(n == 0, f'a failed send is not counted as sent (got {n})')
+    check(broke.drip_step == 0, 'and the step is not marked done')
+    check(broke.sequence == 'send_info', 'the sequence is still live')
+
+    # Now the key exists. The step that was waiting goes out, rather than
+    # having been silently consumed while nothing worked.
+    _nt.send_email = lambda *a, **k: (True, 'ok')
+    n = lifecycle.run_prospect_sequences(now=_dt.utcnow() + _td(days=2))
+    broke = Prospect.query.get(broke.id)
+    check(n == 1 and broke.drip_step == 1,
+          'and it goes out the day the email key is connected')
+    # This prospect's sequence is still live, and the next section counts
+    # sends across every prospect -- leaving it running would make section 17
+    # fail on mail this section caused.
+    broke.sequence = None
+    db.session.commit()
+
+    _nt.send_email = real_email
+    lifecycle._send_prospect_drip = lambda p, seq, nn: (
+        sent_to.append((p.business_name, seq, nn)) or True)
 
     print('\n17. Answering stops the chase without anybody stopping it')
     c.post(f'/find-leads/{info.id}/status', follow_redirects=True,

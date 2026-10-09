@@ -194,9 +194,15 @@ def _send_prospect_drip(p, sequence, n):
     foot = ('You are receiving this because we spoke about cleaning at your '
             f'property. <a href="{unsub}" style="color:#9a95ad">Unsubscribe</a>.')
     html = brands.email_shell(brands.COMMERCIAL, None, inner, footer_note=foot)
-    return send_email(p.email, p.contact_name or p.business_name, subject, html,
-                      from_name=from_name, from_email=from_email,
-                      reply_to=reply_to)
+    # send_email returns (ok, detail). Returning it whole made every caller's
+    # `if _send_prospect_drip(...)` true, because a two-item tuple is truthy
+    # however false its first item is -- so a send that failed for want of an
+    # email key counted as sent, and the step was marked done. Only the answer
+    # leaves this function.
+    ok, _detail = send_email(p.email, p.contact_name or p.business_name,
+                             subject, html, from_name=from_name,
+                             from_email=from_email, reply_to=reply_to)
+    return bool(ok)
 
 
 def run_prospect_sequences(now=None):
@@ -232,10 +238,19 @@ def run_prospect_sequences(now=None):
         for days, target in seq['schedule']:
             if step < target and base <= now - timedelta(days=days):
                 try:
-                    if _send_prospect_drip(p, p.sequence, target):
-                        sent += 1
+                    ok = _send_prospect_drip(p, p.sequence, target)
                 except Exception:
-                    pass
+                    ok = False
+                # A step is only spent if it actually went. This used to
+                # advance either way, so a CRM with no email key connected
+                # burned silently through every sequence it had -- day 2, 7
+                # and 21 all marked done, nothing sent, and connecting the key
+                # afterwards fixed nothing because the steps were already past.
+                # Left where it is, tonight's run tries again, and the day the
+                # key arrives the backlog goes out on its own.
+                if not ok:
+                    break
+                sent += 1
                 p.drip_step = target
                 # Deliberately NOT reset to now: the schedule is measured from
                 # the day the sequence started, so step 2 lands on day 7 rather
@@ -319,10 +334,20 @@ def run_lifecycle_emails():
         for days, target in QUOTE_SCHEDULE:
             if step < target and base <= now - timedelta(days=days):
                 try:
-                    _send_quote_followup(q, target)
-                    c['quote_followup'] += 1
+                    sent_ok, _why = _send_quote_followup(q, target)
                 except Exception:
-                    pass
+                    sent_ok = False
+                # Same shape as the prospect sequences above, and the same
+                # reason: _send_quote_followup hands back send_email's
+                # (ok, detail), the result was never read, and send_email
+                # reports a missing key by returning False rather than by
+                # raising. So a CRM with no email connected marched every
+                # quote through day 2, 5 and 9, counted three sends and made
+                # none -- and the follow-ups could never be recovered,
+                # because the steps were spent.
+                if not sent_ok:
+                    break
+                c['quote_followup'] += 1
                 q.drip_step = target
                 q.last_drip_at = now
                 db.session.commit()
