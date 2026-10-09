@@ -789,6 +789,7 @@ def edit_lead(prospect_id):
     for field in ('contact_name', 'phone', 'email', 'address', 'city', 'renewal_note'):
         if field in f:
             setattr(p, field, (f.get(field) or '').strip() or None)
+    _save_renewal_month(p, f)
     if 'website' in f:
         site = (f.get('website') or '').strip()
         if site and not site.startswith(('http://', 'https://')):
@@ -930,6 +931,30 @@ def export_csv():
         'Content-Disposition': f'attachment; filename=call-list-{stamp}.csv'})
 
 
+def _save_renewal_month(prospect, form):
+    """Record the renewal as a date, which is the half that can act.
+
+    `renewal_note` has always taken "March 2027" and
+    prospecting.wake_renewals() has always read `renewal_date` -- and nothing
+    wrote it, so the wake-up could not fire however many renewal months were
+    collected. A month is the honest precision: nobody knows the day their
+    cleaning contract ends, and asking for one gets a guess typed into a
+    required field.
+
+    Shared by every screen that records one, because there are three now --
+    the drawer, the call sheet and the lead page -- and capturing it on some
+    of them is how this went unnoticed in the first place.
+    """
+    month = (form.get('renewal_date') or '').strip()
+    if not month:
+        return
+    # <input type="month"> gives YYYY-MM. Anchor it to the first, so the
+    # thirty-day lead time lands inside the month before.
+    prospect.renewal_date = f'{month}-01' if len(month) == 7 else month[:10]
+    # A renewal that moved is a new decision, not the old one repeated.
+    prospect.renewal_woken_at = None
+
+
 def _log_call(prospect, form, outcome):
     """Write down a call and schedule whatever comes next.
 
@@ -945,19 +970,7 @@ def _log_call(prospect, form, outcome):
         if val:
             setattr(prospect, attr, val)
 
-    # The renewal as a date, which is the half that can act. `renewal_note`
-    # has always taken "March 2027" and prospecting.wake_renewals() has always
-    # read `renewal_date` -- and nothing wrote it, so the wake-up could not
-    # fire however many renewal months were collected. A month is the honest
-    # precision here: nobody knows the day their cleaning contract ends, and
-    # asking for one gets a guess typed into a required field.
-    month = (form.get('renewal_date') or '').strip()
-    if month:
-        # <input type="month"> gives YYYY-MM. Anchor it to the first, so the
-        # thirty-day lead time lands inside the month before.
-        prospect.renewal_date = f'{month}-01' if len(month) == 7 else month[:10]
-        # A renewal that moved is a new decision, not the old one repeated.
-        prospect.renewal_woken_at = None
+    _save_renewal_month(prospect, form)
 
     # Each save prepends a dated entry instead of overwriting, so the renewal
     # date and what they actually said survive the next call.

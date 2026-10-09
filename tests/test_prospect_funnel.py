@@ -293,6 +293,20 @@ with app.app_context():
     check(sheet.renewal_date == soon_month + '-01',
           'the call sheet records the renewal month too, not only the drawer')
 
+    # Third place a renewal can be recorded: the lead page's Details form,
+    # which landed after this fix and saves by its own route. Three screens
+    # capture this now, and capturing it on only some of them is precisely how
+    # the whole mechanic sat dead for a month.
+    page = Prospect(business_name='Via The Lead Page Co', category='property_manager',
+                    status='new', stage='new')
+    db.session.add(page); db.session.commit()
+    c.post(f'/find-leads/{page.id}/edit', follow_redirects=True, data={
+        'business_name': 'Via The Lead Page Co', 'category': 'property_manager',
+        'renewal_date': soon_month, 'renewal_note': 'spoke to the facilities lead'})
+    page = Prospect.query.get(page.id)
+    check(page.renewal_date == soon_month + '-01',
+          'the lead page Details form records it as well')
+
     print('\n15. A contract renewal wakes the prospect that was resting on it')
     import prospecting
     from datetime import date, timedelta as _td
