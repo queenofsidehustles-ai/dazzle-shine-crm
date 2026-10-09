@@ -436,6 +436,70 @@ check(commercial_pricing.prod_rate('gym') < commercial_pricing.prod_rate('office
       < commercial_pricing.prod_rate('church'),
       'a gym is slower work than an office, a church faster')
 
+print('\n11. One page per lead: correct it, qualify it, talk to it, quote it, sign it')
+r = c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Chang Chang', 'category': 'office', 'phone': '2025700946', 'city': 'Washington'})
+chang = lead('Chang Chang')
+check(r.headers.get('Location', '').endswith(f'/find-leads/{chang["id"]}'),
+      'adding a lead by hand lands on its own page')
+page = c.get(f'/find-leads/{chang["id"]}', base_url=HOST).get_data(as_text=True)
+check(page.count('Log a call') and 'name="category"' in page and 'Contract quote' in page
+      and 'Make them an account' in page and '2025700946' in page,
+      'the page has the details, the call log, the quote and the account step in one place')
+
+c.post(f'/find-leads/{chang["id"]}/edit', base_url=HOST, data={
+    'business_name': 'Chang Chang', 'category': 'restaurant', 'contact_name': 'Mei Chang',
+    'phone': '2025700946', 'email': 'mei@changchang.example', 'city': 'Washington'})
+chang = lead('Chang Chang')
+check(chang['brand'] == 'commercial' and chang['contact_name'] == 'Mei Chang'
+      and chang['email'] == 'mei@changchang.example',
+      'an office typed in by mistake is corrected to a restaurant, with who to ask for')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    check(db.session.get(Prospect, chang['id']).category == 'restaurant', 'and saved as one')
+    db.session.remove()
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'office'})
+check(lead('Oakline Property Management')['brand'] == 'commercial',
+      'changing the kind of business, without picking a side, follows the new kind')
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'office', 'kind': 'residential'})
+check(lead('Oakline Property Management')['brand'] == 'primary', 'but a side picked by hand wins')
+
+r = c.post(f'/find-leads/{chang["id"]}/status', base_url=HOST, data={
+    'mode': 'log', 'status': 'interested', 'log_note': 'Wants nightly cleaning, 3,200 sq ft, kitchen too',
+    'next': f'/find-leads/{chang["id"]}'})
+chang = lead('Chang Chang')
+check(r.headers.get('Location', '').endswith(f'/find-leads/{chang["id"]}')
+      and chang['stage'] == 'interested' and 'nightly cleaning' in (chang['notes'] or ''),
+      'a call logged from the page qualifies the lead and comes back to the page')
+r = c.post(f'/find-leads/{chang["id"]}/snooze', base_url=HOST,
+           data={'days': '3', 'next': 'https://evil.example/'})
+check('evil.example' not in r.headers.get('Location', ''), 'and never sends anybody off-site')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    import blueprints.places_finder as PF2
+    with app.test_request_context('/', base_url=HOST):
+        openers = PF2._openers()
+    db.session.remove()
+check(all(openers[b].get(cat) for b in openers for cat in ('office', 'restaurant', 'gym')),
+      'the drawer has an opening script for every kind of business (it said "No script loaded yet")')
+
+conv = c.get(f'/commercial/convert/{chang["id"]}', base_url=HOST).get_data(as_text=True)
+check('value="Mei Chang"' in conv and 'value="mei@changchang.example"' in conv,
+      'making them an account starts filled in from the lead')
+c.post(f'/commercial/convert/{chang["id"]}', base_url=HOST, data={
+    'contact_name': 'Mei Chang', 'email': 'mei@changchang.example', 'phone': '2025700946',
+    'frequency': 'nightly', 'billing_type': 'monthly', 'billing_amount': '2400'})
+chang = lead('Chang Chang')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    acct = CommercialAccount.query.filter_by(prospect_id=chang['id']).first()
+    acct_cat = acct.category if acct else None
+    db.session.remove()
+check(acct is not None and acct_cat == 'restaurant', 'they become a restaurant account')
+check(chang['stage'] == 'won' and not chang['next_action_date'],
+      'and the lead is won, with no call left due')
+page = c.get(f'/find-leads/{chang["id"]}', base_url=HOST).get_data(as_text=True)
+check('Their account' in page and 'Make them an account' not in page,
+      'the page now points at their account instead')
+
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)
