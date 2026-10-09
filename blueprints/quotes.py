@@ -191,7 +191,7 @@ def new():
             lead.phone = lead.phone or q.phone or None
         db.session.add(q)
         db.session.commit()
-        flash('Quote created!', 'success')
+        flash('Draft saved — nothing has been sent. Review it, then press Send when it is ready.', 'success')
         return redirect(url_for('quotes.detail', quote_id=q.id))
 
     # Started from a lead on the call list: fill in what is already known
@@ -222,29 +222,35 @@ def new():
                            **_estimate_args())
 
 
+def _apply_form(q):
+    """The quote form's fields onto a quote. Shared by Save and Send, so
+    Send emails what is on the screen rather than what was last saved."""
+    f = request.form
+    q.company = (f.get('company') or q.company or '').strip()
+    q.contact_name = (f.get('contact_name', q.contact_name) or '').strip()
+    q.email = (f.get('email', q.email) or '').strip()
+    q.phone = (f.get('phone', q.phone) or '').strip()
+    q.property_type = f.get('property_type', q.property_type)
+    q.property_address = (f.get('property_address', q.property_address) or '').strip()
+    q.units = (f.get('units', q.units) or '').strip()
+    q.sqft = (f.get('sqft', q.sqft) or '').strip()
+    q.services = ', '.join(f.getlist('services'))
+    q.frequency = f.get('frequency', q.frequency)
+    q.contract_term = f.get('contract_term', q.contract_term)
+    q.price_per_visit = f.get('price_per_visit') or None
+    q.monthly_price = f.get('monthly_price') or None
+    q.scope_notes = (f.get('scope_notes', q.scope_notes) or '').strip()
+    q.brand = f.get('brand') or q.brand or brands.brand_for_property(q.property_type)
+
+
 @quotes_bp.route('/<int:quote_id>', methods=['GET', 'POST'])
 @owner_required
 def detail(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
-        services_selected = request.form.getlist('services')
-        q.company = request.form.get('company', q.company).strip()
-        q.contact_name = request.form.get('contact_name', q.contact_name).strip()
-        q.email = request.form.get('email', q.email).strip()
-        q.phone = request.form.get('phone', q.phone).strip()
-        q.property_type = request.form.get('property_type', q.property_type)
-        q.property_address = request.form.get('property_address', q.property_address).strip()
-        q.units = request.form.get('units', q.units).strip()
-        q.sqft = request.form.get('sqft', q.sqft).strip()
-        q.services = ', '.join(services_selected)
-        q.frequency = request.form.get('frequency', q.frequency)
-        q.contract_term = request.form.get('contract_term', q.contract_term)
-        q.price_per_visit = request.form.get('price_per_visit') or None
-        q.monthly_price = request.form.get('monthly_price') or None
-        q.scope_notes = request.form.get('scope_notes', q.scope_notes).strip()
-        q.brand = request.form.get('brand') or q.brand or brands.brand_for_property(q.property_type)
+        _apply_form(q)
         db.session.commit()
-        flash('Quote updated.', 'success')
+        flash('Draft saved — nothing has been sent.' if q.status == 'draft' else 'Quote updated.', 'success')
         return redirect(url_for('quotes.detail', quote_id=quote_id))
 
     selected_services = [s.strip() for s in (q.services or '').split(',') if s.strip()]
@@ -258,6 +264,16 @@ def detail(quote_id):
 @owner_required
 def send_quote(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
+    # The Send button sits in the edit form and posts it. Those edits used to
+    # be dropped -- change the price, press Send, and the old price went out.
+    if 'company' in request.form:
+        _apply_form(q)
+        db.session.commit()
+    # A draft can be saved before anybody's name or email is known (half-way
+    # through a walkthrough); it cannot be sent like that.
+    if not (q.email or '').strip() or not (q.contact_name or '').strip():
+        flash('Add who it is for — a contact name and email — then send.', 'error')
+        return redirect(url_for('quotes.detail', quote_id=q.id))
     crm_url = request.host_url.rstrip('/')
     quote_url = f"{crm_url}/quotes/view/{q.token}"
 

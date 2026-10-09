@@ -35,12 +35,12 @@
         <input type="text" name="company" required value="{{ quote.company if quote else (pre.company or '') }}" placeholder="Sunset Apartments LLC" />
       </div>
       <div class="form-group">
-        <label>Contact Person *</label>
-        <input type="text" name="contact_name" required value="{{ quote.contact_name if quote else (pre.contact_name or '') }}" placeholder="Jane Smith" />
+        <label>Contact Person <span style="font-weight:400;color:var(--softer)">(needed to send)</span></label>
+        <input type="text" name="contact_name" value="{{ quote.contact_name if quote else (pre.contact_name or '') }}" placeholder="Jane Smith" />
       </div>
       <div class="form-group">
-        <label>Email *</label>
-        <input type="email" name="email" required value="{{ quote.email if quote else (pre.email or '') }}" placeholder="jane@sunsetapts.com" />
+        <label>Email <span style="font-weight:400;color:var(--softer)">(needed to send)</span></label>
+        <input type="email" name="email" value="{{ quote.email if quote else (pre.email or '') }}" placeholder="jane@sunsetapts.com" />
       </div>
       <div class="form-group">
         <label>Phone</label>
@@ -150,9 +150,18 @@
       </div>
     </div>
 
+    <div id="draftRestored" style="display:none;background:var(--info-soft);color:var(--info);padding:10px 14px;border-radius:10px;font-size:0.85rem;line-height:1.5">
+      Brought back what you were typing <span id="draftRestoredAt"></span> — it isn't saved yet.
+      <button type="button" id="draftDiscard" style="background:none;border:none;color:var(--info);font-weight:700;text-decoration:underline;cursor:pointer;padding:0">Discard it</button>
+    </div>
+
     <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;padding:13px">
-      {{ 'Save Changes' if quote else 'Create Quote' }}
+      💾 {{ 'Save draft' if not quote or quote.status == 'draft' else 'Save changes' }}
     </button>
+    {% if not quote or quote.status == 'draft' %}
+    <p style="font-size:0.8rem;color:var(--softer);text-align:center;margin:-8px 0 0;line-height:1.5">
+      Nothing is sent when you save. Come back to it any time from Quotes; it goes to the customer only when you press Send.</p>
+    {% endif %}
 
     {% if quote %}
     {% if quote.status == 'draft' %}
@@ -162,12 +171,12 @@
        the right place instead. #}
     <button type="submit" formaction="{{ url_for('quotes.send_quote', quote_id=quote.id) }}"
             formnovalidate class="btn btn-dark" style="width:100%;justify-content:center;padding:13px">
-      Send Quote to {{ quote.email }} →
+      {% if quote.email %}Send Quote to {{ quote.email }} →{% else %}Send Quote → <span style="font-weight:500">(add their email first)</span>{% endif %}
     </button>
     {% elif quote.status == 'sent' %}
     <div style="background:var(--info-soft);color:var(--info);padding:12px 16px;border-radius:10px;font-weight:600;font-size:0.9rem;text-align:center">
       {% if quote.viewed_at %}
-        👁 Opened by {{ quote.contact_name.split()[0] }} on {{ quote.viewed_at.strftime('%b %d at %I:%M %p') }}
+        👁 Opened by {{ (quote.contact_name or 'them').split()[0] }} on {{ quote.viewed_at.strftime('%b %d at %I:%M %p') }}
       {% else %}
         Sent — not opened yet
       {% endif %}
@@ -277,5 +286,62 @@
   document.querySelector('select[name="property_type"]').addEventListener('change', runEstimate);
   document.querySelectorAll('input[name="services"]').forEach(el => el.addEventListener('change', runEstimate));
   runEstimate();
+
+  // Kept on this phone as it is typed, so a reload, a dropped signal or a
+  // tap on Back half-way through a walkthrough loses nothing. Cleared once
+  // the form is saved; it never leaves the device.
+  (function () {
+    const form = document.getElementById('quoteForm');
+    const KEY = 'quote-draft:' + {{ ('q' ~ quote.id if quote else 'new:' ~ ((lead.id if lead else '') or ''))|tojson }};
+    const fields = () => [...form.querySelectorAll('input[name], select[name], textarea[name], #est-hours')]
+      .filter(el => el.type !== 'hidden' && el.name !== 'csrf_token');
+    function snapshot() {
+      const out = { services: [], at: Date.now() };
+      fields().forEach(el => {
+        if (el.name === 'services') { if (el.checked) out.services.push(el.value); }
+        else out[el.id === 'est-hours' ? '#est-hours' : el.name] = el.value;
+      });
+      return out;
+    }
+    const same = (a, b) => JSON.stringify({ ...a, at: 0 }) === JSON.stringify({ ...b, at: 0 });
+    const original = snapshot();
+    function store() {
+      try {
+        const now = snapshot();
+        if (same(now, original)) localStorage.removeItem(KEY);
+        else localStorage.setItem(KEY, JSON.stringify(now));
+      } catch (e) {}
+    }
+    function apply(d) {
+      fields().forEach(el => {
+        if (el.name === 'services') el.checked = (d.services || []).includes(el.value);
+        else {
+          const k = el.id === 'est-hours' ? '#est-hours' : el.name;
+          if (k in d) el.value = d[k];
+        }
+      });
+    }
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+    if (saved && !same(saved, original)) {
+      apply(saved);
+      const t = new Date(saved.at);
+      document.getElementById('draftRestoredAt').textContent =
+        'from ' + t.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+        t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      document.getElementById('draftRestored').style.display = 'block';
+      runEstimate();
+    }
+    document.getElementById('draftDiscard').addEventListener('click', () => {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      apply(original);
+      document.getElementById('draftRestored').style.display = 'none';
+      runEstimate();
+    });
+    let t = null;
+    form.addEventListener('input', () => { clearTimeout(t); t = setTimeout(store, 400); });
+    form.addEventListener('change', store);
+    form.addEventListener('submit', () => { try { localStorage.removeItem(KEY); } catch (e) {} });
+  })();
 </script>
 {% endblock %}

@@ -679,6 +679,42 @@ with app.app_context(), tenancy.use_tenant(SLUG):
 check(re.search(r'value="Deep Cleaning"[^>]*checked', form) and f'value="{deep_wok["per_visit"]}"' in form,
       f'a deep clean ticked on the walkthrough is on the quote, at the deep price (${deep_wok["per_visit"]})')
 
+print('\n13b. A quote can be saved half-done, and Send sends what is on the screen')
+form = c.get('/quotes/new', base_url=HOST).get_data(as_text=True)
+check('Save draft' in form and 'Nothing is sent when you save' in form and "quote-draft:" in form
+      and not re.search(r'name="email"[^>]*required', form)
+      and not re.search(r'name="contact_name"[^>]*required', form),
+      'the form says it saves a draft, keeps what is typed on the phone, and needs no email to save')
+n_sent = len(SENT)
+r = c.post('/quotes/new', base_url=HOST, data={
+    'company': 'Half Known Diner', 'property_type': 'Restaurant / Food Service',
+    'sqft': '2400', 'frequency': 'weekly', 'services': ['Floor Care (Sweep & Mop)'],
+    'price_per_visit': '180', 'monthly_price': '774'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    hq = CommercialQuote.query.filter_by(company='Half Known Diner').first()
+    hq_id, hq_status = (hq.id, hq.status) if hq else (None, None)
+    db.session.remove()
+check(hq_id and hq_status == 'draft' and len(SENT) == n_sent,
+      'a draft with only the business and the numbers saves, and sends nothing')
+r = c.post(f'/quotes/{hq_id}/send', base_url=HOST, data={})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    hq_status = db.session.get(CommercialQuote, hq_id).status
+    db.session.remove()
+check(hq_status == 'draft' and len(SENT) == n_sent, 'and it cannot be sent until it says who it is for')
+page = c.get(f'/quotes/{hq_id}', base_url=HOST).get_data(as_text=True)
+check('Save draft' in page and 'value="2400"' in page, 'reopened, it is still a draft with everything kept')
+c.post(f'/quotes/{hq_id}/send', base_url=HOST, data={
+    'company': 'Half Known Diner', 'contact_name': 'Rosa Diaz', 'email': 'rosa@diner.example',
+    'property_type': 'Restaurant / Food Service', 'sqft': '2400', 'frequency': 'weekly',
+    'services': ['Floor Care (Sweep & Mop)'], 'price_per_visit': '195', 'monthly_price': '839'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    hq = db.session.get(CommercialQuote, hq_id)
+    hq_state = (hq.status, hq.email, float(hq.monthly_price or 0))
+    db.session.remove()
+sent_html = ' '.join(str(k.get('html', '')) for _a, k in SENT[n_sent:])
+check(hq_state == ('sent', 'rosa@diner.example', 839.0) and '839.00' in sent_html,
+      f'Send saves what was typed and emails that -- the new $839/mo, not the old $774 ({hq_state})')
+
 print('\n14. A Sales login: the call list and nothing else')
 check(('sales', 'Sales — finding and working leads only') in rbac.ROLE_OPTIONS
       and rbac.has_permission('sales', 'prospect.work')
