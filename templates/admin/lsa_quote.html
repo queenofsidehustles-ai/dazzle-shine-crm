@@ -3,7 +3,20 @@
 {% block page_title %}Send a Quote{% endblock %}
 
 {% block content %}
+{% set pre = pre or {} %}
+{% if prospect %}
+<div class="card" style="border-left:4px solid var(--amber);margin-bottom:18px;padding:14px 18px;max-width:680px">
+  🏠 Residential quote for <strong>{{ prospect.business_name }}</strong> on your call list
+  <span style="color:var(--softer);font-size:0.85rem">· {{ prospect.stage_label }}</span>
+  <div style="font-size:0.82rem;color:var(--softer);margin-top:4px">
+    Priced per home. Sending it moves them to Proposal with a follow-up in three
+    days; when they book, they are marked won.
+    Need a monthly contract instead? <a href="{{ url_for('quotes.new', prospect_id=prospect.id) }}" style="color:var(--amber-deep)">Write a commercial quote →</a>
+  </div>
+</div>
+{% endif %}
 <form method="POST" class="card" style="max-width:680px">
+{% if prospect %}<input type="hidden" name="prospect_id" value="{{ prospect.id }}">{% endif %}
   <p style="color:var(--muted);font-size:0.9rem;line-height:1.7;margin-bottom:20px">
     {% if lead %}
       For <strong>{{ lead.pretty_phone }}</strong>, who called
@@ -19,19 +32,19 @@
   <div style="display:grid;grid-template-columns:{{ '1fr 1fr' if lead else '1fr 1fr 1fr' }};gap:14px">
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Their name</label>
-      <input name="name" required value="{{ existing.name if existing else '' }}"
+      <input name="name" required value="{{ existing.name if existing else (pre.name or '') }}"
              placeholder="First name is fine"
              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Their email</label>
-      <input name="email" type="email" required value="{{ existing.email if existing else '' }}"
+      <input name="email" type="email" required value="{{ existing.email if existing else (pre.email or '') }}"
              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     {% if not lead %}
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Their phone</label>
-      <input name="phone" value="{{ existing.phone if existing else '' }}"
+      <input name="phone" value="{{ existing.phone if existing else (pre.phone or '') }}"
              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     {% endif %}
@@ -43,7 +56,7 @@
       <select name="service_type" id="q-service" required
               style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
         {% for key, s in services.items() %}
-        <option value="{{ key }}" {{ 'selected' if existing and existing.service_type == key }}>{{ s.label }}</option>
+        <option value="{{ key }}" {{ 'selected' if (existing.service_type if existing else pre.service_type) == key }}>{{ s.label }}</option>
         {% endfor %}
       </select>
     </div>
@@ -225,12 +238,12 @@
   <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:14px">
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Address <span style="color:var(--softer);font-weight:400">(optional)</span></label>
-      <input name="address" value="{{ existing.address if existing else '' }}"
+      <input name="address" value="{{ existing.address if existing else (pre.address or '') }}"
              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">City</label>
-      <input name="city" value="{{ existing.city if existing else lead.location or '' }}"
+      <input name="city" value="{{ existing.city if existing else (pre.city or lead.location or '') }}"
              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
     <div>
@@ -243,7 +256,7 @@
   <div style="margin-top:14px">
     <label class="dl" style="display:block;margin-bottom:5px">Notes from the call <span style="color:var(--softer);font-weight:400">(not emailed)</span></label>
     <textarea name="notes" rows="2"
-              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">{{ existing.notes if existing else '' }}</textarea>
+              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">{{ existing.notes if existing else (pre.notes or '') }}</textarea>
   </div>
 
   {# Texting it as well is worth offering because email is the channel that

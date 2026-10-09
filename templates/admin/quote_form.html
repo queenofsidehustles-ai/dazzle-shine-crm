@@ -6,7 +6,22 @@
 {% endblock %}
 
 {% block content %}
-<form method="POST">
+{% set pre = pre or {} %}
+{% if lead %}
+<div class="card" style="border-left:4px solid var(--amber);margin-bottom:18px;padding:14px 18px">
+  📇 For <strong>{{ lead.business_name }}</strong> on your call list
+  <span style="color:var(--softer);font-size:0.85rem">· {{ lead.stage_label }}</span>
+  <div style="font-size:0.82rem;color:var(--softer);margin-top:4px">
+    Sending it moves them to Proposal with a follow-up in three days; when they
+    accept, they are marked won and become an account.
+    {% if not quote %}Pricing homes or unit turnovers instead?
+    <a href="{{ url_for('leads.new_quote', prospect_id=lead.id) }}" style="color:var(--amber-deep)">Write a residential quote →</a> ·{% endif %}
+    <a href="{{ url_for('places_finder.dashboard', view='everyone') }}" style="color:var(--amber-deep)">Back to the call list →</a>
+  </div>
+</div>
+{% endif %}
+<form method="POST" id="quoteForm">
+{% if lead and not quote %}<input type="hidden" name="prospect_id" value="{{ lead.id }}">{% endif %}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start">
 
   <!-- Left column -->
@@ -15,19 +30,19 @@
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
       <div class="form-group">
         <label>Company / Property Name *</label>
-        <input type="text" name="company" required value="{{ quote.company if quote else '' }}" placeholder="Sunset Apartments LLC" />
+        <input type="text" name="company" required value="{{ quote.company if quote else (pre.company or '') }}" placeholder="Sunset Apartments LLC" />
       </div>
       <div class="form-group">
         <label>Contact Person *</label>
-        <input type="text" name="contact_name" required value="{{ quote.contact_name if quote else '' }}" placeholder="Jane Smith" />
+        <input type="text" name="contact_name" required value="{{ quote.contact_name if quote else (pre.contact_name or '') }}" placeholder="Jane Smith" />
       </div>
       <div class="form-group">
         <label>Email *</label>
-        <input type="email" name="email" required value="{{ quote.email if quote else '' }}" placeholder="jane@sunsetapts.com" />
+        <input type="email" name="email" required value="{{ quote.email if quote else (pre.email or '') }}" placeholder="jane@sunsetapts.com" />
       </div>
       <div class="form-group">
         <label>Phone</label>
-        <input type="tel" name="phone" value="{{ quote.phone if quote else '' }}" placeholder="(407) 555-0000" />
+        <input type="tel" name="phone" value="{{ quote.phone if quote else (pre.phone or '') }}" placeholder="(407) 555-0000" />
       </div>
     </div>
 
@@ -37,7 +52,7 @@
         <label>Property Type</label>
         <select name="property_type">
           {% for pt in property_types %}
-          <option value="{{ pt }}" {{ 'selected' if quote and quote.property_type == pt }}>{{ pt }}</option>
+          <option value="{{ pt }}" {{ 'selected' if (quote.property_type if quote else pre.property_type) == pt }}>{{ pt }}</option>
           {% endfor %}
         </select>
       </div>
@@ -45,14 +60,14 @@
         <label>Send as brand</label>
         <select name="brand">
           {% if not quote %}<option value="">Auto — pick by property type</option>{% endif %}
-          <option value="commercial" {{ 'selected' if quote and quote.brand in ('lm', 'commercial') }}>{{ BIZ_COMMERCIAL }}</option>
-          <option value="primary" {{ 'selected' if quote and quote.brand in ('dazzle', 'primary') }}>{{ BIZ }}</option>
+          <option value="commercial" {{ 'selected' if (quote.brand if quote else pre.brand) in ('lm', 'commercial') }}>{{ BIZ_COMMERCIAL }}</option>
+          <option value="primary" {{ 'selected' if (quote.brand if quote else pre.brand) in ('dazzle', 'primary') }}>{{ BIZ }}</option>
         </select>
         <div style="font-size:0.72rem;color:var(--softer);margin-top:3px">Apartments &amp; property managers → {{ BIZ }}; everything else → {{ BIZ_COMMERCIAL }}.</div>
       </div>
       <div class="form-group">
         <label>Property Address</label>
-        <input type="text" name="property_address" value="{{ quote.property_address if quote else '' }}" placeholder="123 Main St, City, ST 00000" />
+        <input type="text" name="property_address" value="{{ quote.property_address if quote else (pre.property_address or '') }}" placeholder="123 Main St, City, ST 00000" />
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group">
@@ -142,11 +157,14 @@
 
     {% if quote %}
     {% if quote.status == 'draft' %}
-    <form method="POST" action="{{ url_for('quotes.send_quote', quote_id=quote.id) }}">
-      <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center;padding:13px">
-        Send Quote to {{ quote.email }} →
-      </button>
-    </form>
+    {# Not a form of its own: this sits inside the edit form above, and a
+       browser ignores a <form> nested in another -- so this button used to
+       submit the edit form, save, and send nothing. formaction sends it to
+       the right place instead. #}
+    <button type="submit" formaction="{{ url_for('quotes.send_quote', quote_id=quote.id) }}"
+            formnovalidate class="btn btn-dark" style="width:100%;justify-content:center;padding:13px">
+      Send Quote to {{ quote.email }} →
+    </button>
     {% elif quote.status == 'sent' %}
     <div style="background:var(--info-soft);color:var(--info);padding:12px 16px;border-radius:10px;font-weight:600;font-size:0.9rem;text-align:center">
       {% if quote.viewed_at %}
@@ -166,17 +184,15 @@
     {% endif %}
 
     {% if quote.status != 'draft' %}
-    <form method="POST" action="{{ url_for('quotes.send_quote', quote_id=quote.id) }}">
-      <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:11px">
-        ↻ Resend Quote to {{ quote.email }}
-      </button>
-    </form>
+    <button type="submit" formaction="{{ url_for('quotes.send_quote', quote_id=quote.id) }}"
+            formnovalidate class="btn btn-outline" style="width:100%;justify-content:center;padding:11px">
+      ↻ Resend Quote to {{ quote.email }}
+    </button>
     {% endif %}
 
-    <form method="POST" action="{{ url_for('quotes.delete', quote_id=quote.id) }}"
-          onsubmit="return confirm('Delete this quote?')">
-      <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">Delete Quote</button>
-    </form>
+    <button type="submit" formaction="{{ url_for('quotes.delete', quote_id=quote.id) }}"
+            formnovalidate onclick="return confirm('Delete this quote?')"
+            class="btn btn-danger" style="width:100%;justify-content:center">Delete Quote</button>
     {% endif %}
   </div>
 

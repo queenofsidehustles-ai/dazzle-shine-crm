@@ -48,6 +48,33 @@
     {% endif %}
   </p>
   {% endif %}
+  <p style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    {% if text_phone %}
+    <a href="{{ url_for('messages.thread', phone=text_phone, name=current.business_name) }}" class="btn btn-outline">💬 Text them</a>
+    {% endif %}
+    {# Which quote follows from the kind of work: a cleaning contract, or a
+       per-home price for the turnovers a property manager buys. #}
+    {% if current.is_commercial %}
+      {% if can_quote %}
+      <a href="{{ url_for('quotes.new', prospect_id=current.id) }}" class="btn btn-outline">📝 Contract quote</a>
+      {% endif %}
+    {% else %}
+    <a href="{{ url_for('leads.new_quote', prospect_id=current.id) }}" class="btn btn-outline">📝 Home quote</a>
+    {% endif %}
+  </p>
+  <form method="POST" action="{{ url_for('places_finder.set_kind', prospect_id=current.id) }}"
+        style="margin:0 0 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    <span style="font-size:0.8rem;color:var(--softer)">What they're buying:</span>
+    <div style="display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden">
+      {% for value, label, on in [('residential', '🏠 Residential', not current.is_commercial),
+                                  ('commercial', '🏢 Commercial', current.is_commercial)] %}
+      <button type="submit" name="kind" value="{{ value }}" class="kt"
+              style="border:0;padding:6px 12px;font:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;
+                     background:{{ 'var(--ink)' if on else 'transparent' }};color:{{ '#fff' if on else 'var(--muted)' }}">{{ label }}</button>
+      {% endfor %}
+    </div>
+  </form>
 
   {% if current.attempts or current.notes or current.contact_name %}
   <div style="background:var(--surface-2,rgba(0,0,0,0.03));border-radius:8px;padding:12px;margin-bottom:16px">

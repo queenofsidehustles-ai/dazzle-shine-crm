@@ -206,9 +206,35 @@ def _view_args(view, prospects, **extra):
         script_map=Script.PROSPECT_CATEGORY_MAP,
         script_always=Script.ALWAYS_SHOW,
         script_labels=dict(Script.CATEGORIES),
+        # Quotes are an owner's page on a plan that has commercial work, so
+        # the drawer only offers the button to someone it will open for.
+        can_quote=_can_quote(),
+        sms_stopped=_sms_stopped(prospects),
+        commercial_categories=list(brands._COMMERCIAL_CATEGORIES),
+        brand_primary=brands.PRIMARY,
+        brand_commercial=brands.COMMERCIAL,
     )
     args.update(extra)
     return args
+
+
+def _sms_stopped(prospects):
+    """Ids of the leads whose number has replied STOP. One query for the page,
+    not one per row."""
+    from models import SmsOptOut
+    try:
+        stopped = {row.phone for row in SmsOptOut.query.all()}
+    except Exception:
+        return set()
+    return {p.id for p in prospects if _phone10(p.phone) in stopped}
+
+
+def _can_quote():
+    from auth import is_owner_session
+    try:
+        return is_owner_session() and entitlements.can('commercial')
+    except Exception:
+        return False
 
 
 def _email_templates():
@@ -256,7 +282,7 @@ def dashboard():
     # not two screens, so they became 'everyone'. The old names still work:
     # they are in links, bookmarks and anything already open.
     view = {'pipeline': 'everyone', 'contacts': 'everyone'}.get(view, view)
-    if view not in ('today', 'everyone', 'find', 'month'):
+    if view not in ('today', 'everyone', 'find', 'month', 'add'):
         view = 'today'
     stage_filter = (request.args.get('stage') or '').strip()
     rows = _backfilled()
@@ -442,6 +468,10 @@ def call_sheet(prospect_id=None):
         today=today,
         status_labels=Prospect.STATUS_LABELS,
         category_labels=Prospect.CATEGORY_LABELS,
+        can_quote=_can_quote(),
+        # Not offered to a number that has replied STOP.
+        text_phone=(_phone10(current.phone)
+                    if current and current.id not in _sms_stopped([current]) else ''),
     )
 
 
@@ -559,6 +589,109 @@ def import_selected():
     db.session.commit()
     flash(f'Added {added} business{"es" if added != 1 else ""} to your call list.', 'success')
     return redirect(url_for('places_finder.dashboard'))
+
+
+def _phone10(value):
+    digits = ''.join(ch for ch in str(value or '') if ch.isdigit())
+    return digits[-10:] if len(digits) >= 10 else ''
+
+
+@places_finder_bp.route('/add', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def add_by_hand():
+    """A business you met, were referred to, or found yourself.
+
+    Search was the only way onto the call list, so the best leads a cleaning
+    company gets -- the office manager who asked at a networking breakfast, the
+    property manager a customer passed on -- had nowhere to go except a note on
+    somebody's phone. They go in here, and from then on they are worked exactly
+    like anything search found: due today as a first call, logged, followed up,
+    quoted.
+    """
+    import brands
+    f = request.form
+    name = (f.get('business_name') or '').strip()
+    if not name:
+        flash('Give the business a name.', 'error')
+        return redirect(url_for('places_finder.dashboard', view='everyone'))
+    city = (f.get('city') or '').strip()
+    phone = (f.get('phone') or '').strip()
+
+    # The same business twice means two people calling it, which is the one
+    # thing a call list exists to prevent. Same number, or same name in the
+    # same town, is the same business. A name alone is not: two referrals
+    # to a franchise, neither with a town yet, are two businesses.
+    mine = _phone10(phone)
+    for p in Prospect.query.all():
+        if ((mine and _phone10(p.phone) == mine)
+                or (city and (p.business_name or '').strip().lower() == name.lower()
+                    and (p.city or '').strip().lower() == city.lower())):
+            flash(f'{p.business_name} is already on your list ({p.stage_label}).', 'info')
+            return redirect(url_for('places_finder.dashboard', view='everyone'))
+
+    category = f.get('category') if f.get('category') in CATEGORIES else 'office'
+    website = (f.get('website') or '').strip()
+    if website and not website.startswith(('http://', 'https://')):
+        website = 'https://' + website
+    # Residential or commercial, if they said; otherwise worked out from the
+    # kind of business, the same way an imported lead is.
+    kind = f.get('kind')
+    if kind in ('residential', 'commercial'):
+        picked = brands.COMMERCIAL if kind == 'commercial' else brands.PRIMARY
+    else:
+        picked = brands.normalize_lens(f.get('brand'))
+    p = Prospect(
+        business_name=name,
+        category=category,
+        contact_name=(f.get('contact_name') or '').strip() or None,
+        phone=phone,
+        email=(f.get('email') or '').strip() or None,
+        website=website,
+        address=(f.get('address') or '').strip(),
+        city=city,
+        status='new',
+        stage='new',
+        source='manual',
+        brand=(picked if picked != brands.ALL
+               else brands.brand_for_prospect({'category': category})),
+        next_action='First call',
+        next_action_date=local_today().isoformat(),
+    )
+    note = (f.get('notes') or '').strip()
+    p.notes = prospecting.note_entry(p, 'Added by hand' + (f' — {note}' if note else ''))
+    from flask import session
+    if session.get('role') == 'team':
+        p.agent = session.get('user_name')
+    db.session.add(p)
+    db.session.commit()
+    flash(f'{name} is on your call list — first call due today.', 'success')
+    return redirect(url_for('places_finder.dashboard', view='today'))
+
+
+@places_finder_bp.route('/<int:prospect_id>/kind', methods=['POST'])
+@login_required
+def set_kind(prospect_id):
+    """Residential or commercial, said by a person rather than guessed.
+
+    The category decides it until somebody knows better, and the guess is
+    often wrong in both directions: a property manager who also runs an office
+    block wants a janitorial contract, and a general contractor wants a house
+    cleaned after a build. Which way it goes decides the quote it gets, the
+    scripts read to it, and whose name the emails go out under.
+    """
+    import brands
+    p = Prospect.query.get_or_404(prospect_id)
+    kind = request.form.get('kind')
+    if kind in ('residential', 'commercial'):
+        p.brand = brands.COMMERCIAL if kind == 'commercial' else brands.PRIMARY
+        db.session.commit()
+        flash(f'{p.business_name} is now {p.kind_label.split(" ", 1)[1].lower()} — '
+              f'its quote, scripts and emails follow.', 'success')
+    back = request.form.get('next') or ''
+    if not back.startswith('/') or back.startswith('//') or '\\' in back:
+        back = url_for('places_finder.dashboard', view='everyone')
+    return redirect(back)
 
 
 @places_finder_bp.route('/<int:prospect_id>/status', methods=['POST'])

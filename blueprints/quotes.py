@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from entitlements import requires_plan
 from auth import owner_required
-from models import CommercialQuote, CommercialAccount
+from models import CommercialQuote, CommercialAccount, Prospect
 from extensions import db
 from notifications import send_email
 import brands
@@ -66,6 +66,30 @@ def _account_from_quote(q):
     return acc
 
 
+# call-list category → the quote form's property type
+_PROPERTY_FOR_CATEGORY = {
+    'apartment': 'Apartment Complex',
+    'property_manager': 'Property Management Portfolio',
+    'office': 'Office Building',
+    'medical_office': 'Office Building',
+    'daycare': 'Office Building',
+}
+
+
+def _lead_for(q):
+    """The call-list lead a quote was written for, or None."""
+    if not getattr(q, 'prospect_id', None):
+        return None
+    return Prospect.query.get(q.prospect_id)
+
+
+def _lead_moved(q, stage, status, next_action, days, note):
+    """See prospecting.quote_moved. Callers commit."""
+    import prospecting
+    return prospecting.quote_moved(getattr(q, 'prospect_id', None), stage, status,
+                                   next_action, days, note)
+
+
 @quotes_bp.route('/')
 @owner_required
 @requires_plan('commercial')
@@ -110,11 +134,36 @@ def new():
             status='draft',
             brand=(request.form.get('brand') or brands.brand_for_property(request.form.get('property_type', ''))),
         )
+        lead = Prospect.query.get(request.form.get('prospect_id', type=int) or 0)
+        if lead:
+            q.prospect_id = lead.id
+            # What the quote learned about them is worth keeping on the lead,
+            # where the next call will be made from.
+            lead.contact_name = lead.contact_name or q.contact_name or None
+            lead.email = lead.email or q.email or None
+            lead.phone = lead.phone or q.phone or None
         db.session.add(q)
         db.session.commit()
         flash('Quote created!', 'success')
         return redirect(url_for('quotes.detail', quote_id=q.id))
-    return render_template('admin/quote_form.html', quote=None,
+
+    # Started from a lead on the call list: fill in what is already known
+    # rather than make somebody copy it across by hand.
+    lead = Prospect.query.get(request.args.get('prospect_id', type=int) or 0)
+    pre = {}
+    if lead:
+        # Google's addresses already end in the city; typed ones often do not.
+        address = lead.address or ''
+        if lead.city and lead.city.lower() not in address.lower():
+            address = ', '.join(x for x in (address, lead.city) if x)
+        pre = {
+            'company': lead.business_name, 'contact_name': lead.contact_name or '',
+            'email': lead.email or '', 'phone': lead.phone or '',
+            'property_type': _PROPERTY_FOR_CATEGORY.get(lead.category, 'Other'),
+            'brand': brands.normalize_lens(lead.brand) if lead.brand else '',
+            'property_address': address or '',
+        }
+    return render_template('admin/quote_form.html', quote=None, lead=lead, pre=pre,
                            property_types=PROPERTY_TYPES, services=SERVICES,
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS)
 
@@ -145,7 +194,7 @@ def detail(quote_id):
         return redirect(url_for('quotes.detail', quote_id=quote_id))
 
     selected_services = [s.strip() for s in (q.services or '').split(',') if s.strip()]
-    return render_template('admin/quote_form.html', quote=q,
+    return render_template('admin/quote_form.html', quote=q, lead=_lead_for(q), pre={},
                            property_types=PROPERTY_TYPES, services=SERVICES,
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
                            selected_services=selected_services)
@@ -202,6 +251,10 @@ def send_quote(quote_id):
     q.sent_at = datetime.utcnow()
     q.drip_step = 0          # (re)start the follow-up nurture clock
     q.last_drip_at = None
+    lead = _lead_moved(q, 'proposal', None, 'Follow up on the quote', 3,
+                       f'Quote emailed to {q.email}')
+    if lead:
+        lead.last_emailed_at = datetime.utcnow()
     db.session.commit()
 
     # Send the owner a copy so there's always a record in your inbox
@@ -266,7 +319,10 @@ def accept(token):
     except Exception:
         pass
     try:
-        _account_from_quote(q)   # accepted quote becomes an ongoing Commercial Account
+        acc = _account_from_quote(q)   # accepted quote becomes an ongoing Commercial Account
+        lead = _lead_moved(q, 'won', 'won', None, None, 'Accepted the quote 🎉')
+        if lead and acc and not acc.prospect_id:
+            acc.prospect_id = lead.id
     except Exception:
         pass
     try:
@@ -305,6 +361,10 @@ def decline(token):
         q.responded_at = datetime.utcnow()
     except Exception:
         pass
+    # A declined quote is "not now", not "never" -- the same reasoning that
+    # rests a "not interested" call in nurture for a quarter.
+    _lead_moved(q, 'nurture', 'not_interested', 'Quarterly check-in', 90,
+                'Declined the quote')
     try:
         db.session.commit()
     except Exception:

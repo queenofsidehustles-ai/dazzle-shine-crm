@@ -17,6 +17,8 @@ data-email="{{ p.email or '' }}"
 data-renewal="{{ p.renewal_note or '' }}"
 data-attempts="{{ p.attempts or 0 }}"
 data-brand="{{ p.brand or default_brand }}"
+data-kind="{{ 'commercial' if p.is_commercial else 'residential' }}"
+data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
 {%- endmacro %}
 
 {% if demo %}
@@ -37,7 +39,8 @@ data-brand="{{ p.brand or default_brand }}"
 <div class="filter-tabs">
   {% set views = [('today', '📞 Calls', due.overdue + due.today + due.unscheduled),
                   ('everyone', '🏢 Everyone', counts.all),
-                  ('find', '🎯 Find new', None)] %}
+                  ('find', '🎯 Find new', None),
+                  ('add', '➕ Add one', None)] %}
   {% for key, label, n in views %}
   <a href="{{ url_for('places_finder.dashboard', view=key) }}"
      class="filter-tab {{ 'active' if view == key }}">
@@ -144,7 +147,7 @@ data-brand="{{ p.brand or default_brand }}"
             <strong>{{ p.business_name }}</strong>
             {% if p.rating %}<span style="font-size:0.78rem;color:var(--softer)"> ⭐{{ '%.1f' % p.rating }}</span>{% endif %}
             <div style="font-size:0.78rem;color:var(--softer)">
-              {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
+              <span class="kind-badge">{{ p.kind_label }}</span> · {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
               {% if p.contact_name %} · {{ p.contact_name }}{% endif %}
             </div>
             {% if p.website %}<a href="{{ p.website }}" target="_blank" style="font-size:0.78rem;color:var(--amber-deep)">website ↗</a>{% endif %}
@@ -247,6 +250,7 @@ data-brand="{{ p.brand or default_brand }}"
         <tr>
           <td>
             <strong>{{ p.business_name }}</strong>
+            <br><span class="kind-badge">{{ p.kind_label }}</span>
             {% if p.website %}<br><a href="{{ p.website }}" target="_blank" style="font-size:0.76rem;color:var(--amber-deep)">website ↗</a>{% endif %}
           </td>
           <td style="font-size:0.84rem">{{ p.contact_name or '—' }}</td>
@@ -277,6 +281,112 @@ data-brand="{{ p.brand or default_brand }}"
   <p style="text-align:center;color:var(--softer);padding:36px 0">No businesses yet.</p>
   {% endif %}
 </div>
+{% endif %}
+
+<style>
+  .kind-toggle { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; background:var(--surface); }
+  .kind-toggle label, .kind-toggle button { display:inline-flex; align-items:center; gap:4px; margin:0;
+    padding:7px 13px; font-size:0.85rem; font-weight:600; color:var(--muted); cursor:pointer;
+    border:0; background:transparent; font-family:inherit; }
+  .kind-toggle input { position:absolute; opacity:0; pointer-events:none; }
+  .kind-toggle label:has(input:checked), .kind-toggle button.on { background:var(--ink); color:#fff; }
+  .kind-badge { font-size:0.72rem; font-weight:700; color:var(--muted); white-space:nowrap; }
+</style>
+
+{# ── ADD ONE BY HAND ───────────────────────────────────────────────────── #}
+{# The leads search can never find: somebody met at a networking breakfast, a
+   property manager a customer passed on, the office down the road. #}
+{% if view == 'add' %}
+{% set fld = 'width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:0.95rem' %}
+{% set lbl = 'display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px' %}
+<div class="card" style="margin-bottom:18px;max-width:760px">
+  <h3 style="margin:0 0 4px">➕ Add a business yourself</h3>
+  <p style="color:var(--softer);font-size:0.85rem;margin:0 0 16px">
+    Someone you met, were referred to, or found on your own. It joins your call
+    list as a first call due today, and from there it works like any other lead:
+    log calls, email, text, and quote them.
+  </p>
+  <form method="POST" action="{{ url_for('places_finder.add_by_hand') }}"
+        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 14px">
+    <div style="grid-column:1/-1">
+      <label for="addName" style="{{ lbl }}">Business name *</label>
+      <input type="text" name="business_name" id="addName" required style="{{ fld }}"
+             placeholder="Sunrise Pediatrics">
+    </div>
+    <div>
+      <label for="addCat" style="{{ lbl }}">What kind of business?</label>
+      <select name="category" id="addCat" style="{{ fld }}">
+        {% for c in categories %}
+        <option value="{{ c }}" {{ 'selected' if c == 'office' }}>{{ category_labels[c] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <span style="{{ lbl }}">What are they buying?</span>
+      {# Decides which quote they get: a per-home price, or a cleaning
+         contract. Follows the kind of business until you pick one. #}
+      <div class="kind-toggle" id="addKind">
+        <label><input type="radio" name="kind" value="residential"> 🏠 Residential</label>
+        <label><input type="radio" name="kind" value="commercial" checked> 🏢 Commercial</label>
+      </div>
+      <div style="font-size:0.74rem;color:var(--softer);margin-top:4px">
+        Residential: homes, units, turnovers. Commercial: offices and facilities on a contract.
+      </div>
+    </div>
+    <div>
+      <label for="addContact" style="{{ lbl }}">Who to ask for</label>
+      <input type="text" name="contact_name" id="addContact" style="{{ fld }}" placeholder="Name + title">
+    </div>
+    <div>
+      <label for="addPhone" style="{{ lbl }}">Phone</label>
+      <input type="tel" name="phone" id="addPhone" style="{{ fld }}" placeholder="(301) 555-0123">
+    </div>
+    <div>
+      <label for="addEmail" style="{{ lbl }}">Email</label>
+      <input type="email" name="email" id="addEmail" style="{{ fld }}" placeholder="name@company.com">
+    </div>
+    <div>
+      <label for="addWeb" style="{{ lbl }}">Website</label>
+      <input type="text" name="website" id="addWeb" style="{{ fld }}" placeholder="company.com">
+    </div>
+    <div>
+      <label for="addAddr" style="{{ lbl }}">Address</label>
+      <input type="text" name="address" id="addAddr" style="{{ fld }}">
+    </div>
+    <div>
+      <label for="addCity" style="{{ lbl }}">City</label>
+      <input type="text" name="city" id="addCity" style="{{ fld }}">
+    </div>
+    <div style="grid-column:1/-1">
+      <label for="addNotes" style="{{ lbl }}">Anything worth remembering</label>
+      <textarea name="notes" id="addNotes" rows="3" style="{{ fld }}"
+                placeholder="Met at the chamber breakfast — wants a quote for nightly cleaning, 3 restrooms"></textarea>
+    </div>
+    <div style="grid-column:1/-1">
+      <button type="submit" class="btn btn-gold" style="padding:11px 22px">➕ Add to my call list</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if view == 'add' %}
+<script>
+  // Follow the kind of business until somebody picks for themselves.
+  (function () {
+    const COMMERCIAL = {{ commercial_categories | tojson }};
+    const cat = document.getElementById('addCat');
+    const radios = document.querySelectorAll('#addKind input');
+    let picked = false;
+    radios.forEach(r => r.addEventListener('change', () => { picked = true; }));
+    const follow = () => {
+      if (picked) return;
+      const kind = COMMERCIAL.includes(cat.value) ? 'commercial' : 'residential';
+      radios.forEach(r => { r.checked = (r.value === kind); });
+    };
+    cat.addEventListener('change', follow);
+    follow();
+  })();
+</script>
 {% endif %}
 
 {# ── FIND NEW ──────────────────────────────────────────────────────────── #}
@@ -440,7 +550,25 @@ data-brand="{{ p.brand or default_brand }}"
       <button type="button" id="cdClose" class="btn btn-outline"
               style="padding:5px 11px;font-size:.85rem;flex-shrink:0">✕</button>
     </div>
-    <a id="cdPhone" href="#" class="btn" style="padding:8px 16px;font-size:.9rem;margin-top:10px;display:none">📞 Call</a>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <a id="cdPhone" href="#" class="btn" style="padding:8px 16px;font-size:.9rem;display:none">📞 Call</a>
+      {# Texting goes through the ordinary inbox: the conversation, STOP and
+         the reply all land where every other text does. #}
+      <a id="cdText" href="#" class="btn btn-outline" style="padding:8px 14px;font-size:.9rem;display:none">💬 Text</a>
+      <a id="cdQuote" href="#" class="btn btn-outline" style="padding:8px 14px;font-size:.9rem;display:none">📝 Quote</a>
+    </div>
+    {# Which kind of work this is decides the quote it gets. One tap to
+       change it, from where the decision is made: on the call. #}
+    <form id="cdKindForm" method="POST" style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      {# Both carry a class: the stylesheet paints any class-less submit button
+         as the page's main orange action, which made the unpicked side look picked. #}
+      <div class="kind-toggle">
+        <button type="submit" name="kind" value="residential" id="cdKindRes" class="kt">🏠 Residential</button>
+        <button type="submit" name="kind" value="commercial" id="cdKindCom" class="kt">🏢 Commercial</button>
+      </div>
+      <span id="cdKindHint" style="font-size:.74rem;color:var(--softer)"></span>
+    </form>
   </div>
 
   <div class="cd-body">
@@ -571,6 +699,12 @@ data-brand="{{ p.brand or default_brand }}"
   const CD_RULES    = {{ next_rules | tojson }};
   const CD_ACTION   = "{{ url_for('places_finder.update_status', prospect_id=0, view=view) }}";
   const CD_EMAIL_ACTION = "{{ url_for('places_finder.send_outreach', prospect_id=0, view=view) }}";
+  const CD_TEXT_BASE  = "{{ url_for('messages.thread', phone='0000000000') }}";
+  // A commercial lead gets a contract quote (owner, commercial plan); a
+  // residential one gets the per-home quote anyone on the team can send.
+  const CD_QUOTE_COM  = "{{ url_for('quotes.new', prospect_id=0) if can_quote else '' }}";
+  const CD_QUOTE_RES  = "{{ url_for('leads.new_quote', prospect_id=0) }}";
+  const CD_KIND_ACTION = "{{ url_for('places_finder.set_kind', prospect_id=0) }}";
 
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -647,6 +781,33 @@ data-brand="{{ p.brand or default_brand }}"
     } else {
       tel.style.display = 'none';
     }
+    const txt = document.getElementById('cdText');
+    const digits = (d.phone || '').replace(/\D/g, '').slice(-10);
+    // Somebody who asked not to be contacted is not offered a text either.
+    // Nor anybody who replied STOP: Twilio would refuse it anyway, and the
+    // button would be offering something the law says not to do.
+    if (digits.length === 10 && d.status !== 'do_not_contact' && !d.smsstop) {
+      txt.href = CD_TEXT_BASE.replace('0000000000', digits) + '?name=' + encodeURIComponent(d.name);
+      txt.style.display = 'inline-flex';
+    } else {
+      txt.style.display = 'none';
+    }
+    const commercial = d.kind === 'commercial';
+    const qb = document.getElementById('cdQuote');
+    const qurl = commercial ? CD_QUOTE_COM : CD_QUOTE_RES;
+    if (qurl) {
+      qb.href = qurl.replace('prospect_id=0', 'prospect_id=' + d.id);
+      qb.textContent = commercial ? '📝 Contract quote' : '📝 Home quote';
+      qb.style.display = 'inline-flex';
+    } else {
+      qb.style.display = 'none';
+    }
+    document.getElementById('cdKindForm').action = CD_KIND_ACTION.replace('/0/', '/' + d.id + '/');
+    document.getElementById('cdKindRes').classList.toggle('on', !commercial);
+    document.getElementById('cdKindCom').classList.toggle('on', commercial);
+    document.getElementById('cdKindHint').textContent = commercial
+      ? 'Quoted as a cleaning contract'
+      : 'Quoted per home — beds, baths, turnovers';
 
     const openerCat = CD_MAP[d.cat] || 'call_office';
     const opener = CD_SCRIPTS[openerCat] || [];
