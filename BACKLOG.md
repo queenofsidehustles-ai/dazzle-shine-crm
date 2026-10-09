@@ -2,6 +2,80 @@
 
 Ideas we agreed to build later (not urgent). Newest at top.
 
+## Commercial lead system — upgrades parked 2026-10-08
+
+From a walkthrough of someone running the same play on Meta's Muse + Slack +
+Go High Level. Most of it we already have, and ours is the better half: Google
+**Places API** rather than scraping profile pages, which is supported, returns
+structured fields and de-duplicates on `place_id` instead of breaking when a
+layout changes. Sector tags, a staged pipeline and outcome-triggered drips all
+exist. Recorded here so the next person comparing the two does not rebuild what
+is already built.
+
+- [ ] **A referral-partner pipeline, separate from the buyer pipeline.** The
+      real idea worth taking, and the one to decide before any of it is built.
+      An insurance agent never buys cleaning — they refer a claim that left a
+      house uninhabitable. A realtor refers a seller who needs a move-out clean.
+      Those are not prospects to close, and the pipeline we have is shaped
+      entirely around closing: new → working → interested → proposal → **won**.
+      A referral relationship has no "won". It has met → agreed to refer →
+      first referral received → active → gone quiet, a different ask ("send me
+      your clients", not "buy cleaning") and a different measure of success
+      (referrals received, not contracts signed). Today a realtor and an
+      apartment block run through identical machinery and only one of them is
+      a buyer.
+      **The fork:** a second pipeline that is honest about how those
+      relationships work, or one pipeline with a flag, which is less to build
+      and less to learn from. Undecided on purpose.
+
+- [ ] **Insurance agents are not a category at all.** `CATEGORIES` in
+      `blueprints/places_finder.py` has no insurance entry, so that referral
+      channel cannot even be imported. One line, but it only pays off alongside
+      the referral framing above — importing them into a pipeline that tries to
+      sell them cleaning would waste the list.
+
+- [ ] **Work the builder list we are already priced for.** Post-construction
+      carries the highest multipliers in the book — 2.0× / 2.4× / 2.8× in
+      `pricing.py` — and `general_contractor` already exists as a prospect
+      category. The most profitable service we sell, with a ready-made target
+      list, not being called. Needs no code; it is a decision about who to ring.
+
+- [ ] **Turn the morning digest on, and put real names in it.** `owner-digest`
+      sits in `DEFAULT_OFF` in `automations.py`, which is right for a new signup
+      and means our own has likely never fired. The deeper gap is what it says:
+      `daily_plan` reports **counts** — "7 commercial prospects due a call back"
+      plus a link — where the version worth copying carries **the three to five
+      actual contacts, with phone numbers**. A count means opening a laptop;
+      names and numbers mean calling from a phone between other things. Cheapest
+      item here and the one that most changes whether the system gets used daily.
+
+- [ ] **Sector-specific drip copy.** `SEQUENCES` in `prospecting.py` sends the
+      same words to a daycare and a custom builder. The plumbing already exists
+      one layer over: `Script.PROSPECT_CATEGORY_MAP` routes a different *call
+      script* per sector. Making the email sequences category-aware extends a
+      pattern rather than inventing one.
+
+**Deliberately not doing:** scraping Google profiles (we have the API), and
+moving any of this into Go High Level (we are building the CRM).
+
+## Hiring pipeline — bugs found 2026-10-07, not yet fixed
+
+- [ ] **"Unknown" experience silently disqualifies an applicant forever.** The
+      manual-add form's Experience dropdown defaults to `Unknown`, whose value is
+      `""`. `_qualifies()` in `blueprints/api.py` requires a non-empty
+      `years_experience`, so a manually-added applicant left on the default is
+      skipped by the `applicant-followups` backstop permanently, with nothing on
+      screen saying so. This is actively losing candidates. An unknown experience
+      level should mean "a human looks at this", never "never contact them".
+
+- [ ] **`interview_status` is invisible on the applications list.** "not_sent"
+      looks identical to "sent" from the outside, which is how somebody waits for
+      an email nobody sent.
+
+- [ ] **The phone-interview button fails quietly** when
+      `interview_calendar_link` is unset — it flashes a warning and sends
+      nothing. It should say why.
+
 ## White-labeling — DONE 2026-08-08
 
 Every item below is finished. Setting up a new company is now a config job, not a
