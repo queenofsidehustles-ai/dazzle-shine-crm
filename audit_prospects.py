@@ -86,8 +86,17 @@ def _worked(conn, schema, where):
     """Of the rows this rule takes, how many carry work somebody did.
 
     The number that decides whether a rule is tidying or destruction. A row
-    with attempts, a call date, notes, a scheduled follow-up or a renewal month
-    took a phone call to produce and no re-import restores it.
+    with attempts, a call date, notes, a renewal month or an email took a
+    phone call to produce, and no re-import restores it.
+
+    `next_action_date` is deliberately NOT in this list, though it looks like
+    the most obvious member of it. prospecting.backfill() gives every open
+    prospect a next action and today's date the first time the list is read,
+    so it is set on almost everything and means only "this row has been
+    looked at by the software". Counting it marked all eighty-one rows as
+    worked on, including the fifty the rule had already defined as having no
+    email, no attempts, no notes and no call date -- a warning that fires on
+    everything, which is a warning nobody can act on.
     """
     conn.execute(text(f'SET search_path TO "{schema}", public'))
     return conn.execute(text(f"""
@@ -96,7 +105,6 @@ def _worked(conn, schema, where):
             coalesce(attempts, 0) > 0
             OR called_at IS NOT NULL
             OR coalesce(trim(notes), '') <> ''
-            OR next_action_date IS NOT NULL
             OR renewal_date IS NOT NULL
             OR coalesce(trim(email), '') <> ''
         )
@@ -152,7 +160,8 @@ def main():
               '   ← callable, which is the point of the list')
         print(f'  called at least once    {row["called"]:>6}')
         print(f'  carrying call notes     {row["with_notes"]:>6}')
-        print(f'  with a follow-up booked {row["scheduled"]:>6}')
+        print(f'  with a follow-up booked {row["scheduled"]:>6}'
+              '   ← mostly auto-set on first read, not booked by hand')
         print(f'  with a renewal month    {row["with_renewal"]:>6}'
               '   ← the ones that wake themselves')
         print('\n  by stage:')
