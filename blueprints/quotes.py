@@ -26,7 +26,24 @@ SERVICES = [
     'Floor Care (Sweep & Mop)', 'Kitchen / Break Room', 'Hood & Vent Degreasing',
     'Equipment Cleaning', 'Dusting & Surfaces', 'Trash Removal',
     'High-Touch Disinfection', 'Floor Stripping & Waxing',
+    'Kitchen Floor Degreasing', 'Kitchen Equipment Degreasing (Fryers, Grills, Cooktops)',
 ]
+
+# What a kind of property is mostly quoted for, shown first so the services
+# that matter are not lost among apartment and office lines.
+SERVICES_FIRST = {
+    'Restaurant / Food Service': [
+        'Floor Care (Sweep & Mop)', 'Kitchen Floor Degreasing',
+        'Kitchen Equipment Degreasing (Fryers, Grills, Cooktops)', 'Hood & Vent Degreasing',
+        'Kitchen / Break Room', 'Restroom Sanitation', 'Trash Removal',
+        'High-Touch Disinfection', 'Window Cleaning', 'Deep Cleaning',
+    ],
+}
+
+
+def _services_for(property_type):
+    first = SERVICES_FIRST.get(property_type or '', [])
+    return first + [s for s in SERVICES if s not in first]
 
 FREQUENCIES = [
     ('daily', 'Daily'), ('weekly', 'Weekly'), ('biweekly', 'Bi-Weekly'),
@@ -182,7 +199,8 @@ def new():
         pre.update(prospecting.walkthrough_quote_prefill(lead))
     return render_template('admin/quote_form.html', quote=None, lead=lead, pre=pre,
                            selected_services=pre.get('services') or [],
-                           property_types=PROPERTY_TYPES, services=SERVICES,
+                           property_types=PROPERTY_TYPES,
+                           services=_services_for(pre.get('property_type')),
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS)
 
 
@@ -213,7 +231,7 @@ def detail(quote_id):
 
     selected_services = [s.strip() for s in (q.services or '').split(',') if s.strip()]
     return render_template('admin/quote_form.html', quote=q, lead=_lead_for(q), pre={},
-                           property_types=PROPERTY_TYPES, services=SERVICES,
+                           property_types=PROPERTY_TYPES, services=_services_for(q.property_type),
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
                            selected_services=selected_services)
 

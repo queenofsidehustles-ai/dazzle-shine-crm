@@ -98,6 +98,11 @@ EXTRAS = [
     ('breakroom', '🍽️ Break room / kitchen', 0.08),
     ('trash', '🗑️ Trash & liner service', 0.05),
     ('disinfection', '🧴 Disinfect high-touch', 0.08),
+    # A restaurant's kitchen is two jobs a dining room is not: a floor that has
+    # to be degreased, not just mopped, and the line -- fryers, grills,
+    # cooktops, ovens -- scraped and degreased.
+    ('floor_degrease', '🧽 Kitchen floor degreasing', 0.10),
+    ('kitchen_equipment', '🍳 Kitchen equipment — fryers, grills, cooktops', 0.15),
 ]
 
 # Scope that isn't really optional for some facility types. A medical clean
@@ -114,7 +119,7 @@ DEFAULT_EXTRAS = {
 # the work -- but plenty have their own kitchen crew and only want the front of
 # house done, and a box that can be unticked must change the price when it is.
 SUGGESTED_EXTRAS = {
-    'restaurant': ['restrooms', 'breakroom'],
+    'restaurant': ['restrooms', 'breakroom', 'floor_degrease', 'kitchen_equipment'],
     # Locker rooms are restrooms with showers, and equipment is high-touch.
     'gym': ['restrooms', 'disinfection'],
     'church': ['restrooms'],

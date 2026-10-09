@@ -369,12 +369,15 @@ with app.app_context(), tenancy.use_tenant(SLUG):
 with app.app_context(), tenancy.use_tenant(SLUG):
     ticked = set(commercial_pricing.get_config()['default_extras']['restaurant'])
     bare = commercial_pricing.quote(4000, 'restaurant', 'weekly', [])['monthly']
-    full = commercial_pricing.quote(4000, 'restaurant', 'weekly', ['restrooms', 'breakroom'])['monthly']
+    full = commercial_pricing.quote(4000, 'restaurant', 'weekly', sorted(ticked))['monthly']
+    no_line = commercial_pricing.quote(4000, 'restaurant', 'weekly',
+                                       sorted(ticked - {'floor_degrease', 'kitchen_equipment'}))['monthly']
     med_bare = commercial_pricing.quote(4000, 'medical_office', 'weekly', [])['monthly']
     med_full = commercial_pricing.quote(4000, 'medical_office', 'weekly', ['disinfection'])['monthly']
     db.session.remove()
-check(ticked == {'restrooms', 'breakroom'}, 'the kitchen and restrooms start ticked on the calculator')
-check(bare < full, f'but unticking them takes them off the price ({bare} < {full})')
+check(ticked == {'restrooms', 'breakroom', 'floor_degrease', 'kitchen_equipment'},
+      'the kitchen, restrooms, floor degreasing and the line (fryers, grills, cooktops) start ticked')
+check(bare < no_line < full, f'but unticking them takes them off the price ({bare} < {no_line} < {full})')
 check(med_bare == med_full, 'while a medical office still always carries its disinfection')
 
 # Find new under "All brands" used to file every search as residential.
@@ -622,6 +625,30 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     check(cp.quote(3200, 'restaurant', 'weekly', []) == cp.quote(3200, 'restaurant', 'weekly', [], hours=None),
           'and without judged hours the calculator prices exactly as before')
     db.session.remove()
+
+# A restaurant's kitchen: the floor degreased and the line cleaned, on the
+# checklist, in the price and on the quote.
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'sqft': '3200', 'frequency': 'weekly',
+    'services': ['floors', 'floor_degrease', 'kitchen_equipment']})
+page = c.get(f'/find-leads/{wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('Kitchen floor — degrease' in page and 'fryers, grills, cooktops' in page,
+      'the checklist offers kitchen floor degreasing and the fryers, grills and cooktops')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    kitchen = cp.quote(3200, 'restaurant', 'weekly', ['floor_degrease', 'kitchen_equipment'])
+    plain = cp.quote(3200, 'restaurant', 'weekly', [])
+    db.session.remove()
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check(kitchen['per_visit'] > plain['per_visit'] and f'value="{kitchen["per_visit"]}"' in form,
+      f'and are priced: ${kitchen["per_visit"]} a visit against ${plain["per_visit"]} for the floors alone')
+check(re.search(r'value="Kitchen Floor Degreasing"[^>]*checked', form)
+      and re.search(r'value="Kitchen Equipment Degreasing \(Fryers, Grills, Cooktops\)"[^>]*checked', form),
+      'the quote lists them ticked')
+import html as _html
+svc = [_html.unescape(v) for v in re.findall(r'name="services" value="([^"]+)"', form)]
+check(svc[:3] == ['Floor Care (Sweep & Mop)', 'Kitchen Floor Degreasing',
+                  'Kitchen Equipment Degreasing (Fryers, Grills, Cooktops)'],
+      f'and a restaurant quote shows kitchen services first, not apartment lines ({svc[:3]})')
 
 print('\n14. A Sales login: the call list and nothing else')
 check(('sales', 'Sales — finding and working leads only') in rbac.ROLE_OPTIONS
