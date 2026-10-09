@@ -709,7 +709,8 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
   // A commercial lead gets a contract quote (owner, commercial plan); a
   // residential one gets the per-home quote anyone on the team can send.
   const CD_QUOTE_COM  = "{{ url_for('quotes.new', prospect_id=0) if can_quote else '' }}";
-  const CD_QUOTE_RES  = "{{ url_for('leads.new_quote', prospect_id=0) }}";
+  const CD_QUOTE_RES  = "{{ url_for('leads.new_quote', prospect_id=0) if can_home_quote else '' }}";
+  const CD_CAN_TEXT   = {{ 'true' if can_text else 'false' }};
   const CD_KIND_ACTION = "{{ url_for('places_finder.set_kind', prospect_id=0) }}";
   const CD_PAGE = "{{ url_for('places_finder.lead_page', prospect_id=0) }}";
 
@@ -795,7 +796,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
     // Somebody who asked not to be contacted is not offered a text either.
     // Nor anybody who replied STOP: Twilio would refuse it anyway, and the
     // button would be offering something the law says not to do.
-    if (digits.length === 10 && d.status !== 'do_not_contact' && !d.smsstop) {
+    if (CD_CAN_TEXT && digits.length === 10 && d.status !== 'do_not_contact' && !d.smsstop) {
       txt.href = CD_TEXT_BASE.replace('0000000000', digits) + '?name=' + encodeURIComponent(d.name);
       txt.style.display = 'inline-flex';
     } else {

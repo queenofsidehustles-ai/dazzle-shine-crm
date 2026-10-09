@@ -7,13 +7,14 @@ as ``limited`` until an owner deliberately reassigns it.
 """
 from flask import abort, request, session
 
-CANONICAL_ROLES = frozenset({'owner', 'admin', 'dispatcher', 'cleaner', 'limited'})
+CANONICAL_ROLES = frozenset({'owner', 'admin', 'dispatcher', 'sales', 'cleaner', 'limited'})
 LEGACY_ROLE_MAP = {'team': 'limited'}
 
 ROLE_LABELS = {
     'owner': 'Owner',
     'admin': 'Admin',
     'dispatcher': 'Dispatcher',
+    'sales': 'Sales',
     'cleaner': 'Cleaner',
     'limited': 'Limited',
 }
@@ -21,6 +22,7 @@ ROLE_OPTIONS = (
     ('limited', 'Limited — booking read only'),
     ('cleaner', 'Cleaner — assigned work only'),
     ('dispatcher', 'Dispatcher — bookings and scheduling'),
+    ('sales', 'Sales — finding and working leads only'),
     ('admin', 'Admin — operations, no finance/pay'),
     ('owner', 'Owner — full access'),
 )
@@ -34,6 +36,7 @@ ROLE_PERMISSIONS = {
         'checklist.manage',
         'pay.manage', 'finance.manage', 'users.manage', 'settings.manage',
         'assigned_work.use', 'account.manage',
+        'prospect.work',
     }),
     'admin': frozenset({
         'booking.read', 'booking.create', 'booking.manage',
@@ -51,6 +54,11 @@ ROLE_PERMISSIONS = {
     # Every role gets account.manage, owner included above -- it is a login
     # managing itself, which has nothing to do with what that login is
     # otherwise allowed to touch.
+    # Somebody whose whole job is finding business: the call list, searching
+    # for businesses, calling, emailing and walking them through -- and
+    # nothing else. No bookings, no customers, no inbox (which is every
+    # customer's and cleaner's texts), no money. Quoting stays with the owner.
+    'sales': frozenset({'prospect.work', 'account.manage'}),
     'cleaner': frozenset({'assigned_work.use', 'account.manage'}),
     'limited': frozenset({'booking.read', 'account.manage'}),
 }
@@ -93,13 +101,25 @@ ENDPOINT_PERMISSIONS = {
     ('leads.checklist_json', 'GET'): 'lead.manage',
     ('leads.detail', 'POST'): 'lead.manage',
     ('leads.convert', 'POST'): 'lead.manage',
-    # One lead's page, and the forms on it. The page shows the lead's texts
-    # and quotes, so it is a lead surface, not a free-for-all; editing who a
-    # lead is, flipping its side and adding one by hand are lead management.
-    ('places_finder.lead_page', 'GET'): 'lead.read',
-    ('places_finder.edit_lead', 'POST'): 'lead.manage',
-    ('places_finder.set_kind', 'POST'): 'lead.manage',
-    ('places_finder.add_by_hand', 'POST'): 'lead.manage',
+    # Find leads -- the prospecting module, end to end. Its own permission
+    # rather than lead.read/lead.manage (website leads and quotes) so a Sales
+    # login can have all of this and none of that. Deleting a lead stays
+    # owner-only below.
+    ('places_finder.dashboard', 'GET'): 'prospect.work',
+    ('places_finder.search', 'POST'): 'prospect.work',
+    ('places_finder.import_selected', 'POST'): 'prospect.work',
+    ('places_finder.call_sheet', 'GET'): 'prospect.work',
+    ('places_finder.log_call', 'POST'): 'prospect.work',
+    ('places_finder.update_status', 'POST'): 'prospect.work',
+    ('places_finder.snooze', 'POST'): 'prospect.work',
+    ('places_finder.send_outreach', 'POST'): 'prospect.work',
+    ('places_finder.export_csv', 'GET'): 'prospect.work',
+    ('places_finder.lead_page', 'GET'): 'prospect.work',
+    ('places_finder.edit_lead', 'POST'): 'prospect.work',
+    ('places_finder.set_kind', 'POST'): 'prospect.work',
+    ('places_finder.add_by_hand', 'POST'): 'prospect.work',
+    ('places_finder.book_walkthrough', 'POST'): 'prospect.work',
+    ('places_finder.save_walkthrough', 'POST'): 'prospect.work',
 
     ('messages.sent_log', 'GET'): 'messages.read',
     ('messages.inbox', 'GET'): 'messages.read',
@@ -132,6 +152,7 @@ ENDPOINT_PERMISSIONS = {
 # being no permission-based grant here at all.
 OWNER_ONLY_ENDPOINTS = frozenset({
     ('leads.delete', 'POST'),
+    ('places_finder.delete', 'POST'),
     ('messages.request_bgcheck', 'POST'),
     ('staff.index', 'GET'),
     ('staff.edit', 'POST'),
@@ -193,6 +214,11 @@ def required_permission(endpoint=None, method=None):
     return ENDPOINT_PERMISSIONS.get((endpoint, method))
 
 
+# Where a role lands when it opens the back office. The dashboard is bookings
+# and money; a role that may not see it would otherwise sign in to a refusal.
+ROLE_HOME = {'sales': 'places_finder.dashboard'}
+
+
 def enforce_current_request():
     """Enforce IAM on routes deliberately classified in the central matrix.
 
@@ -222,5 +248,10 @@ def enforce_current_request():
     if permission is None:
         return None
     if not has_permission(role, permission):
+        home = ROLE_HOME.get(role)
+        if (home and request.endpoint == 'admin.dashboard'
+                and (request.method or '').upper() == 'GET'):
+            from flask import redirect, url_for
+            return redirect(url_for(home))
         abort(403, description='Your account is not permitted to perform this action.')
     return None

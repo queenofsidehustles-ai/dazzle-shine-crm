@@ -14,6 +14,8 @@
   <div style="font-size:0.82rem;color:var(--softer);margin-top:4px">
     Sending it moves them to Proposal with a follow-up in three days; when they
     accept, they are marked won and become an account.
+    {% if not quote and (pre.sqft or pre.services) %}<br><strong>Filled in from the walkthrough</strong> —
+    size, how often, what is included and a starting price. Check the price against what you saw.{% endif %}
     {% if not quote %}Pricing homes or unit turnovers instead?
     <a href="{{ url_for('leads.new_quote', prospect_id=lead.id) }}" style="color:var(--amber-deep)">Write a residential quote →</a> ·{% endif %}
     <a href="{{ url_for('places_finder.dashboard', view='everyone') }}" style="color:var(--amber-deep)">Back to the call list →</a>
@@ -76,7 +78,7 @@
         </div>
         <div class="form-group">
           <label>Square Footage</label>
-          <input type="text" name="sqft" value="{{ quote.sqft if quote else '' }}" placeholder="e.g. 12,000" />
+          <input type="text" name="sqft" value="{{ quote.sqft if quote else (pre.sqft or '') }}" placeholder="e.g. 12,000" />
         </div>
       </div>
     </div>
@@ -90,7 +92,7 @@
         {% for svc in services %}
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:500">
           <input type="checkbox" name="services" value="{{ svc }}" style="width:auto;accent-color:var(--amber)"
-                 {{ 'checked' if quote and svc in (selected_services or []) }} />
+                 {{ 'checked' if svc in (selected_services or []) }} />
           {{ svc }}
         </label>
         {% endfor %}
@@ -103,7 +105,7 @@
         <label>Service Frequency</label>
         <select name="frequency">
           {% for val, label in frequencies %}
-          <option value="{{ val }}" {{ 'selected' if quote and quote.frequency == val }}>{{ label }}</option>
+          <option value="{{ val }}" {{ 'selected' if (quote.frequency if quote else pre.frequency) == val }}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
@@ -138,16 +140,16 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group">
           <label>Price per Visit ($)</label>
-          <input type="number" name="price_per_visit" id="price_per_visit" step="0.01" value="{{ quote.price_per_visit if quote else '' }}" placeholder="0.00" />
+          <input type="number" name="price_per_visit" id="price_per_visit" step="0.01" value="{{ quote.price_per_visit if quote else (pre.price_per_visit or '') }}" placeholder="0.00" />
         </div>
         <div class="form-group">
           <label>Monthly Total ($)</label>
-          <input type="number" name="monthly_price" id="monthly_price" step="0.01" value="{{ quote.monthly_price if quote else '' }}" placeholder="0.00" />
+          <input type="number" name="monthly_price" id="monthly_price" step="0.01" value="{{ quote.monthly_price if quote else (pre.monthly_price or '') }}" placeholder="0.00" />
         </div>
       </div>
       <div class="form-group">
         <label>Scope of Work / Notes</label>
-        <textarea name="scope_notes" rows="4" placeholder="Describe exactly what's included, any special requirements, access instructions...">{{ quote.scope_notes if quote else '' }}</textarea>
+        <textarea name="scope_notes" rows="4" placeholder="Describe exactly what's included, any special requirements, access instructions...">{{ quote.scope_notes if quote else (pre.scope_notes or '') }}</textarea>
       </div>
     </div>
 

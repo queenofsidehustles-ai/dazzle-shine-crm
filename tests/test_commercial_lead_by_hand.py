@@ -502,11 +502,10 @@ check('Their account' in page and 'Make them an account' not in page,
 
 print('\n12. The lead page is a lead surface, and gets the details right')
 import rbac
-check(rbac.required_permission('places_finder.lead_page', 'GET') == 'lead.read'
-      and rbac.required_permission('places_finder.edit_lead', 'POST') == 'lead.manage'
-      and rbac.required_permission('places_finder.set_kind', 'POST') == 'lead.manage'
-      and rbac.required_permission('places_finder.add_by_hand', 'POST') == 'lead.manage',
-      'viewing needs lead access, changing needs lead management')
+check(all(rbac.required_permission(ep, m) == 'prospect.work' for ep, m in (
+          ('places_finder.lead_page', 'GET'), ('places_finder.edit_lead', 'POST'),
+          ('places_finder.set_kind', 'POST'), ('places_finder.add_by_hand', 'POST'))),
+      'the lead page and its forms are the prospecting module (prospect.work)')
 def role_client(role):
     """Signed in as a real user with this role, bound like a real login --
     a role changed inside the session alone is (rightly) signed out."""
@@ -532,9 +531,8 @@ r2 = cl.post(f'/find-leads/{chang["id"]}/edit', base_url=HOST, data={'business_n
 check(r1.status_code == 403 and r2.status_code == 403 and lead('Chang Chang') is not None,
       f'a cleaner can neither open a lead page nor rename the lead ({r1.status_code}, {r2.status_code})')
 dc = role_client('dispatcher')
-page = dc.get(f'/find-leads/{chang["id"]}', base_url=HOST).get_data(as_text=True)
-check('Log a call' in page and '/mo' not in page and 'Their account' not in page,
-      'a dispatcher works the lead, without the contract prices or the account, which are the owner\'s')
+check(dc.get(f'/find-leads/{chang["id"]}', base_url=HOST).status_code == 403,
+      'nor can a dispatcher -- prospecting is the owner\'s and the Sales role\'s')
 
 c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'property_manager'})
 c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'property_manager', 'kind': 'commercial'})
@@ -565,6 +563,103 @@ check(office and office[0]['title'].startswith('Opening — offices (starter pac
 c.get(f'/find-leads/{old_id}', base_url=HOST)
 check(lead('Old Won Bakery')['stage'] == 'won',
       'an old lead opened straight from a link is brought up to date, not shown as New')
+
+print('\n13. The walkthrough: booked, filled in on site, and written into the quote')
+import commercial_pricing as cp
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Golden Wok', 'category': 'restaurant', 'phone': '2025550101', 'city': 'Washington'})
+wok = lead('Golden Wok')
+page = c.get(f'/find-leads/{wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('Book walkthrough' in page and 'Fill in the checklist on site' in page,
+      'a lead can have its walkthrough booked, and the checklist filled in')
+c.post(f'/find-leads/{wok["id"]}/walkthrough/book', base_url=HOST,
+       data={'date': '2026-11-03', 'time': '10:30am'})
+wok = lead('Golden Wok')
+check(wok['next_action'] == 'Walkthrough at 10:30am' and wok['next_action_date'] == '2026-11-03'
+      and wok['stage'] == 'interested',
+      'booking it makes it the next step, on the day, so it shows on the calendar')
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'sqft': '3,200', 'restrooms': '2', 'frequency': 'weekly', 'hours': '',
+    'services': ['floors', 'restrooms', 'nonsense'], 'days': 'Mondays after close',
+    'access': 'Back door, code 4412', 'notes': 'Tile in the dining room'})
+wok = lead('Golden Wok')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    w = prospecting_walk = __import__('prospecting').walkthrough(db.session.get(Prospect, wok['id']))
+    db.session.remove()
+check(w.get('sqft') == 3200 and w.get('services') == ['floors', 'restrooms'] and w.get('frequency') == 'weekly',
+      'the checklist is saved: 3,200 sq ft, weekly, floors and restrooms (unknown boxes ignored)')
+check(wok['next_action'] == 'Write and send the quote' and wok['next_action_date'] == TODAY
+      and 'Walkthrough done — 3,200 sq ft · 2 restrooms · weekly' in (wok['notes'] or ''),
+      'and the next step is writing the quote, today, with the walkthrough in the history')
+page = c.get(f'/find-leads/{wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('Write the quote from this walkthrough' in page and 'Starting price' in page,
+      'the page shows what was found, a starting price, and the way to the quote')
+
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('value="3200"' in form and re.search(r'<option value="weekly"\s+selected', form)
+      and re.search(r'value="Floor Care \(Sweep &amp; Mop\)"[^>]*checked', form)
+      and re.search(r'value="Restroom Sanitation"[^>]*checked', form)
+      and not re.search(r'value="Window Cleaning"[^>]*checked', form)
+      and 'Mondays after close' in form and 'Filled in from the walkthrough' in form,
+      'the contract quote opens with the size, how often, the services ticked and the scope')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    full = cp.quote(3200, 'restaurant', 'weekly', ['restrooms'])
+    db.session.remove()
+check(f'value="{full["per_visit"]}"' in form and f'value="{full["monthly"]}"' in form,
+      f'with a starting price from the calculator (${full["per_visit"]} a visit, ${full["monthly"]}/mo)')
+
+# Floors only, an hour and a half: priced from the hours judged on site, not
+# as a full clean of every square foot.
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'sqft': '3200', 'frequency': 'weekly', 'hours': '1.5', 'services': ['floors']})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    by_hours = cp.quote(3200, 'restaurant', 'weekly', [], hours=1.5)
+    db.session.remove()
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check(by_hours['per_visit'] < full['per_visit'] and f'value="{by_hours["per_visit"]}"' in form,
+      f'floors only, 1.5 hours a visit, starts at ${by_hours["per_visit"]} -- not the full-clean ${full["per_visit"]}')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    check(cp.quote(3200, 'restaurant', 'weekly', []) == cp.quote(3200, 'restaurant', 'weekly', [], hours=None),
+          'and without judged hours the calculator prices exactly as before')
+    db.session.remove()
+
+print('\n14. A Sales login: the call list and nothing else')
+check(('sales', 'Sales — finding and working leads only') in rbac.ROLE_OPTIONS
+      and rbac.has_permission('sales', 'prospect.work')
+      and not any(rbac.has_permission('sales', perm) for perm in (
+          'booking.read', 'lead.read', 'messages.read', 'messages.send', 'finance.manage', 'settings.manage')),
+      'Sales holds prospecting and nothing else: no bookings, website leads, inbox or money')
+team_page = c.get('/logins/', base_url=HOST).get_data(as_text=True)
+check('value="sales"' in team_page, 'the owner can give a login the Sales role')
+sc = role_client('sales')
+r = sc.get('/', base_url=HOST)
+check(r.status_code == 302 and r.headers.get('Location', '').endswith('/find-leads/'),
+      f'signing in lands on Find leads, not a refusal ({r.status_code} {r.headers.get("Location")})')
+calls = sc.get('/find-leads/', base_url=HOST)
+body = calls.get_data(as_text=True)
+check(calls.status_code == 200 and '📞 Calls' in body and 'Add one' in body, 'Find leads opens')
+check('href="/bookings' not in body and 'href="/messages' not in body and 'href="/money' not in body
+      and 'href="/settings/business' not in body,
+      'and the menu offers nothing else: no bookings, messages, money or settings')
+for path in ('/bookings/', '/messages/', '/quotes/', '/commercial/', '/leads/', '/money/pnl'):
+    st = sc.get(path, base_url=HOST).status_code
+    check(st in (302, 403), f'{path} is closed to Sales ({st})')
+r = sc.post('/find-leads/add', base_url=HOST, data={'business_name': 'Sales Found Deli', 'category': 'restaurant'})
+deli = lead('Sales Found Deli')
+check(deli is not None, 'Sales adds a lead by hand')
+page = sc.get(f'/find-leads/{deli["id"]}', base_url=HOST).get_data(as_text=True)
+check('Book walkthrough' in page and 'Log a call' in page and 'Email them' in page,
+      'works it: logs calls, emails, books and records the walkthrough')
+check('Contract quote' not in page and 'Home quote' not in page and '/messages/thread' not in page,
+      'and is not offered the quote or the inbox, which are the owner\'s')
+sc.post(f'/find-leads/{deli["id"]}/walkthrough', base_url=HOST, data={'sqft': '1800', 'frequency': 'weekly', 'services': ['floors']})
+check(lead('Sales Found Deli')['next_action'] == 'Write and send the quote', 'the walkthrough Sales did is ready for the owner to quote')
+check(sc.post(f'/find-leads/{deli["id"]}/delete', base_url=HOST).status_code == 403
+      and lead('Sales Found Deli') is not None, 'but cannot delete leads')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    agent = db.session.get(Prospect, deli['id']).agent
+    db.session.remove()
+check(agent == 'Sales', 'and a lead Sales adds is credited to them, for commission')
 
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')

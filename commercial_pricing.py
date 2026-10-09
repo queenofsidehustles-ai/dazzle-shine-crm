@@ -176,13 +176,20 @@ def drive_minutes(value=None):
 
 
 def quote(square_footage, category='office', frequency='weekly', extras=None,
-          drive_mins=None):
+          drive_mins=None, hours=None):
     """Return a confident, profitable price with a low/standard/premium range.
 
     The one call every quote in the product goes through. It used to be dead
     code — the browser had its own copy of the arithmetic, twice, and they had
     already drifted apart from each other and from this. Fixing a price here
     changed nothing anybody was quoted.
+
+    `hours` is the time somebody judged the job takes, on a walkthrough. When
+    given it replaces square footage over the production rate, which assumes a
+    full clean of every square foot: a restaurant that only wants its floors
+    done weekly is a fraction of that, and pricing it as a full clean loses
+    the job. Everything after -- labour share, add-ons, the minimum visit, the
+    drive -- is priced exactly as before.
     """
     # Union rather than "whatever was passed", so a facility type's mandatory
     # scope is priced on every path — the saved account and the API, not just
@@ -195,18 +202,25 @@ def quote(square_footage, category='office', frequency='weekly', extras=None,
     min_visit = _get('comm_min_visit')
     mins = drive_minutes(drive_mins)
 
-    hours = sqft / rate if rate else 0.0
+    try:
+        judged = float(hours) if hours not in (None, '') else 0.0
+    except (TypeError, ValueError):
+        judged = 0.0
+    if judged > 0:
+        hours, has_job = judged, True
+    else:
+        hours, has_job = (sqft / rate if rate else 0.0), bool(sqft)
     labor = hours * hourly
     onsite = (labor / target) if target else labor
     onsite = onsite * (1 + sum(extra_pct(k) for k, _lbl, _p in EXTRAS if k in extras))
     # The floor applies to the work, not to the journey. See the note at the
     # top: a minimum that swallowed the drive made every small job cost the
     # same however far away it was.
-    onsite = max(onsite, min_visit if sqft else 0.0)
+    onsite = max(onsite, min_visit if has_job else 0.0)
 
     drive_labor = (mins / 60.0) * hourly
     drive_price = (drive_labor / target) if target else drive_labor
-    if not sqft:
+    if not has_job:
         drive_price = drive_labor = 0.0     # no job, no journey
 
     # Rounded as two parts that are then added, rather than added and then

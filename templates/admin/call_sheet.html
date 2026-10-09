@@ -58,7 +58,7 @@
       {% if can_quote %}
       <a href="{{ url_for('quotes.new', prospect_id=current.id) }}" class="btn btn-outline">📝 Contract quote</a>
       {% endif %}
-    {% else %}
+    {% elif can_home_quote %}
     <a href="{{ url_for('leads.new_quote', prospect_id=current.id) }}" class="btn btn-outline">📝 Home quote</a>
     {% endif %}
   </p>

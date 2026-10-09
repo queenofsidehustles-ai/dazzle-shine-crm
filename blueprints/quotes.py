@@ -21,6 +21,11 @@ SERVICES = [
     'Restroom Sanitation', 'Lobby & Hallway Cleaning', 'Parking Garage',
     'Window Cleaning', 'Carpet Cleaning', 'Move-Out / Turnover Cleaning',
     'Deep Cleaning', 'Post-Construction Cleanup',
+    # What a walkthrough ticks (prospecting.WALKTHROUGH_SERVICES), so a quote
+    # written from one says exactly what was agreed on site.
+    'Floor Care (Sweep & Mop)', 'Kitchen / Break Room', 'Hood & Vent Degreasing',
+    'Equipment Cleaning', 'Dusting & Surfaces', 'Trash Removal',
+    'High-Touch Disinfection', 'Floor Stripping & Waxing',
 ]
 
 FREQUENCIES = [
@@ -171,7 +176,12 @@ def new():
             'brand': brands.normalize_lens(lead.brand) if lead.brand else '',
             'property_address': address or '',
         }
+        # And what the walkthrough found: size, how often, what is included,
+        # and a starting price from the calculator. Hers to change.
+        import prospecting
+        pre.update(prospecting.walkthrough_quote_prefill(lead))
     return render_template('admin/quote_form.html', quote=None, lead=lead, pre=pre,
+                           selected_services=pre.get('services') or [],
                            property_types=PROPERTY_TYPES, services=SERVICES,
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS)
 

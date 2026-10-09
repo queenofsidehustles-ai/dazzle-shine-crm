@@ -62,14 +62,15 @@
 
   <div class="lp-actions">
     {% if p.phone %}<a href="tel:{{ p.phone }}" class="btn btn-gold" style="padding:9px 16px">📞 {{ p.phone }}</a>{% endif %}
-    {% if text_phone %}
+    {% if text_phone and can_text %}
     <a href="{{ url_for('messages.thread', phone=text_phone, name=p.business_name) }}" class="btn btn-outline" style="padding:9px 14px">💬 Text</a>
     {% endif %}
     {% if p.is_commercial %}
       {% if can_quote %}<a href="{{ url_for('quotes.new', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">📝 Contract quote</a>{% endif %}
-    {% else %}
+    {% elif can_home_quote %}
       <a href="{{ url_for('leads.new_quote', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">📝 Home quote</a>
     {% endif %}
+    <a href="#walkthrough" class="btn btn-outline" style="padding:9px 14px">🚶 Walkthrough</a>
     {% if account and is_owner %}
       <a href="{{ url_for('commercial.detail', account_id=account.id) }}" class="btn btn-outline" style="padding:9px 14px">🏢 Their account</a>
     {% elif p.is_commercial and can_convert %}
@@ -81,6 +82,91 @@
 
 <div class="lp-grid">
   <div style="display:flex;flex-direction:column;gap:18px">
+
+    {# ── The walkthrough: book it, then fill it in on site ──────────────── #}
+    {# What the quote is written from. Phone-sized on purpose: it is filled in
+       standing in somebody's kitchen. #}
+    <div class="card lp-card" id="walkthrough">
+      <h3>🚶 Walkthrough</h3>
+      {% if walk %}
+      <p style="margin:0 0 6px;font-size:0.9rem"><strong>Done</strong>
+        {% if p.walkthrough_at %}<span style="color:var(--softer)">· {{ p.walkthrough_at.strftime('%b %d') }}</span>{% endif %}</p>
+      {% if walk_summary %}<p style="margin:0 0 6px;font-size:0.9rem">{{ walk_summary }}</p>{% endif %}
+      {% if walk.days %}<p style="margin:0 0 6px;font-size:0.85rem;color:var(--muted)">🗓️ {{ walk.days }}</p>{% endif %}
+      {% if walk.access %}<p style="margin:0 0 6px;font-size:0.85rem;color:var(--muted)">🔑 {{ walk.access }}</p>{% endif %}
+      {% if walk_price and is_owner %}
+      <p style="margin:8px 0 0;font-size:0.9rem;background:var(--surface-2,rgba(0,0,0,0.04));padding:10px 12px;border-radius:9px">
+        💲 Starting price: <strong>${{ '{:,.0f}'.format(walk_price.per_visit) }} a visit</strong>
+        {% if walk.frequency != 'one_time' %}· about <strong>${{ '{:,.0f}'.format(walk_price.monthly) }}/mo</strong>{% endif %}
+        <span style="display:block;font-size:0.78rem;color:var(--softer);margin-top:3px">
+          {% if walk_price.by_hours %}From the {{ walk.hours|float }} hours a visit you judged on site{% else %}A full clean of {{ '{:,}'.format(walk.sqft) }} sq ft at your {{ p.category_label.split(' ', 1)[-1] }} rate — put the hours a visit in the checklist if they only want part of it cleaned{% endif %},
+          plus the add-ons ticked. Range ${{ '{:,.0f}'.format(walk_price.low) }}–${{ '{:,.0f}'.format(walk_price.premium) }}.</span>
+      </p>
+      {% endif %}
+      {% if p.is_commercial and can_quote %}
+      <p style="margin:12px 0 0"><a href="{{ url_for('quotes.new', prospect_id=p.id) }}" class="btn btn-gold" style="padding:9px 16px">📝 Write the quote from this walkthrough</a></p>
+      {% elif not p.is_commercial and can_home_quote %}
+      <p style="margin:12px 0 0"><a href="{{ url_for('leads.new_quote', prospect_id=p.id) }}" class="btn btn-gold" style="padding:9px 16px">📝 Write the home quote</a></p>
+      {% elif not is_owner %}
+      <p style="margin:12px 0 0;font-size:0.85rem;color:var(--softer)">The owner writes the quote from this.</p>
+      {% endif %}
+      {% else %}
+        {% if walk_booked %}
+        <p style="margin:0 0 10px;font-size:0.9rem">📅 <strong>{{ p.next_action }}</strong> — {{ p.next_action_date }}</p>
+        {% else %}
+        <form method="POST" action="{{ url_for('places_finder.book_walkthrough', prospect_id=p.id) }}"
+              class="lp-row" style="margin-bottom:12px;align-items:end">
+          <div><label for="wbDate" style="{{ lbl }}">Book it for</label>
+            <input type="date" name="date" id="wbDate" min="{{ today }}" required style="{{ fld }}"></div>
+          <div><label for="wbTime" style="{{ lbl }}">Time</label>
+            <input type="text" name="time" id="wbTime" placeholder="10:30am" style="{{ fld }}"></div>
+          <div><button type="submit" class="btn btn-outline" style="padding:9px 14px">📅 Book walkthrough</button></div>
+        </form>
+        {% endif %}
+      {% endif %}
+
+      <details {{ 'open' if walk_booked and not walk }} style="margin-top:12px">
+        <summary style="cursor:pointer;font-weight:700;font-size:0.9rem">{{ 'Edit the checklist' if walk else 'Fill in the checklist on site' }}</summary>
+        <form method="POST" action="{{ url_for('places_finder.save_walkthrough', prospect_id=p.id) }}" style="margin-top:12px">
+          <div class="lp-row" style="margin-bottom:10px">
+            <div><label for="wkSqft" style="{{ lbl }}">Square feet</label>
+              <input type="number" min="0" name="sqft" id="wkSqft" value="{{ walk.sqft or '' }}" placeholder="3200" inputmode="numeric" style="{{ fld }}"></div>
+            <div><label for="wkRest" style="{{ lbl }}">Restrooms</label>
+              <input type="number" min="0" name="restrooms" id="wkRest" value="{{ walk.restrooms if walk.restrooms is not none else '' }}" inputmode="numeric" style="{{ fld }}"></div>
+            <div><label for="wkFreq" style="{{ lbl }}">How often</label>
+              <select name="frequency" id="wkFreq" style="{{ fld }}">
+                <option value="">—</option>
+                {% for key, label, _q, _c in walk_frequencies %}
+                <option value="{{ key }}" {{ 'selected' if walk.frequency == key }}>{{ label }}</option>
+                {% endfor %}
+              </select></div>
+            <div><label for="wkHours" style="{{ lbl }}">Hours a visit (your estimate)</label>
+              <input type="number" min="0" step="0.25" name="hours" id="wkHours" value="{{ walk.hours if walk.hours else '' }}" placeholder="1.5" inputmode="decimal" style="{{ fld }}"></div>
+          </div>
+          <span style="{{ lbl }}">What they want cleaned</span>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px 12px;margin-bottom:12px">
+            {% for key, label, _q, _a in walk_services %}
+            <label style="display:flex;gap:8px;align-items:center;font-size:0.9rem;cursor:pointer">
+              <input type="checkbox" name="services" value="{{ key }}" {{ 'checked' if key in (walk.services or []) }} style="width:18px;height:18px">
+              {{ label }}</label>
+            {% endfor %}
+          </div>
+          <div class="lp-row" style="margin-bottom:10px">
+            <div><label for="wkDays" style="{{ lbl }}">Days / times they want</label>
+              <input type="text" name="days" id="wkDays" value="{{ walk.days or '' }}" placeholder="Mondays after close (10pm)" style="{{ fld }}"></div>
+            <div><label for="wkAccess" style="{{ lbl }}">Access</label>
+              <input type="text" name="access" id="wkAccess" value="{{ walk.access or '' }}" placeholder="Key code, alarm, back door" style="{{ fld }}"></div>
+            <div><label for="wkOnSite" style="{{ lbl }}">Who you met</label>
+              <input type="text" name="contact_on_site" id="wkOnSite" value="{{ walk.contact_on_site or '' }}" style="{{ fld }}"></div>
+            <div><label for="wkNow" style="{{ lbl }}">Who cleans it now</label>
+              <input type="text" name="current_cleaner" id="wkNow" value="{{ walk.current_cleaner or '' }}" placeholder="Staff, another company…" style="{{ fld }}"></div>
+          </div>
+          <div style="margin-bottom:12px"><label for="wkNotes" style="{{ lbl }}">What you noticed</label>
+            <textarea name="notes" id="wkNotes" rows="3" placeholder="Grease on the kitchen floor, tile in the dining room, two mop sinks…" style="{{ fld }}">{{ walk.notes or '' }}</textarea></div>
+          <button type="submit" class="btn" style="padding:10px 18px">💾 Save the walkthrough</button>
+        </form>
+      </details>
+    </div>
 
     {# ── Qualify: log the call ─────────────────────────────────────────── #}
     <div class="card lp-card">
@@ -129,6 +215,7 @@
     </div>
 
     {# ── Communicate ───────────────────────────────────────────────────── #}
+    {% if can_text %}
     <div class="card lp-card">
       <h3>💬 Texts</h3>
       {% if texts %}
@@ -147,6 +234,7 @@
       <p style="margin:10px 0 0;font-size:0.82rem;color:var(--softer)">Not offered: they replied STOP or asked not to be contacted.</p>
       {% endif %}
     </div>
+    {% endif %}
 
     <div class="card lp-card">
       <h3>✉️ Email them</h3>
@@ -264,7 +352,7 @@
       {% if not quotes and not home_quotes %}
       <p style="color:var(--softer);font-size:0.86rem;margin:0">
         No quote yet. Once you know the size and what they want cleaned,
-        {% if p.is_commercial %}{% if can_quote %}<a href="{{ url_for('quotes.new', prospect_id=p.id) }}" style="color:var(--amber-deep)">write the contract quote</a>{% else %}ask the owner to write the contract quote{% endif %}{% else %}<a href="{{ url_for('leads.new_quote', prospect_id=p.id) }}" style="color:var(--amber-deep)">write the home quote</a>{% endif %}.
+        {% if p.is_commercial %}{% if can_quote %}<a href="{{ url_for('quotes.new', prospect_id=p.id) }}" style="color:var(--amber-deep)">write the contract quote</a>{% else %}ask the owner to write the contract quote{% endif %}{% elif can_home_quote %}<a href="{{ url_for('leads.new_quote', prospect_id=p.id) }}" style="color:var(--amber-deep)">write the home quote</a>{% else %}ask the owner to write the home quote{% endif %}.
         Sending it moves them to Proposal; when they accept they are marked won{% if p.is_commercial %} and become an account{% endif %}.
       </p>
       {% endif %}

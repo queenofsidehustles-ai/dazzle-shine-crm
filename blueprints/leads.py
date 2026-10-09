@@ -90,6 +90,13 @@ def new_quote():
             'service_type': _RESIDENTIAL_SERVICE.get(prospect.category, 'standard'),
             'notes': f'For {prospect.business_name}' if prospect.contact_name else '',
         }
+        import prospecting
+        walk = prospecting.walkthrough(prospect)
+        if walk.get('sqft'):
+            pre['sqft'] = walk['sqft']
+        summary = prospecting.walkthrough_summary(walk)
+        if summary:
+            pre['notes'] = (pre['notes'] + '\n' if pre['notes'] else '') + f'Walkthrough: {summary}'
     return render_template('admin/lsa_quote.html', lead=None, existing=None,
                            prospect=prospect, pre=pre, **quoting.form_context())
 

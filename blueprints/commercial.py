@@ -36,7 +36,7 @@ def _agent_from():
     a = (request.form.get('agent') or '').strip()
     if a:
         return a
-    if session.get('role') == 'team':
+    if session.get('role') in ('team', 'sales'):
         return session.get('user_name')
     return None
 

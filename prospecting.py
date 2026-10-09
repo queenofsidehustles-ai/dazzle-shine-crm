@@ -388,3 +388,138 @@ def quote_moved(prospect_id, stage, status, next_action, days, note):
         return p
     except Exception:
         return None
+
+
+# ── The walkthrough ────────────────────────────────────────────────────────
+#
+# What gets ticked on site. Each service knows the line it becomes on the
+# contract quote, and -- where the price carries it -- the commercial
+# calculator add-on it turns on. Floors and carpets are the clean itself and
+# price through the hours; a kitchen, a hood or the restrooms are what make a
+# visit take longer than its square footage says.
+WALKTHROUGH_SERVICES = [
+    # key, label on the checklist, line on the quote, pricing add-on
+    ('floors',       'Floors — sweep & mop',          'Floor Care (Sweep & Mop)',  None),
+    ('carpet',       'Carpets — vacuum',              'Carpet Cleaning',           None),
+    ('restrooms',    'Restrooms',                     'Restroom Sanitation',       'restrooms'),
+    ('kitchen',      'Kitchen / break room',          'Kitchen / Break Room',      'breakroom'),
+    ('hood',         'Hood & vents — degrease',       'Hood & Vent Degreasing',    'breakroom'),
+    ('equipment',    'Equipment wipe-down',           'Equipment Cleaning',        None),
+    ('dusting',      'Dusting & surfaces',            'Dusting & Surfaces',        None),
+    ('windows',      'Windows & glass',               'Window Cleaning',           None),
+    ('trash',        'Trash & liners',                'Trash Removal',             'trash'),
+    ('disinfection', 'High-touch disinfection',       'High-Touch Disinfection',   'disinfection'),
+    ('strip_wax',    'Floor strip & wax',             'Floor Stripping & Waxing',  None),
+]
+WALKTHROUGH_SERVICE_KEYS = [k for k, *_ in WALKTHROUGH_SERVICES]
+
+# How often, in the walkthrough's words -> the contract quote's -> the
+# commercial calculator's (visits a month).
+WALKTHROUGH_FREQUENCIES = [
+    ('nightly',   'Every weeknight', 'daily',     'nightly'),
+    ('weekly',    'Weekly',          'weekly',    'weekly'),
+    ('biweekly',  'Every two weeks', 'biweekly',  'biweekly'),
+    ('monthly',   'Monthly',         'monthly',   'monthly'),
+    ('one_time',  'One time',        'as_needed', 'custom'),
+]
+
+
+def _num(value, kind=float):
+    try:
+        v = kind(str(value).replace(',', '').strip())
+    except (TypeError, ValueError):
+        return None
+    return v if v >= 0 else None
+
+
+def walkthrough(prospect):
+    """The walkthrough as a dict, or {} if there has not been one."""
+    import json
+    try:
+        data = json.loads(prospect.walkthrough or '{}')
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def walkthrough_from_form(form):
+    """Read the checklist as submitted. Only known keys, numbers as numbers."""
+    freq = form.get('frequency')
+    return {
+        'sqft': _num(form.get('sqft'), int),
+        'restrooms': _num(form.get('restrooms'), int),
+        'hours': _num(form.get('hours')),
+        'frequency': freq if freq in [f[0] for f in WALKTHROUGH_FREQUENCIES] else '',
+        'services': [k for k in form.getlist('services') if k in WALKTHROUGH_SERVICE_KEYS],
+        'days': (form.get('days') or '').strip()[:120],
+        'access': (form.get('access') or '').strip()[:300],
+        'contact_on_site': (form.get('contact_on_site') or '').strip()[:120],
+        'current_cleaner': (form.get('current_cleaner') or '').strip()[:200],
+        'notes': (form.get('notes') or '').strip()[:2000],
+    }
+
+
+def walkthrough_summary(w):
+    """One line a person can read: '3,200 sq ft · weekly · floors, restrooms'."""
+    labels = dict((k, lbl) for k, lbl, *_ in WALKTHROUGH_SERVICES)
+    freq = dict((k, lbl) for k, lbl, *_ in WALKTHROUGH_FREQUENCIES)
+    parts = []
+    if w.get('sqft'):
+        parts.append(f"{w['sqft']:,} sq ft")
+    if w.get('restrooms'):
+        parts.append(f"{w['restrooms']} restroom{'' if w['restrooms'] == 1 else 's'}")
+    if w.get('frequency'):
+        parts.append(freq.get(w['frequency'], w['frequency']).lower())
+    if w.get('hours'):
+        parts.append(f"about {w['hours']:g} h a visit")
+    if w.get('services'):
+        parts.append(', '.join(labels[k].split(' — ')[0].lower() for k in w['services'] if k in labels))
+    return ' · '.join(parts)
+
+
+def walkthrough_price(prospect, w=None):
+    """What the walkthrough says this is worth, through the commercial
+    calculator: its own judged hours if given, else the floor area at this
+    kind of business's rate. None when there is nothing to price from."""
+    import commercial_pricing as cp
+    w = w if w is not None else walkthrough(prospect)
+    if not (w.get('sqft') or w.get('hours')):
+        return None
+    calc_freq = {k: c for k, _l, _q, c in WALKTHROUGH_FREQUENCIES}.get(w.get('frequency'), 'weekly')
+    extras = sorted({addon for k, _l, _q, addon in WALKTHROUGH_SERVICES
+                     if addon and k in (w.get('services') or [])})
+    category = prospect.category if prospect.category in cp.PROD_RATES else 'other'
+    out = cp.quote(w.get('sqft') or 0, category=category, frequency=calc_freq,
+                   extras=extras, hours=w.get('hours'))
+    out['by_hours'] = bool(w.get('hours'))
+    return out
+
+
+def walkthrough_quote_prefill(prospect):
+    """What the contract quote form should start with, from the walkthrough."""
+    w = walkthrough(prospect)
+    if not w:
+        return {}
+    lines = {k: q for k, _l, q, _a in WALKTHROUGH_SERVICES}
+    quote_freq = {k: q for k, _l, q, _c in WALKTHROUGH_FREQUENCIES}
+    scope = []
+    if w.get('services'):
+        scope.append('Included: ' + ', '.join(lines[k] for k in w['services'] if k in lines) + '.')
+    if w.get('restrooms'):
+        scope.append(f"{w['restrooms']} restroom{'' if w['restrooms'] == 1 else 's'}.")
+    if w.get('days'):
+        scope.append(f"Preferred days/times: {w['days']}.")
+    if w.get('access'):
+        scope.append(f"Access: {w['access']}.")
+    out = {
+        'sqft': str(w['sqft']) if w.get('sqft') else '',
+        'frequency': quote_freq.get(w.get('frequency'), ''),
+        'services': [lines[k] for k in (w.get('services') or []) if k in lines],
+        'scope_notes': ' '.join(scope),
+    }
+    price = walkthrough_price(prospect, w)
+    if price:
+        out['price_per_visit'] = price['per_visit']
+        if w.get('frequency') != 'one_time':
+            out['monthly_price'] = price['monthly']
+    return out

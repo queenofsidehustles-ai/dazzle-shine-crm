@@ -75,7 +75,7 @@
        extra square feet of floor to vacuum twice. #}
     <div>
       <label class="dl" style="display:block;margin-bottom:5px">Sq ft <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--softer)">(optional)</span></label>
-      <input name="sqft" id="q-sqft" type="number" min="0" max="20000" value="{{ existing.sqft or '' if existing else '' }}"
+      <input name="sqft" id="q-sqft" type="number" min="0" max="20000" value="{{ existing.sqft or '' if existing else (pre.sqft or '') }}"
              placeholder="e.g. 2400"
              style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:inherit">
     </div>
