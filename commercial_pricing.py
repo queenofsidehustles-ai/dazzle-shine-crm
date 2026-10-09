@@ -103,7 +103,20 @@ EXTRAS = [
     # cooktops, ovens -- scraped and degreased.
     ('floor_degrease', '🧽 Kitchen floor degreasing', 0.10),
     ('kitchen_equipment', '🍳 Kitchen equipment — fryers, grills, cooktops', 0.15),
+    # Not more rooms but more time in each: baseboards, vents, behind and
+    # under things, built-up grime. Ticked on a recurring contract it prices
+    # every visit as deep; a one-off deep clean before the regular schedule
+    # is its own line in the scope.
+    ('deep', '✨ Deep clean', 0.50),
+    ('post_construction', '🏗️ Post-construction cleanup', 1.00),
 ]
+
+# Of the add-ons above, the ones that are the same rooms done harder rather
+# than more rooms. These go on after the minimum-visit floor, not before it:
+# on a small job the floor is most of the price, and a deep clean folded
+# underneath it came out at exactly the regular price -- a 1,400 sq ft
+# restaurant quoted the same for a deep clean as for a weekly mop.
+INTENSITY_EXTRAS = frozenset({'deep', 'post_construction'})
 
 # Scope that isn't really optional for some facility types. A medical clean
 # carries the disinfection protocol whether or not anyone remembers to tick the
@@ -217,11 +230,16 @@ def quote(square_footage, category='office', frequency='weekly', extras=None,
         hours, has_job = (sqft / rate if rate else 0.0), bool(sqft)
     labor = hours * hourly
     onsite = (labor / target) if target else labor
-    onsite = onsite * (1 + sum(extra_pct(k) for k, _lbl, _p in EXTRAS if k in extras))
+    onsite = onsite * (1 + sum(extra_pct(k) for k, _lbl, _p in EXTRAS
+                               if k in extras and k not in INTENSITY_EXTRAS))
     # The floor applies to the work, not to the journey. See the note at the
     # top: a minimum that swallowed the drive made every small job cost the
     # same however far away it was.
+    at_minimum = bool(has_job and min_visit and onsite < min_visit)
     onsite = max(onsite, min_visit if has_job else 0.0)
+    # A deep clean is a harder version of whatever that came to, minimum
+    # included -- see INTENSITY_EXTRAS.
+    onsite = onsite * (1 + sum(extra_pct(k) for k in INTENSITY_EXTRAS if k in extras))
 
     drive_labor = (mins / 60.0) * hourly
     drive_price = (drive_labor / target) if target else drive_labor
@@ -255,6 +273,9 @@ def quote(square_footage, category='office', frequency='weekly', extras=None,
         'monthly': monthly,
         'annual': monthly * 12,
         'profit_per_visit': round(standard - labor - drive_labor),
+        # The minimum visit set the price: add-ons below it don't move it.
+        'at_minimum': at_minimum,
+        'min_visit': min_visit,
     }
 
 

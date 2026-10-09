@@ -413,6 +413,7 @@ WALKTHROUGH_SERVICES = [
     ('trash',        'Trash & liners',                'Trash Removal',             'trash'),
     ('disinfection', 'High-touch disinfection',       'High-Touch Disinfection',   'disinfection'),
     ('strip_wax',    'Floor strip & wax',             'Floor Stripping & Waxing',  None),
+    ('deep',         'Deep clean (baseboards, vents, built-up grime)', 'Deep Cleaning', 'deep'),
 ]
 WALKTHROUGH_SERVICE_KEYS = [k for k, *_ in WALKTHROUGH_SERVICES]
 
@@ -522,6 +523,7 @@ def walkthrough_quote_prefill(prospect):
         'frequency': quote_freq.get(w.get('frequency') or 'weekly', 'weekly'),
         'services': [lines[k] for k in (w.get('services') or []) if k in lines],
         'scope_notes': ' '.join(scope),
+        'hours': str(w['hours']) if w.get('hours') else '',
     }
     price = walkthrough_price(prospect, w)
     if price:

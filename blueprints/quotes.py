@@ -41,6 +41,23 @@ SERVICES_FIRST = {
 }
 
 
+def _service_extras():
+    """Quote service line -> the commercial calculator add-on it is priced as.
+    Lines not here (floors, windows, dusting...) are part of the base clean."""
+    import prospecting
+    out = {line: addon for _k, _l, line, addon in prospecting.WALKTHROUGH_SERVICES if addon}
+    out.update({'Restroom Sanitation': 'restrooms', 'Deep Cleaning': 'deep',
+                'Post-Construction Cleanup': 'post_construction'})
+    return out
+
+
+def _estimate_args():
+    """What the quote form's estimate helper sends to /commercial/quote.json."""
+    import commercial_pricing as cp
+    return dict(service_extras=_service_extras(), category_map=_CAT_MAP, freq_map=_FREQ_MAP,
+                extra_labels={e['key']: (e['label'], e['pct']) for e in cp.get_config()['extras']})
+
+
 def _services_for(property_type):
     first = SERVICES_FIRST.get(property_type or '', [])
     return first + [s for s in SERVICES if s not in first]
@@ -201,7 +218,8 @@ def new():
                            selected_services=pre.get('services') or [],
                            property_types=PROPERTY_TYPES,
                            services=_services_for(pre.get('property_type')),
-                           frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS)
+                           frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
+                           **_estimate_args())
 
 
 @quotes_bp.route('/<int:quote_id>', methods=['GET', 'POST'])
@@ -233,7 +251,7 @@ def detail(quote_id):
     return render_template('admin/quote_form.html', quote=q, lead=_lead_for(q), pre={},
                            property_types=PROPERTY_TYPES, services=_services_for(q.property_type),
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
-                           selected_services=selected_services)
+                           selected_services=selected_services, **_estimate_args())
 
 
 @quotes_bp.route('/<int:quote_id>/send', methods=['POST'])

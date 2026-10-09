@@ -650,6 +650,35 @@ check(svc[:3] == ['Floor Care (Sweep & Mop)', 'Kitchen Floor Degreasing',
                   'Kitchen Equipment Degreasing (Fryers, Grills, Cooktops)'],
       f'and a restaurant quote shows kitchen services first, not apartment lines ({svc[:3]})')
 
+# Deep cleaning is more time in every room, so it is priced as a premium --
+# on the quote form's estimate as much as on the walkthrough.
+def est(**kw):
+    import urllib.parse
+    return c.get('/commercial/quote.json?' + urllib.parse.urlencode(kw, doseq=True), base_url=HOST).get_json()
+base = est(sqft=1400, category='restaurant', frequency='weekly')
+deep = est(sqft=1400, category='restaurant', frequency='weekly', extras=['deep'])
+post = est(sqft=1400, category='restaurant', frequency='weekly', extras=['post_construction'])
+check(deep['per_visit'] > base['per_visit'] and post['per_visit'] > deep['per_visit'],
+      f'a deep clean costs more than a regular one, post-construction more again '
+      f'(${base["per_visit"]} < ${deep["per_visit"]} < ${post["per_visit"]} a visit)')
+check(est(sqft=3200, category='restaurant', frequency='weekly', hours=1.5)['per_visit']
+      < est(sqft=3200, category='restaurant', frequency='weekly')['per_visit'],
+      'and the estimate takes the hours judged on site, as the walkthrough does')
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('"Deep Cleaning": "deep"' in form and '"Restroom Sanitation": "restrooms"' in form
+      and '"Kitchen Floor Degreasing": "floor_degrease"' in form
+      and '/commercial/quote.json' in form and 'est-intensity' not in form,
+      'the quote form\'s Estimate Helper prices the ticked services through that calculator, '
+      'not a flat rate per square foot')
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'sqft': '3200', 'frequency': 'weekly', 'services': ['floors', 'deep']})
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    deep_wok = cp.quote(3200, 'restaurant', 'weekly', ['deep'])
+    db.session.remove()
+check(re.search(r'value="Deep Cleaning"[^>]*checked', form) and f'value="{deep_wok["per_visit"]}"' in form,
+      f'a deep clean ticked on the walkthrough is on the quote, at the deep price (${deep_wok["per_visit"]})')
+
 print('\n14. A Sales login: the call list and nothing else')
 check(('sales', 'Sales — finding and working leads only') in rbac.ROLE_OPTIONS
       and rbac.has_permission('sales', 'prospect.work')

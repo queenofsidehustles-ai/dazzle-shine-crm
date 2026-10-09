@@ -101,6 +101,7 @@ def quote_json():
         frequency=request.args.get('frequency') or 'weekly',
         extras=request.args.getlist('extras'),
         drive_mins=request.args.get('drive_minutes'),
+        hours=request.args.get('hours'),
     ))
 
 
