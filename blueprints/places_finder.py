@@ -30,7 +30,8 @@ places_finder_bp = Blueprint('places_finder', __name__, url_prefix='/find-leads'
 DAILY_STINT = 20
 
 CATEGORIES = ['property_manager', 'realtor', 'airbnb', 'apartment',
-              'daycare', 'medical_office', 'general_contractor', 'office', 'other']
+              'daycare', 'medical_office', 'restaurant', 'gym', 'church',
+              'general_contractor', 'office', 'other']
 
 
 # Which opening belongs to which kind of business. The scripts are filed by
@@ -43,6 +44,9 @@ VERTICAL_HINTS = {
     'office':             ('office', 'daycare', 'medical'),
     'medical_office':     ('medical', 'office'),
     'daycare':            ('daycare', 'office'),
+    'restaurant':         ('restaurant', 'office'),
+    'gym':                ('gym', 'fitness', 'office'),
+    'church':             ('church', 'office'),
     'apartment':          ('apartment', 'property manager'),
     'property_manager':   ('property manager', 'apartment'),
     'realtor':            ('realtor',),
@@ -194,7 +198,9 @@ def _view_args(view, prospects, **extra):
         demo=not finder.api_key_present(),
         search_category='property_manager',
         search_location='',
-        search_brand=(brands.active() if brands.active() != brands.ALL else brands.PRIMARY),
+        # The lens, if one is on; otherwise each result is filed by its kind
+        # of business at import (import_selected).
+        search_brand=brands.active(),
         scripts=_call_scripts(),
         email_templates=emails,
         # Titles are the same whichever brand renders them — only the name and
@@ -352,9 +358,10 @@ def search():
     # Which side of the business this batch is being hunted for. Carried
     # through to the import so it is recorded from the search rather than
     # reverse-engineered from the category afterwards.
+    # ALL is kept, not turned into the residential brand: it means "file each
+    # result by its kind of business", which import_selected does. Defaulting
+    # it to residential filed every office and restaurant search as homes.
     picked_brand = brands.normalize_lens(request.form.get('brand'))
-    if picked_brand == brands.ALL:
-        picked_brand = brands.PRIMARY
     location = request.form.get('location', '').strip()
     if not location:
         flash('Enter a city or area to search — a town and state.', 'error')
@@ -442,7 +449,9 @@ def call_sheet(prospect_id=None):
     scripts, emails, can_email = [], [], False
     if current is not None:
         import brands
-        key = brands.brand_for_prospect(current)
+        # The stored brand first: the toggle on this page sets it, and the
+        # opener has to read out the same company the quote button is for.
+        key = brands.normalize(current.brand) if current.brand else brands.brand_for_prospect(current)
         scripts = _scripts_for(current, key)
         # Outreach always goes out under the commercial identity, so the
         # templates offered here are that side's, whatever the call is about.

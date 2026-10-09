@@ -343,6 +343,99 @@ form = c.get(f'/quotes/new?prospect_id={ridge["id"]}', base_url=HOST).get_data(a
 check(f'/leads/quote/new?prospect_id={ridge["id"]}' in form,
       'and a contract quote started by mistake links across to the home quote')
 
+print('\n9. Restaurants are a kind of business of their own')
+import brands
+import commercial_pricing
+import places_finder as finder
+page = c.get('/find-leads/?view=add', base_url=HOST).get_data(as_text=True)
+check('<option value="restaurant"' in page and 'Restaurant / Café' in page,
+      'Restaurant is in the list when adding one by hand')
+find = c.get('/find-leads/?view=find', base_url=HOST).get_data(as_text=True)
+check('<option value="restaurant"' in find and finder.CATEGORY_QUERIES.get('restaurant'),
+      'and can be searched for under Find new')
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Sunshine Grill', 'category': 'restaurant', 'city': 'Silver Spring'})
+grill = lead('Sunshine Grill')
+check(grill['brand'] == 'commercial', 'a restaurant is commercial work unless you say otherwise')
+form = c.get(f'/quotes/new?prospect_id={grill["id"]}', base_url=HOST).get_data(as_text=True)
+check(re.search(r'<option value="Restaurant / Food Service"\s+selected', form),
+      'its contract quote opens as a restaurant')
+check(brands.brand_for_property('Restaurant / Food Service') == brands.COMMERCIAL,
+      'and goes out under the commercial name')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    check(commercial_pricing.prod_rate('restaurant') < commercial_pricing.prod_rate('office'),
+          'kitchens are priced as slower work than an office')
+    db.session.remove()
+with app.app_context(), tenancy.use_tenant(SLUG):
+    ticked = set(commercial_pricing.get_config()['default_extras']['restaurant'])
+    bare = commercial_pricing.quote(4000, 'restaurant', 'weekly', [])['monthly']
+    full = commercial_pricing.quote(4000, 'restaurant', 'weekly', ['restrooms', 'breakroom'])['monthly']
+    med_bare = commercial_pricing.quote(4000, 'medical_office', 'weekly', [])['monthly']
+    med_full = commercial_pricing.quote(4000, 'medical_office', 'weekly', ['disinfection'])['monthly']
+    db.session.remove()
+check(ticked == {'restrooms', 'breakroom'}, 'the kitchen and restrooms start ticked on the calculator')
+check(bare < full, f'but unticking them takes them off the price ({bare} < {full})')
+check(med_bare == med_full, 'while a medical office still always carries its disinfection')
+
+# Find new under "All brands" used to file every search as residential.
+find = c.get('/find-leads/?view=find', base_url=HOST).get_data(as_text=True)
+check(re.search(r'<option value="all"\s+selected>Work it out', find),
+      'Find new files results by their kind of business unless you pick a brand')
+import json as _json
+c.post('/find-leads/import', base_url=HOST, data={
+    'brand': 'all', 'selected': ['demo-restaurant-1'],
+    'payload_demo-restaurant-1': _json.dumps({
+        'business_name': 'Lakeside Bistro', 'category': 'restaurant',
+        'place_id': 'demo-restaurant-1', 'city': 'Rockville', 'phone': '(407) 555-0413'})})
+check(lead('Lakeside Bistro')['brand'] == 'commercial',
+      'so a restaurant found by search lands as commercial')
+
+# The call sheet's script follows the toggle, like its quote button does.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from models import BusinessSetting
+    BusinessSetting.set('commercial_name', 'Gleam Commercial Co')
+    db.session.commit()
+    db.session.remove()
+sheet_com = c.get(f'/find-leads/call/{grill["id"]}', base_url=HOST).get_data(as_text=True)
+c.post(f'/find-leads/{grill["id"]}/kind', base_url=HOST, data={'kind': 'residential'})
+sheet_res = c.get(f'/find-leads/call/{grill["id"]}', base_url=HOST).get_data(as_text=True)
+# The brand switcher at the top of every page names both companies once, so
+# compare against that: the commercial name only shows in the script itself.
+check(sheet_com.count('Gleam Commercial Co') > 1 and sheet_res.count('Gleam Commercial Co') == 1
+      and 'Home quote' in sheet_res,
+      'flipped to residential, the call sheet reads the residential company, not the commercial one')
+
+print('\n10. Gyms and churches too')
+page = c.get('/find-leads/?view=add', base_url=HOST).get_data(as_text=True)
+find = c.get('/find-leads/?view=find', base_url=HOST).get_data(as_text=True)
+for key, name, ptype, extras in (
+        ('gym', 'Harbor Point CrossFit', 'Gym / Fitness Center', {'restrooms', 'disinfection'}),
+        ('church', 'Lakeside Baptist Church', 'Church / House of Worship', {'restrooms'})):
+    check(f'<option value="{key}"' in page and f'<option value="{key}"' in find
+          and finder.CATEGORY_QUERIES.get(key),
+          f'{key}: in the add list, and searchable under Find new')
+    c.post('/find-leads/add', base_url=HOST, data={
+        'business_name': name, 'category': key, 'city': 'Bowie'})
+    row = lead(name)
+    check(row['brand'] == 'commercial', f'{key}: commercial work by default')
+    form = c.get(f'/quotes/new?prospect_id={row["id"]}', base_url=HOST).get_data(as_text=True)
+    check(re.search(rf'<option value="{re.escape(ptype)}"\s+selected', form)
+          and brands.brand_for_property(ptype) == brands.COMMERCIAL,
+          f'{key}: its contract quote opens as "{ptype}", under the commercial name')
+    with app.app_context(), tenancy.use_tenant(SLUG):
+        cfg = commercial_pricing.get_config()
+        rate = commercial_pricing.prod_rate(key)
+        # Big enough to be past the minimum-visit floor, which would hide an add-on.
+        bare = commercial_pricing.quote(12000, key, 'weekly', [])['monthly']
+        full = commercial_pricing.quote(12000, key, 'weekly', sorted(extras))['monthly']
+        db.session.remove()
+    check(key in commercial_pricing.PROD_RATES and rate == commercial_pricing.PROD_RATES[key]
+          and set(cfg['default_extras'][key]) == extras and bare < full,
+          f'{key}: its own cleaning rate, with {sorted(extras)} pre-ticked and removable')
+check(commercial_pricing.prod_rate('gym') < commercial_pricing.prod_rate('office')
+      < commercial_pricing.prod_rate('church'),
+      'a gym is slower work than an office, a church faster')
+
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)

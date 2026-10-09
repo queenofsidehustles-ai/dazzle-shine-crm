@@ -404,10 +404,14 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
     </div>
     <div style="flex:1;min-width:170px">
       <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Calling for which brand?</label>
+      {# "Work it out" files each result by its kind of business -- an office
+         or restaurant as commercial, a property manager as residential --
+         the same rule as a lead added by hand. Picking a brand overrides it. #}
       <select name="brand" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:0.95rem">
+        <option value="all" {{ 'selected' if (search_brand or 'all') == 'all' }}>Work it out from the kind of business</option>
         {% for key, label in brand_choices %}
         {% if key != 'all' %}
-        <option value="{{ key }}" {{ 'selected' if key == (brand_lens if brand_lens != 'all' else default_brand) }}>{{ label }}</option>
+        <option value="{{ key }}" {{ 'selected' if key == search_brand }}>{{ label }}</option>
         {% endif %}
         {% endfor %}
       </select>

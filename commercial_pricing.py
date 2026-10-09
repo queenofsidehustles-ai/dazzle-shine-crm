@@ -54,6 +54,16 @@ PROD_RATES = {
     'apartment': 1500,
     'daycare': 1700,
     'medical_office': 1300,
+    # A dining room goes quickly; the kitchen behind it does not -- grease on
+    # every surface, floors that need degreasing rather than mopping, and a
+    # health inspector who will look. Priced as the slower of the two.
+    'restaurant': 1200,
+    # Every machine and mat wiped down, plus locker rooms and showers: closer
+    # to a clinic than an office for the time it takes.
+    'gym': 1500,
+    # Big open rooms used a few times a week -- the sanctuary goes quickly;
+    # restrooms, nursery and fellowship-hall kitchen are where the time is.
+    'church': 2500,
     'airbnb': 800,
     'other': 2000,
 }
@@ -72,9 +82,12 @@ FACILITY_TYPES = [
     ('office', '🏢 Office', 'Offices, cubicles, meeting rooms'),
     ('daycare', '🧸 Daycare', 'Childcare centers & preschools'),
     ('medical_office', '🩺 Medical', 'Doctor / dental offices, clinics'),
+    ('restaurant', '🍽️ Restaurant', 'Dining rooms, kitchens, restrooms'),
+    ('gym', '🏋️ Gym', 'Fitness studios, locker rooms, equipment'),
+    ('church', '⛪ Church', 'Sanctuaries, halls, classrooms'),
     ('apartment', '🏘️ Apartments', 'Complexes, common areas, turnovers'),
     ('property_manager', '🏢 Property Mgmt', 'Managed buildings'),
-    ('other', '📦 Other', 'Retail, gyms, churches, etc.'),
+    ('other', '📦 Other', 'Retail, schools, warehouses, etc.'),
 ]
 
 # Optional scope add-ons (key, label, % added to the price). The percentages
@@ -93,6 +106,18 @@ EXTRAS = [
 # rooms at office rates. Pre-ticked in the calculator, still removable.
 DEFAULT_EXTRAS = {
     'medical_office': ['disinfection'],
+}
+
+# Scope that usually comes with a facility type but is the customer's to turn
+# down: pre-ticked on the calculator, and priced only while it stays ticked.
+# A restaurant's customers use the restrooms all day and its kitchen is most of
+# the work -- but plenty have their own kitchen crew and only want the front of
+# house done, and a box that can be unticked must change the price when it is.
+SUGGESTED_EXTRAS = {
+    'restaurant': ['restrooms', 'breakroom'],
+    # Locker rooms are restrooms with showers, and equipment is high-touch.
+    'gym': ['restrooms', 'disinfection'],
+    'church': ['restrooms'],
 }
 
 
@@ -225,6 +250,10 @@ def get_config():
         'visits_per_month': VISITS_PER_MONTH,
         'facility_types': [{'key': k, 'label': l, 'desc': d} for k, l, d in FACILITY_TYPES],
         'extras': [{'key': k, 'label': l, 'pct': extra_pct(k)} for k, l, _p in EXTRAS],
-        'default_extras': {c: default_extras(c) for c in PROD_RATES},
+        # What the calculator ticks for each type: the required scope, then
+        # the suggested. Only the required part is forced by quote().
+        'default_extras': {c: default_extras(c) + [k for k in SUGGESTED_EXTRAS.get(c, [])
+                                                   if k not in default_extras(c)]
+                           for c in PROD_RATES},
         'range_low': RANGE_LOW, 'range_high': RANGE_HIGH,
     }
