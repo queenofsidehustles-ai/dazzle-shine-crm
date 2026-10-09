@@ -90,6 +90,13 @@ def new_quote():
             'service_type': _RESIDENTIAL_SERVICE.get(prospect.category, 'standard'),
             'notes': f'For {prospect.business_name}' if prospect.contact_name else '',
         }
+        import prospecting
+        walk = prospecting.walkthrough(prospect)
+        if walk.get('sqft'):
+            pre['sqft'] = walk['sqft']
+        summary = prospecting.walkthrough_summary(walk)
+        if summary:
+            pre['notes'] = (pre['notes'] + '\n' if pre['notes'] else '') + f'Walkthrough: {summary}'
     return render_template('admin/lsa_quote.html', lead=None, existing=None,
                            prospect=prospect, pre=pre, **quoting.form_context())
 
@@ -134,7 +141,7 @@ def detail(lead_id):
         flash('Lead updated.', 'success')
         return redirect(url_for('leads.detail', lead_id=lead_id))
     import quoting
-    vas = User.query.filter_by(role='team').order_by(User.name).all()
+    vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
     # Only a lead that was actually quoted has a link worth showing -- quote_url
     # falls back to the generic booking form, which is not this lead's quote.
     return render_template('admin/lead_detail.html', lead=lead, vas=vas,

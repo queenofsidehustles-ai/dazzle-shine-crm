@@ -36,7 +36,7 @@ def _agent_from():
     a = (request.form.get('agent') or '').strip()
     if a:
         return a
-    if session.get('role') == 'team':
+    if session.get('role') in ('team', 'sales'):
         return session.get('user_name')
     return None
 
@@ -101,6 +101,7 @@ def quote_json():
         frequency=request.args.get('frequency') or 'weekly',
         extras=request.args.getlist('extras'),
         drive_mins=request.args.get('drive_minutes'),
+        hours=request.args.get('hours'),
     ))
 
 
@@ -161,7 +162,9 @@ def convert(prospect_id):
             notes=(request.form.get('notes') or p.notes or '').strip(),
             source='find_leads',
             prospect_id=p.id,
-            agent=_agent_from(),
+            # Whoever found and worked the lead, for their commission -- the
+            # owner converting it is not who earned it.
+            agent=_agent_from() or p.agent,
         )
         # Won on the call list too, with nothing left due -- or somebody rings
         # a new customer to ask whether they are interested.
@@ -202,7 +205,7 @@ def detail(account_id):
         db.session.commit()
         flash('Account updated.', 'success')
         return redirect(url_for('commercial.detail', account_id=a.id))
-    vas = User.query.filter_by(role='team').order_by(User.name).all()
+    vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
     return render_template('admin/commercial_detail.html', **_tmpl_args(a=a, vas=vas))
 
 

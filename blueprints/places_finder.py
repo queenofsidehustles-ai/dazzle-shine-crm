@@ -238,6 +238,9 @@ def _view_args(view, prospects, **extra):
         # Quotes are an owner's page on a plan that has commercial work, so
         # the drawer only offers the button to someone it will open for.
         can_quote=_can_quote(),
+        is_owner=_is_owner(),
+        can_text=_role_may('messages.read'),
+        can_home_quote=_role_may('lead.manage'),
         sms_stopped=_sms_stopped(prospects),
         commercial_categories=list(brands._COMMERCIAL_CATEGORIES),
         brand_primary=brands.PRIMARY,
@@ -256,6 +259,13 @@ def _sms_stopped(prospects):
     except Exception:
         return set()
     return {p.id for p in prospects if _phone10(p.phone) in stopped}
+
+
+def _role_may(permission):
+    """Whether the signed-in role holds a permission (the owner holds all)."""
+    from flask import session
+    import rbac
+    return _is_owner() or rbac.has_permission(session.get('role'), permission)
 
 
 def _is_owner():
@@ -509,9 +519,12 @@ def call_sheet(prospect_id=None):
         status_labels=Prospect.STATUS_LABELS,
         category_labels=Prospect.CATEGORY_LABELS,
         can_quote=_can_quote(),
-        # Not offered to a number that has replied STOP.
+        can_home_quote=_role_may('lead.manage'),
+        # Not offered to a number that has replied STOP, nor to a role that
+        # cannot open the inbox.
         text_phone=(_phone10(current.phone)
-                    if current and current.id not in _sms_stopped([current]) else ''),
+                    if current and current.id not in _sms_stopped([current])
+                    and _role_may('messages.read') else ''),
     )
 
 
@@ -590,6 +603,11 @@ def import_selected():
     # The category alone is not enough: "property management" turned out to be
     # residential managers buying turnover cleaning, not commercial janitorial.
     picked_brand = brands.normalize_lens(request.form.get('brand'))
+    # Found by a Sales (or legacy team) login: theirs, for commission -- the
+    # same as a lead they type in by hand.
+    from flask import session
+    finder_agent = (session.get('user_name')
+                    if session.get('role') in ('team', 'sales') else None)
     added = 0
     for pid in selected:
         raw = request.form.get(f'payload_{pid}')
@@ -624,6 +642,7 @@ def import_selected():
             # working it out from the category rather than storing "all".
             brand=(picked_brand if picked_brand != brands.ALL
                    else brands.brand_for_prospect(data)),
+            agent=finder_agent,
         ))
         added += 1
     db.session.commit()
@@ -711,7 +730,7 @@ def add_by_hand():
     note = (f.get('notes') or '').strip()
     p.notes = prospecting.note_entry(p, 'Added by hand' + (f' — {note}' if note else ''))
     from flask import session
-    if session.get('role') == 'team':
+    if session.get('role') in ('team', 'sales'):
         p.agent = session.get('user_name')
     db.session.add(p)
     db.session.commit()
@@ -765,7 +784,17 @@ def lead_page(prospect_id):
         # prices and the account are only shown to whoever can open them.
         can_quote=_can_quote(), can_convert=_can_quote(),
         is_owner=_is_owner(),
+        # Texting opens the inbox, and the home quote is a website-leads
+        # page: neither is part of a Sales login's job, so neither is offered.
+        can_text=_role_may('messages.read'),
+        can_home_quote=_role_may('lead.manage'),
         email_templates=_email_templates().get(brands.COMMERCIAL, []),
+        walk=prospecting.walkthrough(p),
+        walk_summary=prospecting.walkthrough_summary(prospecting.walkthrough(p)),
+        walk_price=prospecting.walkthrough_price(p),
+        walk_services=prospecting.WALKTHROUGH_SERVICES,
+        walk_frequencies=prospecting.WALKTHROUGH_FREQUENCIES,
+        walk_booked=(p.next_action or '').lower().startswith('walkthrough'),
         here=url_for('places_finder.lead_page', prospect_id=p.id))
 
 
@@ -807,6 +836,56 @@ def edit_lead(prospect_id):
         p.brand = brands.brand_for_prospect(p)
     db.session.commit()
     flash(f'{p.business_name} updated.', 'success')
+    return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
+
+
+@places_finder_bp.route('/<int:prospect_id>/walkthrough/book', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def book_walkthrough(prospect_id):
+    """Put the walkthrough in the diary: it becomes the lead's next step, so
+    it is on the call list and the calendar the day it is due."""
+    p = Prospect.query.get_or_404(prospect_id)
+    when = (request.form.get('date') or '').strip()
+    at = (request.form.get('time') or '').strip()[:20]
+    try:
+        from datetime import date as _date
+        _date.fromisoformat(when)
+    except ValueError:
+        flash('Pick the day of the walkthrough.', 'error')
+        return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
+    p.next_action = f'Walkthrough at {at}' if at else 'Walkthrough'
+    p.next_action_date = when
+    if (p.stage or 'new') in ('new', 'working'):
+        p.stage = 'interested'
+    p.notes = prospecting.note_entry(p, f'Walkthrough booked for {when}' + (f' at {at}' if at else ''))
+    db.session.commit()
+    flash(f'Walkthrough booked for {when}. It is on the calendar.', 'success')
+    return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
+
+
+@places_finder_bp.route('/<int:prospect_id>/walkthrough', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def save_walkthrough(prospect_id):
+    """What the walkthrough found. It is what the quote is written from, so
+    the next step becomes writing it -- today, while it is fresh."""
+    import json
+    from datetime import datetime
+    p = Prospect.query.get_or_404(prospect_id)
+    w = prospecting.walkthrough_from_form(request.form)
+    p.walkthrough = json.dumps(w)
+    p.walkthrough_at = datetime.utcnow()
+    summary = prospecting.walkthrough_summary(w)
+    p.notes = prospecting.note_entry(
+        p, 'Walkthrough done' + (f' — {summary}' if summary else '')
+        + (f'\n{w["notes"]}' if w.get('notes') else ''))
+    if (p.stage or 'new') in ('new', 'working', 'interested'):
+        p.stage = 'interested'
+        p.next_action = 'Write and send the quote'
+        p.next_action_date = local_today().isoformat()
+    db.session.commit()
+    flash('Walkthrough saved. Next: the quote — it is filled in from this.', 'success')
     return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
 
 

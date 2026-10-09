@@ -1826,6 +1826,12 @@ class Prospect(db.Model):
     last_drip_at = db.Column(db.DateTime)
     last_emailed_at = db.Column(db.DateTime)
 
+    # What the walkthrough found -- size, restrooms, how often, which services
+    # -- as JSON, and when it was done. Read through prospecting.walkthrough();
+    # it fills in the quote. See migration 0022.
+    walkthrough = db.Column(db.Text)
+    walkthrough_at = db.Column(db.DateTime)
+
     # Residential or commercial side of the business. Set from the search that
     # imported them, so it is recorded rather than guessed. NULL on anything
     # that predates the split; brands.brand_for_prospect fills it from category.

@@ -21,7 +21,46 @@ SERVICES = [
     'Restroom Sanitation', 'Lobby & Hallway Cleaning', 'Parking Garage',
     'Window Cleaning', 'Carpet Cleaning', 'Move-Out / Turnover Cleaning',
     'Deep Cleaning', 'Post-Construction Cleanup',
+    # What a walkthrough ticks (prospecting.WALKTHROUGH_SERVICES), so a quote
+    # written from one says exactly what was agreed on site.
+    'Floor Care (Sweep & Mop)', 'Kitchen / Break Room', 'Hood & Vent Degreasing',
+    'Equipment Cleaning', 'Dusting & Surfaces', 'Trash Removal',
+    'High-Touch Disinfection', 'Floor Stripping & Waxing',
+    'Kitchen Floor Degreasing', 'Kitchen Equipment Degreasing (Fryers, Grills, Cooktops)',
 ]
+
+# What a kind of property is mostly quoted for, shown first so the services
+# that matter are not lost among apartment and office lines.
+SERVICES_FIRST = {
+    'Restaurant / Food Service': [
+        'Floor Care (Sweep & Mop)', 'Kitchen Floor Degreasing',
+        'Kitchen Equipment Degreasing (Fryers, Grills, Cooktops)', 'Hood & Vent Degreasing',
+        'Kitchen / Break Room', 'Restroom Sanitation', 'Trash Removal',
+        'High-Touch Disinfection', 'Window Cleaning', 'Deep Cleaning',
+    ],
+}
+
+
+def _service_extras():
+    """Quote service line -> the commercial calculator add-on it is priced as.
+    Lines not here (floors, windows, dusting...) are part of the base clean."""
+    import prospecting
+    out = {line: addon for _k, _l, line, addon in prospecting.WALKTHROUGH_SERVICES if addon}
+    out.update({'Restroom Sanitation': 'restrooms', 'Deep Cleaning': 'deep',
+                'Post-Construction Cleanup': 'post_construction'})
+    return out
+
+
+def _estimate_args():
+    """What the quote form's estimate helper sends to /commercial/quote.json."""
+    import commercial_pricing as cp
+    return dict(service_extras=_service_extras(), category_map=_CAT_MAP, freq_map=_FREQ_MAP,
+                extra_labels={e['key']: (e['label'], e['pct']) for e in cp.get_config()['extras']})
+
+
+def _services_for(property_type):
+    first = SERVICES_FIRST.get(property_type or '', [])
+    return first + [s for s in SERVICES if s not in first]
 
 FREQUENCIES = [
     ('daily', 'Daily'), ('weekly', 'Weekly'), ('biweekly', 'Bi-Weekly'),
@@ -152,7 +191,7 @@ def new():
             lead.phone = lead.phone or q.phone or None
         db.session.add(q)
         db.session.commit()
-        flash('Quote created!', 'success')
+        flash('Draft saved — nothing has been sent. Review it, then press Send when it is ready.', 'success')
         return redirect(url_for('quotes.detail', quote_id=q.id))
 
     # Started from a lead on the call list: fill in what is already known
@@ -171,9 +210,37 @@ def new():
             'brand': brands.normalize_lens(lead.brand) if lead.brand else '',
             'property_address': address or '',
         }
+        # And what the walkthrough found: size, how often, what is included,
+        # and a starting price from the calculator. Hers to change.
+        import prospecting
+        pre.update(prospecting.walkthrough_quote_prefill(lead))
     return render_template('admin/quote_form.html', quote=None, lead=lead, pre=pre,
-                           property_types=PROPERTY_TYPES, services=SERVICES,
-                           frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS)
+                           selected_services=pre.get('services') or [],
+                           property_types=PROPERTY_TYPES,
+                           services=_services_for(pre.get('property_type')),
+                           frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
+                           **_estimate_args())
+
+
+def _apply_form(q):
+    """The quote form's fields onto a quote. Shared by Save and Send, so
+    Send emails what is on the screen rather than what was last saved."""
+    f = request.form
+    q.company = (f.get('company') or q.company or '').strip()
+    q.contact_name = (f.get('contact_name', q.contact_name) or '').strip()
+    q.email = (f.get('email', q.email) or '').strip()
+    q.phone = (f.get('phone', q.phone) or '').strip()
+    q.property_type = f.get('property_type', q.property_type)
+    q.property_address = (f.get('property_address', q.property_address) or '').strip()
+    q.units = (f.get('units', q.units) or '').strip()
+    q.sqft = (f.get('sqft', q.sqft) or '').strip()
+    q.services = ', '.join(f.getlist('services'))
+    q.frequency = f.get('frequency', q.frequency)
+    q.contract_term = f.get('contract_term', q.contract_term)
+    q.price_per_visit = f.get('price_per_visit') or None
+    q.monthly_price = f.get('monthly_price') or None
+    q.scope_notes = (f.get('scope_notes', q.scope_notes) or '').strip()
+    q.brand = f.get('brand') or q.brand or brands.brand_for_property(q.property_type)
 
 
 @quotes_bp.route('/<int:quote_id>', methods=['GET', 'POST'])
@@ -181,37 +248,32 @@ def new():
 def detail(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
-        services_selected = request.form.getlist('services')
-        q.company = request.form.get('company', q.company).strip()
-        q.contact_name = request.form.get('contact_name', q.contact_name).strip()
-        q.email = request.form.get('email', q.email).strip()
-        q.phone = request.form.get('phone', q.phone).strip()
-        q.property_type = request.form.get('property_type', q.property_type)
-        q.property_address = request.form.get('property_address', q.property_address).strip()
-        q.units = request.form.get('units', q.units).strip()
-        q.sqft = request.form.get('sqft', q.sqft).strip()
-        q.services = ', '.join(services_selected)
-        q.frequency = request.form.get('frequency', q.frequency)
-        q.contract_term = request.form.get('contract_term', q.contract_term)
-        q.price_per_visit = request.form.get('price_per_visit') or None
-        q.monthly_price = request.form.get('monthly_price') or None
-        q.scope_notes = request.form.get('scope_notes', q.scope_notes).strip()
-        q.brand = request.form.get('brand') or q.brand or brands.brand_for_property(q.property_type)
+        _apply_form(q)
         db.session.commit()
-        flash('Quote updated.', 'success')
+        flash('Draft saved — nothing has been sent.' if q.status == 'draft' else 'Quote updated.', 'success')
         return redirect(url_for('quotes.detail', quote_id=quote_id))
 
     selected_services = [s.strip() for s in (q.services or '').split(',') if s.strip()]
     return render_template('admin/quote_form.html', quote=q, lead=_lead_for(q), pre={},
-                           property_types=PROPERTY_TYPES, services=SERVICES,
+                           property_types=PROPERTY_TYPES, services=_services_for(q.property_type),
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
-                           selected_services=selected_services)
+                           selected_services=selected_services, **_estimate_args())
 
 
 @quotes_bp.route('/<int:quote_id>/send', methods=['POST'])
 @owner_required
 def send_quote(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
+    # The Send button sits in the edit form and posts it. Those edits used to
+    # be dropped -- change the price, press Send, and the old price went out.
+    if 'company' in request.form:
+        _apply_form(q)
+        db.session.commit()
+    # A draft can be saved before anybody's name or email is known (half-way
+    # through a walkthrough); it cannot be sent like that.
+    if not (q.email or '').strip() or not (q.contact_name or '').strip():
+        flash('Add who it is for — a contact name and email — then send.', 'error')
+        return redirect(url_for('quotes.detail', quote_id=q.id))
     crm_url = request.host_url.rstrip('/')
     quote_url = f"{crm_url}/quotes/view/{q.token}"
 
@@ -331,6 +393,10 @@ def accept(token):
         lead = _lead_moved(q, 'won', 'won', None, None, 'Accepted the quote 🎉')
         if lead and acc and not acc.prospect_id:
             acc.prospect_id = lead.id
+        # Credit the account to whoever worked the lead, for their commission.
+        linked = _lead_for(q)
+        if acc and linked and linked.agent and not acc.agent:
+            acc.agent = linked.agent
     except Exception:
         pass
     try:

@@ -15,7 +15,7 @@ commissions_bp = Blueprint('commissions', __name__, url_prefix='/commissions')
 @owner_required
 @requires_plan('va_commissions')
 def index():
-    vas = User.query.filter_by(role='team').order_by(User.name).all()
+    vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
     agent = request.args.get('agent', '')
     if not agent and vas:
         agent = vas[0].name

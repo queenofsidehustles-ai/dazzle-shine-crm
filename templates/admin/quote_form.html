@@ -14,6 +14,8 @@
   <div style="font-size:0.82rem;color:var(--softer);margin-top:4px">
     Sending it moves them to Proposal with a follow-up in three days; when they
     accept, they are marked won and become an account.
+    {% if not quote and (pre.sqft or pre.services) %}<br><strong>Filled in from the walkthrough</strong> —
+    size, how often, what is included and a starting price. Check the price against what you saw.{% endif %}
     {% if not quote %}Pricing homes or unit turnovers instead?
     <a href="{{ url_for('leads.new_quote', prospect_id=lead.id) }}" style="color:var(--amber-deep)">Write a residential quote →</a> ·{% endif %}
     <a href="{{ url_for('places_finder.dashboard', view='everyone') }}" style="color:var(--amber-deep)">Back to the call list →</a>
@@ -33,12 +35,12 @@
         <input type="text" name="company" required value="{{ quote.company if quote else (pre.company or '') }}" placeholder="Sunset Apartments LLC" />
       </div>
       <div class="form-group">
-        <label>Contact Person *</label>
-        <input type="text" name="contact_name" required value="{{ quote.contact_name if quote else (pre.contact_name or '') }}" placeholder="Jane Smith" />
+        <label>Contact Person <span style="font-weight:400;color:var(--softer)">(needed to send)</span></label>
+        <input type="text" name="contact_name" value="{{ quote.contact_name if quote else (pre.contact_name or '') }}" placeholder="Jane Smith" />
       </div>
       <div class="form-group">
-        <label>Email *</label>
-        <input type="email" name="email" required value="{{ quote.email if quote else (pre.email or '') }}" placeholder="jane@sunsetapts.com" />
+        <label>Email <span style="font-weight:400;color:var(--softer)">(needed to send)</span></label>
+        <input type="email" name="email" value="{{ quote.email if quote else (pre.email or '') }}" placeholder="jane@sunsetapts.com" />
       </div>
       <div class="form-group">
         <label>Phone</label>
@@ -76,7 +78,7 @@
         </div>
         <div class="form-group">
           <label>Square Footage</label>
-          <input type="text" name="sqft" value="{{ quote.sqft if quote else '' }}" placeholder="e.g. 12,000" />
+          <input type="text" name="sqft" value="{{ quote.sqft if quote else (pre.sqft or '') }}" placeholder="e.g. 12,000" />
         </div>
       </div>
     </div>
@@ -90,7 +92,7 @@
         {% for svc in services %}
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:500">
           <input type="checkbox" name="services" value="{{ svc }}" style="width:auto;accent-color:var(--amber)"
-                 {{ 'checked' if quote and svc in (selected_services or []) }} />
+                 {{ 'checked' if svc in (selected_services or []) }} />
           {{ svc }}
         </label>
         {% endfor %}
@@ -103,7 +105,7 @@
         <label>Service Frequency</label>
         <select name="frequency">
           {% for val, label in frequencies %}
-          <option value="{{ val }}" {{ 'selected' if quote and quote.frequency == val }}>{{ label }}</option>
+          <option value="{{ val }}" {{ 'selected' if (quote.frequency if quote else pre.frequency) == val }}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
@@ -115,21 +117,18 @@
           {% endfor %}
         </select>
       </div>
-      <!-- ESTIMATE HELPER -->
+      <!-- ESTIMATE HELPER: the commercial calculator, with what is ticked -->
       <div style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:10px;padding:16px 18px;margin-bottom:16px">
         <div style="font-weight:700;color:var(--amber-deep);font-size:0.9rem;margin-bottom:4px">💡 Estimate Helper</div>
-        <p style="font-size:0.78rem;color:var(--amber-deep);margin-bottom:12px;line-height:1.5">Enter the square footage above and pick an intensity — we'll suggest a starting price. Always adjust for the real property.</p>
+        <p style="font-size:0.78rem;color:var(--amber-deep);margin-bottom:12px;line-height:1.5">Priced by your commercial calculator from the property type, square footage, how often and the services ticked — Deep Cleaning, restrooms, kitchen work and the rest each add to it. Always adjust for the real property.</p>
         <div class="form-group" style="margin-bottom:10px">
-          <label style="font-size:0.8rem">Cleaning Intensity</label>
-          <select id="est-intensity" onchange="runEstimate()">
-            <option value="0.08">Light — offices, common areas ($0.08/sq ft)</option>
-            <option value="0.12" selected>Standard — general commercial ($0.12/sq ft)</option>
-            <option value="0.18">Intensive — medical, post-construction ($0.18/sq ft)</option>
-          </select>
+          <label style="font-size:0.8rem">Hours a visit <span style="font-weight:400">(optional — if they only want part of it cleaned)</span></label>
+          <input type="number" id="est-hours" step="0.25" min="0" value="{{ pre.hours or '' }}" placeholder="Leave blank to price the full square footage" />
         </div>
         <div id="est-result" style="display:none;background:#fff;border-radius:8px;padding:12px 14px;font-size:0.85rem;color:var(--ink)">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--softer)">Suggested per visit</span><strong id="est-visit">—</strong></div>
           <div style="display:flex;justify-content:space-between"><span style="color:var(--softer)">Suggested monthly</span><strong id="est-monthly">—</strong></div>
+          <div id="est-includes" style="font-size:0.76rem;color:var(--softer);margin-top:8px;line-height:1.5"></div>
           <button type="button" onclick="applyEstimate()" style="width:100%;margin-top:10px;background:var(--amber);color:var(--ink);border:none;padding:9px;border-radius:7px;font-weight:700;font-size:0.82rem;cursor:pointer">Use this estimate ↓</button>
         </div>
         <div id="est-hint" style="font-size:0.78rem;color:var(--amber-deep)">Enter square footage &amp; frequency to see a suggestion.</div>
@@ -138,22 +137,31 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group">
           <label>Price per Visit ($)</label>
-          <input type="number" name="price_per_visit" id="price_per_visit" step="0.01" value="{{ quote.price_per_visit if quote else '' }}" placeholder="0.00" />
+          <input type="number" name="price_per_visit" id="price_per_visit" step="0.01" value="{{ quote.price_per_visit if quote else (pre.price_per_visit or '') }}" placeholder="0.00" />
         </div>
         <div class="form-group">
           <label>Monthly Total ($)</label>
-          <input type="number" name="monthly_price" id="monthly_price" step="0.01" value="{{ quote.monthly_price if quote else '' }}" placeholder="0.00" />
+          <input type="number" name="monthly_price" id="monthly_price" step="0.01" value="{{ quote.monthly_price if quote else (pre.monthly_price or '') }}" placeholder="0.00" />
         </div>
       </div>
       <div class="form-group">
         <label>Scope of Work / Notes</label>
-        <textarea name="scope_notes" rows="4" placeholder="Describe exactly what's included, any special requirements, access instructions...">{{ quote.scope_notes if quote else '' }}</textarea>
+        <textarea name="scope_notes" rows="4" placeholder="Describe exactly what's included, any special requirements, access instructions...">{{ quote.scope_notes if quote else (pre.scope_notes or '') }}</textarea>
       </div>
     </div>
 
+    <div id="draftRestored" style="display:none;background:var(--info-soft);color:var(--info);padding:10px 14px;border-radius:10px;font-size:0.85rem;line-height:1.5">
+      Brought back what you were typing <span id="draftRestoredAt"></span> — it isn't saved yet.
+      <button type="button" id="draftDiscard" style="background:none;border:none;color:var(--info);font-weight:700;text-decoration:underline;cursor:pointer;padding:0">Discard it</button>
+    </div>
+
     <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;padding:13px">
-      {{ 'Save Changes' if quote else 'Create Quote' }}
+      💾 {{ 'Save draft' if not quote or quote.status == 'draft' else 'Save changes' }}
     </button>
+    {% if not quote or quote.status == 'draft' %}
+    <p style="font-size:0.8rem;color:var(--softer);text-align:center;margin:-8px 0 0;line-height:1.5">
+      Nothing is sent when you save. Come back to it any time from Quotes; it goes to the customer only when you press Send.</p>
+    {% endif %}
 
     {% if quote %}
     {% if quote.status == 'draft' %}
@@ -163,12 +171,12 @@
        the right place instead. #}
     <button type="submit" formaction="{{ url_for('quotes.send_quote', quote_id=quote.id) }}"
             formnovalidate class="btn btn-dark" style="width:100%;justify-content:center;padding:13px">
-      Send Quote to {{ quote.email }} →
+      {% if quote.email %}Send Quote to {{ quote.email }} →{% else %}Send Quote → <span style="font-weight:500">(add their email first)</span>{% endif %}
     </button>
     {% elif quote.status == 'sent' %}
     <div style="background:var(--info-soft);color:var(--info);padding:12px 16px;border-radius:10px;font-weight:600;font-size:0.9rem;text-align:center">
       {% if quote.viewed_at %}
-        👁 Opened by {{ quote.contact_name.split()[0] }} on {{ quote.viewed_at.strftime('%b %d at %I:%M %p') }}
+        👁 Opened by {{ (quote.contact_name or 'them').split()[0] }} on {{ quote.viewed_at.strftime('%b %d at %I:%M %p') }}
       {% else %}
         Sent — not opened yet
       {% endif %}
@@ -200,47 +208,140 @@
 </form>
 
 <script>
-  // Visits per month by frequency
-  const VISITS_PER_MONTH = { daily: 22, weekly: 4.33, biweekly: 2.17, monthly: 1, as_needed: 1 };
-  const MIN_PER_VISIT = 80;   // don't quote below this per visit
-  let lastEstimate = null;
+  // One price, worked out on the server by the same calculator as the
+  // walkthrough and the account form. This used to be its own flat cents per
+  // square foot, so ticking Deep Cleaning, restrooms or a greasy kitchen
+  // changed nothing, and it disagreed with the walkthrough's starting price.
+  const SERVICE_EXTRAS = {{ service_extras|tojson }};
+  const CATEGORY_MAP = {{ category_map|tojson }};
+  const FREQ_MAP = {{ freq_map|tojson }};
+  const EXTRA_LABELS = {{ extra_labels|tojson }};
+  let lastEstimate = null, estSeq = 0;
 
-  function runEstimate() {
+  async function runEstimate() {
     const sqftRaw = document.querySelector('input[name="sqft"]').value || '';
     const sqft = parseFloat(sqftRaw.replace(/[^0-9.]/g, '')) || 0;
-    const rate = parseFloat(document.getElementById('est-intensity').value);
+    const hours = parseFloat(document.getElementById('est-hours').value) || 0;
+    const ptype = (document.querySelector('select[name="property_type"]').value || '').toLowerCase();
     const freq = document.querySelector('select[name="frequency"]').value;
-    const visits = VISITS_PER_MONTH[freq] || 1;
-
     const resultBox = document.getElementById('est-result');
     const hint = document.getElementById('est-hint');
 
-    if (sqft <= 0) {
+    if (sqft <= 0 && hours <= 0) {
       resultBox.style.display = 'none';
       hint.style.display = 'block';
       hint.textContent = 'Enter square footage above to see a suggestion.';
+      lastEstimate = null;
       return;
     }
-
-    const perVisit = Math.max(MIN_PER_VISIT, Math.round(sqft * rate));
-    const monthly = Math.round(perVisit * visits);
-    lastEstimate = { perVisit, monthly };
-
-    document.getElementById('est-visit').textContent = '$' + perVisit.toLocaleString();
-    document.getElementById('est-monthly').textContent = '$' + monthly.toLocaleString();
+    const extras = [...new Set([...document.querySelectorAll('input[name="services"]:checked')]
+      .map(el => SERVICE_EXTRAS[el.value]).filter(Boolean))];
+    const p = new URLSearchParams({ sqft: sqft, category: CATEGORY_MAP[ptype] || 'other',
+                                    frequency: FREQ_MAP[freq] || 'weekly' });
+    if (hours > 0) p.set('hours', hours);
+    extras.forEach(k => p.append('extras', k));
+    const seq = ++estSeq;
+    let d;
+    try {
+      const r = await fetch('/commercial/quote.json?' + p.toString(), { credentials: 'same-origin' });
+      if (!r.ok) throw new Error(r.status);
+      d = await r.json();
+    } catch (e) {
+      hint.style.display = 'block';
+      hint.textContent = 'Could not reach the calculator — price this one by hand.';
+      return;
+    }
+    if (seq !== estSeq) return;    // a newer change is already on its way
+    const oneTime = freq === 'as_needed';
+    lastEstimate = { perVisit: d.per_visit, monthly: oneTime ? null : d.monthly };
+    document.getElementById('est-visit').textContent = '$' + d.per_visit.toLocaleString();
+    document.getElementById('est-monthly').textContent = oneTime ? 'one-time' : '$' + d.monthly.toLocaleString();
+    const added = extras.map(k => EXTRA_LABELS[k] ? EXTRA_LABELS[k][0].replace(/^\S+\s/, '') +
+                                  ' +' + Math.round(EXTRA_LABELS[k][1] * 100) + '%' : k);
+    const notes = [(hours > 0 ? hours + ' h a visit' : sqft.toLocaleString() + ' sq ft') +
+                   (added.length ? ' · ' + added.join(', ') : ' · base clean only') + '.'];
+    if (d.at_minimum)
+      notes.push('At this size your $' + Math.round(d.min_visit) + ' minimum visit sets the price, ' +
+                 'so add-ons like restrooms are inside it; a deep clean still raises it.');
+    if (extras.includes('deep') && !oneTime)
+      notes.push('Deep clean is priced on every visit. For a one-off deep clean before the regular ' +
+                 'schedule, untick it and quote that separately.');
+    const note = notes.join(' ');
+    document.getElementById('est-includes').textContent = note;
     resultBox.style.display = 'block';
     hint.style.display = 'none';
   }
 
   function applyEstimate() {
     if (!lastEstimate) return;
-    document.getElementById('price_per_visit').value = lastEstimate.perVisit.toFixed(2);
-    document.getElementById('monthly_price').value = lastEstimate.monthly.toFixed(2);
+    document.getElementById('price_per_visit').value = Number(lastEstimate.perVisit).toFixed(2);
+    document.getElementById('monthly_price').value =
+      lastEstimate.monthly == null ? '' : Number(lastEstimate.monthly).toFixed(2);
   }
 
-  // Re-run when sqft or frequency changes
+  // Re-run whenever anything that changes the price changes.
   document.querySelector('input[name="sqft"]').addEventListener('input', runEstimate);
+  document.getElementById('est-hours').addEventListener('input', runEstimate);
   document.querySelector('select[name="frequency"]').addEventListener('change', runEstimate);
+  document.querySelector('select[name="property_type"]').addEventListener('change', runEstimate);
+  document.querySelectorAll('input[name="services"]').forEach(el => el.addEventListener('change', runEstimate));
   runEstimate();
+
+  // Kept on this phone as it is typed, so a reload, a dropped signal or a
+  // tap on Back half-way through a walkthrough loses nothing. Cleared once
+  // the form is saved; it never leaves the device.
+  (function () {
+    const form = document.getElementById('quoteForm');
+    const KEY = 'quote-draft:' + {{ ('q' ~ quote.id if quote else 'new:' ~ ((lead.id if lead else '') or ''))|tojson }};
+    const fields = () => [...form.querySelectorAll('input[name], select[name], textarea[name], #est-hours')]
+      .filter(el => el.type !== 'hidden' && el.name !== 'csrf_token');
+    function snapshot() {
+      const out = { services: [], at: Date.now() };
+      fields().forEach(el => {
+        if (el.name === 'services') { if (el.checked) out.services.push(el.value); }
+        else out[el.id === 'est-hours' ? '#est-hours' : el.name] = el.value;
+      });
+      return out;
+    }
+    const same = (a, b) => JSON.stringify({ ...a, at: 0 }) === JSON.stringify({ ...b, at: 0 });
+    const original = snapshot();
+    function store() {
+      try {
+        const now = snapshot();
+        if (same(now, original)) localStorage.removeItem(KEY);
+        else localStorage.setItem(KEY, JSON.stringify(now));
+      } catch (e) {}
+    }
+    function apply(d) {
+      fields().forEach(el => {
+        if (el.name === 'services') el.checked = (d.services || []).includes(el.value);
+        else {
+          const k = el.id === 'est-hours' ? '#est-hours' : el.name;
+          if (k in d) el.value = d[k];
+        }
+      });
+    }
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+    if (saved && !same(saved, original)) {
+      apply(saved);
+      const t = new Date(saved.at);
+      document.getElementById('draftRestoredAt').textContent =
+        'from ' + t.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+        t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      document.getElementById('draftRestored').style.display = 'block';
+      runEstimate();
+    }
+    document.getElementById('draftDiscard').addEventListener('click', () => {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      apply(original);
+      document.getElementById('draftRestored').style.display = 'none';
+      runEstimate();
+    });
+    let t = null;
+    form.addEventListener('input', () => { clearTimeout(t); t = setTimeout(store, 400); });
+    form.addEventListener('change', store);
+    form.addEventListener('submit', () => { try { localStorage.removeItem(KEY); } catch (e) {} });
+  })();
 </script>
 {% endblock %}

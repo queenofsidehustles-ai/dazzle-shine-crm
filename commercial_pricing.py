@@ -98,7 +98,25 @@ EXTRAS = [
     ('breakroom', '🍽️ Break room / kitchen', 0.08),
     ('trash', '🗑️ Trash & liner service', 0.05),
     ('disinfection', '🧴 Disinfect high-touch', 0.08),
+    # A restaurant's kitchen is two jobs a dining room is not: a floor that has
+    # to be degreased, not just mopped, and the line -- fryers, grills,
+    # cooktops, ovens -- scraped and degreased.
+    ('floor_degrease', '🧽 Kitchen floor degreasing', 0.10),
+    ('kitchen_equipment', '🍳 Kitchen equipment — fryers, grills, cooktops', 0.15),
+    # Not more rooms but more time in each: baseboards, vents, behind and
+    # under things, built-up grime. Ticked on a recurring contract it prices
+    # every visit as deep; a one-off deep clean before the regular schedule
+    # is its own line in the scope.
+    ('deep', '✨ Deep clean', 0.50),
+    ('post_construction', '🏗️ Post-construction cleanup', 1.00),
 ]
+
+# Of the add-ons above, the ones that are the same rooms done harder rather
+# than more rooms. These go on after the minimum-visit floor, not before it:
+# on a small job the floor is most of the price, and a deep clean folded
+# underneath it came out at exactly the regular price -- a 1,400 sq ft
+# restaurant quoted the same for a deep clean as for a weekly mop.
+INTENSITY_EXTRAS = frozenset({'deep', 'post_construction'})
 
 # Scope that isn't really optional for some facility types. A medical clean
 # carries the disinfection protocol whether or not anyone remembers to tick the
@@ -114,7 +132,7 @@ DEFAULT_EXTRAS = {
 # the work -- but plenty have their own kitchen crew and only want the front of
 # house done, and a box that can be unticked must change the price when it is.
 SUGGESTED_EXTRAS = {
-    'restaurant': ['restrooms', 'breakroom'],
+    'restaurant': ['restrooms', 'breakroom', 'floor_degrease', 'kitchen_equipment'],
     # Locker rooms are restrooms with showers, and equipment is high-touch.
     'gym': ['restrooms', 'disinfection'],
     'church': ['restrooms'],
@@ -176,13 +194,20 @@ def drive_minutes(value=None):
 
 
 def quote(square_footage, category='office', frequency='weekly', extras=None,
-          drive_mins=None):
+          drive_mins=None, hours=None):
     """Return a confident, profitable price with a low/standard/premium range.
 
     The one call every quote in the product goes through. It used to be dead
     code — the browser had its own copy of the arithmetic, twice, and they had
     already drifted apart from each other and from this. Fixing a price here
     changed nothing anybody was quoted.
+
+    `hours` is the time somebody judged the job takes, on a walkthrough. When
+    given it replaces square footage over the production rate, which assumes a
+    full clean of every square foot: a restaurant that only wants its floors
+    done weekly is a fraction of that, and pricing it as a full clean loses
+    the job. Everything after -- labour share, add-ons, the minimum visit, the
+    drive -- is priced exactly as before.
     """
     # Union rather than "whatever was passed", so a facility type's mandatory
     # scope is priced on every path — the saved account and the API, not just
@@ -195,18 +220,30 @@ def quote(square_footage, category='office', frequency='weekly', extras=None,
     min_visit = _get('comm_min_visit')
     mins = drive_minutes(drive_mins)
 
-    hours = sqft / rate if rate else 0.0
+    try:
+        judged = float(hours) if hours not in (None, '') else 0.0
+    except (TypeError, ValueError):
+        judged = 0.0
+    if judged > 0:
+        hours, has_job = judged, True
+    else:
+        hours, has_job = (sqft / rate if rate else 0.0), bool(sqft)
     labor = hours * hourly
     onsite = (labor / target) if target else labor
-    onsite = onsite * (1 + sum(extra_pct(k) for k, _lbl, _p in EXTRAS if k in extras))
+    onsite = onsite * (1 + sum(extra_pct(k) for k, _lbl, _p in EXTRAS
+                               if k in extras and k not in INTENSITY_EXTRAS))
     # The floor applies to the work, not to the journey. See the note at the
     # top: a minimum that swallowed the drive made every small job cost the
     # same however far away it was.
-    onsite = max(onsite, min_visit if sqft else 0.0)
+    at_minimum = bool(has_job and min_visit and onsite < min_visit)
+    onsite = max(onsite, min_visit if has_job else 0.0)
+    # A deep clean is a harder version of whatever that came to, minimum
+    # included -- see INTENSITY_EXTRAS.
+    onsite = onsite * (1 + sum(extra_pct(k) for k in INTENSITY_EXTRAS if k in extras))
 
     drive_labor = (mins / 60.0) * hourly
     drive_price = (drive_labor / target) if target else drive_labor
-    if not sqft:
+    if not has_job:
         drive_price = drive_labor = 0.0     # no job, no journey
 
     # Rounded as two parts that are then added, rather than added and then
@@ -236,6 +273,9 @@ def quote(square_footage, category='office', frequency='weekly', extras=None,
         'monthly': monthly,
         'annual': monthly * 12,
         'profit_per_visit': round(standard - labor - drive_labor),
+        # The minimum visit set the price: add-ons below it don't move it.
+        'at_minimum': at_minimum,
+        'min_visit': min_visit,
     }
 
 
