@@ -341,6 +341,10 @@ def accept(token):
         lead = _lead_moved(q, 'won', 'won', None, None, 'Accepted the quote 🎉')
         if lead and acc and not acc.prospect_id:
             acc.prospect_id = lead.id
+        # Credit the account to whoever worked the lead, for their commission.
+        linked = _lead_for(q)
+        if acc and linked and linked.agent and not acc.agent:
+            acc.agent = linked.agent
     except Exception:
         pass
     try:

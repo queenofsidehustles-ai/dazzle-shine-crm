@@ -161,7 +161,9 @@ def convert(prospect_id):
             notes=(request.form.get('notes') or p.notes or '').strip(),
             source='find_leads',
             prospect_id=p.id,
-            agent=_agent_from(),
+            # Whoever found and worked the lead, for their commission -- the
+            # owner converting it is not who earned it.
+            agent=_agent_from() or p.agent,
         )
         # Won on the call list too, with nothing left due -- or somebody rings
         # a new customer to ask whether they are interested.
@@ -202,7 +204,7 @@ def detail(account_id):
         db.session.commit()
         flash('Account updated.', 'success')
         return redirect(url_for('commercial.detail', account_id=a.id))
-    vas = User.query.filter_by(role='team').order_by(User.name).all()
+    vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
     return render_template('admin/commercial_detail.html', **_tmpl_args(a=a, vas=vas))
 
 

@@ -511,9 +511,12 @@ def walkthrough_quote_prefill(prospect):
         scope.append(f"Preferred days/times: {w['days']}.")
     if w.get('access'):
         scope.append(f"Access: {w['access']}.")
+    # A walkthrough with no frequency is priced weekly (walkthrough_price), so
+    # the quote says weekly too. Left blank, the form fell to its first option
+    # -- daily -- under a monthly figure worked out for four visits.
     out = {
         'sqft': str(w['sqft']) if w.get('sqft') else '',
-        'frequency': quote_freq.get(w.get('frequency'), ''),
+        'frequency': quote_freq.get(w.get('frequency') or 'weekly', 'weekly'),
         'services': [lines[k] for k in (w.get('services') or []) if k in lines],
         'scope_notes': ' '.join(scope),
     }

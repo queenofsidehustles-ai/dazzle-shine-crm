@@ -238,6 +238,7 @@ def _view_args(view, prospects, **extra):
         # Quotes are an owner's page on a plan that has commercial work, so
         # the drawer only offers the button to someone it will open for.
         can_quote=_can_quote(),
+        is_owner=_is_owner(),
         can_text=_role_may('messages.read'),
         can_home_quote=_role_may('lead.manage'),
         sms_stopped=_sms_stopped(prospects),
@@ -602,6 +603,11 @@ def import_selected():
     # The category alone is not enough: "property management" turned out to be
     # residential managers buying turnover cleaning, not commercial janitorial.
     picked_brand = brands.normalize_lens(request.form.get('brand'))
+    # Found by a Sales (or legacy team) login: theirs, for commission -- the
+    # same as a lead they type in by hand.
+    from flask import session
+    finder_agent = (session.get('user_name')
+                    if session.get('role') in ('team', 'sales') else None)
     added = 0
     for pid in selected:
         raw = request.form.get(f'payload_{pid}')
@@ -636,6 +642,7 @@ def import_selected():
             # working it out from the category rather than storing "all".
             brand=(picked_brand if picked_brand != brands.ALL
                    else brands.brand_for_prospect(data)),
+            agent=finder_agent,
         ))
         added += 1
     db.session.commit()

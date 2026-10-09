@@ -661,6 +661,81 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     db.session.remove()
 check(agent == 'Sales', 'and a lead Sales adds is credited to them, for commission')
 
+print('\n15. Sales is held to the module, and the work it does stays credited to it')
+# Not in the permission matrix used to mean "let the route decide" -- and many
+# older routes only ask whether somebody is signed in.
+for path in ('/bookings/999999/delete', '/contractors/applications/999999/hire',
+             '/bookings/clients/999999/delete'):
+    st = sc.post(path, base_url=HOST).status_code
+    check(st == 403, f'an unclassified back-office form is closed to Sales: {path} ({st})')
+check(sc.get('/account', base_url=HOST).status_code in (200, 302)
+      and sc.get('/account', base_url=HOST).status_code != 403,
+      'while Sales can still manage its own login')
+body = sc.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
+check('/delete' not in body and '/delete' in c.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True),
+      'and is not shown the delete button the owner gets')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    p = db.session.get(Prospect, deli['id'])
+    p.walkthrough = None
+    db.session.commit()
+    db.session.remove()
+sc.post(f'/find-leads/{deli["id"]}/walkthrough', base_url=HOST,
+        data={'sqft': '1800', 'frequency': '', 'services': ['floors']})
+form = c.get(f'/quotes/new?prospect_id={deli["id"]}', base_url=HOST).get_data(as_text=True)
+check(re.search(r'<option value="weekly"\s+selected', form),
+      'a walkthrough with no frequency quotes weekly, the way it was priced -- not daily')
+
+payload = '{"business_name": "Imported Taqueria", "category": "restaurant", "city": "Washington", "place_id": "pid-taq-1"}'
+sc.post('/find-leads/import', base_url=HOST, data={'selected': ['pid-taq-1'], 'payload_pid-taq-1': payload})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    taq = Prospect.query.filter_by(business_name='Imported Taqueria').first()
+    taq_agent = taq.agent if taq else None
+    db.session.remove()
+check(taq is not None and taq_agent == 'Sales', f'a lead Sales imports from search is credited to them ({taq_agent})')
+
+c.post(f'/commercial/convert/{deli["id"]}', base_url=HOST, data={
+    'contact_name': 'Deli Owner', 'email': 'owner@deli.example', 'phone': '2025550188',
+    'frequency': 'weekly', 'billing_type': 'monthly', 'billing_amount': '600'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    acct = CommercialAccount.query.filter_by(prospect_id=deli['id']).first()
+    deli_agent = acct.agent if acct else None
+    db.session.remove()
+check(deli_agent == 'Sales', f'the owner making their lead an account keeps it credited to Sales ({deli_agent})')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    tp = Prospect(business_name='Quoted Cafe', category='restaurant', status='interested',
+                  stage='proposal', agent='Sales', phone='2025550177')
+    db.session.add(tp)
+    db.session.commit()
+    q = CommercialQuote(company='Quoted Cafe', contact_name='Cafe Owner', email='cafe@quoted.example',
+                        property_type='Restaurant / Food Service', frequency='weekly',
+                        monthly_price=500, status='sent', token='tok-quoted-cafe', prospect_id=tp.id)
+    db.session.add(q)
+    db.session.commit()
+    db.session.remove()
+app.test_client().post('/quotes/view/tok-quoted-cafe/accept', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    acct = CommercialAccount.query.filter_by(business_name='Quoted Cafe').first()
+    cafe_agent = acct.agent if acct else None
+    db.session.remove()
+check(acct is not None and cafe_agent == 'Sales', f'and so does the quote being accepted ({cafe_agent})')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from models import Lead
+    db.session.add(Lead(name='Deli Owner', email='owner@deli.example', quoted_price=987.65,
+                        status='contacted', prospect_id=deli['id']))
+    db.session.commit()
+    db.session.remove()
+page = sc.get(f'/find-leads/{deli["id"]}', base_url=HOST).get_data(as_text=True)
+check('987.65' not in page and '1 home quote' in page,
+      'Sales sees that a home quote exists, not what it was priced at')
+check('987.65' in c.get(f'/find-leads/{deli["id"]}', base_url=HOST).get_data(as_text=True),
+      'the owner still sees the price')
+comm = c.get('/commissions/', base_url=HOST).get_data(as_text=True)
+check('<option value="Sales"' in comm,
+      'the commissions page offers Sales logins, not only the old "team" role')
+
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)

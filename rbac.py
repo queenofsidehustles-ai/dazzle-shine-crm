@@ -214,6 +214,28 @@ def required_permission(endpoint=None, method=None):
     return ENDPOINT_PERMISSIONS.get((endpoint, method))
 
 
+# Roles for which "not in the matrix" means no, not "ask the route". The older
+# roles defer to route-local checks on unclassified pages because most of the
+# app predates this matrix; a role created to reach one module only cannot
+# inherit that, or "prospecting only" would mean "prospecting, and every
+# unclassified form in the app" -- deleting bookings, hiring, discounts.
+FAIL_CLOSED_ROLES = frozenset({'sales'})
+
+# What such a role may still reach unclassified: managing its own login, and
+# the few things every back-office page offers -- feedback, the brand lens,
+# a city switch, signing out.
+UNCLASSIFIED_ALLOWED = frozenset({
+    'feedback.send', 'settings.switch_brand', 'admin.switch_city', 'admin.logout',
+})
+UNCLASSIFIED_ALLOWED_PREFIXES = ('account.',)
+
+
+def _unclassified_allowed(endpoint):
+    endpoint = endpoint or ''
+    return (endpoint in UNCLASSIFIED_ALLOWED
+            or endpoint.startswith(UNCLASSIFIED_ALLOWED_PREFIXES))
+
+
 # Where a role lands when it opens the back office. The dashboard is bookings
 # and money; a role that may not see it would otherwise sign in to a refusal.
 ROLE_HOME = {'sales': 'places_finder.dashboard'}
@@ -246,6 +268,8 @@ def enforce_current_request():
 
     permission = required_permission()
     if permission is None:
+        if role in FAIL_CLOSED_ROLES and not _unclassified_allowed(request.endpoint):
+            abort(403, description='Your account is not permitted to perform this action.')
         return None
     if not has_permission(role, permission):
         home = ROLE_HOME.get(role)

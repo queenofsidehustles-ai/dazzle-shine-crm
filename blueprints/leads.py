@@ -141,7 +141,7 @@ def detail(lead_id):
         flash('Lead updated.', 'success')
         return redirect(url_for('leads.detail', lead_id=lead_id))
     import quoting
-    vas = User.query.filter_by(role='team').order_by(User.name).all()
+    vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
     # Only a lead that was actually quoted has a link worth showing -- quote_url
     # falls back to the generic booking form, which is not this lead's quote.
     return render_template('admin/lead_detail.html', lead=lead, vas=vas,

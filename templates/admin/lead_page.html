@@ -337,7 +337,7 @@
         <span style="color:var(--softer);font-size:0.78rem"> · {{ q.created_at.strftime('%b %d') if q.created_at }}</span>
       </div>
       {% endfor %}
-      {% for h in home_quotes %}
+      {% for h in (home_quotes if can_home_quote else []) %}
       <div class="lp-item">
         <a href="{{ url_for('leads.detail', lead_id=h.id) }}" style="font-weight:700;color:var(--ink)">Home quote</a>
         · {{ h.status|capitalize }}
@@ -348,6 +348,10 @@
       {% if quotes and not is_owner %}
       <p style="color:var(--softer);font-size:0.86rem;margin:0 0 8px">
         {{ quotes|length }} contract quote{{ '' if quotes|length == 1 else 's' }} — the owner has the details.</p>
+      {% endif %}
+      {% if home_quotes and not can_home_quote %}
+      <p style="color:var(--softer);font-size:0.86rem;margin:0 0 8px">
+        {{ home_quotes|length }} home quote{{ '' if home_quotes|length == 1 else 's' }} — the owner has the details.</p>
       {% endif %}
       {% if not quotes and not home_quotes %}
       <p style="color:var(--softer);font-size:0.86rem;margin:0">
