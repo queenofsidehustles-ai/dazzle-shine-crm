@@ -148,7 +148,15 @@
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label>When does their current contract end?</label>
-          <input type="text" name="renewal" value="{{ current.renewal_note or '' }}" placeholder="e.g. March 2027 — worth more than it sounds">
+          {# The month is the half that acts: it puts this prospect back on the
+             call list thirty days before the date, which is the one week an
+             incumbent is actually displaceable. The text box beside it keeps
+             whatever they said about it. #}
+          <input type="month" name="renewal_date"
+                 value="{{ (current.renewal_date or '')[:7] }}">
+          <input type="text" name="renewal" value="{{ current.renewal_note or '' }}"
+                 placeholder="anything else about the renewal — worth more than it sounds"
+                 style="margin-top:6px">
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label>Anything else worth remembering</label>

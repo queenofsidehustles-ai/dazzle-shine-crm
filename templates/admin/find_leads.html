@@ -15,6 +15,8 @@ data-status="{{ p.status }}"
 data-contact="{{ p.contact_name or '' }}"
 data-email="{{ p.email or '' }}"
 data-renewal="{{ p.renewal_note or '' }}"
+    {# YYYY-MM for <input type="month">; the stored value is YYYY-MM-01. #}
+    data-renewal-date="{{ (p.renewal_date or '')[:7] }}"
 data-attempts="{{ p.attempts or 0 }}"
 data-brand="{{ p.brand or default_brand }}"
 data-kind="{{ 'commercial' if p.is_commercial else 'residential' }}"
@@ -603,8 +605,14 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
       </div>
       <div class="cd-row">
         <div class="cd-field">
-          <label for="cdRenewal">Contract renewal</label>
-          <input type="text" name="renewal" id="cdRenewal" placeholder="e.g. March 2027">
+          <label for="cdRenewalDate">Contract renewal</label>
+          {# A month, not a day. Nobody knows the date their cleaning contract
+             ends, and this is the one field that puts them back on the call
+             list by itself — thirty days before it. #}
+          <input type="month" name="renewal_date" id="cdRenewalDate">
+          <input type="text" name="renewal" id="cdRenewal"
+                 placeholder="anything else about the renewal"
+                 style="margin-top:6px">
         </div>
         <div class="cd-field">
           <label for="cdSqft">Size / restrooms</label>
@@ -842,6 +850,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
     document.getElementById('cdContact').value = d.contact || '';
     document.getElementById('cdEmail').value = d.email || '';
     document.getElementById('cdRenewal').value = d.renewal || '';
+    document.getElementById('cdRenewalDate').value = d.renewalDate || '';
     nextTouched = false;
     suggestNext(false);
 
