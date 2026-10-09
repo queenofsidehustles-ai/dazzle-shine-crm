@@ -318,8 +318,15 @@
             <input type="text" name="city" id="edCity" value="{{ p.city or '' }}" style="{{ fld }}">
           </div>
           <div>
-            <label for="edRenewal" style="{{ lbl }}">Their contract renews</label>
-            <input type="text" name="renewal_note" id="edRenewal" value="{{ p.renewal_note or '' }}" placeholder="e.g. March 2027" style="{{ fld }}">
+            <label for="edRenewalDate" style="{{ lbl }}">Their contract renews</label>
+            {# The month is the half that acts: it puts this lead back on the
+               call list thirty days before, which is the one week an incumbent
+               is actually displaceable. The note beside it keeps what they
+               said about it. #}
+            <input type="month" name="renewal_date" id="edRenewalDate"
+                   value="{{ (p.renewal_date or '')[:7] }}" style="{{ fld }}">
+            <input type="text" name="renewal_note" id="edRenewal" value="{{ p.renewal_note or '' }}"
+                   placeholder="anything else about the renewal" style="{{ fld }}; margin-top:6px">
           </div>
         </div>
         <button type="submit" class="btn btn-outline" style="padding:9px 16px">Save details</button>

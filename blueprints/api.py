@@ -609,9 +609,31 @@ def applicant_followups():
     cutoff = now - timedelta(days=2)   # spacing between nudges
 
     def _qualifies(a):
-        """Same rule the apply form uses: needs experience + transportation."""
+        """Who this backstop may send an interview link to.
+
+        Deliberately NOT the same rule as the apply form. That form reads
+        answers somebody gave about themselves, where a blank is a refusal to
+        answer. This runs over applicants typed in by the owner, where a blank
+        is simply a question nobody was asked -- and the old rule required a
+        non-empty `years_experience`, so the manual-add form's Experience
+        dropdown (which defaults to "Unknown", saving as "") disqualified
+        every hand-entered applicant permanently, silently, with nothing on
+        any screen saying so.
+
+        Anybody who answered "no experience" on the public form was already
+        auto-rejected at screening and never reaches this query, so an empty
+        value here means unknown, not none.
+        """
+        # A company is a vendor, not a hire. The apply form explicitly does not
+        # send these the video interview -- it asks somebody about their own
+        # cleaning, and what a company needs is its insurance read by a person.
+        # Without this, the backstop quietly did what the form refuses to.
+        if (a.applicant_kind or 'individual') == 'company':
+            return False
         exp = (a.years_experience or '').strip().lower()
-        return bool(exp) and exp not in ('no experience', 'none') and bool(a.has_transportation)
+        if exp in ('no experience', 'none'):
+            return False
+        return bool(a.has_transportation)
 
     # Include applicants who never got a link at all ('not_sent'/None), so a missed
     # timer can never leave a qualified person stuck without their interview.
