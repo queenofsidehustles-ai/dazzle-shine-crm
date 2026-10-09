@@ -2,6 +2,26 @@
 
 Ideas we agreed to build later (not urgent). Newest at top.
 
+## Outreach drips bypass the sending-domain gate — 2026-10-09
+
+- [ ] **`_send_prospect_drip` and `_send_quote_followup` do not check
+      `email_domains.may_send_as()`.** Manual outreach does: press send on an
+      unproven domain and `prospecting.send_outreach` refuses, with the
+      sentence about introductions having to come from your own domain. The
+      automated sequences have no such check, and `brands.send_identity()`
+      quietly falls back to the platform's verified sender — so a tenant who
+      has not proven a domain gets their cold nurture sent from
+      **akyehq.com**. That is precisely what `email_domains.py` exists to
+      prevent: *"One company sending bad cold email from akyehq.com would cost
+      every other company on the platform their deliverability, and the ones
+      who paid that price would be the ones whose work orders stopped
+      arriving."* The automated path is the higher-volume one, so it is the
+      wrong half to leave open.
+      **Fix:** skip and retry rather than send, the same way a failed send now
+      leaves its step unspent. Harmless while outreach is blocked for want of
+      a verified domain; must land before a second tenant prospects.
+
+
 ## Commercial lead system — upgrades parked 2026-10-08
 
 From a walkthrough of someone running the same play on Meta's Muse + Slack +
