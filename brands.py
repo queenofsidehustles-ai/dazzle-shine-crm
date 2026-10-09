@@ -128,7 +128,7 @@ def brand_choices():
 
 _COMMERCIAL_SERVICES = ('commercial',)
 _COMMERCIAL_CATEGORIES = ('medical_office', 'general_contractor', 'office', 'daycare',
-                          'restaurant')
+                          'restaurant', 'gym', 'church')
 
 
 def _field(record, name):

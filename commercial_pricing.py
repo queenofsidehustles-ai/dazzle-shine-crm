@@ -58,6 +58,12 @@ PROD_RATES = {
     # every surface, floors that need degreasing rather than mopping, and a
     # health inspector who will look. Priced as the slower of the two.
     'restaurant': 1200,
+    # Every machine and mat wiped down, plus locker rooms and showers: closer
+    # to a clinic than an office for the time it takes.
+    'gym': 1500,
+    # Big open rooms used a few times a week -- the sanctuary goes quickly;
+    # restrooms, nursery and fellowship-hall kitchen are where the time is.
+    'church': 2500,
     'airbnb': 800,
     'other': 2000,
 }
@@ -77,9 +83,11 @@ FACILITY_TYPES = [
     ('daycare', '🧸 Daycare', 'Childcare centers & preschools'),
     ('medical_office', '🩺 Medical', 'Doctor / dental offices, clinics'),
     ('restaurant', '🍽️ Restaurant', 'Dining rooms, kitchens, restrooms'),
+    ('gym', '🏋️ Gym', 'Fitness studios, locker rooms, equipment'),
+    ('church', '⛪ Church', 'Sanctuaries, halls, classrooms'),
     ('apartment', '🏘️ Apartments', 'Complexes, common areas, turnovers'),
     ('property_manager', '🏢 Property Mgmt', 'Managed buildings'),
-    ('other', '📦 Other', 'Retail, gyms, churches, etc.'),
+    ('other', '📦 Other', 'Retail, schools, warehouses, etc.'),
 ]
 
 # Optional scope add-ons (key, label, % added to the price). The percentages
@@ -107,6 +115,9 @@ DEFAULT_EXTRAS = {
 # house done, and a box that can be unticked must change the price when it is.
 SUGGESTED_EXTRAS = {
     'restaurant': ['restrooms', 'breakroom'],
+    # Locker rooms are restrooms with showers, and equipment is high-touch.
+    'gym': ['restrooms', 'disinfection'],
+    'church': ['restrooms'],
 }
 
 

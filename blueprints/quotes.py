@@ -13,6 +13,7 @@ quotes_bp = Blueprint('quotes', __name__, url_prefix='/quotes')
 
 PROPERTY_TYPES = ['Apartment Complex', 'Student Housing', 'Office Building',
                   'Retail / Commercial', 'Restaurant / Food Service',
+                  'Gym / Fitness Center', 'Church / House of Worship',
                   'Property Management Portfolio', 'Other']
 
 SERVICES = [
@@ -42,6 +43,8 @@ _CAT_MAP = {
     'retail / commercial': 'other',
     'property management portfolio': 'property_manager',
     'restaurant / food service': 'restaurant',
+    'gym / fitness center': 'gym',
+    'church / house of worship': 'church',
 }
 # quote frequency → account frequency
 _FREQ_MAP = {'daily': 'nightly', 'weekly': 'weekly', 'biweekly': 'biweekly',
@@ -76,6 +79,8 @@ _PROPERTY_FOR_CATEGORY = {
     'medical_office': 'Office Building',
     'daycare': 'Office Building',
     'restaurant': 'Restaurant / Food Service',
+    'gym': 'Gym / Fitness Center',
+    'church': 'Church / House of Worship',
 }
 
 

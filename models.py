@@ -1586,6 +1586,8 @@ class Script(db.Model):
         'office':             'call_office',
         'daycare':            'call_office',
         'restaurant':         'call_office',
+        'gym':                'call_office',
+        'church':             'call_office',
         'other':              'call_office',
     }
 
@@ -1836,6 +1838,8 @@ class Prospect(db.Model):
         'apartment': '🏘️ Apartment Complex',
         'daycare': '🧸 Daycare / Childcare',
         'restaurant': '🍽️ Restaurant / Café',
+        'gym': '🏋️ Gym / Fitness Studio',
+        'church': '⛪ Church / Place of Worship',
         'medical_office': '🩺 Doctor / Medical Office',
         'general_contractor': '🏗️ General Contractor',
         'office': '💼 Office Space',

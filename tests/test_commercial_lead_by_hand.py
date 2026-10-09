@@ -405,6 +405,37 @@ check(sheet_com.count('Gleam Commercial Co') > 1 and sheet_res.count('Gleam Comm
       and 'Home quote' in sheet_res,
       'flipped to residential, the call sheet reads the residential company, not the commercial one')
 
+print('\n10. Gyms and churches too')
+page = c.get('/find-leads/?view=add', base_url=HOST).get_data(as_text=True)
+find = c.get('/find-leads/?view=find', base_url=HOST).get_data(as_text=True)
+for key, name, ptype, extras in (
+        ('gym', 'Harbor Point CrossFit', 'Gym / Fitness Center', {'restrooms', 'disinfection'}),
+        ('church', 'Lakeside Baptist Church', 'Church / House of Worship', {'restrooms'})):
+    check(f'<option value="{key}"' in page and f'<option value="{key}"' in find
+          and finder.CATEGORY_QUERIES.get(key),
+          f'{key}: in the add list, and searchable under Find new')
+    c.post('/find-leads/add', base_url=HOST, data={
+        'business_name': name, 'category': key, 'city': 'Bowie'})
+    row = lead(name)
+    check(row['brand'] == 'commercial', f'{key}: commercial work by default')
+    form = c.get(f'/quotes/new?prospect_id={row["id"]}', base_url=HOST).get_data(as_text=True)
+    check(re.search(rf'<option value="{re.escape(ptype)}"\s+selected', form)
+          and brands.brand_for_property(ptype) == brands.COMMERCIAL,
+          f'{key}: its contract quote opens as "{ptype}", under the commercial name')
+    with app.app_context(), tenancy.use_tenant(SLUG):
+        cfg = commercial_pricing.get_config()
+        rate = commercial_pricing.prod_rate(key)
+        # Big enough to be past the minimum-visit floor, which would hide an add-on.
+        bare = commercial_pricing.quote(12000, key, 'weekly', [])['monthly']
+        full = commercial_pricing.quote(12000, key, 'weekly', sorted(extras))['monthly']
+        db.session.remove()
+    check(key in commercial_pricing.PROD_RATES and rate == commercial_pricing.PROD_RATES[key]
+          and set(cfg['default_extras'][key]) == extras and bare < full,
+          f'{key}: its own cleaning rate, with {sorted(extras)} pre-ticked and removable')
+check(commercial_pricing.prod_rate('gym') < commercial_pricing.prod_rate('office')
+      < commercial_pricing.prod_rate('church'),
+      'a gym is slower work than an office, a church faster')
+
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)
