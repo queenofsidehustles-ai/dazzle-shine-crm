@@ -70,7 +70,7 @@
     {% else %}
       <a href="{{ url_for('leads.new_quote', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">📝 Home quote</a>
     {% endif %}
-    {% if account %}
+    {% if account and is_owner %}
       <a href="{{ url_for('commercial.detail', account_id=account.id) }}" class="btn btn-outline" style="padding:9px 14px">🏢 Their account</a>
     {% elif p.is_commercial and can_convert %}
       {# The step that had no button anywhere: they said yes, now they are a customer. #}
@@ -184,6 +184,7 @@
     <div class="card lp-card">
       <h3>🏷️ Details</h3>
       <form method="POST" action="{{ url_for('places_finder.edit_lead', prospect_id=p.id) }}">
+        <input type="hidden" name="kind_was" value="{{ 'commercial' if p.is_commercial else 'residential' }}">
         <div class="lp-row" style="margin-bottom:10px">
           <div style="grid-column:1/-1">
             <label for="edName" style="{{ lbl }}">Business name</label>
@@ -240,7 +241,7 @@
     {# ── Quote, then account ──────────────────────────────────────────── #}
     <div class="card lp-card">
       <h3>📝 Quotes</h3>
-      {% for q in quotes %}
+      {% for q in (quotes if is_owner else []) %}
       <div class="lp-item">
         <a href="{{ url_for('quotes.detail', quote_id=q.id) }}" style="font-weight:700;color:var(--ink)">Contract quote</a>
         · {{ q.status|capitalize }}
@@ -256,6 +257,10 @@
         <span style="color:var(--softer);font-size:0.78rem"> · {{ h.created_at.strftime('%b %d') if h.created_at }}</span>
       </div>
       {% endfor %}
+      {% if quotes and not is_owner %}
+      <p style="color:var(--softer);font-size:0.86rem;margin:0 0 8px">
+        {{ quotes|length }} contract quote{{ '' if quotes|length == 1 else 's' }} — the owner has the details.</p>
+      {% endif %}
       {% if not quotes and not home_quotes %}
       <p style="color:var(--softer);font-size:0.86rem;margin:0">
         No quote yet. Once you know the size and what they want cleaned,
@@ -263,7 +268,7 @@
         Sending it moves them to Proposal; when they accept they are marked won{% if p.is_commercial %} and become an account{% endif %}.
       </p>
       {% endif %}
-      {% if account %}
+      {% if account and is_owner %}
       <p style="margin:12px 0 0;font-size:0.88rem">🏢 <strong>Account:</strong>
         <a href="{{ url_for('commercial.detail', account_id=account.id) }}" style="color:var(--amber-deep)">{{ account.business_name }}</a>
         · {{ account.status|capitalize }}</p>
@@ -282,6 +287,7 @@
   // The outcome fills in the next step, the same suggestions the call list uses.
   (function () {
     const RULES = {{ next_rules | tojson }};
+    const TODAY = {{ today | tojson }};
     const status = document.getElementById('lpStatus');
     const act = document.getElementById('lpNext'), when = document.getElementById('lpWhen');
     let touched = false;
@@ -292,7 +298,10 @@
       if (!r) return;
       act.value = r.action || '';
       if (r.days === null || r.days === undefined) { when.value = ''; return; }
-      const d = new Date(); d.setDate(d.getDate() + r.days);
+      // From the business's own date, in UTC throughout: a browser's local
+      // midnight turned into ISO is tomorrow for anybody west of Greenwich
+      // in the evening, which scheduled every follow-up a day late.
+      const d = new Date(TODAY + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + r.days);
       when.value = d.toISOString().slice(0, 10);
     });
 

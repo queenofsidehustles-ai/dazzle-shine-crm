@@ -500,6 +500,72 @@ page = c.get(f'/find-leads/{chang["id"]}', base_url=HOST).get_data(as_text=True)
 check('Their account' in page and 'Make them an account' not in page,
       'the page now points at their account instead')
 
+print('\n12. The lead page is a lead surface, and gets the details right')
+import rbac
+check(rbac.required_permission('places_finder.lead_page', 'GET') == 'lead.read'
+      and rbac.required_permission('places_finder.edit_lead', 'POST') == 'lead.manage'
+      and rbac.required_permission('places_finder.set_kind', 'POST') == 'lead.manage'
+      and rbac.required_permission('places_finder.add_by_hand', 'POST') == 'lead.manage',
+      'viewing needs lead access, changing needs lead management')
+def role_client(role):
+    """Signed in as a real user with this role, bound like a real login --
+    a role changed inside the session alone is (rightly) signed out."""
+    from auth import _auth_fingerprint
+    from models import User
+    with app.app_context(), tenancy.use_tenant(SLUG):
+        u = User(name=role.title(), username=f'{role}@{SLUG}.test', role=role, active=True)
+        u.set_password('a-perfectly-fine-password')
+        db.session.add(u)
+        db.session.commit()
+        uid, fp = u.id, _auth_fingerprint(u.password_hash)
+        db.session.remove()
+    client = app.test_client()
+    with client.session_transaction(base_url=HOST) as sess:
+        sess.update(logged_in=True, role=role, user_id=uid, user_name=role.title(),
+                    auth_fingerprint=fp, tenant_slug=SLUG)
+    return client
+
+
+cl = role_client('cleaner')
+r1 = cl.get(f'/find-leads/{chang["id"]}', base_url=HOST)
+r2 = cl.post(f'/find-leads/{chang["id"]}/edit', base_url=HOST, data={'business_name': 'Hijacked'})
+check(r1.status_code == 403 and r2.status_code == 403 and lead('Chang Chang') is not None,
+      f'a cleaner can neither open a lead page nor rename the lead ({r1.status_code}, {r2.status_code})')
+dc = role_client('dispatcher')
+page = dc.get(f'/find-leads/{chang["id"]}', base_url=HOST).get_data(as_text=True)
+check('Log a call' in page and '/mo' not in page and 'Their account' not in page,
+      'a dispatcher works the lead, without the contract prices or the account, which are the owner\'s')
+
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'property_manager'})
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'property_manager', 'kind': 'commercial'})
+check(lead('Oakline Property Management')['brand'] == 'commercial', '(set up: flipped to commercial by hand)')
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={
+    'category': 'apartment', 'kind': 'commercial', 'kind_was': 'commercial'})
+check(lead('Oakline Property Management')['brand'] == 'primary',
+      'changing only the kind of business moves the side, though the form sends the side it showed')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from models import Script
+    db.session.add(Script(category='call_office', title='Opening — offices (starter pack)',
+                          content='Hi, quick question about your office cleaning', sort_order=1))
+    old_lead = Prospect(business_name='Old Won Bakery', category='restaurant', status='won',
+                        stage=None, phone='3015550999')
+    db.session.add(old_lead)
+    db.session.commit()
+    old_id = old_lead.id
+    # What a lead from before stages existed looks like: no stage, nothing due.
+    db.session.execute(db.text('UPDATE prospect SET stage = NULL, next_action = NULL, '
+                               'next_action_date = NULL, attempts = NULL WHERE id = :i'), {'i': old_id})
+    db.session.commit()
+    with app.test_request_context('/', base_url=HOST):
+        office = PF2._openers()['commercial']['office']
+    db.session.remove()
+check(office and office[0]['title'].startswith('Opening — offices (starter pack)'),
+      'loaded starter-pack openings for a kind of business are the ones the drawer reads')
+c.get(f'/find-leads/{old_id}', base_url=HOST)
+check(lead('Old Won Bakery')['stage'] == 'won',
+      'an old lead opened straight from a link is brought up to date, not shown as New')
+
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)

@@ -74,13 +74,22 @@ def _pick_openings(outbound, category):
     return named or chosen
 
 
+def _openings_for(groups, category):
+    """The opening to read for one kind of business.
+
+    The "Load starter scripts" pack files openings by kind (call_office,
+    call_medical...), and those are the ones written for this call. A company
+    seeded at signup has them in 'outbound' instead, picked by title.
+    """
+    from models import Script
+    mapped = groups.get(Script.script_category_for(category), [])
+    return mapped or _pick_openings(groups.get('outbound', []), category)
+
+
 def _openers():
     """{brand: {category: [opening scripts]}} for the call drawer."""
-    out = {}
-    for brand_key, groups in _call_scripts().items():
-        outbound = groups.get('outbound', [])
-        out[brand_key] = {c: _pick_openings(outbound, c) for c in CATEGORIES}
-    return out
+    return {brand_key: {c: _openings_for(groups, c) for c in CATEGORIES}
+            for brand_key, groups in _call_scripts().items()}
 
 
 def _scripts_for(prospect, brand_key):
@@ -98,7 +107,7 @@ def _scripts_for(prospect, brand_key):
                 if any(w in (r.get('title') or '').lower() for w in words)]
 
     sections = [
-        ('What to say', _pick_openings(groups.get('outbound', []), prospect.category)),
+        ('What to say', _openings_for(groups, prospect.category)),
         ('Getting past the gatekeeper', titled(general, 'gatekeeper')),
         ('If it goes to voicemail', titled(general, 'voicemail')),
         ('If they push back', groups.get('objection', [])),
@@ -247,6 +256,14 @@ def _sms_stopped(prospects):
     except Exception:
         return set()
     return {p.id for p in prospects if _phone10(p.phone) in stopped}
+
+
+def _is_owner():
+    from auth import is_owner_session
+    try:
+        return is_owner_session()
+    except Exception:
+        return False
 
 
 def _can_quote():
@@ -721,7 +738,10 @@ def lead_page(prospect_id):
     from models import CommercialQuote, CommercialAccount, Lead, Message
     import brands
     p = Prospect.query.get_or_404(prospect_id)
-    if brands.backfill(p, brands.brand_for_prospect):
+    # Opened by link or bookmark, before any list view has filled in what
+    # predates the funnel -- so do it here too, or an old won lead reads New.
+    touched = [prospecting.backfill(p), brands.backfill(p, brands.brand_for_prospect)]
+    if any(touched):
         db.session.commit()
     phone = _phone10(p.phone)
     quotes = (CommercialQuote.query.filter_by(prospect_id=p.id)
@@ -741,7 +761,10 @@ def lead_page(prospect_id):
         next_rules={k: {'action': v[1], 'days': v[2]} for k, v in prospecting.RULES.items()},
         today=local_today().isoformat(),
         text_phone=phone if p.id not in _sms_stopped([p]) and p.status != 'do_not_contact' else '',
+        # Contract quotes and accounts are owner pages (money), so their
+        # prices and the account are only shown to whoever can open them.
         can_quote=_can_quote(), can_convert=_can_quote(),
+        is_owner=_is_owner(),
         email_templates=_email_templates().get(brands.COMMERCIAL, []),
         here=url_for('places_finder.lead_page', prospect_id=p.id))
 
@@ -771,8 +794,11 @@ def edit_lead(prospect_id):
         if site and not site.startswith(('http://', 'https://')):
             site = 'https://' + site
         p.website = site or None
+    # The radio always submits whichever side is showing, so it only counts as
+    # a choice when it differs from what the page was drawn with. Otherwise
+    # correcting a property manager to an office would keep it residential.
     kind = f.get('kind')
-    if kind in ('residential', 'commercial'):
+    if kind in ('residential', 'commercial') and kind != f.get('kind_was'):
         p.brand = brands.COMMERCIAL if kind == 'commercial' else brands.PRIMARY
     elif p.category != old_category:
         # A new kind of business with no explicit choice: follow it, the same

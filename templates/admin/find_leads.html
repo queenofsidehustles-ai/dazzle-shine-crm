@@ -716,9 +716,11 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+  // From the business's own date, in UTC throughout -- see lead_page.html.
+  const CD_TODAY = {{ today | tojson }};
   const isoIn = days => {
-    const d = new Date();
-    d.setDate(d.getDate() + days);
+    const d = new Date(CD_TODAY + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
     return d.toISOString().slice(0, 10);
   };
 
