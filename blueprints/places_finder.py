@@ -30,7 +30,8 @@ places_finder_bp = Blueprint('places_finder', __name__, url_prefix='/find-leads'
 DAILY_STINT = 20
 
 CATEGORIES = ['property_manager', 'realtor', 'airbnb', 'apartment',
-              'daycare', 'medical_office', 'general_contractor', 'office', 'other']
+              'daycare', 'medical_office', 'restaurant', 'general_contractor', 'office',
+              'other']
 
 
 # Which opening belongs to which kind of business. The scripts are filed by
@@ -43,6 +44,7 @@ VERTICAL_HINTS = {
     'office':             ('office', 'daycare', 'medical'),
     'medical_office':     ('medical', 'office'),
     'daycare':            ('daycare', 'office'),
+    'restaurant':         ('restaurant', 'office'),
     'apartment':          ('apartment', 'property manager'),
     'property_manager':   ('property manager', 'apartment'),
     'realtor':            ('realtor',),

@@ -12,7 +12,7 @@ import commercial_pricing as cpricing
 commercial_bp = Blueprint('commercial', __name__, url_prefix='/commercial')
 
 FREQUENCIES = ['nightly', 'weekly', 'biweekly', 'monthly', 'custom']
-CATEGORIES = ['property_manager', 'apartment', 'daycare', 'medical_office',
+CATEGORIES = ['property_manager', 'apartment', 'daycare', 'medical_office', 'restaurant',
               'office', 'realtor', 'airbnb', 'other']
 
 

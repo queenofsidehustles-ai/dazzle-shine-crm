@@ -343,6 +343,32 @@ form = c.get(f'/quotes/new?prospect_id={ridge["id"]}', base_url=HOST).get_data(a
 check(f'/leads/quote/new?prospect_id={ridge["id"]}' in form,
       'and a contract quote started by mistake links across to the home quote')
 
+print('\n9. Restaurants are a kind of business of their own')
+import brands
+import commercial_pricing
+import places_finder as finder
+page = c.get('/find-leads/?view=add', base_url=HOST).get_data(as_text=True)
+check('<option value="restaurant"' in page and 'Restaurant / Café' in page,
+      'Restaurant is in the list when adding one by hand')
+find = c.get('/find-leads/?view=find', base_url=HOST).get_data(as_text=True)
+check('<option value="restaurant"' in find and finder.CATEGORY_QUERIES.get('restaurant'),
+      'and can be searched for under Find new')
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Sunshine Grill', 'category': 'restaurant', 'city': 'Silver Spring'})
+grill = lead('Sunshine Grill')
+check(grill['brand'] == 'commercial', 'a restaurant is commercial work unless you say otherwise')
+form = c.get(f'/quotes/new?prospect_id={grill["id"]}', base_url=HOST).get_data(as_text=True)
+check(re.search(r'<option value="Restaurant / Food Service"\s+selected', form),
+      'its contract quote opens as a restaurant')
+check(brands.brand_for_property('Restaurant / Food Service') == brands.COMMERCIAL,
+      'and goes out under the commercial name')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    check(commercial_pricing.prod_rate('restaurant') < commercial_pricing.prod_rate('office'),
+          'kitchens are priced as slower work than an office')
+    db.session.remove()
+check(set(commercial_pricing.DEFAULT_EXTRAS.get('restaurant', [])) == {'restrooms', 'breakroom'},
+      'with the kitchen and restrooms pre-ticked on the calculator')
+
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)

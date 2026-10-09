@@ -127,7 +127,8 @@ def brand_choices():
 # decided the rule: sold to a business, but residential work.
 
 _COMMERCIAL_SERVICES = ('commercial',)
-_COMMERCIAL_CATEGORIES = ('medical_office', 'general_contractor', 'office', 'daycare')
+_COMMERCIAL_CATEGORIES = ('medical_office', 'general_contractor', 'office', 'daycare',
+                          'restaurant')
 
 
 def _field(record, name):

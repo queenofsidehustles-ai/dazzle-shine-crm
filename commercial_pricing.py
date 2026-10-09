@@ -54,6 +54,10 @@ PROD_RATES = {
     'apartment': 1500,
     'daycare': 1700,
     'medical_office': 1300,
+    # A dining room goes quickly; the kitchen behind it does not -- grease on
+    # every surface, floors that need degreasing rather than mopping, and a
+    # health inspector who will look. Priced as the slower of the two.
+    'restaurant': 1200,
     'airbnb': 800,
     'other': 2000,
 }
@@ -72,6 +76,7 @@ FACILITY_TYPES = [
     ('office', '🏢 Office', 'Offices, cubicles, meeting rooms'),
     ('daycare', '🧸 Daycare', 'Childcare centers & preschools'),
     ('medical_office', '🩺 Medical', 'Doctor / dental offices, clinics'),
+    ('restaurant', '🍽️ Restaurant', 'Dining rooms, kitchens, restrooms'),
     ('apartment', '🏘️ Apartments', 'Complexes, common areas, turnovers'),
     ('property_manager', '🏢 Property Mgmt', 'Managed buildings'),
     ('other', '📦 Other', 'Retail, gyms, churches, etc.'),
@@ -93,6 +98,9 @@ EXTRAS = [
 # rooms at office rates. Pre-ticked in the calculator, still removable.
 DEFAULT_EXTRAS = {
     'medical_office': ['disinfection'],
+    # Customers use the restrooms all day and the kitchen is the job, so a
+    # restaurant quote carries both unless somebody takes them off.
+    'restaurant': ['restrooms', 'breakroom'],
 }
 
 
