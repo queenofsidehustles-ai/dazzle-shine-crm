@@ -93,6 +93,13 @@ ENDPOINT_PERMISSIONS = {
     ('leads.checklist_json', 'GET'): 'lead.manage',
     ('leads.detail', 'POST'): 'lead.manage',
     ('leads.convert', 'POST'): 'lead.manage',
+    # One lead's page, and the forms on it. The page shows the lead's texts
+    # and quotes, so it is a lead surface, not a free-for-all; editing who a
+    # lead is, flipping its side and adding one by hand are lead management.
+    ('places_finder.lead_page', 'GET'): 'lead.read',
+    ('places_finder.edit_lead', 'POST'): 'lead.manage',
+    ('places_finder.set_kind', 'POST'): 'lead.manage',
+    ('places_finder.add_by_hand', 'POST'): 'lead.manage',
 
     ('messages.sent_log', 'GET'): 'messages.read',
     ('messages.inbox', 'GET'): 'messages.read',

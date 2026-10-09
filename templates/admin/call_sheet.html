@@ -31,7 +31,7 @@
 </p>
 
 <div class="card">
-  <h2 style="margin:0 0 2px">{{ current.business_name }}</h2>
+  <h2 style="margin:0 0 2px"><a href="{{ url_for('places_finder.lead_page', prospect_id=current.id) }}" style="color:var(--ink)">{{ current.business_name }}</a></h2>
   <p style="color:var(--softer);font-size:0.86rem;margin:0 0 14px">
     {{ category_labels.get(current.category, current.category) }}
     {% if current.address %} · {{ current.address }}{% endif %}

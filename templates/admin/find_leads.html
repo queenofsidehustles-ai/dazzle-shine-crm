@@ -144,7 +144,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
         {% set state = p.due_state(today) %}
         <tr>
           <td>
-            <strong>{{ p.business_name }}</strong>
+            <a href="{{ url_for('places_finder.lead_page', prospect_id=p.id) }}" style="color:var(--ink)"><strong>{{ p.business_name }}</strong></a>
             {% if p.rating %}<span style="font-size:0.78rem;color:var(--softer)"> ⭐{{ '%.1f' % p.rating }}</span>{% endif %}
             <div style="font-size:0.78rem;color:var(--softer)">
               <span class="kind-badge">{{ p.kind_label }}</span> · {{ p.category_label }}{% if p.attempts %} · {{ p.attempts }} attempt{{ '' if p.attempts == 1 else 's' }}{% endif %}
@@ -249,7 +249,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
         {% for p in shown %}
         <tr>
           <td>
-            <strong>{{ p.business_name }}</strong>
+            <a href="{{ url_for('places_finder.lead_page', prospect_id=p.id) }}" style="color:var(--ink)"><strong>{{ p.business_name }}</strong></a>
             <br><span class="kind-badge">{{ p.kind_label }}</span>
             {% if p.website %}<br><a href="{{ p.website }}" target="_blank" style="font-size:0.76rem;color:var(--amber-deep)">website ↗</a>{% endif %}
           </td>
@@ -550,6 +550,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
       <div style="min-width:0">
         <div id="cdName" style="font-weight:700;font-size:1.05rem;color:var(--ink);line-height:1.3"></div>
         <div id="cdCat" style="font-size:.8rem;color:var(--softer);margin-top:2px"></div>
+        <a id="cdPage" href="#" style="font-size:.8rem;color:var(--amber-deep);font-weight:600">Open their page — details, quotes, history →</a>
       </div>
       <button type="button" id="cdClose" class="btn btn-outline"
               style="padding:5px 11px;font-size:.85rem;flex-shrink:0">✕</button>
@@ -698,6 +699,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
   let   CD_EMAILS  = CD_EMAILS_BY_BRAND[CD_DEFAULT_BRAND] || [];
 
   const CD_MAP      = {{ script_map | tojson }};
+  const CD_OPENERS  = {{ openers | tojson }};
   const CD_ALWAYS   = {{ script_always | tojson }};
   const CD_LABELS   = {{ script_labels | tojson }};
   const CD_RULES    = {{ next_rules | tojson }};
@@ -709,13 +711,16 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
   const CD_QUOTE_COM  = "{{ url_for('quotes.new', prospect_id=0) if can_quote else '' }}";
   const CD_QUOTE_RES  = "{{ url_for('leads.new_quote', prospect_id=0) }}";
   const CD_KIND_ACTION = "{{ url_for('places_finder.set_kind', prospect_id=0) }}";
+  const CD_PAGE = "{{ url_for('places_finder.lead_page', prospect_id=0) }}";
 
   const esc = s => String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+  // From the business's own date, in UTC throughout -- see lead_page.html.
+  const CD_TODAY = {{ today | tojson }};
   const isoIn = days => {
-    const d = new Date();
-    d.setDate(d.getDate() + days);
+    const d = new Date(CD_TODAY + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
     return d.toISOString().slice(0, 10);
   };
 
@@ -807,14 +812,17 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
       qb.style.display = 'none';
     }
     document.getElementById('cdKindForm').action = CD_KIND_ACTION.replace('/0/', '/' + d.id + '/');
+    document.getElementById('cdPage').href = CD_PAGE.replace(/\/0$/, '/' + d.id);
     document.getElementById('cdKindRes').classList.toggle('on', !commercial);
     document.getElementById('cdKindCom').classList.toggle('on', commercial);
     document.getElementById('cdKindHint').textContent = commercial
       ? 'Quoted as a cleaning contract'
       : 'Quoted per home — beds, baths, turnovers';
 
+    // The openings for this kind of business, picked on the server the way
+    // the call sheet picks them. The full Outbound list stays below.
     const openerCat = CD_MAP[d.cat] || 'call_office';
-    const opener = CD_SCRIPTS[openerCat] || [];
+    const opener = ((CD_OPENERS[d.brand] || CD_OPENERS[CD_DEFAULT_BRAND] || {})[d.cat]) || [];
     document.getElementById('cdOpener').innerHTML = opener.length
       ? opener.map(block).join('')
       : '<div class="cd-script"><h4>No script loaded yet</h4><div class="cd-line">'

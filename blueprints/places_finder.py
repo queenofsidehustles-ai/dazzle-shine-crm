@@ -74,6 +74,24 @@ def _pick_openings(outbound, category):
     return named or chosen
 
 
+def _openings_for(groups, category):
+    """The opening to read for one kind of business.
+
+    The "Load starter scripts" pack files openings by kind (call_office,
+    call_medical...), and those are the ones written for this call. A company
+    seeded at signup has them in 'outbound' instead, picked by title.
+    """
+    from models import Script
+    mapped = groups.get(Script.script_category_for(category), [])
+    return mapped or _pick_openings(groups.get('outbound', []), category)
+
+
+def _openers():
+    """{brand: {category: [opening scripts]}} for the call drawer."""
+    return {brand_key: {c: _openings_for(groups, c) for c in CATEGORIES}
+            for brand_key, groups in _call_scripts().items()}
+
+
 def _scripts_for(prospect, brand_key):
     """Everything to say on this call, in the order a call goes.
 
@@ -89,7 +107,7 @@ def _scripts_for(prospect, brand_key):
                 if any(w in (r.get('title') or '').lower() for w in words)]
 
     sections = [
-        ('What to say', _pick_openings(groups.get('outbound', []), prospect.category)),
+        ('What to say', _openings_for(groups, prospect.category)),
         ('Getting past the gatekeeper', titled(general, 'gatekeeper')),
         ('If it goes to voicemail', titled(general, 'voicemail')),
         ('If they push back', groups.get('objection', [])),
@@ -210,6 +228,11 @@ def _view_args(view, prospects, **extra):
         brand_choices=brands.lens_choices(),
         default_brand=brands.PRIMARY,
         script_map=Script.PROSPECT_CATEGORY_MAP,
+        # The opening to read for each kind of business, picked the way the
+        # call sheet picks it. The drawer looked them up by category names
+        # ('call_office' and so on) that no script has ever been filed under,
+        # so it said "No script loaded yet" above six loaded openings.
+        openers=_openers(),
         script_always=Script.ALWAYS_SHOW,
         script_labels=dict(Script.CATEGORIES),
         # Quotes are an owner's page on a plan that has commercial work, so
@@ -233,6 +256,14 @@ def _sms_stopped(prospects):
     except Exception:
         return set()
     return {p.id for p in prospects if _phone10(p.phone) in stopped}
+
+
+def _is_owner():
+    from auth import is_owner_session
+    try:
+        return is_owner_session()
+    except Exception:
+        return False
 
 
 def _can_quote():
@@ -600,6 +631,16 @@ def import_selected():
     return redirect(url_for('places_finder.dashboard'))
 
 
+def _back(view='today'):
+    """Back to where the form was sent from -- the lead page, the call list --
+    if that is a page on this site, else the call list. A form posting a
+    `next` of somebody else's site must not turn this into a redirector."""
+    back = (request.form.get('next') or request.args.get('next') or '').strip()
+    if back.startswith('/') and not back.startswith('//') and '\\' not in back:
+        return redirect(back)
+    return redirect(url_for('places_finder.dashboard', view=view))
+
+
 def _phone10(value):
     digits = ''.join(ch for ch in str(value or '') if ch.isdigit())
     return digits[-10:] if len(digits) >= 10 else ''
@@ -675,7 +716,97 @@ def add_by_hand():
     db.session.add(p)
     db.session.commit()
     flash(f'{name} is on your call list — first call due today.', 'success')
-    return redirect(url_for('places_finder.dashboard', view='today'))
+    # Straight to their page: the next thing anybody does with a lead they
+    # just typed in is call, text or quote it, and that is all there.
+    return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
+
+
+@places_finder_bp.route('/<int:prospect_id>')
+@login_required
+@requires_plan('lead_finder')
+def lead_page(prospect_id):
+    """One lead, start to finish, on one page.
+
+    The call list is built for working through many businesses fast; this is
+    for the one in front of you. Everything a lead goes through is here, in the
+    order it happens: who they are (and correcting it -- a lead typed in as an
+    office that turns out to be a restaurant), what was said on every call,
+    texting and emailing them, the quote, and making them an account when they
+    say yes. Before this, those were five screens and one of them -- making an
+    account from a lead -- had no link to it at all.
+    """
+    from models import CommercialQuote, CommercialAccount, Lead, Message
+    import brands
+    p = Prospect.query.get_or_404(prospect_id)
+    # Opened by link or bookmark, before any list view has filled in what
+    # predates the funnel -- so do it here too, or an old won lead reads New.
+    touched = [prospecting.backfill(p), brands.backfill(p, brands.brand_for_prospect)]
+    if any(touched):
+        db.session.commit()
+    phone = _phone10(p.phone)
+    quotes = (CommercialQuote.query.filter_by(prospect_id=p.id)
+              .order_by(CommercialQuote.created_at.desc()).all())
+    home_quotes = (Lead.query.filter_by(prospect_id=p.id)
+                   .order_by(Lead.created_at.desc()).all())
+    account = CommercialAccount.query.filter_by(prospect_id=p.id).first()
+    texts = (Message.query.filter_by(phone=phone)
+             .order_by(Message.created_at.desc()).limit(5).all()) if phone else []
+    stages = [s for s in Prospect.STAGE_LABELS if s[0] in ('new', 'working', 'interested', 'proposal', 'won')]
+    return render_template(
+        'admin/lead_page.html', p=p, quotes=quotes, home_quotes=home_quotes,
+        account=account, texts=list(reversed(texts)), stages=stages,
+        stage_keys=[k for k, _ in stages],
+        categories=CATEGORIES, category_labels=Prospect.CATEGORY_LABELS,
+        status_labels=Prospect.STATUS_LABELS,
+        next_rules={k: {'action': v[1], 'days': v[2]} for k, v in prospecting.RULES.items()},
+        today=local_today().isoformat(),
+        text_phone=phone if p.id not in _sms_stopped([p]) and p.status != 'do_not_contact' else '',
+        # Contract quotes and accounts are owner pages (money), so their
+        # prices and the account are only shown to whoever can open them.
+        can_quote=_can_quote(), can_convert=_can_quote(),
+        is_owner=_is_owner(),
+        email_templates=_email_templates().get(brands.COMMERCIAL, []),
+        here=url_for('places_finder.lead_page', prospect_id=p.id))
+
+
+@places_finder_bp.route('/<int:prospect_id>/edit', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def edit_lead(prospect_id):
+    """Correct who a lead is. The kind of business especially: it decides
+    which scripts are read, how the quote is priced and which company the
+    emails come from, and the first guess -- typed in a hurry, or Google's
+    -- is often wrong."""
+    import brands
+    p = Prospect.query.get_or_404(prospect_id)
+    f = request.form
+    name = (f.get('business_name') or '').strip()
+    if name:
+        p.business_name = name
+    old_category = p.category
+    if f.get('category') in CATEGORIES:
+        p.category = f.get('category')
+    for field in ('contact_name', 'phone', 'email', 'address', 'city', 'renewal_note'):
+        if field in f:
+            setattr(p, field, (f.get(field) or '').strip() or None)
+    if 'website' in f:
+        site = (f.get('website') or '').strip()
+        if site and not site.startswith(('http://', 'https://')):
+            site = 'https://' + site
+        p.website = site or None
+    # The radio always submits whichever side is showing, so it only counts as
+    # a choice when it differs from what the page was drawn with. Otherwise
+    # correcting a property manager to an office would keep it residential.
+    kind = f.get('kind')
+    if kind in ('residential', 'commercial') and kind != f.get('kind_was'):
+        p.brand = brands.COMMERCIAL if kind == 'commercial' else brands.PRIMARY
+    elif p.category != old_category:
+        # A new kind of business with no explicit choice: follow it, the same
+        # way a lead added by hand does.
+        p.brand = brands.brand_for_prospect(p)
+    db.session.commit()
+    flash(f'{p.business_name} updated.', 'success')
+    return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
 
 
 @places_finder_bp.route('/<int:prospect_id>/kind', methods=['POST'])
@@ -731,7 +862,7 @@ def update_status(prospect_id):
             flash(f'Logged. {p.business_name} is closed for now.', 'success')
     else:
         flash('Call list updated.', 'success')
-    return redirect(url_for('places_finder.dashboard', view=request.args.get('view', 'today')))
+    return _back(request.args.get('view', 'today'))
 
 
 @places_finder_bp.route('/<int:prospect_id>/snooze', methods=['POST'])
@@ -751,7 +882,7 @@ def snooze(prospect_id):
     p.next_action_date = (local_today() + timedelta(days=days)).isoformat()
     db.session.commit()
     flash(f'{p.business_name} moved to {p.next_action_date}.', 'success')
-    return redirect(url_for('places_finder.dashboard', view=request.args.get('view', 'today')))
+    return _back(request.args.get('view', 'today'))
 
 
 @places_finder_bp.route('/<int:prospect_id>/email', methods=['POST'])
@@ -767,7 +898,7 @@ def send_outreach(prospect_id):
         p, request.form.get('subject'), request.form.get('body'),
         to=request.form.get('email'))
     flash(said, 'success' if ok else 'error')
-    return redirect(url_for('places_finder.dashboard', view=view))
+    return _back(view)
 
 
 @places_finder_bp.route('/export.csv')

@@ -163,7 +163,14 @@ def convert(prospect_id):
             prospect_id=p.id,
             agent=_agent_from(),
         )
+        # Won on the call list too, with nothing left due -- or somebody rings
+        # a new customer to ask whether they are interested.
+        import prospecting
+        prospecting.quote_moved(p.id, 'won', 'won', None, None,
+                                'Became a commercial account 🎉')
         p.status = 'won'
+        p.contact_name = p.contact_name or a.contact_name or None
+        p.email = p.email or a.email or None
         db.session.add(a)
         db.session.commit()
         flash(f'🎉 {p.business_name} is now a commercial account!', 'success')

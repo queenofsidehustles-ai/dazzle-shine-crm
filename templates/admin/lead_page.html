@@ -1,0 +1,317 @@
+{% extends "base_admin.html" %}
+{% block title %}{{ p.business_name }} — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}{{ p.business_name }}{% endblock %}
+
+{% block content %}
+{# One lead, start to finish: who they are, what was said, talking to them,
+   the quote, and making them an account. In the order it happens. #}
+{% set fld = 'width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:0.92rem;font-family:inherit;background:var(--surface)' %}
+{% set lbl = 'display:block;font-size:0.78rem;color:var(--softer);margin-bottom:4px' %}
+<style>
+  .lp-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:18px; align-items:start; }
+  .lp-steps { display:flex; gap:6px; flex-wrap:wrap; margin:12px 0 0; padding:0; list-style:none; }
+  .lp-steps li { font-size:0.8rem; font-weight:700; padding:6px 12px; border-radius:999px;
+                 background:var(--surface-2,rgba(0,0,0,0.04)); color:var(--softer); }
+  .lp-steps li.done { color:var(--good); }
+  .lp-steps li.now { background:var(--ink); color:#fff; }
+  .lp-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  .lp-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px 12px; }
+  .lp-card h3 { margin:0 0 12px; font-size:1rem; }
+  .lp-item { padding:10px 0; border-top:1px solid var(--line); font-size:0.88rem; }
+  .lp-item:first-of-type { border-top:0; }
+  .lp-notes { white-space:pre-wrap; font-size:0.86rem; line-height:1.6; color:var(--muted); margin:0; }
+  .kt-row { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
+  .kt-row label { display:inline-flex; align-items:center; gap:4px; margin:0; padding:7px 13px;
+                  font-size:0.85rem; font-weight:600; color:var(--muted); cursor:pointer; }
+  .kt-row input { position:absolute; opacity:0; pointer-events:none; }
+  .kt-row label:has(input:checked) { background:var(--ink); color:#fff; }
+</style>
+
+<p style="margin:0 0 12px">
+  <a href="{{ url_for('places_finder.dashboard', view='everyone') }}" style="color:var(--softer);font-size:0.88rem">← Call list</a>
+</p>
+
+<div class="card" style="margin-bottom:18px">
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <div style="font-size:0.85rem;color:var(--softer)">
+        {{ p.category_label }} · <strong>{{ p.kind_label }}</strong>
+        {% if p.contact_name %} · {{ p.contact_name }}{% endif %}
+      </div>
+      {% if p.stage in stage_keys %}
+      <ol class="lp-steps" aria-label="Where they are">
+        {% set here_i = stage_keys.index(p.stage) %}
+        {% for key, label in stages %}
+        <li class="{{ 'now' if loop.index0 == here_i else ('done' if loop.index0 < here_i else '') }}">
+          {{ '✓ ' if loop.index0 < here_i }}{{ label }}</li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <p style="margin:10px 0 0;font-size:0.85rem"><strong>{{ p.stage_label }}</strong></p>
+      {% endif %}
+    </div>
+    <div style="text-align:right;font-size:0.88rem">
+      {% if p.next_action %}
+      <div style="color:var(--softer);font-size:0.78rem">Next step</div>
+      <strong>{{ p.next_action }}</strong>
+      {% if p.next_action_date %}<div style="color:{{ 'var(--amber-deep)' if p.next_action_date < today else 'var(--softer)' }}">
+        {{ 'overdue — was ' if p.next_action_date < today else 'due ' }}{{ p.next_action_date }}</div>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="lp-actions">
+    {% if p.phone %}<a href="tel:{{ p.phone }}" class="btn btn-gold" style="padding:9px 16px">📞 {{ p.phone }}</a>{% endif %}
+    {% if text_phone %}
+    <a href="{{ url_for('messages.thread', phone=text_phone, name=p.business_name) }}" class="btn btn-outline" style="padding:9px 14px">💬 Text</a>
+    {% endif %}
+    {% if p.is_commercial %}
+      {% if can_quote %}<a href="{{ url_for('quotes.new', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">📝 Contract quote</a>{% endif %}
+    {% else %}
+      <a href="{{ url_for('leads.new_quote', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">📝 Home quote</a>
+    {% endif %}
+    {% if account and is_owner %}
+      <a href="{{ url_for('commercial.detail', account_id=account.id) }}" class="btn btn-outline" style="padding:9px 14px">🏢 Their account</a>
+    {% elif p.is_commercial and can_convert %}
+      {# The step that had no button anywhere: they said yes, now they are a customer. #}
+      <a href="{{ url_for('commercial.convert', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">🎉 Make them an account</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="lp-grid">
+  <div style="display:flex;flex-direction:column;gap:18px">
+
+    {# ── Qualify: log the call ─────────────────────────────────────────── #}
+    <div class="card lp-card">
+      <h3>📋 Log a call</h3>
+      <form method="POST" action="{{ url_for('places_finder.update_status', prospect_id=p.id) }}">
+        <input type="hidden" name="mode" value="log">
+        <input type="hidden" name="next" value="{{ here }}">
+        <div class="lp-row" style="margin-bottom:10px">
+          <div>
+            <label for="lpStatus" style="{{ lbl }}">How did it go?</label>
+            <select name="status" id="lpStatus" style="{{ fld }}">
+              {% for sv, sl in status_labels.items() %}
+              <option value="{{ sv }}" {{ 'selected' if sv == p.status }}>{{ sl }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="lpContact" style="{{ lbl }}">Who did you speak to?</label>
+            <input type="text" name="contact" id="lpContact" value="{{ p.contact_name or '' }}" placeholder="Name + title" style="{{ fld }}">
+          </div>
+          <div>
+            <label for="lpEmail" style="{{ lbl }}">Their email</label>
+            <input type="email" name="email" id="lpEmail" value="{{ p.email or '' }}" placeholder="name@company.com" style="{{ fld }}">
+          </div>
+          <div>
+            <label for="lpSqft" style="{{ lbl }}">Size / restrooms</label>
+            <input type="text" name="sqft" id="lpSqft" placeholder="3,200 sq ft · 2 restrooms" style="{{ fld }}">
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label for="lpNote" style="{{ lbl }}">What did they say?</label>
+          <textarea name="log_note" id="lpNote" rows="3" placeholder="Who decides, what they have now, when their contract ends…" style="{{ fld }}"></textarea>
+        </div>
+        <div class="lp-row" style="margin-bottom:12px">
+          <div>
+            <label for="lpNext" style="{{ lbl }}">Next step</label>
+            <input type="text" name="next_action" id="lpNext" placeholder="Fills in from the outcome" style="{{ fld }}">
+          </div>
+          <div>
+            <label for="lpWhen" style="{{ lbl }}">When</label>
+            <input type="date" name="next_action_date" id="lpWhen" style="{{ fld }}">
+          </div>
+        </div>
+        <button type="submit" class="btn" style="padding:10px 18px">💾 Save call &amp; set next step</button>
+      </form>
+    </div>
+
+    {# ── Communicate ───────────────────────────────────────────────────── #}
+    <div class="card lp-card">
+      <h3>💬 Texts</h3>
+      {% if texts %}
+        {% for m in texts %}
+        <div class="lp-item">
+          <span style="font-size:0.75rem;color:var(--softer)">{{ 'They wrote' if m.direction == 'in' else 'You wrote' }} · {{ m.created_at.strftime('%b %d %I:%M %p') if m.created_at }}</span>
+          <div>{{ m.body_translated if m.direction == 'in' and m.body_translated else m.body }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p style="color:var(--softer);font-size:0.86rem;margin:0">No texts yet.</p>
+      {% endif %}
+      {% if text_phone %}
+      <p style="margin:10px 0 0"><a href="{{ url_for('messages.thread', phone=text_phone, name=p.business_name) }}" style="color:var(--amber-deep)">Open the conversation →</a></p>
+      {% elif p.phone %}
+      <p style="margin:10px 0 0;font-size:0.82rem;color:var(--softer)">Not offered: they replied STOP or asked not to be contacted.</p>
+      {% endif %}
+    </div>
+
+    <div class="card lp-card">
+      <h3>✉️ Email them</h3>
+      <form method="POST" action="{{ url_for('places_finder.send_outreach', prospect_id=p.id) }}">
+        <input type="hidden" name="next" value="{{ here }}">
+        {% if email_templates %}
+        <div style="margin-bottom:10px">
+          <label for="lpTmpl" style="{{ lbl }}">Start from</label>
+          <select id="lpTmpl" style="{{ fld }}">
+            <option value="">— a blank email —</option>
+            {% for t in email_templates %}<option value="{{ loop.index0 }}">{{ t.title }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div style="margin-bottom:10px">
+          <label for="lpTo" style="{{ lbl }}">To</label>
+          <input type="email" name="email" id="lpTo" value="{{ p.email or '' }}" required style="{{ fld }}">
+        </div>
+        <div style="margin-bottom:10px">
+          <label for="lpSubject" style="{{ lbl }}">Subject</label>
+          <input type="text" name="subject" id="lpSubject" required style="{{ fld }}">
+        </div>
+        <div style="margin-bottom:12px">
+          <label for="lpBody" style="{{ lbl }}">Message</label>
+          <textarea name="body" id="lpBody" rows="6" required style="{{ fld }}"></textarea>
+        </div>
+        <button type="submit" class="btn btn-outline" style="padding:9px 16px">✉️ Send</button>
+      </form>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:18px">
+
+    {# ── Who they are — correctable ───────────────────────────────────── #}
+    <div class="card lp-card">
+      <h3>🏷️ Details</h3>
+      <form method="POST" action="{{ url_for('places_finder.edit_lead', prospect_id=p.id) }}">
+        <input type="hidden" name="kind_was" value="{{ 'commercial' if p.is_commercial else 'residential' }}">
+        <div class="lp-row" style="margin-bottom:10px">
+          <div style="grid-column:1/-1">
+            <label for="edName" style="{{ lbl }}">Business name</label>
+            <input type="text" name="business_name" id="edName" value="{{ p.business_name }}" required style="{{ fld }}">
+          </div>
+          <div>
+            <label for="edCat" style="{{ lbl }}">Kind of business</label>
+            <select name="category" id="edCat" style="{{ fld }}">
+              {% for c in categories %}
+              <option value="{{ c }}" {{ 'selected' if c == p.category }}>{{ category_labels[c] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div style="grid-column:1/-1">
+            <span style="{{ lbl }}">What are they buying?</span>
+            <div class="kt-row">
+              <label><input type="radio" name="kind" value="residential" {{ 'checked' if not p.is_commercial }}> 🏠 Residential</label>
+              <label><input type="radio" name="kind" value="commercial" {{ 'checked' if p.is_commercial }}> 🏢 Commercial</label>
+            </div>
+          </div>
+          <div>
+            <label for="edContact" style="{{ lbl }}">Contact</label>
+            <input type="text" name="contact_name" id="edContact" value="{{ p.contact_name or '' }}" style="{{ fld }}">
+          </div>
+          <div>
+            <label for="edPhone" style="{{ lbl }}">Phone</label>
+            <input type="tel" name="phone" id="edPhone" value="{{ p.phone or '' }}" style="{{ fld }}">
+          </div>
+          <div>
+            <label for="edEmail" style="{{ lbl }}">Email</label>
+            <input type="email" name="email" id="edEmail" value="{{ p.email or '' }}" style="{{ fld }}">
+          </div>
+          <div>
+            <label for="edWeb" style="{{ lbl }}">Website</label>
+            <input type="text" name="website" id="edWeb" value="{{ p.website or '' }}" style="{{ fld }}">
+          </div>
+          <div>
+            <label for="edAddr" style="{{ lbl }}">Address</label>
+            <input type="text" name="address" id="edAddr" value="{{ p.address or '' }}" style="{{ fld }}">
+          </div>
+          <div>
+            <label for="edCity" style="{{ lbl }}">City</label>
+            <input type="text" name="city" id="edCity" value="{{ p.city or '' }}" style="{{ fld }}">
+          </div>
+          <div>
+            <label for="edRenewal" style="{{ lbl }}">Their contract renews</label>
+            <input type="text" name="renewal_note" id="edRenewal" value="{{ p.renewal_note or '' }}" placeholder="e.g. March 2027" style="{{ fld }}">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-outline" style="padding:9px 16px">Save details</button>
+      </form>
+    </div>
+
+    {# ── Quote, then account ──────────────────────────────────────────── #}
+    <div class="card lp-card">
+      <h3>📝 Quotes</h3>
+      {% for q in (quotes if is_owner else []) %}
+      <div class="lp-item">
+        <a href="{{ url_for('quotes.detail', quote_id=q.id) }}" style="font-weight:700;color:var(--ink)">Contract quote</a>
+        · {{ q.status|capitalize }}
+        {% if q.monthly_price %} · ${{ '{:,.2f}'.format(q.monthly_price|float) }}/mo{% elif q.price_per_visit %} · ${{ '{:,.2f}'.format(q.price_per_visit|float) }}/visit{% endif %}
+        <span style="color:var(--softer);font-size:0.78rem"> · {{ q.created_at.strftime('%b %d') if q.created_at }}</span>
+      </div>
+      {% endfor %}
+      {% for h in home_quotes %}
+      <div class="lp-item">
+        <a href="{{ url_for('leads.detail', lead_id=h.id) }}" style="font-weight:700;color:var(--ink)">Home quote</a>
+        · {{ h.status|capitalize }}
+        {% if h.quoted_price %} · ${{ '{:,.2f}'.format(h.quoted_price|float) }}{% endif %}
+        <span style="color:var(--softer);font-size:0.78rem"> · {{ h.created_at.strftime('%b %d') if h.created_at }}</span>
+      </div>
+      {% endfor %}
+      {% if quotes and not is_owner %}
+      <p style="color:var(--softer);font-size:0.86rem;margin:0 0 8px">
+        {{ quotes|length }} contract quote{{ '' if quotes|length == 1 else 's' }} — the owner has the details.</p>
+      {% endif %}
+      {% if not quotes and not home_quotes %}
+      <p style="color:var(--softer);font-size:0.86rem;margin:0">
+        No quote yet. Once you know the size and what they want cleaned,
+        {% if p.is_commercial %}{% if can_quote %}<a href="{{ url_for('quotes.new', prospect_id=p.id) }}" style="color:var(--amber-deep)">write the contract quote</a>{% else %}ask the owner to write the contract quote{% endif %}{% else %}<a href="{{ url_for('leads.new_quote', prospect_id=p.id) }}" style="color:var(--amber-deep)">write the home quote</a>{% endif %}.
+        Sending it moves them to Proposal; when they accept they are marked won{% if p.is_commercial %} and become an account{% endif %}.
+      </p>
+      {% endif %}
+      {% if account and is_owner %}
+      <p style="margin:12px 0 0;font-size:0.88rem">🏢 <strong>Account:</strong>
+        <a href="{{ url_for('commercial.detail', account_id=account.id) }}" style="color:var(--amber-deep)">{{ account.business_name }}</a>
+        · {{ account.status|capitalize }}</p>
+      {% endif %}
+    </div>
+
+    <div class="card lp-card">
+      <h3>🗒️ History</h3>
+      {% if p.notes %}<p class="lp-notes">{{ p.notes }}</p>
+      {% else %}<p style="color:var(--softer);font-size:0.86rem;margin:0">Nothing logged yet.</p>{% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  // The outcome fills in the next step, the same suggestions the call list uses.
+  (function () {
+    const RULES = {{ next_rules | tojson }};
+    const TODAY = {{ today | tojson }};
+    const status = document.getElementById('lpStatus');
+    const act = document.getElementById('lpNext'), when = document.getElementById('lpWhen');
+    let touched = false;
+    [act, when].forEach(el => el.addEventListener('input', () => { touched = true; }));
+    status.addEventListener('change', () => {
+      if (touched) return;
+      const r = RULES[status.value];
+      if (!r) return;
+      act.value = r.action || '';
+      if (r.days === null || r.days === undefined) { when.value = ''; return; }
+      // From the business's own date, in UTC throughout: a browser's local
+      // midnight turned into ISO is tomorrow for anybody west of Greenwich
+      // in the evening, which scheduled every follow-up a day late.
+      const d = new Date(TODAY + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + r.days);
+      when.value = d.toISOString().slice(0, 10);
+    });
+
+    const TEMPLATES = {{ email_templates | tojson }};
+    const pick = document.getElementById('lpTmpl');
+    if (pick) pick.addEventListener('change', () => {
+      const t = TEMPLATES[pick.value];
+      document.getElementById('lpSubject').value = t ? t.subject : '';
+      document.getElementById('lpBody').value = t ? t.body : '';
+    });
+  })();
+</script>
+{% endblock %}
