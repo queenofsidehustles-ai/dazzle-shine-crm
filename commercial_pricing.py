@@ -98,8 +98,14 @@ EXTRAS = [
 # rooms at office rates. Pre-ticked in the calculator, still removable.
 DEFAULT_EXTRAS = {
     'medical_office': ['disinfection'],
-    # Customers use the restrooms all day and the kitchen is the job, so a
-    # restaurant quote carries both unless somebody takes them off.
+}
+
+# Scope that usually comes with a facility type but is the customer's to turn
+# down: pre-ticked on the calculator, and priced only while it stays ticked.
+# A restaurant's customers use the restrooms all day and its kitchen is most of
+# the work -- but plenty have their own kitchen crew and only want the front of
+# house done, and a box that can be unticked must change the price when it is.
+SUGGESTED_EXTRAS = {
     'restaurant': ['restrooms', 'breakroom'],
 }
 
@@ -233,6 +239,10 @@ def get_config():
         'visits_per_month': VISITS_PER_MONTH,
         'facility_types': [{'key': k, 'label': l, 'desc': d} for k, l, d in FACILITY_TYPES],
         'extras': [{'key': k, 'label': l, 'pct': extra_pct(k)} for k, l, _p in EXTRAS],
-        'default_extras': {c: default_extras(c) for c in PROD_RATES},
+        # What the calculator ticks for each type: the required scope, then
+        # the suggested. Only the required part is forced by quote().
+        'default_extras': {c: default_extras(c) + [k for k in SUGGESTED_EXTRAS.get(c, [])
+                                                   if k not in default_extras(c)]
+                           for c in PROD_RATES},
         'range_low': RANGE_LOW, 'range_high': RANGE_HIGH,
     }

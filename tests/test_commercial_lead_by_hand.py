@@ -366,8 +366,44 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     check(commercial_pricing.prod_rate('restaurant') < commercial_pricing.prod_rate('office'),
           'kitchens are priced as slower work than an office')
     db.session.remove()
-check(set(commercial_pricing.DEFAULT_EXTRAS.get('restaurant', [])) == {'restrooms', 'breakroom'},
-      'with the kitchen and restrooms pre-ticked on the calculator')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    ticked = set(commercial_pricing.get_config()['default_extras']['restaurant'])
+    bare = commercial_pricing.quote(4000, 'restaurant', 'weekly', [])['monthly']
+    full = commercial_pricing.quote(4000, 'restaurant', 'weekly', ['restrooms', 'breakroom'])['monthly']
+    med_bare = commercial_pricing.quote(4000, 'medical_office', 'weekly', [])['monthly']
+    med_full = commercial_pricing.quote(4000, 'medical_office', 'weekly', ['disinfection'])['monthly']
+    db.session.remove()
+check(ticked == {'restrooms', 'breakroom'}, 'the kitchen and restrooms start ticked on the calculator')
+check(bare < full, f'but unticking them takes them off the price ({bare} < {full})')
+check(med_bare == med_full, 'while a medical office still always carries its disinfection')
+
+# Find new under "All brands" used to file every search as residential.
+find = c.get('/find-leads/?view=find', base_url=HOST).get_data(as_text=True)
+check(re.search(r'<option value="all"\s+selected>Work it out', find),
+      'Find new files results by their kind of business unless you pick a brand')
+import json as _json
+c.post('/find-leads/import', base_url=HOST, data={
+    'brand': 'all', 'selected': ['demo-restaurant-1'],
+    'payload_demo-restaurant-1': _json.dumps({
+        'business_name': 'Lakeside Bistro', 'category': 'restaurant',
+        'place_id': 'demo-restaurant-1', 'city': 'Rockville', 'phone': '(407) 555-0413'})})
+check(lead('Lakeside Bistro')['brand'] == 'commercial',
+      'so a restaurant found by search lands as commercial')
+
+# The call sheet's script follows the toggle, like its quote button does.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from models import BusinessSetting
+    BusinessSetting.set('commercial_name', 'Gleam Commercial Co')
+    db.session.commit()
+    db.session.remove()
+sheet_com = c.get(f'/find-leads/call/{grill["id"]}', base_url=HOST).get_data(as_text=True)
+c.post(f'/find-leads/{grill["id"]}/kind', base_url=HOST, data={'kind': 'residential'})
+sheet_res = c.get(f'/find-leads/call/{grill["id"]}', base_url=HOST).get_data(as_text=True)
+# The brand switcher at the top of every page names both companies once, so
+# compare against that: the commercial name only shows in the script itself.
+check(sheet_com.count('Gleam Commercial Co') > 1 and sheet_res.count('Gleam Commercial Co') == 1
+      and 'Home quote' in sheet_res,
+      'flipped to residential, the call sheet reads the residential company, not the commercial one')
 
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
