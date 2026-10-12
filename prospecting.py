@@ -446,10 +446,30 @@ def walkthrough(prospect):
     return data if isinstance(data, dict) else {}
 
 
+def _walk_areas(form):
+    """The checklist's work-area rows -- area, work item, quantity, one row
+    each -- grouped into areas in the order they were measured."""
+    import commercial_pricing as cp
+    names, items, qtys = form.getlist('wa_area'), form.getlist('wa_item'), form.getlist('wa_qty')
+    areas = []
+    for name, item, qty in list(zip(names, items, qtys))[:60]:
+        qty = _num(qty)
+        if item not in cp.WORK_ITEM_KEYS or not qty:
+            continue
+        name = (name or '').strip()[:80] or 'Work area'
+        area = next((a for a in areas if a['name'].lower() == name.lower()), None)
+        if area is None:
+            area = {'name': name, 'lines': []}
+            areas.append(area)
+        area['lines'].append({'item': item, 'qty': qty})
+    return areas
+
+
 def walkthrough_from_form(form):
     """Read the checklist as submitted. Only known keys, numbers as numbers."""
     freq = form.get('frequency')
     return {
+        'areas': _walk_areas(form),
         'sqft': _num(form.get('sqft'), int),
         'restrooms': _num(form.get('restrooms'), int),
         'hours': _num(form.get('hours')),
@@ -478,6 +498,8 @@ def walkthrough_summary(w):
         parts.append(f"about {w['hours']:g} h a visit")
     if w.get('services'):
         parts.append(', '.join(labels[k].split(' — ')[0].lower() for k in w['services'] if k in labels))
+    if w.get('areas'):
+        parts.append('areas: ' + ', '.join(a['name'] for a in w['areas']))
     return ' · '.join(parts)
 
 
@@ -487,6 +509,15 @@ def walkthrough_price(prospect, w=None):
     kind of business's rate. None when there is nothing to price from."""
     import commercial_pricing as cp
     w = w if w is not None else walkthrough(prospect)
+    if w.get('areas'):
+        # Measured area by area: priced line by line, the way the quote will be.
+        quote_freq = {k: q for k, _l, q, _c in WALKTHROUGH_FREQUENCIES}.get(w.get('frequency') or 'weekly', 'weekly')
+        out = cp.area_quote(w['areas'], quote_freq)
+        if out['per_visit']:
+            out.update(by_areas=True, by_hours=False,
+                       low=round(out['per_visit'] * cp.RANGE_LOW),
+                       premium=round(out['per_visit'] * cp.RANGE_HIGH))
+            return out
     if not (w.get('sqft') or w.get('hours')):
         return None
     calc_freq = {k: c for k, _l, _q, c in WALKTHROUGH_FREQUENCIES}.get(w.get('frequency'), 'weekly')
@@ -525,9 +556,18 @@ def walkthrough_quote_prefill(prospect):
         'scope_notes': ' '.join(scope),
         'hours': str(w['hours']) if w.get('hours') else '',
     }
+    if w.get('areas'):
+        import commercial_pricing as cp
+        cfg = {k: (lbl, unit) for k, lbl, unit, *_ in cp.WORK_ITEMS}
+        out['line_items'] = [
+            {'name': a['name'], 'lines': [
+                {'item': l['item'], 'qty': l['qty'], 'label': cfg[l['item']][0], 'unit': cfg[l['item']][1],
+                 'price': '', 'override': False}
+                for l in a['lines'] if l['item'] in cfg]}
+            for a in w['areas']]
     price = walkthrough_price(prospect, w)
     if price:
         out['price_per_visit'] = price['per_visit']
-        if w.get('frequency') != 'one_time':
+        if w.get('frequency') != 'one_time' and price.get('monthly') is not None:
             out['monthly_price'] = price['monthly']
     return out

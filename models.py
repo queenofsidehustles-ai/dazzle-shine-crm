@@ -1087,6 +1087,13 @@ class CommercialQuote(db.Model):
     # The call-list lead this was written for, if any. Sending moves the lead to
     # Proposal; accepting wins it. See migration 0021.
     prospect_id = db.Column(db.Integer, index=True)
+    # Priced by work area: [{"name": "Service floor", "lines": [{"item":
+    # "floor_ceramic", "label": ..., "qty": 1000, "unit": "sq ft", "price":
+    # 58.0, "custom": false}, ...]}, ...] as JSON. NULL on a quote priced the
+    # old way -- one figure and a list of services. See migration 0023.
+    line_items = db.Column(db.Text)
+    # Whether the customer sees what each line costs, or only each area's total.
+    show_line_prices = db.Column(db.Boolean, default=True, server_default=db.true())
 
 
 class Staff(db.Model):

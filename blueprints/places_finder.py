@@ -793,6 +793,8 @@ def lead_page(prospect_id):
         walk_summary=prospecting.walkthrough_summary(prospecting.walkthrough(p)),
         walk_price=prospecting.walkthrough_price(p),
         walk_services=prospecting.WALKTHROUGH_SERVICES,
+        walk_items=__import__('commercial_pricing').WORK_ITEMS,
+        walk_area_presets=__import__('commercial_pricing').AREA_PRESETS,
         walk_frequencies=prospecting.WALKTHROUGH_FREQUENCIES,
         walk_booked=(p.next_action or '').lower().startswith('walkthrough'),
         here=url_for('places_finder.lead_page', prospect_id=p.id))

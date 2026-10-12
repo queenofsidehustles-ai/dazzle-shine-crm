@@ -279,6 +279,151 @@ def quote(square_footage, category='office', frequency='weekly', extras=None,
     }
 
 
+# ── Priced by work area ─────────────────────────────────────────────────────
+#
+# A commercial quote broken into the areas of the building and the work done
+# in each, every line priced the way quote() prices a whole building: time on
+# site (quantity over how fast that work goes) at the loaded hourly cost,
+# grossed up to the target labour share, plus what the chemicals and the
+# machine cost per unit. Floors are the reason: stone or concrete tile on an
+# auto-scrubber, ceramic tile scrubbed and grouted and hardwood dust-mopped
+# and never wetted each take their own equipment, chemical and time.
+#
+# Defaults only, like everything here: every rate and supplies figure is the
+# owner's to change in Settings -> Commercial pricing.
+
+AREA_PRESETS = [
+    'Service floor / dining room', 'Entry & lobby', 'Kitchen', 'Restrooms',
+    'Back of house & storage', 'Offices', 'Locker rooms', 'Sanctuary & halls',
+    'Exterior & entrance', 'Other',
+]
+
+# key, what is done (the line the customer reads), unit, units one cleaner
+# does in an hour, supplies + equipment per unit ($), group for the picker.
+WORK_ITEMS = [
+    ('floor_hardwood', 'Hardwood floor — dust mop & damp mop, wood-safe cleaner', 'sq ft', 1800, 0.004, 'Floors'),
+    ('floor_ceramic', 'Ceramic tile floor — scrub, mop & grout detail', 'sq ft', 1200, 0.006, 'Floors'),
+    ('floor_stone', 'Stone / concrete tile — auto-scrubber, neutral cleaner', 'sq ft', 1500, 0.012, 'Floors'),
+    ('floor_vinyl', 'Vinyl / VCT floor — sweep & damp mop', 'sq ft', 2000, 0.004, 'Floors'),
+    ('floor_carpet', 'Carpet — vacuum', 'sq ft', 2500, 0.002, 'Floors'),
+    ('floor_kitchen', 'Kitchen floor (quarry tile) — degrease & scrub', 'sq ft', 800, 0.015, 'Floors'),
+    ('floor_strip_wax', 'Floor strip & wax', 'sq ft', 250, 0.08, 'Floors'),
+    ('rr_toilet', 'Toilets & urinals — clean & disinfect', 'each', 10, 0.25, 'Restrooms'),
+    ('rr_sink', 'Sinks, counters & mirrors', 'each', 15, 0.15, 'Restrooms'),
+    ('rr_floor', 'Restroom floor — scrub & disinfect', 'sq ft', 600, 0.01, 'Restrooms'),
+    ('rr_restock', 'Restock paper & soap', 'each', 30, 0.0, 'Restrooms'),
+    ('k_fryer', 'Fryers — degrease exterior & surrounds', 'each', 2, 3.0, 'Kitchen'),
+    ('k_line', 'Cooking line — flat-tops, grills & cooktops', 'linear ft', 20, 0.5, 'Kitchen'),
+    ('k_hood', 'Hood & filters — degrease', 'linear ft', 10, 0.75, 'Kitchen'),
+    ('k_prep', 'Prep tables & stainless surfaces', 'each', 12, 0.1, 'Kitchen'),
+    ('g_dusting', 'Dusting & high-touch disinfection', 'sq ft', 4000, 0.001, 'General'),
+    ('g_trash', 'Trash & liners', 'each', 30, 0.2, 'General'),
+    ('g_glass', 'Glass doors & interior windows', 'each', 20, 0.05, 'General'),
+    ('g_labor', 'Additional cleaning time', 'hours', 1, 0.0, 'General'),
+]
+WORK_ITEM_KEYS = [k for k, *_ in WORK_ITEMS]
+_ITEM = {k: (lbl, unit, rate, sup, grp) for k, lbl, unit, rate, sup, grp in WORK_ITEMS}
+# The quote's frequency words -> visits a month.
+_QUOTE_FREQ = {'daily': 'nightly', 'weekly': 'weekly', 'biweekly': 'biweekly',
+               'monthly': 'monthly', 'as_needed': None}
+
+
+def item_rate(key):
+    """Units one cleaner does in an hour for a work item. Owner override wins."""
+    v = _get(f'comm_item_{key}_rate')
+    return v if v else (_ITEM[key][2] if key in _ITEM else 0.0)
+
+
+def item_supplies(key):
+    """Supplies and equipment per unit, in dollars. Owner override wins."""
+    v = _get(f'comm_item_{key}_supplies')
+    return v if v is not None else (_ITEM[key][3] if key in _ITEM else 0.0)
+
+
+def line_price(key, qty):
+    """(price, hours) for one line: the time it takes priced like any other
+    cleaning time, plus its supplies."""
+    try:
+        qty = max(0.0, float(qty or 0))
+    except (TypeError, ValueError):
+        qty = 0.0
+    rate = item_rate(key)
+    if key not in _ITEM or not rate:
+        return 0.0, 0.0
+    hours = qty / rate
+    target = _get('comm_target_labor') or 0.40
+    labour = hours * (_get('comm_hourly_cost') or 0)
+    return round(labour / target + qty * item_supplies(key)), hours
+
+
+def _num(value, default=0.0):
+    try:
+        v = float(str(value).replace(',', '').replace('$', '').strip())
+    except (TypeError, ValueError):
+        return default
+    return v if v >= 0 else default
+
+
+def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False):
+    """Price a quote laid out as work areas and their lines.
+
+    `areas` is what the quote form sends: [{"name", "lines": [{"item", "qty",
+    "label"?, "price"?, "override"?}]}]. A line's price is worked out from its
+    item and quantity unless it was typed over (override) or is a custom line
+    with only a price. What comes back is the same areas, cleaned and priced,
+    with each area's subtotal, then the minimum-visit top-up and the travel as
+    lines of their own -- never folded into the work, where nobody can see
+    them -- the price a visit, and a month.
+
+    keep_empty keeps lines with nothing in them yet, so the editor's rows and
+    the priced rows stay one-to-one while somebody is still typing.
+    """
+    out_areas, work, hours = [], 0.0, 0.0
+    for a in (areas or [])[:30]:
+        if not isinstance(a, dict):
+            continue
+        name = str(a.get('name') or '').strip()[:80] or 'Work area'
+        lines = []
+        for ln in (a.get('lines') or [])[:60]:
+            if not isinstance(ln, dict):
+                continue
+            key = ln.get('item') if ln.get('item') in _ITEM else 'custom'
+            qty = _num(ln.get('qty'))
+            if key == 'custom':
+                label = str(ln.get('label') or '').strip()[:140] or 'Other work'
+                unit = str(ln.get('unit') or '').strip()[:20]
+                price = round(_num(ln.get('price')), 2)
+                h = 0.0
+                override = True
+            else:
+                label = str(ln.get('label') or '').strip()[:140] or _ITEM[key][0]
+                unit = _ITEM[key][1]
+                price, h = line_price(key, qty)
+                override = bool(ln.get('override')) and ln.get('price') not in (None, '')
+                if override:
+                    price = round(_num(ln.get('price')), 2)
+            if not (qty or price) and not keep_empty:
+                continue
+            lines.append({'item': key, 'label': label, 'qty': qty, 'unit': unit,
+                          'price': price, 'override': override})
+            work += price
+            hours += h
+        out_areas.append({'name': name, 'lines': lines,
+                          'subtotal': round(sum(l['price'] for l in lines), 2)})
+    work = round(work, 2)
+    min_visit = _get('comm_min_visit') or 0.0
+    minimum = round(min_visit - work, 2) if work and work < min_visit else 0.0
+    mins = drive_minutes(drive_mins)
+    target = _get('comm_target_labor') or 0.40
+    travel = round((mins / 60.0) * (_get('comm_hourly_cost') or 0) / target) if work else 0.0
+    per_visit = round(work + minimum + travel, 2)
+    calc = _QUOTE_FREQ.get(frequency, 'weekly')
+    monthly = round(per_visit * VISITS_PER_MONTH[calc]) if calc else None
+    return {'areas': out_areas, 'work': work, 'minimum': minimum, 'min_visit': min_visit,
+            'travel': travel, 'drive_minutes': round(mins), 'per_visit': per_visit,
+            'monthly': monthly, 'hours': round(hours, 2)}
+
+
 def get_config():
     """JSON-serializable config for the in-browser live calculator."""
     return {
@@ -296,4 +441,8 @@ def get_config():
                                                    if k not in default_extras(c)]
                            for c in PROD_RATES},
         'range_low': RANGE_LOW, 'range_high': RANGE_HIGH,
+        'work_items': [{'key': k, 'label': lbl, 'unit': unit, 'group': grp,
+                        'rate': item_rate(k), 'supplies': item_supplies(k)}
+                       for k, lbl, unit, _r, _s, grp in WORK_ITEMS],
+        'area_presets': AREA_PRESETS,
     }

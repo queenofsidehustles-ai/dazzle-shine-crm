@@ -86,8 +86,27 @@
 
   <!-- Right column -->
   <div style="display:flex;flex-direction:column;gap:18px">
-    <div class="card">
+    <!-- WORK AREAS: the quote priced area by area, line by line -->
+    <div class="card" id="waCard">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Work Areas &amp; Line Items</h2>
+      <p style="font-size:0.8rem;color:var(--softer);margin:0 0 12px;line-height:1.5">
+        Quote each part of the building as its own area — the service floor's stone tile, ceramic tile and hardwood as separate lines,
+        the kitchen and restrooms as areas of their own if they are included. Each line is priced from your rates in
+        <a href="{{ url_for('settings.commercial') }}" style="color:var(--amber-deep)">Commercial pricing</a>; type over any price to set your own.</p>
+      <input type="hidden" name="line_items_json" id="waJson" value="{{ areas_init|tojson|forceescape }}" />
+      <datalist id="waPresets">{% for a in area_presets %}<option value="{{ a }}">{% endfor %}</datalist>
+      <div id="waAreas" style="display:flex;flex-direction:column;gap:14px"></div>
+      <button type="button" id="waAddArea" class="btn btn-outline" style="width:100%;justify-content:center;margin-top:12px">+ Add a work area</button>
+      <div id="waTotals" style="display:none;margin-top:14px;background:var(--ground);border-radius:10px;padding:12px 14px;font-size:0.88rem"></div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:0.85rem;cursor:pointer">
+        <input type="checkbox" name="show_line_prices" value="1" style="width:auto;accent-color:var(--amber)" {{ 'checked' if show_prices_init }} />
+        Show the customer the price of every line <span style="color:var(--softer)">(off: each area's total only)</span>
+      </label>
+    </div>
+
+    <div class="card" id="svcCard">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Services Included</h2>
+      <p id="svcNote" style="display:none;font-size:0.8rem;color:var(--softer);margin:-8px 0 10px">Priced by work area — the customer sees the areas and lines above instead of this list.</p>
       <div style="display:flex;flex-direction:column;gap:8px">
         {% for svc in services %}
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:500">
@@ -118,7 +137,7 @@
         </select>
       </div>
       <!-- ESTIMATE HELPER: the commercial calculator, with what is ticked -->
-      <div style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:10px;padding:16px 18px;margin-bottom:16px">
+      <div id="estHelper" style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:10px;padding:16px 18px;margin-bottom:16px">
         <div style="font-weight:700;color:var(--amber-deep);font-size:0.9rem;margin-bottom:4px">💡 Estimate Helper</div>
         <p style="font-size:0.78rem;color:var(--amber-deep);margin-bottom:12px;line-height:1.5">Priced by your commercial calculator from the property type, square footage, how often and the services ticked — Deep Cleaning, restrooms, kitchen work and the rest each add to it. Always adjust for the real property.</p>
         <div class="form-group" style="margin-bottom:10px">
@@ -213,6 +232,167 @@
 </form>
 
 <script>
+  // The work-area editor. It keeps its rows in `state`, mirrors them into the
+  // hidden line_items_json field the form posts, and asks the server to price
+  // them -- the same arithmetic that prices the saved quote, never a copy.
+  (function () {
+    const ITEMS = {{ work_items|tojson }};
+    const BY_KEY = Object.fromEntries(ITEMS.map(i => [i.key, i]));
+    const box = document.getElementById('waAreas');
+    const hidden = document.getElementById('waJson');
+    const totals = document.getElementById('waTotals');
+    const ppv = document.getElementById('price_per_visit');
+    const mon = document.getElementById('monthly_price');
+    const freqSel = document.querySelector('select[name="frequency"]');
+    let state = [], seq = 0, timer = null;
+    const money = n => '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    const el = (tag, attrs, kids) => {
+      const e = document.createElement(tag);
+      Object.entries(attrs || {}).forEach(([k, v]) => { if (k === 'text') e.textContent = v; else e.setAttribute(k, v); });
+      (kids || []).forEach(k => e.appendChild(k));
+      return e;
+    };
+
+    function load() {
+      try { state = JSON.parse(hidden.value || '[]'); } catch (e) { state = []; }
+      if (!Array.isArray(state)) state = [];
+      state.forEach(a => { a.lines = Array.isArray(a.lines) ? a.lines : []; });
+    }
+    function hasLines() { return state.some(a => a.lines.some(l => Number(l.qty) || Number(l.price))); }
+    function sync() {
+      hidden.value = JSON.stringify(state.map(a => ({ name: a.name, lines: a.lines.map(l => ({
+        item: l.item, label: l.label, qty: l.qty, unit: l.unit, price: l.price, override: !!l.override })) })));
+      const on = hasLines();
+      [ppv, mon].forEach(i => { i.readOnly = on; i.style.background = on ? 'var(--ground)' : ''; });
+      const est = document.getElementById('estHelper'); if (est) est.style.display = on ? 'none' : '';
+      const note = document.getElementById('svcNote'); if (note) note.style.display = on ? 'block' : 'none';
+    }
+    function itemSelect(line) {
+      const s = el('select', { 'aria-label': 'Work item', style: 'width:100%' });
+      const groups = {};
+      ITEMS.forEach(i => {
+        groups[i.group] = groups[i.group] || el('optgroup', { label: i.group });
+        groups[i.group].appendChild(el('option', { value: i.key, text: i.label + ' (' + i.unit + ')' }));
+      });
+      Object.values(groups).forEach(g => s.appendChild(g));
+      s.appendChild(el('option', { value: 'custom', text: 'Something else — describe it and price it' }));
+      s.value = BY_KEY[line.item] ? line.item : 'custom';
+      s.addEventListener('change', () => {
+        line.item = s.value; line.override = false;
+        line.label = BY_KEY[line.item] ? BY_KEY[line.item].label : '';
+        line.unit = BY_KEY[line.item] ? BY_KEY[line.item].unit : '';
+        render(); changed();
+      });
+      return s;
+    }
+    function lineRow(area, line, idx) {
+      const custom = !BY_KEY[line.item];
+      const desc = el('input', { type: 'text', value: line.label || '', placeholder: custom ? 'What is done, e.g. Pressure-wash the patio' : '',
+                                  'aria-label': 'Description the customer reads', style: 'width:100%;margin-top:6px;font-size:0.85rem' });
+      desc.addEventListener('input', () => { line.label = desc.value; changed(false); });
+      const qty = el('input', { type: 'number', min: '0', step: 'any', value: line.qty || '', placeholder: 'Qty', 'aria-label': 'Quantity', style: 'width:100%' });
+      qty.addEventListener('input', () => { line.qty = qty.value; changed(); });
+      const price = el('input', { type: 'number', min: '0', step: '0.01', value: line.price || '', placeholder: '$', 'aria-label': 'Line price', style: 'width:100%' });
+      price.addEventListener('input', () => { line.price = price.value; line.override = true; changed(); });
+      // Offer "use the calculated price" once they have finished typing theirs.
+      price.addEventListener('change', () => render());
+      const unit = el('span', { text: custom ? '' : (BY_KEY[line.item].unit), style: 'font-size:0.78rem;color:var(--softer);white-space:nowrap' });
+      const del = el('button', { type: 'button', title: 'Remove this line', 'aria-label': 'Remove this line',
+                                  style: 'background:none;border:none;color:var(--warn);font-size:1.1rem;cursor:pointer;padding:0 4px', text: '✕' });
+      del.addEventListener('click', () => { area.lines.splice(idx, 1); render(); changed(); });
+      const row = custom
+        ? el('div', { style: 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:6px' }, [price, del])
+        : el('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;margin-top:6px' }, [qty, unit, price, del]);
+      const wrap = el('div', { style: 'border-top:1px dashed var(--line);padding-top:8px;margin-top:8px' }, [itemSelect(line), desc, row]);
+      if (line.override && !custom) {
+        const reset = el('button', { type: 'button', style: 'background:none;border:none;color:var(--amber-deep);font-size:0.75rem;cursor:pointer;padding:2px 0',
+                                     text: '↺ Your price — use the calculated one' });
+        reset.addEventListener('click', () => { line.override = false; render(); changed(); });
+        wrap.appendChild(reset);
+      }
+      return wrap;
+    }
+    function render() {
+      box.innerHTML = '';
+      state.forEach((area, ai) => {
+        const name = el('input', { type: 'text', list: 'waPresets', value: area.name || '', placeholder: 'Area, e.g. Service floor / dining room',
+                                    'aria-label': 'Work area name', style: 'flex:1;font-weight:700' });
+        name.addEventListener('input', () => { area.name = name.value; changed(false); });
+        const drop = el('button', { type: 'button', style: 'background:none;border:none;color:var(--warn);font-size:0.8rem;cursor:pointer', text: 'Remove area' });
+        drop.addEventListener('click', () => { if (!area.lines.length || confirm('Remove ' + (area.name || 'this area') + ' and its lines?')) { state.splice(ai, 1); render(); changed(); } });
+        const sub = el('div', { style: 'font-size:0.82rem;color:var(--softer);margin-top:8px;text-align:right', 'data-sub': ai });
+        const add = el('button', { type: 'button', class: 'btn btn-outline', style: 'padding:5px 12px;font-size:0.8rem;margin-top:8px', text: '+ Add a line' });
+        add.addEventListener('click', () => {
+          const first = ITEMS[0];
+          area.lines.push({ item: first.key, label: first.label, unit: first.unit, qty: '', price: '', override: false });
+          render(); changed();
+        });
+        const card = el('div', { style: 'border:1px solid var(--line);border-radius:10px;padding:12px' },
+          [el('div', { style: 'display:flex;gap:8px;align-items:center' }, [name, drop])]
+            .concat(area.lines.map((l, li) => lineRow(area, l, li))).concat([add, sub]));
+        box.appendChild(card);
+      });
+    }
+    function changed(reprice) {
+      sync();
+      hidden.dispatchEvent(new Event('input', { bubbles: true }));
+      if (reprice === false) return;
+      clearTimeout(timer); timer = setTimeout(price, 250);
+    }
+    async function price() {
+      sync();
+      if (!state.length) { totals.style.display = 'none'; return; }
+      const mine = ++seq;
+      let d;
+      try {
+        const r = await fetch({{ url_for('quotes.lines_json')|tojson }}, {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ areas: JSON.parse(hidden.value), frequency: freqSel.value }) });
+        if (!r.ok) throw new Error(r.status);
+        d = await r.json();
+      } catch (e) {
+        totals.style.display = 'block'; totals.textContent = 'Could not price the lines just now — your entries are kept.';
+        return;
+      }
+      if (mine !== seq) return;
+      d.areas.forEach((a, ai) => {
+        if (!state[ai]) return;
+        a.lines.forEach((l, li) => { const s = state[ai].lines[li]; if (s && !s.override) s.price = l.price; });
+        const sub = box.querySelector('[data-sub="' + ai + '"]'); if (sub) sub.textContent = a.name + ': ' + money(a.subtotal);
+      });
+      // Refresh the price boxes without re-rendering what somebody is typing in.
+      let k = 0;
+      const priceInputs = box.querySelectorAll('input[aria-label="Line price"]');
+      state.forEach(a => a.lines.forEach(l => { const inp = priceInputs[k++]; if (inp && document.activeElement !== inp) inp.value = l.price || ''; }));
+      sync();
+      if (!hasLines()) { totals.style.display = 'none'; return; }
+      totals.style.display = 'block';
+      totals.innerHTML = '';
+      const row = (label, value, strong) => totals.appendChild(el('div', { style: 'display:flex;justify-content:space-between;' + (strong ? 'font-weight:700;margin-top:4px' : '') },
+                                                                 [el('span', { text: label }), el('span', { text: value })]));
+      row('Work', money(d.work));
+      if (d.minimum) row('Minimum visit (' + money(d.min_visit) + ')', money(d.minimum));
+      if (d.travel) row('Travel (' + d.drive_minutes + ' min round trip)', money(d.travel));
+      row('Per visit', money(d.per_visit), true);
+      if (d.monthly != null) row('Monthly', money(d.monthly), true);
+      totals.appendChild(el('div', { style: 'font-size:0.75rem;color:var(--softer);margin-top:6px',
+                                     text: 'About ' + d.hours + ' h of cleaning a visit. These set the price per visit and monthly below.' }));
+      ppv.value = Number(d.per_visit).toFixed(2);
+      mon.value = d.monthly == null ? '' : Number(d.monthly).toFixed(2);
+    }
+    document.getElementById('waAddArea').addEventListener('click', () => {
+      const first = ITEMS[0];
+      state.push({ name: '', lines: [{ item: first.key, label: first.label, unit: first.unit, qty: '', price: '', override: false }] });
+      render(); changed();
+      const inputs = box.querySelectorAll('input[aria-label="Work area name"]'); inputs[inputs.length - 1].focus();
+    });
+    freqSel.addEventListener('change', () => changed());
+    window.waReload = function () { load(); render(); price(); };
+    load(); render(); sync(); if (hasLines()) price();
+  })();
+</script>
+
+<script>
   // One price, worked out on the server by the same calculator as the
   // walkthrough and the account form. This used to be its own flat cents per
   // square foot, so ticking Deep Cleaning, restrooms or a greasy kitchen
@@ -299,7 +479,7 @@
     const form = document.getElementById('quoteForm');
     const KEY = 'quote-draft:' + {{ ('q' ~ quote.id if quote else 'new:' ~ ((lead.id if lead else '') or ''))|tojson }};
     const fields = () => [...form.querySelectorAll('input[name], select[name], textarea[name], #est-hours')]
-      .filter(el => el.type !== 'hidden' && el.name !== 'csrf_token');
+      .filter(el => (el.type !== 'hidden' || el.name === 'line_items_json') && el.name !== 'csrf_token');
     function snapshot() {
       const out = { services: [], at: Date.now() };
       fields().forEach(el => {
@@ -325,6 +505,7 @@
           if (k in d) el.value = d[k];
         }
       });
+      if (window.waReload) window.waReload();
     }
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
