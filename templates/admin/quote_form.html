@@ -199,7 +199,7 @@
     {% if quote.status != 'draft' %}
     <button type="submit" formaction="{{ url_for('quotes.review', quote_id=quote.id) }}"
             formnovalidate class="btn btn-outline" style="width:100%;justify-content:center;padding:11px">
-      👁 Review the proposal{{ ' & resend' if quote.status == 'sent' }} →
+      👁 Review the proposal{{ ' & resend' if quote.status in ('sent', 'declined') }} →
     </button>
     {% endif %}
 

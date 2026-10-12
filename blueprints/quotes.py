@@ -443,6 +443,11 @@ def send_quote(quote_id):
         db.session.commit()
     # A draft can be saved before anybody's name or email is known (half-way
     # through a walkthrough); it cannot be sent like that.
+    if q.status == 'accepted':
+        # Re-sending would put a signed customer back to "sent" and restart
+        # the follow-up emails at somebody who already said yes.
+        flash('This quote was accepted — it is not sent again.', 'error')
+        return redirect(url_for('quotes.review', quote_id=q.id))
     blocking, _warnings = _send_checks(q)
     if blocking:
         flash('Not sent: ' + ' '.join(blocking), 'error')

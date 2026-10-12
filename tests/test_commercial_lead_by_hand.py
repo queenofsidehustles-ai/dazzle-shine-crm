@@ -782,6 +782,28 @@ with app.app_context(), tenancy.use_tenant(SLUG):
 sent_html = ' '.join(str(k.get('html', '')) for _a, k in SENT[n3:])
 check(st == 'sent' and 'Review &amp; Accept Quote' in sent_html and 'Review &amp; &lt;Co&gt;' in sent_html,
       'then it sends, the email matching what was reviewed (with its Accept link this time)')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    db.session.get(CommercialQuote, rq_id).status = 'declined'
+    db.session.commit()
+    db.session.remove()
+page = c.get(f'/quotes/{rq_id}/review', base_url=HOST).get_data(as_text=True)
+n4 = len(SENT)
+c.post(f'/quotes/{rq_id}/send', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    st = db.session.get(CommercialQuote, rq_id).status
+    db.session.get(CommercialQuote, rq_id).status = 'accepted'
+    db.session.commit()
+    db.session.remove()
+check('Send the revised proposal' in page and st == 'sent' and len(SENT) > n4,
+      'a declined quote can be revised and sent again from the review')
+page = c.get(f'/quotes/{rq_id}/review', base_url=HOST).get_data(as_text=True)
+n5 = len(SENT)
+c.post(f'/quotes/{rq_id}/send', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    st = db.session.get(CommercialQuote, rq_id).status
+    db.session.remove()
+check('This quote was accepted' in page and st == 'accepted' and len(SENT) == n5,
+      'but an accepted one is not sent again, or it would go back to "sent" with follow-ups restarting')
 doc = c.get(f'/quotes/{rq_id}/document', base_url=HOST)
 dtext = doc.get_data(as_text=True)
 check(doc.status_code == 200 and 'Commercial Cleaning Proposal' in dtext and 'Mondays after close' in dtext
