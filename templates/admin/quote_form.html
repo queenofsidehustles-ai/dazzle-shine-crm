@@ -158,9 +158,14 @@
     <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;padding:13px">
       💾 {{ 'Save draft' if not quote or quote.status == 'draft' else 'Save changes' }}
     </button>
+    {% if not quote %}
+    <button type="submit" name="next" value="review" class="btn btn-dark" style="width:100%;justify-content:center;padding:13px">
+      👁 Save &amp; review before sending →
+    </button>
+    {% endif %}
     {% if not quote or quote.status == 'draft' %}
     <p style="font-size:0.8rem;color:var(--softer);text-align:center;margin:-8px 0 0;line-height:1.5">
-      Nothing is sent when you save. Come back to it any time from Quotes; it goes to the customer only when you press Send.</p>
+      Nothing is sent when you save. Come back to it any time from Quotes; it goes to the customer only after you review it and press Send.</p>
     {% endif %}
 
     {% if quote %}
@@ -169,9 +174,9 @@
        browser ignores a <form> nested in another -- so this button used to
        submit the edit form, save, and send nothing. formaction sends it to
        the right place instead. #}
-    <button type="submit" formaction="{{ url_for('quotes.send_quote', quote_id=quote.id) }}"
+    <button type="submit" formaction="{{ url_for('quotes.review', quote_id=quote.id) }}"
             formnovalidate class="btn btn-dark" style="width:100%;justify-content:center;padding:13px">
-      {% if quote.email %}Send Quote to {{ quote.email }} →{% else %}Send Quote → <span style="font-weight:500">(add their email first)</span>{% endif %}
+      👁 Review before sending →
     </button>
     {% elif quote.status == 'sent' %}
     <div style="background:var(--info-soft);color:var(--info);padding:12px 16px;border-radius:10px;font-weight:600;font-size:0.9rem;text-align:center">
@@ -192,9 +197,9 @@
     {% endif %}
 
     {% if quote.status != 'draft' %}
-    <button type="submit" formaction="{{ url_for('quotes.send_quote', quote_id=quote.id) }}"
+    <button type="submit" formaction="{{ url_for('quotes.review', quote_id=quote.id) }}"
             formnovalidate class="btn btn-outline" style="width:100%;justify-content:center;padding:11px">
-      ↻ Resend Quote to {{ quote.email }}
+      👁 Review the proposal{{ ' & resend' if quote.status == 'sent' }} →
     </button>
     {% endif %}
 

@@ -162,6 +162,10 @@ OWNER_ONLY_ENDPOINTS = frozenset({
     ('quotes.index', 'GET'),
     ('quotes.new', 'POST'),
     ('quotes.send_quote', 'POST'),
+    ('quotes.review', 'GET'),
+    ('quotes.review', 'POST'),
+    ('quotes.circulate', 'POST'),
+    ('quotes.document', 'GET'),
     ('invoices.index', 'GET'),
     # Contractor payouts: real money out (a Stripe transfer, or a manual
     # payment recorded as paid). Route-decorator-only here would repeat the

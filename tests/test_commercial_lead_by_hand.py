@@ -154,10 +154,12 @@ with app.app_context(), tenancy.use_tenant(SLUG):
 check(linked == p['id'], 'the saved quote remembers its lead')
 
 detail = c.get(f'/quotes/{qid}', base_url=HOST).get_data(as_text=True)
-check(f'formaction="/quotes/{qid}/send"' in detail
-      and f'action="/quotes/{qid}/send"' not in detail.replace('formaction', ''),
-      'Send is a button of the edit form, not a form nested inside it '
-      '(which a browser ignores, so Send used to save and send nothing)')
+review_page = c.get(f'/quotes/{qid}/review', base_url=HOST).get_data(as_text=True)
+check(f'formaction="/quotes/{qid}/review"' in detail
+      and f'action="/quotes/{qid}/send"' not in detail.replace('formaction', '')
+      and f'action="/quotes/{qid}/send"' in review_page,
+      'the edit form goes to the review with a button of its own, not a form nested inside it '
+      '(which a browser ignores); Send is on the review page')
 
 print('\n4. Sending moves the lead to Proposal')
 SENT.clear()
@@ -715,6 +717,81 @@ sent_html = ' '.join(str(k.get('html', '')) for _a, k in SENT[n_sent:])
 check(hq_state == ('sent', 'rosa@diner.example', 839.0) and '839.00' in sent_html,
       f'Send saves what was typed and emails that -- the new $839/mo, not the old $774 ({hq_state})')
 
+print('\n13c. Review the proposal as a document, circulate it, then send')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    rq = CommercialQuote(company='Review & <Co>', contact_name='', email='', property_type='Restaurant / Food Service',
+                         services='Floor Care (Sweep & Mop), Kitchen Floor Degreasing', frequency='weekly',
+                         contract_term='month_to_month', price_per_visit=200, monthly_price=500,
+                         scope_notes='Mondays after close', token='tok-review-co', status='draft',
+                         prospect_id=wok['id'])
+    db.session.add(rq)
+    db.session.commit()
+    rq_id = rq.id
+    db.session.remove()
+n_sent = len(SENT)
+page = c.get(f'/quotes/{rq_id}/review', base_url=HOST).get_data(as_text=True)
+check('Commercial Cleaning Proposal' in page and 'Kitchen Floor Degreasing' in page and 'DRAFT' in page
+      and 'Review &amp; &lt;Co&gt;' in page and '<Co>' not in page.replace('&lt;Co&gt;', ''),
+      'the review shows the proposal as the customer will read it, marked DRAFT, with what was typed escaped')
+check('The email they will get' in page and 'srcdoc=' in page and 'sandbox="allow-same-origin"' in page
+      and 'allow-scripts' not in page,
+      'and the exact email that will go out, in a sandboxed frame')
+check('No contact name' in page and 'No email address' in page and 'does not match' in page
+      and re.search(r'<button type="submit" class="btn btn-gold"[^>]*disabled', page),
+      'it lists what is missing or off (no contact, no email, $500/mo vs $200 x 4.33 visits) and holds Send back')
+check('/quotes/view/tok-review-co/accept' not in page,
+      'and the review page has no live Accept button for the owner to press by mistake')
+c.post(f'/quotes/{rq_id}/send', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    still = db.session.get(CommercialQuote, rq_id).status
+    db.session.remove()
+check(still == 'draft' and len(SENT) == n_sent, 'Send itself refuses while the review says it cannot go')
+
+r = c.post(f'/quotes/{rq_id}/circulate', base_url=HOST,
+           data={'to': 'partner@gleam.example, walker@gleam.example', 'note': 'Is $200 right?'})
+copies = SENT[n_sent:]
+to_list = sorted((a[0] if a else k.get('to_email')) for a, k in copies)
+html0 = str(copies[0][1].get('html', '')) if copies else ''
+check(to_list == ['partner@gleam.example', 'walker@gleam.example']
+      and 'DRAFT for review' in html0 and 'Is $200 right?' in html0
+      and 'tok-review-co' not in html0 and 'Review &amp; Accept Quote' not in html0,
+      'Send for review emails a DRAFT copy to each reviewer, with the note and no way to accept it')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    st = db.session.get(CommercialQuote, rq_id).status
+    wok_notes = db.session.get(Prospect, wok['id']).notes or ''
+    db.session.remove()
+check(st == 'draft' and 'Draft quote sent for review to partner@gleam.example' in wok_notes,
+      'the quote is still an unsent draft, and the lead\'s history says who was asked to review it')
+n2 = len(SENT)
+c.post(f'/quotes/{rq_id}/circulate', base_url=HOST, data={'to': 'not-an-email'})
+check(len(SENT) == n2, 'a reviewer address that is not an email sends nothing')
+
+c.post(f'/quotes/{rq_id}/review', base_url=HOST, data={
+    'company': 'Review & <Co>', 'contact_name': 'Mei Chang', 'email': 'mei@review.example',
+    'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St',
+    'services': ['Floor Care (Sweep & Mop)'], 'frequency': 'weekly', 'contract_term': 'month_to_month',
+    'price_per_visit': '200', 'monthly_price': '866', 'scope_notes': 'Mondays after close'})
+page = c.get(f'/quotes/{rq_id}/review', base_url=HOST).get_data(as_text=True)
+check('Nothing missing' in page and not re.search(r'<button type="submit" class="btn btn-gold"[^>]*disabled', page),
+      'Review before sending saves the form first; filled in, the checks clear and Send is offered')
+n3 = len(SENT)
+c.post(f'/quotes/{rq_id}/send', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    st = db.session.get(CommercialQuote, rq_id).status
+    db.session.remove()
+sent_html = ' '.join(str(k.get('html', '')) for _a, k in SENT[n3:])
+check(st == 'sent' and 'Review &amp; Accept Quote' in sent_html and 'Review &amp; &lt;Co&gt;' in sent_html,
+      'then it sends, the email matching what was reviewed (with its Accept link this time)')
+doc = c.get(f'/quotes/{rq_id}/document', base_url=HOST)
+dtext = doc.get_data(as_text=True)
+check(doc.status_code == 200 and 'Commercial Cleaning Proposal' in dtext and 'Mondays after close' in dtext
+      and '/accept' not in dtext and 'base_admin' not in dtext and 'Ask Nana' not in dtext,
+      'the proposal on a page of its own, to print or save as a PDF, with no Accept button and no back office around it')
+form = c.get('/quotes/new', base_url=HOST).get_data(as_text=True)
+lst = c.get('/quotes/', base_url=HOST).get_data(as_text=True)
+check('Save &amp; review before sending' in form and f'/quotes/{hq_id}/send' not in lst,
+      'a new quote can go straight to review, and the quote list no longer has a send-without-looking button')
+
 print('\n14. A Sales login: the call list and nothing else')
 check(('sales', 'Sales — finding and working leads only') in rbac.ROLE_OPTIONS
       and rbac.has_permission('sales', 'prospect.work')
@@ -733,7 +810,8 @@ check(calls.status_code == 200 and '📞 Calls' in body and 'Add one' in body, '
 check('href="/bookings' not in body and 'href="/messages' not in body and 'href="/money' not in body
       and 'href="/settings/business' not in body,
       'and the menu offers nothing else: no bookings, messages, money or settings')
-for path in ('/bookings/', '/messages/', '/quotes/', '/commercial/', '/leads/', '/money/pnl'):
+for path in ('/bookings/', '/messages/', '/quotes/', '/commercial/', '/leads/', '/money/pnl',
+             f'/quotes/{rq_id}/review', f'/quotes/{rq_id}/document'):
     st = sc.get(path, base_url=HOST).status_code
     check(st in (302, 403), f'{path} is closed to Sales ({st})')
 r = sc.post('/find-leads/add', base_url=HOST, data={'business_name': 'Sales Found Deli', 'category': 'restaurant'})
