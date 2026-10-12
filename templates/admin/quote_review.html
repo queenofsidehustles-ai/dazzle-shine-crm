@@ -1,0 +1,111 @@
+{% extends "base_admin.html" %}
+{% block title %}Review quote — {{ q.company }} — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Review before sending{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('quotes.detail', quote_id=q.id) }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Edit quote</a>
+{% endblock %}
+
+{% block content %}
+<style>
+  .rv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+  .rv-paper { background: var(--ground); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; position: relative; }
+  .rv-stamp { position: absolute; top: 14px; right: -38px; transform: rotate(35deg); background: var(--warn); color: #fff;
+              font-weight: 800; letter-spacing: 0.2em; font-size: 0.72rem; padding: 4px 44px; z-index: 2; }
+  .rv-cta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 24px; max-width: 680px; margin: 0 auto; }
+  .rv-cta div { border: 2px dashed var(--line); border-radius: 12px; padding: 14px; text-align: center; color: var(--softer); font-weight: 600; font-size: 0.85rem; }
+  .rv-side { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 14px; }
+  .rv-side .card { padding: 16px 18px; }
+  .rv-side h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--softer); margin: 0 0 10px; }
+  .rv-check { font-size: 0.86rem; line-height: 1.5; margin: 0 0 8px; padding-left: 22px; position: relative; }
+  .rv-check::before { position: absolute; left: 0; }
+  .rv-check.block::before { content: '⛔'; } .rv-check.warn::before { content: '⚠️'; } .rv-check.ok::before { content: '✅'; }
+  .rv-email-meta { font-size: 0.82rem; line-height: 1.7; color: var(--muted); margin-bottom: 10px; word-break: break-word; }
+  .rv-email { width: 100%; height: 640px; display: block; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  @media (max-width: 900px) { .rv-grid { grid-template-columns: 1fr; } .rv-side { position: static; } }
+</style>
+
+<div class="rv-grid">
+  <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+    <div class="rv-paper rv-print">
+      {% if q.status == 'draft' %}<div class="rv-stamp">DRAFT</div>{% endif %}
+      {% include 'partials/quote_document.html' %}
+      <div class="rv-cta"><div>Accept This Proposal</div><div>Decline</div></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1rem;font-weight:700;margin:0 0 6px">✉️ The email they will get</h2>
+      <div class="rv-email-meta">
+        <strong>To:</strong> {{ q.contact_name or '—' }} &lt;{{ q.email or 'no email yet' }}&gt;<br>
+        <strong>From:</strong> {{ from_name }} &lt;{{ from_email }}&gt; · replies go to {{ reply_to }}<br>
+        <strong>Subject:</strong> {{ email_subject }}
+      </div>
+      {# Sandboxed without scripts. allow-same-origin only so the site's
+         frame-ancestors 'self' policy recognises its own frame (a fully
+         sandboxed one has no origin and is refused, leaving it blank) and so
+         the page can size it to the email. #}
+      <iframe class="rv-email" id="rvEmail" sandbox="allow-same-origin" srcdoc="{{ email_html }}" title="The proposal email"></iframe>
+      <p style="font-size:0.8rem;color:var(--softer);margin:8px 0 0">Its button opens the proposal page above, where they accept or decline.</p>
+    </div>
+  </div>
+
+  <div class="rv-side">
+    <div class="card">
+      <h3>Before it goes out</h3>
+      {% for m in blocking %}<p class="rv-check block">{{ m }}</p>{% endfor %}
+      {% for m in warnings %}<p class="rv-check warn">{{ m }}</p>{% endfor %}
+      {% if not blocking and not warnings %}<p class="rv-check ok">Nothing missing — read it through once more, then send.</p>{% endif %}
+      {% if blocking or warnings %}
+      <a href="{{ url_for('quotes.detail', quote_id=q.id) }}" style="font-size:0.85rem;color:var(--amber-deep);font-weight:600">Fix it in the quote →</a>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Send it</h3>
+      {# Declined is re-sendable: adjust the proposal and send the revision.
+         Accepted is not -- that would put a signed customer back to "sent". #}
+      {% if q.status in ('draft', 'sent', 'declined') %}
+      <form method="POST" action="{{ url_for('quotes.send_quote', quote_id=q.id) }}"
+            onsubmit='return confirm({{ ("Email this proposal to " ~ (q.email or "") ~ " now?")|tojson }})'>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;padding:12px"
+                {{ 'disabled' if blocking }}>
+          {{ {'sent': '↻ Resend', 'declined': '📨 Send the revised proposal'}.get(q.status, '📨 Looks right — send') }} to {{ q.email or '…' }}
+        </button>
+      </form>
+      <p style="font-size:0.78rem;color:var(--softer);margin:8px 0 0;line-height:1.5">
+        {% if blocking %}Fix the ⛔ items first.{% elif q.status == 'declined' %}They declined the last version; this sends the revision for them to accept.{% elif lead %}Sending moves {{ lead.business_name }} to Proposal, with a follow-up in three days.{% else %}You get a copy in your inbox.{% endif %}</p>
+      {% else %}
+      <p style="font-size:0.86rem;margin:0">This quote was {{ q.status }}{% if q.responded_at %} on {{ q.responded_at.strftime('%b %d') }}{% endif %}.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Send for review first</h3>
+      <p style="font-size:0.82rem;color:var(--softer);margin:0 0 10px;line-height:1.5">
+        Email a copy marked DRAFT — with no Accept button — to a partner, the cleaner who did the walkthrough, or yourself. Their replies come to you.</p>
+      <form method="POST" action="{{ url_for('quotes.circulate', quote_id=q.id) }}">
+        <input type="text" name="to" value="{{ owner_email }}" placeholder="name@example.com, another@example.com"
+               style="width:100%;margin-bottom:8px" aria-label="Who should review it" />
+        <textarea name="note" rows="2" placeholder="Anything to look at? e.g. Is $219 right for the kitchen?" style="width:100%;margin-bottom:8px"></textarea>
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📤 Send draft for review</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Keep a copy</h3>
+      <a href="{{ url_for('quotes.document', quote_id=q.id, print=1) }}" target="_blank" rel="noopener"
+         class="btn btn-outline" style="width:100%;justify-content:center">🖨 Print or save as PDF</a>
+      <p style="font-size:0.78rem;color:var(--softer);margin:8px 0 0">Opens just the proposal. Choose "Save as PDF" as the printer for a file to attach or share.</p>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const f = document.getElementById('rvEmail');
+    function fit() {
+      try { f.style.height = (f.contentDocument.documentElement.scrollHeight + 8) + 'px'; } catch (e) {}
+    }
+    f.addEventListener('load', fit);
+    window.addEventListener('resize', fit);
+  })();
+</script>
+{% endblock %}

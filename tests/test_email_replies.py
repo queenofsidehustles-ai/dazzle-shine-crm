@@ -92,7 +92,10 @@ with app.app_context():
     check(ok is True, 'it is recorded')
     check(p.next_action == 'They replied — read it',
           'the scheduled chase becomes "a person should read this"')
-    check(p.next_action_date <= '2026-10-09', 'and it is due now, not next week')
+    # Against today, not the date the test was written: a fixed date here
+    # turned every run red once the calendar passed it.
+    from scheduling import local_today
+    check(p.next_action_date <= local_today().isoformat(), 'and it is due now, not next week')
     check(p.sequence is None, 'the drip stops — they already answered')
     check('Yes — send pricing please.' in (p.notes or ''), 'what they said is kept')
     check(forwarded and forwarded[0][0] == 'owner@brightclean.com',

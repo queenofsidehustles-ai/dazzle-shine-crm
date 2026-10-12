@@ -1,0 +1,68 @@
+{#- The proposal itself, as the customer reads it. One template for the
+    customer's page and the owner's review page, so what was reviewed is what
+    is sent. Needs: q, doc_biz, freq_label, term_label, services_list. -#}
+<style>
+  .qdoc { font-family: "Inter", sans-serif; color: var(--ink); }
+  .qdoc-header { background: var(--ink); padding: 24px; text-align: center; }
+  .qdoc-header .script { font-family: "Allura", cursive; font-size: 2.2rem; color: var(--amber); }
+  .qdoc-header .sub { font-size: 0.75rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.2em; margin-top: 4px; }
+  .qdoc-body { max-width: 680px; margin: 0 auto; padding: 30px 16px 10px; }
+  .qdoc .card { background: #fff; border-radius: 14px; border: 1px solid var(--line); padding: 28px; margin-bottom: 18px; box-shadow: 0 4px 24px rgba(15,7,40,0.07); }
+  .qdoc h2 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--softer); margin: 0 0 16px; }
+  .qdoc .row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .qdoc .row .label { font-size: 0.82rem; color: var(--softer); font-weight: 600; min-width: 140px; }
+  .qdoc .row .val { font-weight: 600; color: var(--ink); }
+  .qdoc .service-list { display: flex; flex-direction: column; gap: 8px; }
+  .qdoc .service-item { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+  .qdoc .service-item::before { content: '✓'; color: var(--amber); font-weight: 700; }
+  .qdoc .price-box { background: linear-gradient(135deg,var(--ink),var(--ink-2)); border-radius: 12px; padding: 24px; text-align: center; color: #fff; margin: 20px 0; }
+  .qdoc .price-box .amount { font-size: 2.4rem; font-weight: 700; color: var(--amber); }
+  .qdoc .price-box .sub { font-size: 0.85rem; color: rgba(255,255,255,0.6); margin-top: 4px; }
+  .qdoc .scope { background: var(--ground); border-radius: 9px; padding: 14px; margin-top: 12px; font-size: 0.9rem; line-height: 1.7; color: var(--muted); white-space: pre-line; }
+  .qdoc .missing { color: var(--warn); font-style: italic; font-weight: 500; }
+  @media (max-width: 480px) { .qdoc .row { flex-direction: column; gap: 2px; } .qdoc .row .label { min-width: 0; } }
+</style>
+<div class="qdoc">
+  <div class="qdoc-header">
+    <div class="script">{{ doc_biz }}</div>
+    <div class="sub">Commercial Cleaning Proposal</div>
+  </div>
+  <div class="qdoc-body">
+    <div class="card">
+      <h2>Prepared For</h2>
+      <div class="row"><span class="label">Company</span><span class="val">{{ q.company }}</span></div>
+      <div class="row"><span class="label">Contact</span><span class="val">{{ q.contact_name or '' }}</span></div>
+      <div class="row"><span class="label">Property Type</span><span class="val">{{ q.property_type or '' }}</span></div>
+      <div class="row"><span class="label">Address</span><span class="val">{{ q.property_address or '' }}</span></div>
+      {% if q.units %}<div class="row"><span class="label">Units</span><span class="val">{{ q.units }}</span></div>{% endif %}
+      {% if q.sqft %}<div class="row"><span class="label">Square Footage</span><span class="val">{{ q.sqft }} sq ft</span></div>{% endif %}
+    </div>
+
+    <div class="card">
+      <h2>Services Included</h2>
+      <div class="service-list">
+        {% for svc in services_list %}
+        <div class="service-item">{{ svc }}</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Schedule & Terms</h2>
+      <div class="row"><span class="label">Frequency</span><span class="val">{{ freq_label or '' }}</span></div>
+      <div class="row"><span class="label">Contract Term</span><span class="val">{{ term_label or '' }}</span></div>
+      {% if q.scope_notes %}<div class="scope">{{ q.scope_notes }}</div>{% endif %}
+    </div>
+
+    {% if q.monthly_price or q.price_per_visit %}
+    <div class="price-box">
+      {% if q.monthly_price %}
+      <div class="amount">${{ '{:,.2f}'.format(q.monthly_price|float) }}<span style="font-size:1rem;font-weight:500">/mo</span></div>
+      {% endif %}
+      {% if q.price_per_visit %}
+      <div class="sub">${{ '{:,.2f}'.format(q.price_per_visit|float) }} per visit</div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>

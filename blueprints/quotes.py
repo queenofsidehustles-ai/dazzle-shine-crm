@@ -192,6 +192,8 @@ def new():
         db.session.add(q)
         db.session.commit()
         flash('Draft saved — nothing has been sent. Review it, then press Send when it is ready.', 'success')
+        if request.form.get('next') == 'review':
+            return redirect(url_for('quotes.review', quote_id=q.id))
         return redirect(url_for('quotes.detail', quote_id=q.id))
 
     # Started from a lead on the call list: fill in what is already known
@@ -260,6 +262,176 @@ def detail(quote_id):
                            selected_services=selected_services, **_estimate_args())
 
 
+def _quote_url(q):
+    return f"{request.host_url.rstrip('/')}/quotes/view/{q.token}"
+
+
+def _doc_ctx(q):
+    """What the proposal document needs -- the customer's page and the review."""
+    return dict(
+        freq_label=dict(FREQUENCIES).get(q.frequency, q.frequency),
+        term_label=dict(CONTRACT_TERMS).get(q.contract_term, q.contract_term),
+        services_list=[s.strip() for s in (q.services or '').split(',') if s.strip()],
+    )
+
+
+def _proposal_email(q, quote_url, draft=False):
+    """(subject, html) of the proposal email. The one builder for the send, the
+    review page's preview of it, and the draft copy circulated for review --
+    so what was looked over is exactly what goes out.
+
+    Everything typed into the quote is escaped: a company called "A&B <Ltd>"
+    used to arrive as broken markup."""
+    from markupsafe import escape as e
+    ctx = _doc_ctx(q)
+    brand = q.brand or brands.brand_for_property(q.property_type)
+    b = brands.get_brand(brand)
+    services_html = ''.join(f'<li>{e(s)}</li>' for s in ctx['services_list'])
+    price_html = ''
+    if q.price_per_visit:
+        price_html += f"<p><strong>Price per visit:</strong> ${float(q.price_per_visit):,.2f}</p>"
+    if q.monthly_price:
+        price_html += f"<p><strong>Monthly total:</strong> ${float(q.monthly_price):,.2f}</p>"
+    units_html = f'<br>Units: {e(q.units)}' if q.units else ''
+    sqft_html = f' · {e(q.sqft)} sq ft' if q.sqft else ''
+    scope_html = (f'<div style="background:#f6f5fb;border-radius:9px;padding:14px;margin-top:10px;white-space:pre-line">'
+                  f'<strong>Scope of Work:</strong><br>{e(q.scope_notes)}</div>') if q.scope_notes else ''
+    address = (' · ' + str(e(q.property_address))) if q.property_address else ''
+    draft_html = ('<div style="background:#fff4e5;border:1px dashed #d97706;color:#92400e;border-radius:9px;'
+                  'padding:12px 14px;margin-bottom:16px;font-weight:600">DRAFT for review — this has not been '
+                  'sent to the customer, and it has no Accept button.</div>') if draft else ''
+    inner = (
+        f'{draft_html}'
+        f'<p>Dear {e(q.contact_name or "")},</p>'
+        f'<p>Thank you for the opportunity to quote cleaning services for <strong>{e(q.company)}</strong>. '
+        f'Please find your customized proposal below.</p>'
+        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Property</h3>'
+        f'<p>{e(q.property_type or "")}{address}{units_html}{sqft_html}</p>'
+        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Services Included</h3>'
+        f'<ul style="padding-left:20px;line-height:1.9">{services_html}</ul>'
+        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Schedule &amp; Pricing</h3>'
+        f'<p><strong>Frequency:</strong> {e(ctx["freq_label"] or "")}<br>'
+        f'<strong>Contract term:</strong> {e(ctx["term_label"] or "")}</p>'
+        f'{price_html}{scope_html}'
+        + ('' if draft else '<p style="text-align:center;margin-top:16px">Ready to move forward? Review and accept below.</p>')
+    )
+    html = brands.email_shell(brand, 'Your Cleaning Proposal', inner,
+                              cta_text=None if draft else 'Review &amp; Accept Quote →',
+                              cta_url=None if draft else quote_url)
+    return f'Cleaning Services Proposal — {b["name"]}', html
+
+
+_VISITS = {'daily': 22, 'weekly': 4.33, 'biweekly': 2.17, 'monthly': 1}
+
+
+def _send_checks(q):
+    """What to look at before this goes to a customer: (blocking, warnings).
+    Blocking ones stop the Send button; the rest are worth a second look."""
+    import re
+    blocking, warnings = [], []
+    if not (q.contact_name or '').strip():
+        blocking.append('No contact name — the email would open "Dear ,".')
+    if not (q.email or '').strip():
+        blocking.append('No email address to send it to.')
+    elif not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', q.email.strip()):
+        blocking.append(f'"{q.email}" does not look like an email address.')
+    if not (q.monthly_price or q.price_per_visit):
+        warnings.append('No price on it — they would be asked to accept without a figure.')
+    if not (q.services or '').strip():
+        warnings.append('No services ticked — the "Services Included" section is empty.')
+    if not (q.property_address or '').strip():
+        warnings.append('No property address.')
+    visits = _VISITS.get(q.frequency)
+    if visits and q.monthly_price and q.price_per_visit:
+        expected = float(q.price_per_visit) * visits
+        if expected and abs(float(q.monthly_price) - expected) / expected > 0.10:
+            warnings.append(
+                f'The monthly total (${float(q.monthly_price):,.2f}) does not match '
+                f'${float(q.price_per_visit):,.2f} a visit × about {visits:g} visits a month '
+                f'(${expected:,.2f}).')
+    return blocking, warnings
+
+
+@quotes_bp.route('/<int:quote_id>/review', methods=['GET', 'POST'])
+@owner_required
+def review(quote_id):
+    """The proposal as the customer will see it -- the page and the email --
+    with what still needs fixing, before anything is sent. Posting the edit
+    form here saves it first, so the review is of what is on the screen."""
+    q = CommercialQuote.query.get_or_404(quote_id)
+    if request.method == 'POST':
+        if 'company' in request.form:
+            _apply_form(q)
+            db.session.commit()
+        return redirect(url_for('quotes.review', quote_id=q.id))
+    brand = q.brand or brands.brand_for_property(q.property_type)
+    from_name, from_email, reply_to = brands.send_identity(brand)
+    subject, email_html = _proposal_email(q, _quote_url(q))
+    blocking, warnings = _send_checks(q)
+    return render_template(
+        'admin/quote_review.html', q=q, lead=_lead_for(q), doc_biz=branding.biz_name(),
+        email_subject=subject, email_html=email_html, from_name=from_name,
+        from_email=from_email, reply_to=reply_to, blocking=blocking, warnings=warnings,
+        owner_email=branding.owner_email() or '', **_doc_ctx(q))
+
+
+@quotes_bp.route('/<int:quote_id>/document')
+@owner_required
+def document(quote_id):
+    """The proposal alone, on a page of its own, to print or save as a PDF --
+    the copy to keep, attach, or hand over at the walkthrough."""
+    q = CommercialQuote.query.get_or_404(quote_id)
+    return render_template('admin/quote_print.html', q=q, doc_biz=branding.biz_name(), **_doc_ctx(q))
+
+
+@quotes_bp.route('/<int:quote_id>/circulate', methods=['POST'])
+@owner_required
+def circulate(quote_id):
+    """Email a DRAFT copy to people who should look it over first -- a partner,
+    the cleaner who did the walkthrough, yourself on another device. It has no
+    Accept button and no link a reader could accept from; replies come back to
+    the owner, not to the business's customer inbox."""
+    import re
+    q = CommercialQuote.query.get_or_404(quote_id)
+    raw = request.form.get('to', '')
+    to = [a for a in re.split(r'[\s,;]+', raw) if a][:5]
+    bad = [a for a in to if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', a)]
+    if not to or bad:
+        flash(f'Who should review it? {"Not an email address: " + ", ".join(bad) if bad else "Add an email address."}',
+              'error')
+        return redirect(url_for('quotes.review', quote_id=q.id))
+    from markupsafe import escape as e
+    note = (request.form.get('note') or '').strip()[:2000]
+    _subject, html = _proposal_email(q, _quote_url(q), draft=True)
+    review_link = url_for('quotes.review', quote_id=q.id, _external=True)
+    intro = (f'<div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto 14px;color:#1f1333">'
+             f'<p><strong>{e(branding.biz_name())}</strong> would like a second look at this proposal for '
+             f'<strong>{e(q.company)}</strong> before it goes to the customer.</p>'
+             + (f'<p style="background:#f6f5fb;border-radius:9px;padding:12px;white-space:pre-line">{e(note)}</p>' if note else '')
+             + f'<p style="font-size:0.85rem;color:#6b6585">Reply to this email with any changes. '
+             f'Team members can also open it in the app: <a href="{review_link}">{review_link}</a></p></div>')
+    brand = q.brand or brands.brand_for_property(q.property_type)
+    from_name, from_email, _reply = brands.send_identity(brand)
+    owner = branding.owner_email() or _reply
+    sent, failed = [], []
+    for addr in to:
+        ok, _detail = send_email(
+            to_email=addr, to_name=addr,
+            subject=f'For review (not sent to the customer): proposal for {q.company}',
+            html=intro + html, from_name=from_name, from_email=from_email, reply_to=owner)
+        (sent if ok else failed).append(addr)
+    if sent:
+        lead = _lead_for(q)
+        if lead:
+            import prospecting
+            lead.notes = prospecting.note_entry(lead, f'Draft quote sent for review to {", ".join(sent)}')
+        db.session.commit()
+        flash(f'Draft sent for review to {", ".join(sent)}. The customer has not been sent anything.', 'success')
+    if failed:
+        flash(f'Could not email {", ".join(failed)}.', 'error')
+    return redirect(url_for('quotes.review', quote_id=q.id))
+
+
 @quotes_bp.route('/<int:quote_id>/send', methods=['POST'])
 @owner_required
 def send_quote(quote_id):
@@ -271,46 +443,22 @@ def send_quote(quote_id):
         db.session.commit()
     # A draft can be saved before anybody's name or email is known (half-way
     # through a walkthrough); it cannot be sent like that.
-    if not (q.email or '').strip() or not (q.contact_name or '').strip():
-        flash('Add who it is for — a contact name and email — then send.', 'error')
-        return redirect(url_for('quotes.detail', quote_id=q.id))
-    crm_url = request.host_url.rstrip('/')
-    quote_url = f"{crm_url}/quotes/view/{q.token}"
-
-    freq_label = dict(FREQUENCIES).get(q.frequency, q.frequency)
-    term_label = dict(CONTRACT_TERMS).get(q.contract_term, q.contract_term)
-    services_html = ''.join(f'<li>{s}</li>' for s in (q.services or '').split(',') if s.strip())
-    price_html = ''
-    if q.price_per_visit:
-        price_html += f"<p><strong>Price per visit:</strong> ${float(q.price_per_visit):,.2f}</p>"
-    if q.monthly_price:
-        price_html += f"<p><strong>Monthly total:</strong> ${float(q.monthly_price):,.2f}</p>"
-
+    if q.status == 'accepted':
+        # Re-sending would put a signed customer back to "sent" and restart
+        # the follow-up emails at somebody who already said yes.
+        flash('This quote was accepted — it is not sent again.', 'error')
+        return redirect(url_for('quotes.review', quote_id=q.id))
+    blocking, _warnings = _send_checks(q)
+    if blocking:
+        flash('Not sent: ' + ' '.join(blocking), 'error')
+        return redirect(url_for('quotes.review', quote_id=q.id))
+    quote_url = _quote_url(q)
     brand = q.brand or brands.brand_for_property(q.property_type)
-    b = brands.get_brand(brand)
     from_name, from_email, reply_to = brands.send_identity(brand)
-    units_html = f'<br>Units: {q.units}' if q.units else ''
-    sqft_html = f' · {q.sqft} sq ft' if q.sqft else ''
-    scope_html = (f'<div style="background:#f6f5fb;border-radius:9px;padding:14px;margin-top:10px">'
-                  f'<strong>Scope of Work:</strong><br>{q.scope_notes}</div>') if q.scope_notes else ''
-    inner = (
-        f'<p>Dear {q.contact_name},</p>'
-        f'<p>Thank you for the opportunity to quote cleaning services for <strong>{q.company}</strong>. '
-        f'Please find your customized proposal below.</p>'
-        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Property</h3>'
-        f'<p>{q.property_type or ""}{(" · " + q.property_address) if q.property_address else ""}{units_html}{sqft_html}</p>'
-        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Services Included</h3>'
-        f'<ul style="padding-left:20px;line-height:1.9">{services_html}</ul>'
-        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Schedule &amp; Pricing</h3>'
-        f'<p><strong>Frequency:</strong> {freq_label}<br><strong>Contract term:</strong> {term_label}</p>'
-        f'{price_html}{scope_html}'
-        f'<p style="text-align:center;margin-top:16px">Ready to move forward? Review and accept below.</p>'
-    )
-    html = brands.email_shell(brand, 'Your Cleaning Proposal', inner,
-                              cta_text='Review &amp; Accept Quote →', cta_url=quote_url)
+    subject, html = _proposal_email(q, quote_url)
     ok, detail = send_email(
         to_email=q.email, to_name=q.contact_name,
-        subject=f'Cleaning Services Proposal — {b["name"]}',
+        subject=subject,
         html=html, from_name=from_name, from_email=from_email, reply_to=reply_to,
     )
     if not ok:

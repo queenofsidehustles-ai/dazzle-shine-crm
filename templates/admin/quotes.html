@@ -38,9 +38,7 @@
           <td style="display:flex;gap:6px">
             <a href="{{ url_for('quotes.detail', quote_id=q.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a>
             {% if q.status == 'draft' %}
-            <form method="POST" action="{{ url_for('quotes.send_quote', quote_id=q.id) }}">
-              <button type="submit" class="btn btn-gold" style="padding:5px 12px;font-size:0.82rem">Send</button>
-            </form>
+            <a href="{{ url_for('quotes.review', quote_id=q.id) }}" class="btn btn-gold" style="padding:5px 12px;font-size:0.82rem">Review &amp; send</a>
             {% endif %}
           </td>
         </tr>
