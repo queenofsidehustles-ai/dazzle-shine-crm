@@ -909,6 +909,56 @@ check('id="waJson"' in edit and 'floor_stone' in edit and '$40.00' not in doc an
       and 'Ceramic tile floor' in doc,
       'switched to area totals only, the lines are listed without their prices and each area shows its total')
 
+# Codex review: editing a saved quote after the rates move must not re-price it.
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '40', 'comm_target_labor': '40',
+       'comm_min_visit': '200', 'comm_drive_minutes': '30'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    before = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+c.post(f'/quotes/{aq_id}/review', base_url=HOST, data=dict(form_data, show_line_prices='1',
+       line_items_json=_json.dumps(areas_in), scope_notes='fixed a typo'))
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+check([l['price'] for a in after['areas'] for l in a['lines']] == [l['price'] for a in before['areas'] for l in a['lines']]
+      and after['travel'] == before['travel'] and after['min_visit'] == before['min_visit']
+      and after['per_visit'] == before['per_visit'],
+      'saving or reviewing a quote after the rates went up keeps every unchanged line at the price it was quoted')
+live = c.post('/quotes/lines.json', base_url=HOST, json={'areas': areas_in, 'frequency': 'weekly', 'quote_id': aq_id}).get_json()
+check(live['per_visit'] == before['per_visit'], 'and the editor shows those kept prices, not today\'s')
+changed = _json.loads(_json.dumps(areas_in))
+changed[0]['lines'][1]['qty'] = 1200
+c.post(f'/quotes/{aq_id}', base_url=HOST, data=dict(form_data, show_line_prices='1', line_items_json=_json.dumps(changed)))
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after2 = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    new_ceramic = cp.line_price('floor_ceramic', 1200)[0]
+    db.session.remove()
+check(after2['areas'][0]['lines'][0]['price'] == before['areas'][0]['lines'][0]['price']
+      and after2['areas'][0]['lines'][1]['price'] == new_ceramic,
+      'a line somebody changes is priced at today\'s rates; the rest keep theirs')
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    tiny = cp.area_quote([{'name': 'Lobby', 'lines': [{'item': 'g_dusting', 'qty': 10}]}], 'weekly')
+    freebie = cp.area_quote([{'name': 'Lobby', 'lines': [{'item': 'g_dusting', 'qty': 400},
+                                                         {'item': 'custom', 'label': 'Complimentary mat swap', 'price': 0}]}], 'weekly')
+    from sqlalchemy import event as _ev
+    seen = []
+    _hook = lambda *a, **k: seen.append(1)
+    _ev.listen(db.engine, 'before_cursor_execute', _hook)
+    cp.area_quote([{'name': 'A', 'lines': [{'item': k, 'qty': 100} for k in cp.WORK_ITEM_KEYS[:15]]}], 'weekly')
+    _ev.remove(db.engine, 'before_cursor_execute', _hook)
+    db.session.remove()
+check(tiny['work'] == 0 and tiny['minimum'] == tiny['min_visit'] and tiny['travel'] > 0 and tiny['per_visit'] > 0,
+      f'a line too small to cost a dollar still means a visit, at the minimum plus travel (${tiny["per_visit"]})')
+check([l['label'] for l in freebie['areas'][0]['lines']][-1] == 'Complimentary mat swap',
+      'a described $0 line is kept on the quote, not dropped')
+check(len(seen) <= 3, f'a 15-line quote is priced with the settings read once ({len(seen)} queries, was 60+)')
+form = c.get('/quotes/new', base_url=HOST).get_data(as_text=True)
+check("else if (el.type === 'checkbox') out[el.name] = el.checked;" in form,
+      'the phone-side draft keeps the show-every-line-price switch as switched, not as its value')
+
 bad = _json.dumps([{'name': 'Patio', 'lines': []}, {'name': 'Office', 'lines': [{'item': 'custom', 'label': 'Free extra', 'price': 0},
                                                                                {'item': 'g_dusting', 'qty': 500}]}])
 c.post(f'/quotes/{aq_id}', base_url=HOST, data=dict(form_data, line_items_json=bad))

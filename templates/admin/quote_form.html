@@ -347,7 +347,8 @@
       try {
         const r = await fetch({{ url_for('quotes.lines_json')|tojson }}, {
           method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ areas: JSON.parse(hidden.value), frequency: freqSel.value }) });
+          body: JSON.stringify({ areas: JSON.parse(hidden.value), frequency: freqSel.value,
+                                 quote_id: {{ (quote.id if quote else none)|tojson }} }) });
         if (!r.ok) throw new Error(r.status);
         d = await r.json();
       } catch (e) {
@@ -484,6 +485,7 @@
       const out = { services: [], at: Date.now() };
       fields().forEach(el => {
         if (el.name === 'services') { if (el.checked) out.services.push(el.value); }
+        else if (el.type === 'checkbox') out[el.name] = el.checked;
         else out[el.id === 'est-hours' ? '#est-hours' : el.name] = el.value;
       });
       return out;
@@ -500,6 +502,7 @@
     function apply(d) {
       fields().forEach(el => {
         if (el.name === 'services') el.checked = (d.services || []).includes(el.value);
+        else if (el.type === 'checkbox') { if (el.name in d) el.checked = !!d[el.name]; }
         else {
           const k = el.id === 'est-hours' ? '#est-hours' : el.name;
           if (k in d) el.value = d[k];

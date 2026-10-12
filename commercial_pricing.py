@@ -328,32 +328,58 @@ _QUOTE_FREQ = {'daily': 'nightly', 'weekly': 'weekly', 'biweekly': 'biweekly',
                'monthly': 'monthly', 'as_needed': None}
 
 
-def item_rate(key):
+def _settings():
+    """Every commercial pricing override, in one query -- for pricing a whole
+    quote's lines at once, which otherwise asked the database four times a
+    line, on every keystroke in the editor. None if it cannot be read."""
+    try:
+        from models import PricingSetting
+        rows = PricingSetting.query.filter(PricingSetting.key.like('comm_%')).all()
+    except Exception:
+        return None
+    out = {}
+    for r in rows:
+        try:
+            out[r.key] = float(r.value)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _val(key, s):
+    """An override from a _settings() snapshot, else _get()'s answer."""
+    if s is None:
+        return _get(key)
+    v = s.get(key)
+    return v if v is not None else DEFAULTS.get(key)
+
+
+def item_rate(key, s=None):
     """Units one cleaner does in an hour for a work item. Owner override wins."""
-    v = _get(f'comm_item_{key}_rate')
+    v = _val(f'comm_item_{key}_rate', s)
     return v if v else (_ITEM[key][2] if key in _ITEM else 0.0)
 
 
-def item_supplies(key):
+def item_supplies(key, s=None):
     """Supplies and equipment per unit, in dollars. Owner override wins."""
-    v = _get(f'comm_item_{key}_supplies')
+    v = _val(f'comm_item_{key}_supplies', s)
     return v if v is not None else (_ITEM[key][3] if key in _ITEM else 0.0)
 
 
-def line_price(key, qty):
+def line_price(key, qty, s=None):
     """(price, hours) for one line: the time it takes priced like any other
     cleaning time, plus its supplies."""
     try:
         qty = max(0.0, float(qty or 0))
     except (TypeError, ValueError):
         qty = 0.0
-    rate = item_rate(key)
+    rate = item_rate(key, s)
     if key not in _ITEM or not rate:
         return 0.0, 0.0
     hours = qty / rate
-    target = _get('comm_target_labor') or 0.40
-    labour = hours * (_get('comm_hourly_cost') or 0)
-    return round(labour / target + qty * item_supplies(key)), hours
+    target = _val('comm_target_labor', s) or 0.40
+    labour = hours * (_val('comm_hourly_cost', s) or 0)
+    return round(labour / target + qty * item_supplies(key, s)), hours
 
 
 def _num(value, default=0.0):
@@ -364,7 +390,7 @@ def _num(value, default=0.0):
     return v if v >= 0 else default
 
 
-def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False):
+def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fixed=None):
     """Price a quote laid out as work areas and their lines.
 
     `areas` is what the quote form sends: [{"name", "lines": [{"item", "qty",
@@ -377,8 +403,16 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False):
 
     keep_empty keeps lines with nothing in them yet, so the editor's rows and
     the priced rows stay one-to-one while somebody is still typing.
+
+    A line carrying `locked_price` keeps it: the price it was quoted at, on a
+    line nobody has changed since (see quotes._lock_saved). `fixed` does the
+    same for the minimum visit and the travel -- {"min_visit", "travel"} as
+    the quote was written -- so editing a saved quote does not quietly
+    re-price it at whatever the rates are today.
     """
-    out_areas, work, hours = [], 0.0, 0.0
+    s = _settings()
+    fixed = fixed or {}
+    out_areas, work, hours, has_work = [], 0.0, 0.0, False
     for a in (areas or [])[:30]:
         if not isinstance(a, dict):
             continue
@@ -390,32 +424,49 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False):
             key = ln.get('item') if ln.get('item') in _ITEM else 'custom'
             qty = _num(ln.get('qty'))
             if key == 'custom':
-                label = str(ln.get('label') or '').strip()[:140] or 'Other work'
+                label = str(ln.get('label') or '').strip()[:140]
                 unit = str(ln.get('unit') or '').strip()[:20]
                 price = round(_num(ln.get('price')), 2)
                 h = 0.0
                 override = True
+                # Described but free -- a complimentary item is still scope
+                # the customer is promised, and the review flags the $0.
+                keep = bool(label)
+                label = label or 'Other work'
             else:
                 label = str(ln.get('label') or '').strip()[:140] or _ITEM[key][0]
                 unit = _ITEM[key][1]
-                price, h = line_price(key, qty)
+                price, h = line_price(key, qty, s)
                 override = bool(ln.get('override')) and ln.get('price') not in (None, '')
                 if override:
                     price = round(_num(ln.get('price')), 2)
-            if not (qty or price) and not keep_empty:
+                elif ln.get('locked_price') not in (None, ''):
+                    price = round(_num(ln.get('locked_price')), 2)
+                keep = False
+            if not (qty or price or keep) and not keep_empty:
                 continue
             lines.append({'item': key, 'label': label, 'qty': qty, 'unit': unit,
                           'price': price, 'override': override})
             work += price
             hours += h
+            # Work is there whatever it rounds to: a few square feet priced at
+            # $0 still means a visit, and the visit still costs its minimum.
+            has_work = has_work or bool(qty or price)
         out_areas.append({'name': name, 'lines': lines,
                           'subtotal': round(sum(l['price'] for l in lines), 2)})
     work = round(work, 2)
-    min_visit = _get('comm_min_visit') or 0.0
-    minimum = round(min_visit - work, 2) if work and work < min_visit else 0.0
-    mins = drive_minutes(drive_mins)
-    target = _get('comm_target_labor') or 0.40
-    travel = round((mins / 60.0) * (_get('comm_hourly_cost') or 0) / target) if work else 0.0
+    min_visit = fixed['min_visit'] if fixed.get('min_visit') is not None else (_val('comm_min_visit', s) or 0.0)
+    minimum = round(min_visit - work, 2) if has_work and work < min_visit else 0.0
+    mins = drive_mins if drive_mins not in (None, '') else _val('comm_drive_minutes', s)
+    try:
+        mins = max(0.0, float(mins or 0))
+    except (TypeError, ValueError):
+        mins = 0.0
+    target = _val('comm_target_labor', s) or 0.40
+    if fixed.get('travel') is not None:
+        travel = fixed['travel'] if has_work else 0.0
+    else:
+        travel = round((mins / 60.0) * (_val('comm_hourly_cost', s) or 0) / target) if has_work else 0.0
     per_visit = round(work + minimum + travel, 2)
     calc = _QUOTE_FREQ.get(frequency, 'weekly')
     monthly = round(per_visit * VISITS_PER_MONTH[calc]) if calc else None

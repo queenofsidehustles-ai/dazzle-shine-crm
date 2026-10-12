@@ -276,13 +276,49 @@ def _apply_lines(q):
         areas = json.loads(raw) if raw.strip() else []
     except ValueError:
         areas = []
-    priced = cp.area_quote(areas if isinstance(areas, list) else [], q.frequency or 'weekly')
+    areas = areas if isinstance(areas, list) else []
+    priced = cp.area_quote(areas, q.frequency or 'weekly', **_lock_saved(areas, _priced(q)))
     if any(a['lines'] for a in priced['areas']):
         q.line_items = json.dumps(priced)
         q.price_per_visit = priced['per_visit']
         q.monthly_price = priced['monthly']
     else:
         q.line_items = None
+
+
+def _lock_saved(areas, saved):
+    """Keep what a saved quote was priced at, for every line nobody changed.
+
+    The editor posts every line on every save -- and on Review, which saves
+    first -- and a calculated line is worked out from today's rates. Without
+    this, raising the hourly cost next month and opening an old quote to fix a
+    typo re-priced it, and a proposal already sent (or accepted) changed under
+    the customer. A line still in the same area, for the same work and the
+    same quantity, keeps its saved price; the minimum visit and the travel
+    keep theirs. A line that was changed, or added, is priced today.
+    Mutates `areas`; returns the area_quote kwargs."""
+    if not saved:
+        return {}
+    old = {}
+    for a in saved.get('areas') or []:
+        for l in a.get('lines') or []:
+            if not l.get('override') and l.get('item') != 'custom':
+                old.setdefault(((a.get('name') or '').strip().lower(), l.get('item'), float(l.get('qty') or 0)),
+                               l.get('price'))
+    for a in areas:
+        if not isinstance(a, dict):
+            continue
+        for l in a.get('lines') or []:
+            if not isinstance(l, dict) or l.get('override'):
+                continue
+            try:
+                qty = float(str(l.get('qty') or 0).replace(',', ''))
+            except ValueError:
+                continue
+            k = ((a.get('name') or '').strip().lower(), l.get('item'), qty)
+            if k in old:
+                l['locked_price'] = old[k]
+    return {'fixed': {'min_visit': saved.get('min_visit'), 'travel': saved.get('travel')}}
 
 
 def _priced(q):
@@ -304,7 +340,13 @@ def lines_json():
     import commercial_pricing as cp
     d = request.get_json(silent=True) or {}
     areas = d.get('areas') if isinstance(d.get('areas'), list) else []
-    return jsonify(cp.area_quote(areas, d.get('frequency') or 'weekly', keep_empty=True))
+    # Editing a saved quote: show the prices it will keep, not today's.
+    saved = None
+    if d.get('quote_id'):
+        q = CommercialQuote.query.get(int(d['quote_id'])) if str(d['quote_id']).isdigit() else None
+        saved = _priced(q) if q else None
+    return jsonify(cp.area_quote(areas, d.get('frequency') or 'weekly', keep_empty=True,
+                                 **_lock_saved(areas, saved)))
 
 
 @quotes_bp.route('/<int:quote_id>', methods=['GET', 'POST'])
