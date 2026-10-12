@@ -158,7 +158,7 @@
             {% set rows = [] %}
             {% for a in (walk.areas or []) %}{% for l in a.lines %}{% set _ = rows.append((a.name, l.item, l.qty)) %}{% endfor %}{% endfor %}
             {% for name, item, qty in (rows or [('', '', '')]) %}
-            <div class="wk-area-row" style="display:grid;grid-template-columns:1fr 90px;gap:6px;padding-bottom:6px;border-bottom:1px dashed var(--line)">
+            <div class="wk-area-row" style="display:grid;grid-template-columns:1fr 90px 32px;gap:6px;padding-bottom:6px;border-bottom:1px dashed var(--line)">
               <input type="text" name="wa_area" list="wkAreaPresets" value="{{ name }}" placeholder="Area, e.g. Service floor" aria-label="Area" style="{{ fld }};grid-column:1/-1">
               <select name="wa_item" aria-label="Surface or job" style="{{ fld }}">
                 <option value="">— surface or job —</option>
@@ -167,11 +167,22 @@
                 {% endfor %}
               </select>
               <input type="number" name="wa_qty" min="0" step="any" value="{{ ('%g' % qty) if qty else '' }}" placeholder="Qty" inputmode="decimal" aria-label="Quantity" style="{{ fld }}">
+              <button type="button" class="wk-area-del" aria-label="Remove this row" title="Remove this row"
+                      style="background:none;border:none;color:var(--warn);font-size:1.1rem;cursor:pointer">✕</button>
             </div>
             {% endfor %}
           </div>
           <button type="button" id="wkAddArea" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem;margin-bottom:12px">+ Add a row</button>
           <script>
+            // Remove a row; the last one is cleared rather than removed, so
+            // there is always a row to type into.
+            document.getElementById('wkAreas').addEventListener('click', function (e) {
+              if (!e.target.classList.contains('wk-area-del')) return;
+              var row = e.target.closest('.wk-area-row');
+              if (this.querySelectorAll('.wk-area-row').length > 1) { row.remove(); return; }
+              row.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+              row.querySelector('select').value = '';
+            });
             document.getElementById('wkAddArea').addEventListener('click', function () {
               var box = document.getElementById('wkAreas');
               var rows = box.querySelectorAll('.wk-area-row');

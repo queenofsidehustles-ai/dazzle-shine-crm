@@ -323,7 +323,8 @@ WORK_ITEMS = [
 ]
 WORK_ITEM_KEYS = [k for k, *_ in WORK_ITEMS]
 _ITEM = {k: (lbl, unit, rate, sup, grp) for k, lbl, unit, rate, sup, grp in WORK_ITEMS}
-# The quote's frequency words -> visits a month.
+# The quote form's frequency names -> the calculator's (VISITS_PER_MONTH keys);
+# None for a one-off, which has no monthly figure.
 _QUOTE_FREQ = {'daily': 'nightly', 'weekly': 'weekly', 'biweekly': 'biweekly',
                'monthly': 'monthly', 'as_needed': None}
 

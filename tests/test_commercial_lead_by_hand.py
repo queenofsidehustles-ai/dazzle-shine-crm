@@ -978,7 +978,8 @@ lp = c.get(f'/find-leads/{wok["id"]}', base_url=HOST).get_data(as_text=True)
 form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
 check('Priced area by area' in lp and 'name="wa_area"' in lp,
       'the lead page measures by area on site and prices the walkthrough the same way')
-check('floor_ceramic' in form.split('id="waJson"')[1].split('/>')[0] if 'id="waJson"' in form else False,
+waj = re.search(r'id="waJson" value="([^"]*)"', form)
+check(bool(waj) and 'floor_ceramic' in waj.group(1),
       'and the quote opens with those areas and lines filled in')
 
 print('\n14. A Sales login: the call list and nothing else')
