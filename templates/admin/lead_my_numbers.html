@@ -1,0 +1,94 @@
+{% extends "base_admin.html" %}
+{% block title %}My numbers — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}My numbers{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('places_finder.call_sheet') }}" class="btn btn-gold" style="padding:6px 14px;font-size:0.85rem">Start calling →</a>
+{% endblock %}
+
+{% block content %}
+{% set row = 'display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--line-soft, var(--line));font-size:0.88rem' %}
+
+<div class="card" style="margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+    <h3 style="margin:0">Today</h3>
+    <span style="color:var(--softer);font-size:0.86rem">{% if done >= target %}Target made 🎉{% else %}{{ target - done }} to go{% endif %}</span>
+  </div>
+  <div style="font-size:2rem;font-weight:800;margin:6px 0 4px">{{ done }} <span style="font-size:1rem;font-weight:500;color:var(--softer)">of {{ target }} calls</span></div>
+  <div style="height:9px;border-radius:5px;background:var(--line, #eee);overflow:hidden" role="progressbar"
+       aria-valuenow="{{ done }}" aria-valuemin="0" aria-valuemax="{{ target }}" aria-label="Calls today against your target">
+    <div style="height:100%;width:{{ pct }}%;background:var(--gold, #b98a33)"></div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:16px">
+  {% for label, n in (('This week', week), ('This month', month)) %}
+  <div class="card" style="margin:0">
+    <h3 style="margin:0 0 6px">{{ label }}</h3>
+    <div style="{{ row }}"><span>Calls</span><strong>{{ n.call }}</strong></div>
+    <div style="{{ row }}"><span style="color:var(--softer)">— reached somebody</span><span>{{ n.conversations }}</span></div>
+    <div style="{{ row }}"><span>Texts · emails</span><span>{{ n.text }} · {{ n.email }}</span></div>
+    <div style="{{ row }}"><span>Walkthroughs booked · done</span><span>{{ n.walkthrough_booked }} · {{ n.walkthrough }}</span></div>
+    <div style="{{ row }}"><span>Handed over to quote</span><span>{{ n.handoff }}</span></div>
+    <div style="{{ row }}"><span>Accounts won</span><strong>{{ n.won }}</strong></div>
+  </div>
+  {% endfor %}
+  <div class="card" style="margin:0">
+    <h3 style="margin:0 0 6px">My leads</h3>
+    <div style="{{ row }}"><span>Open</span><a href="{{ url_for('places_finder.dashboard', view='everyone') }}"><strong>{{ leads.open }}</strong></a></div>
+    <div style="{{ row }}"><span>With the owner to quote</span><span>{{ leads.waiting }}</span></div>
+    <div style="{{ row }}"><span>Became accounts (all time)</span><span>{{ leads.accounts }}</span></div>
+  </div>
+</div>
+
+{% if earnings %}
+{% set e = earnings %}
+<div class="card" style="margin-bottom:16px" id="earnings">
+  <h3 style="margin:0 0 4px">What I've earned</h3>
+  <p style="color:var(--softer);font-size:0.82rem;margin:0 0 10px">
+    Commission is earned once the customer pays. Worked out from the same rates as the owner's commission report.
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+    <div style="background:var(--gold-soft, rgba(211,168,79,0.12));border-radius:10px;padding:12px 14px">
+      <div style="font-size:0.82rem;color:var(--softer)">{{ e.this_label }} so far</div>
+      <div style="font-size:1.8rem;font-weight:800">${{ '%.2f' % e.this.total }}</div>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px">
+      <div style="font-size:0.82rem;color:var(--softer)">{{ e.prev_label }}</div>
+      <div style="font-size:1.8rem;font-weight:800">${{ '%.2f' % (e.prev_paid.amount if e.prev_paid else e.prev.total) }}</div>
+      <div style="font-size:0.8rem;color:var(--softer)">
+        {% if e.prev_paid %}✅ Paid {{ e.prev_paid.paid_at.strftime('%b %-d') }}{% elif e.prev.total > 0 %}Not paid out yet{% else %}Nothing earned{% endif %}
+      </div>
+    </div>
+  </div>
+  {% if e.this.lines %}
+  <div style="margin-top:12px">
+    {% for l in e.this.lines %}
+    <div style="{{ row }}"><span>{{ l.label }}</span><span>${{ '%.2f' % l.amount }}</span></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <details style="margin-top:12px">
+    <summary style="cursor:pointer;font-weight:600;font-size:0.88rem">How I earn</summary>
+    {% set r = e.rates %}
+    <div style="margin-top:8px">
+      <div style="{{ row }}"><span>Commercial account signed — under $1,000/mo</span><span>${{ '%.0f' % r.va_comm_small_land }} + ${{ '%.0f' % r.va_comm_small_res }}/mo</span></div>
+      <div style="{{ row }}"><span>— $1,000 to $2,500/mo</span><span>${{ '%.0f' % r.va_comm_standard_land }} + ${{ '%.0f' % r.va_comm_standard_res }}/mo</span></div>
+      <div style="{{ row }}"><span>— $2,500/mo and up</span><span>${{ '%.0f' % r.va_comm_large_land }} + ${{ '%.0f' % r.va_comm_large_res }}/mo</span></div>
+      <div style="{{ row }}"><span>Home clean booked (one-time)</span><span>${{ '%.0f' % r.va_direct_lead }}</span></div>
+      <div style="{{ row }}"><span>Each recurring home clean</span><span>${{ '%.0f' % r.va_recurring_clean }}</span></div>
+      <div style="{{ row }}"><span>Bonus at {{ '%.0f' % r.va_momentum_threshold }}+ new customers in a month</span><span>${{ '%.0f' % r.va_momentum_bonus }}</span></div>
+      <p style="color:var(--softer);font-size:0.8rem;margin:8px 0 0">
+        The monthly amount on a commercial account is paid for every month it stays active after the first.
+        Customers who came from paid ads don't earn commission.
+      </p>
+    </div>
+  </details>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 style="margin:0 0 8px">What I've done lately</h3>
+  {% with show_who=False %}{% include "partials/lead_activity_feed.html" %}{% endwith %}
+</div>
+{% endblock %}

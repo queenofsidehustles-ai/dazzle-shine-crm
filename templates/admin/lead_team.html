@@ -1,0 +1,100 @@
+{% extends "base_admin.html" %}
+{% block title %}Team — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Your sales team{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('places_finder.dashboard') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← Find leads</a>
+{% endblock %}
+
+{% block content %}
+{% if not rows %}
+<div class="card" style="text-align:center;color:var(--softer);padding:36px">
+  No Sales logins yet. Add one in <a href="{{ url_for('team_logins.index') }}">Team Logins</a> with the Sales role,
+  give them some leads, and what they do shows up here.
+</div>
+{% else %}
+
+<div class="filter-tabs" style="margin-bottom:14px">
+  {% for key, label in periods %}
+  <a href="{{ url_for('places_finder.team', period=key, rep=feed_rep or None) }}" class="filter-tab {{ 'active' if period == key }}">{{ label }}</a>
+  {% endfor %}
+</div>
+<p style="color:var(--softer);font-size:0.85rem;margin:-6px 0 14px">
+  {{ first.strftime('%a %-d %b') }}{% if last != first %} – {{ last.strftime('%a %-d %b') }}{% endif %}.
+  Calls today are always today's.
+</p>
+
+<form id="targets" method="POST" action="{{ url_for('places_finder.set_targets') }}">
+  <input type="hidden" name="period" value="{{ period }}">
+</form>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;margin-bottom:18px">
+  {% for r in rows %}
+  {% set n = r.n %}
+  <div class="card rep-card" style="margin:0">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <h3 style="margin:0">{{ r.user.name }}</h3>
+      <a href="{{ url_for('places_finder.dashboard', view='everyone', rep=r.user.name) }}" style="font-size:0.82rem">{{ r.open }} open lead{{ '' if r.open == 1 else 's' }} →</a>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;font-size:0.86rem;margin-top:10px">
+      <span><strong>{{ r.today }}</strong> of {{ r.target }} calls today</span>
+      <span style="color:var(--softer)">{% if r.today >= r.target %}Target made{% else %}{{ r.target - r.today }} to go{% endif %}</span>
+    </div>
+    <div style="height:7px;border-radius:4px;background:var(--line, #eee);margin-top:6px;overflow:hidden" role="progressbar"
+         aria-valuenow="{{ r.today }}" aria-valuemin="0" aria-valuemax="{{ r.target }}" aria-label="{{ r.user.name }}'s calls today">
+      <div style="height:100%;width:{{ r.pct }}%;background:var(--gold, #b98a33)"></div>
+    </div>
+
+    <dl style="display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:14px 0 0;font-size:0.86rem">
+      <dt>Calls</dt><dd style="margin:0;text-align:right;font-weight:700">{{ n.call }}</dd>
+      <dt style="color:var(--softer)">— reached somebody</dt><dd style="margin:0;text-align:right">{{ n.conversations }}</dd>
+      <dt>Texts · emails</dt><dd style="margin:0;text-align:right">{{ n.text }} · {{ n.email }}</dd>
+      <dt>Walkthroughs booked</dt><dd style="margin:0;text-align:right">{{ n.walkthrough_booked }}</dd>
+      <dt>Walkthroughs done</dt><dd style="margin:0;text-align:right">{{ n.walkthrough }}</dd>
+      <dt>Handed to you to quote</dt><dd style="margin:0;text-align:right">{{ n.handoff }}</dd>
+      <dt>Accounts won</dt><dd style="margin:0;text-align:right;font-weight:700">{{ n.won }}</dd>
+      {% if pay %}
+      <dt>Commission this month</dt>
+      <dd style="margin:0;text-align:right"><a href="{{ url_for('commissions.index', agent=r.user.name) }}">${{ '%.2f' % r.earned }}</a></dd>
+      {% endif %}
+    </dl>
+
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;font-size:0.82rem;color:var(--softer)">
+      Their calls a day
+      <input type="number" name="target_{{ r.user.id }}" form="targets" min="1" max="500"
+             value="{{ r.own_target or '' }}" placeholder="{{ default_target }}"
+             style="width:90px;margin:0" aria-label="{{ r.user.name }}'s calls a day">
+    </label>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card" style="margin-bottom:18px">
+  <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+    <label style="flex:1;min-width:200px;font-size:0.86rem">
+      Calls a day for anyone without their own number
+      <input type="number" name="default" form="targets" min="1" max="500" value="{{ default_target }}" style="margin:6px 0 0">
+    </label>
+    <button type="submit" form="targets" class="btn btn-gold" style="padding:10px 20px">Save targets</button>
+  </div>
+  <p style="color:var(--softer);font-size:0.8rem;margin:8px 0 0">
+    A rep's call sheet stops at their number with a "that's today's target" — they can keep going if they like.
+  </p>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+    <h3 style="margin:0">Latest</h3>
+    <form method="GET" style="margin:0">
+      <input type="hidden" name="period" value="{{ period }}">
+      <select name="rep" onchange="this.form.submit()" aria-label="Whose activity" style="width:auto;margin:0;padding:6px 10px">
+        <option value="">Everybody</option>
+        {% for r in rows %}<option value="{{ r.user.name }}" {{ 'selected' if feed_rep == r.user.name }}>{{ r.user.name }}</option>{% endfor %}
+      </select>
+      <noscript><button type="submit" class="btn btn-outline">Show</button></noscript>
+    </form>
+  </div>
+  {% with show_who=True %}{% include "partials/lead_activity_feed.html" %}{% endwith %}
+</div>
+{% endif %}
+{% endblock %}
