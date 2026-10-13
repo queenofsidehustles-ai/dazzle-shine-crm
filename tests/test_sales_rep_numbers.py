@@ -151,7 +151,7 @@ check(acts('Sam Sales', 'handoff') == 1
 c.post(f'/find-leads/call/{three}/log', base_url=HOST, data={'outcome': 'voicemail'})
 check(acts('Owner', 'call') == 1 and acts('Riley Rep') == 0,
       'the owner\'s own call is filed under the owner, not under the rep whose lead it is')
-got = in_tenant(lambda: rep_activity.counts(['Sam Sales'], TODAY, TODAY)['Sam Sales'])
+got = in_tenant(lambda: rep_activity.counts([sam_id], TODAY, TODAY)[sam_id])
 check(got['call'] == 2 and got['conversations'] == 1,
       f'calls, and how many of them reached somebody ({got["call"]}, {got["conversations"]})')
 
@@ -160,10 +160,10 @@ print('\n2. Days are the business\'s days, not the server\'s')
 def edge():
     start, end = rep_activity.utc_bounds(TODAY, TODAY)
     for when in (start - timedelta(minutes=1), start, end - timedelta(minutes=1), end):
-        db.session.add(ProspectActivity(user_name='Edge Case', kind='call', outcome='called',
+        db.session.add(ProspectActivity(user_id=990001, user_name='Edge Case', kind='call', outcome='called',
                                         business_name='Edge', created_at=when))
     db.session.commit()
-    return rep_activity.counts(['Edge Case'], TODAY, TODAY)['Edge Case']['call']
+    return rep_activity.counts([990001], TODAY, TODAY)[990001]['call']
 check(in_tenant(edge) == 2, 'a call a minute before local midnight is yesterday\'s; one at midnight is today\'s')
 
 
@@ -190,6 +190,10 @@ check(targets == (3, 3, 40), f'the company\'s number, and a rep\'s own over it (
 c.post('/find-leads/team/targets', base_url=HOST, data={'default': '0'})
 check(in_tenant(rep_activity.default_target) == 3, 'a target of nought is not a target')
 c.get('/find-leads/team', base_url=HOST)   # (the refusal)
+c.post('/find-leads/team/targets', base_url=HOST, data={'default': '', f'target_{riley_id}': '12'})
+check(in_tenant(lambda: (rep_activity.default_target(), db.session.get(User, riley_id).daily_call_target)) == (3, 40),
+      'nor is a blank company number -- refused, and the rep\'s change with it')
+c.get('/find-leads/team', base_url=HOST)   # (the refusal)
 check(sam.post('/find-leads/team/targets', base_url=HOST, data={f'target_{sam_id}': '1'}).status_code == 403
       and in_tenant(lambda: db.session.get(User, sam_id).daily_call_target) is None,
       'a rep cannot set their own target')
@@ -202,7 +206,19 @@ check('That\'s today\'s target' not in page(riley, '/find-leads/call'),
 
 
 print('\n4. The owner\'s Team page')
-team = text_of(page(c, '/find-leads/team?period=week'))
+# A predecessor who had the same name: their calls are theirs, not Riley's.
+def ghost():
+    for _ in range(4):
+        db.session.add(ProspectActivity(user_id=990002, user_name='Riley Rep', kind='call',
+                                        outcome='called', business_name='Ghost Lead'))
+    db.session.commit()
+in_tenant(ghost)
+team_html = page(c, '/find-leads/team?period=week')
+team = text_of(team_html)
+check('Ghost Lead' not in team and '0 of 40 calls today' in team,
+      'a rep\'s numbers are their login\'s -- a former rep with the same name does not count toward them')
+check(f'month={TODAY.year:04d}-{TODAY.month:02d}' in team_html,
+      'the commission link opens the same month the card shows')
 check('Sam Sales' in team and 'Riley Rep' in team and '3 of 3 calls today' in team and '0 of 40 calls today' in team,
       'each rep, with calls today against their target')
 check('Sam Sales · Call' in team and 'Numbers One Dental' in team, 'and the latest of what they did')
@@ -233,6 +249,8 @@ check(f'${owed:.2f}' in me and 'Commercial signed — Numbers Won Clinic' in me,
       f'what they have earned this month, line by line -- the commission report\'s figure (${owed:.2f})')
 check('✅ Paid' in me and '$42.00' in me, 'and whether last month has been paid out')
 check('Riley Won Bistro' not in me and 'Riley Rep' not in me, 'never a teammate\'s accounts or numbers')
+check('Ghost Lead' not in text_of(page(riley, '/find-leads/me')),
+      'nor, on a rep\'s own page, the calls of somebody who had their name before them')
 check('How I earn' in me and 'of 3 calls' in me and 'Became accounts' in me,
       'with how the commission is worked out, today against target, and their leads')
 check(c.get('/find-leads/me', base_url=HOST).status_code == 302, 'the owner is sent to the Team page instead')

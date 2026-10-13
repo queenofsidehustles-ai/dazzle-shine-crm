@@ -51,43 +51,46 @@ def utc_bounds(first, last):
     return start.replace(tzinfo=None), end.replace(tzinfo=None)
 
 
-def counts(names, first, last):
-    """{name: {kind: n, 'conversations': n}} for each name, over local days
-    first..last. One query, whoever is asked about."""
+def counts(user_ids, first, last):
+    """{user id: {kind: n, 'conversations': n}} for each login, over local
+    days first..last. One query, whoever is asked about.
+
+    By login, not by name: a name can be reused -- a rep leaves, their login
+    is deleted, somebody else is added under the same name -- and the new
+    rep must not start with the old one's calls."""
     from models import ProspectActivity
     start, end = utc_bounds(first, last)
-    out = {n: _blank() for n in names}
-    if not names:
+    out = {i: _blank() for i in user_ids}
+    if not user_ids:
         return out
     rows = (ProspectActivity.query
-            .filter(ProspectActivity.user_name.in_(list(names)),
+            .filter(ProspectActivity.user_id.in_(list(user_ids)),
                     ProspectActivity.created_at >= start,
                     ProspectActivity.created_at < end)
-            .with_entities(ProspectActivity.user_name, ProspectActivity.kind,
+            .with_entities(ProspectActivity.user_id, ProspectActivity.kind,
                            ProspectActivity.outcome)
             .all())
-    for name, kind, outcome in rows:
-        c = out.setdefault(name, _blank())
+    for uid, kind, outcome in rows:
+        c = out.setdefault(uid, _blank())
         c[kind] = c.get(kind, 0) + 1
         if kind == 'call' and outcome not in ProspectActivity.NO_CONVERSATION:
             c['conversations'] += 1
     return out
 
 
-def calls_today(name):
-    """How many calls `name` has logged today."""
+def calls_today(user_id):
+    """How many calls this login has logged today."""
     from scheduling import local_today
     today = local_today()
-    return counts([name], today, today)[name]['call']
+    return counts([user_id], today, today)[user_id]['call']
 
 
-def recent(names=None, limit=30):
-    """The latest things done, newest first -- everybody's, or these people's."""
+def recent(user_ids, limit=30):
+    """The latest things these logins did, newest first."""
     from models import ProspectActivity
-    q = ProspectActivity.query
-    if names is not None:
-        q = q.filter(ProspectActivity.user_name.in_(list(names) or ['']))
-    return q.order_by(ProspectActivity.created_at.desc()).limit(limit).all()
+    return (ProspectActivity.query
+            .filter(ProspectActivity.user_id.in_(list(user_ids) or [-1]))
+            .order_by(ProspectActivity.created_at.desc()).limit(limit).all())
 
 
 def won(names, first, last):

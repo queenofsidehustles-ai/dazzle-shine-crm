@@ -55,7 +55,7 @@
       <dt>Accounts won</dt><dd style="margin:0;text-align:right;font-weight:700">{{ n.won }}</dd>
       {% if pay %}
       <dt>Commission this month</dt>
-      <dd style="margin:0;text-align:right"><a href="{{ url_for('commissions.index', agent=r.user.name) }}">${{ '%.2f' % r.earned }}</a></dd>
+      <dd style="margin:0;text-align:right"><a href="{{ url_for('commissions.index', agent=r.user.name, month=month) }}">${{ '%.2f' % r.earned }}</a></dd>
       {% endif %}
     </dl>
 
@@ -73,7 +73,7 @@
   <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
     <label style="flex:1;min-width:200px;font-size:0.86rem">
       Calls a day for anyone without their own number
-      <input type="number" name="default" form="targets" min="1" max="500" value="{{ default_target }}" style="margin:6px 0 0">
+      <input type="number" name="default" form="targets" min="1" max="500" required value="{{ default_target }}" style="margin:6px 0 0">
     </label>
     <button type="submit" form="targets" class="btn btn-gold" style="padding:10px 20px">Save targets</button>
   </div>

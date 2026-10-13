@@ -358,7 +358,10 @@ def _my_progress():
     if rep is None:
         return None
     import rep_activity
-    done, target = rep_activity.calls_today(rep), rep_activity.target_for(_me())
+    me = _me()
+    if me is None:
+        return None
+    done, target = rep_activity.calls_today(me.id), rep_activity.target_for(me)
     return {'done': done, 'target': target, 'pct': min(100, round(100 * done / target))}
 
 
@@ -623,8 +626,9 @@ def call_sheet(prospect_id=None):
         # A rep's own calls against their own target: the leads' last-called
         # stamps are anybody's calls, and a lead rung twice counts once.
         import rep_activity
-        done = rep_activity.calls_today(rep)
-        stint = rep_activity.target_for(_me())
+        me = _me()
+        done = rep_activity.calls_today(me.id) if me else 0
+        stint = rep_activity.target_for(me)
 
     # A sitting worth of calls, then a finish line. An endless queue is how a
     # backlog becomes a screen nobody opens: there is no version of today where
@@ -1491,14 +1495,15 @@ def assign_many():
                             rep=request.form.get('rep_filter') or None))
 
 
-def _numbers(names, period):
-    """Each rep's activity for a period, and the accounts it won them."""
+def _numbers(users, period):
+    """Each rep's activity for a period, by login, and the accounts it won
+    them (accounts are credited by name, like their commission)."""
     import rep_activity
     first, last = rep_activity.period_dates(period)
-    got = rep_activity.counts(names, first, last)
-    won = rep_activity.won(names, first, last)
-    for n in names:
-        got[n]['won'] = len(won.get(n, []))
+    got = rep_activity.counts([u.id for u in users], first, last)
+    won = rep_activity.won([u.name for u in users], first, last)
+    for u in users:
+        got[u.id]['won'] = len(won.get(u.name, []))
     return got, first, last
 
 
@@ -1519,8 +1524,9 @@ def team():
     reps = _reps()
     names = [u.name for u in reps]
     today = local_today()
-    calls_today = rep_activity.counts(names, today, today)
-    got, first, last = _numbers(names, period)
+    ids = [u.id for u in reps]
+    calls_today = rep_activity.counts(ids, today, today)
+    got, first, last = _numbers(reps, period)
     open_leads = dict(
         db.session.query(Prospect.agent, db.func.count(Prospect.id))
         .filter(Prospect.agent.in_(names or ['']),
@@ -1532,19 +1538,20 @@ def team():
         target = rep_activity.target_for(u)
         rows.append({
             'user': u, 'target': target, 'own_target': u.daily_call_target,
-            'today': calls_today[u.name]['call'],
-            'pct': min(100, round(100 * calls_today[u.name]['call'] / target)),
-            'n': got[u.name], 'open': open_leads.get(u.name, 0),
+            'today': calls_today[u.id]['call'],
+            'pct': min(100, round(100 * calls_today[u.id]['call'] / target)),
+            'n': got[u.id], 'open': open_leads.get(u.name, 0),
             'earned': (va_commission.commission_for_month(u.name, today.year, today.month)['total']
                        if pay else None),
         })
     who = (request.args.get('rep') or '').strip()
-    feed = rep_activity.recent([who] if who in names else names, limit=40)
+    feed = rep_activity.recent([u.id for u in reps if u.name == who] if who in names else ids, limit=40)
     return render_template(
         'admin/lead_team.html', rows=rows, period=period, periods=rep_activity.PERIODS,
         first=first, last=last, default_target=rep_activity.default_target(),
         feed=feed, feed_rep=who if who in names else '', kinds=_activity_kinds(),
-        status_labels=Prospect.STATUS_LABELS, pay=pay)
+        status_labels=Prospect.STATUS_LABELS, pay=pay,
+        month=f'{today.year:04d}-{today.month:02d}')
 
 
 def _activity_kinds():
@@ -1576,11 +1583,16 @@ def set_targets():
     import rep_activity
     back = redirect(url_for('places_finder.team', period=request.form.get('period') or None))
     try:
-        default = _target(request.form.get('default'))
+        # The company's number cannot be "nothing": every rep without their
+        # own would have no target. Only a rep's own box may be left blank.
+        default = _target(request.form.get('default')) if 'default' in request.form else None
+        if 'default' in request.form and default is None:
+            raise ValueError('')
         own = {u: _target(request.form.get(f'target_{u.id}'))
                for u in _reps() if f'target_{u.id}' in request.form}
     except ValueError as e:
-        flash(f'"{e}" is not a number of calls — use a whole number from 1 to 500. Nothing was changed.', 'error')
+        what = f'"{e}" is not a number of calls' if str(e) else 'The company\'s calls a day cannot be blank'
+        flash(f'{what} — use a whole number from 1 to 500. Nothing was changed.', 'error')
         return back
     if default:
         BusinessSetting.set('sales_daily_calls', default)
@@ -1608,10 +1620,13 @@ def my_numbers():
         return redirect(url_for('places_finder.team') if _is_owner()
                         else url_for('places_finder.dashboard'))
     today = local_today()
-    target = rep_activity.target_for(_me())
-    done = rep_activity.calls_today(rep)
-    week, *_ = _numbers([rep], 'week')
-    month, *_ = _numbers([rep], 'month')
+    me = _me()
+    if me is None:
+        return redirect(url_for('places_finder.dashboard'))
+    target = rep_activity.target_for(me)
+    done = rep_activity.calls_today(me.id)
+    week, *_ = _numbers([me], 'week')
+    month, *_ = _numbers([me], 'month')
     mine = Prospect.query.filter(Prospect.agent == rep).all()
     leads = {
         'open': sum(1 for p in mine if (p.stage or 'new') in Prospect.LIVE_STAGES),
@@ -1633,8 +1648,8 @@ def my_numbers():
         }
     return render_template(
         'admin/lead_my_numbers.html', target=target, done=done,
-        pct=min(100, round(100 * done / target)), week=week[rep], month=month[rep],
-        leads=leads, earnings=earnings, feed=rep_activity.recent([rep], limit=15),
+        pct=min(100, round(100 * done / target)), week=week[me.id], month=month[me.id],
+        leads=leads, earnings=earnings, feed=rep_activity.recent([me.id], limit=15),
         kinds=_activity_kinds(), status_labels=Prospect.STATUS_LABELS)
 
 
