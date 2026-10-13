@@ -81,4 +81,6 @@
     is there when you want it.
   </p>
 {% endif %}
+{# Akye's ads: record the finished signup once (set by signup.welcome). #}
+{% if session.pop('meta_signup_complete', False) %}{% with meta_event='CompleteRegistration' %}{% include '_meta_pixel.html' %}{% endwith %}{% endif %}
 {% endblock %}

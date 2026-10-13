@@ -453,4 +453,8 @@ def welcome(token):
     # rather than hand-assigning session keys, so this can't again silently
     # drift out of sync with what a real login sets -- see JOURNEY-01.
     bind_authenticated_session(user)
+    # A real, finished signup: the first screen records it once for Akye's
+    # ads (templates/_meta_pixel.html). Set after bind_authenticated_session,
+    # which may reset the session, and only here -- a sign-in later never sets it.
+    session['meta_signup_complete'] = True
     return redirect(url_for('settings.getting_started'))

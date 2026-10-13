@@ -375,6 +375,7 @@ def create_app():
                 'PRODUCT_BASE': product.canonical_base().rstrip('/'),
                 'LEGAL_ENTITY': product.legal_entity(),
                 'LEGAL_ADDRESS': product.legal_address(),
+                'META_PIXEL_ID': product.meta_pixel_id(),
                 # Texting, email, photos and lead search come from Akye, not
                 # from the company (integrations._PLATFORM).
                 'CONNECTIONS_PROVIDED': _connections_provided()}
