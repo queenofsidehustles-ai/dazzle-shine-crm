@@ -51,6 +51,8 @@
   <p style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     {% if text_phone %}
     <a href="{{ url_for('messages.thread', phone=text_phone, name=current.business_name) }}" class="btn btn-outline">💬 Text them</a>
+    {% elif lead_text %}
+    <a href="{{ url_for('places_finder.lead_page', prospect_id=current.id) }}#texts" class="btn btn-outline">💬 Text them</a>
     {% endif %}
     {# Which quote follows from the kind of work: a cleaning contract, or a
        per-home price for the turnovers a property manager buys. #}

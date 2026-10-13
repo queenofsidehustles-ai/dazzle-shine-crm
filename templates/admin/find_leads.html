@@ -43,6 +43,8 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
                   ('everyone', '🏢 Everyone', counts.all),
                   ('find', '🎯 Find new', None),
                   ('add', '➕ Add one', None)] %}
+  {# What the reps have handed over to price -- the owner's queue. #}
+  {% if is_owner and (ready_count or view == 'ready') %}{% set views = views + [('ready', '📝 Ready to quote', ready_count)] %}{% endif %}
   {% for key, label, n in views %}
   <a href="{{ url_for('places_finder.dashboard', view=key) }}"
      class="filter-tab {{ 'active' if view == key }}">
@@ -215,10 +217,11 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
 {% endif %}
 
 {# ── CONTACTS ──────────────────────────────────────────────────────────── #}
-{% if view == 'everyone' %}
+{% if view in ('everyone', 'ready') %}
 {# The stage counts were a screen you could look at and not act on. As filters
    they answer the same question and then take you to the rows, which is what
    the number was for. #}
+{% if view == 'everyone' %}
 <div class="card" style="margin-bottom:14px">
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <a href="{{ url_for('places_finder.dashboard', view='everyone') }}"
@@ -229,30 +232,67 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
     {% endif %}{% endfor %}
   </div>
 </div>
+{% endif %}
 
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div>
+      {% if view == 'ready' %}
+      <h3 style="margin:0 0 4px">📝 Ready to quote</h3>
+      <p style="color:var(--softer);font-size:0.85rem;margin:0">
+        Qualified and handed over by your reps, oldest first. Each leaves this list when its quote is sent.
+      </p>
+      {% else %}
       <h3 style="margin:0 0 4px">📇 Every contact</h3>
       <p style="color:var(--softer);font-size:0.85rem;margin:0">
         Everything you've collected — phone, email, address, and where each one stands.
       </p>
+      {% endif %}
     </div>
     <a href="{{ url_for('places_finder.export_csv') }}" class="btn btn-gold" style="padding:9px 17px">⬇️ Download CSV</a>
   </div>
+
+  {% if is_owner and reps %}
+  {# Who works which lead. Filter to one rep (or the unassigned pool), tick
+     leads and hand them over -- a new hire's first morning, or a leaver's
+     leads to somebody else. #}
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;font-size:0.86rem">
+    <form method="GET" action="{{ url_for('places_finder.dashboard') }}" style="display:flex;gap:6px;align-items:center">
+      <input type="hidden" name="view" value="everyone">
+      {% if stage_filter %}<input type="hidden" name="stage" value="{{ stage_filter }}">{% endif %}
+      <label for="repFilter" style="color:var(--softer)">Show</label>
+      <select id="repFilter" name="rep" onchange="this.form.submit()" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px">
+        <option value="">Every rep's leads</option>
+        <option value="unassigned" {{ 'selected' if rep_filter == 'unassigned' }}>Unassigned</option>
+        {% for u in reps %}<option value="{{ u.name }}" {{ 'selected' if rep_filter == u.name }}>{{ u.name }}</option>{% endfor %}
+      </select>
+    </form>
+    <form method="POST" id="assignForm" action="{{ url_for('places_finder.assign_many') }}" style="display:flex;gap:6px;align-items:center">
+      <input type="hidden" name="rep_filter" value="{{ rep_filter }}">
+      <label for="assignTo" style="color:var(--softer)">Give the ticked leads to</label>
+      <select id="assignTo" name="agent" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px">
+        <option value="">— nobody (unassigned) —</option>
+        {% for u in reps %}<option value="{{ u.name }}">{{ u.name }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn btn-outline" style="padding:6px 12px">Assign</button>
+    </form>
+  </div>
+  {% endif %}
 
   {% if shown %}
   <input type="text" id="contactSearch" placeholder="Filter by name, contact, city or phone…"
          style="width:100%;margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:0.92rem">
   <div class="table-wrap" style="margin-top:12px">
     <table id="contactTable">
-      <thead><tr><th>Business</th><th>Contact</th><th>Phone</th><th>Email</th><th>Where</th><th>Stage</th><th></th></tr></thead>
+      <thead><tr>{% if is_owner and reps %}<th><input type="checkbox" aria-label="Tick every lead shown" onclick="document.querySelectorAll('.assign-pick').forEach(c => c.checked = this.checked)"></th>{% endif %}<th>Business</th><th>Contact</th><th>Phone</th><th>Email</th><th>Where</th><th>Stage</th>{% if (is_owner and reps) or my_rep %}<th>Rep</th>{% endif %}<th></th></tr></thead>
       <tbody>
         {% for p in shown %}
         <tr>
+          {% if is_owner and reps %}<td><input type="checkbox" class="assign-pick" name="ids" value="{{ p.id }}" form="assignForm" aria-label="Tick {{ p.business_name }}"></td>{% endif %}
           <td>
             <a href="{{ url_for('places_finder.lead_page', prospect_id=p.id) }}" style="color:var(--ink)"><strong>{{ p.business_name }}</strong></a>
             <br><span class="kind-badge">{{ p.kind_label }}</span>
+            {% if p.ready_to_quote_at %}<br><span style="font-size:0.74rem;color:var(--amber-deep);font-weight:600">📝 Ready to quote · from {{ p.ready_by }} {{ p.ready_to_quote_at.strftime('%b %d') }}</span>{% endif %}
             {% if p.website %}<br><a href="{{ p.website }}" target="_blank" style="font-size:0.76rem;color:var(--amber-deep)">website ↗</a>{% endif %}
           </td>
           <td style="font-size:0.84rem">{{ p.contact_name or '—' }}</td>
@@ -265,6 +305,9 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
           </td>
           <td style="font-size:0.8rem;color:var(--softer)">{{ p.city or p.address or '—' }}</td>
           <td><span style="font-size:0.78rem;font-weight:700;color:var(--muted)">{{ p.stage_label }}</span></td>
+          {% if (is_owner and reps) or my_rep %}
+          <td style="font-size:0.8rem;color:var(--softer)">{% if my_rep %}{{ 'You' if p.agent == my_rep else 'Unassigned' }}{% else %}{{ p.agent or '—' }}{% endif %}</td>
+          {% endif %}
           <td style="text-align:right;white-space:nowrap">
             <button type="button" class="btn btn-outline open-script" {{ prospect_data(p) }}
                     style="padding:5px 10px;font-size:0.78rem">📋 Open</button>
@@ -282,7 +325,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
     </table>
   </div>
   {% else %}
-  <p style="text-align:center;color:var(--softer);padding:36px 0">No businesses yet.</p>
+  <p style="text-align:center;color:var(--softer);padding:36px 0">{{ 'Nothing waiting on a quote.' if view == 'ready' else 'No businesses yet.' }}</p>
   {% endif %}
 </div>
 {% endif %}

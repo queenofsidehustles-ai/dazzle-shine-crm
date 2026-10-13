@@ -382,6 +382,8 @@ def quote_moved(prospect_id, stage, status, next_action, days, note):
         p.stage = stage
         if status:
             p.status = status
+        # Quoted (or signed): whatever was handed over for a quote has one.
+        p.ready_to_quote_at = None
         p.next_action = next_action
         p.next_action_date = _plus(days) if days is not None else None
         p.notes = note_entry(p, note)

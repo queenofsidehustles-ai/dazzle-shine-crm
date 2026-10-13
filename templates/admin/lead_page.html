@@ -57,6 +57,30 @@
       {% if p.next_action_date %}<div style="color:{{ 'var(--amber-deep)' if p.next_action_date < today else 'var(--softer)' }}">
         {{ 'overdue — was ' if p.next_action_date < today else 'due ' }}{{ p.next_action_date }}</div>{% endif %}
       {% endif %}
+      <div style="margin-top:8px;font-size:0.82rem;color:var(--softer)">
+        {% if is_owner and reps %}
+        <form method="POST" action="{{ url_for('places_finder.assign', prospect_id=p.id) }}" style="display:inline-flex;gap:6px;align-items:center">
+          <label for="lpAgent">Worked by</label>
+          <select id="lpAgent" name="agent" onchange="this.form.submit()" style="padding:4px 6px;border:1px solid var(--line);border-radius:7px">
+            <option value="">— unassigned —</option>
+            {% for u in reps %}<option value="{{ u.name }}" {{ 'selected' if p.agent == u.name }}>{{ u.name }}</option>{% endfor %}
+            {% if p.agent and p.agent not in reps|map(attribute='name')|list %}<option value="{{ p.agent }}" selected>{{ p.agent }} (no longer a login)</option>{% endif %}
+          </select>
+          <noscript><button type="submit" class="btn btn-outline" style="padding:3px 8px">Save</button></noscript>
+        </form>
+        {% elif my_rep %}
+          {% if p.agent == my_rep %}Your lead{% else %}Unassigned — it becomes yours when you log a call, text or email{% endif %}
+        {% elif p.agent %}Worked by {{ p.agent }}{% endif %}
+      </div>
+      {% if p.ready_to_quote_at %}
+      <div style="margin-top:6px;font-size:0.82rem;color:var(--amber-deep);font-weight:600">📝 With {{ 'you' if is_owner else 'the owner' }} to quote · handed over by {{ p.ready_by }} {{ p.ready_to_quote_at.strftime('%b %d') }}</div>
+      {% elif not is_owner and p.stage in ('new', 'working', 'interested') %}
+      <form method="POST" action="{{ url_for('places_finder.ready_to_quote', prospect_id=p.id) }}" style="margin-top:8px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+        <input type="text" name="note" maxlength="500" placeholder="Anything the owner should know?" aria-label="Note for the owner"
+               style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:0.82rem;min-width:180px">
+        <button type="submit" class="btn btn-gold" style="padding:6px 12px;font-size:0.82rem">✅ Ready to quote — hand to the owner</button>
+      </form>
+      {% endif %}
     </div>
   </div>
 
@@ -64,6 +88,8 @@
     {% if p.phone %}<a href="tel:{{ p.phone }}" class="btn btn-gold" style="padding:9px 16px">📞 {{ p.phone }}</a>{% endif %}
     {% if text_phone and can_text %}
     <a href="{{ url_for('messages.thread', phone=text_phone, name=p.business_name) }}" class="btn btn-outline" style="padding:9px 14px">💬 Text</a>
+    {% elif text_phone and can_text_lead %}
+    <a href="#texts" class="btn btn-outline" style="padding:9px 14px">💬 Text</a>
     {% endif %}
     {% if p.is_commercial %}
       {% if can_quote %}<a href="{{ url_for('quotes.new', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">📝 Contract quote</a>{% endif %}
@@ -259,8 +285,8 @@
     </div>
 
     {# ── Communicate ───────────────────────────────────────────────────── #}
-    {% if can_text %}
-    <div class="card lp-card">
+    {% if can_text or can_text_lead %}
+    <div class="card lp-card" id="texts">
       <h3>💬 Texts</h3>
       {% if texts %}
         {% for m in texts %}
@@ -273,7 +299,13 @@
         <p style="color:var(--softer);font-size:0.86rem;margin:0">No texts yet.</p>
       {% endif %}
       {% if text_phone %}
-      <p style="margin:10px 0 0"><a href="{{ url_for('messages.thread', phone=text_phone, name=p.business_name) }}" style="color:var(--amber-deep)">Open the conversation →</a></p>
+      <form method="POST" action="{{ url_for('places_finder.text_lead', prospect_id=p.id) }}" style="margin-top:10px">
+        <label for="lpText" style="{{ lbl }}">Text {{ p.contact_name or p.business_name }}</label>
+        <textarea id="lpText" name="body" rows="2" maxlength="1000" required
+                  placeholder="Hi {{ (p.contact_name or '').split(' ')[0] or 'there' }}, following up on our call…" style="{{ fld }}"></textarea>
+        <button type="submit" class="btn btn-outline" style="padding:7px 14px;margin-top:6px">💬 Send text</button>
+      </form>
+      {% if can_text %}<p style="margin:10px 0 0"><a href="{{ url_for('messages.thread', phone=text_phone, name=p.business_name) }}" style="color:var(--amber-deep)">Open the conversation →</a></p>{% endif %}
       {% elif p.phone %}
       <p style="margin:10px 0 0;font-size:0.82rem;color:var(--softer)">Not offered: they replied STOP or asked not to be contacted.</p>
       {% endif %}

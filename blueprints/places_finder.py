@@ -13,7 +13,7 @@ import io
 import json
 from datetime import datetime, timedelta
 from flask import (Blueprint, render_template, request, redirect, url_for,
-                   flash, Response)
+                   flash, Response, abort)
 import entitlements
 from entitlements import requires_plan
 from auth import login_required
@@ -166,9 +166,10 @@ def _backfilled():
     touched += [brands.backfill(p, brands.brand_for_prospect) for p in list(rows)]
     if any(touched):
         db.session.commit()
-    # Only the side of the business currently on screen. Done here rather than
-    # in each view so Today, Pipeline and Contacts can't disagree about it.
-    return brands.filter_rows(rows, brands.brand_for_prospect)
+    # Only the side of the business currently on screen, and only the leads
+    # this person works. Done here rather than in each view so Today, the call
+    # sheet, Everyone and the export can't disagree about it.
+    return _mine(brands.filter_rows(rows, brands.brand_for_prospect))
 
 
 def _view_args(view, prospects, **extra):
@@ -199,8 +200,15 @@ def _view_args(view, prospects, **extra):
         search_capped=False,
         prospects=prospects,
         results=None,
-        counts=_status_counts(),
-        due=prospecting.due_counts(prospects),
+        # A rep's counts are of the leads they work, not the whole company's.
+        counts=_status_counts() if _rep() is None else {
+            'all': len(prospects),
+            **{k: sum(1 for p in prospects if p.status == k) for k in ('new', 'called', 'interested', 'won')}},
+        due=prospecting.due_counts(_workable(prospects)),
+        my_rep=_rep(),
+        reps=_reps() if _is_owner() else [],
+        rep_filter='',
+        ready_count=sum(1 for p in prospects if p.ready_to_quote_at),
         stage_counts={key: sum(1 for p in prospects if (p.stage or 'new') == key)
                       for key, _ in Prospect.STAGE_LABELS},
         stages=Prospect.STAGE_LABELS,
@@ -277,6 +285,89 @@ def _is_owner():
         return False
 
 
+def _rep():
+    """The signed-in Sales rep's name, or None for anybody who works every lead.
+
+    A rep works their own leads and the unassigned pool, never a teammate's:
+    two people ringing the same business is the thing a call list exists to
+    prevent, and a rep's commission is what they bring in, not what somebody
+    else did. The owner -- and the older roles -- see everything.
+    """
+    from flask import session
+    return session.get('user_name') if session.get('role') == 'sales' else None
+
+
+def _mine(rows):
+    """The rows the signed-in person works: all of them, or a rep's own plus
+    the unassigned pool."""
+    rep = _rep()
+    if rep is None:
+        return rows
+    return [p for p in rows if not p.agent or p.agent == rep]
+
+
+def _lead(prospect_id):
+    """A lead by id, as long as the signed-in person may work it. A rep asking
+    for a teammate's gets the same 404 as a lead that does not exist."""
+    p = Prospect.query.get_or_404(prospect_id)
+    rep = _rep()
+    if rep is not None and p.agent and p.agent != rep:
+        abort(404)
+    return p
+
+
+def _take(p):
+    """Make an unassigned lead the signed-in rep's, if nobody beat them to it.
+
+    One conditional UPDATE, not a read and then a write: two reps opening the
+    pool at the same moment both read it as unassigned, and only the database
+    can say which of them got there first. The row stays locked until the
+    request commits, so the second rep's UPDATE waits and then matches
+    nothing. True when the lead is (now) theirs, or when nobody is a rep.
+    """
+    from sqlalchemy import or_
+    rep = _rep()
+    if rep is None or p.agent == rep:
+        return True
+    if p.agent:
+        return False
+    taken = (Prospect.query
+             .filter(Prospect.id == p.id, or_(Prospect.agent.is_(None), Prospect.agent == ''))
+             .update({Prospect.agent: rep}, synchronize_session=False))
+    if taken:
+        p.agent = rep
+        return True
+    db.session.refresh(p)
+    return p.agent == rep
+
+
+def _claim(p):
+    """A rep who works an unassigned lead takes it: it is theirs from the first
+    call, for the follow-ups and for the commission. If a teammate took it a
+    moment ago, it is theirs, and this rep gets what _lead gives for a
+    teammate's lead."""
+    if not _take(p):
+        abort(404)
+
+
+def _workable(rows):
+    """The leads still the signed-in person's to chase. A rep's part ends at
+    the hand-off: a lead waiting on the owner's quote is not a call to make,
+    so it leaves their Today and their call sheet (it stays in Everyone)."""
+    if _rep() is None:
+        return rows
+    return [p for p in rows if not p.ready_to_quote_at]
+
+
+def _reps():
+    """Who a lead can be assigned to: the active Sales logins. Not the legacy
+    "team" role -- it cannot open the call list, so a lead given to one would
+    sit where nobody can work it."""
+    from models import User
+    return (User.query.filter(User.role == 'sales', User.active.is_(True))
+            .order_by(User.name).all())
+
+
 def _can_quote():
     from auth import is_owner_session
     try:
@@ -330,18 +421,30 @@ def dashboard():
     # not two screens, so they became 'everyone'. The old names still work:
     # they are in links, bookmarks and anything already open.
     view = {'pipeline': 'everyone', 'contacts': 'everyone'}.get(view, view)
-    if view not in ('today', 'everyone', 'find', 'month', 'add'):
+    if view not in ('today', 'everyone', 'find', 'month', 'add', 'ready'):
         view = 'today'
     stage_filter = (request.args.get('stage') or '').strip()
     rows = _backfilled()
+    # Counted before the rep filter: the tab is the owner's whole queue of
+    # leads to price, whichever rep's list is on screen.
+    ready_count = sum(1 for p in rows if p.ready_to_quote_at)
+    # The owner can look at one rep's leads, or the ones nobody has yet.
+    rep_filter = (request.args.get('rep') or '').strip() if _is_owner() else ''
+    if rep_filter == 'unassigned':
+        rows = [p for p in rows if not p.agent]
+    elif rep_filter:
+        rows = [p for p in rows if p.agent == rep_filter]
 
     if view == 'today':
         # Prospect.is_due is the one definition of due, shared with the
         # dashboard count. It was written out longhand here, and a prospect
         # resting in nurture could never satisfy it however overdue it got.
         today = local_today().isoformat()
-        shown = sorted([p for p in rows if p.is_due(today)],
+        shown = sorted([p for p in _workable(rows) if p.is_due(today)],
                        key=prospecting.due_sort_key)
+    elif view == 'ready':
+        # Handed over by a rep, waiting on a price: oldest first.
+        shown = sorted([p for p in rows if p.ready_to_quote_at], key=lambda p: p.ready_to_quote_at)
     elif view == 'everyone':
         pool = [p for p in rows if (p.stage or 'new') == stage_filter] \
             if stage_filter else rows
@@ -351,7 +454,7 @@ def dashboard():
         # time and take four minutes -- so they do not belong on the jobs
         # calendar. They do belong somewhere you can see a fortnight ahead and
         # notice that the week of the 14th has eleven of them in it.
-        shown = sorted(rows, key=prospecting.due_sort_key)
+        shown = sorted(_workable(rows), key=prospecting.due_sort_key)
     else:
         shown = sorted(rows, key=prospecting.due_sort_key)
 
@@ -367,7 +470,7 @@ def dashboard():
             year, month = local_today().year, local_today().month
         stamp = f'{year}-{month:02d}'
         by_day = {}
-        for p in rows:
+        for p in _workable(rows):
             if (p.next_action_date or '').startswith(stamp):
                 try:
                     by_day.setdefault(int(p.next_action_date.split('-')[2]), []).append(p)
@@ -388,7 +491,9 @@ def dashboard():
 
     return render_template('admin/find_leads.html',
                            **_view_args(view, rows, shown=shown,
-                                        stage_filter=stage_filter, **extra))
+                                        stage_filter=stage_filter,
+                                        **dict(extra, rep_filter=rep_filter,
+                                               ready_count=ready_count)))
 
 
 @places_finder_bp.route('/search', methods=['POST'])
@@ -472,7 +577,7 @@ def call_sheet(prospect_id=None):
     """
     today = local_today().isoformat()
     rows = _backfilled()
-    queue = sorted([p for p in rows if p.is_due(today)],
+    queue = sorted([p for p in _workable(rows) if p.is_due(today)],
                    key=prospecting.due_sort_key)
     done = sum(1 for p in rows
                if p.called_at and p.called_at.date().isoformat() == today)
@@ -485,8 +590,18 @@ def call_sheet(prospect_id=None):
                   and not prospect_id
                   and request.args.get('more') != '1')
 
-    current = Prospect.query.get_or_404(prospect_id) if prospect_id else (
-        None if stint_over else (queue[0] if queue else None))
+    if prospect_id:
+        current = _lead(prospect_id)
+        _claim(current)
+    else:
+        # The sheet puts one business in front of a rep, so that is when it
+        # becomes theirs -- not at their first click, by which time a
+        # teammate may be ringing it too. One already taken is skipped.
+        current = None if stint_over else next((p for p in queue if _take(p)), None)
+    if _rep() is not None:
+        db.session.commit()
+        # Less any a teammate took while this one was being reserved.
+        queue = _mine(queue)
 
     scripts, emails, can_email = [], [], False
     if current is not None:
@@ -526,6 +641,11 @@ def call_sheet(prospect_id=None):
         text_phone=(_phone10(current.phone)
                     if current and current.id not in _sms_stopped([current])
                     and _role_may('messages.read') else ''),
+        # Without the inbox (a Sales rep), texting is done on the lead's page.
+        lead_text=bool(current and _phone10(current.phone)
+                       and current.id not in _sms_stopped([current])
+                       and current.status != 'do_not_contact'
+                       and not _role_may('messages.read')),
     )
 
 
@@ -540,7 +660,8 @@ def log_call(prospect_id):
     work. Without it the counter would say nought and the queue would look
     untouched.
     """
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
+    _claim(p)
     outcome = (request.form.get('outcome') or '').strip()
     if outcome in Prospect.STATUS_LABELS:
         p.status = outcome
@@ -697,7 +818,11 @@ def add_by_hand():
         if ((mine and _phone10(p.phone) == mine)
                 or (city and (p.business_name or '').strip().lower() == name.lower()
                     and (p.city or '').strip().lower() == city.lower())):
-            flash(f'{p.business_name} is already on your list ({p.stage_label}).', 'info')
+            rep = _rep()
+            if rep is not None and p.agent and p.agent != rep:
+                flash(f'{p.business_name} is already on the call list — a teammate is working it.', 'info')
+            else:
+                flash(f'{p.business_name} is already on your list ({p.stage_label}).', 'info')
             return redirect(url_for('places_finder.dashboard', view='everyone'))
 
     category = f.get('category') if f.get('category') in CATEGORIES else 'office'
@@ -757,7 +882,7 @@ def lead_page(prospect_id):
     """
     from models import CommercialQuote, CommercialAccount, Lead, Message
     import brands
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
     # Opened by link or bookmark, before any list view has filled in what
     # predates the funnel -- so do it here too, or an old won lead reads New.
     touched = [prospecting.backfill(p), brands.backfill(p, brands.brand_for_prospect)]
@@ -771,6 +896,14 @@ def lead_page(prospect_id):
     account = CommercialAccount.query.filter_by(prospect_id=p.id).first()
     texts = (Message.query.filter_by(phone=phone)
              .order_by(Message.created_at.desc()).limit(5).all()) if phone else []
+    if texts and not _role_may('messages.read'):
+        # A thread is keyed by phone number, and a number on a lead can also
+        # be a customer's, a cleaner's or an applicant's. Without the inbox,
+        # the conversation is shown only when the number is this lead's and
+        # nobody else's -- the same test the inbox uses to label it.
+        from blueprints.messages import resolve_contact
+        if resolve_contact(phone).get('prospect_id') != p.id:
+            texts = []
     stages = [s for s in Prospect.STAGE_LABELS if s[0] in ('new', 'working', 'interested', 'proposal', 'won')]
     return render_template(
         'admin/lead_page.html', p=p, quotes=quotes, home_quotes=home_quotes,
@@ -781,6 +914,9 @@ def lead_page(prospect_id):
         next_rules={k: {'action': v[1], 'days': v[2]} for k, v in prospecting.RULES.items()},
         today=local_today().isoformat(),
         text_phone=phone if p.id not in _sms_stopped([p]) and p.status != 'do_not_contact' else '',
+        can_text_lead=_role_may('prospect.work'),
+        my_rep=_rep(),
+        reps=_reps() if _is_owner() else [],
         # Contract quotes and accounts are owner pages (money), so their
         # prices and the account are only shown to whoever can open them.
         can_quote=_can_quote(), can_convert=_can_quote(),
@@ -810,7 +946,8 @@ def edit_lead(prospect_id):
     emails come from, and the first guess -- typed in a hurry, or Google's
     -- is often wrong."""
     import brands
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
+    _claim(p)
     f = request.form
     name = (f.get('business_name') or '').strip()
     if name:
@@ -848,7 +985,8 @@ def edit_lead(prospect_id):
 def book_walkthrough(prospect_id):
     """Put the walkthrough in the diary: it becomes the lead's next step, so
     it is on the call list and the calendar the day it is due."""
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
+    _claim(p)
     when = (request.form.get('date') or '').strip()
     at = (request.form.get('time') or '').strip()[:20]
     try:
@@ -863,6 +1001,13 @@ def book_walkthrough(prospect_id):
         p.stage = 'interested'
     p.notes = prospecting.note_entry(p, f'Walkthrough booked for {when}' + (f' at {at}' if at else ''))
     db.session.commit()
+    from flask import session
+    _tell_owner(p, f'Walkthrough booked: {p.business_name}, {when}' + (f' at {at}' if at else ''), [
+        f'{session.get("user_name") or "Your team"} booked a walkthrough at {p.business_name} '
+        f'for {when}' + (f' at {at}' if at else '') + '.',
+        f'Address: {p.address or p.city or "—"}',
+        f'Contact: {p.contact_name or "—"} · {p.phone or "no phone"}',
+    ])
     flash(f'Walkthrough booked for {when}. It is on the calendar.', 'success')
     return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
 
@@ -875,7 +1020,8 @@ def save_walkthrough(prospect_id):
     the next step becomes writing it -- today, while it is fresh."""
     import json
     from datetime import datetime
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
+    _claim(p)
     w = prospecting.walkthrough_from_form(request.form)
     p.walkthrough = json.dumps(w)
     p.walkthrough_at = datetime.utcnow()
@@ -883,12 +1029,25 @@ def save_walkthrough(prospect_id):
     p.notes = prospecting.note_entry(
         p, 'Walkthrough done' + (f' — {summary}' if summary else '')
         + (f'\n{w["notes"]}' if w.get('notes') else ''))
+    handed = False
     if (p.stage or 'new') in ('new', 'working', 'interested'):
         p.stage = 'interested'
         p.next_action = 'Write and send the quote'
         p.next_action_date = local_today().isoformat()
+        # A rep's walkthrough is the hand-off: the owner writes the quote.
+        if not _is_owner():
+            _hand_over(p)
+            handed = True
     db.session.commit()
-    flash('Walkthrough saved. Next: the quote — it is filled in from this.', 'success')
+    if handed:
+        _tell_owner(p, f'Ready to quote: {p.business_name} (walkthrough by {p.ready_by})', [
+            f'{p.ready_by} did the walkthrough at {p.business_name}. It is ready for you to quote.',
+            f'Found: {summary}' if summary else '',
+            f'Noticed: {w["notes"]}' if w.get('notes') else '',
+        ])
+        flash('Walkthrough saved and handed to the owner to quote.', 'success')
+    else:
+        flash('Walkthrough saved. Next: the quote — it is filled in from this.', 'success')
     return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
 
 
@@ -904,7 +1063,8 @@ def set_kind(prospect_id):
     scripts read to it, and whose name the emails go out under.
     """
     import brands
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
+    _claim(p)
     kind = request.form.get('kind')
     if kind in ('residential', 'commercial'):
         p.brand = brands.COMMERCIAL if kind == 'commercial' else brands.PRIMARY
@@ -920,7 +1080,8 @@ def set_kind(prospect_id):
 @places_finder_bp.route('/<int:prospect_id>/status', methods=['POST'])
 @login_required
 def update_status(prospect_id):
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
+    _claim(p)
     new_status = request.form.get('status')
     logged = request.form.get('mode') == 'log'
 
@@ -956,7 +1117,8 @@ def snooze(prospect_id):
     Without this the only way to clear something off Today is to log a call you
     didn't make, which puts a lie in the notes and inflates the attempt count.
     """
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
+    _claim(p)
     try:
         days = max(1, min(365, int(request.form.get('days', 3))))
     except (TypeError, ValueError):
@@ -972,7 +1134,8 @@ def snooze(prospect_id):
 @login_required
 def send_outreach(prospect_id):
     """Send one of the outreach emails to a prospect and log it as a touch."""
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
+    _claim(p)
     view = request.args.get('view', 'today')
     # The sending itself lives in prospecting.send_outreach, because the
     # assistant offers this too and two copies of it is how one of them stops
@@ -1100,10 +1263,177 @@ def _prepend_log(prospect, form):
     return (entry + '\n\n' + (prospect.notes or '')).strip()
 
 
+@places_finder_bp.route('/<int:prospect_id>/text', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def text_lead(prospect_id):
+    """Text this lead, and only this lead.
+
+    A rep follows up by text as much as by phone, but texting meant the inbox
+    -- every customer's and every cleaner's conversation. This sends to the
+    lead's own number from the lead page, through the inbox's own delivery
+    (so it is translated, logged and shows in the owner's inbox like any
+    other), and never to a number that replied STOP or asked not to hear
+    from us."""
+    from blueprints.messages import deliver
+    from notifications import sms_opted_out
+    p = _lead(prospect_id)
+    _claim(p)
+    phone10 = _phone10(p.phone)
+    body = (request.form.get('body') or '').strip()[:1000]
+    here = url_for('places_finder.lead_page', prospect_id=p.id) + '#texts'
+    if not phone10:
+        flash('There is no mobile number on this lead to text.', 'error')
+        return redirect(here)
+    if not body:
+        flash('Type a message first.', 'error')
+        return redirect(here)
+    if p.status == 'do_not_contact' or sms_opted_out(phone10):
+        flash('Not sent — they asked not to be contacted, or replied STOP.', 'error')
+        db.session.commit()
+        return redirect(here)
+    ok, detail = deliver(phone10, body, {'name': p.contact_name or p.business_name})
+    # The history says what reached them. A failed send is still written
+    # down -- so nobody re-sends blind or wonders why there was no reply --
+    # but as a failure, not as a touch.
+    p.notes = prospecting.note_entry(
+        p, f'Texted: {body}' if ok else f'Text failed ({detail}): {body}')
+    db.session.commit()
+    flash('Text sent.' if ok else 'The text did not go: ' + detail,
+          'success' if ok else 'error')
+    return redirect(here)
+
+
+def _tell_owner(p, subject, lines):
+    """Email the owner about something a rep did on a lead -- a walkthrough
+    to turn up to, a lead to price. Not when it is the owner doing it, and
+    never fatal: the lead is saved whether or not the email goes."""
+    if _is_owner():
+        return
+    try:
+        import branding
+        import notifications
+        from markupsafe import escape as e
+        to = branding.owner_email()
+        if not to:
+            return
+        link = url_for('places_finder.lead_page', prospect_id=p.id, _external=True)
+        html = ('<div style="font-family:Inter,Arial,sans-serif;max-width:560px;color:#1f1333">'
+                + ''.join(f'<p style="margin:0 0 10px">{e(x)}</p>' for x in lines if x)
+                + f'<p><a href="{link}" style="color:#b98a33;font-weight:700">Open {e(p.business_name)} &rarr;</a></p></div>')
+        notifications.send_email(to_email=to, to_name=branding.biz_name(), subject=subject, html=html)
+    except Exception:
+        pass
+
+
+def _hand_over(p, note=''):
+    """Mark a lead ready for the owner to quote. The rep's part is done: the
+    lead is qualified and the walkthrough found what the quote needs."""
+    from datetime import datetime
+    from flask import session
+    p.ready_to_quote_at = datetime.utcnow()
+    p.ready_by = session.get('user_name') or 'the team'
+    if (p.stage or 'new') in ('new', 'working'):
+        p.stage = 'interested'
+    p.next_action = 'Write and send the quote'
+    p.next_action_date = local_today().isoformat()
+    p.notes = prospecting.note_entry(
+        p, f'Handed over for a quote by {p.ready_by}' + (f': {note}' if note else ''))
+
+
+@places_finder_bp.route('/<int:prospect_id>/ready', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def ready_to_quote(prospect_id):
+    """A rep hands a qualified lead to the owner to price."""
+    p = _lead(prospect_id)
+    here = url_for('places_finder.lead_page', prospect_id=p.id)
+    # Only an open lead nobody has handed over yet. A second tab, a double
+    # tap or an old page would otherwise drag a quoted or won lead back to
+    # Interested and email the owner about it again.
+    if p.ready_to_quote_at:
+        flash(f'{p.business_name} is already with the owner to quote.', 'info')
+        return redirect(here)
+    if (p.stage or 'new') not in ('new', 'working', 'interested'):
+        stage = dict(Prospect.STAGE_LABELS).get(p.stage, p.stage)
+        flash(f'{p.business_name} is past the hand-off already ({stage}).', 'error')
+        return redirect(here)
+    _claim(p)
+    note = (request.form.get('note') or '').strip()[:500]
+    _hand_over(p, note)
+    db.session.commit()
+    summary = prospecting.walkthrough_summary(prospecting.walkthrough(p))
+    _tell_owner(p, f'Ready to quote: {p.business_name} (from {p.ready_by})', [
+        f'{p.ready_by} has qualified {p.business_name} and handed it to you to quote.',
+        f'Walkthrough: {summary}' if summary else 'No walkthrough recorded yet.',
+        f'Their note: {note}' if note else '',
+        f'Contact: {p.contact_name or "—"} · {p.phone or "no phone"} · {p.email or "no email"}',
+    ])
+    flash(f'{p.business_name} is with the owner to quote.', 'success')
+    return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
+
+
+_NOT_A_REP = object()
+
+
+def _assignee(value):
+    """A rep's name from the assign form; None when the owner picked
+    "Unassigned"; _NOT_A_REP for anything else -- a rep disabled since the
+    page was drawn, or a hand-edited form -- which must change nothing rather
+    than quietly empty the lead into the pool."""
+    value = (value or '').strip()
+    if not value:
+        return None
+    return value if value in {u.name for u in _reps()} else _NOT_A_REP
+
+
+@places_finder_bp.route('/<int:prospect_id>/assign', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def assign(prospect_id):
+    """Give a lead to a rep, move it to another, or put it back in the pool.
+    The owner's: rbac lists it with the other owner-only endpoints."""
+    p = _lead(prospect_id)
+    agent = _assignee(request.form.get('agent'))
+    if agent is _NOT_A_REP:
+        flash('That person is not an active Sales login — nothing was changed.', 'error')
+        return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
+    p.agent = agent
+    db.session.commit()
+    flash(f'{p.business_name} is now {p.agent}\u2019s.' if p.agent
+          else f'{p.business_name} is back in the unassigned pool.', 'success')
+    if not (request.form.get('next') or '').strip():
+        return redirect(url_for('places_finder.lead_page', prospect_id=p.id))
+    return _back('everyone')
+
+
+@places_finder_bp.route('/assign', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def assign_many():
+    """Hand a batch of leads to a rep from the Everyone list -- a morning's
+    calling for a new hire, or a leaver's leads to somebody else."""
+    ids = [int(i) for i in request.form.getlist('ids') if str(i).isdigit()][:500]
+    agent = _assignee(request.form.get('agent'))
+    if agent is _NOT_A_REP:
+        flash('That person is not an active Sales login — nothing was changed.', 'error')
+        return redirect(url_for('places_finder.dashboard', view='everyone',
+                                rep=request.form.get('rep_filter') or None))
+    rows = Prospect.query.filter(Prospect.id.in_(ids)).all() if ids else []
+    for p in rows:
+        p.agent = agent
+    db.session.commit()
+    who = agent or 'the unassigned pool'
+    flash(f'{len(rows)} lead{"" if len(rows) == 1 else "s"} moved to {who}.' if rows
+          else 'Tick the leads to move first.', 'success' if rows else 'error')
+    return redirect(url_for('places_finder.dashboard', view='everyone',
+                            rep=request.form.get('rep_filter') or None))
+
+
 @places_finder_bp.route('/<int:prospect_id>/delete', methods=['POST'])
 @login_required
 def delete(prospect_id):
-    p = Prospect.query.get_or_404(prospect_id)
+    p = _lead(prospect_id)
     db.session.delete(p)
     db.session.commit()
     flash('Removed from call list.', 'success')
