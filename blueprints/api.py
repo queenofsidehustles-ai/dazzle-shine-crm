@@ -947,6 +947,26 @@ def trial_nudges():
     return jsonify({'ok': True, 'sent': sent, **counts})
 
 
+# ── Lead nurture (cron — run once daily) ─────────────────────────────────────
+# Four useful emails over two weeks for somebody who started signing up, or
+# asked for early access, and did not open an account (lead_nurture.py). The
+# product's own job, like trial nudges: called once, on the product's address.
+
+@api_bp.route('/lead-nurture', methods=['POST'])
+def lead_nurture():
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    if not expected or api_key != expected:
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    import lead_nurture as ln
+    dry = request.args.get('dry_run') in ('1', 'true', 'yes')
+    counts = ln.run(dry_run=dry)
+    counts.pop('plan', None)            # addresses stay out of the scheduler log
+    if not dry:
+        automations.record('lead-nurture', items=counts.get('sent', 0))
+    return jsonify({'ok': True, **counts})
+
+
 # ── Demo company rebuild (cron — hourly, product site only) ──────────────────
 # Anyone entering the demo through /demo is its owner, so it is rebuilt from
 # its seed every hour (demo_company.py, DEMO.md). The rebuild takes seconds of
@@ -1260,6 +1280,19 @@ def create_booking():
     else:
         # Tentative booking → ask for the deposit to confirm
         _send_deposit_request(booking)
+
+    # A stranger just booked this company through its own page. On Akye that
+    # is worth telling the owner about, once -- the first time is when the
+    # booking page stops being a setting and starts being money. Recorded
+    # against the company, so the second booking sends nothing.
+    try:
+        import billing
+        import trial_nudges
+        org = billing.current_org()
+        if org:
+            trial_nudges.send_event(org['slug'], 'first_booking')
+    except Exception:
+        pass
 
     resp = jsonify({'ok': True, 'booking_id': booking.id,
                     'deposit_paid': booking.deposit_paid,

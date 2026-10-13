@@ -246,6 +246,8 @@ def create_app():
     app.register_blueprint(portal_bp)
     from blueprints.confirm import confirm_bp
     app.register_blueprint(confirm_bp)
+    from blueprints.confirm_email import email_confirm_bp
+    app.register_blueprint(email_confirm_bp)
     app.register_blueprint(money_bp)
     app.register_blueprint(team_bp)
     app.register_blueprint(availability_bp)
@@ -317,7 +319,11 @@ def create_app():
             if state and not state['started']:
                 # Have they actually begun? Cheap: onboarding already knows.
                 if onboarding.progress().get('activated'):
-                    billing.mark_activated(provisioning._engine(), org['slug'])
+                    if billing.mark_activated(provisioning._engine(), org['slug']):
+                        # The moment it became real, marked when it happened
+                        # rather than tomorrow morning (trial_nudges.send_event).
+                        import trial_nudges
+                        trial_nudges.send_event(org['slug'], 'activated')
                     org = billing.current_org()
                     state = billing.trial_state(org)
                     # Once, here, because this is the only place that knows
@@ -333,6 +339,30 @@ def create_app():
             return {'TRIAL': state}
         except Exception:
             return {'TRIAL': None}          # never take a page down for a banner
+
+    @app.context_processor
+    def inject_funnel():
+        """The setup videos that exist, and whether the owner's email still
+        needs confirming (funnel_videos.py, email_confirm.py)."""
+        out = {'VIDEOS': {}, 'VIDEO_EMBEDS': {}, 'EMAIL_CONFIRM': None}
+        try:
+            import funnel_videos
+            out['VIDEOS'] = funnel_videos.all_set()
+            out['VIDEO_EMBEDS'] = {k: funnel_videos.embed_url(k)
+                                   for k in out['VIDEOS']}
+        except Exception:
+            pass
+        try:
+            from flask import session
+            if session.get('logged_in') and session.get('role') == 'owner':
+                import billing
+                import email_confirm
+                org = billing.current_org()
+                if email_confirm.pending(org):
+                    out['EMAIL_CONFIRM'] = {'email': org.get('owner_email') or ''}
+        except Exception:
+            pass
+        return out
 
     def _connections_provided():
         try:

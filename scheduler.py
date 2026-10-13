@@ -75,7 +75,7 @@ RUNNABLE = ('active',)
 # and log it seven times. Until this table existed nothing called them at all:
 # the endpoint was written and never scheduled, and no trial company was ever
 # reminded of anything.
-PRODUCT_JOBS = [('trial-nudges', 'daily')]
+PRODUCT_JOBS = [('trial-nudges', 'daily'), ('lead-nurture', 'daily')]
 
 
 def jobs_for(cadence):

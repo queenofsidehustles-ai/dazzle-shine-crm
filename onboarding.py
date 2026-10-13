@@ -158,13 +158,13 @@ def journey():
         # by opening /book — which is where this step's own button went, so the
         # step ticked itself the moment anybody clicked it and then sat there
         # crossed out above a business that had shared nothing.
-        {'key': 'booking_page', 'done': setting('booking_page_shared'),
+        {'key': 'booking_page', 'video': 'booking_page', 'done': setting('booking_page_shared'),
          'title': 'Share your booking page',
          'why': 'You already have one — a page where customers pick what they want, '
                 'see your price and book themselves. It just needs to be somewhere '
                 'they will see it, like your Facebook bio.',
          'cta': 'Show me my page', 'link': '/settings/booking-page'},
-        {'key': 'team', 'done': has_staff,
+        {'key': 'team', 'video': 'team_and_customer', 'done': has_staff,
          'title': 'Add a cleaner',
          'why': 'You need somebody to send a job to. Add yourself if you are still cleaning.',
          'cta': 'Add a cleaner', 'link': '/staff/new',
@@ -174,13 +174,13 @@ def journey():
          # to skip.
          'secondary': {'label': 'Already have a team? Import them all at once',
                        'link': '/migration'}},
-        {'key': 'client', 'done': has_client,
+        {'key': 'client', 'video': 'team_and_customer', 'done': has_client,
          'title': 'Add a customer',
          'why': 'One you already clean for. Real is better than made up — you will see how it works.',
          'cta': 'Add a customer', 'link': '/bookings/clients/new',
          'secondary': {'label': 'Already have a customer list? Import it instead',
                        'link': '/migration'}},
-        {'key': 'job', 'done': bookings > 0 and assigned,
+        {'key': 'job', 'video': 'book_job', 'done': bookings > 0 and assigned,
          'title': 'Schedule a job and assign it',
          'why': 'This is the moment it starts being useful — the cleaner gets a text with the address, '
                 'the price and the checklist.',

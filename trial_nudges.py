@@ -44,6 +44,32 @@ What this refuses to do, in every case deliberately:
 Called daily from `/api/trial-nudges` and by hand with
 `python3 provisioning.py nudges --dry-run`, which sends nothing and prints
 exactly what a real run would do.
+
+## The first week, and the moments worth marking (added October 2026)
+
+Four emails reached the person who never came back, but nothing at all spoke
+to them in the week that decides it. Day 0 was the welcome; day 7 was
+already a rescue. Paid traffic makes that week the expensive one, so it now
+has its own short run, and the two moments somebody decides this is real get
+a note of their own:
+
+    day1           day 1, not activated   two things, two minutes
+    day2           day 2, everyone        your booking page is already live
+    day4           day 4, not activated   where people get stuck
+    day5           day 5, not activated   bring your list over
+    activated      when the 14 days start what is now switched on
+    feature        ~day 10 of the trial   the one useful thing not yet tried
+    first_booking  first online booking   somebody booked you (sent at once)
+    winback        a week after it lapsed what you would get back, once
+
+Every rule above still holds, plus one more: **one email a day, from any of
+these, however it was sent.** `nudge_last_at` is what enforces that, so a
+"somebody booked you" at 3pm and the next morning's note are never the same
+day's mail. Each not-activated email stops the moment they activate.
+
+`activated` and `first_booking` are sent the moment they happen
+(`send_event`), because that is when they mean something; the daily run also
+sends `activated` if the moment passed without it, for three days and no more.
 """
 from datetime import datetime
 
@@ -67,19 +93,64 @@ ENDING_WITHIN_DAYS = 3
 # against an existing database, every old trial is past this.
 ENDED_WITHIN_DAYS = 3
 
-ALL = ('start_7', 'start_21', 'ending', 'ended')
+# The first week. Windows of days since signup, as above; tight on purpose,
+# because "two things, two minutes" read on day four is just late.
+DAY1 = (1, 2)
+DAY2 = (2, 4)
+DAY4 = (4, 5)
+DAY5 = (5, 6)
+# How long after the 14 days start the "now switched on" note still makes
+# sense if the moment itself was missed.
+ACTIVATED_WITHIN_DAYS = 3
+# Days into the running trial for "one thing you have not tried". Ends before
+# the "3 days left" note begins, so the two are never in competition.
+FEATURE = (8, 10)
+# Days after a lapse for the single "here is what you would get back".
+WINBACK = (7, 10)
+# Fewer hours than a day, so a cron that runs at 9:05 one morning and 8:55
+# the next is still "the next day".
+ONE_A_DAY_HOURS = 20
+
+ALL = ('start_7', 'start_21', 'ending', 'ended',
+       'day1', 'day2', 'day4', 'day5', 'activated', 'feature',
+       'first_booking', 'winback')
+# Sent when something happens, not on a timetable.
+EVENTS = ('activated', 'first_booking')
 
 
 def _sent(org):
     return {s for s in (org.get('nudges_sent') or '').split(',') if s}
 
 
-def due(org, now=None):
+def _blocked(org):
+    """Why this company must not be emailed at all, or None."""
+    if not org:
+        return 'no company'
+    if org.get('is_test') or org.get('is_demo'):
+        return 'test account'           # marked a test account in the console
+    if org.get('nudges_opted_out'):
+        return 'opted out'              # she asked not to be, from her own Settings
+    if org.get('status') in ('suspended', 'closing', 'closed'):
+        return 'not active'
+    return None
+
+
+def emailed_today(org, now=None):
+    last = (org or {}).get('nudge_last_at')
+    now = now or datetime.utcnow()
+    return bool(last) and (now - last).total_seconds() < ONE_A_DAY_HOURS * 3600
+
+
+def due(org, now=None, next_step=None):
     """Which nudge this company should get today, or None.
 
     Pure: no database, no mail, no clock of its own. Every rule above is
     decided here so that it can be tested by describing a company rather than
     by building one.
+
+    `next_step` is the one tenant-side fact the "feature" note needs -- the
+    first Getting Started step still undone, or None. The caller reads it;
+    without it, that note is simply not due.
     """
     if not org:
         return None
@@ -97,9 +168,16 @@ def due(org, now=None):
         return None                     # paying, cancelled, or past due
 
     now = now or datetime.utcnow()
+    if org.get('is_demo'):
+        return None
+    if emailed_today(org, now):
+        return None                     # one a day, whatever sent the last one
     already = _sent(org)
     created = org.get('created_at') or now
     age = (now - created).days
+
+    def open_(window, kind, days=age):
+        return window[0] <= days <= window[1] and kind not in already
 
     if state['phase'] == 'over':
         # Only just over. On the first run this is what stands between a
@@ -107,11 +185,23 @@ def due(org, now=None):
         lapsed = (now - state['ends_at']).days
         if 0 <= lapsed <= ENDED_WITHIN_DAYS and 'ended' not in already:
             return 'ended'
+        # Once, a week on, and only for somebody who actually started: a
+        # trial that lapsed unused has nothing to "get back".
+        if org.get('activated_at') and open_(WINBACK, 'winback', lapsed):
+            return 'winback'
         return None
 
     if state['phase'] == 'running':
         if state['days_left'] <= ENDING_WITHIN_DAYS and 'ending' not in already:
             return 'ending'
+        began = org.get('activated_at') or now
+        days_in = (now - began).days
+        if days_in <= ACTIVATED_WITHIN_DAYS and 'activated' not in already:
+            return 'activated'
+        if open_(DAY2, 'day2'):
+            return 'day2'
+        if next_step and open_(FEATURE, 'feature', days_in):
+            return 'feature'
         return None
 
     # Not started. The two that matter most, because this is the person the
@@ -120,6 +210,12 @@ def due(org, now=None):
         return 'start_21'
     if START_7[0] <= age <= START_7[1] and 'start_7' not in already:
         return 'start_7'
+    # The first week, earliest first: a run that missed yesterday sends
+    # yesterday's note today and today's tomorrow, rather than skipping one.
+    for window, kind in ((DAY1, 'day1'), (DAY2, 'day2'),
+                         (DAY4, 'day4'), (DAY5, 'day5')):
+        if open_(window, kind):
+            return kind
     return None
 
 
@@ -137,9 +233,10 @@ def company_url(org):
     return f'https://{slug}.{base}'
 
 
-def compose(org, kind):
+def compose(org, kind, next_step=None):
     """(subject, html) for one nudge. Separated so the tests can read the
     words without sending anything."""
+    import funnel_videos
     name = (org.get('name') or 'there').strip()
     first = (org.get('owner_email') or '').split('@')[0].split('.')[0].title()
     url = company_url(org)
@@ -163,7 +260,9 @@ def compose(org, kind):
   <p style="color:#7a8499;font-size:13px;margin-top:28px;border-top:1px solid #e6eaf2;
             padding-top:14px">
     {brand} &middot; {url}<br>
-    Questions? Just reply to this email — a person reads it.
+    Questions? Just reply to this email — a person reads it.<br>
+    Rather not get these? <a href="{url}/billing" style="color:#7a8499">Turn them off
+    under Billing</a>.
   </p>
 </div>'''
 
@@ -181,7 +280,7 @@ def compose(org, kind):
             it is what starts your {billing.TRIAL_DAYS} days.</p>
             <p style="color:#7a8499;font-size:14px">You have
             <strong>{left} day{plural}</strong> to make that start.</p>''',
-            'Add your first job'))
+            'Add a cleaner', f'{url}/staff/new'))
 
     if kind == 'start_21':
         return (f'{name}: {left} day{plural} left to start your trial',
@@ -228,16 +327,124 @@ def compose(org, kind):
             was missing. That is more useful to me than a sale.</p>''',
             'See plans', f'{url}/billing'))
 
+    # ── The first week ────────────────────────────────────────────────────
+    if kind == 'day1':
+        return (f'{name}: two things, two minutes',
+                wrap(
+            'Two things, two minutes',
+            f'''<p>The quickest way to see it work is with your real business
+            in it. Add <strong>one cleaner</strong> (yourself counts if you are
+            still cleaning) and <strong>one customer</strong> you already clean
+            for.</p>
+            <p>That is all. It is also what starts your
+            {billing.TRIAL_DAYS} days, so nothing runs down while you are still
+            getting set up.</p>
+            {funnel_videos.email_block('team_and_customer')}''',
+            'Add a cleaner', f'{url}/staff/new'))
+
+    if kind == 'day2':
+        return (f'{name}: your booking page is already live',
+                wrap(
+            'Your booking page is already live',
+            f'''<p>You already have a page where customers pick a service, see
+            your price and book themselves. No back-and-forth texts to set a
+            time.</p>
+            <p style="font-size:17px"><strong>{url}/book</strong></p>
+            <p>Put that link in your Facebook bio, on your Google profile, or in
+            your next reply to &ldquo;how much do you charge?&rdquo; It is the
+            part that brings work in while you are busy cleaning.</p>
+            {funnel_videos.email_block('booking_page')}''',
+            'See my booking page', f'{url}/settings/booking-page'))
+
+    if kind == 'day4':
+        return (f'{name}: where people get stuck',
+                wrap(
+            'Where people get stuck',
+            '''<p>Three questions come up a lot in the first week:</p>
+            <p><strong>&ldquo;Do I have to set everything up first?&rdquo;</strong><br>
+            No. One cleaner and one customer is enough to see it work. The rest
+            can wait.</p>
+            <p><strong>&ldquo;My prices are different.&rdquo;</strong><br>
+            Change them under Settings, Prices. Your booking page and quotes
+            follow.</p>
+            <p><strong>&ldquo;I do not have cleaners yet.&rdquo;</strong><br>
+            Add yourself. That is how most people start.</p>
+            <p>Stuck on something else? Reply and say what. A person reads
+            every one.</p>'''))
+
+    if kind == 'day5':
+        return (f'{name}: bring your list over',
+                wrap(
+            'Bring your list over',
+            f'''<p>If your customers live in a notebook, a spreadsheet or
+            another app, you do not have to type them in one at a time. Bring
+            the list over in one go and they land as customers, ready to
+            book.</p>
+            {funnel_videos.email_block('migration')}''',
+            'Import my list', f'{url}/migration'))
+
+    # ── Moments ───────────────────────────────────────────────────────────
+    if kind == 'activated':
+        ends = state.get('ends_at')
+        until = f"{ends.strftime('%B')} {ends.day}" if ends else 'two weeks from now'
+        return (f'{name}: your {billing.TRIAL_DAYS} days just started',
+                wrap(
+            f'Your {billing.TRIAL_DAYS} days just started',
+            f'''<p>You added a cleaner and a customer, so everything is
+            switched on until <strong>{until}</strong>: scheduling, job texts to
+            your cleaners, your booking page, quotes and invoices, and the
+            hiring pipeline.</p>
+            <p>The step that makes it click: <strong>book one real job and
+            assign it.</strong> Your cleaner gets the address, the time and the
+            checklist on their phone.</p>
+            {funnel_videos.email_block('book_job')}''',
+            'Book a job', f'{url}/bookings/new'))
+
+    if kind == 'first_booking':
+        return (f'{name}: somebody just booked you online',
+                wrap(
+            'Somebody booked you through your own page',
+            '''<p>A customer just booked through your booking page. No phone
+            tag, no back-and-forth. It is in your CRM now, waiting for a
+            cleaner.</p>
+            <p>That is what the page is for. Keep sharing the link.</p>''',
+            'See the booking', f'{url}/bookings/'))
+
+    if kind == 'feature':
+        step = next_step or {}
+        title = step.get('title') or 'Getting started'
+        why = step.get('why') or ''
+        return (f'{name}: one thing worth trying this week',
+                wrap(
+            'One thing worth trying this week',
+            f'''<p>You have <strong>{left} day{plural}</strong> left of
+            everything. One thing you have not tried yet:</p>
+            <p><strong>{title}</strong><br>{why}</p>''',
+            step.get('cta') or 'Open your CRM',
+            f"{url}{step.get('link') or ''}"))
+
+    if kind == 'winback':
+        return (f'{name}: here is what you would get back',
+                wrap(
+            'Here is what you would get back',
+            '''<p>You have been on the free plan for a week, and everything you
+            entered is still there.</p>
+            <p>If you miss the hiring pipeline, the automations or the extra
+            team seats, they come back the moment you pick a plan.</p>
+            <p>This is the last note about it. If something was missing,
+            reply and tell us. That helps more than you would think.</p>''',
+            'See plans', f'{url}/billing'))
+
     raise ValueError(f'unknown nudge: {kind}')
 
 
-def _send(org, kind):
+def _send(org, kind, next_step=None):
     """Send one, as the product rather than as the cleaning company."""
     import notifications
     to = (org.get('owner_email') or '').strip()
     if not to:
         return False, 'no owner email on the account'
-    subject, html = compose(org, kind)
+    subject, html = compose(org, kind, next_step)
     support = product.support_email()
     return notifications.send_email(
         to, org.get('name') or '', subject, html,
@@ -278,7 +485,8 @@ def run(engine=None, now=None, dry_run=False):
     now = now or datetime.utcnow()
     for org in orgs:
         counts['considered'] += 1
-        kind = due(org, now)
+        step = _next_step_if_needed(org, now)
+        kind = due(org, now, next_step=step)
         if not kind:
             continue
         if not (org.get('owner_email') or '').strip():
@@ -289,7 +497,7 @@ def run(engine=None, now=None, dry_run=False):
             counts[kind] += 1
             continue
         try:
-            ok, detail = _send(org, kind)
+            ok, detail = _send(org, kind, step)
         except Exception as e:
             ok, detail = False, str(e)
         if not ok:
@@ -298,10 +506,98 @@ def run(engine=None, now=None, dry_run=False):
             counts['failed'] += 1
             print(f'  ⚠️  {org["slug"]} {kind}: {detail}')
             continue
-        control_plane.set_billing(
-            engine, org['slug'],
-            nudges_sent=','.join(sorted(_sent(org) | {kind})))
+        _record(engine, org, kind, now)
         counts[kind] += 1
 
     counts['plan'] = plan
     return counts
+
+
+def _record(engine, org, kind, now=None):
+    control_plane.set_billing(
+        engine, org['slug'],
+        nudges_sent=','.join(sorted(_sent(org) | {kind})),
+        nudge_last_at=now or datetime.utcnow())
+
+
+# The Getting Started steps worth suggesting in the "feature" note, in order.
+# Not the two that start the trial -- by then they are done.
+FEATURE_STEPS = ('job', 'booking_page', 'pricing')
+
+
+def _next_step_if_needed(org, now):
+    """Read the company's own schema only when the "feature" note could be
+    due -- every company, every day, would be a lot of reading for nothing."""
+    state = billing.trial_state(org)
+    began = org.get('activated_at')
+    if not state or state['phase'] != 'running' or not began:
+        return None
+    if 'feature' in _sent(org):
+        return None
+    days_in = (now - began).days
+    if not (FEATURE[0] <= days_in <= FEATURE[1]):
+        return None
+    return next_step(org['slug'])
+
+
+def next_step(slug):
+    """The first useful Getting Started step this company has not done, as
+    {title, why, cta, link}, or None. Never raises: a company whose schema
+    will not read is a company that does not get this one email."""
+    try:
+        import console_data
+        import onboarding
+        import tenancy
+        from extensions import db
+        if not console_data.schema_ready(slug):
+            return None
+        db.session.remove()
+        try:
+            with tenancy.use_tenant(slug):
+                steps = {s['key']: dict(s) for s in onboarding.journey()}
+        finally:
+            db.session.remove()
+        for key in FEATURE_STEPS:
+            s = steps.get(key)
+            if s and not s['done']:
+                return {k: s.get(k) for k in ('title', 'why', 'cta', 'link')}
+    except Exception:
+        return None
+    return None
+
+
+def send_event(slug, kind, engine=None):
+    """Send `activated` or `first_booking` now, because it just happened.
+
+    Same rules as the daily run, checked against the company as it is this
+    second: never twice, never to a paying, opted-out, test or closed
+    company. The one-a-day rule is the only one an event does not wait for
+    -- "somebody booked you" tomorrow morning is not the same email -- but it
+    still counts as today's, so the scheduled note waits until tomorrow.
+
+    Returns (sent, detail). Never raises: it is called from inside a page
+    load and a booking, neither of which may fail because of an email.
+    """
+    if kind not in EVENTS:
+        return False, f'not an event: {kind}'
+    try:
+        if engine is None:
+            import provisioning
+            engine = provisioning._engine()
+        org = control_plane.find(engine, slug)
+        why = _blocked(org)
+        if why:
+            return False, why
+        if billing.trial_state(org) is None:
+            return False, 'not on a trial'
+        if kind in _sent(org):
+            return False, 'already sent'
+        if kind == 'activated' and not org.get('activated_at'):
+            return False, 'not activated'
+        ok, detail = _send(org, kind)
+        if ok:
+            _record(engine, org, kind)
+        return ok, detail
+    except Exception as e:
+        return False, f'{type(e).__name__}: {e}'
+
