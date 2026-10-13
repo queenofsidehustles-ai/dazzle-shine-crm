@@ -320,6 +320,16 @@ def create_app():
                     billing.mark_activated(provisioning._engine(), org['slug'])
                     org = billing.current_org()
                     state = billing.trial_state(org)
+                    # Once, here, because this is the only place that knows
+                    # the moment it became true. `mark_activated` has already
+                    # stamped the company, so a second page load does not
+                    # reach this branch and cannot send it twice.
+                    try:
+                        import meta_capi
+                        meta_capi.activation(org)
+                    except Exception:
+                        pass            # a banner, and now a report, are both
+                                        # worth less than the page
             return {'TRIAL': state}
         except Exception:
             return {'TRIAL': None}          # never take a page down for a banner

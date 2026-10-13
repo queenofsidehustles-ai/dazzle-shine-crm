@@ -2,7 +2,13 @@
    owner's first screen after signing up -- never on anything a company's
    customers or cleaners see. Renders nothing when META_PIXEL_ID is empty
    (product.meta_pixel_id). Pass `meta_event` to record one standard event
-   after the PageView, e.g. 'CompleteRegistration'. #}
+   after the PageView, e.g. 'CompleteRegistration'.
+
+   Pass `meta_event_id` too when the server sends the same event through the
+   Conversions API. Both arrive, Meta keeps one, and the signup is counted
+   once -- the browser's copy for the people whose browser allows it, the
+   server's for everybody else. Without the shared id Meta cannot tell the
+   two apart and every signup counts as two. #}
 {% if META_PIXEL_ID %}
 <script>
 !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -12,6 +18,6 @@ t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
 document,'script','https://connect.facebook.net/en_US/fbevents.js');
 fbq('init', {{ META_PIXEL_ID|tojson }});
 fbq('track', 'PageView');
-{% if meta_event %}fbq('track', {{ meta_event|tojson }});{% endif %}
+{% if meta_event %}fbq('track', {{ meta_event|tojson }}{% if meta_event_id %}, {}, {eventID: {{ meta_event_id|tojson }}}{% endif %});{% endif %}
 </script>
 {% endif %}

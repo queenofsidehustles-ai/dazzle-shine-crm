@@ -245,9 +245,10 @@ def signup():
                                    base=base, terms_accepted=terms_accepted,
                                    error=error)
 
+        came_from = _came_from()
         try:
             token = _create_everything(slug, form, password,
-                                       attribution=_came_from(),
+                                       attribution=came_from,
                                        terms_accepted=terms_accepted)
         except SlugTaken:
             return render_template(
@@ -271,6 +272,18 @@ def signup():
         import security
         control_plane.record_signup_attempt(_engine(), security.client_ip())
         _tell_us(slug, form, base)
+        # Tell Meta an ad produced an account. Sent here, before the
+        # attribution cookie is forgotten below, and from `came_from` --
+        # the same dict just written to the company, carrying the click id
+        # that makes this conversion match an ad rather than nobody.
+        try:
+            import meta_capi
+            meta_capi.registration(
+                slug, form.get('email') or '', attribution=came_from,
+                ip=security.client_ip(),
+                user_agent=request.headers.get('User-Agent'))
+        except Exception as _e:
+            print(f'  ⚠️  meta conversion not sent for {slug!r}: {_e}')
         scheme = 'http' if base.startswith('localhost') else 'https'
         # Where they came from is recorded on the company now; a second
         # company opened from this browser should not inherit the first's link.
@@ -457,4 +470,11 @@ def welcome(token):
     # ads (templates/_meta_pixel.html). Set after bind_authenticated_session,
     # which may reset the session, and only here -- a sign-in later never sets it.
     session['meta_signup_complete'] = True
+    # ...and the id the Conversions API used for this same signup, so the
+    # browser's copy and the server's collapse into one conversion rather
+    # than counting the company twice.
+    import meta_capi
+    session['meta_signup_event_id'] = meta_capi.event_id(
+        meta_capi.REGISTRATION,
+        tenancy.slug_from_host(request.host) or '')
     return redirect(url_for('settings.getting_started'))

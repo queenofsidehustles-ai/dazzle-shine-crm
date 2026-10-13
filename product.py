@@ -179,6 +179,19 @@ def resend_api_key():
             or os.environ.get('RESEND_API_KEY') or '').strip()
 
 
+def meta_capi_token():
+    """The access token for sending conversions to that dataset."""
+    return (os.environ.get('META_CAPI_TOKEN') or '').strip()
+
+
+def meta_test_event_code():
+    """Set this and events go to Events Manager's Test Events instead of
+    counting for real. The way to prove the wiring works without polluting
+    the dataset that the ad algorithm is learning from -- and the way to
+    discover, before spending money, that the token was pasted wrong."""
+    return (os.environ.get('META_CAPI_TEST_CODE') or '').strip()
+
+
 def mail_status():
     """Whether the product can actually email anybody, and what is missing.
 

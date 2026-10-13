@@ -116,8 +116,15 @@ organizations = Table(
     Column('signup_source', String(120)),
     Column('signup_medium', String(120)),
     Column('signup_campaign', String(120)),
+    # The individual ad, not the campaign: Meta fills utm_content with the ad
+    # name, which is the only thing that says which creative earned a signup.
+    Column('signup_content', String(120)),
     Column('signup_referrer', String(120)),
     Column('signup_landing', String(120)),
+    # Meta's click id, in their envelope. Wider than the rest because it is,
+    # and `ensure_columns` only ever adds a column -- never widens one -- so
+    # getting the width wrong here is not something a later deploy repairs.
+    Column('signup_fbc', String(255)),
     Column('referred_by', String(40), index=True),
     # When she agreed to the Terms of Service, at signup. Not optional: signup
     # refuses to create the account at all without it (see blueprints/signup.py
@@ -515,8 +522,11 @@ def _signup_attribution(engine, slug, attribution):
     follow a name that was made up or a company referring itself.
     """
     a = attribution or {}
-    out = {f'signup_{k}': (a.get(k) or None) and str(a[k])[:120]
-           for k in ('source', 'medium', 'campaign', 'referrer', 'landing')}
+    import attribution as _attr
+    out = {f'signup_{k}': (a.get(k) or None)
+           and str(a[k])[:_attr.LIMITS.get(k, _attr.DEFAULT_LIMIT)]
+           for k in ('source', 'medium', 'campaign', 'content', 'referrer',
+                     'landing', 'fbc')}
     out = {k: v for k, v in out.items() if v}
     ref = (a.get('ref') or '').strip().lower()
     if ref and ref != slug and find(engine, ref):
