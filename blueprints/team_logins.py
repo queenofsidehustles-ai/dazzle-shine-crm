@@ -49,6 +49,18 @@ def add():
     if User.query.filter_by(username=email).first():
         flash(f'"{email}" already has a login.', 'error')
         return redirect(url_for('team_logins.index'))
+    # A Sales rep's leads and commission are filed under their name, so two
+    # reps -- or a rep and anybody else -- sharing one would share a call
+    # list and each other's credit. Asked for here, once, rather than
+    # untangled from the leads afterwards.
+    from sqlalchemy import func
+    same = User.query.filter(func.lower(User.name) == name.lower())
+    if role != 'sales':
+        same = same.filter(User.role == 'sales')
+    if same.first():
+        flash(f'There is already a login called "{name}". Add a surname or an '
+              'initial, so each Sales rep\'s leads and commission stay their own.', 'error')
+        return redirect(url_for('team_logins.index'))
 
     import secrets
     u = User(name=name, username=email, role=role, active=True)
