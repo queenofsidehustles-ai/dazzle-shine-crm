@@ -93,47 +93,68 @@ def compose(lead, step):
         started = (f'You started setting up {biz} with {name}. If you want to '
                    f'finish, it picks up right where you left off: {link}\n\n')
 
+    # Each one is useful on its own (the guide), then names the everyday
+    # problem behind it and how Akye takes it off their plate. One link to
+    # sign up, no invented urgency, no made-up customers.
     if step == 1:
         return ('What it actually costs to start a cleaning business', (
             f'Hi {first},\n\n{started}'
-            'A question we hear a lot: what does it really cost to start? Less '
-            'than most businesses. Most people begin with a few hundred to a '
-            'couple of thousand dollars. That covers supplies, a good vacuum, '
-            'registration and a year of insurance.\n\n'
-            'Everything else, like a van, a website or staff, can wait until the '
-            'business pays for it.\n\n'
-            f'The full breakdown: {guide}#what-it-costs\n\n'
-            f'When you are ready, {name} is free to start: {link}'))
+            'Less than most people think. Most owners start with a few hundred '
+            'to a couple of thousand dollars: supplies, a good vacuum, '
+            'registration and a year of insurance. A van, a website and staff '
+            'can wait until the business pays for them.\n\n'
+            'The cost nobody budgets for is the work that slips through. The '
+            'quote you meant to send that evening. The customer who asked for a '
+            'price and booked someone else before you replied. Nobody tells you '
+            'it happened.\n\n'
+            f'{name} gives you a booking page that answers for you: customers see '
+            'your price and book a time while you are still cleaning.\n\n'
+            f'The full cost breakdown: {guide}#what-it-costs\n\n'
+            f'Free to start, no card needed: {link}'))
     if step == 2:
-        return ('How to price a cleaning job', (
+        return ('How to price a cleaning job (and stop undercharging)', (
             f'Hi {first},\n\n'
-            'Price the job, not the hour. Customers want to know the cost before '
-            'you arrive, and hourly pricing punishes you for getting faster.\n\n'
+            'Price the job, not the hour. Customers want the price before you '
+            'arrive, and hourly pricing punishes you for getting faster.\n\n'
             'Start from what you need to earn. Add what it costs to send '
             'somebody: their pay, supplies, travel, insurance. Then add margin. '
             'And charge more for a first clean. A home nobody has deep cleaned '
-            'in a year takes far longer than the visits after it.\n\n'
+            'in a year can take twice as long, and quoting the regular price for '
+            'it is how a three-hour price turns into a ten-hour day.\n\n'
+            f'In {name} you set your prices once. Every quote and every booking '
+            'uses them, so the price you say out loud is the price they '
+            'book.\n\n'
             f'More on pricing: {guide}#pricing\n\n'
-            f'Free to start whenever you are ready: {link}'))
+            f'Free to start: {link}'))
     if step == 3:
         return ('The decision that gets new cleaning owners fined', (
             f'Hi {first},\n\n'
             'Calling your cleaners 1099 contractors looks cheaper. Get it wrong '
-            'and the bill comes later: back taxes, penalties and interest.\n\n'
+            'and the bill shows up years later: back taxes, penalties and '
+            'interest, usually when someone files for unemployment or gets '
+            'hurt.\n\n'
             'What decides it is not the paperwork. It is how the work happens. '
             'If you set their hours, supply the products and tell them how to '
             'clean, they may count as employees whatever the contract says. '
             'Rules differ by state, so talk to an accountant where you are '
             'before you hire the first person.\n\n'
+            'Whichever way you go, keep a clear record of who cleaned where '
+            f'and when. {name} keeps that for every job, so pay day is not a '
+            'memory test.\n\n'
             f'The full section: {guide}#contractors-or-employees\n\n'
-            f'{name} is free to start: {link}'))
+            f'Free to start: {link}'))
     if step == 4:
-        return (f'Want to try {name} with your real business?', (
+        return (f'Last one from us', (
             f'Hi {first},\n\n'
-            'Last one from us. If you would like to see your customers, cleaners '
-            'and prices in one place, opening an account is free and takes '
-            f'about a minute. No card needed.\n\n{link}\n\n'
-            f'Either way, the guide is yours to keep: {guide}\n\n'
+            f'If any of this sounds familiar, it is what {name} is for:\n\n'
+            '- The schedule lives in your head and your phone.\n'
+            '- Addresses go to cleaners as screenshots in a group chat.\n'
+            '- Quotes and follow-ups wait until you have a free evening.\n'
+            '- A job got cleaned and never got billed.\n\n'
+            'Opening an account is free and takes about a minute. No card '
+            f'needed.\n\n{link}\n\n'
+            'Either way, the guide is yours to keep: '
+            f'{guide}\n\n'
             'Questions? Just reply. A real person reads it.'))
     raise ValueError(f'unknown nurture step: {step}')
 

@@ -27,18 +27,18 @@ Akye, and every email along the way.
 | Key | When | Who | Says |
 |---|---|---|---|
 | welcome | at signup | everyone | your address, sign-in email, confirm code |
-| `day1` | day 1–2 | not activated | two things, two minutes |
-| `day2` | day 2–4 | everyone on trial | your booking page is already live |
-| `day4` | day 4–5 | not activated | where people get stuck |
-| `day5` | day 5–6 | not activated | bring your list over |
+| `day1` | day 1–2 | not activated | get the schedule out of your head |
+| `day2` | day 2–4 | everyone on trial | the jobs you lose while you're cleaning |
+| `day4` | day 4–5 | not activated | what usually gets in the way |
+| `day5` | day 5–6 | not activated | your customer list is one lost phone from gone |
 | `start_7` | day 7–13 | not activated | your 14 days haven't started |
 | `start_21` | day 21–29 | not activated | X days left to start |
 | `activated` | at the moment, or within 3 days | just activated | your 14 days just started |
 | `first_booking` | at the moment | first online booking | somebody booked you |
-| `feature` | trial day 8–10 | a setup step still undone | one thing worth trying |
+| `feature` | trial day 8–10 | a setup step still undone | before your trial ends, try this |
 | `ending` | 3 days left | running | X days left of everything |
 | `ended` | 0–3 days after | lapsed | finished, everything is still here |
-| `winback` | 7–10 days after | lapsed after using it | here's what you'd get back |
+| `winback` | 7–10 days after | lapsed after using it | still doing it the hard way? |
 
 Never more than one a day. Never the same one twice. Never to paying, test,
 demo, opted-out or closed companies.
@@ -48,9 +48,9 @@ demo, opted-out or closed companies.
 | Step | Day | Subject |
 |---|---|---|
 | 1 | 1 | What it actually costs to start a cleaning business |
-| 2 | 4 | How to price a cleaning job |
+| 2 | 4 | How to price a cleaning job (and stop undercharging) |
 | 3 | 8 | The decision that gets new cleaning owners fined |
-| 4 | 13 | Want to try Akye with your real business? |
+| 4 | 13 | Last one from us |
 
 Only for people who came to us (half-finished signup, early access). Never
 uploaded prospect lists. Stops if they sign up, unsubscribe, or the console
