@@ -93,6 +93,22 @@ def _user_data(email, fbc, ip, user_agent):
     return out
 
 
+def event_id(event, slug):
+    """The id both copies of one conversion must carry.
+
+    The browser fires this event too (templates/_meta_pixel.html, on the
+    owner's first screen), and the server fires it from here. Two reports of
+    one signup is the correct design -- between them they cover the people
+    whose browser blocks the pixel and the people whose click id never
+    reached the server -- but only if Meta can tell it is one signup. This is
+    how: same id, deduplicated for 48 hours, counted once.
+
+    Derived rather than random, because the two are produced by different
+    machines in different requests and never speak to each other.
+    """
+    return f'{event}:{slug}'
+
+
 def build(event, slug, email=None, fbc=None, ip=None, user_agent=None,
           when=None, source_url=None):
     """One event, as Meta's payload. Pure, so the tests can read it."""
@@ -103,7 +119,7 @@ def build(event, slug, email=None, fbc=None, ip=None, user_agent=None,
         # Same slug and same event name produce the same id, so a retry --
         # or a cron that runs twice, or a deploy that replays a request --
         # is counted once. Meta dedupes on this for 48 hours.
-        'event_id': f'{event}:{slug}',
+        'event_id': event_id(event, slug),
         'event_source_url': source_url or product.base_url() or None,
         'user_data': _user_data(email, fbc, ip, user_agent),
     }

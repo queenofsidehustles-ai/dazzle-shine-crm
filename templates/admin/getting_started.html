@@ -82,5 +82,5 @@
   </p>
 {% endif %}
 {# Akye's ads: record the finished signup once (set by signup.welcome). #}
-{% if session.pop('meta_signup_complete', False) %}{% with meta_event='CompleteRegistration' %}{% include '_meta_pixel.html' %}{% endwith %}{% endif %}
+{% if session.pop('meta_signup_complete', False) %}{% with meta_event='CompleteRegistration', meta_event_id=session.pop('meta_signup_event_id', '') %}{% include '_meta_pixel.html' %}{% endwith %}{% endif %}
 {% endblock %}

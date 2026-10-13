@@ -179,16 +179,6 @@ def resend_api_key():
             or os.environ.get('RESEND_API_KEY') or '').strip()
 
 
-def meta_pixel_id():
-    """The product's own Meta dataset, from the environment only.
-
-    Same reasoning as `resend_api_key`: this is Akye's advertising account,
-    not any cleaning company's. A tenant must never be able to set it, or our
-    conversions would land in their dataset or theirs in ours.
-    """
-    return (os.environ.get('META_PIXEL_ID') or '').strip()
-
-
 def meta_capi_token():
     """The access token for sending conversions to that dataset."""
     return (os.environ.get('META_CAPI_TOKEN') or '').strip()

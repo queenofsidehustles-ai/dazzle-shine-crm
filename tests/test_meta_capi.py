@@ -109,6 +109,33 @@ def test_the_same_account_cannot_be_counted_twice():
     _off()
 
 
+def test_the_browser_and_the_server_agree_on_one_id_per_signup():
+    """Both report the same signup -- the browser from the owner's first
+    screen, the server from here -- which is right, because between them
+    they cover the people whose browser blocks the pixel and the people
+    whose click id never arrived. It is only right if Meta can tell it is
+    one signup. Same id, or every company counts as two."""
+    from jinja2 import Environment, FileSystemLoader
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = Environment(loader=FileSystemLoader(os.path.join(root, 'templates')),
+                      autoescape=True)
+    tpl = env.get_template('_meta_pixel.html')
+
+    wanted = meta_capi.event_id(meta_capi.REGISTRATION, 'acme')
+    out = tpl.render(META_PIXEL_ID='1', meta_event=meta_capi.REGISTRATION,
+                     meta_event_id=wanted)
+    assert 'eventID' in out and wanted in out
+
+    _on()
+    assert meta_capi.build(meta_capi.REGISTRATION, 'acme')['event_id'] == wanted
+    _off()
+
+    # No id given -> no eventID argument at all, rather than an empty one,
+    # which Meta would read as a distinct event and count twice.
+    plain = tpl.render(META_PIXEL_ID='1', meta_event=meta_capi.REGISTRATION)
+    assert 'eventID' not in plain
+
+
 def test_a_signup_with_nothing_to_match_on_is_still_a_valid_event():
     """Somebody who typed the address in by hand has no click id and may
     have given an email we cannot read here. That is a weaker event, not a
