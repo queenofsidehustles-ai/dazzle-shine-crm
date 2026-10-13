@@ -278,6 +278,17 @@
          banners plus the Getting started card filled the whole first screen,
          so you scrolled past three blocks of nagging to reach today's jobs. #}
       {% set ON_START = request.endpoint in ('admin.dashboard', 'settings.getting_started') %}
+      {# Soft, not a gate: they are working before the email has even
+         arrived. Asks until the address is proven, and lets them fix it if
+         it was mistyped (email_confirm.py). Only for companies whose signup
+         sent a code, so older accounts never see it. #}
+      {% if ON_START and EMAIL_CONFIRM %}
+      <a href="{{ url_for('email_confirm.page') }}" class="trialbar">
+        <b>Confirm your email.</b>
+        We sent a code to {{ EMAIL_CONFIRM.email }}. Wrong address? Fix it here.
+        <span class="go">Confirm →</span>
+      </a>
+      {% endif %}
       {% if ON_START and TRIAL and not TRIAL.expired %}
       <a href="{{ url_for('billing.upgrade') }}" class="trialbar {{ 'urgent' if TRIAL.days_left <= 3 }}">
         {% if TRIAL.phase == 'not_started' %}

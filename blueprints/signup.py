@@ -210,6 +210,74 @@ def check_slug():
     return jsonify({'ok': True, 'host': f'{slug}.{os.environ["BASE_DOMAIN"]}'})
 
 
+# Somebody typing an address into the form is not a reason to accept
+# unlimited writes from one place. Per worker and forgetful on purpose: this
+# only has to stop a script filling the leads list, not be exact.
+_STARTED = {}
+STARTED_PER_ADDRESS_PER_HOUR = 20
+
+
+def _started_throttled(ip, now=None):
+    import time
+    now = now or time.time()
+    recent = [t for t in _STARTED.get(ip, []) if now - t < 3600]
+    if len(_STARTED) > 5000:
+        _STARTED.clear()
+    if len(recent) >= STARTED_PER_ADDRESS_PER_HOUR:
+        _STARTED[ip] = recent
+        return True
+    _STARTED[ip] = recent + [now]
+    return False
+
+
+@signup_bp.route('/signup/started', methods=['POST'])
+def started():
+    """The email box lost focus with an address in it. Write it down.
+
+    Paid clicks leave half-way through the form often -- the password box is
+    where most of them go -- and until this existed every one of those people
+    was gone without a trace. Written to the leads list, tagged
+    `abandoned_signup`, and taken off again by a signup that finishes
+    (control_plane.clear_abandoned_signup). The welcome sequence for the ones
+    who do not finish is lead_nurture.py.
+
+    Always answers 204: the form must not behave differently for an address
+    we already have, or this becomes a way to ask "is this person a lead?".
+    """
+    _require_open()
+    from flask import Response
+    import notifications
+    import security
+    data = request.get_json(silent=True) or request.form
+    email = (data.get('email') or '').strip().lower()
+    if (data.get(HONEYPOT_FIELD) or '').strip():
+        return Response(status=204)
+    if not (EMAIL_RE.match(email) and notifications.looks_like_email(email)):
+        return Response(status=204)
+    if _started_throttled(security.client_ip()):
+        return Response(status=204)
+    try:
+        engine = _engine()
+        _ensure_control_plane(engine)
+        if email in control_plane.owner_emails(engine):
+            return Response(status=204)     # already a customer, not a lead
+        came = _came_from()
+        note = None
+        try:
+            import attribution
+            note = ('campaign:' + attribution.label(came))[:120] if came else None
+        except Exception:
+            note = None
+        control_plane.find_or_add_abandoned_signup(
+            engine, email,
+            name=(data.get('name') or '').strip()[:120] or None,
+            company=(data.get('business') or '').strip()[:200] or None,
+            note=note)
+    except Exception as e:
+        print(f'  ⚠️  could not note a started signup: {type(e).__name__}')
+    return Response(status=204)
+
+
 @signup_bp.route('/signup', methods=['GET', 'POST'])
 def signup():
     _require_open()
@@ -293,14 +361,22 @@ def signup():
         # The owner's own copy. Sent before the redirect so that somebody who
         # closes the tab on the next screen still has their address in writing —
         # which, until now, they did not.
+        #
+        # It also carries the code that proves the address is right
+        # (email_confirm.py): one email, not a welcome and a confirm in the
+        # same minute. Nothing waits on it -- they go straight in.
         try:
-            import welcome_email
-            welcome_email.send(form.get('business') or slug,
-                               form.get('email') or '',
-                               f'{slug}.{base}',
-                               first=(form.get('name') or '').split(' ')[0])
+            import email_confirm
+            org = control_plane.find(_engine(), slug)
+            ok, detail = email_confirm.send(
+                org, f'{slug}.{base}',
+                first=(form.get('name') or '').split(' ')[0])
+            if not ok:
+                print(f'  ⚠️  welcome email not sent for {slug!r}: {detail}')
         except Exception as _e:
             print(f'  ⚠️  welcome email not sent for {slug!r}: {_e}')
+        # They finished, so they are not a half-finished signup any more.
+        control_plane.clear_abandoned_signup(_engine(), form.get('email'))
 
         return redirect(f'{scheme}://{slug}.{base}/welcome/{token}')
 
@@ -328,7 +404,7 @@ def _tell_us(slug, form, base):
               <tr><td><strong>Address</strong></td><td><a href="{url}">{url}</a></td></tr>
             </table>
             <p>They are on the top plan, trialing. The 14 days start when they
-            first assign a job to somebody.</p>''',
+            add one cleaner and one customer.</p>''',
             from_name=product.name(),
             from_email=product.from_email() or None,
             reply_to=form.get('email') or to,

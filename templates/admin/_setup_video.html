@@ -1,0 +1,12 @@
+{# One setup video, at the top of the page it explains. Set `video_key`
+   before including. Renders nothing until that video exists (funnel_videos.py). #}
+{% if VIDEOS.get(video_key) %}
+<div class="card" style="max-width:660px">
+  <div style="position:relative;padding-bottom:56.25%;height:0;border-radius:10px;
+              overflow:hidden;background:var(--ink)">
+    <iframe src="{{ VIDEO_EMBEDS[video_key] }}" title="How this works"
+            style="position:absolute;inset:0;width:100%;height:100%;border:0"
+            allowfullscreen loading="lazy"></iframe>
+  </div>
+</div>
+{% endif %}

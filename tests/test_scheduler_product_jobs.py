@@ -55,7 +55,7 @@ def test_product_host_can_be_set_and_is_never_doubled(monkeypatch):
 
 
 def test_daily_cadence_includes_trial_reminders_hourly_does_not():
-    assert scheduler.product_jobs_for('daily') == ['trial-nudges']
+    assert scheduler.product_jobs_for('daily') == ['trial-nudges', 'lead-nurture']
     assert scheduler.product_jobs_for('hourly') == []
 
 
@@ -91,7 +91,7 @@ def test_main_wires_the_daily_cadence(monkeypatch):
                         product_jobs=(): seen.update(jobs=jobs, product=product_jobs) or [])
     monkeypatch.setattr(sys, 'argv', ['scheduler.py', '--cadence', 'daily'])
     assert scheduler.main() == 0
-    assert seen['product'] == ['trial-nudges'] and 'reminders' in seen['jobs']
+    assert seen['product'] == ['trial-nudges', 'lead-nurture'] and 'reminders' in seen['jobs']
     monkeypatch.setattr(sys, 'argv', ['scheduler.py', '--job', 'trial-nudges'])
     scheduler.main()
     assert seen == {'jobs': [], 'product': ['trial-nudges']}
