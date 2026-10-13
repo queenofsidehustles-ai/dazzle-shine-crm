@@ -136,6 +136,41 @@ def test_the_browser_and_the_server_agree_on_one_id_per_signup():
     assert 'eventID' not in plain
 
 
+def test_the_browsers_id_is_built_from_the_host_it_is_rendered_on():
+    """The regression this file previously could not see.
+
+    The earlier test asserted that `event_id` and the template agreed, and
+    they did -- but nothing exercised the step between the request and the
+    id, which is where the slug comes from. That step was passing no base
+    domain, so it produced an empty slug, so the browser sent
+    "CompleteRegistration:" while the server sent
+    "CompleteRegistration:acme". Both arrived. Neither matched. Every
+    company acquired counted as two, and cost per signup read as half.
+    """
+    saved = os.environ.get('BASE_DOMAIN')
+    os.environ['BASE_DOMAIN'] = 'akyehq.com'
+    try:
+        browser = meta_capi.registration_event_id_for_host('acme.akyehq.com')
+        server = meta_capi.event_id(meta_capi.REGISTRATION, 'acme')
+        assert browser == server, f'{browser!r} != {server!r}'
+        assert browser.endswith(':acme'), browser
+
+        # A port on the Host header, and a capitalised one, are both normal
+        # and must not change the answer.
+        assert meta_capi.registration_event_id_for_host(
+            'ACME.akyehq.com:443') == server
+
+        # The product's own host is not a tenant, so there is no slug and
+        # no signup to deduplicate.
+        assert meta_capi.registration_event_id_for_host(
+            'www.akyehq.com').endswith(':')
+    finally:
+        if saved is None:
+            os.environ.pop('BASE_DOMAIN', None)
+        else:
+            os.environ['BASE_DOMAIN'] = saved
+
+
 def test_a_signup_with_nothing_to_match_on_is_still_a_valid_event():
     """Somebody who typed the address in by hand has no click id and may
     have given an email we cannot read here. That is a weaker event, not a

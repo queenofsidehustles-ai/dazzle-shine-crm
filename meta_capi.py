@@ -109,6 +109,28 @@ def event_id(event, slug):
     return f'{event}:{slug}'
 
 
+def registration_event_id_for_host(host):
+    """The browser's copy of the signup id, worked out from the host the
+    page is being rendered on.
+
+    A function rather than two lines at the call site, because the two lines
+    were wrong and nothing could see it. `tenancy.slug_from_host` returns
+    None unless it is told the base domain -- it cannot know where the
+    tenant label ends otherwise -- and called without it this produced
+    "CompleteRegistration:" against the server's
+    "CompleteRegistration:acme". Both events reached Meta, neither matched
+    the other, and one signup counted as two.
+
+    The tests could not see it either: they checked that `event_id` and the
+    template agreed, which they did. Nothing exercised the step that turned
+    a host into a slug. Now that step has a name and a test.
+    """
+    import product
+    import tenancy
+    return event_id(REGISTRATION,
+                    tenancy.slug_from_host(host, product.domain()) or '')
+
+
 def build(event, slug, email=None, fbc=None, ip=None, user_agent=None,
           when=None, source_url=None):
     """One event, as Meta's payload. Pure, so the tests can read it."""
