@@ -14,9 +14,9 @@
     <span style="color:var(--softer);font-size:0.86rem">{% if done >= target %}Target made 🎉{% else %}{{ target - done }} to go{% endif %}</span>
   </div>
   <div style="font-size:2rem;font-weight:800;margin:6px 0 4px">{{ done }} <span style="font-size:1rem;font-weight:500;color:var(--softer)">of {{ target }} calls</span></div>
-  <div style="height:9px;border-radius:5px;background:var(--line, #eee);overflow:hidden" role="progressbar"
+  <div style="height:9px;border-radius:5px;background:var(--line);overflow:hidden" role="progressbar"
        aria-valuenow="{{ done }}" aria-valuemin="0" aria-valuemax="{{ target }}" aria-label="Calls today against your target">
-    <div style="height:100%;width:{{ pct }}%;background:var(--gold, #b98a33)"></div>
+    <div style="height:100%;width:{{ pct }}%;background:var(--amber)"></div>
   </div>
 </div>
 
@@ -48,7 +48,7 @@
     Commission is earned once the customer pays. Worked out from the same rates as the owner's commission report.
   </p>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
-    <div style="background:var(--gold-soft, rgba(211,168,79,0.12));border-radius:10px;padding:12px 14px">
+    <div style="background:var(--amber-soft);border-radius:10px;padding:12px 14px">
       <div style="font-size:0.82rem;color:var(--softer)">{{ e.this_label }} so far</div>
       <div style="font-size:1.8rem;font-weight:800">${{ '%.2f' % e.this.total }}</div>
     </div>

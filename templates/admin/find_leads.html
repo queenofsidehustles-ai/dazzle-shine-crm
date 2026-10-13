@@ -66,10 +66,10 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
     <strong>{{ my_progress.done }} of {{ my_progress.target }} calls today</strong>
     <span style="color:var(--softer)">{% if my_progress.done >= my_progress.target %}Target made 🎉{% else %}{{ my_progress.target - my_progress.done }} to go{% endif %}</span>
   </div>
-  <div style="height:8px;border-radius:4px;background:var(--line, #eee);margin-top:8px;overflow:hidden"
+  <div style="height:8px;border-radius:4px;background:var(--line);margin-top:8px;overflow:hidden"
        role="progressbar" aria-valuenow="{{ my_progress.done }}" aria-valuemin="0" aria-valuemax="{{ my_progress.target }}"
        aria-label="Calls today against your target">
-    <div style="height:100%;width:{{ my_progress.pct }}%;background:var(--gold, #b98a33)"></div>
+    <div style="height:100%;width:{{ my_progress.pct }}%;background:var(--amber)"></div>
   </div>
 </a>
 {% endif %}

@@ -40,9 +40,9 @@
       <span><strong>{{ r.today }}</strong> of {{ r.target }} calls today</span>
       <span style="color:var(--softer)">{% if r.today >= r.target %}Target made{% else %}{{ r.target - r.today }} to go{% endif %}</span>
     </div>
-    <div style="height:7px;border-radius:4px;background:var(--line, #eee);margin-top:6px;overflow:hidden" role="progressbar"
+    <div style="height:7px;border-radius:4px;background:var(--line);margin-top:6px;overflow:hidden" role="progressbar"
          aria-valuenow="{{ r.today }}" aria-valuemin="0" aria-valuemax="{{ r.target }}" aria-label="{{ r.user.name }}'s calls today">
-      <div style="height:100%;width:{{ r.pct }}%;background:var(--gold, #b98a33)"></div>
+      <div style="height:100%;width:{{ r.pct }}%;background:var(--amber)"></div>
     </div>
 
     <dl style="display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:14px 0 0;font-size:0.86rem">
