@@ -79,6 +79,29 @@ Monica's rules, and they apply to every word:
 - **Plain punctuation.** No em-dash pileups. Contractions are fine.
 - Always capitalize "God" if it ever appears.
 
+## How the emails persuade (and where the line is)
+
+Every email follows the same shape: **the pain, the fix, one small ask.**
+
+1. **Open on a moment they have lived.** Not "manage your schedule" but
+   "a cleaner texting 'which house again?' at 8am." Pain points we use: the
+   schedule living in your head and phone, addresses screenshotted into a
+   group chat, a price request that booked someone else before you replied,
+   quotes and follow-ups waiting for a free evening, a job cleaned and never
+   billed, the customer list living on one phone, pay day as a memory test.
+2. **Show the fix in Akye, concretely.** Name the feature by what it does
+   for them that day.
+3. **Make the ask small.** "About two minutes," "one cleaner and one
+   customer." Remove the risk they are guarding against ("your 14 days do
+   not start until you do").
+4. **Loss over gain, with real stakes only.** When a trial ends, list exactly
+   what switches off (`LOSES` in `compose()`), from `entitlements.PLANS`.
+5. **Picture next week** after a win (activated, first booking).
+
+Never: invented deadlines or scarcity, made-up testimonials or numbers
+("owners save 10 hours"), guilt, or claims a free-plan user cannot get. If a
+claim depends on a paid feature, it only goes in emails sent during the trial.
+
 ## Videos
 
 Never embed a player in an email. Call `funnel_videos.email_block(key)`; it

@@ -298,90 +298,115 @@ def compose(org, kind, next_step=None):
             it takes two minutes.</p>''',
             'Start my 14 days'))
 
+    # What switches off when a trial ends, in the owner's words, from the
+    # plan table (entitlements.PLANS). Said concretely because "the paid
+    # features" means nothing; "texting your cleaners" is a Tuesday morning.
+    LOSES = '''<ul style="padding-left:20px;margin:10px 0 14px">
+              <li>Texting your cleaners and customers</li>
+              <li>Automatic reminders and follow-ups</li>
+              <li>Card payments and invoices</li>
+              <li>The hiring pipeline</li>
+              <li>More than 2 cleaners, or 20 jobs a month</li>
+            </ul>'''
+
     if kind == 'ending':
+        ends = state.get('ends_at')
+        when = f"{ends.strftime('%B')} {ends.day}" if ends else 'soon'
         return (f'{name}: {left} day{plural} left of everything',
                 wrap(
             f'{left} day{plural} left of everything',
-            f'''<p>Your trial ends on
-            <strong>{state.get("ends_at").strftime("%d %B") if state.get("ends_at") else "soon"}</strong>.</p>
-            <p>After that you keep your account and everything in it — your
-            customers, your jobs, your team, your prices. Nothing is deleted.
-            What stops is the paid side: the hiring pipeline, the automations
-            and the extra seats.</p>
-            <p>If it has been useful, picking a plan takes a minute. If it has
-            not, I would genuinely rather know why — reply and tell me.</p>''',
-            'See plans', f'{url}/billing'))
+            f'''<p>On <strong>{when}</strong> your account moves to the free
+            plan. Your customers, jobs and prices all stay.
+            Nothing is deleted. These switch off:</p>
+            {LOSES}
+            <p>That is the difference between the business texting people for
+            you and you doing it from your phone at 10pm again.</p>
+            <p>Keeping it takes a minute. If it has not been worth it, reply
+            and tell us why. We would genuinely rather know.</p>''',
+            'Keep everything on', f'{url}/billing'))
 
     if kind == 'ended':
         return (f'{name}: your trial has finished — everything is still here',
                 wrap(
             'Your trial has finished',
-            '''<p>You are on the free plan from today. Your customers, jobs,
-            team, prices and history are all exactly where you left them —
-            nothing has been deleted and nothing will be.</p>
-            <p>What is switched off is the paid side: the hiring pipeline, the
-            automations, and extra team seats. They are still there in the
-            menu, and turning them back on is one click whenever you want
-            them.</p>
-            <p>If you tried it and it was not right, reply and tell me what
-            was missing. That is more useful to me than a sale.</p>''',
+            f'''<p>You are on the free plan from today. Your customers, jobs,
+            team and prices are exactly where you left them.
+            Nothing has been deleted.</p>
+            <p>What is switched off:</p>
+            {LOSES}
+            <p>It all comes back with one click whenever you want it. If it was
+            not right for you, reply and tell us what was missing. That helps
+            more than a sale.</p>''',
             'See plans', f'{url}/billing'))
 
     # ── The first week ────────────────────────────────────────────────────
+    # Each one opens on a moment the owner has actually lived, then shows the
+    # fix, then asks for one small thing. Real stakes only: no invented
+    # deadlines, no made-up testimonials.
     if kind == 'day1':
-        return (f'{name}: two things, two minutes',
+        return (f'{name}: get the schedule out of your head',
                 wrap(
-            'Two things, two minutes',
-            f'''<p>The quickest way to see it work is with your real business
-            in it. Add <strong>one cleaner</strong> (yourself counts if you are
-            still cleaning) and <strong>one customer</strong> you already clean
-            for.</p>
-            <p>That is all. It is also what starts your
-            {billing.TRIAL_DAYS} days, so nothing runs down while you are still
-            getting set up.</p>
+            'Get the schedule out of your head',
+            f'''<p>Addresses screenshotted into a group chat. A cleaner texting
+            &ldquo;which house again?&rdquo; at 8am. The whole week living in
+            your head and your phone.</p>
+            <p>That ends with two things: add <strong>one cleaner</strong>
+            (you count, if you are still cleaning) and <strong>one
+            customer</strong> you already clean for. Then you can watch a job
+            go straight to their phone with the address, the time and the
+            checklist.</p>
+            <p>About two minutes. Your {billing.TRIAL_DAYS} days do not start
+            until you do, so you lose nothing by starting now.</p>
             {funnel_videos.email_block('team_and_customer')}''',
-            'Add a cleaner', f'{url}/staff/new'))
+            'Add my first cleaner', f'{url}/staff/new'))
 
     if kind == 'day2':
-        return (f'{name}: your booking page is already live',
+        return (f'{name}: the jobs you lose while you are cleaning',
                 wrap(
-            'Your booking page is already live',
-            f'''<p>You already have a page where customers pick a service, see
-            your price and book themselves. No back-and-forth texts to set a
-            time.</p>
+            'The jobs you lose while you are cleaning',
+            f'''<p>Somebody asks for a price while you are elbow-deep in a
+            bathroom. By the time you text back that evening, they have booked
+            someone else. Nobody tells you. The job just never happens.</p>
+            <p>Your booking page stops that. Customers pick a service, see your
+            price and book a time themselves, even while you are working.
+            It is already live:</p>
             <p style="font-size:17px"><strong>{url}/book</strong></p>
-            <p>Put that link in your Facebook bio, on your Google profile, or in
-            your next reply to &ldquo;how much do you charge?&rdquo; It is the
-            part that brings work in while you are busy cleaning.</p>
+            <p>Put it in your Facebook bio and your Google profile today, and
+            send it next time someone asks &ldquo;how much?&rdquo;</p>
             {funnel_videos.email_block('booking_page')}''',
-            'See my booking page', f'{url}/settings/booking-page'))
+            'Get my booking link', f'{url}/settings/booking-page'))
 
     if kind == 'day4':
-        return (f'{name}: where people get stuck',
+        return (f'{name}: what usually gets in the way',
                 wrap(
-            'Where people get stuck',
-            '''<p>Three questions come up a lot in the first week:</p>
-            <p><strong>&ldquo;Do I have to set everything up first?&rdquo;</strong><br>
-            No. One cleaner and one customer is enough to see it work. The rest
-            can wait.</p>
+            'What usually gets in the way',
+            '''<p>Most owners do not stall because it is hard. They stall because
+            the week gets away from them, which is the exact problem this is
+            meant to fix. A few things we hear a lot:</p>
+            <p><strong>&ldquo;I need to set everything up first.&rdquo;</strong><br>
+            You do not. One cleaner and one customer is enough to see it work.
+            Do the rest when you have a quiet evening.</p>
             <p><strong>&ldquo;My prices are different.&rdquo;</strong><br>
             Change them under Settings, Prices. Your booking page and quotes
-            follow.</p>
+            follow, so the price you say is the price they book.</p>
             <p><strong>&ldquo;I do not have cleaners yet.&rdquo;</strong><br>
-            Add yourself. That is how most people start.</p>
-            <p>Stuck on something else? Reply and say what. A person reads
-            every one.</p>'''))
+            Add yourself. That is how most cleaning businesses start.</p>
+            <p>Stuck on something else? Reply and tell us what. A real person
+            reads every one.</p>''',
+            'Pick up where I left off'))
 
     if kind == 'day5':
-        return (f'{name}: bring your list over',
+        return (f'{name}: your customer list is one lost phone from gone',
                 wrap(
-            'Bring your list over',
-            f'''<p>If your customers live in a notebook, a spreadsheet or
-            another app, you do not have to type them in one at a time. Bring
-            the list over in one go and they land as customers, ready to
-            book.</p>
+            'Your customer list is one lost phone from gone',
+            f'''<p>Your customers are the business. If they live in a notebook,
+            your phone&rsquo;s contacts or a spreadsheet, that is a lot riding
+            on one thing you could drop in a bucket.</p>
+            <p>You do not have to type them in one at a time. Bring the whole
+            list over in one go, and every customer is saved, searchable and
+            ready to book.</p>
             {funnel_videos.email_block('migration')}''',
-            'Import my list', f'{url}/migration'))
+            'Bring my list over', f'{url}/migration'))
 
     # ── Moments ───────────────────────────────────────────────────────────
     if kind == 'activated':
@@ -390,50 +415,57 @@ def compose(org, kind, next_step=None):
         return (f'{name}: your {billing.TRIAL_DAYS} days just started',
                 wrap(
             f'Your {billing.TRIAL_DAYS} days just started',
-            f'''<p>You added a cleaner and a customer, so everything is
-            switched on until <strong>{until}</strong>: scheduling, job texts to
-            your cleaners, your booking page, quotes and invoices, and the
-            hiring pipeline.</p>
-            <p>The step that makes it click: <strong>book one real job and
-            assign it.</strong> Your cleaner gets the address, the time and the
-            checklist on their phone.</p>
+            f'''<p>You added a cleaner and a customer, so everything is switched
+            on until <strong>{until}</strong>.</p>
+            <p>Picture next week: jobs land on your cleaners&rsquo; phones,
+            customers get their reminders without you, and you are not
+            rebuilding the schedule from texts at night.</p>
+            <p>To see it for real, <strong>book one real job and assign
+            it.</strong> That is the moment it clicks.</p>
             {funnel_videos.email_block('book_job')}''',
-            'Book a job', f'{url}/bookings/new'))
+            'Book my first job', f'{url}/bookings/new'))
 
     if kind == 'first_booking':
         return (f'{name}: somebody just booked you online',
                 wrap(
             'Somebody booked you through your own page',
-            '''<p>A customer just booked through your booking page. No phone
-            tag, no back-and-forth. It is in your CRM now, waiting for a
-            cleaner.</p>
-            <p>That is what the page is for. Keep sharing the link.</p>''',
+            '''<p>A customer just booked you, and you did not have to answer a
+            call, play phone tag or send a quote. It is in your calendar now,
+            ready for a cleaner.</p>
+            <p>That is a job that could easily have gone to someone else.
+            Every place your link lives is another chance for this to happen
+            again. Add it somewhere new today.</p>''',
             'See the booking', f'{url}/bookings/'))
 
     if kind == 'feature':
         step = next_step or {}
         title = step.get('title') or 'Getting started'
         why = step.get('why') or ''
-        return (f'{name}: one thing worth trying this week',
+        return (f'{name}: before your trial ends, try this',
                 wrap(
-            'One thing worth trying this week',
-            f'''<p>You have <strong>{left} day{plural}</strong> left of
-            everything. One thing you have not tried yet:</p>
-            <p><strong>{title}</strong><br>{why}</p>''',
-            step.get('cta') or 'Open your CRM',
+            'Before your trial ends, try this',
+            f'''<p>You have <strong>{left} day{plural}</strong> left with
+            everything switched on. Most people only find out what a tool can
+            do after it is gone. One thing you have not tried yet:</p>
+            <p><strong>{title}</strong><br>{why}</p>
+            <p>It takes a few minutes, and then you will know if it is worth
+            keeping.</p>''',
+            step.get('cta') or 'Open my account',
             f"{url}{step.get('link') or ''}"))
 
     if kind == 'winback':
-        return (f'{name}: here is what you would get back',
+        return (f'{name}: still doing it the hard way?',
                 wrap(
-            'Here is what you would get back',
-            '''<p>You have been on the free plan for a week, and everything you
-            entered is still there.</p>
-            <p>If you miss the hiring pipeline, the automations or the extra
-            team seats, they come back the moment you pick a plan.</p>
-            <p>This is the last note about it. If something was missing,
-            reply and tell us. That helps more than you would think.</p>''',
-            'See plans', f'{url}/billing'))
+            'Still doing it the hard way?',
+            f'''<p>It has been a week on the free plan. Everything you entered is
+            still there.</p>
+            <p>If you have caught yourself texting cleaners one by one again,
+            chasing a payment, or reminding customers by hand, that is the part
+            that switched off:</p>
+            {LOSES}
+            <p>It comes back the moment you pick a plan. This is the last note
+            about it. If something was missing, reply and tell us.</p>''',
+            'Turn it back on', f'{url}/billing'))
 
     raise ValueError(f'unknown nudge: {kind}')
 
