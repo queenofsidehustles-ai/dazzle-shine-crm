@@ -40,6 +40,16 @@
                     color:var(--gold-deep);font-weight:700;margin-bottom:6px">Next</div>
         <h3 style="margin:0 0 6px;font-size:1.1rem">{{ p.next.title }}</h3>
         <p style="color:var(--muted);margin:0 0 14px;line-height:1.55">{{ p.next.why }}</p>
+        {# The video sits next to the step it explains, not on a help page
+           (funnel_videos.py). Absent until it is recorded. #}
+        {% if p.next.video and VIDEOS.get(p.next.video) %}
+        <div style="position:relative;padding-bottom:56.25%;height:0;margin:0 0 14px;
+                    border-radius:10px;overflow:hidden;background:#0D1526">
+          <iframe src="{{ VIDEO_EMBEDS[p.next.video] }}" title="How to: {{ p.next.title }}"
+                  style="position:absolute;inset:0;width:100%;height:100%;border:0"
+                  allowfullscreen loading="lazy"></iframe>
+        </div>
+        {% endif %}
         <a href="{{ p.next.link }}" class="btn-primary">{{ p.next.cta }} →</a>
         {% if p.next.secondary %}
         <a href="{{ p.next.secondary.link }}" style="margin-left:14px;color:var(--gold-deep);
@@ -64,6 +74,10 @@
             <div style="color:var(--softer);font-size:0.86rem;margin-top:2px">{{ s.why }}
               {% if s.secondary %}
               · <a href="{{ s.secondary.link }}" style="color:var(--gold-deep);font-weight:600">{{ s.secondary.label }}</a>
+              {% endif %}
+              {% if s.video and VIDEOS.get(s.video) %}
+              · <a href="{{ VIDEOS[s.video] }}" target="_blank" rel="noopener"
+                   style="color:var(--gold-deep);font-weight:600">▶ Watch (1 min)</a>
               {% endif %}
             </div>
           {% endif %}

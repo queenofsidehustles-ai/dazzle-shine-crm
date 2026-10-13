@@ -5,6 +5,17 @@
   <p class="lead">A minute from now you'll have your own CRM at your own web
      address, with nothing in it but your business name.</p>
 
+  {# Track 0: somebody arriving from an ad sees what they are signing up
+     for before being asked to. Appears only once the video exists
+     (funnel_videos.py) -- never an empty box. #}
+  {% if VIDEOS.overview %}
+  <div style="position:relative;padding-bottom:56.25%;height:0;margin:0 0 18px;border-radius:10px;overflow:hidden;background:#0D1526">
+    <iframe src="{{ VIDEO_EMBEDS.overview }}" title="What it looks like once it is set up"
+            style="position:absolute;inset:0;width:100%;height:100%;border:0"
+            allowfullscreen loading="lazy"></iframe>
+  </div>
+  {% endif %}
+
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
   <form method="post" id="signup">
@@ -35,6 +46,7 @@
     <label for="email">Your email</label>
     <input id="email" name="email" type="email" required
            value="{{ form.email or '' }}" autocomplete="username" />
+    <p class="small">We'll send your web address and sign-in details here.</p>
 
     <label for="password">Choose a password</label>
     <input id="password" name="password" type="password" required minlength="8"
@@ -63,6 +75,30 @@
   <a class="back" href="/login">Already have an account? Sign in</a>
 
   <script>
+    // Note the email as soon as it is typed, before the account exists, so
+    // somebody who leaves at the password box can still be helped to finish
+    // (signup.started). Once per address; failure is silent and harmless.
+    (function () {
+      var email = document.getElementById('email');
+      var sent = {};
+      email.addEventListener('blur', function () {
+        var v = (email.value || '').trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(v) || sent[v]) return;
+        sent[v] = true;
+        try {
+          fetch('/signup/started', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              email: v,
+              name: (document.getElementById('name').value || '').trim(),
+              business: (document.getElementById('business').value || '').trim(),
+              website: (document.getElementById('website').value || '')
+            }), keepalive: true
+          }).catch(function () {});
+        } catch (e) {}
+      });
+    })();
+
     // Suggest an address from the business name, until the person edits it
     // themselves -- after which it is theirs and we stop interfering.
     (function () {
