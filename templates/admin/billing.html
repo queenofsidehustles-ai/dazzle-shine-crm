@@ -84,8 +84,9 @@
 <div class="card" style="max-width:640px;margin-top:16px">
   <h2 style="margin:0 0 4px;font-size:1.05rem">Email preferences</h2>
   <p style="color:var(--muted);margin:0 0 12px;font-size:0.9rem">
-    While you're on a trial we send a few emails about how much of it is left.
-    If you'd rather not get them, turn that off here — it never changes
+    While you're on a trial we send a few short emails: tips for getting set
+    up, and how much of the trial is left. If you'd rather not get them, turn
+    that off here — it never changes
     anything about your account, your data or what you can do with it.
   </p>
   <form method="POST" action="{{ url_for('billing.nudge_preference') }}">
@@ -93,7 +94,7 @@
       <input type="checkbox" name="opted_out" value="1" style="margin-top:3px"
              {{ 'checked' if org.nudges_opted_out }}
              onchange="this.form.requestSubmit()">
-      <span>Don't email me about my trial, and don't treat me as a lead to follow up with</span>
+      <span>Don't email me tips or trial reminders, and don't treat me as a lead to follow up with</span>
     </label>
   </form>
 </div>

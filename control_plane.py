@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
                         LargeBinary, Text, UniqueConstraint,
-                        Table, select, insert, update, text, func)
+                        Table, select, insert, update, delete, text, func)
 
 # Its own MetaData: these tables must never be created inside a tenant schema,
 # and must never be swept up by a migration that walks models.py.
@@ -78,6 +78,18 @@ organizations = Table(
     # business cannot see or control is not one. trial_nudges.due() checks
     # this before anything else a trial's state would otherwise call for.
     Column('nudges_opted_out', Boolean, default=False),
+    # When the last owner email from trial_nudges went out, cron or event.
+    # `nudges_sent` says which emails; this says when, so that a celebration
+    # sent at 3pm ("somebody booked you") and the next morning's scheduled
+    # note never land on the same day. One email a day, whatever sent it.
+    Column('nudge_last_at', DateTime),
+    # Has the owner shown the signup email reaches them? A typo here loses
+    # the only written record of their address and every email after it.
+    # `email_confirm_sent_at` is set only by the signup that asked, so
+    # companies from before this existed are never told to confirm anything.
+    # See email_confirm.py.
+    Column('email_confirm_sent_at', DateTime),
+    Column('email_confirmed_at', DateTime),
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
     # Owned by tenant_data_lifecycle.py, declared here for the same reason the
@@ -170,6 +182,12 @@ product_leads = Table(
     # Separate from sms_opted_out_at: that is the person's own STOP, which
     # their START undoes; this is ours, and only the console undoes it.
     Column('do_not_text_at', DateTime),
+    # The short welcome sequence (lead_nurture.py) for somebody who came to
+    # us -- started signing up, or asked for early access -- and did not open
+    # an account. Which email they are on, and when the last one went.
+    # Uploaded prospect lists are never put through it.
+    Column('nurture_step', Integer),
+    Column('nurture_last_at', DateTime),
 )
 
 
@@ -563,7 +581,7 @@ def set_billing(engine, slug, **fields):
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
                'grandfathered', 'status', 'activated_at', 'nudges_sent',
-               'nudges_opted_out',
+               'nudges_opted_out', 'nudge_last_at',
                'mrr_cents', 'paid_since', 'canceled_at', 'discount_code'}
     bad = set(fields) - allowed
     if bad:
@@ -572,6 +590,76 @@ def set_billing(engine, slug, **fields):
         conn.execute(update(organizations)
                      .where(organizations.c.slug == slug).values(**fields))
     return find(engine, slug)
+
+
+def set_email_state(engine, slug, **fields):
+    """Record the owner's email being asked about, confirmed, or corrected.
+
+    Its own whitelist rather than set_billing's: none of this is billing, and
+    `owner_email` is not something a billing caller should ever be able to
+    change by passing the wrong keyword.
+    """
+    allowed = {'owner_email', 'email_confirm_sent_at', 'email_confirmed_at'}
+    bad = set(fields) - allowed
+    if bad:
+        raise ValueError(f'not email fields: {sorted(bad)}')
+    with engine.begin() as conn:
+        conn.execute(update(organizations)
+                     .where(organizations.c.slug == slug).values(**fields))
+    return find(engine, slug)
+
+
+def owner_emails(engine):
+    """Every address that already owns a company, lower-cased.
+
+    The nurture sequence asks this before each send: somebody who opened an
+    account after leaving the signup form is a customer now, not a lead.
+    """
+    try:
+        with engine.connect() as conn:
+            return {(r[0] or '').strip().lower() for r in conn.execute(
+                select(organizations.c.owner_email)) if r[0]}
+    except Exception:
+        return set()
+
+
+def find_or_add_abandoned_signup(engine, email, name=None, company=None,
+                                 note=None):
+    """Somebody typed their email into the signup form. Never raises.
+
+    Written before the account exists, so that leaving at the password box
+    still leaves a name to follow up. One row per address: a person tabbing
+    in and out of the field, or coming back tomorrow, is still one person.
+    """
+    return add_lead(engine, source='abandoned_signup', email=email,
+                    name=name, company=company, note=note)
+
+
+def clear_abandoned_signup(engine, email):
+    """They finished. Take the half-finished row off the leads list.
+
+    Only rows this form wrote: an early-access request or an uploaded
+    prospect at the same address is a different record with its own history.
+    """
+    email = (email or '').strip().lower()
+    if not email:
+        return 0
+    try:
+        with engine.begin() as conn:
+            return conn.execute(
+                delete(product_leads)
+                .where(func.lower(product_leads.c.email) == email,
+                       product_leads.c.source == 'abandoned_signup')).rowcount
+    except Exception:
+        return 0
+
+
+def set_lead_nurture(engine, lead_id, step, when=None):
+    with engine.begin() as conn:
+        conn.execute(update(product_leads)
+                     .where(product_leads.c.id == lead_id)
+                     .values(nurture_step=step,
+                             nurture_last_at=when or datetime.utcnow()))
 
 
 def find_by_customer(engine, stripe_customer_id):
@@ -605,6 +693,20 @@ def record_tenant_login(engine, email, tenant_slug):
             if not exists:
                 conn.execute(insert(tenant_logins).values(
                     email=email, tenant_slug=tenant_slug))
+    except Exception:
+        pass
+
+
+def forget_tenant_login(engine, email, tenant_slug):
+    """Remove one (email, tenant) pair -- the owner corrected a mistyped
+    address, and the mistyped one may belong to a stranger who should never
+    be sent this company's address by the "find my login" lookup."""
+    email = (email or '').strip().lower()
+    try:
+        with engine.begin() as conn:
+            conn.execute(tenant_logins.delete().where(
+                tenant_logins.c.email == email,
+                tenant_logins.c.tenant_slug == (tenant_slug or '').strip().lower()))
     except Exception:
         pass
 

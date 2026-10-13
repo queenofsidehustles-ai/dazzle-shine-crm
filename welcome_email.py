@@ -21,6 +21,15 @@ BODY = """
   <p>{{ biz }} is set up. Everything below is yours — your customers, your cleaners,
      your prices, your money.</p>
 
+  {% if confirm_code %}
+  <div style="border:2px solid #D98A2B;border-radius:12px;padding:18px 22px;margin:22px 0">
+    <div style="font-weight:700;margin-bottom:6px">First, one quick check that this email reaches you</div>
+    <div style="font-size:.95rem;color:#3d4f57">Type this code where your dashboard asks for it:</div>
+    <div style="font-size:1.9rem;font-weight:800;letter-spacing:.28em;margin:10px 0 12px">{{ confirm_code }}</div>
+    <a href="{{ confirm_url }}" style="color:#13232a;font-weight:600;font-size:.95rem">Or tap here and press &ldquo;Yes, this is me&rdquo; &rarr;</a>
+  </div>
+  {% endif %}
+
   <div style="background:#0D1526;border-radius:12px;padding:22px 24px;margin:22px 0">
     <div style="color:#9fb0c9;font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;font-weight:700;margin-bottom:8px">Your address</div>
     <a href="{{ url }}" style="color:#fff;font-size:1.22rem;font-weight:800;text-decoration:none">{{ host }}</a>
@@ -36,12 +45,14 @@ BODY = """
      else — taking card payments, texting your crew, sending invoices — comes after,
      and only when you want it.</p>
 
+  {{ video|safe }}
+
   <p style="margin:26px 0">
     <a href="{{ url }}" style="background:#D98A2B;color:#fff;padding:14px 30px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Open my CRM</a>
   </p>
 
-  <p>You are on the top plan while you try it. Your fourteen days start when you assign
-     your first job — not today — and there is no card on file. When it ends you drop to
+  <p>You are on the top plan while you try it. Your fourteen days start once you add
+     one cleaner and one customer — not today — and there is no card on file. When it ends you drop to
      the free plan and <strong>keep everything you entered</strong>.</p>
 
   <p style="margin-top:24px">Reply to this email if anything is confusing or broken. It
@@ -54,14 +65,19 @@ BODY = """
 """
 
 
-def build(biz, owner_email, host, first=None):
+def build(biz, owner_email, host, first=None, confirm_code=None,
+          confirm_url=None):
+    import funnel_videos
     url = host if host.startswith('http') else f'https://{host}'
     return render_template_string(
         BODY, biz=biz, email=owner_email, host=host.replace('https://', ''),
-        url=url, first=(first or '').strip(), product_name=product.name())
+        url=url, first=(first or '').strip(), product_name=product.name(),
+        confirm_code=confirm_code, confirm_url=confirm_url,
+        video=funnel_videos.email_block('signup'))
 
 
-def send(biz, owner_email, host, first=None):
+def send(biz, owner_email, host, first=None, confirm_code=None,
+         confirm_url=None):
     """Returns (ok, detail). Never raises: a welcome email that fails must not
     be the reason a signup looks broken to somebody who just succeeded."""
     import notifications
@@ -69,7 +85,8 @@ def send(biz, owner_email, host, first=None):
         return notifications.send_email(
             to_email=owner_email, to_name=biz,
             subject=f'{biz} is set up — here is your address',
-            html=build(biz, owner_email, host, first),
+            html=build(biz, owner_email, host, first, confirm_code,
+                       confirm_url),
             from_name=product.name(),
             from_email=product.from_email() or None,
             reply_to=product.support_email() or None,

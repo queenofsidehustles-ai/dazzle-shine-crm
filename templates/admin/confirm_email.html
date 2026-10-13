@@ -1,0 +1,50 @@
+{% extends "base_admin.html" %}
+{% block title %}Confirm your email · {{ BIZ }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:560px">
+  {% if not pending %}
+    <h2 style="margin:0 0 8px">Your email is confirmed</h2>
+    <p style="color:var(--muted);line-height:1.6;margin:0 0 16px">
+      Everything we send about your account goes to
+      <strong>{{ org.owner_email }}</strong>.</p>
+    <a href="{{ url_for('settings.getting_started') }}" class="btn-primary">Back to Getting started</a>
+  {% else %}
+    <h2 style="margin:0 0 8px">Confirm your email</h2>
+    <p style="color:var(--muted);line-height:1.6;margin:0 0 18px">
+      We sent a 6-digit code to <strong>{{ org.owner_email }}</strong>. It's the
+      email with your web address in it. Type the code here, or tap the button in
+      that email.</p>
+
+    <form method="post" action="{{ url_for('email_confirm.page') }}"
+          style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input name="code" inputmode="numeric" autocomplete="one-time-code"
+             maxlength="7" placeholder="123456" required
+             style="font-size:1.3rem;letter-spacing:.2em;width:11ch;padding:10px 12px">
+      <button type="submit" class="btn-primary">Confirm</button>
+    </form>
+
+    <form method="post" action="{{ url_for('email_confirm.resend') }}" style="margin-top:14px">
+      <button type="submit" style="background:none;border:0;padding:0;color:var(--gold-deep);
+              font-weight:600;cursor:pointer;font-size:0.92rem">Didn't get it? Send it again</button>
+    </form>
+
+    {% if may_change %}
+    <details style="margin-top:26px;border-top:1px solid var(--border);padding-top:16px">
+      <summary style="cursor:pointer;font-weight:600">Wrong address? Fix it</summary>
+      <p style="color:var(--softer);font-size:0.88rem;line-height:1.55;margin:10px 0 12px">
+        This also changes the email you sign in with. We'll send a new code to the
+        new address.</p>
+      <form method="post" action="{{ url_for('email_confirm.change') }}">
+        <label style="display:block;font-weight:600;font-size:0.9rem;margin:0 0 4px">The right email</label>
+        <input name="email" type="email" required autocomplete="email"
+               style="width:100%;max-width:340px;padding:9px 11px">
+        <label style="display:block;font-weight:600;font-size:0.9rem;margin:12px 0 4px">Your password</label>
+        <input name="password" type="password" required autocomplete="current-password"
+               style="width:100%;max-width:340px;padding:9px 11px">
+        <div style="margin-top:14px"><button type="submit" class="btn-primary">Update my email</button></div>
+      </form>
+    </details>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

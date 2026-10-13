@@ -79,8 +79,11 @@ def running(days_in, **kw):
 
 print('\n1. The person who signed up and never came back')
 # The banner cannot reach them. This is the entire point.
-check(tn.due(org(days_old=1)) is None, 'day 1 — nothing, they are still setting up')
-check(tn.due(org(days_old=6)) is None, 'day 6 — still nothing')
+# The first week used to be silent, which left day 7 as a rescue mission.
+# It now has its own short run (day1/day2/day4/day5); see section 14.
+check(tn.due(org(days_old=1)) == 'day1', 'day 1 — two things, two minutes')
+check(tn.due(org(days_old=6, nudges_sent='day1,day2,day4,day5')) is None,
+      'day 6, first week done — nothing until day 7')
 check(tn.due(org(days_old=7)) == 'start_7', 'day 7 — the first nudge')
 check(tn.due(org(days_old=14, nudges_sent='start_7')) is None,
       'day 14 — quiet again, one email is not a campaign')
@@ -112,7 +115,10 @@ for kind, o in (('start_7', org(days_old=8, nudges_sent='start_7')),
 
 
 print('\n4. Somebody who is actually using it')
-check(tn.due(running(1)) is None, 'day 1 of 14 — leave them alone')
+check(tn.due(running(1)) == 'activated',
+      'day 1 of 14 — the "now switched on" note, if the moment was missed')
+check(tn.due(running(1, nudges_sent='activated,day2')) is None,
+      'and after that, leave them alone')
 check(tn.due(running(9)) is None, 'day 9 — still nothing')
 check(tn.due(running(11)) == 'ending', 'with 3 days left, the one about money')
 check(tn.due(running(13)) == 'ending', 'and on the last day if it was missed')
@@ -170,7 +176,8 @@ for kind in tn.ALL:
     check(bool(subj) and 'Brightside' in subj, f'{kind}: the subject names them')
     check('brightside.akyehq.com' in html,
           f'{kind}: the link goes to their address, not the product\'s')
-    check('akyehq.com/book' not in html and
+    check('https://akyehq.com/book' not in html and
+          'www.akyehq.com/book' not in html and
           'href="https://akyehq.com' not in html,
           f'{kind}: and never to a login page where they do not exist')
 
@@ -284,7 +291,8 @@ def age_to(days, clear=True):
     with engine.begin() as conn:
         sql = 'UPDATE organizations SET created_at = :c'
         if clear:
-            sql += ', nudges_sent = NULL'
+            # A different day, so the one-a-day rule starts over too.
+            sql += ', nudges_sent = NULL, nudge_last_at = NULL'
         conn.execute(_t(sql + ' WHERE slug = :s'),
                      {'c': NOW - timedelta(days=days), 's': 'nudgetest'})
 
