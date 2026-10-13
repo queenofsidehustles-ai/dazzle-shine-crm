@@ -208,6 +208,7 @@ def _view_args(view, prospects, **extra):
         my_rep=_rep(),
         reps=_reps() if _is_owner() else [],
         rep_filter='',
+        my_progress=_my_progress(),
         ready_count=sum(1 for p in prospects if p.ready_to_quote_at),
         stage_counts={key: sum(1 for p in prospects if (p.stage or 'new') == key)
                       for key, _ in Prospect.STAGE_LABELS},
@@ -350,6 +351,28 @@ def _claim(p):
         abort(404)
 
 
+def _my_progress():
+    """A rep's calls today against their target, for the top of their list;
+    None for anybody without a target."""
+    rep = _rep()
+    if rep is None:
+        return None
+    import rep_activity
+    me = _me()
+    if me is None:
+        return None
+    done, target = rep_activity.calls_today(me.id), rep_activity.target_for(me)
+    return {'done': done, 'target': target, 'pct': min(100, round(100 * done / target))}
+
+
+def _me():
+    """The signed-in login's User row, or None (the env owner has none)."""
+    from flask import session
+    from models import User
+    uid = session.get('user_id')
+    return db.session.get(User, uid) if uid else None
+
+
 def _workable(rows):
     """The leads still the signed-in person's to chase. A rep's part ends at
     the hand-off: a lead waiting on the owner's quote is not a call to make,
@@ -366,6 +389,21 @@ def _reps():
     from models import User
     return (User.query.filter(User.role == 'sales', User.active.is_(True))
             .order_by(User.name).all())
+
+
+def _record(p, kind, outcome=None):
+    """Write down that the signed-in person did something on a lead -- what
+    the owner's Team page and a rep's own numbers are counted from. Added to
+    the session; it is saved with whatever the route commits."""
+    from flask import has_request_context, session
+    from models import ProspectActivity
+    # Outside a request (a script, a test) nobody is signed in to credit.
+    who = session if has_request_context() else {}
+    db.session.add(ProspectActivity(
+        prospect_id=p.id, business_name=(p.business_name or '')[:200],
+        user_id=who.get('user_id'),
+        user_name=who.get('user_name') or ('Owner' if who.get('logged_in') else None),
+        kind=kind, outcome=(outcome or None) and str(outcome)[:30]))
 
 
 def _can_quote():
@@ -579,14 +617,24 @@ def call_sheet(prospect_id=None):
     rows = _backfilled()
     queue = sorted([p for p in _workable(rows) if p.is_due(today)],
                    key=prospecting.due_sort_key)
-    done = sum(1 for p in rows
-               if p.called_at and p.called_at.date().isoformat() == today)
+    rep = _rep()
+    if rep is None:
+        done = sum(1 for p in rows
+                   if p.called_at and p.called_at.date().isoformat() == today)
+        stint = DAILY_STINT
+    else:
+        # A rep's own calls against their own target: the leads' last-called
+        # stamps are anybody's calls, and a lead rung twice counts once.
+        import rep_activity
+        me = _me()
+        done = rep_activity.calls_today(me.id) if me else 0
+        stint = rep_activity.target_for(me)
 
     # A sitting worth of calls, then a finish line. An endless queue is how a
     # backlog becomes a screen nobody opens: there is no version of today where
     # you get to the bottom, so there is no reason to start. Twenty is a
     # morning. Anybody who wants to keep going says so.
-    stint_over = (done >= DAILY_STINT
+    stint_over = (done >= stint
                   and not prospect_id
                   and request.args.get('more') != '1')
 
@@ -626,7 +674,8 @@ def call_sheet(prospect_id=None):
         queue_left=len(queue),
         done_today=done,
         stint_over=stint_over,
-        daily_stint=DAILY_STINT,
+        daily_stint=stint,
+        my_rep=rep,
         scripts=scripts,
         emails=emails,
         can_email=can_email,
@@ -677,7 +726,9 @@ def log_call(prospect_id):
             p, request.form.get('email_subject'), request.form.get('email_body'),
             to=request.form.get('email'))
         sent_note = ' ' + said
-        if not ok:
+        if ok:
+            _record(p, 'email')
+        else:
             flash(said, 'error')
     elif outcome == 'send_info':
         # The outcome that means "they asked me to email something" is the one
@@ -1000,6 +1051,7 @@ def book_walkthrough(prospect_id):
     if (p.stage or 'new') in ('new', 'working'):
         p.stage = 'interested'
     p.notes = prospecting.note_entry(p, f'Walkthrough booked for {when}' + (f' at {at}' if at else ''))
+    _record(p, 'walkthrough_booked')
     db.session.commit()
     from flask import session
     _tell_owner(p, f'Walkthrough booked: {p.business_name}, {when}' + (f' at {at}' if at else ''), [
@@ -1023,6 +1075,9 @@ def save_walkthrough(prospect_id):
     p = _lead(prospect_id)
     _claim(p)
     w = prospecting.walkthrough_from_form(request.form)
+    if not p.walkthrough_at:
+        # Counted once: saving it again is correcting it, not a second visit.
+        _record(p, 'walkthrough')
     p.walkthrough = json.dumps(w)
     p.walkthrough_at = datetime.utcnow()
     summary = prospecting.walkthrough_summary(w)
@@ -1035,7 +1090,9 @@ def save_walkthrough(prospect_id):
         p.next_action = 'Write and send the quote'
         p.next_action_date = local_today().isoformat()
         # A rep's walkthrough is the hand-off: the owner writes the quote.
-        if not _is_owner():
+        # Once: saving it again is a correction, not a second hand-off (or a
+        # second email to the owner).
+        if not _is_owner() and not p.ready_to_quote_at:
             _hand_over(p)
             handed = True
     db.session.commit()
@@ -1143,6 +1200,9 @@ def send_outreach(prospect_id):
     ok, said = prospecting.send_outreach(
         p, request.form.get('subject'), request.form.get('body'),
         to=request.form.get('email'))
+    if ok:
+        _record(p, 'email')
+        db.session.commit()
     flash(said, 'success' if ok else 'error')
     return _back(view)
 
@@ -1229,8 +1289,10 @@ def _log_call(prospect, form, outcome):
     walkthrough = (form.get('walkthrough_date') or '').strip()
     action = (form.get('next_action') or '').strip() or None
     when = (form.get('next_action_date') or '').strip() or None
+    _record(prospect, 'call', outcome)
     if outcome == 'interested' and walkthrough:
         action, when = 'Walkthrough', walkthrough
+        _record(prospect, 'walkthrough_booked')
 
     # Where they are now, and what happens next. A blank action here means the
     # caller took the suggestion; an explicit one overrules it.
@@ -1298,6 +1360,8 @@ def text_lead(prospect_id):
     # but as a failure, not as a touch.
     p.notes = prospecting.note_entry(
         p, f'Texted: {body}' if ok else f'Text failed ({detail}): {body}')
+    if ok:
+        _record(p, 'text')
     db.session.commit()
     flash('Text sent.' if ok else 'The text did not go: ' + detail,
           'success' if ok else 'error')
@@ -1339,6 +1403,7 @@ def _hand_over(p, note=''):
     p.next_action_date = local_today().isoformat()
     p.notes = prospecting.note_entry(
         p, f'Handed over for a quote by {p.ready_by}' + (f': {note}' if note else ''))
+    _record(p, 'handoff')
 
 
 @places_finder_bp.route('/<int:prospect_id>/ready', methods=['POST'])
@@ -1428,6 +1493,164 @@ def assign_many():
           else 'Tick the leads to move first.', 'success' if rows else 'error')
     return redirect(url_for('places_finder.dashboard', view='everyone',
                             rep=request.form.get('rep_filter') or None))
+
+
+def _numbers(users, period):
+    """Each rep's activity for a period, by login, and the accounts it won
+    them (accounts are credited by name, like their commission)."""
+    import rep_activity
+    first, last = rep_activity.period_dates(period)
+    got = rep_activity.counts([u.id for u in users], first, last)
+    won = rep_activity.won([u.name for u in users], first, last)
+    for u in users:
+        got[u.id]['won'] = len(won.get(u.name, []))
+    return got, first, last
+
+
+@places_finder_bp.route('/team')
+@login_required
+@requires_plan('lead_finder')
+def team():
+    """The owner's view of the reps: calls against target today, what a
+    period of calling turned into, and the latest of what they did.
+
+    Owner-only (rbac): a rep's numbers are between them and the owner, and a
+    rep sees their own on My numbers."""
+    import rep_activity
+    import va_commission
+    period = request.args.get('period', 'week')
+    if period not in dict(rep_activity.PERIODS):
+        period = 'week'
+    reps = _reps()
+    names = [u.name for u in reps]
+    today = local_today()
+    ids = [u.id for u in reps]
+    calls_today = rep_activity.counts(ids, today, today)
+    got, first, last = _numbers(reps, period)
+    open_leads = dict(
+        db.session.query(Prospect.agent, db.func.count(Prospect.id))
+        .filter(Prospect.agent.in_(names or ['']),
+                db.func.coalesce(Prospect.stage, 'new').in_(Prospect.LIVE_STAGES))
+        .group_by(Prospect.agent).all())
+    pay = entitlements.can('va_commissions')
+    rows = []
+    for u in reps:
+        target = rep_activity.target_for(u)
+        rows.append({
+            'user': u, 'target': target, 'own_target': u.daily_call_target,
+            'today': calls_today[u.id]['call'],
+            'pct': min(100, round(100 * calls_today[u.id]['call'] / target)),
+            'n': got[u.id], 'open': open_leads.get(u.name, 0),
+            'earned': (va_commission.commission_for_month(u.name, today.year, today.month)['total']
+                       if pay else None),
+        })
+    who = (request.args.get('rep') or '').strip()
+    feed = rep_activity.recent([u.id for u in reps if u.name == who] if who in names else ids, limit=40)
+    return render_template(
+        'admin/lead_team.html', rows=rows, period=period, periods=rep_activity.PERIODS,
+        first=first, last=last, default_target=rep_activity.default_target(),
+        feed=feed, feed_rep=who if who in names else '', kinds=_activity_kinds(),
+        status_labels=Prospect.STATUS_LABELS, pay=pay,
+        month=f'{today.year:04d}-{today.month:02d}')
+
+
+def _activity_kinds():
+    from models import ProspectActivity
+    return ProspectActivity.KINDS
+
+
+def _target(value):
+    """A calls-a-day number from a form: 1 to 500, or None when left blank."""
+    value = (value or '').strip()
+    if not value:
+        return None
+    try:
+        n = int(value)
+    except ValueError:
+        raise ValueError(value)
+    if not 1 <= n <= 500:
+        raise ValueError(value)
+    return n
+
+
+@places_finder_bp.route('/team/targets', methods=['POST'])
+@login_required
+@requires_plan('lead_finder')
+def set_targets():
+    """The company's calls a day, and any rep's own number. A rep left blank
+    follows the company's."""
+    from models import BusinessSetting
+    import rep_activity
+    back = redirect(url_for('places_finder.team', period=request.form.get('period') or None))
+    try:
+        # The company's number cannot be "nothing": every rep without their
+        # own would have no target. Only a rep's own box may be left blank.
+        default = _target(request.form.get('default')) if 'default' in request.form else None
+        if 'default' in request.form and default is None:
+            raise ValueError('')
+        own = {u: _target(request.form.get(f'target_{u.id}'))
+               for u in _reps() if f'target_{u.id}' in request.form}
+    except ValueError as e:
+        what = f'"{e}" is not a number of calls' if str(e) else 'The company\'s calls a day cannot be blank'
+        flash(f'{what} — use a whole number from 1 to 500. Nothing was changed.', 'error')
+        return back
+    if default:
+        BusinessSetting.set('sales_daily_calls', default)
+    for u, n in own.items():
+        u.daily_call_target = n
+    db.session.commit()
+    flash(f'Targets saved. Anyone without their own makes '
+          f'{default or rep_activity.default_target()} calls a day.', 'success')
+    return back
+
+
+@places_finder_bp.route('/me')
+@login_required
+@requires_plan('lead_finder')
+def my_numbers():
+    """A rep's own page: calls against today's target, what this week and
+    month have come to, and what they have earned -- worked out the same way
+    as the owner's commission report, from the same rates, so the two never
+    disagree about what somebody is owed."""
+    import rep_activity
+    import va_commission
+    from models import CommercialAccount, CommissionPayment
+    rep = _rep()
+    if rep is None:
+        return redirect(url_for('places_finder.team') if _is_owner()
+                        else url_for('places_finder.dashboard'))
+    today = local_today()
+    me = _me()
+    if me is None:
+        return redirect(url_for('places_finder.dashboard'))
+    target = rep_activity.target_for(me)
+    done = rep_activity.calls_today(me.id)
+    week, *_ = _numbers([me], 'week')
+    month, *_ = _numbers([me], 'month')
+    mine = Prospect.query.filter(Prospect.agent == rep).all()
+    leads = {
+        'open': sum(1 for p in mine if (p.stage or 'new') in Prospect.LIVE_STAGES),
+        'waiting': sum(1 for p in mine if p.ready_to_quote_at),
+        'accounts': CommercialAccount.query.filter(CommercialAccount.agent == rep).count(),
+    }
+    pay = entitlements.can('va_commissions')
+    earnings = None
+    if pay:
+        last_y, last_m = (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
+        this = va_commission.commission_for_month(rep, today.year, today.month)
+        prev = va_commission.commission_for_month(rep, last_y, last_m)
+        earnings = {
+            'this': this, 'prev': prev,
+            'prev_paid': CommissionPayment.query.filter_by(agent=rep, year=last_y, month=last_m).first(),
+            'this_label': today.strftime('%B'),
+            'prev_label': today.replace(day=1).replace(year=last_y, month=last_m).strftime('%B'),
+            'rates': va_commission.get_rates(),
+        }
+    return render_template(
+        'admin/lead_my_numbers.html', target=target, done=done,
+        pct=min(100, round(100 * done / target)), week=week[me.id], month=month[me.id],
+        leads=leads, earnings=earnings, feed=rep_activity.recent([me.id], limit=15),
+        kinds=_activity_kinds(), status_labels=Prospect.STATUS_LABELS)
 
 
 @places_finder_bp.route('/<int:prospect_id>/delete', methods=['POST'])

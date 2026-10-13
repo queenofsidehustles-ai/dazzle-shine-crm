@@ -51,7 +51,28 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
     {{ label }}{% if n is not none %} ({{ n }}){% endif %}
   </a>
   {% endfor %}
+  {# The reps' numbers: the owner's view of everybody, a rep's of themselves. #}
+  {% if is_owner and reps %}
+  <a href="{{ url_for('places_finder.team') }}" class="filter-tab">👥 Team</a>
+  {% elif my_rep %}
+  <a href="{{ url_for('places_finder.my_numbers') }}" class="filter-tab">📈 My numbers</a>
+  {% endif %}
 </div>
+
+{% if my_progress %}
+<a href="{{ url_for('places_finder.my_numbers') }}" class="card" id="myProgress"
+   style="display:block;text-decoration:none;color:inherit;padding:12px 16px;margin-bottom:14px">
+  <div style="display:flex;justify-content:space-between;gap:10px;font-size:0.9rem">
+    <strong>{{ my_progress.done }} of {{ my_progress.target }} calls today</strong>
+    <span style="color:var(--softer)">{% if my_progress.done >= my_progress.target %}Target made 🎉{% else %}{{ my_progress.target - my_progress.done }} to go{% endif %}</span>
+  </div>
+  <div style="height:8px;border-radius:4px;background:var(--line);margin-top:8px;overflow:hidden"
+       role="progressbar" aria-valuenow="{{ my_progress.done }}" aria-valuemin="0" aria-valuemax="{{ my_progress.target }}"
+       aria-label="Calls today against your target">
+    <div style="height:100%;width:{{ my_progress.pct }}%;background:var(--amber)"></div>
+  </div>
+</a>
+{% endif %}
 
 {% if view in ('today', 'month') %}
 <div style="display:flex;gap:8px;margin:0 0 14px">

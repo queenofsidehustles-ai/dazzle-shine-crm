@@ -7,8 +7,13 @@
 <div class="card" style="text-align:center;padding:40px 20px">
   <h2 style="margin:0 0 8px">That's {{ done_today }} calls. Nice work.</h2>
   <p style="color:var(--softer);margin:0 0 20px">
+    {% if my_rep %}
+    That's today's target of {{ daily_stint }} made. {{ queue_left }} still
+    waiting, and they'll keep — anything past this is extra.
+    {% else %}
     {{ queue_left }} still waiting, and they'll keep. Twenty calls is a good
     morning — the rest is there whenever you want it.
+    {% endif %}
   </p>
   <a href="{{ url_for('places_finder.call_sheet', more=1) }}" class="btn btn-gold">Keep going anyway</a>
   <a href="{{ url_for('places_finder.dashboard') }}" class="btn btn-outline">I'm done for now</a>
@@ -27,7 +32,7 @@
 
 {% else %}
 <p style="color:var(--softer);font-size:0.85rem;margin:0 0 10px">
-  {{ done_today }} done today · {{ queue_left }} left
+  {% if my_rep %}{{ done_today }} of {{ daily_stint }} calls today{% else %}{{ done_today }} done today{% endif %} · {{ queue_left }} left
 </p>
 
 <div class="card">

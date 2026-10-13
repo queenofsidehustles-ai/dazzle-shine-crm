@@ -1,0 +1,20 @@
+{# What somebody did on the leads, newest first. Shared by the owner's Team
+   page and a rep's My numbers, so an entry reads the same on both.
+   Needs: feed (ProspectActivity rows), kinds, status_labels, show_who. #}
+{% if feed %}
+<ul style="list-style:none;margin:0;padding:0">
+  {% for a in feed %}
+  <li style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line-soft, var(--line));font-size:0.86rem;flex-wrap:wrap">
+    <span>
+      {% if show_who %}<strong>{{ a.user_name }}</strong> · {% endif %}
+      {{ kinds.get(a.kind, a.kind) }}{% if a.kind == 'call' and a.outcome %} — {{ status_labels.get(a.outcome, a.outcome) }}{% endif %}
+      ·
+      {% if a.prospect_id %}<a href="{{ url_for('places_finder.lead_page', prospect_id=a.prospect_id) }}">{{ a.business_name }}</a>{% else %}{{ a.business_name }}{% endif %}
+    </span>
+    <span style="color:var(--softer);white-space:nowrap">{{ a.created_at | short_stamp }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p style="color:var(--softer);margin:0">Nothing logged yet. Calls, texts, emails, walkthroughs and hand-offs show here as they happen.</p>
+{% endif %}

@@ -1982,6 +1982,38 @@ class Prospect(db.Model):
         return 'later'
 
 
+class ProspectActivity(db.Model):
+    """One thing somebody did on a lead: a call, a text, an email, a
+    walkthrough booked or done, a hand-off to the owner.
+
+    A lead keeps only its latest call (called_at) and a running count
+    (attempts), which says nothing about who made them or on which day --
+    so "how many calls did Sam make this week" had no answer. This is that
+    answer, one row per act. The business name is copied in so the history
+    still reads after a lead is deleted.
+    """
+    __tablename__ = 'prospect_activity'
+    id = db.Column(db.Integer, primary_key=True)
+    prospect_id = db.Column(db.Integer, index=True)
+    business_name = db.Column(db.String(200))
+    user_id = db.Column(db.Integer)
+    user_name = db.Column(db.String(120), index=True)
+    kind = db.Column(db.String(30), nullable=False)   # see KINDS
+    outcome = db.Column(db.String(30))                # a call's Prospect status
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    KINDS = {
+        'call': 'Call',
+        'text': 'Text',
+        'email': 'Email',
+        'walkthrough_booked': 'Walkthrough booked',
+        'walkthrough': 'Walkthrough done',
+        'handoff': 'Handed over to quote',
+    }
+    # Calls that reached nobody. Everything else is a conversation.
+    NO_CONVERSATION = ('no_answer', 'voicemail', 'new', None, '')
+
+
 class User(db.Model):
     """A person who can log into the CRM.
     role 'owner'  → sees everything, money included (that's Monica).
@@ -2003,6 +2035,9 @@ class User(db.Model):
     # without granting anything, since only totp_enabled gates the login path.
     totp_secret = db.Column(db.String(64))
     totp_enabled = db.Column(db.Boolean, default=False)
+    # Calls a day the owner expects of a Sales rep. Empty: the company's
+    # default (BusinessSetting 'sales_daily_calls').
+    daily_call_target = db.Column(db.Integer)
     totp_backup_codes = db.Column(db.Text)  # JSON list of hashed one-time codes
 
     def set_password(self, pw):

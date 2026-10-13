@@ -122,6 +122,7 @@ ENDPOINT_PERMISSIONS = {
     ('places_finder.save_walkthrough', 'POST'): 'prospect.work',
     ('places_finder.text_lead', 'POST'): 'prospect.work',
     ('places_finder.ready_to_quote', 'POST'): 'prospect.work',
+    ('places_finder.my_numbers', 'GET'): 'prospect.work',
 
     ('messages.sent_log', 'GET'): 'messages.read',
     ('messages.inbox', 'GET'): 'messages.read',
@@ -159,6 +160,8 @@ OWNER_ONLY_ENDPOINTS = frozenset({
     # teammate's leads, or hand their own to somebody else.
     ('places_finder.assign', 'POST'),
     ('places_finder.assign_many', 'POST'),
+    ('places_finder.team', 'GET'),
+    ('places_finder.set_targets', 'POST'),
     ('messages.request_bgcheck', 'POST'),
     ('staff.index', 'GET'),
     ('staff.edit', 'POST'),
