@@ -474,7 +474,6 @@ def welcome(token):
     # browser's copy and the server's collapse into one conversion rather
     # than counting the company twice.
     import meta_capi
-    session['meta_signup_event_id'] = meta_capi.event_id(
-        meta_capi.REGISTRATION,
-        tenancy.slug_from_host(request.host) or '')
+    session['meta_signup_event_id'] = \
+        meta_capi.registration_event_id_for_host(request.host)
     return redirect(url_for('settings.getting_started'))
