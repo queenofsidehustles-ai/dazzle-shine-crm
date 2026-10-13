@@ -312,6 +312,19 @@ def commercial():
             v = request.form.get(f'comm_prod_{c}')
             if v:
                 PricingSetting.set(f'comm_prod_{c}', v)
+        # Work-area line items: how fast each goes, and what it uses.
+        for key in cp.WORK_ITEM_KEYS:
+            for part in ('rate', 'supplies'):
+                v = request.form.get(f'comm_item_{key}_{part}')
+                if v in (None, ''):
+                    continue
+                try:
+                    num = float(v)
+                except ValueError:
+                    continue
+                if num < 0 or (part == 'rate' and num == 0):
+                    continue
+                PricingSetting.set(f'comm_item_{key}_{part}', num)
         # Add-ons are typed as whole percents and stored as decimals, the same
         # way target labor is, so the form never asks anyone to write 0.08.
         for key, _lbl, _pct in cp.EXTRAS:

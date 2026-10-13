@@ -99,8 +99,7 @@
         💲 Starting price: <strong>${{ '{:,.0f}'.format(walk_price.per_visit) }} a visit</strong>
         {% if walk.frequency != 'one_time' %}· about <strong>${{ '{:,.0f}'.format(walk_price.monthly) }}/mo</strong>{% endif %}
         <span style="display:block;font-size:0.78rem;color:var(--softer);margin-top:3px">
-          {% if walk_price.by_hours %}From the {{ walk.hours|float }} hours a visit you judged on site{% else %}A full clean of {{ '{:,}'.format(walk.sqft) }} sq ft at your {{ p.category_label.split(' ', 1)[-1] }} rate — put the hours a visit in the checklist if they only want part of it cleaned{% endif %},
-          plus the add-ons ticked. Range ${{ '{:,.0f}'.format(walk_price.low) }}–${{ '{:,.0f}'.format(walk_price.premium) }}.</span>
+          {% if walk_price.by_areas %}Priced area by area from what you measured, with your minimum visit and travel{% elif walk_price.by_hours %}From the {{ walk.hours|float }} hours a visit you judged on site{% else %}A full clean of {{ '{:,}'.format(walk.sqft) }} sq ft at your {{ p.category_label.split(' ', 1)[-1] }} rate — put the hours a visit in the checklist if they only want part of it cleaned{% endif %}{% if not walk_price.by_areas %}, plus the add-ons ticked{% endif %}. Range ${{ '{:,.0f}'.format(walk_price.low) }}–${{ '{:,.0f}'.format(walk_price.premium) }}.</span>
       </p>
       {% endif %}
       {% if p.is_commercial and can_quote %}
@@ -151,6 +150,51 @@
               {{ label }}</label>
             {% endfor %}
           </div>
+          <span style="{{ lbl }}">Work areas — measure each surface on its own</span>
+          <p style="font-size:0.8rem;color:var(--softer);margin:0 0 6px">One row per surface or job: the service floor's stone tile, ceramic tile and hardwood
+            are three rows under the same area. The quote is written from these, line by line.</p>
+          <datalist id="wkAreaPresets">{% for a in walk_area_presets %}<option value="{{ a }}">{% endfor %}</datalist>
+          <div id="wkAreas" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px">
+            {% set rows = [] %}
+            {% for a in (walk.areas or []) %}{% for l in a.lines %}{% set _ = rows.append((a.name, l.item, l.qty)) %}{% endfor %}{% endfor %}
+            {% for name, item, qty in (rows or [('', '', '')]) %}
+            <div class="wk-area-row" style="display:grid;grid-template-columns:1fr 90px 32px;gap:6px;padding-bottom:6px;border-bottom:1px dashed var(--line)">
+              <input type="text" name="wa_area" list="wkAreaPresets" value="{{ name }}" placeholder="Area, e.g. Service floor" aria-label="Area" style="{{ fld }};grid-column:1/-1">
+              <select name="wa_item" aria-label="Surface or job" style="{{ fld }}">
+                <option value="">— surface or job —</option>
+                {% for key, label, unit, _r, _s, grp in walk_items %}
+                <option value="{{ key }}" {{ 'selected' if key == item }}>{{ label.split(' — ')[0] }} ({{ unit }})</option>
+                {% endfor %}
+              </select>
+              <input type="number" name="wa_qty" min="0" step="any" value="{{ ('%g' % qty) if qty else '' }}" placeholder="Qty" inputmode="decimal" aria-label="Quantity" style="{{ fld }}">
+              <button type="button" class="wk-area-del" aria-label="Remove this row" title="Remove this row"
+                      style="background:none;border:none;color:var(--warn);font-size:1.1rem;cursor:pointer">✕</button>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" id="wkAddArea" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem;margin-bottom:12px">+ Add a row</button>
+          <script>
+            // Remove a row; the last one is cleared rather than removed, so
+            // there is always a row to type into.
+            document.getElementById('wkAreas').addEventListener('click', function (e) {
+              if (!e.target.classList.contains('wk-area-del')) return;
+              var row = e.target.closest('.wk-area-row');
+              if (this.querySelectorAll('.wk-area-row').length > 1) { row.remove(); return; }
+              row.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+              row.querySelector('select').value = '';
+            });
+            document.getElementById('wkAddArea').addEventListener('click', function () {
+              var box = document.getElementById('wkAreas');
+              var rows = box.querySelectorAll('.wk-area-row');
+              var last = rows[rows.length - 1];
+              var row = last.cloneNode(true);
+              // Same area as the row above by default -- the next surface in it.
+              row.querySelector('select').value = '';
+              row.querySelector('input[name="wa_qty"]').value = '';
+              box.appendChild(row);
+              row.querySelector('select').focus();
+            });
+          </script>
           <div class="lp-row" style="margin-bottom:10px">
             <div><label for="wkDays" style="{{ lbl }}">Days / times they want</label>
               <input type="text" name="days" id="wkDays" value="{{ walk.days or '' }}" placeholder="Mondays after close (10pm)" style="{{ fld }}"></div>

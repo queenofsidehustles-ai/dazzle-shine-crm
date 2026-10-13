@@ -58,6 +58,18 @@ def _estimate_args():
                 extra_labels={e['key']: (e['label'], e['pct']) for e in cp.get_config()['extras']})
 
 
+def _editor_args(q=None, pre=None):
+    """What the work-area editor starts from: the quote's own areas, or the
+    walkthrough's for a new one, and the catalog of work items to pick from."""
+    import commercial_pricing as cp
+    cfg = cp.get_config()
+    priced = _priced(q) if q is not None else None
+    areas = (priced or {}).get('areas') or ((pre or {}).get('line_items') or [])
+    show = (q.show_line_prices is not False) if q is not None else True
+    return dict(work_items=cfg['work_items'], area_presets=cfg['area_presets'],
+                areas_init=areas, show_prices_init=show)
+
+
 def _services_for(property_type):
     first = SERVICES_FIRST.get(property_type or '', [])
     return first + [s for s in SERVICES if s not in first]
@@ -181,6 +193,7 @@ def new():
             status='draft',
             brand=(request.form.get('brand') or brands.brand_for_property(request.form.get('property_type', ''))),
         )
+        _apply_lines(q)
         lead = Prospect.query.get(request.form.get('prospect_id', type=int) or 0)
         if lead:
             q.prospect_id = lead.id
@@ -221,7 +234,7 @@ def new():
                            property_types=PROPERTY_TYPES,
                            services=_services_for(pre.get('property_type')),
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
-                           **_estimate_args())
+                           **_estimate_args(), **_editor_args(pre=pre))
 
 
 def _apply_form(q):
@@ -243,6 +256,97 @@ def _apply_form(q):
     q.monthly_price = f.get('monthly_price') or None
     q.scope_notes = (f.get('scope_notes', q.scope_notes) or '').strip()
     q.brand = f.get('brand') or q.brand or brands.brand_for_property(q.property_type)
+    _apply_lines(q)
+
+
+def _apply_lines(q):
+    """The work-area editor's areas and lines onto a quote, priced on the
+    server and kept as a snapshot: what was quoted stays what was quoted when
+    a rate in Settings changes next month. With lines, they set the price a
+    visit and a month -- the two can no longer disagree with the table the
+    customer reads. Without the editor in the post (an older form, a send from
+    the review page) nothing changes."""
+    import json
+    import commercial_pricing as cp
+    raw = request.form.get('line_items_json')
+    if raw is None:
+        return
+    q.show_line_prices = request.form.get('show_line_prices') == '1'
+    try:
+        areas = json.loads(raw) if raw.strip() else []
+    except ValueError:
+        areas = []
+    areas = areas if isinstance(areas, list) else []
+    priced = cp.area_quote(areas, q.frequency or 'weekly', **_lock_saved(areas, _priced(q)))
+    if any(a['lines'] for a in priced['areas']):
+        q.line_items = json.dumps(priced)
+        q.price_per_visit = priced['per_visit']
+        q.monthly_price = priced['monthly']
+    else:
+        q.line_items = None
+
+
+def _lock_saved(areas, saved):
+    """Keep what a saved quote was priced at, for every line nobody changed.
+
+    The editor posts every line on every save -- and on Review, which saves
+    first -- and a calculated line is worked out from today's rates. Without
+    this, raising the hourly cost next month and opening an old quote to fix a
+    typo re-priced it, and a proposal already sent (or accepted) changed under
+    the customer. A line still in the same area, for the same work and the
+    same quantity, keeps its saved price; the minimum visit and the travel
+    keep theirs. A line that was changed, or added, is priced today.
+    Mutates `areas`; returns the area_quote kwargs."""
+    if not saved:
+        return {}
+    old = {}
+    for a in saved.get('areas') or []:
+        for l in a.get('lines') or []:
+            if not l.get('override') and l.get('item') != 'custom':
+                old.setdefault(((a.get('name') or '').strip().lower(), l.get('item'), float(l.get('qty') or 0)),
+                               l.get('price'))
+    for a in areas:
+        if not isinstance(a, dict):
+            continue
+        for l in a.get('lines') or []:
+            if not isinstance(l, dict) or l.get('override'):
+                continue
+            try:
+                qty = float(str(l.get('qty') or 0).replace(',', ''))
+            except ValueError:
+                continue
+            k = ((a.get('name') or '').strip().lower(), l.get('item'), qty)
+            if k in old:
+                l['locked_price'] = old[k]
+    return {'fixed': {'min_visit': saved.get('min_visit'), 'travel': saved.get('travel')}}
+
+
+def _priced(q):
+    """The quote's priced work areas, or None for a quote priced the old way."""
+    import json
+    try:
+        data = json.loads(q.line_items) if getattr(q, 'line_items', None) else None
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) and data.get('areas') else None
+
+
+@quotes_bp.route('/lines.json', methods=['POST'])
+@owner_required
+def lines_json():
+    """Price the work-area editor's lines as they are typed. The arithmetic
+    lives on the server, once -- see commercial.quote_json for why."""
+    from flask import jsonify
+    import commercial_pricing as cp
+    d = request.get_json(silent=True) or {}
+    areas = d.get('areas') if isinstance(d.get('areas'), list) else []
+    # Editing a saved quote: show the prices it will keep, not today's.
+    saved = None
+    if d.get('quote_id'):
+        q = CommercialQuote.query.get(int(d['quote_id'])) if str(d['quote_id']).isdigit() else None
+        saved = _priced(q) if q else None
+    return jsonify(cp.area_quote(areas, d.get('frequency') or 'weekly', keep_empty=True,
+                                 **_lock_saved(areas, saved)))
 
 
 @quotes_bp.route('/<int:quote_id>', methods=['GET', 'POST'])
@@ -259,7 +363,8 @@ def detail(quote_id):
     return render_template('admin/quote_form.html', quote=q, lead=_lead_for(q), pre={},
                            property_types=PROPERTY_TYPES, services=_services_for(q.property_type),
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
-                           selected_services=selected_services, **_estimate_args())
+                           selected_services=selected_services, **_estimate_args(),
+                           **_editor_args(q=q))
 
 
 def _quote_url(q):
@@ -269,10 +374,46 @@ def _quote_url(q):
 def _doc_ctx(q):
     """What the proposal document needs -- the customer's page and the review."""
     return dict(
+        priced=_priced(q),
+        show_line_prices=getattr(q, 'show_line_prices', True) is not False,
         freq_label=dict(FREQUENCIES).get(q.frequency, q.frequency),
         term_label=dict(CONTRACT_TERMS).get(q.contract_term, q.contract_term),
         services_list=[s.strip() for s in (q.services or '').split(',') if s.strip()],
     )
+
+
+def _areas_email_html(priced, show_prices, accent):
+    """The work-area table for the email, in the inline styles mail clients
+    keep. Same rule as the page: every line's price, or each area's total."""
+    from markupsafe import escape as e
+    td = 'padding:7px 0;border-top:1px solid #e4dfef;vertical-align:top'
+    num = td + ';text-align:right;white-space:nowrap;padding-left:10px'
+    qty = td + ';color:#6b6585;text-align:right;white-space:nowrap;padding-left:10px'
+    money = lambda v: f'${float(v or 0):,.2f}'
+    rows = []
+    for a in priced.get('areas') or []:
+        if not a.get('lines'):
+            continue
+        rows.append(f'<tr><td colspan="2" style="padding:14px 0 4px;font-weight:700;color:{accent}">{e(a["name"])}</td>'
+                    f'<td style="padding:14px 0 4px;text-align:right;font-weight:700">'
+                    f'{"" if show_prices else money(a.get("subtotal"))}</td></tr>')
+        for l in a['lines']:
+            q_txt = f'{float(l.get("qty") or 0):,g} {e(l.get("unit") or "")}' if l.get('qty') else ''
+            rows.append(f'<tr><td style="{td}">{e(l.get("label") or "")}</td><td style="{qty}">{q_txt}</td>'
+                        f'<td style="{num}">{money(l.get("price")) if show_prices else ""}</td></tr>')
+        if show_prices:
+            rows.append(f'<tr><td colspan="2" style="{td};font-weight:700">{e(a["name"])} total</td>'
+                        f'<td style="{num};font-weight:700">{money(a.get("subtotal"))}</td></tr>')
+    if priced.get('minimum') or priced.get('travel'):
+        rows.append(f'<tr><td colspan="3" style="padding:14px 0 4px;font-weight:700;color:{accent}">Each visit</td></tr>')
+        if priced.get('minimum'):
+            rows.append(f'<tr><td colspan="2" style="{td}">Minimum visit charge (visits are at least '
+                        f'${float(priced.get("min_visit") or 0):,.0f})</td><td style="{num}">{money(priced["minimum"])}</td></tr>')
+        if priced.get('travel'):
+            rows.append(f'<tr><td colspan="2" style="{td}">Travel to and from your site</td>'
+                        f'<td style="{num}">{money(priced["travel"])}</td></tr>')
+    return ('<table style="width:100%;border-collapse:collapse;font-size:14px" cellpadding="0" cellspacing="0">'
+            + ''.join(rows) + '</table>')
 
 
 def _proposal_email(q, quote_url, draft=False):
@@ -307,8 +448,11 @@ def _proposal_email(q, quote_url, draft=False):
         f'Please find your customized proposal below.</p>'
         f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Property</h3>'
         f'<p>{e(q.property_type or "")}{address}{units_html}{sqft_html}</p>'
-        f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Services Included</h3>'
-        f'<ul style="padding-left:20px;line-height:1.9">{services_html}</ul>'
+        + (f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Scope of Work by Area</h3>'
+           + _areas_email_html(ctx['priced'], ctx['show_line_prices'], b['accent'])
+           if ctx['priced'] else
+           f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Services Included</h3>'
+           f'<ul style="padding-left:20px;line-height:1.9">{services_html}</ul>') +
         f'<h3 style="color:{b["accent"]};margin:18px 0 6px">Schedule &amp; Pricing</h3>'
         f'<p><strong>Frequency:</strong> {e(ctx["freq_label"] or "")}<br>'
         f'<strong>Contract term:</strong> {e(ctx["term_label"] or "")}</p>'
@@ -337,7 +481,17 @@ def _send_checks(q):
         blocking.append(f'"{q.email}" does not look like an email address.')
     if not (q.monthly_price or q.price_per_visit):
         warnings.append('No price on it — they would be asked to accept without a figure.')
-    if not (q.services or '').strip():
+    priced = _priced(q)
+    if priced:
+        for a in priced['areas']:
+            if not a['lines']:
+                warnings.append(f'"{a["name"]}" has no lines — it will not appear on the proposal.')
+            for l in a['lines']:
+                if not l.get('price'):
+                    warnings.append(f'"{l["label"]}" in {a["name"]} is priced at $0.')
+                elif not l.get('qty') and l.get('item') != 'custom':
+                    warnings.append(f'"{l["label"]}" in {a["name"]} has no quantity.')
+    elif not (q.services or '').strip():
         warnings.append('No services ticked — the "Services Included" section is empty.')
     if not (q.property_address or '').strip():
         warnings.append('No property address.')
@@ -518,12 +672,8 @@ def view(token):
     if not is_preview and q.status == 'sent' and not q.viewed_at:
         q.viewed_at = datetime.utcnow()
         db.session.commit()
-    freq_label = dict(FREQUENCIES).get(q.frequency, q.frequency)
-    term_label = dict(CONTRACT_TERMS).get(q.contract_term, q.contract_term)
-    services_list = [s.strip() for s in (q.services or '').split(',') if s.strip()]
-    return render_template('public/quote_view.html', q=q,
-                           freq_label=freq_label, term_label=term_label,
-                           services_list=services_list)
+    # The same context as the owner's review, so the two cannot drift apart.
+    return render_template('public/quote_view.html', q=q, **_doc_ctx(q))
 
 
 @quotes_bp.route('/view/<token>/accept', methods=['POST'])

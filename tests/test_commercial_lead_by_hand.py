@@ -814,6 +814,174 @@ lst = c.get('/quotes/', base_url=HOST).get_data(as_text=True)
 check('Save &amp; review before sending' in form and f'/quotes/{hq_id}/send' not in lst,
       'a new quote can go straight to review, and the quote list no longer has a send-without-looking button')
 
+print('\n13d. Quoted by work area, line by line')
+import json as _json
+with app.app_context(), tenancy.use_tenant(SLUG):
+    floors = cp.area_quote([{'name': 'Service floor / entry', 'lines': [
+        {'item': 'floor_stone', 'qty': 800}, {'item': 'floor_ceramic', 'qty': 1000},
+        {'item': 'floor_hardwood', 'qty': 600}]}], 'weekly')
+    small = cp.area_quote([{'name': 'Entry', 'lines': [{'item': 'floor_hardwood', 'qty': 200}]}], 'weekly')
+    db.session.remove()
+ln = {l['item']: l for l in floors['areas'][0]['lines']}
+per_sqft = {k: ln[k]['price'] / ln[k]['qty'] for k in ln}
+check(len({round(v, 4) for v in per_sqft.values()}) == 3 and per_sqft['floor_ceramic'] > per_sqft['floor_hardwood'],
+      f'each floor is priced on its own rate: stone ${ln["floor_stone"]["price"]}, ceramic ${ln["floor_ceramic"]["price"]}, '
+      f'hardwood ${ln["floor_hardwood"]["price"]}')
+check(floors['areas'][0]['subtotal'] == sum(l['price'] for l in floors['areas'][0]['lines'])
+      and floors['per_visit'] == floors['work'] + floors['minimum'] + floors['travel']
+      and floors['monthly'] == round(floors['per_visit'] * cp.VISITS_PER_MONTH['weekly']),
+      f'areas add up to the work, and work + minimum + travel to the visit (${floors["per_visit"]}, ${floors["monthly"]}/mo)')
+check(small['minimum'] > 0 and small['per_visit'] == small['min_visit'] + small['travel'],
+      'a small job shows its minimum-visit top-up as a line of its own, not buried in the work')
+
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30', 'comm_item_floor_hardwood_rate': '900'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    slower = cp.line_price('floor_hardwood', 600)[0]
+    db.session.remove()
+check(slower > ln['floor_hardwood']['price'],
+      f'the owner sets how fast each surface goes in Settings (hardwood at 900 sq ft/h: ${slower})')
+
+r = c.post('/quotes/lines.json', base_url=HOST, json={'areas': [{'name': 'Kitchen', 'lines': [
+    {'item': 'k_fryer', 'qty': 2}, {'item': 'floor_kitchen', 'qty': ''}]}], 'frequency': 'weekly'})
+d = r.get_json() or {}
+check(r.status_code == 200 and len(d['areas'][0]['lines']) == 2 and d['areas'][0]['lines'][0]['price'] > 0,
+      'the editor is priced on the server as it is typed, half-typed rows kept in place')
+
+areas_in = [
+    {'name': 'Service floor / entry', 'lines': [
+        {'item': 'floor_stone', 'qty': 800}, {'item': 'floor_ceramic', 'qty': 1000},
+        {'item': 'floor_hardwood', 'qty': 600, 'price': 40, 'override': True}]},
+    {'name': 'Restrooms', 'lines': [{'item': 'rr_toilet', 'qty': 3}, {'item': 'custom', 'label': 'Replace air fresheners', 'price': 6}]},
+]
+r = c.post('/quotes/new', base_url=HOST, data={
+    'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',
+    'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St', 'frequency': 'weekly',
+    'contract_term': 'month_to_month', 'price_per_visit': '1', 'monthly_price': '1', 'show_line_prices': '1',
+    'line_items_json': _json.dumps(areas_in), 'prospect_id': str(wok['id'])})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    aq = CommercialQuote.query.filter_by(company='Areas & Co').first()
+    aq_id = aq.id
+    snap = _json.loads(aq.line_items)
+    aq_ppv, aq_mon = float(aq.price_per_visit), float(aq.monthly_price)
+    db.session.remove()
+hw = snap['areas'][0]['lines'][2]
+cust = snap['areas'][1]['lines'][1]
+check(aq_ppv == snap['per_visit'] and aq_mon == snap['monthly'] and aq_ppv != 1,
+      f'the lines set the price a visit and a month (${aq_ppv}, ${aq_mon}) -- not what was typed in the boxes')
+check(hw['price'] == 40 and hw['override'] and cust['label'] == 'Replace air fresheners' and cust['price'] == 6,
+      'a price typed over is kept, and a line for something else is described and priced by hand')
+
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '40', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30', 'comm_item_floor_hardwood_rate': '1800'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    still = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+check(still == snap, 'a quote keeps the prices it was written with when the rates change later')
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+
+page = c.get(f'/quotes/{aq_id}/review', base_url=HOST).get_data(as_text=True)
+check('Scope of Work by Area' in page and 'Service floor / entry' in page and 'Restrooms' in page
+      and 'Ceramic tile floor' in page and '$40.00' in page and 'Travel to and from your site' in page
+      and 'Services Included' not in page.split('The email they will get')[0],
+      'the proposal lists each area and its lines with their prices, then the visit charges')
+sent_n = len(SENT)
+c.post(f'/quotes/{aq_id}/send', base_url=HOST)
+mail = ' '.join(str(k.get('html', '')) for _a, k in SENT[sent_n:])
+check('Scope of Work by Area' in mail and 'Hardwood floor' in mail and '$40.00' in mail and 'Restrooms total' in mail,
+      'and the email carries the same table')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    tok = db.session.get(CommercialQuote, aq_id).token
+    db.session.remove()
+pub = app.test_client().get(f'/quotes/view/{tok}', base_url=HOST).get_data(as_text=True)
+check('Scope of Work by Area' in pub and 'Stone / concrete tile' in pub, 'as does the page they accept it on')
+
+edit = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+form_data = {'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',
+             'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St', 'frequency': 'weekly',
+             'contract_term': 'month_to_month', 'line_items_json': _json.dumps(areas_in)}
+c.post(f'/quotes/{aq_id}', base_url=HOST, data=form_data)   # show_line_prices unticked
+page = c.get(f'/quotes/{aq_id}/review', base_url=HOST).get_data(as_text=True)
+doc = page.split('The email they will get')[0]
+area_total = f'${snap["areas"][0]["subtotal"]:,.2f}'
+check('id="waJson"' in edit and 'floor_stone' in edit and '$40.00' not in doc and area_total in doc
+      and 'Ceramic tile floor' in doc,
+      'switched to area totals only, the lines are listed without their prices and each area shows its total')
+
+# Codex review: editing a saved quote after the rates move must not re-price it.
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '40', 'comm_target_labor': '40',
+       'comm_min_visit': '200', 'comm_drive_minutes': '30'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    before = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+c.post(f'/quotes/{aq_id}/review', base_url=HOST, data=dict(form_data, show_line_prices='1',
+       line_items_json=_json.dumps(areas_in), scope_notes='fixed a typo'))
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+check([l['price'] for a in after['areas'] for l in a['lines']] == [l['price'] for a in before['areas'] for l in a['lines']]
+      and after['travel'] == before['travel'] and after['min_visit'] == before['min_visit']
+      and after['per_visit'] == before['per_visit'],
+      'saving or reviewing a quote after the rates went up keeps every unchanged line at the price it was quoted')
+live = c.post('/quotes/lines.json', base_url=HOST, json={'areas': areas_in, 'frequency': 'weekly', 'quote_id': aq_id}).get_json()
+check(live['per_visit'] == before['per_visit'], 'and the editor shows those kept prices, not today\'s')
+changed = _json.loads(_json.dumps(areas_in))
+changed[0]['lines'][1]['qty'] = 1200
+c.post(f'/quotes/{aq_id}', base_url=HOST, data=dict(form_data, show_line_prices='1', line_items_json=_json.dumps(changed)))
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after2 = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    new_ceramic = cp.line_price('floor_ceramic', 1200)[0]
+    db.session.remove()
+check(after2['areas'][0]['lines'][0]['price'] == before['areas'][0]['lines'][0]['price']
+      and after2['areas'][0]['lines'][1]['price'] == new_ceramic,
+      'a line somebody changes is priced at today\'s rates; the rest keep theirs')
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    tiny = cp.area_quote([{'name': 'Lobby', 'lines': [{'item': 'g_dusting', 'qty': 10}]}], 'weekly')
+    freebie = cp.area_quote([{'name': 'Lobby', 'lines': [{'item': 'g_dusting', 'qty': 400},
+                                                         {'item': 'custom', 'label': 'Complimentary mat swap', 'price': 0}]}], 'weekly')
+    from sqlalchemy import event as _ev
+    seen = []
+    _hook = lambda *a, **k: seen.append(1)
+    _ev.listen(db.engine, 'before_cursor_execute', _hook)
+    cp.area_quote([{'name': 'A', 'lines': [{'item': k, 'qty': 100} for k in cp.WORK_ITEM_KEYS[:15]]}], 'weekly')
+    _ev.remove(db.engine, 'before_cursor_execute', _hook)
+    db.session.remove()
+check(tiny['work'] == 0 and tiny['minimum'] == tiny['min_visit'] and tiny['travel'] > 0 and tiny['per_visit'] > 0,
+      f'a line too small to cost a dollar still means a visit, at the minimum plus travel (${tiny["per_visit"]})')
+check([l['label'] for l in freebie['areas'][0]['lines']][-1] == 'Complimentary mat swap',
+      'a described $0 line is kept on the quote, not dropped')
+check(len(seen) <= 3, f'a 15-line quote is priced with the settings read once ({len(seen)} queries, was 60+)')
+form = c.get('/quotes/new', base_url=HOST).get_data(as_text=True)
+check("else if (el.type === 'checkbox') out[el.name] = el.checked;" in form,
+      'the phone-side draft keeps the show-every-line-price switch as switched, not as its value')
+
+bad = _json.dumps([{'name': 'Patio', 'lines': []}, {'name': 'Office', 'lines': [{'item': 'custom', 'label': 'Free extra', 'price': 0},
+                                                                               {'item': 'g_dusting', 'qty': 500}]}])
+c.post(f'/quotes/{aq_id}', base_url=HOST, data=dict(form_data, line_items_json=bad))
+page = c.get(f'/quotes/{aq_id}/review', base_url=HOST).get_data(as_text=True)
+check('&#34;Patio&#34; has no lines' in page, 'the review flags an area with nothing in it')
+
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'frequency': 'weekly', 'wa_area': ['Service floor', 'Service floor', 'Service floor', 'Kitchen'],
+    'wa_item': ['floor_stone', 'floor_ceramic', 'floor_hardwood', 'floor_kitchen'],
+    'wa_qty': ['800', '1000', '600', '0']})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    w = __import__('prospecting').walkthrough(db.session.get(Prospect, wok['id']))
+    db.session.remove()
+check([a['name'] for a in w.get('areas', [])] == ['Service floor'] and len(w['areas'][0]['lines']) == 3,
+      'the walkthrough records the service floor as three surfaces (an unmeasured kitchen row is left out)')
+lp = c.get(f'/find-leads/{wok["id"]}', base_url=HOST).get_data(as_text=True)
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('Priced area by area' in lp and 'name="wa_area"' in lp,
+      'the lead page measures by area on site and prices the walkthrough the same way')
+waj = re.search(r'id="waJson" value="([^"]*)"', form)
+check(bool(waj) and 'floor_ceramic' in waj.group(1),
+      'and the quote opens with those areas and lines filled in')
+
 print('\n14. A Sales login: the call list and nothing else')
 check(('sales', 'Sales — finding and working leads only') in rbac.ROLE_OPTIONS
       and rbac.has_permission('sales', 'prospect.work')
