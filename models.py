@@ -1839,6 +1839,10 @@ class Prospect(db.Model):
     # it fills in the quote. See migration 0022.
     walkthrough = db.Column(db.Text)
     walkthrough_at = db.Column(db.DateTime)
+    # Handed to the owner to quote, and by whom: a rep's job ends where the
+    # pricing starts. Cleared when a quote is written. Migration 0024.
+    ready_to_quote_at = db.Column(db.DateTime)
+    ready_by = db.Column(db.String(100))
 
     # Residential or commercial side of the business. Set from the search that
     # imported them, so it is recorded rather than guessed. NULL on anything

@@ -1096,6 +1096,122 @@ comm = c.get('/commissions/', base_url=HOST).get_data(as_text=True)
 check('<option value="Sales"' in comm,
       'the commissions page offers Sales logins, not only the old "team" role')
 
+print('\n16. A rep works their own leads; the owner assigns them and gets the hand-off')
+from models import User as _User, Message as _Msg, SmsOptOut as _Opt
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from auth import _auth_fingerprint
+    riley = _User(name='Riley Rep', username=f'riley@{SLUG}.test', role='sales', active=True)
+    riley.set_password('a-perfectly-fine-password')
+    db.session.add(riley)
+    db.session.commit()
+    riley_id, riley_fp = riley.id, _auth_fingerprint(riley.password_hash)
+    db.session.remove()
+rc = app.test_client()
+with rc.session_transaction(base_url=HOST) as sess:
+    sess.update(logged_in=True, role='sales', user_id=riley_id, user_name='Riley Rep',
+                auth_fingerprint=riley_fp, tenant_slug=SLUG)
+for name, phone in (('Assign A Cafe', '2025550301'), ('Assign B Bakery', '2025550302'), ('Assign C Diner', '2025550303')):
+    c.post('/find-leads/add', base_url=HOST, data={'business_name': name, 'category': 'restaurant',
+                                                   'phone': phone, 'city': 'Washington'})
+la, lb, lc = lead('Assign A Cafe'), lead('Assign B Bakery'), lead('Assign C Diner')
+page = c.get(f'/find-leads/{la["id"]}', base_url=HOST).get_data(as_text=True)
+check('Worked by' in page and '<option value="Riley Rep"' in page, 'the owner picks who works a lead from its page')
+c.post(f'/find-leads/{la["id"]}/assign', base_url=HOST, data={'agent': 'Sales'})
+c.post('/find-leads/assign', base_url=HOST, data={'ids': [str(lb['id'])], 'agent': 'Riley Rep'})
+c.post('/find-leads/assign', base_url=HOST, data={'ids': [str(lc['id'])], 'agent': 'Nobody Real'})
+def agent_of(i):
+    with app.app_context(), tenancy.use_tenant(SLUG):
+        a = db.session.get(Prospect, i).agent
+        db.session.remove()
+        return a
+check(agent_of(la['id']) == 'Sales' and agent_of(lb['id']) == 'Riley Rep' and agent_of(lc['id']) is None,
+      'one at a time or ticked in bulk; a name that is not a Sales login leaves it unassigned')
+
+mine = sc.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
+check('Assign A Cafe' in mine and 'Assign C Diner' in mine and 'Assign B Bakery' not in mine,
+      "a rep's list is their own leads and the unassigned pool -- never a teammate's")
+csv_out = sc.get('/find-leads/export.csv', base_url=HOST).get_data(as_text=True)
+check('Assign B Bakery' not in csv_out and 'Assign A Cafe' in csv_out, 'nor in their spreadsheet download')
+codes = [sc.get(f'/find-leads/{lb["id"]}', base_url=HOST).status_code,
+         sc.post(f'/find-leads/{lb["id"]}/status', base_url=HOST, data={'mode': 'log', 'status': 'called'}).status_code,
+         sc.post(f'/find-leads/{lb["id"]}/text', base_url=HOST, data={'body': 'hi'}).status_code,
+         sc.get(f'/find-leads/call/{lb["id"]}', base_url=HOST).status_code]
+check(codes == [404, 404, 404, 404] and agent_of(lb['id']) == 'Riley Rep',
+      f"a teammate's lead cannot be opened, logged, texted or claimed ({codes})")
+check(sc.post(f'/find-leads/{lc["id"]}/assign', base_url=HOST, data={'agent': 'Sales'}).status_code == 403
+      and sc.post('/find-leads/assign', base_url=HOST, data={'ids': [str(lb['id'])], 'agent': 'Sales'}).status_code == 403
+      and agent_of(lb['id']) == 'Riley Rep',
+      'and a rep cannot hand leads around -- assigning is the owner\'s')
+sc.post(f'/find-leads/{lc["id"]}/status', base_url=HOST, data={'mode': 'log', 'status': 'called', 'log_note': 'No answer'})
+check(agent_of(lc['id']) == 'Sales', 'working an unassigned lead makes it theirs')
+check('Assign C Diner' not in rc.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True),
+      '-- and it leaves the other reps\' pool')
+own = c.get('/find-leads/?view=everyone&rep=Riley+Rep', base_url=HOST).get_data(as_text=True)
+own = own.split('id="contactTable"')[1]   # the rows, not a message left from an earlier step
+check('Assign B Bakery' in own and 'Assign A Cafe' not in own, 'the owner can look at one rep\'s leads')
+
+# Texting the lead, without the inbox
+with app.app_context(), tenancy.use_tenant(SLUG):
+    before = _Msg.query.filter_by(phone='2025550301').count()
+    db.session.remove()
+page = sc.get(f'/find-leads/{la["id"]}', base_url=HOST).get_data(as_text=True)
+check('Send text' in page and '/messages/thread' not in page, 'a rep texts a lead from its page, with no way into the inbox')
+sc.post(f'/find-leads/{la["id"]}/text', base_url=HOST, data={'body': 'Hi! Following up on our call about your floors.'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after = _Msg.query.filter_by(phone='2025550301').count()
+    notes_a = db.session.get(Prospect, la['id']).notes or ''
+    db.session.add(_Opt(phone='2025550303'))
+    db.session.commit()
+    db.session.remove()
+check(after == before + 1 and 'Texted: Hi! Following up' in notes_a,
+      'the text goes out through the inbox\'s own sending, and is in the lead\'s history')
+sc.post(f'/find-leads/{lc["id"]}/text', base_url=HOST, data={'body': 'Hello again'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    stopped = _Msg.query.filter_by(phone='2025550303').count()
+    db.session.remove()
+check(stopped == 0, 'a number that replied STOP is not texted')
+check(sc.get('/messages/', base_url=HOST).status_code in (302, 403), 'and the inbox itself stays closed to the rep')
+
+# The hand-off
+n = len(SENT)
+sc.post(f'/find-leads/{la["id"]}/walkthrough/book', base_url=HOST, data={'date': '2026-11-10', 'time': '3pm'})
+booked = [k for _a, k in SENT[n:] if 'Walkthrough booked: Assign A Cafe' in str(k.get('subject', ''))]
+check(len(booked) == 1, 'a walkthrough a rep books is emailed to the owner, who may need to be there')
+n = len(SENT)
+sc.post(f'/find-leads/{la["id"]}/ready', base_url=HOST, data={'note': 'Wants Monday nights'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    pa = db.session.get(Prospect, la['id'])
+    ready = (pa.ready_to_quote_at is not None, pa.ready_by, pa.next_action)
+    db.session.remove()
+mail = [k for _a, k in SENT[n:] if 'Ready to quote: Assign A Cafe' in str(k.get('subject', ''))]
+check(ready == (True, 'Sales', 'Write and send the quote') and mail and 'Wants Monday nights' in str(mail[0].get('html')),
+      'a rep hands a qualified lead to the owner to quote, and the owner is emailed with their note')
+q = c.get('/find-leads/?view=ready', base_url=HOST).get_data(as_text=True)
+check('Ready to quote' in q and 'Assign A Cafe' in q and 'Assign B Bakery' not in q,
+      'the owner has a Ready to quote list of what the reps handed over')
+check('view=ready' not in sc.get('/find-leads/', base_url=HOST).get_data(as_text=True),
+      'which is the owner\'s, not on the rep\'s screen')
+n = len(SENT)
+rc.post(f'/find-leads/{lb["id"]}/walkthrough', base_url=HOST, data={'sqft': '1500', 'frequency': 'weekly',
+                                                                     'services': ['floors']})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    pb_ready = db.session.get(Prospect, lb['id']).ready_by
+    db.session.remove()
+check(pb_ready == 'Riley Rep' and any('walkthrough by Riley Rep' in str(k.get('subject', '')) for _a, k in SENT[n:]),
+      'a rep\'s saved walkthrough hands the lead over by itself')
+n = len(SENT)
+c.post(f'/find-leads/{lc["id"]}/walkthrough/book', base_url=HOST, data={'date': '2026-11-11'})
+check(not any('Walkthrough booked' in str(k.get('subject', '')) for _a, k in SENT[n:]),
+      'the owner is not emailed about what the owner did')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    import prospecting as _pr
+    _pr.quote_moved(la['id'], 'proposal', None, 'Follow up on the quote', 3, 'Quote emailed')
+    db.session.commit()
+    cleared = db.session.get(Prospect, la['id']).ready_to_quote_at is None
+    db.session.remove()
+check(cleared and 'Assign A Cafe' not in c.get('/find-leads/?view=ready', base_url=HOST).get_data(as_text=True),
+      'and it leaves the list once its quote is sent')
+
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)

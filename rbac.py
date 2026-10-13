@@ -120,6 +120,8 @@ ENDPOINT_PERMISSIONS = {
     ('places_finder.add_by_hand', 'POST'): 'prospect.work',
     ('places_finder.book_walkthrough', 'POST'): 'prospect.work',
     ('places_finder.save_walkthrough', 'POST'): 'prospect.work',
+    ('places_finder.text_lead', 'POST'): 'prospect.work',
+    ('places_finder.ready_to_quote', 'POST'): 'prospect.work',
 
     ('messages.sent_log', 'GET'): 'messages.read',
     ('messages.inbox', 'GET'): 'messages.read',
@@ -153,6 +155,10 @@ ENDPOINT_PERMISSIONS = {
 OWNER_ONLY_ENDPOINTS = frozenset({
     ('leads.delete', 'POST'),
     ('places_finder.delete', 'POST'),
+    # Who works which lead is the owner's call: a rep cannot take a
+    # teammate's leads, or hand their own to somebody else.
+    ('places_finder.assign', 'POST'),
+    ('places_finder.assign_many', 'POST'),
     ('messages.request_bgcheck', 'POST'),
     ('staff.index', 'GET'),
     ('staff.edit', 'POST'),
