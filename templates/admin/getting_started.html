@@ -44,7 +44,7 @@
            (funnel_videos.py). Absent until it is recorded. #}
         {% if p.next.video and VIDEOS.get(p.next.video) %}
         <div style="position:relative;padding-bottom:56.25%;height:0;margin:0 0 14px;
-                    border-radius:10px;overflow:hidden;background:#0D1526">
+                    border-radius:10px;overflow:hidden;background:var(--ink)">
           <iframe src="{{ VIDEO_EMBEDS[p.next.video] }}" title="How to: {{ p.next.title }}"
                   style="position:absolute;inset:0;width:100%;height:100%;border:0"
                   allowfullscreen loading="lazy"></iframe>
