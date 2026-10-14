@@ -75,7 +75,8 @@ def _editor_args(q=None, pre=None):
     if priced:
         live = cp.area_quote(priced['areas'], q.frequency or 'weekly',
                              first_visit=bool(q.first_visit_premium))
-        rates_changed = round(live['per_visit'], 2) != round(priced['per_visit'], 2)
+        rates_changed = (round(live['per_visit'], 2) != round(priced['per_visit'], 2)
+                         or round(live['first_visit_total'], 2) != round(priced.get('first_visit_total') or 0, 2))
     return dict(work_items=cfg['work_items'], area_presets=cfg['area_presets'],
                 areas_init=areas, show_prices_init=show, rates_changed=rates_changed)
 
@@ -307,8 +308,11 @@ def _lock_saved(areas, saved):
     this, raising the hourly cost next month and opening an old quote to fix a
     typo re-priced it, and a proposal already sent (or accepted) changed under
     the customer. A line still in the same area, for the same work and the
-    same quantity, keeps its saved price; the travel keeps its too. A line
-    that was changed, or added, is priced today.
+    same quantity, keeps its saved price; the travel keeps its too, and so
+    does the first-visit percentage -- changing that setting in Settings
+    should not silently change what an already-priced quote's premium comes
+    to the next time someone saves it. A line that was changed, or added, is
+    priced today.
     Mutates `areas`; returns the area_quote kwargs."""
     if not saved:
         return {}
@@ -331,7 +335,7 @@ def _lock_saved(areas, saved):
             k = ((a.get('name') or '').strip().lower(), l.get('item'), qty)
             if k in old:
                 l['locked_price'] = old[k]
-    return {'fixed': {'travel': saved.get('travel')}}
+    return {'fixed': {'travel': saved.get('travel'), 'first_visit_pct': saved.get('first_visit_pct')}}
 
 
 def _priced(q):
@@ -437,10 +441,17 @@ def _areas_email_html(priced, show_prices, accent):
         if show_prices:
             rows.append(f'<tr><td colspan="2" style="{td};font-weight:700">{e(a["name"])} total{area_rate}</td>'
                         f'<td style="{num};font-weight:700">{money(a.get("subtotal"))}</td></tr>')
-    if priced.get('travel'):
+    if priced.get('travel') or priced.get('minimum') or priced.get('price_per_sqft'):
         rows.append(f'<tr><td colspan="3" style="padding:14px 0 4px;font-weight:700;color:{accent}">Each visit</td></tr>')
-        rows.append(f'<tr><td colspan="2" style="{td}">Travel to and from your site</td>'
-                    f'<td style="{num}">{money(priced["travel"])}</td></tr>')
+        if priced.get('minimum'):
+            # A quote saved before the minimum-visit floor was dropped from
+            # this editor -- its per_visit already includes this top-up, so
+            # it has to keep showing here or the lines stop adding up.
+            rows.append(f'<tr><td colspan="2" style="{td}">Minimum visit charge</td>'
+                        f'<td style="{num}">{money(priced["minimum"])}</td></tr>')
+        if priced.get('travel'):
+            rows.append(f'<tr><td colspan="2" style="{td}">Travel to and from your site</td>'
+                        f'<td style="{num}">{money(priced["travel"])}</td></tr>')
         if priced.get('price_per_sqft'):
             rows.append(f'<tr><td colspan="2" style="{td};color:#6b6585">Works out to</td>'
                         f'<td style="{num};color:#6b6585">{rate(priced["price_per_sqft"])} a visit</td></tr>')
@@ -729,6 +740,14 @@ def duplicate(quote_id):
             areas = (json.loads(src.line_items) or {}).get('areas') or []
         except ValueError:
             areas = []
+        # area_quote() takes a custom line's per-unit price as "rate" but
+        # hands it back as "unit_rate" -- feeding its own output back in
+        # needs the rename, or a qty x rate line silently falls back to a
+        # flat, un-editable price.
+        for a in areas:
+            for l in (a.get('lines') or []):
+                if isinstance(l, dict) and l.get('unit_rate') is not None:
+                    l['rate'] = l['unit_rate']
         priced = cp.area_quote(areas, q.frequency or 'weekly', first_visit=bool(q.first_visit_premium))
         if any(a['lines'] for a in priced['areas']):
             q.line_items = json.dumps(priced)

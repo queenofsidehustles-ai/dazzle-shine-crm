@@ -428,8 +428,10 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fix
 
     A line carrying `locked_price` keeps it: the price it was quoted at, on a
     line nobody has changed since (see quotes._lock_saved). `fixed` does the
-    same for the travel -- {"travel"} as the quote was written -- so editing a
-    saved quote does not quietly re-price it at whatever the rates are today.
+    same for the travel and the first-visit percentage -- {"travel",
+    "first_visit_pct"} as the quote was written -- so editing a saved quote
+    does not quietly re-price it, or its first-visit premium, at whatever
+    the rates are today.
 
     first_visit prices a one-time premium on top of the work (not the travel),
     for a first clean on a new contract, which is reliably slower than every
@@ -520,11 +522,14 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fix
     else:
         travel = round((mins / 60.0) * (_val('comm_hourly_cost', s) or 0) / target) if has_work else 0.0
     per_visit = round(work + travel, 2)
-    first_visit_pct = _val('comm_first_visit_pct', s) or 0.0
+    if fixed.get('first_visit_pct') is not None:
+        first_visit_pct = fixed['first_visit_pct']
+    else:
+        first_visit_pct = _val('comm_first_visit_pct', s) or 0.0
     first_visit_charge = round(work * first_visit_pct) if first_visit and has_work else 0.0
     calc = _QUOTE_FREQ.get(frequency, 'weekly')
     monthly = round(per_visit * VISITS_PER_MONTH[calc]) if calc else None
-    price_per_sqft = round(per_visit / sqft_total, 2) if sqft_total else None
+    price_per_sqft = round(per_visit / sqft_total, 4) if sqft_total else None
     return {'areas': out_areas, 'work': work, 'travel': travel, 'drive_minutes': round(mins),
             'per_visit': per_visit, 'monthly': monthly, 'hours': round(hours, 2),
             'sqft': round(sqft_total) if sqft_total else 0, 'price_per_sqft': price_per_sqft,

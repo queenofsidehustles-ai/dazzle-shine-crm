@@ -835,7 +835,7 @@ check(small['per_visit'] == small['work'] + small['travel'] and 'minimum' not in
       'an itemized quote has no minimum-visit floor -- a small job is priced at exactly what its lines add up to')
 check(all(ln[k]['rate_per_sqft'] == round(ln[k]['price'] / ln[k]['qty'], 4) for k in ln)
       and floors['areas'][0]['rate_per_sqft'] == round(floors['areas'][0]['subtotal'] / 2400, 4)
-      and floors['price_per_sqft'] == round(floors['per_visit'] / 2400, 2)
+      and floors['price_per_sqft'] == round(floors['per_visit'] / 2400, 4)
       and floors['sqft'] == 2400,
       f'the quote also reads as $/sq ft -- per line, per area, and for the whole visit (${floors["price_per_sqft"]}/sq ft)')
 with app.app_context(), tenancy.use_tenant(SLUG):
@@ -859,6 +859,13 @@ check(first['first_visit_charge'] == round(first['work'] * first['first_visit_pc
       f'first visit total ${first["first_visit_total"]})')
 check(floors['first_visit_charge'] == 0 and floors['first_visit_total'] == floors['per_visit'],
       'and without the toggle, there is no premium to show at all')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    locked_fv = cp.area_quote([{'name': 'Service floor / entry', 'lines': [{'item': 'floor_stone', 'qty': 800}]}],
+                              'weekly', first_visit=True, fixed={'first_visit_pct': 0.10})
+    db.session.remove()
+check(locked_fv['first_visit_pct'] == 0.10 and locked_fv['first_visit_charge'] == round(locked_fv['work'] * 0.10),
+      "a saved quote's first-visit premium is locked the same way its lines and travel are -- "
+      "a changed comm_first_visit_pct setting doesn't reach it (see quotes._lock_saved)")
 
 c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
        'comm_min_visit': '125', 'comm_drive_minutes': '30', 'comm_item_floor_hardwood_rate': '900'})
@@ -928,6 +935,25 @@ edit_fresh = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
 check('rates in Settings have changed' not in edit_fresh,
       'and the flag clears once rates are back to what the quote was priced at')
 
+# Codex review: the first-visit percentage is locked the same way lines and travel are.
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30', 'comm_first_visit_pct': '50'})
+edit_fv_stale = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+check('rates in Settings have changed' in edit_fv_stale,
+      'changing just the first-visit percentage flags it too, even though per_visit alone would not have moved')
+c.post(f'/quotes/{aq_id}', base_url=HOST, data={
+    'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',
+    'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St', 'frequency': 'weekly',
+    'contract_term': 'month_to_month', 'show_line_prices': '1', 'first_visit_premium': '1',
+    'line_items_json': _json.dumps(areas_in)})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    relocked = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+check(relocked['first_visit_pct'] == snap['first_visit_pct'] and relocked['first_visit_charge'] == snap['first_visit_charge'],
+      "saving the quote again (fixing a typo, say) keeps the first-visit premium it was written with -- not today's 50%")
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30', 'comm_first_visit_pct': '25'})
+
 page = c.get(f'/quotes/{aq_id}/review', base_url=HOST).get_data(as_text=True)
 check('Scope of Work by Area' in page and 'Service floor / entry' in page and 'Restrooms' in page
       and 'Ceramic tile floor' in page and '$40.00' in page and 'Travel to and from your site' in page
@@ -965,6 +991,9 @@ check(dup_snap['areas'][0]['lines'][1]['price'] == fresh_ceramic
       and dup_snap['areas'][0]['lines'][1]['price'] != snap['areas'][0]['lines'][1]['price']
       and dup_snap['first_visit_charge'] > 0,
       "re-priced at today's rates rather than the original's locked snapshot, with the first-visit toggle carried over")
+dup_by_unit = dup_snap['areas'][1]['lines'][2]
+check(dup_by_unit['price'] == 30 and not dup_by_unit['override'] and dup_by_unit['unit_rate'] == 7.5,
+      "a custom qty x rate line keeps pricing itself after duplicating -- not silently flattened to a typed-over price")
 dup_edit = c.get(f'/quotes/{dup_id}', base_url=HOST).get_data(as_text=True)
 check('Other quotes for this account' in dup_edit and f'/quotes/{aq_id}' in dup_edit and 'sent' in dup_edit,
       'and opening the duplicate shows the other quote for the same account, with a link to it')
@@ -973,6 +1002,40 @@ check('Other quotes for this account' in orig_edit and f'/quotes/{dup_id}' in or
       'and the original shows its duplicate right back, by the lead they share -- not by company name alone')
 c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
        'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+
+# Codex review: a quote saved before the minimum-visit floor was dropped from
+# this editor still carries one in its line_items snapshot -- its stored
+# per_visit already includes it, so the proposal has to keep showing it, or
+# the lines stop adding up to the price. Travel is zero, too, which used to
+# hide the whole-visit $/sq ft figure along with it.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    legacy_items = {
+        'areas': [{'name': 'Lobby', 'lines': [{'item': 'g_dusting', 'label': 'Dusting & high-touch disinfection',
+                   'qty': 500, 'unit': 'sq ft', 'price': 50.0, 'override': False, 'rate_per_sqft': 0.1}],
+                  'subtotal': 50.0, 'sqft': 500, 'rate_per_sqft': 0.1}],
+        'work': 50.0, 'minimum': 75.0, 'min_visit': 125.0, 'travel': 0.0, 'drive_minutes': 0,
+        'per_visit': 125.0, 'monthly': 542.0, 'hours': 1.0, 'sqft': 500, 'price_per_sqft': 0.25,
+        'first_visit': False, 'first_visit_pct': 0.0, 'first_visit_charge': 0, 'first_visit_total': 125.0,
+    }
+    legacy = CommercialQuote(company='Legacy Lobby Co', contact_name='Lee Gacy', email='lee@legacy.example',
+                             property_type='Office Building', frequency='weekly', contract_term='month_to_month',
+                             price_per_visit=125.0, monthly_price=542.0, status='draft',
+                             token='legacy-test-token-001', show_line_prices=True,
+                             line_items=_json.dumps(legacy_items))
+    db.session.add(legacy)
+    db.session.commit()
+    legacy_id = legacy.id
+    db.session.remove()
+legacy_page = c.get(f'/quotes/{legacy_id}/review', base_url=HOST).get_data(as_text=True)
+legacy_doc = legacy_page.split('The email they will get')[0]
+check('Minimum visit charge' in legacy_doc and '$75.00' in legacy_doc and '$0.25/sq ft' in legacy_doc,
+      'a pre-existing minimum-visit charge still shows on the proposal page, so travel plus the lines '
+      'still add up to the displayed per-visit price, and the whole-visit rate shows even with no travel')
+sent_n2 = len(SENT)
+c.post(f'/quotes/{legacy_id}/send', base_url=HOST)
+legacy_mail = ' '.join(str(k.get('html', '')) for _a, k in SENT[sent_n2:])
+check('Minimum visit charge' in legacy_mail and '$75.00' in legacy_mail and '$0.25/sq ft' in legacy_mail,
+      'and the emailed copy carries the same minimum-visit line and whole-visit rate')
 
 edit = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
 form_data = {'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',

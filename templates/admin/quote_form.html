@@ -247,8 +247,7 @@
     </button>
     {% endif %}
 
-    <button type="submit" formaction="{{ url_for('quotes.duplicate', quote_id=quote.id) }}"
-            formnovalidate class="btn btn-outline" style="width:100%;justify-content:center">
+    <button type="button" id="dupQuote" class="btn btn-outline" style="width:100%;justify-content:center">
       ⧉ Duplicate as a new draft
     </button>
 
@@ -545,6 +544,21 @@
     document.getElementById('monthly_price').value =
       lastEstimate.monthly == null ? '' : Number(lastEstimate.monthly).toFixed(2);
   }
+
+  // A button of its own, outside #quoteForm's submit -- duplicating reads
+  // only the saved quote, never what's on screen, so routing it through the
+  // main form would both send edits it ignores and (via the autosave below)
+  // wipe the in-progress draft of a quote that was never actually saved.
+  document.getElementById('dupQuote')?.addEventListener('click', async () => {
+    try {
+      const r = await fetch({{ url_for('quotes.duplicate', quote_id=quote.id)|tojson if quote else '""' }},
+                            { method: 'POST', credentials: 'same-origin' });
+      if (!r.ok) throw new Error(r.status);
+      window.location = r.url;
+    } catch (e) {
+      alert('Could not duplicate the quote just now — try again.');
+    }
+  });
 
   // Re-run whenever anything that changes the price changes.
   document.querySelector('input[name="sqft"]').addEventListener('input', runEstimate);
