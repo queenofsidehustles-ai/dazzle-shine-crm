@@ -321,6 +321,8 @@ def company(slug):
                  if f.get('org_slug') == slug][:20],
         history=[r for r in control_plane.console_log_all(engine)
                  if r.get('target') == slug][:20],
+        emails=control_plane.product_messages_for(engine, slug=slug, limit=30),
+        email_labels=__import__('communications').LABELS,
         purge_from=(closed_at + timedelta(days=tenant_data_lifecycle.RETENTION_DAYS)
                     if closed_at else None),
         may_operate=_may_operate(),
@@ -456,6 +458,10 @@ def send_welcome(slug):
     ok, detail = welcome_email.send(org.get('name') or slug, email, host)
     control_plane.log_console(engine, request.console_user['email'],
                               'welcome-email', slug, ('sent' if ok else str(detail))[:300])
+    control_plane.record_product_message(
+        engine, slug, 'welcome', email,
+        f'{org.get("name") or slug} is set up — here is your address', ok,
+        detail, request.console_user['email'])
     if ok:
         flash(f'Welcome email sent to {email}.', 'success')
     else:
@@ -681,7 +687,7 @@ def send_trial_emails():
     if not _may_operate():
         return _refuse(url_for('console.health'))
     engine = _engine()
-    counts = trial_nudges.run(engine)
+    counts = trial_nudges.run(engine, sent_by=request.console_user['email'])
     plan = counts.get('plan') or []
     sent = len(plan) - counts.get('failed', 0)
     control_plane.log_console(
@@ -1514,6 +1520,104 @@ def playbook_edit(doc_id):
         return redirect(url_for('console.playbook_view', doc_id=doc_id))
     return render_template('console/playbook_form.html', doc=doc,
                            me=request.console_user, counts=_counts(engine))
+
+
+# --------------------------------------------------------------------------
+# Communications: every automated email to owners and leads, in one place.
+# What is due today, what went out, to whom, and an on/off switch for each.
+# The catalog lives in communications.py; the senders read the switches.
+
+def _comms_back():
+    q = request.args.get('q') or request.form.get('q') or ''
+    return url_for('console.communications', q=q) if q else url_for('console.communications')
+
+
+@console_bp.route('/communications')
+@console_required
+def communications():
+    import communications as comms
+    import lead_nurture
+    import trial_nudges
+    engine = _engine()
+    q = (request.args.get('q') or '').strip()
+    owner_due = trial_nudges.run(engine, dry_run=True)
+    lead_due = lead_nurture.run(engine, dry_run=True)
+    names = {o['slug']: o['name'] for o in control_plane.all_orgs(engine)}
+    smap = control_plane.switches(engine)
+    found, history = comms.history_for(engine, q) if q else ({}, [])
+    return render_template(
+        'console/communications.html',
+        catalog=comms.CATALOG, labels=comms.LABELS,
+        always_on=comms.ALWAYS_ON, switches=smap,
+        owner_on=smap.get(comms.ALL_OWNER, True),
+        lead_on=smap.get(comms.ALL_LEAD, True),
+        sent=comms.sent_counts(engine),
+        owner_due=owner_due.get('plan') or [],
+        owner_off=owner_due.get('switched_off', 0),
+        lead_due=lead_due.get('plan') or [],
+        lead_off=lead_due.get('switched_off', 0),
+        names=names, recent=comms.recent(engine, 60),
+        q=q, found=found, history=history,
+        may_operate=_may_operate(), me=request.console_user,
+        counts=_counts(engine))
+
+
+@console_bp.route('/communications/switch', methods=['POST'])
+@console_required
+def communications_switch():
+    import communications as comms
+    if not _may_operate():
+        return _refuse(_comms_back())
+    key = request.form.get('key') or ''
+    valid = {k for k, *_ in comms.CATALOG} | {comms.ALL_OWNER, comms.ALL_LEAD}
+    if key not in valid or key in comms.ALWAYS_ON:
+        flash('That email cannot be switched.', 'error')
+        return redirect(_comms_back())
+    on = request.form.get('on') == '1'
+    engine = _engine()
+    control_plane.set_switch(engine, key, on, request.console_user['email'])
+    label = {comms.ALL_OWNER: 'All owner emails',
+             comms.ALL_LEAD: 'All emails to leads'}.get(key, comms.LABELS.get(key, key))
+    control_plane.log_console(engine, request.console_user['email'],
+                              'email switched ' + ('on' if on else 'off'),
+                              key, label[:300])
+    flash(f'"{label}" is now {"on" if on else "off"}.', 'success')
+    return redirect(_comms_back())
+
+
+@console_bp.route('/communications/preview/<key>')
+@console_required
+def communications_preview(key):
+    import communications as comms
+    if key not in comms.LABELS:
+        flash('No such email.', 'error')
+        return redirect(url_for('console.communications'))
+    subject, html = comms.sample_preview(key)
+    engine = _engine()
+    return render_template('console/communications_preview.html',
+                           key=key, label=comms.LABELS[key], subject=subject,
+                           html=html, me=request.console_user,
+                           counts=_counts(engine))
+
+
+@console_bp.route('/communications/send-leads', methods=['POST'])
+@console_required
+def communications_send_leads():
+    """Send today's lead emails now rather than waiting for the evening run.
+    Each is recorded, so pressing it twice sends nothing twice."""
+    import lead_nurture
+    if not _may_operate():
+        return _refuse(url_for('console.communications'))
+    engine = _engine()
+    out = lead_nurture.run(engine)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'sent lead emails', f'{out.get("sent", 0)} sent')
+    if out.get('failed'):
+        flash(f'{out.get("sent", 0)} sent, {out["failed"]} failed — they stay '
+              f'due and can be sent again.', 'error')
+    else:
+        flash(f'{out.get("sent", 0)} lead email(s) sent.', 'success')
+    return redirect(url_for('console.communications'))
 
 
 @console_bp.route('/log')

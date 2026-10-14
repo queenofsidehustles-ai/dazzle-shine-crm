@@ -230,15 +230,16 @@ with app.app_context():
     check('\'=HYPERLINK' in csv_body and ',=HYPERLINK' not in csv_body,
           'a name starting with = is exported as text')
 
-    print('\n9. Health: every company at once, and the trial emails')
+    print('\n9. Health: every company at once; trial emails on Communications')
     body = get(helper, '/console/health').data.decode()
     alpha_row = body.split(f'Ops Alpha {TAG}')[1].split('</tr>')[0]
     check('failing' in alpha_row, "Alpha's failing reminders show in the matrix")
-    check(f'Ops Charlie {TAG}' not in body.split('Trial emails due')[1].split('Closed, in retention')[0],
+    comms = get(helper, '/console/communications').data.decode()
+    check(f'Ops Charlie {TAG}' not in comms.split('Due today')[1].split('Every automated email')[0],
           'a closed company is never sent a trial email')
     check(f'Ops Charlie {TAG}' in body.split('Closed, in retention')[1],
           'it is listed as closed, with the date it can be purged')
-    check('once a day at 22:00 UTC' in body,
+    check('22:00 UTC' in comms,
           'the page says when they go out on their own')
     with engine.begin() as conn:
         conn.execute(text("UPDATE public.organizations SET status = 'active', closed_at = NULL "
@@ -251,10 +252,11 @@ with app.app_context():
     charlie_listed = listing.split(f'Ops Charlie {TAG}')[1].split('</tr>')[0]
     check('could not read' in charlie_listed and 'error' not in charlie_listed,
           "and the list does not show another schema's errors as Charlie's")
-    due = body.split('Trial emails due')[1].split('Closed, in retention')[0]
-    check(f'Ops Charlie {TAG}' in due and 'Not started (day 7)' in due,
+    comms = get(helper, '/console/communications').data.decode()
+    due = comms.split('Due today')[1].split('Every automated email')[0]
+    check(f'Ops Charlie {TAG}' in due and 'Your 14 days have not started' in due,
           'reopened, Charlie is due the day-7 email')
-    check('Send these' not in due, 'a helper gets no send button')
+    check('Send owner emails now' not in due, 'a helper gets no send button')
     SENT.clear()
     post(helper, '/console/health/trial-emails')
     check(SENT == [], 'and posting at it sends nothing')

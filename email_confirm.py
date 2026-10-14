@@ -111,7 +111,7 @@ def confirm(engine, slug):
                                          email_confirmed_at=datetime.utcnow())
 
 
-def send(org, host, first=None):
+def send(org, host, first=None, sent_by='auto'):
     """(Re)send the welcome email, which is where the code lives.
 
     One email rather than a welcome and a separate confirm: two arriving in
@@ -125,7 +125,12 @@ def send(org, host, first=None):
     ok, detail = welcome_email.send(
         org.get('name') or slug, email, host, first=first,
         confirm_code=code(slug, email), confirm_url=link(host, slug, email))
+    engine = provisioning._engine()
     if ok:
-        control_plane.set_email_state(provisioning._engine(), slug,
+        control_plane.set_email_state(engine, slug,
                                       email_confirm_sent_at=datetime.utcnow())
+    control_plane.record_product_message(
+        engine, slug, 'welcome', email,
+        f'{org.get("name") or slug} is set up — here is your address', ok,
+        detail, sent_by)
     return ok, detail

@@ -1,0 +1,14 @@
+{% extends "console/_shell.html" %}
+{% block title %}{{ label }}{% endblock %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+<p style="margin:0 0 var(--s3)"><a href="{{ url_for('console.communications') }}">← Communications</a></p>
+<h2 style="font-size:1.05rem;margin:0 0 var(--s2)">{{ label }}</h2>
+<p class="ops-dim" style="margin:0 0 var(--s4)">Shown with sample details (Sparkle Cleaning). Real emails use
+  the company's own name and web address. To change the wording, ask Claude to use the
+  akye-lifecycle-email skill.</p>
+<p style="margin:0 0 var(--s2)"><strong>Subject:</strong> {{ subject }}</p>
+{# Emails are white in a mail app, so the preview is too. #}
+<div style="background:#ffffff;color:#16213a;border:1px solid var(--line);border-radius:var(--r);
+            padding:var(--s5);max-width:640px;overflow-x:auto">{{ html|safe }}</div>
+{% endblock %}
