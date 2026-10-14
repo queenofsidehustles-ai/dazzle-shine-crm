@@ -132,6 +132,8 @@
          does it; one who can't, doesn't. #}
       <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}{{ ' locked' if item.locked }}"{% if MENU_TIPS.get(item.endpoint) %} data-tip="{{ item.endpoint }}"{% endif %}>
         <span class="icon">{{ item.icon }}</span> {{ item.label }}
+        {# A few features this person has never opened (adoption.py). #}
+        {% if item.endpoint in NAV_DOTS or item.tabs | selectattr('endpoint', 'in', NAV_DOTS) | list %}<span class="nav-dot" title="You haven't opened this yet"><span class="sr-only">— not opened yet</span></span>{% endif %}
         {% if item.locked %}<span style="margin-left:auto;font-size:0.72rem;opacity:0.75">🔒</span>{% endif %}
         {% if item.endpoint == 'messages.inbox' and nav_unread %}<span style="margin-left:auto;background:var(--warn);color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
       </a>
@@ -196,7 +198,7 @@
     {% if NAV_TABS %}
     <div class="section-tabs">
       {% for t in NAV_TABS %}
-      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}" {% if t.locked %}style="opacity:0.45"{% endif %}{% if MENU_TIPS.get(t.endpoint) %} data-tip="{{ t.endpoint }}"{% endif %}>{{ t.label }}{% if t.locked %} 🔒{% endif %}</a>
+      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}" {% if t.locked %}style="opacity:0.45"{% endif %}{% if MENU_TIPS.get(t.endpoint) %} data-tip="{{ t.endpoint }}"{% endif %}>{{ t.label }}{% if t.endpoint in NAV_DOTS %}<span class="nav-dot" title="You haven't opened this yet"><span class="sr-only">— not opened yet</span></span>{% endif %}{% if t.locked %} 🔒{% endif %}</a>
       {% endfor %}
     </div>
     {% endif %}
@@ -313,6 +315,26 @@
         You are on the free plan — everything you entered is still here.
         <span class="go">See plans →</span>
       </a>
+      {% endif %}
+
+      {# One "Did you know?" per sign-in, for a feature this person has
+         never opened (adoption.py). "Not now" means never again. #}
+      {% if SUGGESTION %}
+      <div class="suggest" id="tipSuggest" role="region" aria-label="Did you know?">
+        <span class="suggest-icon" aria-hidden="true">💡</span>
+        <div class="suggest-body">
+          <strong>Did you know? {{ SUGGESTION.title }}</strong>
+          <span>{{ SUGGESTION.text }}</span>
+        </div>
+        <div class="suggest-actions">
+          <a href="{{ url_for('tips.go', key=SUGGESTION.key) }}" class="btn btn-gold">Show me →</a>
+          <form method="POST" action="{{ url_for('tips.dismiss') }}" data-tip-dismiss>
+            <input type="hidden" name="key" value="{{ SUGGESTION.key }}">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit" class="btn btn-outline">Not now</button>
+          </form>
+        </div>
+      </div>
       {% endif %}
 
       {% block content %}{% endblock %}

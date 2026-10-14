@@ -19,11 +19,23 @@
   function vw() { return document.documentElement.clientWidth || window.innerWidth; }
   function vh() { return document.documentElement.clientHeight || window.innerHeight; }
 
+  // A tip read counts once per page, for the report of which tips work
+  // (adoption.py). Fire and forget: a lost count never costs the person anything.
+  var sent = {};
+  function counted(key) {
+    if (!key || sent[key]) return;
+    sent[key] = true;
+    try {
+      fetch('/tips/opened', {method: 'POST', credentials: 'same-origin', keepalive: true,
+        headers: {'Content-Type': 'application/json'}, body: JSON.stringify({key: key})});
+    } catch (e) { /* counting is never worth an error */ }
+  }
+
   // ── Menu tips ────────────────────────────────────────────────────────
   var data = {};
   try { data = JSON.parse((document.getElementById('menuTips') || {}).textContent || '{}'); } catch (e) { data = {}; }
   var box = document.getElementById('menuTip');
-  var timer = null, current = null, hiddenAt = 0;
+  var timer = null, current = null, hiddenAt = 0, readTimer = null;
 
   function place(el) {
     var r = el.getBoundingClientRect();
@@ -53,10 +65,14 @@
     place(el);
     el.setAttribute('aria-describedby', 'menuTip');
     current = el;
+    // Read, not brushed past: on screen long enough to have been read.
+    clearTimeout(readTimer);
+    readTimer = setTimeout(function () { counted(el.getAttribute('data-tip')); }, 1200);
   }
 
   function hideMenu() {
     clearTimeout(timer);
+    clearTimeout(readTimer);
     if (box) box.hidden = true;
     if (current) { current.removeAttribute('aria-describedby'); hiddenAt = Date.now(); }
     current = null;
@@ -92,6 +108,7 @@
     if (!pop) return;
     pop.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
+    counted(btn.closest('.tip') && btn.closest('.tip').getAttribute('data-key'));
     if (pinned) btn.dataset.pinned = '1';
     // Kept on screen: on a phone the button can be near either edge. Lined
     // up with the button where it fits, slid left where it would not.
@@ -136,6 +153,21 @@
         if (!btn.dataset.pinned) closeTip(btn);
       });
     }
+  });
+
+  // "Not now" on the Did you know?: gone at once, and never suggested again.
+  // Without JavaScript the form still posts and comes back to this page.
+  document.querySelectorAll('form[data-tip-dismiss]').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var card = document.getElementById('tipSuggest');
+      if (card) card.remove();
+      try {
+        fetch(form.action, {method: 'POST', credentials: 'same-origin', keepalive: true,
+          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+          body: JSON.stringify({key: form.querySelector('[name=key]').value})});
+      } catch (err) { form.submit(); }
+    });
   });
 
   document.addEventListener('click', function (e) {

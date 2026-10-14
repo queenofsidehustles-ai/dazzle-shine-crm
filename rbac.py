@@ -241,7 +241,9 @@ FAIL_CLOSED_ROLES = frozenset({'sales'})
 UNCLASSIFIED_ALLOWED = frozenset({
     'feedback.send', 'settings.switch_brand', 'admin.switch_city', 'admin.logout',
 })
-UNCLASSIFIED_ALLOWED_PREFIXES = ('account.',)
+# tips.*: a tip read, a suggestion followed or turned down -- each writes only
+# the signed-in person's own record (adoption.py).
+UNCLASSIFIED_ALLOWED_PREFIXES = ('account.', 'tips.')
 
 
 def _unclassified_allowed(endpoint):

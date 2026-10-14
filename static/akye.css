@@ -549,6 +549,30 @@ input::placeholder, textarea::placeholder { color: var(--softer); }
 .menu-tip strong { color: var(--amber); font-weight: 650; }
 .menu-tip-lock { display: block; margin-top: var(--s1); color: var(--amber-line); }
 
+/* A feature this person has never opened -- a few at a time (adoption.py). */
+.nav-dot {
+  display: inline-block; width: 7px; height: 7px; margin-left: 6px; flex: 0 0 auto;
+  border-radius: 50%; background: var(--amber); vertical-align: middle;
+}
+.sidebar nav a .nav-dot { margin-left: auto; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* "Did you know?" -- once per sign-in, never for something already opened. */
+.suggest {
+  display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap;
+  margin: 0 0 var(--s4); padding: var(--s3) var(--s4); border-radius: var(--r);
+  background: var(--amber-soft); border: 1px solid var(--amber-line);
+}
+.suggest-icon { font-size: 1.3rem; }
+.suggest-body { flex: 1 1 260px; font-size: var(--t-sm); color: var(--ink); line-height: var(--lh); }
+.suggest-body strong { display: block; font-weight: 650; }
+.suggest-actions { display: flex; gap: var(--s2); align-items: center; }
+.suggest-actions form { margin: 0; }
+.suggest-actions .btn { padding: 7px 14px; font-size: var(--t-sm); }
+
 /* ── Tables ───────────────────────────────────────────────────────────── */
 
 table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
