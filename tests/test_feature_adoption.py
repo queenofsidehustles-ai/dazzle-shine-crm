@@ -205,6 +205,16 @@ check(events('places_finder.dashboard', 'open') == 1 and events('places_finder.d
 c.post('/tips/opened', base_url=HOST, json={'key': 'no.such.tip'}, headers={'Origin': HOST})
 check(row('no.such.tip') is None, 'a key that is not a tip is ignored')
 
+# A menu tip read, then its item clicked: the click's page can land first.
+page(c, u('team.availability'))
+c.post('/tips/opened', base_url=HOST, json={'key': 'team.availability', 'source': 'menu'}, headers={'Origin': HOST})
+check(events('team.availability', 'used') == 1,
+      'a menu tip read that arrives just after the visit it prompted still counts for the tip')
+page(c, u('invoices.index'))
+c.post('/tips/opened', base_url=HOST, json={'key': 'invoices.index', 'source': 'page'}, headers={'Origin': HOST})
+check(events('invoices.index', 'open') == 1 and events('invoices.index', 'used') == 0,
+      "but the ⓘ on a page they are already on does not -- they were there before they read it")
+
 
 print('\n5. Locked features, and other people')
 fresh_postgres.set_company_plan(SLUG, 'pro')
@@ -212,6 +222,9 @@ c = owner()
 code, html = page(c, '/')
 dots = dotted(html)
 check('Commercial' not in dots and code == 200, f'a feature the plan does not include is never dotted ({dots})')
+c.post('/tips/opened', base_url=HOST, json={'key': 'quotes.index', 'source': 'menu'}, headers={'Origin': HOST})
+check(row('quotes.index') is None and events('quotes.index', 'open') == 0,
+      'nor is reading its tip counted: they could not open it, so it says nothing about the tip')
 fresh_postgres.set_company_plan(SLUG, 'scale')
 
 from auth import _auth_fingerprint
@@ -272,6 +285,20 @@ check(m is not None and m.groups() == ('1', '1', '100'),
 m = re.search(r'Rentals rentals\.index (\d+) (\d+) (\d+) (\d+) \((\d+)%\) (\d+)', body)
 check(m is not None and m.groups() == ('0', '0', '1', '1', '100', '0'),
       f'and each "Did you know?": shown to one person, who followed it ({m.groups() if m else None})')
+# A window counts the people who read in it, and what those people did.
+now = datetime.utcnow()
+with ENGINE.begin() as conn:
+    for person, event, days in (('early', 'open', 40), ('early', 'used', 10),
+                                ('inside', 'open', 5), ('inside', 'used', 3),
+                                ('early', 'suggested', 45), ('early', 'clicked', 20)):
+        conn.execute(control_plane.tip_events.insert().values(
+            slug=SLUG, person=person, role='owner', tip='faq.index', event=event,
+            created_at=now - timedelta(days=days)))
+got = control_plane.tip_report(ENGINE, since=now - timedelta(days=30)).get('faq.index', {})
+check(got == {'open': 1, 'used': 1},
+      f'in the last 30 days: one read, one opened -- not a success from a read before the window ({got})')
+got = control_plane.tip_report(ENGINE).get('faq.index', {})
+check(got == {'open': 2, 'used': 2, 'suggested': 1, 'clicked': 1}, f'and all time, everyone ({got})')
 with ENGINE.begin() as conn:
     conn.execute(text('DELETE FROM public.console_users WHERE email = :e'), {'e': EMAIL})
 

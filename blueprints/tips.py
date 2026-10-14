@@ -20,7 +20,8 @@ def _key():
 def opened():
     key = _key()
     if key:
-        adoption.record_open(key)
+        source = (request.get_json(silent=True) or {}).get('source') or request.form.get('source')
+        adoption.record_open(key, source='menu' if source == 'menu' else None)
     return ('', 204)
 
 

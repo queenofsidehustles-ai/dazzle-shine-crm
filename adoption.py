@@ -26,6 +26,10 @@ USED_WITHIN = timedelta(days=7)
 SUGGEST_AGAIN_AFTER = timedelta(days=7)
 # More dots than this and they stop meaning anything.
 MAX_DOTS = 3
+# A menu tip is read, then its item clicked: the read is sent as the page
+# changes and can land just after the visit it led to. A read from the menu
+# arriving this soon after the first visit was the reason for that visit.
+READ_RACE = timedelta(seconds=15)
 
 
 def user_key():
@@ -132,15 +136,37 @@ def note_visit(endpoint, nav):
         pass
 
 
-def record_open(key):
-    """They read a tip -- the first time counts, for the report."""
+def _locked(key):
+    """A feature this company's plan does not include. Reading its tip says
+    nothing about whether the tip works -- they could not open it if they
+    wanted to -- so it is not counted, and stays uncounted until they can."""
+    try:
+        import entitlements
+        import navigation
+        feature = navigation.feature_for(key)
+        return bool(feature) and not entitlements.can(feature)
+    except Exception:
+        return False
+
+
+def record_open(key, source=None):
+    """They read a tip -- the first time counts, for the report.
+
+    `source` 'menu' is a tip read from the sidebar, which can be overtaken by
+    the click it prompted (READ_RACE): then the visit came from the read, and
+    counts for it."""
     import help_tips
-    if key not in help_tips.TIPS or user_key() is None:
+    if key not in help_tips.TIPS or user_key() is None or _locked(key):
         return
-    if (_rows().get(key) or {}).get('tip_opened_at'):
+    row = _rows().get(key) or {}
+    if row.get('tip_opened_at'):
         return
-    _set(key, tip_opened_at=datetime.utcnow())
+    now = datetime.utcnow()
+    _set(key, tip_opened_at=now)
     _event(key, 'open')
+    seen = row.get('first_seen_at')
+    if source == 'menu' and seen and timedelta(0) <= now - seen <= READ_RACE:
+        _event(key, 'used')
 
 
 def _candidates(nav):

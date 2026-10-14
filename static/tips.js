@@ -22,12 +22,13 @@
   // A tip read counts once per page, for the report of which tips work
   // (adoption.py). Fire and forget: a lost count never costs the person anything.
   var sent = {};
-  function counted(key) {
+  function counted(key, source) {
     if (!key || sent[key]) return;
     sent[key] = true;
     try {
       fetch('/tips/opened', {method: 'POST', credentials: 'same-origin', keepalive: true,
-        headers: {'Content-Type': 'application/json'}, body: JSON.stringify({key: key})});
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({key: key, source: source || 'page'})});
     } catch (e) { /* counting is never worth an error */ }
   }
 
@@ -65,9 +66,13 @@
     place(el);
     el.setAttribute('aria-describedby', 'menuTip');
     current = el;
-    // Read, not brushed past: on screen long enough to have been read.
+    // Read, not brushed past: on screen long enough to have been read. Not
+    // for a locked feature -- they could not open it, so it says nothing
+    // about whether the tip works.
     clearTimeout(readTimer);
-    readTimer = setTimeout(function () { counted(el.getAttribute('data-tip')); }, 1200);
+    if (!t.locked) {
+      readTimer = setTimeout(function () { counted(el.getAttribute('data-tip'), 'menu'); }, 1200);
+    }
   }
 
   function hideMenu() {
@@ -159,14 +164,19 @@
   // Without JavaScript the form still posts and comes back to this page.
   document.querySelectorAll('form[data-tip-dismiss]').forEach(function (form) {
     form.addEventListener('submit', function (e) {
+      if (!window.fetch) return;            // the plain form post does it
       e.preventDefault();
       var card = document.getElementById('tipSuggest');
-      if (card) card.remove();
-      try {
-        fetch(form.action, {method: 'POST', credentials: 'same-origin', keepalive: true,
-          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-          body: JSON.stringify({key: form.querySelector('[name=key]').value})});
-      } catch (err) { form.submit(); }
+      if (card) card.hidden = true;
+      // Hidden at once, but only gone once it is saved: if it was not, the
+      // form posts the ordinary way, so "Not now" is never just a promise.
+      fetch(form.action, {method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({key: form.querySelector('[name=key]').value})
+      }).then(function (r) {
+        if (!r.ok) throw new Error(r.status);
+        if (card) card.remove();
+      }).catch(function () { form.submit(); });
     });
   });
 

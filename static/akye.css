@@ -566,6 +566,7 @@ input::placeholder, textarea::placeholder { color: var(--softer); }
   margin: 0 0 var(--s4); padding: var(--s3) var(--s4); border-radius: var(--r);
   background: var(--amber-soft); border: 1px solid var(--amber-line);
 }
+.suggest[hidden] { display: none; }
 .suggest-icon { font-size: 1.3rem; }
 .suggest-body { flex: 1 1 260px; font-size: var(--t-sm); color: var(--ink); line-height: var(--lh); }
 .suggest-body strong { display: block; font-weight: 650; }

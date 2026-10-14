@@ -451,21 +451,42 @@ def record_tip_event(engine, slug, person, role, tip, event):
             created_at=datetime.utcnow()))
 
 
+# Each outcome and the event it is the outcome of. A rate is only honest when
+# both sides come from the same people: those who read the tip (or were shown
+# the suggestion) in the window, and what those people then did -- whenever
+# they did it. Counting each event on its own window instead lets somebody who
+# read a tip the day before the window opens count as a success inside it.
+TIP_COHORTS = {'used': 'open', 'clicked': 'suggested', 'dismissed': 'suggested'}
+
+
 def tip_report(engine, since=None):
     """{tip: {event: distinct people}} across real companies -- test and demo
-    accounts left out, as everywhere else in the console."""
+    accounts left out, as everywhere else in the console. With `since`, the
+    people are those whose read (or suggestion) falls in the window, and each
+    outcome counts only those same people."""
     q = (select(tip_events.c.tip, tip_events.c.event,
-                func.count(func.distinct(tip_events.c.slug + ':' + tip_events.c.person)))
+                tip_events.c.slug, tip_events.c.person, tip_events.c.created_at)
          .select_from(tip_events.outerjoin(
              organizations, organizations.c.slug == tip_events.c.slug))
-         .where((organizations.c.is_test.is_(None)) | (organizations.c.is_test.is_(False)))
-         .group_by(tip_events.c.tip, tip_events.c.event))
-    if since is not None:
-        q = q.where(tip_events.c.created_at >= since)
-    out = {}
+         .where((organizations.c.is_test.is_(None)) | (organizations.c.is_test.is_(False))))
+    people = {}                     # (tip, event) -> {person: first time}
     with engine.connect() as conn:
-        for tip, event, n in conn.execute(q):
-            out.setdefault(tip, {})[event] = n
+        for tip, event, slug, person, at in conn.execute(q):
+            seen = people.setdefault((tip, event), {})
+            who = f'{slug}:{person}'
+            if who not in seen or (at and at < seen[who]):
+                seen[who] = at
+    out = {}
+    for (tip, event), seen in people.items():
+        origin = TIP_COHORTS.get(event)
+        if origin is None:          # an originating event: the window decides
+            who = {p for p, at in seen.items() if since is None or (at and at >= since)}
+        else:                       # an outcome: only for that window's cohort
+            cohort = people.get((tip, origin), {})
+            who = {p for p in seen if p in cohort
+                   and (since is None or (cohort[p] and cohort[p] >= since))}
+        if who:
+            out.setdefault(tip, {})[event] = len(who)
     return out
 
 
