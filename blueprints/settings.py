@@ -299,49 +299,90 @@ def test_stripe():
 def commercial():
     import commercial_pricing as cp
     if request.method == 'POST':
-        PricingSetting.set('comm_hourly_cost', request.form.get('comm_hourly_cost') or 20)
-        try:
-            pct = float(request.form.get('comm_target_labor') or 40)
-        except ValueError:
-            pct = 40
-        PricingSetting.set('comm_target_labor', round(pct / 100.0, 4))
-        PricingSetting.set('comm_min_visit', request.form.get('comm_min_visit') or 125)
-        PricingSetting.set('comm_drive_minutes',
-                           request.form.get('comm_drive_minutes') or 30)
-        try:
-            fv_pct = float(request.form.get('comm_first_visit_pct') or 25)
-        except ValueError:
-            fv_pct = 25
-        PricingSetting.set('comm_first_visit_pct', round(fv_pct / 100.0, 4))
+        bad = []
+
+        def _rejected(label, value):
+            bad.append(f'{label} ("{value}")')
+
+        def _set_rate(key, label, form_key):
+            """A plain non-negative number, saved as typed. Blank leaves the
+            setting as it was; a value that was typed but does not read as
+            one is rejected rather than stored as a string that silently
+            fails to parse the next time this price is actually used."""
+            v = (request.form.get(form_key) or '').strip()
+            if not v:
+                return
+            try:
+                num = float(v)
+            except ValueError:
+                return _rejected(label, v)
+            if num < 0:
+                return _rejected(label, v)
+            PricingSetting.set(key, num)
+
+        def _set_pct(key, label, form_key):
+            """A whole percent typed in the box (25), stored as the decimal
+            commercial_pricing.py actually uses (0.25)."""
+            v = (request.form.get(form_key) or '').strip()
+            if not v:
+                return
+            try:
+                pct = float(v)
+            except ValueError:
+                return _rejected(label, v)
+            if not 0 <= pct <= 100:
+                return _rejected(label, v)
+            PricingSetting.set(key, round(pct / 100.0, 4))
+
+        _set_rate('comm_hourly_cost', 'Your cleaner cost', 'comm_hourly_cost')
+        _set_pct('comm_target_labor', 'Target labor %', 'comm_target_labor')
+        _set_rate('comm_min_visit', 'Minimum per visit', 'comm_min_visit')
+        _set_rate('comm_drive_minutes', 'Default drive time', 'comm_drive_minutes')
+        _set_pct('comm_first_visit_pct', 'First-visit premium', 'comm_first_visit_pct')
         for c in cp.PROD_RATES:
-            v = request.form.get(f'comm_prod_{c}')
-            if v:
-                PricingSetting.set(f'comm_prod_{c}', v)
+            _set_rate(f'comm_prod_{c}', f'{c} production rate', f'comm_prod_{c}')
         # Work-area line items: how fast each goes, and what it uses.
+        item_labels = {k: lbl for k, lbl, *_ in cp.WORK_ITEMS}
         for key in cp.WORK_ITEM_KEYS:
-            for part in ('rate', 'supplies'):
-                v = request.form.get(f'comm_item_{key}_{part}')
-                if v in (None, ''):
-                    continue
+            label = item_labels.get(key, key)
+            v = request.form.get(f'comm_item_{key}_rate')
+            if v not in (None, ''):
                 try:
                     num = float(v)
                 except ValueError:
-                    continue
-                if num < 0 or (part == 'rate' and num == 0):
-                    continue
-                PricingSetting.set(f'comm_item_{key}_{part}', num)
+                    num = None
+                if num is None or num <= 0:
+                    _rejected(f'{label} — per hour', v)
+                else:
+                    PricingSetting.set(f'comm_item_{key}_rate', num)
+            v = request.form.get(f'comm_item_{key}_supplies')
+            if v not in (None, ''):
+                try:
+                    num = float(v)
+                except ValueError:
+                    num = None
+                if num is None or num < 0:
+                    _rejected(f'{label} — supplies', v)
+                else:
+                    PricingSetting.set(f'comm_item_{key}_supplies', num)
         # Add-ons are typed as whole percents and stored as decimals, the same
         # way target labor is, so the form never asks anyone to write 0.08.
-        for key, _lbl, _pct in cp.EXTRAS:
-            v = request.form.get(f'comm_extra_{key}')
-            if v in (None, ''):
+        for key, lbl, _pct in cp.EXTRAS:
+            v = (request.form.get(f'comm_extra_{key}') or '').strip()
+            if not v:
                 continue
             try:
-                PricingSetting.set(f'comm_extra_{key}', round(float(v) / 100.0, 4))
+                pct = float(v)
             except ValueError:
-                pass
+                _rejected(lbl, v)
+                continue
+            PricingSetting.set(f'comm_extra_{key}', round(pct / 100.0, 4))
         db.session.commit()
-        flash('Commercial pricing updated.', 'success')
+        if bad:
+            flash('Saved the rest, but could not read: ' + '; '.join(bad) +
+                  ' — enter a number and try those again.', 'error')
+        else:
+            flash('Commercial pricing updated.', 'success')
         return redirect(url_for('settings.commercial'))
     return render_template('admin/settings_commercial.html',
                            cfg=cp.get_config(), category_labels=Prospect.CATEGORY_LABELS)
