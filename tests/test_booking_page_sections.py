@@ -113,11 +113,17 @@ with app.app_context():
     check("sel.value === 'team'" in SRC,
           'the script swaps them on the team choice')
 
-    print('\n6. The headcount moved in with the arithmetic it belongs to')
+    print('\n6. The headcount is a decision, so it stays in the open')
+    # It spent one release folded in with the hours, on the theory that it was
+    # arithmetic. It is not: it sets how many spots the team offer advertises
+    # and how the pot divides. test_crew_size_visible holds the full contract.
     details = SRC[SRC.index('How this pay is worked out'):]
     cut = details.index('</details>')
-    check('How many cleaners are you paying?' in details[:cut],
-          'the headcount sits inside "How this pay is worked out"')
+    check('name="crew_size"' not in details[:cut],
+          'it is NOT buried in "How this pay is worked out"')
+    assign = SRC[SRC.index("url_for('bookings.assign'"):]
+    check('name="crew_size"' in assign[:assign.index('</form>')],
+          'it sits with "Assign to", where who-and-how-many is decided together')
 
 if failures:
     print(f'\n❌ {len(failures)} failed')
