@@ -130,7 +130,7 @@
       {# A page their plan doesn't include is drawn greyed with a padlock, not
          removed. An owner who can see Hiring sitting there knows the product
          does it; one who can't, doesn't. #}
-      <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}{{ ' locked' if item.locked }}"{% if item.locked %} title="Included in Pro"{% endif %}>
+      <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}{{ ' locked' if item.locked }}"{% if MENU_TIPS.get(item.endpoint) %} data-tip="{{ item.endpoint }}"{% endif %}>
         <span class="icon">{{ item.icon }}</span> {{ item.label }}
         {% if item.locked %}<span style="margin-left:auto;font-size:0.72rem;opacity:0.75">🔒</span>{% endif %}
         {% if item.endpoint == 'messages.inbox' and nav_unread %}<span style="margin-left:auto;background:var(--warn);color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
@@ -155,6 +155,7 @@
     <div class="topbar">
       <button class="hamburger" onclick="toggleNav()" aria-label="Open menu">☰</button>
       <h1>{% block page_title %}{{ NAV_TITLE or 'Dashboard' }}{% endblock %}</h1>
+      {% if PAGE_TIP %}{{ tip(PAGE_TIP) }}{% endif %}
 
       {% if BRAND_LENS_CHOICES %}
       {# Which side of the business is on screen. Deliberately loud when it is
@@ -195,7 +196,7 @@
     {% if NAV_TABS %}
     <div class="section-tabs">
       {% for t in NAV_TABS %}
-      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}" {% if t.locked %}style="opacity:0.45" title="Included in Pro"{% endif %}>{{ t.label }}{% if t.locked %} 🔒{% endif %}</a>
+      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}" {% if t.locked %}style="opacity:0.45"{% endif %}{% if MENU_TIPS.get(t.endpoint) %} data-tip="{{ t.endpoint }}"{% endif %}>{{ t.label }}{% if t.locked %} 🔒{% endif %}</a>
       {% endfor %}
     </div>
     {% endif %}
@@ -365,6 +366,10 @@
     })();
   </script>
   <script src="{{ url_for('static', filename='card-reorder.js') }}" defer></script>
+  {# What each menu item is for (help_tips.py), read by tips.js on hover. #}
+  <script type="application/json" id="menuTips">{{ MENU_TIPS | tojson }}</script>
+  <div id="menuTip" class="menu-tip" role="tooltip" hidden></div>
+  <script src="{{ url_for('static', filename='tips.js') }}" defer></script>
   {# On every screen, deliberately. A beta tester who has to go and find
      somewhere to report a problem mostly does not. #}
   {% if session.get('logged_in') %}{% include '_feedback.html' %}{% endif %}

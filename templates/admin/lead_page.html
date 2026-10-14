@@ -71,14 +71,16 @@
         {% elif my_rep %}
           {% if p.agent == my_rep %}Your lead{% else %}Unassigned — it becomes yours when you log a call, text or email{% endif %}
         {% elif p.agent %}Worked by {{ p.agent }}{% endif %}
+        {% if (is_owner and reps) or my_rep %}{{ tip('lead.assignment', 'Who works a lead?') }}{% endif %}
       </div>
       {% if p.ready_to_quote_at %}
-      <div style="margin-top:6px;font-size:0.82rem;color:var(--amber-deep);font-weight:600">📝 With {{ 'you' if is_owner else 'the owner' }} to quote · handed over by {{ p.ready_by }} {{ p.ready_to_quote_at.strftime('%b %d') }}</div>
+      <div style="margin-top:6px;font-size:0.82rem;color:var(--amber-deep);font-weight:600">📝 With {{ 'you' if is_owner else 'the owner' }} to quote · handed over by {{ p.ready_by }} {{ p.ready_to_quote_at.strftime('%b %d') }} {{ tip('lead.ready_to_quote') }}</div>
       {% elif not is_owner and p.stage in ('new', 'working', 'interested') %}
       <form method="POST" action="{{ url_for('places_finder.ready_to_quote', prospect_id=p.id) }}" style="margin-top:8px;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
         <input type="text" name="note" maxlength="500" placeholder="Anything the owner should know?" aria-label="Note for the owner"
                style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:0.82rem;min-width:180px">
         <button type="submit" class="btn btn-gold" style="padding:6px 12px;font-size:0.82rem">✅ Ready to quote — hand to the owner</button>
+        <span style="align-self:center">{{ tip('lead.ready_to_quote', 'What does Ready to quote do?') }}</span>
       </form>
       {% endif %}
     </div>

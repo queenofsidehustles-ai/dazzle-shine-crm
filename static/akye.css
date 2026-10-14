@@ -507,6 +507,48 @@ input::placeholder, textarea::placeholder { color: var(--softer); }
 }
 .ask-hint:hover { background: var(--amber-soft); border-color: var(--amber-line); color: var(--amber-deep); }
 
+/* What a feature is for, where somebody is about to use it (help_tips.py,
+ * static/tips.js). The ⓘ is a real button -- tap, click or Enter opens it --
+ * because most owners are on a phone, where a hover-only tip never appears.
+ * Menu tips are the hover-only kind on purpose: there a tap opens the page,
+ * and the page has its own ⓘ. */
+.tip { position: relative; display: inline-flex; vertical-align: middle; margin-left: 6px; }
+.tip-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  font: italic 700 0.72rem/1 Georgia, serif; cursor: pointer;
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
+}
+/* A bigger target than it looks on a touch screen. */
+@media (pointer: coarse) { .tip-btn { width: 26px; height: 26px; } }
+.tip-btn:hover, .tip-btn[aria-expanded="true"] {
+  background: var(--amber-soft); border-color: var(--amber-line); color: var(--amber-deep);
+}
+.tip-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.tip-pop {
+  position: absolute; top: calc(100% + 8px); left: -8px; z-index: 60;
+  width: max-content; max-width: min(300px, calc(100vw - 32px));
+  padding: var(--s3) var(--s4); border-radius: var(--r);
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-lg);
+  color: var(--ink); font-size: var(--t-sm); font-weight: 400; line-height: var(--lh);
+  text-align: left; white-space: normal; letter-spacing: normal; text-transform: none;
+}
+.tip-pop[hidden] { display: none; }
+.tip-pop strong { font-weight: 650; }
+.tip-links { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin-top: var(--s2); }
+.tip-links a { font-weight: 600; font-size: var(--t-sm); }
+
+.menu-tip {
+  position: fixed; z-index: 1000; max-width: 260px; pointer-events: none;
+  padding: var(--s2) var(--s3); border-radius: var(--r-sm);
+  background: var(--ink); color: var(--surface); box-shadow: var(--shadow-lg);
+  font-size: var(--t-xs); line-height: var(--lh);
+}
+.menu-tip[hidden] { display: none; }
+.menu-tip strong { color: var(--amber); font-weight: 650; }
+.menu-tip-lock { display: block; margin-top: var(--s1); color: var(--amber-line); }
+
 /* ── Tables ───────────────────────────────────────────────────────────── */
 
 table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
