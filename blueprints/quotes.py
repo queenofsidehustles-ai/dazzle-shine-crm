@@ -66,8 +66,18 @@ def _editor_args(q=None, pre=None):
     priced = _priced(q) if q is not None else None
     areas = (priced or {}).get('areas') or ((pre or {}).get('line_items') or [])
     show = (q.show_line_prices is not False) if q is not None else True
+    # A line this quote locked in (see _lock_saved) keeps its saved price
+    # forever, even after a rate in Settings moves -- that's the point. But
+    # nobody editing the quote would otherwise notice their rates have since
+    # changed, so re-price the same areas fresh, with nothing locked, and
+    # flag it if that comes out different from what's actually saved.
+    rates_changed = False
+    if priced:
+        live = cp.area_quote(priced['areas'], q.frequency or 'weekly',
+                             first_visit=bool(q.first_visit_premium))
+        rates_changed = round(live['per_visit'], 2) != round(priced['per_visit'], 2)
     return dict(work_items=cfg['work_items'], area_presets=cfg['area_presets'],
-                areas_init=areas, show_prices_init=show)
+                areas_init=areas, show_prices_init=show, rates_changed=rates_changed)
 
 
 def _services_for(property_type):

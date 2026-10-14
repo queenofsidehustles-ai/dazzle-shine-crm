@@ -93,6 +93,12 @@
         Quote each part of the building as its own area — the service floor's stone tile, ceramic tile and hardwood as separate lines,
         the kitchen and restrooms as areas of their own if they are included. Each line is priced from your rates in
         <a href="{{ url_for('settings.commercial') }}" style="color:var(--amber-deep)">Commercial pricing</a>; type over any price to set your own.</p>
+      {% if quote and rates_changed %}
+      <div style="background:var(--warn-soft);color:var(--warn);border-radius:9px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;font-weight:600">
+        ⚠ Your rates in Settings have changed since this was priced. Every line below still shows what was quoted —
+        touch a line's quantity (then undo it) to see what it would cost today, or just save to keep it as is.
+      </div>
+      {% endif %}
       <input type="hidden" name="line_items_json" id="waJson" value="{{ areas_init|tojson|forceescape }}" />
       <datalist id="waPresets">{% for a in area_presets %}<option value="{{ a }}">{% endfor %}</datalist>
       <div id="waAreas" style="display:flex;flex-direction:column;gap:14px"></div>

@@ -915,8 +915,14 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     still = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
     db.session.remove()
 check(still == snap, 'a quote keeps the prices it was written with when the rates change later')
+edit_stale = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+check('rates in Settings have changed' in edit_stale,
+      'reopening a quote after a rate changes flags that it was priced at different rates')
 c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
        'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+edit_fresh = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+check('rates in Settings have changed' not in edit_fresh,
+      'and the flag clears once rates are back to what the quote was priced at')
 
 page = c.get(f'/quotes/{aq_id}/review', base_url=HOST).get_data(as_text=True)
 check('Scope of Work by Area' in page and 'Service floor / entry' in page and 'Restrooms' in page
