@@ -390,6 +390,40 @@ signup_attempts = Table(
 )
 
 
+# Every email the product sends to a company's owner -- welcome, trial
+# emails, the moments -- sent or failed. Leads have their own record
+# (product_lead_messages); between the two, the console's Communications page
+# can answer "what have we sent this person, and when" from one place.
+product_messages = Table(
+    'product_messages', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('org_slug', String(40), index=True),
+    Column('kind', String(40)),
+    Column('to_address', String(200), index=True),
+    Column('subject', String(300)),
+    Column('ok', Boolean, default=False),
+    Column('detail', String(400)),
+    # 'auto' for the daily run, 'event' for a moment, or the console user
+    # who pressed the button.
+    Column('sent_by', String(200)),
+    Column('sent_at', DateTime, default=datetime.utcnow, index=True),
+)
+
+
+# Which automated emails are switched on. One row per email (or per whole
+# sequence); a missing row means on, so a new email works the day it ships
+# and an empty table changes nothing. Set from the console's Communications
+# page by a manager or the owner, and recorded in the console log.
+product_switches = Table(
+    'product_switches', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('key', String(60), unique=True, nullable=False),
+    Column('enabled', Boolean, default=True),
+    Column('updated_by', String(200)),
+    Column('updated_at', DateTime, default=datetime.utcnow),
+)
+
+
 # Questions from the public site -- people who are not customers yet and have
 # no account to file feedback from.
 support_requests = Table(
@@ -548,7 +582,8 @@ def ensure_table(engine):
                         tenant_logins, login_lookup_requests, console_docs,
                         switch_tokens,
                         promo_codes, product_lead_messages, signup_attempts,
-                        tip_events])
+                        tip_events,
+                        product_messages, product_switches])
     ensure_columns(engine)
 
 
@@ -1011,6 +1046,76 @@ def lead_messages(engine, limit=100):
             return [dict(r) for r in conn.execute(q).mappings()]
     except Exception:
         return []
+
+
+def record_product_message(engine, org_slug, kind, to_address, subject, ok,
+                           detail=None, sent_by='auto'):
+    """Write down one email to an owner. Never raises: a failed write to the
+    record must never be the reason an email is treated as unsent."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(product_messages).values(
+                org_slug=(org_slug or '')[:40] or None, kind=(kind or '')[:40],
+                to_address=(to_address or '')[:200], subject=(subject or '')[:300],
+                ok=bool(ok), detail=(detail or '')[:400],
+                sent_by=(sent_by or '')[:200], sent_at=datetime.utcnow()))
+    except Exception:
+        pass
+
+
+def product_messages_for(engine, slug=None, email=None, since=None, limit=200):
+    """Owner emails, newest first, optionally for one company or address."""
+    try:
+        q = select(product_messages)
+        if slug:
+            q = q.where(product_messages.c.org_slug == slug)
+        if email:
+            q = q.where(func.lower(product_messages.c.to_address)
+                        == email.strip().lower())
+        if since:
+            q = q.where(product_messages.c.sent_at >= since)
+        q = q.order_by(product_messages.c.sent_at.desc()).limit(limit)
+        with engine.connect() as conn:
+            return [dict(r) for r in conn.execute(q).mappings()]
+    except Exception:
+        return []
+
+
+def lead_messages_for(engine, email, limit=100):
+    """Everything sent to one lead address, newest first."""
+    try:
+        with engine.connect() as conn:
+            q = (select(product_lead_messages)
+                 .where(func.lower(product_lead_messages.c.to_address)
+                        == (email or '').strip().lower())
+                 .order_by(product_lead_messages.c.sent_at.desc()).limit(limit))
+            return [dict(r) for r in conn.execute(q).mappings()]
+    except Exception:
+        return []
+
+
+def switches(engine):
+    """{key: enabled} for every switch that has been set. Absent means on.
+    Never raises: if the table cannot be read, everything stays on, which is
+    how it behaved before switches existed."""
+    try:
+        with engine.connect() as conn:
+            return {r['key']: bool(r['enabled']) for r in conn.execute(
+                select(product_switches)).mappings()}
+    except Exception:
+        return {}
+
+
+def set_switch(engine, key, enabled, by=None):
+    now = datetime.utcnow()
+    with engine.begin() as conn:
+        done = conn.execute(update(product_switches)
+                            .where(product_switches.c.key == key)
+                            .values(enabled=bool(enabled), updated_by=by,
+                                    updated_at=now)).rowcount
+        if not done:
+            conn.execute(insert(product_switches).values(
+                key=key, enabled=bool(enabled), updated_by=by, updated_at=now))
 
 
 def mark_leads_unsubscribed(engine, email):
