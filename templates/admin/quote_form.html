@@ -278,7 +278,8 @@
     function hasLines() { return state.some(a => a.lines.some(l => Number(l.qty) || Number(l.price))); }
     function sync() {
       hidden.value = JSON.stringify(state.map(a => ({ name: a.name, lines: a.lines.map(l => ({
-        item: l.item, label: l.label, qty: l.qty, unit: l.unit, price: l.price, override: !!l.override })) })));
+        item: l.item, label: l.label, qty: l.qty, unit: l.unit, price: l.price, override: !!l.override,
+        rate: l.unit_rate })) })));
       const on = hasLines();
       [ppv, mon].forEach(i => { i.readOnly = on; i.style.background = on ? 'var(--ground)' : ''; });
       const est = document.getElementById('estHelper'); if (est) est.style.display = on ? 'none' : '';
@@ -295,7 +296,7 @@
       s.appendChild(el('option', { value: 'custom', text: 'Something else — describe it and price it' }));
       s.value = BY_KEY[line.item] ? line.item : 'custom';
       s.addEventListener('change', () => {
-        line.item = s.value; line.override = false;
+        line.item = s.value; line.override = false; line.unit_rate = null;
         line.label = BY_KEY[line.item] ? BY_KEY[line.item].label : '';
         line.unit = BY_KEY[line.item] ? BY_KEY[line.item].unit : '';
         render(); changed();
@@ -304,27 +305,56 @@
     }
     function lineRow(area, line, idx) {
       const custom = !BY_KEY[line.item];
+      const byUnit = custom && line.unit_rate != null && line.unit_rate !== '';
       const desc = el('input', { type: 'text', value: line.label || '', placeholder: custom ? 'What is done, e.g. Pressure-wash the patio' : '',
                                   'aria-label': 'Description the customer reads', style: 'width:100%;margin-top:6px;font-size:0.85rem' });
       desc.addEventListener('input', () => { line.label = desc.value; changed(false); });
       const qty = el('input', { type: 'number', min: '0', step: 'any', value: line.qty || '', placeholder: 'Qty', 'aria-label': 'Quantity', style: 'width:100%' });
-      qty.addEventListener('input', () => { line.qty = qty.value; changed(); });
       const price = el('input', { type: 'number', min: '0', step: '0.01', value: line.price || '', placeholder: '$', 'aria-label': 'Line price', style: 'width:100%' });
-      price.addEventListener('input', () => { line.price = price.value; line.override = true; changed(); });
-      // Offer "use the calculated price" once they have finished typing theirs.
-      price.addEventListener('change', () => render());
       const unit = el('span', { text: custom ? '' : (BY_KEY[line.item].unit), style: 'font-size:0.78rem;color:var(--softer);white-space:nowrap' });
       const del = el('button', { type: 'button', title: 'Remove this line', 'aria-label': 'Remove this line',
                                   style: 'background:none;border:none;color:var(--warn);font-size:1.1rem;cursor:pointer;padding:0 4px', text: '✕' });
       del.addEventListener('click', () => { area.lines.splice(idx, 1); render(); changed(); });
-      const row = custom
-        ? el('div', { style: 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:6px' }, [price, del])
-        : el('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;margin-top:6px' }, [qty, unit, price, del]);
+      let row, toggle = null;
+      if (custom && byUnit) {
+        // Priced like a catalog item -- qty times a rate typed on the line
+        // itself, since there's no Settings entry for something made up on
+        // the spot. The price box becomes the read-out, not the input.
+        const cunit = el('input', { type: 'text', value: line.unit || '', placeholder: 'unit, e.g. window',
+                                    'aria-label': 'Unit', style: 'width:100%;font-size:0.82rem' });
+        cunit.addEventListener('input', () => { line.unit = cunit.value; changed(false); });
+        const rateInp = el('input', { type: 'number', min: '0', step: '0.01', value: line.unit_rate || '', placeholder: '$/unit', 'aria-label': 'Price per unit', style: 'width:100%' });
+        const recalc = () => {
+          line.price = Math.round(((Number(line.qty) || 0) * (Number(rateInp.value) || 0)) * 100) / 100;
+          price.value = line.price || '';
+        };
+        qty.addEventListener('input', () => { line.qty = qty.value; recalc(); changed(); });
+        rateInp.addEventListener('input', () => { line.unit_rate = rateInp.value; recalc(); changed(); });
+        price.readOnly = true; price.style.background = 'var(--ground)';
+        row = el('div', { style: 'display:grid;grid-template-columns:0.7fr 1fr 0.8fr 1fr auto;gap:6px;align-items:center;margin-top:6px' },
+                 [qty, cunit, rateInp, price, del]);
+        toggle = el('button', { type: 'button', style: 'background:none;border:none;color:var(--amber-deep);font-size:0.75rem;cursor:pointer;padding:2px 0',
+                                text: '↺ Use a flat price instead' });
+        toggle.addEventListener('click', () => { line.unit_rate = null; render(); changed(); });
+      } else if (custom) {
+        price.addEventListener('input', () => { line.price = price.value; line.override = true; changed(); });
+        row = el('div', { style: 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:6px' }, [price, del]);
+        toggle = el('button', { type: 'button', style: 'background:none;border:none;color:var(--amber-deep);font-size:0.75rem;cursor:pointer;padding:2px 0',
+                                text: '× Price by quantity × $ per unit instead' });
+        toggle.addEventListener('click', () => { line.unit_rate = '0'; render(); changed(); });
+      } else {
+        qty.addEventListener('input', () => { line.qty = qty.value; changed(); });
+        price.addEventListener('input', () => { line.price = price.value; line.override = true; changed(); });
+        // Offer "use the calculated price" once they have finished typing theirs.
+        price.addEventListener('change', () => render());
+        row = el('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;margin-top:6px' }, [qty, unit, price, del]);
+      }
       // Filled in once price() hears back from the server -- only a sq-ft
       // line gets a rate at all, see commercial_pricing.area_quote's note on
       // why a toilet count or a linear foot of hood does not.
       const rateHint = el('div', { 'data-role': 'rate', style: 'display:none;font-size:0.72rem;color:var(--softer);text-align:right;margin-top:2px' });
       const wrap = el('div', { style: 'border-top:1px dashed var(--line);padding-top:8px;margin-top:8px' }, [itemSelect(line), desc, row, rateHint]);
+      if (toggle) wrap.appendChild(toggle);
       if (line.override && !custom) {
         const reset = el('button', { type: 'button', style: 'background:none;border:none;color:var(--amber-deep);font-size:0.75rem;cursor:pointer;padding:2px 0',
                                      text: '↺ Your price — use the calculated one' });
@@ -381,7 +411,7 @@
       const rateTxt = r => '$' + r.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '/sq ft';
       d.areas.forEach((a, ai) => {
         if (!state[ai]) return;
-        a.lines.forEach((l, li) => { const s = state[ai].lines[li]; if (s) { if (!s.override) s.price = l.price; s.rate_per_sqft = l.rate_per_sqft; } });
+        a.lines.forEach((l, li) => { const s = state[ai].lines[li]; if (s) { if (!s.override) s.price = l.price; s.rate_per_sqft = l.rate_per_sqft; s.unit_rate = l.unit_rate; } });
         const sub = box.querySelector('[data-sub="' + ai + '"]');
         if (sub) sub.textContent = a.name + ': ' + money(a.subtotal) + (a.rate_per_sqft ? ' (' + rateTxt(a.rate_per_sqft) + ')' : '');
       });

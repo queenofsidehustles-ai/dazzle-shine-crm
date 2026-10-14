@@ -1089,8 +1089,10 @@ class CommercialQuote(db.Model):
     prospect_id = db.Column(db.Integer, index=True)
     # Priced by work area, as JSON: commercial_pricing.area_quote()'s result as
     # it was when saved -- {"areas": [{"name", "subtotal", "lines": [{"item",
-    # "label", "qty", "unit", "price", "override"}]}], "work", "travel",
-    # "per_visit", "monthly", "first_visit_charge", "price_per_sqft", ...}.
+    # "label", "qty", "unit", "price", "override", "unit_rate"}]}], "work",
+    # "travel", "per_visit", "monthly", "first_visit_charge", "price_per_sqft", ...}.
+    # unit_rate is only set on a custom line priced as qty x a rate typed on
+    # the line itself, rather than a flat price (override=true).
     # NULL on a quote priced the old way -- one figure and a list of services.
     # Migration 0023.
     line_items = db.Column(db.Text)

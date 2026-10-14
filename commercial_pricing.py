@@ -397,12 +397,14 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fix
     """Price a quote laid out as work areas and their lines.
 
     `areas` is what the quote form sends: [{"name", "lines": [{"item", "qty",
-    "label"?, "price"?, "override"?}]}]. A line's price is worked out from its
-    item and quantity unless it was typed over (override) or is a custom line
-    with only a price. What comes back is the same areas, cleaned and priced,
-    with each area's subtotal, then the travel as a line of its own -- never
-    folded into the work, where nobody can see it -- the price a visit, and a
-    month.
+    "label"?, "price"?, "override"?, "rate"?}]}]. A line's price is worked
+    out from its item and quantity unless it was typed over (override), or
+    is a custom line -- priced as its qty times a "rate" typed on the line
+    itself (there's no catalog rate for something made up on the spot), or
+    failing that a flat "price". What comes back is the same areas, cleaned
+    and priced, with each area's subtotal, then the travel as a line of its
+    own -- never folded into the work, where nobody can see it -- the price
+    a visit, and a month.
 
     No minimum-visit floor here, unlike quote() (the single-sqft estimator):
     an itemized quote is already a commitment to the scope on the page, so the
@@ -441,12 +443,21 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fix
                 continue
             key = ln.get('item') if ln.get('item') in _ITEM else 'custom'
             qty = _num(ln.get('qty'))
+            unit_rate = None
             if key == 'custom':
                 label = str(ln.get('label') or '').strip()[:140]
                 unit = str(ln.get('unit') or '').strip()[:20]
-                price = round(_num(ln.get('price')), 2)
                 h = 0.0
-                override = True
+                # A rate per unit (12 windows at $8 each) prices itself, same
+                # as a catalog item; without one it's a flat price typed by
+                # hand, the only way a custom line worked before this.
+                if ln.get('rate') not in (None, ''):
+                    unit_rate = round(_num(ln.get('rate')), 4)
+                    price = round(qty * unit_rate, 2)
+                    override = False
+                else:
+                    price = round(_num(ln.get('price')), 2)
+                    override = True
                 # Described but free -- a complimentary item is still scope
                 # the customer is promised, and the review flags the $0.
                 keep = bool(label)
@@ -468,7 +479,8 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fix
             # such rate, and showing one would read as real.
             rate = round(price / qty, 4) if unit == 'sq ft' and qty else None
             lines.append({'item': key, 'label': label, 'qty': qty, 'unit': unit,
-                          'price': price, 'override': override, 'rate_per_sqft': rate})
+                          'price': price, 'override': override, 'rate_per_sqft': rate,
+                          'unit_rate': unit_rate})
             work += price
             hours += h
             if unit == 'sq ft':

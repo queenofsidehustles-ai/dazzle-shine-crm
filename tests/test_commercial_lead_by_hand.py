@@ -878,7 +878,8 @@ areas_in = [
     {'name': 'Service floor / entry', 'lines': [
         {'item': 'floor_stone', 'qty': 800}, {'item': 'floor_ceramic', 'qty': 1000},
         {'item': 'floor_hardwood', 'qty': 600, 'price': 40, 'override': True}]},
-    {'name': 'Restrooms', 'lines': [{'item': 'rr_toilet', 'qty': 3}, {'item': 'custom', 'label': 'Replace air fresheners', 'price': 6}]},
+    {'name': 'Restrooms', 'lines': [{'item': 'rr_toilet', 'qty': 3}, {'item': 'custom', 'label': 'Replace air fresheners', 'price': 6},
+                                    {'item': 'custom', 'label': 'Replace window screens', 'qty': 4, 'rate': 7.5}]},
 ]
 r = c.post('/quotes/new', base_url=HOST, data={
     'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',
@@ -894,10 +895,13 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     db.session.remove()
 hw = snap['areas'][0]['lines'][2]
 cust = snap['areas'][1]['lines'][1]
+by_unit = snap['areas'][1]['lines'][2]
 check(aq_ppv == snap['per_visit'] and aq_mon == snap['monthly'] and aq_ppv != 1,
       f'the lines set the price a visit and a month (${aq_ppv}, ${aq_mon}) -- not what was typed in the boxes')
 check(hw['price'] == 40 and hw['override'] and cust['label'] == 'Replace air fresheners' and cust['price'] == 6,
       'a price typed over is kept, and a line for something else is described and priced by hand')
+check(by_unit['price'] == 30 and not by_unit['override'] and by_unit['unit_rate'] == 7.5,
+      "or priced as its own qty times a rate, like a catalog line, instead of typed as one flat number (4 x $7.50 = $30)")
 check(snap['first_visit_charge'] > 0 and aq_ppv == snap['per_visit'],
       f'"New contract" on the form saves a first-visit premium without touching the recurring price (+${snap["first_visit_charge"]})')
 
