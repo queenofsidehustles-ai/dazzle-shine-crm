@@ -102,7 +102,7 @@ test.describe('Live CRM — read only', () => {
     }
     await firstBooking.click();
     const body = page.locator('body');
-    await expect(body).toContainText("Who's Doing This Job");
+    await expect(body).toContainText("Who's doing it");
     // The headcount now lives inside the "How this pay is worked out"
     // disclosure, which is closed, so its text is not in innerText. What must
     // always show is the one control that says who is doing the job.
