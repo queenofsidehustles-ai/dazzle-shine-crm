@@ -102,6 +102,11 @@
         <input type="checkbox" name="show_line_prices" value="1" style="width:auto;accent-color:var(--amber)" {{ 'checked' if show_prices_init }} />
         Show the customer the price of every line <span style="color:var(--softer)">(off: each area's total only)</span>
       </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:0.85rem;cursor:pointer">
+        <input type="checkbox" name="first_visit_premium" id="firstVisitPremium" value="1" style="width:auto;accent-color:var(--amber)"
+               {{ 'checked' if quote and quote.first_visit_premium }} />
+        New contract — add a one-time first-visit premium <span style="color:var(--softer)">(the first clean runs longer than every visit after it)</span>
+      </label>
     </div>
 
     <div class="card" id="svcCard">
@@ -244,6 +249,7 @@
     const ppv = document.getElementById('price_per_visit');
     const mon = document.getElementById('monthly_price');
     const freqSel = document.querySelector('select[name="frequency"]');
+    const fvCheckbox = document.getElementById('firstVisitPremium');
     let state = [], seq = 0, timer = null;
     const money = n => '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     const el = (tag, attrs, kids) => {
@@ -303,7 +309,11 @@
       const row = custom
         ? el('div', { style: 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:6px' }, [price, del])
         : el('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;margin-top:6px' }, [qty, unit, price, del]);
-      const wrap = el('div', { style: 'border-top:1px dashed var(--line);padding-top:8px;margin-top:8px' }, [itemSelect(line), desc, row]);
+      // Filled in once price() hears back from the server -- only a sq-ft
+      // line gets a rate at all, see commercial_pricing.area_quote's note on
+      // why a toilet count or a linear foot of hood does not.
+      const rateHint = el('div', { 'data-role': 'rate', style: 'display:none;font-size:0.72rem;color:var(--softer);text-align:right;margin-top:2px' });
+      const wrap = el('div', { style: 'border-top:1px dashed var(--line);padding-top:8px;margin-top:8px' }, [itemSelect(line), desc, row, rateHint]);
       if (line.override && !custom) {
         const reset = el('button', { type: 'button', style: 'background:none;border:none;color:var(--amber-deep);font-size:0.75rem;cursor:pointer;padding:2px 0',
                                      text: '↺ Your price — use the calculated one' });
@@ -348,6 +358,7 @@
         const r = await fetch({{ url_for('quotes.lines_json')|tojson }}, {
           method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ areas: JSON.parse(hidden.value), frequency: freqSel.value,
+                                 first_visit: fvCheckbox.checked,
                                  quote_id: {{ (quote.id if quote else none)|tojson }} }) });
         if (!r.ok) throw new Error(r.status);
         d = await r.json();
@@ -356,15 +367,24 @@
         return;
       }
       if (mine !== seq) return;
+      const rateTxt = r => '$' + r.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '/sq ft';
       d.areas.forEach((a, ai) => {
         if (!state[ai]) return;
-        a.lines.forEach((l, li) => { const s = state[ai].lines[li]; if (s && !s.override) s.price = l.price; });
-        const sub = box.querySelector('[data-sub="' + ai + '"]'); if (sub) sub.textContent = a.name + ': ' + money(a.subtotal);
+        a.lines.forEach((l, li) => { const s = state[ai].lines[li]; if (s) { if (!s.override) s.price = l.price; s.rate_per_sqft = l.rate_per_sqft; } });
+        const sub = box.querySelector('[data-sub="' + ai + '"]');
+        if (sub) sub.textContent = a.name + ': ' + money(a.subtotal) + (a.rate_per_sqft ? ' (' + rateTxt(a.rate_per_sqft) + ')' : '');
       });
-      // Refresh the price boxes without re-rendering what somebody is typing in.
+      // Refresh the price boxes and rate hints without re-rendering what
+      // somebody is typing in.
       let k = 0;
       const priceInputs = box.querySelectorAll('input[aria-label="Line price"]');
-      state.forEach(a => a.lines.forEach(l => { const inp = priceInputs[k++]; if (inp && document.activeElement !== inp) inp.value = l.price || ''; }));
+      const rateHints = box.querySelectorAll('[data-role="rate"]');
+      state.forEach(a => a.lines.forEach(l => {
+        const inp = priceInputs[k]; if (inp && document.activeElement !== inp) inp.value = l.price || '';
+        const hint = rateHints[k];
+        if (hint) { if (l.rate_per_sqft) { hint.textContent = rateTxt(l.rate_per_sqft); hint.style.display = 'block'; } else hint.style.display = 'none'; }
+        k++;
+      }));
       sync();
       if (!hasLines()) { totals.style.display = 'none'; return; }
       totals.style.display = 'block';
@@ -372,10 +392,15 @@
       const row = (label, value, strong) => totals.appendChild(el('div', { style: 'display:flex;justify-content:space-between;' + (strong ? 'font-weight:700;margin-top:4px' : '') },
                                                                  [el('span', { text: label }), el('span', { text: value })]));
       row('Work', money(d.work));
-      if (d.minimum) row('Minimum visit (' + money(d.min_visit) + ')', money(d.minimum));
       if (d.travel) row('Travel (' + d.drive_minutes + ' min round trip)', money(d.travel));
       row('Per visit', money(d.per_visit), true);
+      if (d.price_per_sqft) row('', rateTxt(d.price_per_sqft) + ' a visit');
       if (d.monthly != null) row('Monthly', money(d.monthly), true);
+      if (d.first_visit_charge) {
+        totals.appendChild(el('div', { style: 'border-top:1px dashed var(--line);margin-top:8px;padding-top:6px;font-weight:700' , text: 'First visit' }));
+        row('First-visit premium (+' + Math.round(d.first_visit_pct * 100) + '%)', money(d.first_visit_charge));
+        row('Your first visit total', money(d.first_visit_total), true);
+      }
       totals.appendChild(el('div', { style: 'font-size:0.75rem;color:var(--softer);margin-top:6px',
                                      text: 'About ' + d.hours + ' h of cleaning a visit. These set the price per visit and monthly below.' }));
       ppv.value = Number(d.per_visit).toFixed(2);
@@ -388,6 +413,7 @@
       const inputs = box.querySelectorAll('input[aria-label="Work area name"]'); inputs[inputs.length - 1].focus();
     });
     freqSel.addEventListener('change', () => changed());
+    fvCheckbox.addEventListener('change', () => changed());
     window.waReload = function () { load(); render(); price(); };
     load(); render(); sync(); if (hasLines()) price();
   })();

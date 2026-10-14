@@ -192,6 +192,7 @@ def new():
             token=secrets.token_urlsafe(32),
             status='draft',
             brand=(request.form.get('brand') or brands.brand_for_property(request.form.get('property_type', ''))),
+            first_visit_premium=request.form.get('first_visit_premium') == '1',
         )
         _apply_lines(q)
         lead = Prospect.query.get(request.form.get('prospect_id', type=int) or 0)
@@ -256,6 +257,7 @@ def _apply_form(q):
     q.monthly_price = f.get('monthly_price') or None
     q.scope_notes = (f.get('scope_notes', q.scope_notes) or '').strip()
     q.brand = f.get('brand') or q.brand or brands.brand_for_property(q.property_type)
+    q.first_visit_premium = f.get('first_visit_premium') == '1'
     _apply_lines(q)
 
 
@@ -277,7 +279,8 @@ def _apply_lines(q):
     except ValueError:
         areas = []
     areas = areas if isinstance(areas, list) else []
-    priced = cp.area_quote(areas, q.frequency or 'weekly', **_lock_saved(areas, _priced(q)))
+    priced = cp.area_quote(areas, q.frequency or 'weekly', first_visit=bool(q.first_visit_premium),
+                           **_lock_saved(areas, _priced(q)))
     if any(a['lines'] for a in priced['areas']):
         q.line_items = json.dumps(priced)
         q.price_per_visit = priced['per_visit']
@@ -294,8 +297,8 @@ def _lock_saved(areas, saved):
     this, raising the hourly cost next month and opening an old quote to fix a
     typo re-priced it, and a proposal already sent (or accepted) changed under
     the customer. A line still in the same area, for the same work and the
-    same quantity, keeps its saved price; the minimum visit and the travel
-    keep theirs. A line that was changed, or added, is priced today.
+    same quantity, keeps its saved price; the travel keeps its too. A line
+    that was changed, or added, is priced today.
     Mutates `areas`; returns the area_quote kwargs."""
     if not saved:
         return {}
@@ -318,7 +321,7 @@ def _lock_saved(areas, saved):
             k = ((a.get('name') or '').strip().lower(), l.get('item'), qty)
             if k in old:
                 l['locked_price'] = old[k]
-    return {'fixed': {'min_visit': saved.get('min_visit'), 'travel': saved.get('travel')}}
+    return {'fixed': {'travel': saved.get('travel')}}
 
 
 def _priced(q):
@@ -346,6 +349,7 @@ def lines_json():
         q = CommercialQuote.query.get(int(d['quote_id'])) if str(d['quote_id']).isdigit() else None
         saved = _priced(q) if q else None
     return jsonify(cp.area_quote(areas, d.get('frequency') or 'weekly', keep_empty=True,
+                                 first_visit=bool(d.get('first_visit')),
                                  **_lock_saved(areas, saved)))
 
 
@@ -390,28 +394,38 @@ def _areas_email_html(priced, show_prices, accent):
     num = td + ';text-align:right;white-space:nowrap;padding-left:10px'
     qty = td + ';color:#6b6585;text-align:right;white-space:nowrap;padding-left:10px'
     money = lambda v: f'${float(v or 0):,.2f}'
+    rate = lambda r: f'${r:,.3f}'.rstrip('0').rstrip('.') + '/sq ft'
     rows = []
     for a in priced.get('areas') or []:
         if not a.get('lines'):
             continue
+        area_rate = f' ({rate(a["rate_per_sqft"])})' if show_prices and a.get('rate_per_sqft') else ''
         rows.append(f'<tr><td colspan="2" style="padding:14px 0 4px;font-weight:700;color:{accent}">{e(a["name"])}</td>'
                     f'<td style="padding:14px 0 4px;text-align:right;font-weight:700">'
                     f'{"" if show_prices else money(a.get("subtotal"))}</td></tr>')
         for l in a['lines']:
             q_txt = f'{float(l.get("qty") or 0):,g} {e(l.get("unit") or "")}' if l.get('qty') else ''
+            line_rate = f' <span style="color:#9a95ad">({rate(l["rate_per_sqft"])})</span>' if show_prices and l.get('rate_per_sqft') else ''
             rows.append(f'<tr><td style="{td}">{e(l.get("label") or "")}</td><td style="{qty}">{q_txt}</td>'
-                        f'<td style="{num}">{money(l.get("price")) if show_prices else ""}</td></tr>')
+                        f'<td style="{num}">{money(l.get("price")) + line_rate if show_prices else ""}</td></tr>')
         if show_prices:
-            rows.append(f'<tr><td colspan="2" style="{td};font-weight:700">{e(a["name"])} total</td>'
+            rows.append(f'<tr><td colspan="2" style="{td};font-weight:700">{e(a["name"])} total{area_rate}</td>'
                         f'<td style="{num};font-weight:700">{money(a.get("subtotal"))}</td></tr>')
-    if priced.get('minimum') or priced.get('travel'):
+    if priced.get('travel'):
         rows.append(f'<tr><td colspan="3" style="padding:14px 0 4px;font-weight:700;color:{accent}">Each visit</td></tr>')
-        if priced.get('minimum'):
-            rows.append(f'<tr><td colspan="2" style="{td}">Minimum visit charge (visits are at least '
-                        f'${float(priced.get("min_visit") or 0):,.0f})</td><td style="{num}">{money(priced["minimum"])}</td></tr>')
-        if priced.get('travel'):
-            rows.append(f'<tr><td colspan="2" style="{td}">Travel to and from your site</td>'
-                        f'<td style="{num}">{money(priced["travel"])}</td></tr>')
+        rows.append(f'<tr><td colspan="2" style="{td}">Travel to and from your site</td>'
+                    f'<td style="{num}">{money(priced["travel"])}</td></tr>')
+        if priced.get('price_per_sqft'):
+            rows.append(f'<tr><td colspan="2" style="{td};color:#6b6585">Works out to</td>'
+                        f'<td style="{num};color:#6b6585">{rate(priced["price_per_sqft"])} a visit</td></tr>')
+    if priced.get('first_visit_charge'):
+        pct = round((priced.get('first_visit_pct') or 0) * 100)
+        rows.append(f'<tr><td colspan="3" style="padding:14px 0 4px;font-weight:700;color:{accent}">First visit</td></tr>')
+        rows.append(f'<tr><td colspan="2" style="{td}">One-time first-visit premium (+{pct}%) — the first clean on a '
+                    f'new contract runs longer than every visit after it</td>'
+                    f'<td style="{num}">{money(priced["first_visit_charge"])}</td></tr>')
+        rows.append(f'<tr><td colspan="2" style="{td};font-weight:700">Your first visit total</td>'
+                    f'<td style="{num};font-weight:700">{money(priced.get("first_visit_total"))}</td></tr>')
     return ('<table style="width:100%;border-collapse:collapse;font-size:14px" cellpadding="0" cellspacing="0">'
             + ''.join(rows) + '</table>')
 

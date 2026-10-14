@@ -308,6 +308,11 @@ def commercial():
         PricingSetting.set('comm_min_visit', request.form.get('comm_min_visit') or 125)
         PricingSetting.set('comm_drive_minutes',
                            request.form.get('comm_drive_minutes') or 30)
+        try:
+            fv_pct = float(request.form.get('comm_first_visit_pct') or 25)
+        except ValueError:
+            fv_pct = 25
+        PricingSetting.set('comm_first_visit_pct', round(fv_pct / 100.0, 4))
         for c in cp.PROD_RATES:
             v = request.form.get(f'comm_prod_{c}')
             if v:
