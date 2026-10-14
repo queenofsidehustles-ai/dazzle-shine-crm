@@ -392,6 +392,16 @@ def _num(value, default=0.0):
     return v if v >= 0 else default
 
 
+def fmt_sqft_rate(r):
+    """A $/sq ft rate (area_quote's rate_per_sqft / price_per_sqft) as a
+    customer reads it -- 3 decimals so a few cents a square foot isn't
+    rounded to nothing, trailing zeros dropped so $0.050 reads as $0.05.
+    The one formatting rule, used on the quote page, the review page and
+    the proposal email alike, so the same rate never reads differently in
+    two places."""
+    return f'${r:,.3f}'.rstrip('0').rstrip('.') + '/sq ft'
+
+
 def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fixed=None,
                first_visit=False):
     """Price a quote laid out as work areas and their lines.

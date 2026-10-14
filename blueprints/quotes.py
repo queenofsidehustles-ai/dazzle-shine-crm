@@ -400,11 +400,12 @@ def _areas_email_html(priced, show_prices, accent):
     """The work-area table for the email, in the inline styles mail clients
     keep. Same rule as the page: every line's price, or each area's total."""
     from markupsafe import escape as e
+    import commercial_pricing as cp
     td = 'padding:7px 0;border-top:1px solid #e4dfef;vertical-align:top'
     num = td + ';text-align:right;white-space:nowrap;padding-left:10px'
     qty = td + ';color:#6b6585;text-align:right;white-space:nowrap;padding-left:10px'
     money = lambda v: f'${float(v or 0):,.2f}'
-    rate = lambda r: f'${r:,.3f}'.rstrip('0').rstrip('.') + '/sq ft'
+    rate = cp.fmt_sqft_rate
     rows = []
     for a in priced.get('areas') or []:
         if not a.get('lines'):

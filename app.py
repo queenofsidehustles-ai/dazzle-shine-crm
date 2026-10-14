@@ -537,6 +537,10 @@ def create_app():
     # {{ tip('key') }}: an ⓘ that explains a feature or a term (help_tips.py).
     import help_tips as _help_tips
     app.jinja_env.globals['tip'] = _help_tips.render
+    # The same $/sq ft formatting the proposal email builds by hand, so a
+    # commercial quote's rate reads the same on the page and in the inbox.
+    import commercial_pricing as _cp
+    app.jinja_env.filters['sqft_rate'] = _cp.fmt_sqft_rate
 
     with app.app_context():
         # Migrations run FIRST, and the order is not cosmetic.
