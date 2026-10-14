@@ -11,8 +11,8 @@ behavior before this existed.
 from alembic import op
 import sqlalchemy as sa
 
-revision = '0026_quote_first_visit_premium'
-down_revision = '0025_prospect_activity'
+revision = '0027_quote_first_visit_premium'
+down_revision = '0026_feature_seen'
 branch_labels = None
 depends_on = None
 
