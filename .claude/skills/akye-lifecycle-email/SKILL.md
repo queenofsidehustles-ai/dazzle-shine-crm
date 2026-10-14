@@ -19,6 +19,7 @@ Read `SIGNUP_FUNNEL.md` first for the map of every email and when it fires.
 | Owner emails on a schedule | `trial_nudges.py` (`due()` + `compose()`) | daily, `/api/trial-nudges` |
 | Owner emails on an event | `trial_nudges.send_event()` | the moment it happens |
 | Leads who did not sign up | `lead_nurture.py` | daily, `/api/lead-nurture` |
+| Catalog, switches, history | `communications.py`, console Communications page | read by every sender |
 
 A new owner email is almost always a new **kind** in `trial_nudges.py`. Do not
 start a new module or a new cron for it.
@@ -123,7 +124,9 @@ scripts are in `LOOM_SCRIPTS.md`.
    sent once, blocked for paying, test, opted out), and confirm the
    `compose()` loop in `tests/test_trial_nudges.py` still passes for every
    kind (names them, links to their own address).
-7. Update the table in `SIGNUP_FUNNEL.md`.
+7. Add it to `communications.CATALOG` so it appears on the console's
+   Communications page with its own switch and preview.
+8. Update the table in `SIGNUP_FUNNEL.md`.
 
 ## Before you finish
 

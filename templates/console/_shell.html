@@ -57,6 +57,8 @@
        class="{{ 'on' if request.endpoint == 'console.health' }}">Health</a>
     <a href="{{ url_for('console.funnel_view') }}"
        class="{{ 'on' if request.endpoint in ('console.funnel_view', 'console.leads_view', 'console.sales_view', 'console.discounts', 'console.tips_view') }}">Funnel{% if counts and counts.leads %}<span class="pill" title="New leads nobody has contacted yet">{{ counts.leads }}</span>{% endif %}</a>
+    <a href="{{ url_for('console.communications') }}"
+       class="{{ 'on' if request.endpoint and request.endpoint.startswith('console.communications') }}">Communications</a>
     <a href="{{ url_for('console.nana_proposals') }}"
        class="{{ 'on' if request.endpoint == 'console.nana_proposals' }}">Nana</a>
     <a href="{{ url_for('console.people') }}"
