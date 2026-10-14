@@ -10,7 +10,7 @@
 
 <div class="card" style="margin-bottom:16px">
   <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
-    <h3 style="margin:0">Today</h3>
+    <h3 style="margin:0">Today {{ tip('rep.daily_target', 'Where does my target come from?') }}</h3>
     <span style="color:var(--softer);font-size:0.86rem">{% if done >= target %}Target made 🎉{% else %}{{ target - done }} to go{% endif %}</span>
   </div>
   <div style="font-size:2rem;font-weight:800;margin:6px 0 4px">{{ done }} <span style="font-size:1rem;font-weight:500;color:var(--softer)">of {{ target }} calls</span></div>

@@ -286,16 +286,24 @@ def create_app():
                 except Exception:
                     setup = None
 
-            return {'NAV': navigation.sidebar(role, can, setup_done),
+            nav = navigation.sidebar(role, can, setup_done)
+            # What each menu item is for, shown on hover (help_tips.py), and
+            # the ⓘ beside this page's title -- on the page a menu item opens,
+            # not on the records behind it.
+            import help_tips
+            return {'NAV': nav,
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
                     'NAV_TITLE': navigation.title_for(request.endpoint),
                     'NAV_TABS': tabs,
                     'NAV_ACTIVE_TAB': active_tab,
-                    'SETUP': setup}
+                    'SETUP': setup,
+                    'MENU_TIPS': help_tips.for_menu(nav),
+                    'PAGE_TIP': request.endpoint if request.endpoint in help_tips.TIPS else None}
         except Exception:
             # A broken menu must never take a working page down with it.
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [],
-                    'NAV_ACTIVE_TAB': None, 'SETUP': None}
+                    'NAV_ACTIVE_TAB': None, 'SETUP': None,
+                    'MENU_TIPS': {}, 'PAGE_TIP': None}
 
     @app.context_processor
     def inject_trial():
@@ -526,6 +534,9 @@ def create_app():
     app.jinja_env.filters['stamp'] = _sched.stamp
     app.jinja_env.filters['short_stamp'] = _sched.short_stamp
     app.jinja_env.globals['business_tz_label'] = lambda: _sched.local_now().strftime('%Z')
+    # {{ tip('key') }}: an ⓘ that explains a feature or a term (help_tips.py).
+    import help_tips as _help_tips
+    app.jinja_env.globals['tip'] = _help_tips.render
 
     with app.app_context():
         # Migrations run FIRST, and the order is not cosmetic.
