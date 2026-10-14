@@ -808,14 +808,21 @@
         ⚠️ No email or phone on this booking, so nothing can be delivered. An invoice
         can still be raised here and its link shared by hand.</p>
       {% endif %}
+      {# Order matters: a select with nothing marked selected opens on its first
+         option, and the script below then hides every panel but that one. The
+         Yes/No request used to be first, so the booking confirmation — the only
+         send that can carry the deposit request — opened hidden, behind a
+         dropdown there was no reason to open. It leads now, and says so. #}
       <div class="form-group" style="margin:12px 0 14px">
         <label for="sendKind" style="font-size:0.82rem">What do you want to send?</label>
         <select id="sendKind" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px">
+          {% if not settled %}
+          <option value="confirmation" selected>The booking confirmation — and the deposit, if you want it</option>
+          {% endif %}
           {% if booking.status in ['pending', 'confirmed'] and booking.confirm_response not in ['yes', 'no'] %}
           <option value="confirm-request">Ask them to confirm — with a Yes / No button</option>
           {% endif %}
           {% if not settled %}
-          <option value="confirmation">The booking confirmation</option>
           <option value="payment-link">A payment request</option>
           <option value="invoice">{{ 'The invoice — resend ' ~ booking.invoice_number if booking.invoice_number else 'An invoice' }}</option>
           {% endif %}
@@ -908,7 +915,9 @@
               style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
           <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--good-soft);border-radius:8px;margin:0">
             <option value="none" selected>Confirmation only</option>
-            <option value="deposit">+ ask for the deposit</option>
+            {# Name the figure. "the deposit" gave her no way to check from here
+               that the amount in Settings is still the one she means to ask for. #}
+            <option value="deposit">+ ask for the ${{ '%.0f' % deposit_amount }} deposit</option>
             <option value="full">+ ask for the full amount</option>
           </select>
           <button type="submit" class="btn btn-gold" style="flex-shrink:0">Send</button>
@@ -1483,7 +1492,13 @@
   if (!sel) return;
   const panels = document.querySelectorAll('.send-panel');
   function show() {
-    panels.forEach(p => { p.style.display = p.dataset.kind === sel.value ? '' : 'none'; });
+    // A chosen kind with no panel behind it hid every send on the card and left
+    // her nothing to press. Show them all rather than none in that case — the
+    // same thing the page does with no JavaScript at all.
+    const matched = [...panels].some(p => p.dataset.kind === sel.value);
+    panels.forEach(p => {
+      p.style.display = (!matched || p.dataset.kind === sel.value) ? '' : 'none';
+    });
   }
   sel.addEventListener('change', show);
   show();

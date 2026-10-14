@@ -255,9 +255,17 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
         raw_body = raw_body.rstrip() + '\n\n' + always_append
     body_text = _sub(raw_body, v)
     html = _wrap_html(body_text, biz, unsubscribe_url=unsubscribe_url)
-    send_email(to_email=to_email, to_name=to_name, subject=subject,
-               html=html, from_name=biz, cc=cc)
-    return True
+    # Report what actually happened. send_email signals a refused send by
+    # *returning* (False, detail) rather than raising -- no email key connected,
+    # a malformed address, Resend rejecting the call -- so returning True here
+    # regardless told every caller the mail had gone. The ones that check
+    # (quoting's lead quote, lifecycle's drips, the cleaner job notice) then
+    # recorded a send that reached nobody. Still a plain bool, because that is
+    # what those callers test; a two-item tuple is truthy however false its
+    # first item is.
+    ok, _detail = send_email(to_email=to_email, to_name=to_name, subject=subject,
+                             html=html, from_name=biz, cc=cc)
+    return bool(ok)
 
 
 def _sub(text, variables):

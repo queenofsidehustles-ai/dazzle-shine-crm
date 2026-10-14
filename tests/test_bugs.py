@@ -15,7 +15,7 @@ from models import Booking, Client
 import invoicing
 app = create_app()
 import blueprints.bookings as bk
-bk._send_booking_confirmation = lambda b: None
+bk._send_booking_confirmation = lambda b: (True, 'stub')
 
 def check(cond, m):
     assert cond, f'FAILED: {m}'
