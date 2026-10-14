@@ -103,9 +103,11 @@ test.describe('Live CRM — read only', () => {
     await firstBooking.click();
     const body = page.locator('body');
     await expect(body).toContainText("Who's Doing This Job");
-    await expect(body).toContainText('How many cleaners are you paying?');
-    // The picker must be present whenever a spot is open — the bug we fixed.
-    const spotsOpen = await page.locator('select[name="add_staff_id"]').count();
+    // The headcount now lives inside the "How this pay is worked out"
+    // disclosure, which is closed, so its text is not in innerText. What must
+    // always show is the one control that says who is doing the job.
+    await expect(body).toContainText('Assign to');
+    const spotsOpen = await page.locator('select[name="assign_to"]').count();
     const alreadyFull = (await body.innerText()).includes('Already assigned to');
     expect(spotsOpen > 0 || alreadyFull,
       'either the cleaner picker shows, or the job is already fully assigned').toBe(true);
