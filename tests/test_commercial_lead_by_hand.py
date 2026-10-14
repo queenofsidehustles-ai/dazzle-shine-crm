@@ -965,6 +965,12 @@ check(dup_snap['areas'][0]['lines'][1]['price'] == fresh_ceramic
       and dup_snap['areas'][0]['lines'][1]['price'] != snap['areas'][0]['lines'][1]['price']
       and dup_snap['first_visit_charge'] > 0,
       "re-priced at today's rates rather than the original's locked snapshot, with the first-visit toggle carried over")
+dup_edit = c.get(f'/quotes/{dup_id}', base_url=HOST).get_data(as_text=True)
+check('Other quotes for this account' in dup_edit and f'/quotes/{aq_id}' in dup_edit and 'sent' in dup_edit,
+      'and opening the duplicate shows the other quote for the same account, with a link to it')
+orig_edit = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+check('Other quotes for this account' in orig_edit and f'/quotes/{dup_id}' in orig_edit,
+      'and the original shows its duplicate right back, by the lead they share -- not by company name alone')
 c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
        'comm_min_visit': '125', 'comm_drive_minutes': '30'})
 

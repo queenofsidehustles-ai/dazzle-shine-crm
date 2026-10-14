@@ -363,6 +363,20 @@ def lines_json():
                                  **_lock_saved(areas, saved)))
 
 
+def _quote_history(q):
+    """Other quotes for the same account -- the same call-list lead, or
+    failing that the same company name -- so whoever is pricing a rebid
+    can see what it went for elsewhere without digging through Quotes."""
+    query = CommercialQuote.query.filter(CommercialQuote.id != q.id)
+    if q.prospect_id:
+        query = query.filter(CommercialQuote.prospect_id == q.prospect_id)
+    elif q.company:
+        query = query.filter(db.func.lower(CommercialQuote.company) == q.company.strip().lower())
+    else:
+        return []
+    return query.order_by(CommercialQuote.created_at.desc()).limit(5).all()
+
+
 @quotes_bp.route('/<int:quote_id>', methods=['GET', 'POST'])
 @owner_required
 def detail(quote_id):
@@ -377,6 +391,7 @@ def detail(quote_id):
     return render_template('admin/quote_form.html', quote=q, lead=_lead_for(q), pre={},
                            property_types=PROPERTY_TYPES, services=_services_for(q.property_type),
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
+                           history=_quote_history(q),
                            selected_services=selected_services, **_estimate_args(),
                            **_editor_args(q=q))
 

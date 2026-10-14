@@ -22,6 +22,20 @@
   </div>
 </div>
 {% endif %}
+{% if quote and history %}
+<div class="card" style="border-left:4px solid var(--softer);margin-bottom:18px;padding:14px 18px">
+  <strong>Other quotes for this account</strong>
+  <div style="font-size:0.85rem;color:var(--softer);margin-top:6px;display:flex;flex-direction:column;gap:4px">
+    {% for h in history %}
+    <div>
+      <a href="{{ url_for('quotes.detail', quote_id=h.id) }}" style="color:var(--amber-deep)">{{ h.created_at.strftime('%b %d, %Y') }}</a>
+      — {{ h.status }}{% if h.price_per_visit %}, ${{ '{:,.2f}'.format(h.price_per_visit|float) }}/visit{% endif %}{% if h.monthly_price %}
+      (${{ '{:,.2f}'.format(h.monthly_price|float) }}/mo){% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 <form method="POST" id="quoteForm">
 {% if lead and not quote %}<input type="hidden" name="prospect_id" value="{{ lead.id }}">{% endif %}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start">
