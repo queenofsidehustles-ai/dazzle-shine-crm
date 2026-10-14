@@ -574,19 +574,30 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
         return ' ⚠️ No email or phone on this booking, so the customer was told nothing.'
 
     sent, failed = [], []
+    # Both sends report by returning, not by raising. Calling them bare inside a
+    # try and then appending to `sent` on the next line was the whole bug: a
+    # confirmation and a deposit request that reached nobody still produced
+    # "Sent the confirmation and deposit request", and the only way to find out
+    # otherwise was the customer saying they never got it.
     if confirmation:
         try:
-            _send_booking_confirmation(b)
-            sent.append('confirmation 📩')
+            ok, why = _send_booking_confirmation(b)
+            if ok:
+                sent.append('confirmation 📩')
+            else:
+                failed.append(f'confirmation ({why})')
         except Exception as e:
             failed.append(f'confirmation ({e})')
 
     if pay_kind in ('deposit', 'full'):
         label = 'deposit request 💳' if pay_kind == 'deposit' else 'payment link 💳'
         try:
-            from blueprints.payments import send_payment_link
-            send_payment_link(b, kind=pay_kind)
-            sent.append(label)
+            from blueprints.payments import send_payment_link_detail
+            ok, why = send_payment_link_detail(b, kind=pay_kind)
+            if ok:
+                sent.append(label)
+            else:
+                failed.append(f'{label} ({why})')
         except Exception as e:
             failed.append(f'{label} ({e})')
 
@@ -2858,19 +2869,39 @@ def confirmation_content(booking):
 
 def _send_booking_confirmation(booking):
     """Confirm a hand-created booking to the customer via email + text.
-    No deposit language — a simple 'you're booked' note. Best-effort."""
+    No deposit language — a simple 'you're booked' note.
+
+    Returns (ok, detail): ok is True when the email or the text actually went.
+    It used to return nothing at all, and send_email reports a refusal by
+    returning (False, detail) rather than raising, so the caller's try/except
+    could only ever conclude the confirmation had been sent."""
     from notifications import send_email, send_sms
     subject, html, sms = confirmation_content(booking)
+    ok, detail = False, ''
 
     if booking.email:
-        send_email(to_email=booking.email, to_name=booking.name,
-                   subject=subject, html=html, cc=booking.cc_email)
+        try:
+            mailed, why = send_email(to_email=booking.email, to_name=booking.name,
+                                     subject=subject, html=html, cc=booking.cc_email)
+            ok = ok or bool(mailed)
+            if not mailed:
+                detail = why or 'the email was refused'
+        except Exception as e:
+            detail = str(e)
 
     if booking.phone:
         try:
-            send_sms(booking.phone, sms)
-        except Exception:
-            pass
+            texted, why = send_sms(booking.phone, sms)
+            ok = ok or bool(texted)
+            if not texted and not detail:
+                detail = why or 'the text was refused'
+        except Exception as e:
+            if not detail:
+                detail = str(e)
+
+    if not ok and not detail:
+        detail = 'no email address or phone number on this booking'
+    return ok, detail
 
 
 def _create_next_recurring(booking):

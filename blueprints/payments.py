@@ -28,7 +28,23 @@ def payment_link_url(booking, kind='full'):
 
 
 def send_payment_link(booking, kind='full'):
-    """Email + text the customer their payment link. Returns True if anything sent."""
+    """Email + text the customer their payment link. True if anything went.
+
+    Kept returning a plain bool for the callers that already test it.
+    send_payment_link_detail is the same send with the reason attached."""
+    return send_payment_link_detail(booking, kind)[0]
+
+
+def send_payment_link_detail(booking, kind='full'):
+    """As send_payment_link, but returns (ok, detail) so the owner can be told
+    *why* nothing went out.
+
+    send_email and send_sms report a refused send by *returning* (False, detail)
+    rather than raising. This function used to set sent = True immediately after
+    calling send_email inside a try block, so every refusal -- no email key in
+    Settings -> Connections, a mistyped address, Resend rejecting the call --
+    counted as a successful send. A deposit request then flashed "Sent" at the
+    owner and reached nobody."""
     from notifications import send_email, send_sms
     url = payment_link_url(booking, kind)
     first = (booking.name or 'there').split()[0]
@@ -38,10 +54,10 @@ def send_payment_link(booking, kind='full'):
     else:
         amt_text = f"${amount_due(booking):.2f}"
         sms_line = f"here's your invoice for {amt_text} — tap to pay securely"
-    sent = False
+    sent, detail = False, ''
     if booking.email:
         try:
-            send_email(
+            ok, why = send_email(
                 to_email=booking.email, to_name=booking.name,
                 subject=f'Your {_biz()} invoice — tap to pay',
                 html=f"""
@@ -55,17 +71,24 @@ def send_payment_link(booking, kind='full'):
   <p style="color:#9a95ad;font-size:13px;margin-top:18px">{_biz()}{" · " + branding.city_line() if branding.city_line() else ""}</p>
 </div>""",
             )
-            sent = True
-        except Exception:
-            pass
+            sent = sent or bool(ok)
+            if not ok:
+                detail = why or 'the email was refused'
+        except Exception as e:
+            detail = str(e)
     if booking.phone:
         try:
-            ok, _ = send_sms(booking.phone,
-                             f"Hi {first}! {sms_line}: {url} — {_biz()}. Reply STOP to opt out.")
+            ok, why = send_sms(booking.phone,
+                               f"Hi {first}! {sms_line}: {url} — {_biz()}. Reply STOP to opt out.")
             sent = sent or bool(ok)
-        except Exception:
-            pass
-    return sent
+            if not ok and not detail:
+                detail = why or 'the text was refused'
+        except Exception as e:
+            if not detail:
+                detail = str(e)
+    if not sent and not detail:
+        detail = 'no email address or phone number on this booking'
+    return sent, detail
 
 
 def ensure_pay_token(booking):

@@ -29,7 +29,7 @@ from app import create_app
 from extensions import db
 from models import Booking, PricingSetting
 import blueprints.bookings as bk
-bk._send_booking_confirmation = lambda b: None
+bk._send_booking_confirmation = lambda b: (True, 'stub')
 app = create_app()
 
 
