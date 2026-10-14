@@ -601,15 +601,17 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
         except Exception as e:
             failed.append(f'{label} ({e})')
 
+    # Flash only. send_email and send_sms write their own Sent Log row on every
+    # refusal they report -- the demo guard blocking it, no key connected, no
+    # address, Resend rejecting it -- naming the actual reason and the actual
+    # recipient. This loop used to add a second, vaguer row on top ("Booking
+    # confirmation / payment request", no body), which never showed because
+    # `failed` was always empty while the senders claimed success. Now that
+    # failures are real, logging here would double every entry in her Sent Log
+    # and the duplicate would be the less informative of the two.
     for f in failed:
         flash(f'⚠️ Could not send the {f} to {b.name or "the customer"}. '
               f'Check the Sent Log for details.', 'warning')
-        try:
-            from notifications import _log_outbound
-            _log_outbound('email', b.email or b.phone, b.name,
-                          'Booking confirmation / payment request', '', False, f)
-        except Exception:
-            pass
 
     return (' Sent the ' + ' and '.join(sent) + '.') if sent else ''
 
