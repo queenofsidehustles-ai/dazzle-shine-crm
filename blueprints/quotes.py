@@ -251,7 +251,15 @@ def new():
 
 def _apply_form(q):
     """The quote form's fields onto a quote. Shared by Save and Send, so
-    Send emails what is on the screen rather than what was last saved."""
+    Send emails what is on the screen rather than what was last saved.
+
+    A no-op once a quote is accepted: the terms a customer agreed to are
+    what they agreed to, permanently -- not whatever somebody typed into
+    this same form afterward. Duplicate it (see duplicate()) for a revised
+    offer; that starts a new, separate record rather than rewriting this
+    one's price out from under an accepted contract."""
+    if q.status == 'accepted':
+        return
     f = request.form
     q.company = (f.get('company') or q.company or '').strip()
     q.contact_name = (f.get('contact_name', q.contact_name) or '').strip()
@@ -278,9 +286,14 @@ def _apply_lines(q):
     a rate in Settings changes next month. With lines, they set the price a
     visit and a month -- the two can no longer disagree with the table the
     customer reads. Without the editor in the post (an older form, a send from
-    the review page) nothing changes."""
+    the review page) nothing changes.
+
+    Also a no-op once accepted (see _apply_form) -- called on a new, still-
+    unaccepted quote too, where the check never fires."""
     import json
     import commercial_pricing as cp
+    if q.status == 'accepted':
+        return
     raw = request.form.get('line_items_json')
     if raw is None:
         return
@@ -386,6 +399,9 @@ def _quote_history(q):
 def detail(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
+        if q.status == 'accepted':
+            flash('This quote was accepted — its terms are locked. Duplicate it to send a revised offer.', 'error')
+            return redirect(url_for('quotes.detail', quote_id=quote_id))
         _apply_form(q)
         db.session.commit()
         flash('Draft saved — nothing has been sent.' if q.status == 'draft' else 'Quote updated.', 'success')
@@ -566,8 +582,11 @@ def review(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
         if 'company' in request.form:
-            _apply_form(q)
-            db.session.commit()
+            if q.status == 'accepted':
+                flash('This quote was accepted — its terms are locked. Duplicate it to send a revised offer.', 'error')
+            else:
+                _apply_form(q)
+                db.session.commit()
         return redirect(url_for('quotes.review', quote_id=q.id))
     brand = q.brand or brands.brand_for_property(q.property_type)
     from_name, from_email, reply_to = brands.send_identity(brand)
@@ -641,18 +660,19 @@ def circulate(quote_id):
 @owner_required
 def send_quote(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
+    # Checked before touching anything: re-sending would put a signed
+    # customer back to "sent" and restart the follow-up emails at somebody
+    # who already said yes -- and _apply_form is a no-op on an accepted
+    # quote anyway (its terms are locked), so there would be nothing of
+    # this form's edits to apply even if it ran first.
+    if q.status == 'accepted':
+        flash('This quote was accepted — it is not sent again.', 'error')
+        return redirect(url_for('quotes.review', quote_id=q.id))
     # The Send button sits in the edit form and posts it. Those edits used to
     # be dropped -- change the price, press Send, and the old price went out.
     if 'company' in request.form:
         _apply_form(q)
         db.session.commit()
-    # A draft can be saved before anybody's name or email is known (half-way
-    # through a walkthrough); it cannot be sent like that.
-    if q.status == 'accepted':
-        # Re-sending would put a signed customer back to "sent" and restart
-        # the follow-up emails at somebody who already said yes.
-        flash('This quote was accepted — it is not sent again.', 'error')
-        return redirect(url_for('quotes.review', quote_id=q.id))
     blocking, _warnings = _send_checks(q)
     if blocking:
         flash('Not sent: ' + ' '.join(blocking), 'error')

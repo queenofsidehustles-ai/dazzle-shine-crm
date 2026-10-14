@@ -20,6 +20,7 @@ lead it was for, so what would go wrong without each of these:
 
 Against a disposable Postgres, like the rest of the multi-company suite.
 """
+import math
 import os
 import pathlib
 import re
@@ -804,6 +805,42 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     db.session.remove()
 check('This quote was accepted' in page and st == 'accepted' and len(SENT) == n5,
       'but an accepted one is not sent again, or it would go back to "sent" with follow-ups restarting')
+
+# Integrity review: once accepted, the terms are locked against every edit route --
+# not just against being re-sent -- so an operator (or a mistake) can't quietly
+# rewrite what a customer actually agreed to.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    accepted_q = db.session.get(CommercialQuote, rq_id)
+    accepted_state = (accepted_q.company, float(accepted_q.price_per_visit or 0), float(accepted_q.monthly_price or 0))
+    db.session.remove()
+tamper = {'company': 'Hijacked Co', 'contact_name': 'Someone Else', 'email': 'nobody@example.com',
+          'property_type': 'Restaurant / Food Service', 'frequency': 'weekly',
+          'contract_term': 'month_to_month', 'price_per_visit': '1', 'monthly_price': '1'}
+r_tamper = c.post(f'/quotes/{rq_id}', base_url=HOST, data=tamper)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after_tamper = db.session.get(CommercialQuote, rq_id)
+    tamper_state = (after_tamper.company, float(after_tamper.price_per_visit or 0), float(after_tamper.monthly_price or 0))
+    db.session.remove()
+flash_page = c.get(f'/quotes/{rq_id}', base_url=HOST).get_data(as_text=True)
+check(r_tamper.status_code == 302 and tamper_state == accepted_state
+      and 'terms are locked' in flash_page,
+      "an accepted quote's own edit form cannot change it -- price and company stay exactly what was accepted")
+c.post(f'/quotes/{rq_id}/review', base_url=HOST, data=tamper)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after_tamper2 = db.session.get(CommercialQuote, rq_id)
+    tamper_state2 = (after_tamper2.company, float(after_tamper2.price_per_visit or 0), float(after_tamper2.monthly_price or 0))
+    db.session.remove()
+check(tamper_state2 == accepted_state, 'nor does posting the same form from the review page')
+n_tamper = len(SENT)
+c.post(f'/quotes/{rq_id}/send', base_url=HOST, data=tamper)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after_tamper3 = db.session.get(CommercialQuote, rq_id)
+    tamper_state3 = (after_tamper3.company, float(after_tamper3.price_per_visit or 0), float(after_tamper3.monthly_price or 0))
+    db.session.remove()
+check(tamper_state3 == accepted_state and len(SENT) == n_tamper,
+      "nor does pressing Send with edited fields in the form -- it used to apply the edit, commit it, "
+      "and only then refuse to actually send")
+
 doc = c.get(f'/quotes/{rq_id}/document', base_url=HOST)
 dtext = doc.get_data(as_text=True)
 check(doc.status_code == 200 and 'Commercial Cleaning Proposal' in dtext and 'Mondays after close' in dtext
@@ -1121,6 +1158,32 @@ check('Priced area by area' in lp and 'name="wa_area"' in lp,
 waj = re.search(r'id="waJson" value="([^"]*)"', form)
 check(bool(waj) and 'floor_ceramic' in waj.group(1),
       'and the quote opens with those areas and lines filled in')
+
+print('\n13e. Integrity review: NaN, Infinity and other bad numbers never reach a price')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    before_cfg = cp.get_config()
+    db.session.remove()
+bad_page = c.post('/settings/commercial', base_url=HOST, data={
+    'comm_hourly_cost': 'Infinity', 'comm_target_labor': 'NaN', 'comm_min_visit': '125',
+    'comm_drive_minutes': '30'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after_cfg = cp.get_config()
+    db.session.remove()
+settings_flash = c.get('/settings/commercial', base_url=HOST).get_data(as_text=True)
+check(after_cfg['hourly'] == before_cfg['hourly'] and after_cfg['target'] == before_cfg['target'],
+      "float() itself accepts \"Infinity\" and \"NaN\" as valid numbers -- Settings keeps the rates "
+      "they were rather than storing either and corrupting every quote priced from them after")
+check('could not read' in settings_flash and 'cleaner cost' in settings_flash and 'Target labor' in settings_flash,
+      'and says so, instead of silently keeping the old value with no explanation')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    inf_line = cp.area_quote([{'name': 'Odd', 'lines': [
+        {'item': 'custom', 'label': 'Bad qty x rate', 'qty': 'Infinity', 'rate': 5}]}], 'weekly')
+    nan_line = cp.area_quote([{'name': 'Odd', 'lines': [
+        {'item': 'floor_stone', 'qty': 'NaN'}]}], 'weekly')
+    db.session.remove()
+check(math.isfinite(inf_line['per_visit']) and math.isfinite(inf_line['monthly'] or 0)
+      and math.isfinite(nan_line['per_visit']),
+      'a quantity or rate typed (or posted) as Infinity or NaN prices as if it were blank, not as $inf/mo')
 
 print('\n14. A Sales login: the call list and nothing else')
 check(('sales', 'Sales — finding and working leads only') in rbac.ROLE_OPTIONS

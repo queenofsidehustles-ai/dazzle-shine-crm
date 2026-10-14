@@ -36,6 +36,23 @@ can measure from its own finished jobs: square footage divided by the hours
 somebody actually clocked. Every number here is owner-editable in
 Settings → Commercial pricing, and an override always wins.
 """
+import math
+
+
+def finite_num(value, max_value=1_000_000.0):
+    """A plain, finite, non-negative float from whatever was typed or sent --
+    or None if it doesn't parse, or is NaN, +/-Infinity, negative, or a
+    magnitude only a mistake or an attempt to corrupt a total could produce.
+    `float()` itself accepts "inf"/"Infinity"/"nan" as valid numbers, and a
+    negative-only check lets NaN through too (every NaN comparison is False) --
+    this is the one gate every numeric pricing input, in Settings or on a
+    quote, passes through before it reaches any arithmetic."""
+    try:
+        v = float(str(value).replace(',', '').replace('$', '').strip())
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) and 0 <= v <= max_value else None
+
 
 # Starting defaults (owner can change all of these in settings)
 DEFAULTS = {
@@ -187,10 +204,9 @@ def drive_minutes(value=None):
     to the setting when it does not.
     """
     if value not in (None, ''):
-        try:
-            return max(0.0, float(value))
-        except (TypeError, ValueError):
-            pass
+        v = finite_num(value)
+        if v is not None:
+            return v
     return _get('comm_drive_minutes') or 0.0
 
 
@@ -214,17 +230,14 @@ def quote(square_footage, category='office', frequency='weekly', extras=None,
     # scope is priced on every path — the saved account and the API, not just
     # the browser calculator where the box happens to start ticked.
     extras = set(extras or []) | set(default_extras(category))
-    sqft = max(0.0, float(square_footage or 0))
+    sqft = finite_num(square_footage) or 0.0
     rate = prod_rate(category) or 2000
     hourly = _get('comm_hourly_cost')
     target = _get('comm_target_labor') or 0.40
     min_visit = _get('comm_min_visit')
     mins = drive_minutes(drive_mins)
 
-    try:
-        judged = float(hours) if hours not in (None, '') else 0.0
-    except (TypeError, ValueError):
-        judged = 0.0
+    judged = finite_num(hours) or 0.0
     if judged > 0:
         hours, has_job = judged, True
     else:
@@ -385,11 +398,8 @@ def line_price(key, qty, s=None):
 
 
 def _num(value, default=0.0):
-    try:
-        v = float(str(value).replace(',', '').replace('$', '').strip())
-    except (TypeError, ValueError):
-        return default
-    return v if v >= 0 else default
+    v = finite_num(value)
+    return default if v is None else v
 
 
 def fmt_sqft_rate(r):
@@ -512,10 +522,7 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fix
                                                l['unit'] == 'sq ft' for l in lines) else None)})
     work = round(work, 2)
     mins = drive_mins if drive_mins not in (None, '') else _val('comm_drive_minutes', s)
-    try:
-        mins = max(0.0, float(mins or 0))
-    except (TypeError, ValueError):
-        mins = 0.0
+    mins = finite_num(mins) or 0.0
     target = _val('comm_target_labor', s) or 0.40
     if fixed.get('travel') is not None:
         travel = fixed['travel'] if has_work else 0.0

@@ -305,18 +305,16 @@ def commercial():
             bad.append(f'{label} ("{value}")')
 
         def _set_rate(key, label, form_key):
-            """A plain non-negative number, saved as typed. Blank leaves the
-            setting as it was; a value that was typed but does not read as
-            one is rejected rather than stored as a string that silently
-            fails to parse the next time this price is actually used."""
+            """A plain non-negative, finite number, saved as typed. Blank
+            leaves the setting as it was; a value that was typed but does not
+            read as one -- including NaN or +/-Infinity, which `float()`
+            itself happily accepts -- is rejected rather than stored as
+            something that corrupts every quote priced from it afterward."""
             v = (request.form.get(form_key) or '').strip()
             if not v:
                 return
-            try:
-                num = float(v)
-            except ValueError:
-                return _rejected(label, v)
-            if num < 0:
+            num = cp.finite_num(v)
+            if num is None:
                 return _rejected(label, v)
             PricingSetting.set(key, num)
 
@@ -326,11 +324,8 @@ def commercial():
             v = (request.form.get(form_key) or '').strip()
             if not v:
                 return
-            try:
-                pct = float(v)
-            except ValueError:
-                return _rejected(label, v)
-            if not 0 <= pct <= 100:
+            pct = cp.finite_num(v, max_value=100)
+            if pct is None:
                 return _rejected(label, v)
             PricingSetting.set(key, round(pct / 100.0, 4))
 
@@ -347,21 +342,15 @@ def commercial():
             label = item_labels.get(key, key)
             v = request.form.get(f'comm_item_{key}_rate')
             if v not in (None, ''):
-                try:
-                    num = float(v)
-                except ValueError:
-                    num = None
+                num = cp.finite_num(v)
                 if num is None or num <= 0:
                     _rejected(f'{label} — per hour', v)
                 else:
                     PricingSetting.set(f'comm_item_{key}_rate', num)
             v = request.form.get(f'comm_item_{key}_supplies')
             if v not in (None, ''):
-                try:
-                    num = float(v)
-                except ValueError:
-                    num = None
-                if num is None or num < 0:
+                num = cp.finite_num(v)
+                if num is None:
                     _rejected(f'{label} — supplies', v)
                 else:
                     PricingSetting.set(f'comm_item_{key}_supplies', num)
@@ -371,9 +360,8 @@ def commercial():
             v = (request.form.get(f'comm_extra_{key}') or '').strip()
             if not v:
                 continue
-            try:
-                pct = float(v)
-            except ValueError:
+            pct = cp.finite_num(v)
+            if pct is None:
                 _rejected(lbl, v)
                 continue
             PricingSetting.set(f'comm_extra_{key}', round(pct / 100.0, 4))
