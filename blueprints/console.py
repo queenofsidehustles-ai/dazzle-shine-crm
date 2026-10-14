@@ -734,6 +734,47 @@ def sales_view():
                            me=request.console_user, counts=_counts(engine))
 
 
+@console_bp.route('/funnel/tips')
+@console_required
+def tips_view():
+    """Which help tips work, across every real company: how many people read
+    each one, and how many of them opened the feature within a week -- and
+    how the once-a-sign-in "Did you know?" fares. The wording lives in
+    help_tips.py; this is how to tell which of it to rewrite."""
+    import adoption
+    import funnel
+    import help_tips
+    engine = _engine()
+    window = request.args.get('window', funnel.DEFAULT_WINDOW)
+    if window not in funnel.WINDOWS:
+        window = funnel.DEFAULT_WINDOW
+    days = funnel.WINDOWS[window]
+    since = datetime.utcnow() - timedelta(days=days) if days else None
+    got = control_plane.tip_report(engine, since)
+    order = list(help_tips.DISCOVER) + sorted(k for k in help_tips.TIPS if k not in help_tips.DISCOVER)
+
+    def pct(a, b):
+        return round(100 * a / b) if b else None
+
+    rows = []
+    for key in order:
+        n = got.get(key, {})
+        if not n and key not in help_tips.DISCOVER:
+            continue
+        rows.append({
+            'key': key, 'title': help_tips.TIPS[key][0],
+            'opened': n.get('open', 0), 'used': n.get('used', 0),
+            'used_pct': pct(n.get('used', 0), n.get('open', 0)),
+            'suggested': n.get('suggested', 0), 'clicked': n.get('clicked', 0),
+            'dismissed': n.get('dismissed', 0),
+            'clicked_pct': pct(n.get('clicked', 0), n.get('suggested', 0)),
+            'discover': key in help_tips.DISCOVER,
+        })
+    return render_template('console/tips.html', rows=rows, window=window,
+                           windows=list(funnel.WINDOWS), used_within=adoption.USED_WITHIN.days,
+                           me=request.console_user, counts=_counts(engine))
+
+
 PROMO_CODE_RE = re.compile(r'^[A-Z0-9][A-Z0-9_-]{2,39}$')
 
 

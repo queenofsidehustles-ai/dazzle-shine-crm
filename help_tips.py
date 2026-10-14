@@ -277,6 +277,29 @@ TIPS = {
 }
 
 
+# The features worth finding, in order of what they pay back. The menu dots
+# and the "Did you know?" (adoption.py) take the first few a person can use
+# and has never opened -- so this order decides what everyone is nudged
+# toward first. Contracts before conveniences.
+DISCOVER = (
+    'places_finder.dashboard',      # commercial contracts: money every month
+    'money.job_economics',          # which jobs lose money
+    'rentals.index',                # turnovers booked from a calendar link
+    'lsa.index',                    # missed calls followed up, not lost
+    'directory.talent_pool',        # cleaners looking for work nearby
+    'invoices.index',
+    'team.availability',
+    'discounts.index',
+    'messages.templates',
+    'workorders.templates',
+    'content.index',
+    'money.pnl',
+    'sops.index',
+    'migration.index',
+    'settings.connections',
+)
+
+
 def get(key):
     """The tip as a dict, or None. Videos and Nana are resolved here, so a
     template never links to a video that hasn't been recorded or to an
@@ -363,7 +386,7 @@ def render(key, label=None):
     if t['ask']:
         links.append(f'<a href="{escape(t["ask"])}">💬 Ask Nana</a>')
     return Markup(
-        f'<span class="tip">'
+        f'<span class="tip" data-key="{escape(key)}">'
         f'<button type="button" class="tip-btn" aria-expanded="false" aria-controls="{pid}" '
         f'aria-label="{escape(label or "What is " + t["title"] + "?")}">i</button>'
         f'<span class="tip-pop" id="{pid}" role="dialog" aria-label="{escape(t["title"])}" hidden>'

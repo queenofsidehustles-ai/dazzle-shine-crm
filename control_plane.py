@@ -423,6 +423,73 @@ console_docs = Table(
 )
 
 
+# Which help tips work, across every company (adoption.py). The tips' wording
+# is the product's, not any one company's, so whether "Find leads" gets opened
+# after its tip was read is a question about the product -- answered here, in
+# one place, rather than by visiting every company's schema. Nobody is named:
+# `person` is a one-way hash of company and login, there only so one person
+# counts once.
+tip_events = Table(
+    'tip_events', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('slug', String(40), index=True),
+    Column('person', String(16)),
+    Column('role', String(20)),
+    Column('tip', String(80), index=True),
+    # 'open' -- read the tip; 'used' -- opened the feature within a week of
+    # reading its tip, for the first time; 'suggested' / 'clicked' /
+    # 'dismissed' -- the once-a-sign-in "Did you know?".
+    Column('event', String(20), nullable=False),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
+)
+
+
+def record_tip_event(engine, slug, person, role, tip, event):
+    with engine.begin() as conn:
+        conn.execute(insert(tip_events).values(
+            slug=slug, person=person, role=role, tip=tip, event=event,
+            created_at=datetime.utcnow()))
+
+
+# Each outcome and the event it is the outcome of. A rate is only honest when
+# both sides come from the same people: those who read the tip (or were shown
+# the suggestion) in the window, and what those people then did -- whenever
+# they did it. Counting each event on its own window instead lets somebody who
+# read a tip the day before the window opens count as a success inside it.
+TIP_COHORTS = {'used': 'open', 'clicked': 'suggested', 'dismissed': 'suggested'}
+
+
+def tip_report(engine, since=None):
+    """{tip: {event: distinct people}} across real companies -- test and demo
+    accounts left out, as everywhere else in the console. With `since`, the
+    people are those whose read (or suggestion) falls in the window, and each
+    outcome counts only those same people."""
+    q = (select(tip_events.c.tip, tip_events.c.event,
+                tip_events.c.slug, tip_events.c.person, tip_events.c.created_at)
+         .select_from(tip_events.outerjoin(
+             organizations, organizations.c.slug == tip_events.c.slug))
+         .where((organizations.c.is_test.is_(None)) | (organizations.c.is_test.is_(False))))
+    people = {}                     # (tip, event) -> {person: first time}
+    with engine.connect() as conn:
+        for tip, event, slug, person, at in conn.execute(q):
+            seen = people.setdefault((tip, event), {})
+            who = f'{slug}:{person}'
+            if who not in seen or (at and at < seen[who]):
+                seen[who] = at
+    out = {}
+    for (tip, event), seen in people.items():
+        origin = TIP_COHORTS.get(event)
+        if origin is None:          # an originating event: the window decides
+            who = {p for p, at in seen.items() if since is None or (at and at >= since)}
+        else:                       # an outcome: only for that window's cohort
+            cohort = people.get((tip, origin), {})
+            who = {p for p in seen if p in cohort
+                   and (since is None or (cohort[p] and cohort[p] >= since))}
+        if who:
+            out.setdefault(tip, {})[event] = len(who)
+    return out
+
+
 def _ensure_table_columns(engine, table):
     """Add any column `table` declares that the live table does not have.
 
@@ -480,7 +547,8 @@ def ensure_table(engine):
                         console_users, support_requests, console_log,
                         tenant_logins, login_lookup_requests, console_docs,
                         switch_tokens,
-                        promo_codes, product_lead_messages, signup_attempts])
+                        promo_codes, product_lead_messages, signup_attempts,
+                        tip_events])
     ensure_columns(engine)
 
 
