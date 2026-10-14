@@ -227,6 +227,11 @@
     </button>
     {% endif %}
 
+    <button type="submit" formaction="{{ url_for('quotes.duplicate', quote_id=quote.id) }}"
+            formnovalidate class="btn btn-outline" style="width:100%;justify-content:center">
+      ⧉ Duplicate as a new draft
+    </button>
+
     <button type="submit" formaction="{{ url_for('quotes.delete', quote_id=quote.id) }}"
             formnovalidate onclick="return confirm('Delete this quote?')"
             class="btn btn-danger" style="width:100%;justify-content:center">Delete Quote</button>

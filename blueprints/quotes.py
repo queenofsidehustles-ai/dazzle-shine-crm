@@ -676,6 +676,43 @@ def delete(quote_id):
     return redirect(url_for('quotes.index'))
 
 
+@quotes_bp.route('/<int:quote_id>/duplicate', methods=['POST'])
+@owner_required
+def duplicate(quote_id):
+    """A fresh draft with the same company, areas and lines -- for a
+    repeat proposal (annual rebid, a revised ask) without retyping the
+    whole thing. Priced again at today's rates rather than copying the
+    old snapshot, same as any other new quote."""
+    src = CommercialQuote.query.get_or_404(quote_id)
+    q = CommercialQuote(
+        company=src.company, contact_name=src.contact_name, email=src.email,
+        phone=src.phone, property_type=src.property_type,
+        property_address=src.property_address, units=src.units, sqft=src.sqft,
+        services=src.services, frequency=src.frequency, contract_term=src.contract_term,
+        scope_notes=src.scope_notes, token=secrets.token_urlsafe(32), status='draft',
+        brand=src.brand, prospect_id=src.prospect_id,
+        show_line_prices=src.show_line_prices, first_visit_premium=src.first_visit_premium,
+        price_per_visit=src.price_per_visit, monthly_price=src.monthly_price,
+    )
+    db.session.add(q)
+    db.session.flush()
+    if src.line_items:
+        import json
+        import commercial_pricing as cp
+        try:
+            areas = (json.loads(src.line_items) or {}).get('areas') or []
+        except ValueError:
+            areas = []
+        priced = cp.area_quote(areas, q.frequency or 'weekly', first_visit=bool(q.first_visit_premium))
+        if any(a['lines'] for a in priced['areas']):
+            q.line_items = json.dumps(priced)
+            q.price_per_visit = priced['per_visit']
+            q.monthly_price = priced['monthly']
+    db.session.commit()
+    flash(f'Duplicated as a new draft for {q.company} — priced at today\'s rates.', 'success')
+    return redirect(url_for('quotes.detail', quote_id=q.id))
+
+
 # ── Public accept / decline (no login) ────────────────────────────────────────
 
 @quotes_bp.route('/view/<token>')

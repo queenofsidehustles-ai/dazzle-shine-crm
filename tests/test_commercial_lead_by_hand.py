@@ -934,6 +934,30 @@ with app.app_context(), tenancy.use_tenant(SLUG):
 pub = app.test_client().get(f'/quotes/view/{tok}', base_url=HOST).get_data(as_text=True)
 check('Scope of Work by Area' in pub and 'Stone / concrete tile' in pub, 'as does the page they accept it on')
 
+# Duplicating a sent quote starts a fresh, re-priced draft -- not a copy of the locked snapshot.
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '50', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    orig = db.session.get(CommercialQuote, aq_id)
+    orig_status, orig_token = orig.status, orig.token
+    fresh_ceramic = cp.line_price('floor_ceramic', 1000)[0]
+    db.session.remove()
+r = c.post(f'/quotes/{aq_id}/duplicate', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    dup = CommercialQuote.query.filter_by(company='Areas & Co').order_by(CommercialQuote.id.desc()).first()
+    dup_id, dup_status, dup_token = dup.id, dup.status, dup.token
+    dup_snap = _json.loads(dup.line_items)
+    db.session.remove()
+check(r.status_code == 302 and orig_status == 'sent' and dup_id != aq_id and dup_status == 'draft'
+      and dup_token != orig_token,
+      'duplicating a sent quote makes a fresh draft with its own token, not a copy of the sent one')
+check(dup_snap['areas'][0]['lines'][1]['price'] == fresh_ceramic
+      and dup_snap['areas'][0]['lines'][1]['price'] != snap['areas'][0]['lines'][1]['price']
+      and dup_snap['first_visit_charge'] > 0,
+      "re-priced at today's rates rather than the original's locked snapshot, with the first-visit toggle carried over")
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+
 edit = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
 form_data = {'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',
              'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St', 'frequency': 'weekly',
