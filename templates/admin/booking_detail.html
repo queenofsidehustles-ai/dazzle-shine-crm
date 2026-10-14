@@ -478,8 +478,10 @@
 
     <!-- Crew — big houses that need more than one cleaner -->
     <div class="card" data-card-key="crew-pay" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">👥 Who's Paid For This Job</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">👥 Who's Doing This Job</h2>
       <form method="POST" action="{{ url_for('bookings.save_crew', booking_id=booking.id) }}">
+        <details style="margin-bottom:14px">
+          <summary style="cursor:pointer;font-size:0.82rem;color:var(--softer);font-weight:600">How this pay is worked out</summary>
         {# The pot. Person-hours x the hourly rate — deliberately nothing to do
            with what the customer was charged, so a discount can't cut their pay. #}
         <div class="form-group">
@@ -563,6 +565,7 @@
           {% else %}✅ Labor is {{ lp }}% of this job's price — healthy.{% endif %}
         </div>
         {% endif %}
+        </details>
 
         {# One company hourly rate cannot be right for a move-out and for a
            discounted biweekly at the same time. Saying the pay outright makes
@@ -696,41 +699,6 @@
         {% endfor %}
         {% endif %}
 
-        {# Always available — this is how a job gets given to someone directly,
-           whether it needs one cleaner or a whole crew. #}
-        {% if booking.spots_left > 0 %}
-        <div style="background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:12px 13px;margin-top:14px">
-          <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:7px">
-            ➕ Give this job to a specific cleaner
-            <span style="display:block;font-weight:400;color:var(--softer);font-size:0.79rem;margin-top:3px">Skips the job board — no claim link, she just gets the work.</span>
-          </label>
-          <select name="add_staff_id" style="margin-bottom:8px">
-            <option value="">— Pick a cleaner —</option>
-            {% for s in staff %}
-              {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}
-            {% endfor %}
-          </select>
-          <div style="display:flex;align-items:center;gap:7px">
-            <span style="font-size:0.85rem;color:var(--muted);white-space:nowrap">Pay her $</span>
-            <input type="number" step="0.01" min="0" name="add_pay"
-                   placeholder="{{ '%.2f' % (booking.commissionable_price / (booking.crew_size or 1)) }}"
-                   style="width:100px;padding:7px 9px;margin:0" />
-            <span style="font-size:0.78rem;color:var(--softer)">blank = auto</span>
-          </div>
-          <p style="font-size:0.78rem;color:var(--muted);margin-top:7px">
-            {% if booking.labor_budget is not none %}
-              Suggested from the hours above: <strong>${{ '%.2f' % booking.default_crew_pay(staff[0]) if staff else '—' }}</strong> per cleaner. Type over it if this one's different.
-            {% else %}
-              This job pays out <strong>${{ '%.2f' % booking.commissionable_price }}</strong>{% if booking.lead_fee %} (${{ '%.2f' % booking.price }} minus the ${{ '%.2f' % booking.lead_fee }} lead fee){% endif %} — whatever you don't give her, you keep.
-            {% endif %}
-          </p>
-          <button type="submit" name="send_now" value="1" class="btn btn-gold"
-                  style="width:100%;justify-content:center;margin-top:10px">
-            📲 Add &amp; send the job to her now
-          </button>
-          <p style="font-size:0.76rem;color:var(--softer);margin-top:6px">She gets a text + email with the address, entry notes, her pay, and the checklist link.</p>
-        </div>
-        {% endif %}
 
         <div style="display:flex;gap:8px;margin-top:12px">
           <button type="submit" class="btn {{ 'btn-outline' if booking.spots_left > 0 else 'btn-gold' }}" style="flex:1;justify-content:center">Save pay</button>
@@ -741,42 +709,88 @@
         </div>
       </form>
 
+      {# One decision, one control. Picking a named cleaner used to be buried at
+         the bottom of this card while "offer it to the whole team" — much the
+         rarer choice — was a card of its own with the bigger button, and the
+         checklist every cleaner needs was a third card further down. All three
+         are the same question: who is turning up, and does she know what to do. #}
+      {% if booking.spots_left > 0 or not booking.crew %}
+      <form method="POST" action="{{ url_for('bookings.assign', booking_id=booking.id) }}"
+            style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
+        <div class="form-group" style="margin-bottom:10px">
+          <label for="assignTo" style="font-size:0.84rem">Assign to</label>
+          <select id="assignTo" name="assign_to" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
+            <option value="">— Pick a cleaner —</option>
+            {% for s in staff %}
+              {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}
+            {% endfor %}
+            <option value="team">— Offer it to the whole team —</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label for="assignPay" style="font-size:0.84rem">She gets paid</label>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="color:var(--softer)">$</span>
+            <input id="assignPay" type="number" step="0.01" min="0" name="add_pay"
+                   placeholder="{{ '%.2f' % booking.default_crew_pay(staff[0]) if staff else '' }}"
+                   style="width:120px;margin:0" />
+            <span style="font-size:0.85rem;color:var(--softer)">flat for the job</span>
+          </div>
+          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
+            {% if booking.labor_budget is not none %}
+              Leave it blank for <strong>${{ '%.2f' % (booking.labor_budget / (booking.crew_size or 1)) }}</strong> — your chart's figure for this job.
+              Type over it when the job is harder than the chart assumes.
+            {% else %}
+              Leave it blank and this job pays its usual share. Put the hours in under
+              <em>How this pay is worked out</em> to price it by the hour instead.
+            {% endif %}
+          </p>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:9px;font-size:0.84rem;margin-bottom:11px">
+          <input type="checkbox" name="send_checklist" value="1" checked style="width:16px;height:16px;margin-top:2px" />
+          <span>Send the work order now — address, entry notes, her pay and the
+            <strong>{{ booking.service_label }}</strong> checklist.
+            <span style="color:var(--softer)">Untick to put her on the job quietly and send it later.</span></span>
+        </label>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Assign &amp; send</button>
+      </form>
+      {% endif %}
+
       {% if booking.crew %}
       <form method="POST" action="{{ url_for('bookings.send_crew', booking_id=booking.id) }}" style="margin-top:10px">
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
           📲 Re-send the job to {{ booking.crew_label }}
         </button>
       </form>
+      {% elif booking.assigned_cleaner %}
+      {# A job assigned before this card kept a crew row carries a cleaner's NAME
+         and nothing else. Folding the Work Order card into the tickbox above
+         would have left those jobs with no way to send a checklist at all,
+         because the re-send button needs a crew row to aim at. #}
+      <form method="POST" action="{{ url_for('workorders.send_workorder', booking_id=booking.id) }}" style="margin-top:10px">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
+          📲 Send the {{ booking.service_label }} checklist to {{ booking.assigned_cleaner }}
+        </button>
+      </form>
+      {% endif %}
+
+      {# What the cleaner has actually ticked off, kept beside the person who
+         was sent it rather than in a card of its own further down. #}
+      {% if booking.job_checklists %}
+      <div style="margin-top:12px">
+      {% for jc in booking.job_checklists|sort(attribute='sent_at', reverse=True) %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line-soft);font-size:0.85rem">
+      <span style="color:var(--muted)">{{ jc.template_name }} — sent {{ jc.sent_at.strftime('%b %d') }}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+      <span style="color:{{ 'var(--good)' if jc.completion_percent == 100 else 'var(--softer)' }};font-weight:700">{{ jc.completion_percent }}%</span>
+      <a href="{{ url_for('workorders.view_checklist', token=jc.token) }}" target="_blank" style="color:var(--muted);font-weight:600">View →</a>
+      </div>
+      </div>
+      {% endfor %}
+      </div>
       {% endif %}
     </div>
 
-    <!-- Offer to the team (first to claim wins) -->
-    <div class="card" data-card-key="offer-team" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">📣 Offer to the Team</h2>
-      {% if booking.open_for_claim %}
-      <div style="background:var(--info-soft);border:1px solid var(--info-soft);color:var(--info);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
-        ⏳ Open on the board — waiting for
-        {% if booking.is_crew_job %}{{ booking.spots_left }} more cleaner{{ 's' if booking.spots_left != 1 }} to claim a spot{% else %}someone to claim it{% endif %}.
-        {% if booking.broadcast_at %}Offered {{ booking.broadcast_at.strftime('%b %-d, %-I:%M %p') }}.{% endif %}
-      </div>
-      {% endif %}
-      <p style="font-size:0.85rem;color:var(--muted);margin:8px 0 12px">
-        {% if booking.is_crew_job %}
-        Text every available cleaner — the first {{ booking.spots_left }} to claim take the open spot{{ 's' if booking.spots_left != 1 }}. Anyone already on the crew keeps their spot and won't be texted again.
-        {% else %}
-        Text every available cleaner — the first to claim it gets the job (blocks anyone whose day would clash).
-        {% endif %}
-      </p>
-      {% set no_spots = booking.crew and booking.spots_left <= 0 %}
-      <form method="POST" action="{{ url_for('bookings.broadcast', booking_id=booking.id) }}"
-            onsubmit="return confirm({{ ('Offer the ' ~ booking.spots_left ~ ' open spot(s) to the team?') | tojson if booking.is_crew_job else '\'Offer this job to the whole team? First to claim it gets it.\'' }})">
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center"
-                {{ 'disabled' if no_spots }}>
-          {% if no_spots %}✅ Already assigned to {{ booking.crew_label }}
-          {% else %}{{ '🔁 Re-offer to the team' if booking.open_for_claim else '📣 Offer to the team' }}{% endif %}
-        </button>
-      </form>
-    </div>
 
     {# ── Send to customer ─────────────────────────────────────────────────
        Eight ways to message a customer were spread across two cards: the
@@ -1097,32 +1111,6 @@
     </div>
     {% endif %}
 
-    <!-- Work Order Card -->
-    <div class="card" data-card-key="work-order" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Work Order / Checklist</h2>
-      {# The picker here offered exactly one option — "Default checklist" — because
-         nothing ever populated a template list. A select that cannot select
-         anything is a control that does nothing, so the checklist it was always
-         going to send is now just named in the button's own line. #}
-      <form method="POST" action="{{ url_for('workorders.send_workorder', booking_id=booking.id) }}">
-        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">
-          Send the {{ booking.service_label }} checklist to the cleaner
-        </button>
-      </form>
-      {% if booking.job_checklists %}
-      <div style="margin-top:12px">
-        {% for jc in booking.job_checklists|sort(attribute='sent_at', reverse=True) %}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line-soft);font-size:0.85rem">
-          <span style="color:var(--muted)">{{ jc.template_name }} — sent {{ jc.sent_at.strftime('%b %d') }}</span>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="color:{{ 'var(--good)' if jc.completion_percent == 100 else 'var(--softer)' }};font-weight:700">{{ jc.completion_percent }}%</span>
-            <a href="{{ url_for('workorders.view_checklist', token=jc.token) }}" target="_blank" style="color:var(--muted);font-weight:600">View →</a>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
 
     <!-- Job Photos Card (before / after proof) -->
     {% set ns = namespace(photo_jc=None) %}

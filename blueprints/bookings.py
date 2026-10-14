@@ -1101,6 +1101,74 @@ def save_crew(booking_id):
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
+@bookings_bp.route('/<int:booking_id>/assign', methods=['POST'])
+@login_required
+def assign(booking_id):
+    """Put somebody on this job -- a named cleaner or the whole team -- set what
+    they are paid, and send them the work, in one press.
+
+    One decision used to be three cards. The cleaner dropdown was buried at the
+    bottom of the pay card; "offer it to the whole team", much the rarer choice,
+    was a card of its own with the bigger gold button; and the checklist every
+    cleaner needs to do the job was a third card further down the page. The
+    common thing to want was the hardest of the three to reach."""
+    from flask import session, abort
+    import rbac
+    b = Booking.query.get_or_404(booking_id)
+    who = (request.form.get('assign_to') or '').strip()
+    if not who:
+        flash('Pick a cleaner, or choose to offer it to the whole team.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    # The pay is read before anybody is told anything, so the figure in the
+    # offer is the figure she just typed rather than the one it replaced.
+    raw = (request.form.get('add_pay') or '').strip().replace('$', '').replace(',', '')
+    pay = None
+    if raw:
+        try:
+            pay = max(0.0, round(float(raw), 2))
+        except ValueError:
+            flash('That pay figure is not a number.', 'error')
+            return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    if who == 'team':
+        # Offering work to everyone is a dispatch action. Folding it into a
+        # control that also sets pay must not hand dispatch to a role that only
+        # had the money half, nor the reverse -- so the half this endpoint is
+        # not registered under is checked here by hand.
+        if not rbac.has_permission(session.get('role'), 'dispatch.manage'):
+            abort(403)
+        if pay is not None:
+            b.crew_pay_each = pay
+            db.session.commit()
+        return broadcast(booking_id)
+
+    s = Staff.query.get(int(who)) if who.isdigit() else None
+    if not s:
+        flash('That cleaner is no longer on your team.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if b.crew_row_for(s):
+        flash(f'{s.name} is already on this job.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if b.spots_left <= 0:
+        # Raise the headcount for her rather than refusing: she picked a second
+        # person, which is what wanting a second person looks like.
+        b.crew_size = min(6, (b.crew_size or 1) + 1)
+
+    amount = pay if pay is not None else b.default_crew_pay(s)
+    db.session.add(BookingCrew(booking_id=b.id, staff_id=s.id, pay_amount=amount))
+    if not b.assigned_cleaner:
+        b.assigned_cleaner = s.name
+    b.open_for_claim = False          # assigned by hand -- it is off the board
+    db.session.commit()
+
+    if request.form.get('send_checklist'):
+        return _send_job_to(b, [s])
+    flash(f'{s.name} is on this job at ${amount:.2f}. Nothing was sent to her yet.',
+          'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
 def _send_job_to(b, people):
     """Email + text these cleaners the job: address, access notes, their pay, and
     the checklist link. This is the direct alternative to the claim board — they

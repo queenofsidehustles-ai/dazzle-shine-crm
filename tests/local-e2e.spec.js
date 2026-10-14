@@ -80,7 +80,7 @@ test.describe('Akye end-to-end — local', () => {
   test('5. the booking page shows the "who\'s paid" card with a cleaner picker', async ({ page }) => {
     await page.goto(CRM + '/bookings/');
     await page.click('text=E2E Big House');
-    await expect(page.locator('body')).toContainText("Who's Paid For This Job");
+    await expect(page.locator('body')).toContainText("Who's Doing This Job");
     await expect(page.locator('body')).toContainText('Give this job to a specific cleaner');
     await expect(page.locator('select[name="add_staff_id"]')).toBeVisible();
     await expect(page.locator('input[name="add_pay"]')).toBeVisible();

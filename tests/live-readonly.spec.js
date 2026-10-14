@@ -102,7 +102,7 @@ test.describe('Live CRM — read only', () => {
     }
     await firstBooking.click();
     const body = page.locator('body');
-    await expect(body).toContainText("Who's Paid For This Job");
+    await expect(body).toContainText("Who's Doing This Job");
     await expect(body).toContainText('How many cleaners are you paying?');
     // The picker must be present whenever a spot is open — the bug we fixed.
     const spotsOpen = await page.locator('select[name="add_staff_id"]').count();
