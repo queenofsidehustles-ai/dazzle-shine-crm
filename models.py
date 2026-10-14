@@ -1990,6 +1990,26 @@ class Prospect(db.Model):
         return 'later'
 
 
+class FeatureSeen(db.Model):
+    """What one person has found of the product: the menu features they have
+    opened, the tips they have read, and the suggestions they were shown or
+    turned down (adoption.py).
+
+    Per person, not per company -- a new dispatcher has seen none of it,
+    whatever the owner has -- and keyed by a login, not a name. One row per
+    person per feature, written the first time anything happens to it.
+    """
+    __tablename__ = 'feature_seen'
+    id = db.Column(db.Integer, primary_key=True)
+    user_key = db.Column(db.String(40), nullable=False)   # 'u<id>', or 'owner' for the env login
+    endpoint = db.Column(db.String(80), nullable=False)   # a menu page (help_tips key)
+    first_seen_at = db.Column(db.DateTime)                # first opened the page
+    tip_opened_at = db.Column(db.DateTime)                # first read its tip
+    suggested_at = db.Column(db.DateTime)                 # last shown as "Did you know?"
+    dismissed_at = db.Column(db.DateTime)                 # said "Not now" -- never suggested again
+    __table_args__ = (db.UniqueConstraint('user_key', 'endpoint', name='uq_feature_seen_user_endpoint'),)
+
+
 class ProspectActivity(db.Model):
     """One thing somebody did on a lead: a call, a text, an email, a
     walkthrough booked or done, a hand-off to the owner.

@@ -46,6 +46,7 @@ from blueprints.invoices import invoices_bp
 from blueprints.portal import portal_bp
 from blueprints.money import money_bp
 from blueprints.team import team_bp, availability_bp
+from blueprints.tips import tips_bp
 
 
 def create_app():
@@ -251,6 +252,7 @@ def create_app():
     app.register_blueprint(money_bp)
     app.register_blueprint(team_bp)
     app.register_blueprint(availability_bp)
+    app.register_blueprint(tips_bp)
 
     # The menu itself — see navigation.py. Built per request because what the
     # sidebar shows depends on whether the owner or a team member is looking.
@@ -291,6 +293,12 @@ def create_app():
             # the ⓘ beside this page's title -- on the page a menu item opens,
             # not on the records behind it.
             import help_tips
+            # Which features this person has found (adoption.py): this page
+            # counts as found, then a dot on a few they haven't, and at most
+            # one "Did you know?" per sign-in.
+            import adoption
+            if request.method == 'GET':
+                adoption.note_visit(request.endpoint, nav)
             return {'NAV': nav,
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
                     'NAV_TITLE': navigation.title_for(request.endpoint),
@@ -298,12 +306,15 @@ def create_app():
                     'NAV_ACTIVE_TAB': active_tab,
                     'SETUP': setup,
                     'MENU_TIPS': help_tips.for_menu(nav),
+                    'NAV_DOTS': adoption.dots(nav, setup_done),
+                    'SUGGESTION': adoption.suggestion(nav, setup_done),
                     'PAGE_TIP': request.endpoint if request.endpoint in help_tips.TIPS else None}
         except Exception:
             # A broken menu must never take a working page down with it.
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [],
                     'NAV_ACTIVE_TAB': None, 'SETUP': None,
-                    'MENU_TIPS': {}, 'PAGE_TIP': None}
+                    'MENU_TIPS': {}, 'PAGE_TIP': None,
+                    'NAV_DOTS': set(), 'SUGGESTION': None}
 
     @app.context_processor
     def inject_trial():

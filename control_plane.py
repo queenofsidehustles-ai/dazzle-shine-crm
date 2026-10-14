@@ -390,6 +390,40 @@ signup_attempts = Table(
 )
 
 
+# Every email the product sends to a company's owner -- welcome, trial
+# emails, the moments -- sent or failed. Leads have their own record
+# (product_lead_messages); between the two, the console's Communications page
+# can answer "what have we sent this person, and when" from one place.
+product_messages = Table(
+    'product_messages', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('org_slug', String(40), index=True),
+    Column('kind', String(40)),
+    Column('to_address', String(200), index=True),
+    Column('subject', String(300)),
+    Column('ok', Boolean, default=False),
+    Column('detail', String(400)),
+    # 'auto' for the daily run, 'event' for a moment, or the console user
+    # who pressed the button.
+    Column('sent_by', String(200)),
+    Column('sent_at', DateTime, default=datetime.utcnow, index=True),
+)
+
+
+# Which automated emails are switched on. One row per email (or per whole
+# sequence); a missing row means on, so a new email works the day it ships
+# and an empty table changes nothing. Set from the console's Communications
+# page by a manager or the owner, and recorded in the console log.
+product_switches = Table(
+    'product_switches', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('key', String(60), unique=True, nullable=False),
+    Column('enabled', Boolean, default=True),
+    Column('updated_by', String(200)),
+    Column('updated_at', DateTime, default=datetime.utcnow),
+)
+
+
 # Questions from the public site -- people who are not customers yet and have
 # no account to file feedback from.
 support_requests = Table(
@@ -421,6 +455,73 @@ console_docs = Table(
     Column('created_at', DateTime, default=datetime.utcnow),
     Column('updated_at', DateTime, default=datetime.utcnow, onupdate=datetime.utcnow),
 )
+
+
+# Which help tips work, across every company (adoption.py). The tips' wording
+# is the product's, not any one company's, so whether "Find leads" gets opened
+# after its tip was read is a question about the product -- answered here, in
+# one place, rather than by visiting every company's schema. Nobody is named:
+# `person` is a one-way hash of company and login, there only so one person
+# counts once.
+tip_events = Table(
+    'tip_events', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('slug', String(40), index=True),
+    Column('person', String(16)),
+    Column('role', String(20)),
+    Column('tip', String(80), index=True),
+    # 'open' -- read the tip; 'used' -- opened the feature within a week of
+    # reading its tip, for the first time; 'suggested' / 'clicked' /
+    # 'dismissed' -- the once-a-sign-in "Did you know?".
+    Column('event', String(20), nullable=False),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
+)
+
+
+def record_tip_event(engine, slug, person, role, tip, event):
+    with engine.begin() as conn:
+        conn.execute(insert(tip_events).values(
+            slug=slug, person=person, role=role, tip=tip, event=event,
+            created_at=datetime.utcnow()))
+
+
+# Each outcome and the event it is the outcome of. A rate is only honest when
+# both sides come from the same people: those who read the tip (or were shown
+# the suggestion) in the window, and what those people then did -- whenever
+# they did it. Counting each event on its own window instead lets somebody who
+# read a tip the day before the window opens count as a success inside it.
+TIP_COHORTS = {'used': 'open', 'clicked': 'suggested', 'dismissed': 'suggested'}
+
+
+def tip_report(engine, since=None):
+    """{tip: {event: distinct people}} across real companies -- test and demo
+    accounts left out, as everywhere else in the console. With `since`, the
+    people are those whose read (or suggestion) falls in the window, and each
+    outcome counts only those same people."""
+    q = (select(tip_events.c.tip, tip_events.c.event,
+                tip_events.c.slug, tip_events.c.person, tip_events.c.created_at)
+         .select_from(tip_events.outerjoin(
+             organizations, organizations.c.slug == tip_events.c.slug))
+         .where((organizations.c.is_test.is_(None)) | (organizations.c.is_test.is_(False))))
+    people = {}                     # (tip, event) -> {person: first time}
+    with engine.connect() as conn:
+        for tip, event, slug, person, at in conn.execute(q):
+            seen = people.setdefault((tip, event), {})
+            who = f'{slug}:{person}'
+            if who not in seen or (at and at < seen[who]):
+                seen[who] = at
+    out = {}
+    for (tip, event), seen in people.items():
+        origin = TIP_COHORTS.get(event)
+        if origin is None:          # an originating event: the window decides
+            who = {p for p, at in seen.items() if since is None or (at and at >= since)}
+        else:                       # an outcome: only for that window's cohort
+            cohort = people.get((tip, origin), {})
+            who = {p for p in seen if p in cohort
+                   and (since is None or (cohort[p] and cohort[p] >= since))}
+        if who:
+            out.setdefault(tip, {})[event] = len(who)
+    return out
 
 
 def _ensure_table_columns(engine, table):
@@ -480,7 +581,9 @@ def ensure_table(engine):
                         console_users, support_requests, console_log,
                         tenant_logins, login_lookup_requests, console_docs,
                         switch_tokens,
-                        promo_codes, product_lead_messages, signup_attempts])
+                        promo_codes, product_lead_messages, signup_attempts,
+                        tip_events,
+                        product_messages, product_switches])
     ensure_columns(engine)
 
 
@@ -943,6 +1046,76 @@ def lead_messages(engine, limit=100):
             return [dict(r) for r in conn.execute(q).mappings()]
     except Exception:
         return []
+
+
+def record_product_message(engine, org_slug, kind, to_address, subject, ok,
+                           detail=None, sent_by='auto'):
+    """Write down one email to an owner. Never raises: a failed write to the
+    record must never be the reason an email is treated as unsent."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(product_messages).values(
+                org_slug=(org_slug or '')[:40] or None, kind=(kind or '')[:40],
+                to_address=(to_address or '')[:200], subject=(subject or '')[:300],
+                ok=bool(ok), detail=(detail or '')[:400],
+                sent_by=(sent_by or '')[:200], sent_at=datetime.utcnow()))
+    except Exception:
+        pass
+
+
+def product_messages_for(engine, slug=None, email=None, since=None, limit=200):
+    """Owner emails, newest first, optionally for one company or address."""
+    try:
+        q = select(product_messages)
+        if slug:
+            q = q.where(product_messages.c.org_slug == slug)
+        if email:
+            q = q.where(func.lower(product_messages.c.to_address)
+                        == email.strip().lower())
+        if since:
+            q = q.where(product_messages.c.sent_at >= since)
+        q = q.order_by(product_messages.c.sent_at.desc()).limit(limit)
+        with engine.connect() as conn:
+            return [dict(r) for r in conn.execute(q).mappings()]
+    except Exception:
+        return []
+
+
+def lead_messages_for(engine, email, limit=100):
+    """Everything sent to one lead address, newest first."""
+    try:
+        with engine.connect() as conn:
+            q = (select(product_lead_messages)
+                 .where(func.lower(product_lead_messages.c.to_address)
+                        == (email or '').strip().lower())
+                 .order_by(product_lead_messages.c.sent_at.desc()).limit(limit))
+            return [dict(r) for r in conn.execute(q).mappings()]
+    except Exception:
+        return []
+
+
+def switches(engine):
+    """{key: enabled} for every switch that has been set. Absent means on.
+    Never raises: if the table cannot be read, everything stays on, which is
+    how it behaved before switches existed."""
+    try:
+        with engine.connect() as conn:
+            return {r['key']: bool(r['enabled']) for r in conn.execute(
+                select(product_switches)).mappings()}
+    except Exception:
+        return {}
+
+
+def set_switch(engine, key, enabled, by=None):
+    now = datetime.utcnow()
+    with engine.begin() as conn:
+        done = conn.execute(update(product_switches)
+                            .where(product_switches.c.key == key)
+                            .values(enabled=bool(enabled), updated_by=by,
+                                    updated_at=now)).rowcount
+        if not done:
+            conn.execute(insert(product_switches).values(
+                key=key, enabled=bool(enabled), updated_by=by, updated_at=now))
 
 
 def mark_leads_unsubscribed(engine, email):
