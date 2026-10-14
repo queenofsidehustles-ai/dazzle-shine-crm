@@ -61,22 +61,34 @@
           <tr>
             <td>{{ l.label }}</td>
             <td class="qty">{% if l.qty %}{{ '{:,g}'.format(l.qty|float) }} {{ l.unit }}{% endif %}</td>
-            <td class="num">{% if show_line_prices %}${{ '{:,.2f}'.format(l.price|float) }}{% endif %}</td>
+            <td class="num">{% if show_line_prices %}${{ '{:,.2f}'.format(l.price|float) }}{% if l.rate_per_sqft %}<br><span class="qty">{{ l.rate_per_sqft|float|sqft_rate }}</span>{% endif %}{% endif %}</td>
           </tr>
           {% endfor %}
           {% if show_line_prices %}
-          <tr class="area-total"><td colspan="2">{{ a.name }} total</td><td class="num">${{ '{:,.2f}'.format(a.subtotal|float) }}</td></tr>
+          <tr class="area-total"><td colspan="2">{{ a.name }} total{% if a.rate_per_sqft %} <span class="qty">({{ a.rate_per_sqft|float|sqft_rate }})</span>{% endif %}</td><td class="num">${{ '{:,.2f}'.format(a.subtotal|float) }}</td></tr>
           {% endif %}
         {% endfor %}
-        {% if priced.minimum or priced.travel %}
+        {% if priced.travel or priced.minimum or priced.price_per_sqft %}
           <tr class="area-name"><td colspan="3">Each visit</td></tr>
           {% if priced.minimum %}
-          <tr class="visit"><td colspan="2">Minimum visit charge (visits are at least ${{ '{:,.0f}'.format(priced.min_visit|float) }})</td>
-            <td class="num">${{ '{:,.2f}'.format(priced.minimum|float) }}</td></tr>
+          {#- A quote saved before the minimum-visit floor was dropped from this
+              editor -- its per_visit already includes this top-up, so it has to
+              keep showing here or the lines stop adding up. -#}
+          <tr class="visit"><td colspan="2">Minimum visit charge</td><td class="num">${{ '{:,.2f}'.format(priced.minimum|float) }}</td></tr>
           {% endif %}
           {% if priced.travel %}
           <tr class="visit"><td colspan="2">Travel to and from your site</td><td class="num">${{ '{:,.2f}'.format(priced.travel|float) }}</td></tr>
           {% endif %}
+          {% if priced.price_per_sqft %}
+          <tr class="visit"><td colspan="2">Works out to</td><td class="num">{{ priced.price_per_sqft|float|sqft_rate }} a visit</td></tr>
+          {% endif %}
+        {% endif %}
+        {% if priced.first_visit_charge %}
+          <tr class="area-name"><td colspan="3">First Visit</td></tr>
+          <tr class="visit"><td colspan="2">One-time first-visit premium (+{{ (priced.first_visit_pct * 100)|round|int }}%) &mdash;
+            the first clean on a new contract runs longer than every visit after it</td>
+            <td class="num">${{ '{:,.2f}'.format(priced.first_visit_charge|float) }}</td></tr>
+          <tr class="area-total"><td colspan="2">Your first visit total</td><td class="num">${{ '{:,.2f}'.format(priced.first_visit_total|float) }}</td></tr>
         {% endif %}
         </tbody>
       </table>
@@ -106,6 +118,9 @@
       {% endif %}
       {% if q.price_per_visit %}
       <div class="sub">${{ '{:,.2f}'.format(q.price_per_visit|float) }} per visit</div>
+      {% endif %}
+      {% if priced and priced.first_visit_charge %}
+      <div class="sub">Your first visit: ${{ '{:,.2f}'.format(priced.first_visit_total|float) }} (one-time first-visit premium included)</div>
       {% endif %}
     </div>
     {% endif %}

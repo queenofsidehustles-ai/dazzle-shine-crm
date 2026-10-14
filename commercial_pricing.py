@@ -36,13 +36,31 @@ can measure from its own finished jobs: square footage divided by the hours
 somebody actually clocked. Every number here is owner-editable in
 Settings → Commercial pricing, and an override always wins.
 """
+import math
+
+
+def finite_num(value, max_value=1_000_000.0):
+    """A plain, finite, non-negative float from whatever was typed or sent --
+    or None if it doesn't parse, or is NaN, +/-Infinity, negative, or a
+    magnitude only a mistake or an attempt to corrupt a total could produce.
+    `float()` itself accepts "inf"/"Infinity"/"nan" as valid numbers, and a
+    negative-only check lets NaN through too (every NaN comparison is False) --
+    this is the one gate every numeric pricing input, in Settings or on a
+    quote, passes through before it reaches any arithmetic."""
+    try:
+        v = float(str(value).replace(',', '').replace('$', '').strip())
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) and 0 <= v <= max_value else None
+
 
 # Starting defaults (owner can change all of these in settings)
 DEFAULTS = {
     'comm_hourly_cost': 25.0,    # what ONE cleaner costs YOU per hour, loaded
     'comm_target_labor': 0.40,   # labor as a share of price (0.40 = 40%)
-    'comm_min_visit': 125.0,     # never quote a single visit below this
+    'comm_min_visit': 125.0,     # never quote a single visit below this (quote() only)
     'comm_drive_minutes': 30.0,  # round trip, per visit, unless told otherwise
+    'comm_first_visit_pct': 0.25,  # one-time premium on an itemized quote's first visit
 }
 
 # Square feet one cleaner can cover per hour, by facility type.
@@ -186,10 +204,9 @@ def drive_minutes(value=None):
     to the setting when it does not.
     """
     if value not in (None, ''):
-        try:
-            return max(0.0, float(value))
-        except (TypeError, ValueError):
-            pass
+        v = finite_num(value)
+        if v is not None:
+            return v
     return _get('comm_drive_minutes') or 0.0
 
 
@@ -213,17 +230,14 @@ def quote(square_footage, category='office', frequency='weekly', extras=None,
     # scope is priced on every path — the saved account and the API, not just
     # the browser calculator where the box happens to start ticked.
     extras = set(extras or []) | set(default_extras(category))
-    sqft = max(0.0, float(square_footage or 0))
+    sqft = finite_num(square_footage) or 0.0
     rate = prod_rate(category) or 2000
     hourly = _get('comm_hourly_cost')
     target = _get('comm_target_labor') or 0.40
     min_visit = _get('comm_min_visit')
     mins = drive_minutes(drive_mins)
 
-    try:
-        judged = float(hours) if hours not in (None, '') else 0.0
-    except (TypeError, ValueError):
-        judged = 0.0
+    judged = finite_num(hours) or 0.0
     if judged > 0:
         hours, has_job = judged, True
     else:
@@ -384,52 +398,88 @@ def line_price(key, qty, s=None):
 
 
 def _num(value, default=0.0):
-    try:
-        v = float(str(value).replace(',', '').replace('$', '').strip())
-    except (TypeError, ValueError):
-        return default
-    return v if v >= 0 else default
+    v = finite_num(value)
+    return default if v is None else v
 
 
-def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fixed=None):
+def fmt_sqft_rate(r):
+    """A $/sq ft rate (area_quote's rate_per_sqft / price_per_sqft) as a
+    customer reads it -- 3 decimals so a few cents a square foot isn't
+    rounded to nothing, trailing zeros dropped so $0.050 reads as $0.05.
+    The one formatting rule, used on the quote page, the review page and
+    the proposal email alike, so the same rate never reads differently in
+    two places."""
+    return f'${r:,.3f}'.rstrip('0').rstrip('.') + '/sq ft'
+
+
+def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fixed=None,
+               first_visit=False):
     """Price a quote laid out as work areas and their lines.
 
     `areas` is what the quote form sends: [{"name", "lines": [{"item", "qty",
-    "label"?, "price"?, "override"?}]}]. A line's price is worked out from its
-    item and quantity unless it was typed over (override) or is a custom line
-    with only a price. What comes back is the same areas, cleaned and priced,
-    with each area's subtotal, then the minimum-visit top-up and the travel as
-    lines of their own -- never folded into the work, where nobody can see
-    them -- the price a visit, and a month.
+    "label"?, "price"?, "override"?, "rate"?}]}]. A line's price is worked
+    out from its item and quantity unless it was typed over (override), or
+    is a custom line -- priced as its qty times a "rate" typed on the line
+    itself (there's no catalog rate for something made up on the spot), or
+    failing that a flat "price". What comes back is the same areas, cleaned
+    and priced, with each area's subtotal, then the travel as a line of its
+    own -- never folded into the work, where nobody can see it -- the price
+    a visit, and a month.
+
+    No minimum-visit floor here, unlike quote() (the single-sqft estimator):
+    an itemized quote is already a commitment to the scope on the page, so the
+    price is what that scope actually costs, not topped up to a floor nobody
+    can see the reason for. A job small enough that it is not worth the trip
+    is a judgement call for whoever is pricing it -- raise a rate, add scope,
+    or decline it -- not something to paper over with an invisible top-up.
 
     keep_empty keeps lines with nothing in them yet, so the editor's rows and
     the priced rows stay one-to-one while somebody is still typing.
 
     A line carrying `locked_price` keeps it: the price it was quoted at, on a
     line nobody has changed since (see quotes._lock_saved). `fixed` does the
-    same for the minimum visit and the travel -- {"min_visit", "travel"} as
-    the quote was written -- so editing a saved quote does not quietly
-    re-price it at whatever the rates are today.
+    same for the travel and the first-visit percentage -- {"travel",
+    "first_visit_pct"} as the quote was written -- so editing a saved quote
+    does not quietly re-price it, or its first-visit premium, at whatever
+    the rates are today.
+
+    first_visit prices a one-time premium on top of the work (not the travel),
+    for a first clean on a new contract, which is reliably slower than every
+    visit after it -- years of buildup, no established pace. Returned as its
+    own `first_visit_charge`, never folded into `per_visit` or `monthly`: a
+    one-time line should not inflate what a customer thinks they will pay
+    every month.
     """
     s = _settings()
     fixed = fixed or {}
     out_areas, work, hours, has_work = [], 0.0, 0.0, False
+    sqft_total = 0.0
     for a in (areas or [])[:30]:
         if not isinstance(a, dict):
             continue
         name = str(a.get('name') or '').strip()[:80] or 'Work area'
         lines = []
+        area_sqft = 0.0
         for ln in (a.get('lines') or [])[:60]:
             if not isinstance(ln, dict):
                 continue
             key = ln.get('item') if ln.get('item') in _ITEM else 'custom'
             qty = _num(ln.get('qty'))
+            unit_rate = None
             if key == 'custom':
                 label = str(ln.get('label') or '').strip()[:140]
                 unit = str(ln.get('unit') or '').strip()[:20]
-                price = round(_num(ln.get('price')), 2)
                 h = 0.0
-                override = True
+                # A rate per unit (12 windows at $8 each) prices itself, same
+                # as a catalog item; without one it's a flat price typed by
+                # hand, the only way a custom line worked before this.
+                if ln.get('rate') not in (None, ''):
+                    unit_rate = round(_num(ln.get('rate')), 4)
+                    price = round(qty * unit_rate, 2)
+                    override = False
+                else:
+                    price = round(_num(ln.get('price')), 2)
+                    override = True
                 # Described but free -- a complimentary item is still scope
                 # the customer is promised, and the review flags the $0.
                 keep = bool(label)
@@ -446,34 +496,53 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fix
                 keep = False
             if not (qty or price or keep) and not keep_empty:
                 continue
+            # $/sq ft only means anything for a line actually priced by the
+            # square foot -- a toilet count or a linear foot of hood has no
+            # such rate, and showing one would read as real.
+            rate = round(price / qty, 4) if unit == 'sq ft' and qty else None
             lines.append({'item': key, 'label': label, 'qty': qty, 'unit': unit,
-                          'price': price, 'override': override})
+                          'price': price, 'override': override, 'rate_per_sqft': rate,
+                          'unit_rate': unit_rate})
             work += price
             hours += h
+            if unit == 'sq ft':
+                area_sqft += qty
             # Work is there whatever it rounds to: a few square feet priced at
-            # $0 still means a visit, and the visit still costs its minimum.
+            # $0 still means a visit.
             has_work = has_work or bool(qty or price)
-        out_areas.append({'name': name, 'lines': lines,
-                          'subtotal': round(sum(l['price'] for l in lines), 2)})
+        sqft_total += area_sqft
+        subtotal = round(sum(l['price'] for l in lines), 2)
+        out_areas.append({'name': name, 'lines': lines, 'subtotal': subtotal,
+                          'sqft': round(area_sqft) if area_sqft else 0,
+                          # A blended rate only when the area's whole subtotal
+                          # is sq-ft-priced work -- a floor area with a custom
+                          # line mixed in has no single honest $/sq ft either.
+                          'rate_per_sqft': (round(subtotal / area_sqft, 4)
+                                           if area_sqft and all(
+                                               l['unit'] == 'sq ft' for l in lines) else None)})
     work = round(work, 2)
-    min_visit = fixed['min_visit'] if fixed.get('min_visit') is not None else (_val('comm_min_visit', s) or 0.0)
-    minimum = round(min_visit - work, 2) if has_work and work < min_visit else 0.0
     mins = drive_mins if drive_mins not in (None, '') else _val('comm_drive_minutes', s)
-    try:
-        mins = max(0.0, float(mins or 0))
-    except (TypeError, ValueError):
-        mins = 0.0
+    mins = finite_num(mins) or 0.0
     target = _val('comm_target_labor', s) or 0.40
     if fixed.get('travel') is not None:
         travel = fixed['travel'] if has_work else 0.0
     else:
         travel = round((mins / 60.0) * (_val('comm_hourly_cost', s) or 0) / target) if has_work else 0.0
-    per_visit = round(work + minimum + travel, 2)
+    per_visit = round(work + travel, 2)
+    if fixed.get('first_visit_pct') is not None:
+        first_visit_pct = fixed['first_visit_pct']
+    else:
+        first_visit_pct = _val('comm_first_visit_pct', s) or 0.0
+    first_visit_charge = round(work * first_visit_pct) if first_visit and has_work else 0.0
     calc = _QUOTE_FREQ.get(frequency, 'weekly')
     monthly = round(per_visit * VISITS_PER_MONTH[calc]) if calc else None
-    return {'areas': out_areas, 'work': work, 'minimum': minimum, 'min_visit': min_visit,
-            'travel': travel, 'drive_minutes': round(mins), 'per_visit': per_visit,
-            'monthly': monthly, 'hours': round(hours, 2)}
+    price_per_sqft = round(per_visit / sqft_total, 4) if sqft_total else None
+    return {'areas': out_areas, 'work': work, 'travel': travel, 'drive_minutes': round(mins),
+            'per_visit': per_visit, 'monthly': monthly, 'hours': round(hours, 2),
+            'sqft': round(sqft_total) if sqft_total else 0, 'price_per_sqft': price_per_sqft,
+            'first_visit': bool(first_visit), 'first_visit_pct': first_visit_pct,
+            'first_visit_charge': first_visit_charge,
+            'first_visit_total': round(per_visit + first_visit_charge, 2)}
 
 
 def get_config():
@@ -483,6 +552,7 @@ def get_config():
         'target': _get('comm_target_labor') or 0.40,
         'min_visit': _get('comm_min_visit'),
         'drive_minutes': _get('comm_drive_minutes') or 0.0,
+        'first_visit_pct': _get('comm_first_visit_pct') or 0.0,
         'prod_rates': {c: prod_rate(c) for c in PROD_RATES},
         'visits_per_month': VISITS_PER_MONTH,
         'facility_types': [{'key': k, 'label': l, 'desc': d} for k, l, d in FACILITY_TYPES],

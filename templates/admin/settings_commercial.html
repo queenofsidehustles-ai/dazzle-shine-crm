@@ -20,11 +20,18 @@
     <div><label class="lbl">Minimum per visit ($)</label>
       <input class="inp" name="comm_min_visit" value="{{ '%.0f' % cfg.min_visit }}">
       <div style="font-size:0.72rem;color:var(--softer);margin-top:2px">Covers a stop being worth
-        making at all. Travel is added on top of this, not swallowed by it.</div></div>
+        making at all. Travel is added on top of this, not swallowed by it. Only used by the
+        Estimate Helper's quick square-footage number — a work-area quote is priced at exactly
+        what its lines add up to, with no floor under it.</div></div>
     <div><label class="lbl">Default drive time (mins, round trip)</label>
       <input class="inp" name="comm_drive_minutes" value="{{ '%.0f' % cfg.drive_minutes }}">
       <div style="font-size:0.72rem;color:var(--softer);margin-top:2px">Priced like cleaning time —
         an hour in the van is an hour you can't sell. Each account can set its own.</div></div>
+    <div><label class="lbl">First-visit premium (%)</label>
+      <input class="inp" name="comm_first_visit_pct" value="{{ '%.0f' % (cfg.first_visit_pct*100) }}">
+      <div style="font-size:0.72rem;color:var(--softer);margin-top:2px">Added once, to the first visit only,
+        on a work-area quote marked "New contract" — the recurring price and the monthly total never
+        include it.</div></div>
 
     <div style="grid-column:1/-1;border-top:1px solid #eee;padding-top:12px">
       <strong style="font-size:0.9rem">Production rates — sq ft one cleaner covers per hour</strong>

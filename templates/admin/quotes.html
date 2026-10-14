@@ -40,6 +40,9 @@
             {% if q.status == 'draft' %}
             <a href="{{ url_for('quotes.review', quote_id=q.id) }}" class="btn btn-gold" style="padding:5px 12px;font-size:0.82rem">Review &amp; send</a>
             {% endif %}
+            <form method="POST" action="{{ url_for('quotes.duplicate', quote_id=q.id) }}" style="display:inline">
+              <button type="submit" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem" title="Duplicate as a new draft">⧉</button>
+            </form>
           </td>
         </tr>
         {% endfor %}

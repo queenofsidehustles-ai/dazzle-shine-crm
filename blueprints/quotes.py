@@ -66,8 +66,19 @@ def _editor_args(q=None, pre=None):
     priced = _priced(q) if q is not None else None
     areas = (priced or {}).get('areas') or ((pre or {}).get('line_items') or [])
     show = (q.show_line_prices is not False) if q is not None else True
+    # A line this quote locked in (see _lock_saved) keeps its saved price
+    # forever, even after a rate in Settings moves -- that's the point. But
+    # nobody editing the quote would otherwise notice their rates have since
+    # changed, so re-price the same areas fresh, with nothing locked, and
+    # flag it if that comes out different from what's actually saved.
+    rates_changed = False
+    if priced:
+        live = cp.area_quote(priced['areas'], q.frequency or 'weekly',
+                             first_visit=bool(q.first_visit_premium))
+        rates_changed = (round(live['per_visit'], 2) != round(priced['per_visit'], 2)
+                         or round(live['first_visit_total'], 2) != round(priced.get('first_visit_total') or 0, 2))
     return dict(work_items=cfg['work_items'], area_presets=cfg['area_presets'],
-                areas_init=areas, show_prices_init=show)
+                areas_init=areas, show_prices_init=show, rates_changed=rates_changed)
 
 
 def _services_for(property_type):
@@ -192,6 +203,7 @@ def new():
             token=secrets.token_urlsafe(32),
             status='draft',
             brand=(request.form.get('brand') or brands.brand_for_property(request.form.get('property_type', ''))),
+            first_visit_premium=request.form.get('first_visit_premium') == '1',
         )
         _apply_lines(q)
         lead = Prospect.query.get(request.form.get('prospect_id', type=int) or 0)
@@ -239,7 +251,15 @@ def new():
 
 def _apply_form(q):
     """The quote form's fields onto a quote. Shared by Save and Send, so
-    Send emails what is on the screen rather than what was last saved."""
+    Send emails what is on the screen rather than what was last saved.
+
+    A no-op once a quote is accepted: the terms a customer agreed to are
+    what they agreed to, permanently -- not whatever somebody typed into
+    this same form afterward. Duplicate it (see duplicate()) for a revised
+    offer; that starts a new, separate record rather than rewriting this
+    one's price out from under an accepted contract."""
+    if q.status == 'accepted':
+        return
     f = request.form
     q.company = (f.get('company') or q.company or '').strip()
     q.contact_name = (f.get('contact_name', q.contact_name) or '').strip()
@@ -256,6 +276,7 @@ def _apply_form(q):
     q.monthly_price = f.get('monthly_price') or None
     q.scope_notes = (f.get('scope_notes', q.scope_notes) or '').strip()
     q.brand = f.get('brand') or q.brand or brands.brand_for_property(q.property_type)
+    q.first_visit_premium = f.get('first_visit_premium') == '1'
     _apply_lines(q)
 
 
@@ -265,9 +286,14 @@ def _apply_lines(q):
     a rate in Settings changes next month. With lines, they set the price a
     visit and a month -- the two can no longer disagree with the table the
     customer reads. Without the editor in the post (an older form, a send from
-    the review page) nothing changes."""
+    the review page) nothing changes.
+
+    Also a no-op once accepted (see _apply_form) -- called on a new, still-
+    unaccepted quote too, where the check never fires."""
     import json
     import commercial_pricing as cp
+    if q.status == 'accepted':
+        return
     raw = request.form.get('line_items_json')
     if raw is None:
         return
@@ -277,7 +303,8 @@ def _apply_lines(q):
     except ValueError:
         areas = []
     areas = areas if isinstance(areas, list) else []
-    priced = cp.area_quote(areas, q.frequency or 'weekly', **_lock_saved(areas, _priced(q)))
+    priced = cp.area_quote(areas, q.frequency or 'weekly', first_visit=bool(q.first_visit_premium),
+                           **_lock_saved(areas, _priced(q)))
     if any(a['lines'] for a in priced['areas']):
         q.line_items = json.dumps(priced)
         q.price_per_visit = priced['per_visit']
@@ -294,8 +321,11 @@ def _lock_saved(areas, saved):
     this, raising the hourly cost next month and opening an old quote to fix a
     typo re-priced it, and a proposal already sent (or accepted) changed under
     the customer. A line still in the same area, for the same work and the
-    same quantity, keeps its saved price; the minimum visit and the travel
-    keep theirs. A line that was changed, or added, is priced today.
+    same quantity, keeps its saved price; the travel keeps its too, and so
+    does the first-visit percentage -- changing that setting in Settings
+    should not silently change what an already-priced quote's premium comes
+    to the next time someone saves it. A line that was changed, or added, is
+    priced today.
     Mutates `areas`; returns the area_quote kwargs."""
     if not saved:
         return {}
@@ -318,7 +348,7 @@ def _lock_saved(areas, saved):
             k = ((a.get('name') or '').strip().lower(), l.get('item'), qty)
             if k in old:
                 l['locked_price'] = old[k]
-    return {'fixed': {'min_visit': saved.get('min_visit'), 'travel': saved.get('travel')}}
+    return {'fixed': {'travel': saved.get('travel'), 'first_visit_pct': saved.get('first_visit_pct')}}
 
 
 def _priced(q):
@@ -346,7 +376,22 @@ def lines_json():
         q = CommercialQuote.query.get(int(d['quote_id'])) if str(d['quote_id']).isdigit() else None
         saved = _priced(q) if q else None
     return jsonify(cp.area_quote(areas, d.get('frequency') or 'weekly', keep_empty=True,
+                                 first_visit=bool(d.get('first_visit')),
                                  **_lock_saved(areas, saved)))
+
+
+def _quote_history(q):
+    """Other quotes for the same account -- the same call-list lead, or
+    failing that the same company name -- so whoever is pricing a rebid
+    can see what it went for elsewhere without digging through Quotes."""
+    query = CommercialQuote.query.filter(CommercialQuote.id != q.id)
+    if q.prospect_id:
+        query = query.filter(CommercialQuote.prospect_id == q.prospect_id)
+    elif q.company:
+        query = query.filter(db.func.lower(CommercialQuote.company) == q.company.strip().lower())
+    else:
+        return []
+    return query.order_by(CommercialQuote.created_at.desc()).limit(5).all()
 
 
 @quotes_bp.route('/<int:quote_id>', methods=['GET', 'POST'])
@@ -354,6 +399,9 @@ def lines_json():
 def detail(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
+        if q.status == 'accepted':
+            flash('This quote was accepted — its terms are locked. Duplicate it to send a revised offer.', 'error')
+            return redirect(url_for('quotes.detail', quote_id=quote_id))
         _apply_form(q)
         db.session.commit()
         flash('Draft saved — nothing has been sent.' if q.status == 'draft' else 'Quote updated.', 'success')
@@ -363,6 +411,7 @@ def detail(quote_id):
     return render_template('admin/quote_form.html', quote=q, lead=_lead_for(q), pre={},
                            property_types=PROPERTY_TYPES, services=_services_for(q.property_type),
                            frequencies=FREQUENCIES, contract_terms=CONTRACT_TERMS,
+                           history=_quote_history(q),
                            selected_services=selected_services, **_estimate_args(),
                            **_editor_args(q=q))
 
@@ -386,32 +435,50 @@ def _areas_email_html(priced, show_prices, accent):
     """The work-area table for the email, in the inline styles mail clients
     keep. Same rule as the page: every line's price, or each area's total."""
     from markupsafe import escape as e
+    import commercial_pricing as cp
     td = 'padding:7px 0;border-top:1px solid #e4dfef;vertical-align:top'
     num = td + ';text-align:right;white-space:nowrap;padding-left:10px'
     qty = td + ';color:#6b6585;text-align:right;white-space:nowrap;padding-left:10px'
     money = lambda v: f'${float(v or 0):,.2f}'
+    rate = cp.fmt_sqft_rate
     rows = []
     for a in priced.get('areas') or []:
         if not a.get('lines'):
             continue
+        area_rate = f' ({rate(a["rate_per_sqft"])})' if show_prices and a.get('rate_per_sqft') else ''
         rows.append(f'<tr><td colspan="2" style="padding:14px 0 4px;font-weight:700;color:{accent}">{e(a["name"])}</td>'
                     f'<td style="padding:14px 0 4px;text-align:right;font-weight:700">'
                     f'{"" if show_prices else money(a.get("subtotal"))}</td></tr>')
         for l in a['lines']:
             q_txt = f'{float(l.get("qty") or 0):,g} {e(l.get("unit") or "")}' if l.get('qty') else ''
+            line_rate = f' <span style="color:#9a95ad">({rate(l["rate_per_sqft"])})</span>' if show_prices and l.get('rate_per_sqft') else ''
             rows.append(f'<tr><td style="{td}">{e(l.get("label") or "")}</td><td style="{qty}">{q_txt}</td>'
-                        f'<td style="{num}">{money(l.get("price")) if show_prices else ""}</td></tr>')
+                        f'<td style="{num}">{money(l.get("price")) + line_rate if show_prices else ""}</td></tr>')
         if show_prices:
-            rows.append(f'<tr><td colspan="2" style="{td};font-weight:700">{e(a["name"])} total</td>'
+            rows.append(f'<tr><td colspan="2" style="{td};font-weight:700">{e(a["name"])} total{area_rate}</td>'
                         f'<td style="{num};font-weight:700">{money(a.get("subtotal"))}</td></tr>')
-    if priced.get('minimum') or priced.get('travel'):
+    if priced.get('travel') or priced.get('minimum') or priced.get('price_per_sqft'):
         rows.append(f'<tr><td colspan="3" style="padding:14px 0 4px;font-weight:700;color:{accent}">Each visit</td></tr>')
         if priced.get('minimum'):
-            rows.append(f'<tr><td colspan="2" style="{td}">Minimum visit charge (visits are at least '
-                        f'${float(priced.get("min_visit") or 0):,.0f})</td><td style="{num}">{money(priced["minimum"])}</td></tr>')
+            # A quote saved before the minimum-visit floor was dropped from
+            # this editor -- its per_visit already includes this top-up, so
+            # it has to keep showing here or the lines stop adding up.
+            rows.append(f'<tr><td colspan="2" style="{td}">Minimum visit charge</td>'
+                        f'<td style="{num}">{money(priced["minimum"])}</td></tr>')
         if priced.get('travel'):
             rows.append(f'<tr><td colspan="2" style="{td}">Travel to and from your site</td>'
                         f'<td style="{num}">{money(priced["travel"])}</td></tr>')
+        if priced.get('price_per_sqft'):
+            rows.append(f'<tr><td colspan="2" style="{td};color:#6b6585">Works out to</td>'
+                        f'<td style="{num};color:#6b6585">{rate(priced["price_per_sqft"])} a visit</td></tr>')
+    if priced.get('first_visit_charge'):
+        pct = round((priced.get('first_visit_pct') or 0) * 100)
+        rows.append(f'<tr><td colspan="3" style="padding:14px 0 4px;font-weight:700;color:{accent}">First visit</td></tr>')
+        rows.append(f'<tr><td colspan="2" style="{td}">One-time first-visit premium (+{pct}%) — the first clean on a '
+                    f'new contract runs longer than every visit after it</td>'
+                    f'<td style="{num}">{money(priced["first_visit_charge"])}</td></tr>')
+        rows.append(f'<tr><td colspan="2" style="{td};font-weight:700">Your first visit total</td>'
+                    f'<td style="{num};font-weight:700">{money(priced.get("first_visit_total"))}</td></tr>')
     return ('<table style="width:100%;border-collapse:collapse;font-size:14px" cellpadding="0" cellspacing="0">'
             + ''.join(rows) + '</table>')
 
@@ -515,8 +582,11 @@ def review(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
         if 'company' in request.form:
-            _apply_form(q)
-            db.session.commit()
+            if q.status == 'accepted':
+                flash('This quote was accepted — its terms are locked. Duplicate it to send a revised offer.', 'error')
+            else:
+                _apply_form(q)
+                db.session.commit()
         return redirect(url_for('quotes.review', quote_id=q.id))
     brand = q.brand or brands.brand_for_property(q.property_type)
     from_name, from_email, reply_to = brands.send_identity(brand)
@@ -590,18 +660,19 @@ def circulate(quote_id):
 @owner_required
 def send_quote(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
+    # Checked before touching anything: re-sending would put a signed
+    # customer back to "sent" and restart the follow-up emails at somebody
+    # who already said yes -- and _apply_form is a no-op on an accepted
+    # quote anyway (its terms are locked), so there would be nothing of
+    # this form's edits to apply even if it ran first.
+    if q.status == 'accepted':
+        flash('This quote was accepted — it is not sent again.', 'error')
+        return redirect(url_for('quotes.review', quote_id=q.id))
     # The Send button sits in the edit form and posts it. Those edits used to
     # be dropped -- change the price, press Send, and the old price went out.
     if 'company' in request.form:
         _apply_form(q)
         db.session.commit()
-    # A draft can be saved before anybody's name or email is known (half-way
-    # through a walkthrough); it cannot be sent like that.
-    if q.status == 'accepted':
-        # Re-sending would put a signed customer back to "sent" and restart
-        # the follow-up emails at somebody who already said yes.
-        flash('This quote was accepted — it is not sent again.', 'error')
-        return redirect(url_for('quotes.review', quote_id=q.id))
     blocking, _warnings = _send_checks(q)
     if blocking:
         flash('Not sent: ' + ' '.join(blocking), 'error')
@@ -660,6 +731,51 @@ def delete(quote_id):
     db.session.commit()
     flash('Quote deleted.', 'success')
     return redirect(url_for('quotes.index'))
+
+
+@quotes_bp.route('/<int:quote_id>/duplicate', methods=['POST'])
+@owner_required
+def duplicate(quote_id):
+    """A fresh draft with the same company, areas and lines -- for a
+    repeat proposal (annual rebid, a revised ask) without retyping the
+    whole thing. Priced again at today's rates rather than copying the
+    old snapshot, same as any other new quote."""
+    src = CommercialQuote.query.get_or_404(quote_id)
+    q = CommercialQuote(
+        company=src.company, contact_name=src.contact_name, email=src.email,
+        phone=src.phone, property_type=src.property_type,
+        property_address=src.property_address, units=src.units, sqft=src.sqft,
+        services=src.services, frequency=src.frequency, contract_term=src.contract_term,
+        scope_notes=src.scope_notes, token=secrets.token_urlsafe(32), status='draft',
+        brand=src.brand, prospect_id=src.prospect_id,
+        show_line_prices=src.show_line_prices, first_visit_premium=src.first_visit_premium,
+        price_per_visit=src.price_per_visit, monthly_price=src.monthly_price,
+    )
+    db.session.add(q)
+    db.session.flush()
+    if src.line_items:
+        import json
+        import commercial_pricing as cp
+        try:
+            areas = (json.loads(src.line_items) or {}).get('areas') or []
+        except ValueError:
+            areas = []
+        # area_quote() takes a custom line's per-unit price as "rate" but
+        # hands it back as "unit_rate" -- feeding its own output back in
+        # needs the rename, or a qty x rate line silently falls back to a
+        # flat, un-editable price.
+        for a in areas:
+            for l in (a.get('lines') or []):
+                if isinstance(l, dict) and l.get('unit_rate') is not None:
+                    l['rate'] = l['unit_rate']
+        priced = cp.area_quote(areas, q.frequency or 'weekly', first_visit=bool(q.first_visit_premium))
+        if any(a['lines'] for a in priced['areas']):
+            q.line_items = json.dumps(priced)
+            q.price_per_visit = priced['per_visit']
+            q.monthly_price = priced['monthly']
+    db.session.commit()
+    flash(f'Duplicated as a new draft for {q.company} — priced at today\'s rates.', 'success')
+    return redirect(url_for('quotes.detail', quote_id=q.id))
 
 
 # ── Public accept / decline (no login) ────────────────────────────────────────

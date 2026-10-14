@@ -22,6 +22,20 @@
   </div>
 </div>
 {% endif %}
+{% if quote and history %}
+<div class="card" style="border-left:4px solid var(--softer);margin-bottom:18px;padding:14px 18px">
+  <strong>Other quotes for this account</strong>
+  <div style="font-size:0.85rem;color:var(--softer);margin-top:6px;display:flex;flex-direction:column;gap:4px">
+    {% for h in history %}
+    <div>
+      <a href="{{ url_for('quotes.detail', quote_id=h.id) }}" style="color:var(--amber-deep)">{{ h.created_at.strftime('%b %d, %Y') }}</a>
+      — {{ h.status }}{% if h.price_per_visit %}, ${{ '{:,.2f}'.format(h.price_per_visit|float) }}/visit{% endif %}{% if h.monthly_price %}
+      (${{ '{:,.2f}'.format(h.monthly_price|float) }}/mo){% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 <form method="POST" id="quoteForm">
 {% if lead and not quote %}<input type="hidden" name="prospect_id" value="{{ lead.id }}">{% endif %}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start">
@@ -93,6 +107,12 @@
         Quote each part of the building as its own area — the service floor's stone tile, ceramic tile and hardwood as separate lines,
         the kitchen and restrooms as areas of their own if they are included. Each line is priced from your rates in
         <a href="{{ url_for('settings.commercial') }}" style="color:var(--amber-deep)">Commercial pricing</a>; type over any price to set your own.</p>
+      {% if quote and rates_changed %}
+      <div style="background:var(--warn-soft);color:var(--warn);border-radius:9px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;font-weight:600">
+        ⚠ Your rates in Settings have changed since this was priced. Every line below still shows what was quoted —
+        touch a line's quantity (then undo it) to see what it would cost today, or just save to keep it as is.
+      </div>
+      {% endif %}
       <input type="hidden" name="line_items_json" id="waJson" value="{{ areas_init|tojson|forceescape }}" />
       <datalist id="waPresets">{% for a in area_presets %}<option value="{{ a }}">{% endfor %}</datalist>
       <div id="waAreas" style="display:flex;flex-direction:column;gap:14px"></div>
@@ -101,6 +121,11 @@
       <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:0.85rem;cursor:pointer">
         <input type="checkbox" name="show_line_prices" value="1" style="width:auto;accent-color:var(--amber)" {{ 'checked' if show_prices_init }} />
         Show the customer the price of every line <span style="color:var(--softer)">(off: each area's total only)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:0.85rem;cursor:pointer">
+        <input type="checkbox" name="first_visit_premium" id="firstVisitPremium" value="1" style="width:auto;accent-color:var(--amber)"
+               {{ 'checked' if quote and quote.first_visit_premium }} />
+        New contract — add a one-time first-visit premium <span style="color:var(--softer)">(the first clean runs longer than every visit after it)</span>
       </label>
     </div>
 
@@ -222,6 +247,10 @@
     </button>
     {% endif %}
 
+    <button type="button" id="dupQuote" class="btn btn-outline" style="width:100%;justify-content:center">
+      ⧉ Duplicate as a new draft
+    </button>
+
     <button type="submit" formaction="{{ url_for('quotes.delete', quote_id=quote.id) }}"
             formnovalidate onclick="return confirm('Delete this quote?')"
             class="btn btn-danger" style="width:100%;justify-content:center">Delete Quote</button>
@@ -244,6 +273,7 @@
     const ppv = document.getElementById('price_per_visit');
     const mon = document.getElementById('monthly_price');
     const freqSel = document.querySelector('select[name="frequency"]');
+    const fvCheckbox = document.getElementById('firstVisitPremium');
     let state = [], seq = 0, timer = null;
     const money = n => '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     const el = (tag, attrs, kids) => {
@@ -261,7 +291,8 @@
     function hasLines() { return state.some(a => a.lines.some(l => Number(l.qty) || Number(l.price))); }
     function sync() {
       hidden.value = JSON.stringify(state.map(a => ({ name: a.name, lines: a.lines.map(l => ({
-        item: l.item, label: l.label, qty: l.qty, unit: l.unit, price: l.price, override: !!l.override })) })));
+        item: l.item, label: l.label, qty: l.qty, unit: l.unit, price: l.price, override: !!l.override,
+        rate: l.unit_rate })) })));
       const on = hasLines();
       [ppv, mon].forEach(i => { i.readOnly = on; i.style.background = on ? 'var(--ground)' : ''; });
       const est = document.getElementById('estHelper'); if (est) est.style.display = on ? 'none' : '';
@@ -278,7 +309,7 @@
       s.appendChild(el('option', { value: 'custom', text: 'Something else — describe it and price it' }));
       s.value = BY_KEY[line.item] ? line.item : 'custom';
       s.addEventListener('change', () => {
-        line.item = s.value; line.override = false;
+        line.item = s.value; line.override = false; line.unit_rate = null;
         line.label = BY_KEY[line.item] ? BY_KEY[line.item].label : '';
         line.unit = BY_KEY[line.item] ? BY_KEY[line.item].unit : '';
         render(); changed();
@@ -287,23 +318,56 @@
     }
     function lineRow(area, line, idx) {
       const custom = !BY_KEY[line.item];
+      const byUnit = custom && line.unit_rate != null && line.unit_rate !== '';
       const desc = el('input', { type: 'text', value: line.label || '', placeholder: custom ? 'What is done, e.g. Pressure-wash the patio' : '',
                                   'aria-label': 'Description the customer reads', style: 'width:100%;margin-top:6px;font-size:0.85rem' });
       desc.addEventListener('input', () => { line.label = desc.value; changed(false); });
       const qty = el('input', { type: 'number', min: '0', step: 'any', value: line.qty || '', placeholder: 'Qty', 'aria-label': 'Quantity', style: 'width:100%' });
-      qty.addEventListener('input', () => { line.qty = qty.value; changed(); });
       const price = el('input', { type: 'number', min: '0', step: '0.01', value: line.price || '', placeholder: '$', 'aria-label': 'Line price', style: 'width:100%' });
-      price.addEventListener('input', () => { line.price = price.value; line.override = true; changed(); });
-      // Offer "use the calculated price" once they have finished typing theirs.
-      price.addEventListener('change', () => render());
       const unit = el('span', { text: custom ? '' : (BY_KEY[line.item].unit), style: 'font-size:0.78rem;color:var(--softer);white-space:nowrap' });
       const del = el('button', { type: 'button', title: 'Remove this line', 'aria-label': 'Remove this line',
                                   style: 'background:none;border:none;color:var(--warn);font-size:1.1rem;cursor:pointer;padding:0 4px', text: '✕' });
       del.addEventListener('click', () => { area.lines.splice(idx, 1); render(); changed(); });
-      const row = custom
-        ? el('div', { style: 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:6px' }, [price, del])
-        : el('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;margin-top:6px' }, [qty, unit, price, del]);
-      const wrap = el('div', { style: 'border-top:1px dashed var(--line);padding-top:8px;margin-top:8px' }, [itemSelect(line), desc, row]);
+      let row, toggle = null;
+      if (custom && byUnit) {
+        // Priced like a catalog item -- qty times a rate typed on the line
+        // itself, since there's no Settings entry for something made up on
+        // the spot. The price box becomes the read-out, not the input.
+        const cunit = el('input', { type: 'text', value: line.unit || '', placeholder: 'unit, e.g. window',
+                                    'aria-label': 'Unit', style: 'width:100%;font-size:0.82rem' });
+        cunit.addEventListener('input', () => { line.unit = cunit.value; changed(false); });
+        const rateInp = el('input', { type: 'number', min: '0', step: '0.01', value: line.unit_rate || '', placeholder: '$/unit', 'aria-label': 'Price per unit', style: 'width:100%' });
+        const recalc = () => {
+          line.price = Math.round(((Number(line.qty) || 0) * (Number(rateInp.value) || 0)) * 100) / 100;
+          price.value = line.price || '';
+        };
+        qty.addEventListener('input', () => { line.qty = qty.value; recalc(); changed(); });
+        rateInp.addEventListener('input', () => { line.unit_rate = rateInp.value; recalc(); changed(); });
+        price.readOnly = true; price.style.background = 'var(--ground)';
+        row = el('div', { style: 'display:grid;grid-template-columns:0.7fr 1fr 0.8fr 1fr auto;gap:6px;align-items:center;margin-top:6px' },
+                 [qty, cunit, rateInp, price, del]);
+        toggle = el('button', { type: 'button', style: 'background:none;border:none;color:var(--amber-deep);font-size:0.75rem;cursor:pointer;padding:2px 0',
+                                text: '↺ Use a flat price instead' });
+        toggle.addEventListener('click', () => { line.unit_rate = null; render(); changed(); });
+      } else if (custom) {
+        price.addEventListener('input', () => { line.price = price.value; line.override = true; changed(); });
+        row = el('div', { style: 'display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:6px' }, [price, del]);
+        toggle = el('button', { type: 'button', style: 'background:none;border:none;color:var(--amber-deep);font-size:0.75rem;cursor:pointer;padding:2px 0',
+                                text: '× Price by quantity × $ per unit instead' });
+        toggle.addEventListener('click', () => { line.unit_rate = '0'; render(); changed(); });
+      } else {
+        qty.addEventListener('input', () => { line.qty = qty.value; changed(); });
+        price.addEventListener('input', () => { line.price = price.value; line.override = true; changed(); });
+        // Offer "use the calculated price" once they have finished typing theirs.
+        price.addEventListener('change', () => render());
+        row = el('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;margin-top:6px' }, [qty, unit, price, del]);
+      }
+      // Filled in once price() hears back from the server -- only a sq-ft
+      // line gets a rate at all, see commercial_pricing.area_quote's note on
+      // why a toilet count or a linear foot of hood does not.
+      const rateHint = el('div', { 'data-role': 'rate', style: 'display:none;font-size:0.72rem;color:var(--softer);text-align:right;margin-top:2px' });
+      const wrap = el('div', { style: 'border-top:1px dashed var(--line);padding-top:8px;margin-top:8px' }, [itemSelect(line), desc, row, rateHint]);
+      if (toggle) wrap.appendChild(toggle);
       if (line.override && !custom) {
         const reset = el('button', { type: 'button', style: 'background:none;border:none;color:var(--amber-deep);font-size:0.75rem;cursor:pointer;padding:2px 0',
                                      text: '↺ Your price — use the calculated one' });
@@ -348,6 +412,7 @@
         const r = await fetch({{ url_for('quotes.lines_json')|tojson }}, {
           method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ areas: JSON.parse(hidden.value), frequency: freqSel.value,
+                                 first_visit: fvCheckbox.checked,
                                  quote_id: {{ (quote.id if quote else none)|tojson }} }) });
         if (!r.ok) throw new Error(r.status);
         d = await r.json();
@@ -356,15 +421,24 @@
         return;
       }
       if (mine !== seq) return;
+      const rateTxt = r => '$' + r.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '/sq ft';
       d.areas.forEach((a, ai) => {
         if (!state[ai]) return;
-        a.lines.forEach((l, li) => { const s = state[ai].lines[li]; if (s && !s.override) s.price = l.price; });
-        const sub = box.querySelector('[data-sub="' + ai + '"]'); if (sub) sub.textContent = a.name + ': ' + money(a.subtotal);
+        a.lines.forEach((l, li) => { const s = state[ai].lines[li]; if (s) { if (!s.override) s.price = l.price; s.rate_per_sqft = l.rate_per_sqft; s.unit_rate = l.unit_rate; } });
+        const sub = box.querySelector('[data-sub="' + ai + '"]');
+        if (sub) sub.textContent = a.name + ': ' + money(a.subtotal) + (a.rate_per_sqft ? ' (' + rateTxt(a.rate_per_sqft) + ')' : '');
       });
-      // Refresh the price boxes without re-rendering what somebody is typing in.
+      // Refresh the price boxes and rate hints without re-rendering what
+      // somebody is typing in.
       let k = 0;
       const priceInputs = box.querySelectorAll('input[aria-label="Line price"]');
-      state.forEach(a => a.lines.forEach(l => { const inp = priceInputs[k++]; if (inp && document.activeElement !== inp) inp.value = l.price || ''; }));
+      const rateHints = box.querySelectorAll('[data-role="rate"]');
+      state.forEach(a => a.lines.forEach(l => {
+        const inp = priceInputs[k]; if (inp && document.activeElement !== inp) inp.value = l.price || '';
+        const hint = rateHints[k];
+        if (hint) { if (l.rate_per_sqft) { hint.textContent = rateTxt(l.rate_per_sqft); hint.style.display = 'block'; } else hint.style.display = 'none'; }
+        k++;
+      }));
       sync();
       if (!hasLines()) { totals.style.display = 'none'; return; }
       totals.style.display = 'block';
@@ -372,10 +446,15 @@
       const row = (label, value, strong) => totals.appendChild(el('div', { style: 'display:flex;justify-content:space-between;' + (strong ? 'font-weight:700;margin-top:4px' : '') },
                                                                  [el('span', { text: label }), el('span', { text: value })]));
       row('Work', money(d.work));
-      if (d.minimum) row('Minimum visit (' + money(d.min_visit) + ')', money(d.minimum));
       if (d.travel) row('Travel (' + d.drive_minutes + ' min round trip)', money(d.travel));
       row('Per visit', money(d.per_visit), true);
+      if (d.price_per_sqft) row('', rateTxt(d.price_per_sqft) + ' a visit');
       if (d.monthly != null) row('Monthly', money(d.monthly), true);
+      if (d.first_visit_charge) {
+        totals.appendChild(el('div', { style: 'border-top:1px dashed var(--line);margin-top:8px;padding-top:6px;font-weight:700' , text: 'First visit' }));
+        row('First-visit premium (+' + Math.round(d.first_visit_pct * 100) + '%)', money(d.first_visit_charge));
+        row('Your first visit total', money(d.first_visit_total), true);
+      }
       totals.appendChild(el('div', { style: 'font-size:0.75rem;color:var(--softer);margin-top:6px',
                                      text: 'About ' + d.hours + ' h of cleaning a visit. These set the price per visit and monthly below.' }));
       ppv.value = Number(d.per_visit).toFixed(2);
@@ -388,6 +467,7 @@
       const inputs = box.querySelectorAll('input[aria-label="Work area name"]'); inputs[inputs.length - 1].focus();
     });
     freqSel.addEventListener('change', () => changed());
+    fvCheckbox.addEventListener('change', () => changed());
     window.waReload = function () { load(); render(); price(); };
     load(); render(); sync(); if (hasLines()) price();
   })();
@@ -464,6 +544,21 @@
     document.getElementById('monthly_price').value =
       lastEstimate.monthly == null ? '' : Number(lastEstimate.monthly).toFixed(2);
   }
+
+  // A button of its own, outside #quoteForm's submit -- duplicating reads
+  // only the saved quote, never what's on screen, so routing it through the
+  // main form would both send edits it ignores and (via the autosave below)
+  // wipe the in-progress draft of a quote that was never actually saved.
+  document.getElementById('dupQuote')?.addEventListener('click', async () => {
+    try {
+      const r = await fetch({{ url_for('quotes.duplicate', quote_id=quote.id)|tojson if quote else '""' }},
+                            { method: 'POST', credentials: 'same-origin' });
+      if (!r.ok) throw new Error(r.status);
+      window.location = r.url;
+    } catch (e) {
+      alert('Could not duplicate the quote just now — try again.');
+    }
+  });
 
   // Re-run whenever anything that changes the price changes.
   document.querySelector('input[name="sqft"]').addEventListener('input', runEstimate);

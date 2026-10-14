@@ -1089,12 +1089,20 @@ class CommercialQuote(db.Model):
     prospect_id = db.Column(db.Integer, index=True)
     # Priced by work area, as JSON: commercial_pricing.area_quote()'s result as
     # it was when saved -- {"areas": [{"name", "subtotal", "lines": [{"item",
-    # "label", "qty", "unit", "price", "override"}]}], "work", "minimum",
-    # "min_visit", "travel", "per_visit", "monthly", ...}. NULL on a quote
-    # priced the old way -- one figure and a list of services. Migration 0023.
+    # "label", "qty", "unit", "price", "override", "unit_rate"}]}], "work",
+    # "travel", "per_visit", "monthly", "first_visit_charge", "price_per_sqft", ...}.
+    # unit_rate is only set on a custom line priced as qty x a rate typed on
+    # the line itself, rather than a flat price (override=true).
+    # NULL on a quote priced the old way -- one figure and a list of services.
+    # Migration 0023.
     line_items = db.Column(db.Text)
     # Whether the customer sees what each line costs, or only each area's total.
     show_line_prices = db.Column(db.Boolean, default=True, server_default=db.true())
+    # A new contract's first clean is slower than every visit after it. When
+    # set, area_quote() prices a one-time first-visit premium as its own line
+    # -- never folded into price_per_visit or monthly_price, which stay the
+    # recurring figures. Migration 0026.
+    first_visit_premium = db.Column(db.Boolean, default=False)
 
 
 class Staff(db.Model):
