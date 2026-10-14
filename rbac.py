@@ -88,6 +88,10 @@ ENDPOINT_PERMISSIONS = {
     ('bookings.correct_price', 'POST'): 'pay.manage',
     ('bookings.notify_pay', 'POST'): 'pay.manage',
     ('bookings.save_crew', 'POST'): 'pay.manage',
+    # Assigning sets what somebody is paid, so it is registered under the
+    # money permission; its "offer it to the whole team" branch checks
+    # dispatch.manage itself, because one control now does both jobs.
+    ('bookings.assign', 'POST'): 'pay.manage',
     ('bookings.send_payment_link_route', 'POST'): 'finance.manage',
     ('bookings.resend_deposit_receipt', 'POST'): 'finance.manage',
     ('bookings.log_ad_cost', 'POST'): 'finance.manage',

@@ -77,25 +77,31 @@ test.describe('Akye end-to-end — local', () => {
     await expect(page.locator('body')).toContainText('E2E Big House');
   });
 
-  test('5. the booking page shows the "who\'s paid" card with a cleaner picker', async ({ page }) => {
+  test('5. the booking page asks who is doing the job, in one control', async ({ page }) => {
     await page.goto(CRM + '/bookings/');
     await page.click('text=E2E Big House');
-    await expect(page.locator('body')).toContainText("Who's Paid For This Job");
-    await expect(page.locator('body')).toContainText('Give this job to a specific cleaner');
-    await expect(page.locator('select[name="add_staff_id"]')).toBeVisible();
+    await expect(page.locator('body')).toContainText("Who's Doing This Job");
+    const picker = page.locator('select[name="assign_to"]');
+    await expect(picker).toBeVisible();
     await expect(page.locator('input[name="add_pay"]')).toBeVisible();
+    // Every cleaner AND the whole team live in the same dropdown, because
+    // picking one of them is a single decision.
+    await expect(picker.locator('option[value="team"]')).toHaveCount(1);
+    await expect(page.locator('input[name="send_checklist"]')).toBeVisible();
   });
 
   test('6. assigns the cleaner directly at a set amount', async ({ page }) => {
     await page.goto(CRM + '/bookings/');
     await page.click('text=E2E Big House');
-    await page.selectOption('select[name="add_staff_id"]', { label: 'Test Cleaner' });
+    await page.selectOption('select[name="assign_to"]', { label: 'Test Cleaner' });
     await page.fill('input[name="add_pay"]', '250');
-    await page.click('button[name="send_now"]');
+    await page.click('button:has-text("Assign & send")');
     const body = page.locator('body');
     await expect(body).toContainText('Test Cleaner');
     await expect(page.locator('input[name^="pay_"]')).toHaveValue('250.00');
-    await expect(body).toContainText('Already assigned to Test Cleaner');
+    // She is on the job, so the card now offers to re-send it to her rather
+    // than to assign her again.
+    await expect(body).toContainText('Re-send the job to Test Cleaner');
   });
 
   test('7. the set amount overrides the automatic percentage', async ({ page }) => {
