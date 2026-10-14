@@ -105,7 +105,7 @@ def resend():
         flash('We just sent one. Give it a couple of minutes, and check your '
               'spam folder.', 'error')
         return redirect(url_for('email_confirm.page'))
-    ok, _detail = email_confirm.send(org, _host(org['slug']),
+    ok, _detail = email_confirm.send(org, _host(org['slug']), sent_by='owner',
                                      first=(session.get('user_name') or '').split(' ')[0])
     flash(f'Sent again to {org.get("owner_email")}.' if ok else
           'We could not send it just now. Please try again shortly.',
@@ -178,7 +178,7 @@ def change():
     control_plane.forget_tenant_login(engine, old, org['slug'])
     control_plane.record_tenant_login(engine, new, org['slug'])
 
-    ok, _detail = email_confirm.send(org, _host(org['slug']),
+    ok, _detail = email_confirm.send(org, _host(org['slug']), sent_by='owner',
                                      first=(user.name or '').split(' ')[0])
     flash(f'Updated. You now sign in with {new}, and a new code is on its way '
           f'there.' if ok else

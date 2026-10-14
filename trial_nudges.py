@@ -470,13 +470,22 @@ def compose(org, kind, next_step=None):
     raise ValueError(f'unknown nudge: {kind}')
 
 
-def _send(org, kind, next_step=None):
-    """Send one, as the product rather than as the cleaning company."""
-    import notifications
+def _send(org, kind, next_step=None, engine=None, sent_by='auto'):
+    """Send one, as the product rather than as the cleaning company, and
+    write it down for the console's Communications page."""
     to = (org.get('owner_email') or '').strip()
     if not to:
         return False, 'no owner email on the account'
     subject, html = compose(org, kind, next_step)
+    ok, detail = _deliver(org, to, subject, html)
+    if engine is not None:
+        control_plane.record_product_message(engine, org.get('slug'), kind, to,
+                                             subject, ok, detail, sent_by)
+    return ok, detail
+
+
+def _deliver(org, to, subject, html):
+    import notifications
     support = product.support_email()
     return notifications.send_email(
         to, org.get('name') or '', subject, html,
@@ -491,7 +500,7 @@ def _send(org, kind, next_step=None):
         api_key=product.resend_api_key() or None)
 
 
-def run(engine=None, now=None, dry_run=False):
+def run(engine=None, now=None, dry_run=False, sent_by='auto'):
     """Walk every company and send at most one nudge each.
 
     At most one, on purpose. A company that has been quiet for three weeks
@@ -504,7 +513,7 @@ def run(engine=None, now=None, dry_run=False):
 
     counts = {k: 0 for k in ALL}
     counts.update({'considered': 0, 'skipped_no_email': 0, 'failed': 0,
-                   'dry_run': bool(dry_run)})
+                   'switched_off': 0, 'dry_run': bool(dry_run)})
     plan = []
 
     try:
@@ -514,12 +523,19 @@ def run(engine=None, now=None, dry_run=False):
         # an error, it is the other product.
         return counts
 
+    import communications
+    switch_map = control_plane.switches(engine)
     now = now or datetime.utcnow()
     for org in orgs:
         counts['considered'] += 1
         step = _next_step_if_needed(org, now)
         kind = due(org, now, next_step=step)
         if not kind:
+            continue
+        if not communications.is_on(kind, switch_map):
+            # Switched off in the console. Not recorded as sent, so turning
+            # it back on inside the window still sends it.
+            counts['switched_off'] += 1
             continue
         if not (org.get('owner_email') or '').strip():
             counts['skipped_no_email'] += 1
@@ -529,7 +545,7 @@ def run(engine=None, now=None, dry_run=False):
             counts[kind] += 1
             continue
         try:
-            ok, detail = _send(org, kind, step)
+            ok, detail = _send(org, kind, step, engine, sent_by)
         except Exception as e:
             ok, detail = False, str(e)
         if not ok:
@@ -626,7 +642,10 @@ def send_event(slug, kind, engine=None):
             return False, 'already sent'
         if kind == 'activated' and not org.get('activated_at'):
             return False, 'not activated'
-        ok, detail = _send(org, kind)
+        import communications
+        if not communications.is_on(kind, control_plane.switches(engine)):
+            return False, 'switched off in the console'
+        ok, detail = _send(org, kind, engine=engine, sent_by='event')
         if ok:
             _record(engine, org, kind)
         return ok, detail

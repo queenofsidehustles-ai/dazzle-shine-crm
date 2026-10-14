@@ -71,6 +71,21 @@ marks them contacted. Each has an unsubscribe link and the postal address.
    `POST /api/trial-nudges?dry_run=1` and `POST /api/lead-nurture?dry_run=1`
    with the `X-Api-Key` header.
 
+## Managing it day to day: Console → Communications
+
+One page for every automated email to owners and leads:
+
+- **Due today**: who gets what at 6pm Eastern, with buttons to send now.
+- **Every automated email**: what it is, when it goes, how many went out in
+  30 days, a preview, and an on/off switch (managers and the owner only).
+  A switch that is off holds the email; it is not marked sent. The welcome
+  email is always on.
+- **Recently sent**, and a search box for one person's or company's full
+  email history. Each company's console page lists its emails too.
+
+Leads stop getting automatic emails when they sign up, unsubscribe, reply,
+or get a signup invite from the Leads page.
+
 ## Changing an email
 
 Use the `akye-lifecycle-email` skill (`.claude/skills/akye-lifecycle-email`).

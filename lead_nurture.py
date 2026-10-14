@@ -21,7 +21,9 @@ What it refuses to do:
   * email anybody who already owns a company -- checked before every send,
     so finishing signup halfway through the sequence ends it
   * email anybody who unsubscribed, or whom the console is already talking to
-    (`contacted_at` set: a person replied, and a robot should not)
+    (`contacted_at` set: a person replied, and a robot should not; or
+    `invited_at` set: somebody sent them a signup invite by hand)
+  * send an email switched off on the console's Communications page
   * start the sequence for somebody who asked weeks ago. On the first run
     the table is full of history; without FRESH_DAYS every old lead would get
     "email 1" on the same morning
@@ -62,6 +64,8 @@ def due_step(lead, owners=(), now=None):
         return None
     if lead.get('unsubscribed_at') or lead.get('contacted_at'):
         return None
+    if lead.get('invited_at'):
+        return None                     # a person already invited them by hand
     if (lead.get('source') or '') in NEVER_SOURCES:
         return None
     if email in owners:
@@ -190,11 +194,17 @@ def run(engine=None, now=None, dry_run=False):
         leads = control_plane.all_leads(engine)
     except Exception:
         return counts
+    import communications
     owners = control_plane.owner_emails(engine)
+    switch_map = control_plane.switches(engine)
+    counts['switched_off'] = 0
     for lead in reversed(leads):                    # oldest first
         counts['considered'] += 1
         step = due_step(lead, owners, now)
         if not step:
+            continue
+        if not communications.is_on(f'nurture_{step}', switch_map):
+            counts['switched_off'] += 1
             continue
         if len(plan) >= MAX_PER_RUN:
             break                                   # the rest are due tomorrow
