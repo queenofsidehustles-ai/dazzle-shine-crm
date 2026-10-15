@@ -42,6 +42,13 @@
     <div class="status-banner status-accepted">You accepted this proposal ✓<br><span style="font-size:0.85rem;font-weight:500">We'll be in touch shortly to confirm your start date.</span></div>
     {% elif q.status == 'declined' %}
     <div class="status-banner status-declined">You declined this proposal.<br><span style="font-size:0.85rem;font-weight:500">Questions? Call us at {{ BIZ_PHONE }}.</span></div>
+    {% elif q.status == 'withdrawn' %}
+    {# Withdrawn by hand, or replaced by a revision: either way these terms
+       are no longer on offer, and the page says so instead of a button. #}
+    <div class="status-banner status-declined">This proposal is no longer open.<br><span style="font-size:0.85rem;font-weight:500">If we've sent you a newer one, please use the link in that email. Questions? Call us at {{ BIZ_PHONE }}.</span></div>
+    {% elif q.status != 'sent' %}
+    {# A draft nobody has sent: the owner's own preview. Nothing to accept. #}
+    <div class="status-banner" style="background:var(--ground);color:var(--muted)">Draft — not sent yet. This is a preview; there is nothing to accept.</div>
     {% else %}
     <div class="action-row">
       <form method="POST" action="{{ url_for('quotes.accept', token=q.token) }}">

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{ 'Proposal Accepted' if accepted else 'Proposal Declined' }} — {{ BIZ }}</title>
+  <title>{{ 'Please try again' if failed else ('Proposal Accepted' if accepted else 'Proposal Declined') }} — {{ BIZ }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
   <style>
@@ -18,7 +18,13 @@
 </head>
 <body>
   <div class="card">
-    {% if accepted %}
+    {% if failed %}
+    {# Nothing was saved -- the proposal is exactly as open as before. #}
+    <div class="icon">⚠️</div>
+    <h1>We couldn't record that just now.</h1>
+    <p>Nothing has changed — the proposal is still open. Please go back and try again in a minute.</p>
+    <p style="margin-top:16px"><a href="{{ url_for('quotes.view', token=q.token) }}">Back to the proposal</a> · or call us at <strong>{{ BIZ_PHONE }}</strong></p>
+    {% elif accepted %}
     <div class="icon">🎉</div>
     <h1 style="color:var(--good)">Proposal Accepted!</h1>
     <p>Thank you, {{ q.contact_name }}! We're thrilled to partner with <strong>{{ q.company }}</strong>.</p>

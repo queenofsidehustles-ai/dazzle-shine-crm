@@ -795,8 +795,9 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     db.session.get(CommercialQuote, rq_id).status = 'accepted'
     db.session.commit()
     db.session.remove()
-check('Send the revised proposal' in page and st == 'sent' and len(SENT) > n4,
-      'a declined quote can be revised and sent again from the review')
+check('Revise and send a new version' in page and 'Send the revised proposal' not in page
+      and st == 'declined' and len(SENT) == n4,
+      'a declined quote is not re-sent under the link they declined -- the review offers a revision instead')
 page = c.get(f'/quotes/{rq_id}/review', base_url=HOST).get_data(as_text=True)
 n5 = len(SENT)
 c.post(f'/quotes/{rq_id}/send', base_url=HOST)
@@ -1074,6 +1075,10 @@ legacy_mail = ' '.join(str(k.get('html', '')) for _a, k in SENT[sent_n2:])
 check('Minimum visit charge' in legacy_mail and '$75.00' in legacy_mail and '$0.25/sq ft' in legacy_mail,
       'and the emailed copy carries the same minimum-visit line and whole-visit rate')
 
+# aq_id has been sent, so its terms are fixed under the customer's link. The
+# edits below are made the way they now have to be: on a revision of it.
+r = c.post(f'/quotes/{aq_id}/revise', base_url=HOST)
+aq_id = int(r.headers['Location'].rstrip('/').split('/')[-1])
 edit = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
 form_data = {'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',
              'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St', 'frequency': 'weekly',

@@ -7,7 +7,7 @@
 
 {% block content %}
 <div class="filter-tabs">
-  {% for s, label in [('','All'),('draft','Draft'),('sent','Sent'),('accepted','Accepted'),('declined','Declined')] %}
+  {% for s, label in [('','All'),('draft','Draft'),('sent','Sent'),('accepted','Accepted'),('declined','Declined'),('withdrawn','Withdrawn')] %}
   <a href="{{ url_for('quotes.index', status=s) }}"
      class="filter-tab {{ 'active' if status_filter == s }}">
     {{ label }} ({{ counts['all' if not s else s] }})
@@ -30,7 +30,7 @@
           <td style="font-size:0.85rem;color:var(--softer)">{{ q.property_type }}</td>
           <td style="font-weight:700">${{ '{:,.2f}'.format(q.monthly_price or 0) }}/mo</td>
           <td>
-            {% set colors = {'draft':'status-pending','sent':'status-confirmed','accepted':'status-completed','declined':'status-cancelled'} %}
+            {% set colors = {'draft':'status-pending','sent':'status-confirmed','accepted':'status-completed','declined':'status-cancelled','withdrawn':'status-cancelled'} %}
             <span class="status {{ colors.get(q.status,'status-pending') }}">{{ q.status }}</span>
             {% if q.status == 'sent' and q.viewed_at %}<br><span style="font-size:0.72rem;color:var(--good);font-weight:600">👁 opened</span>{% endif %}
           </td>
