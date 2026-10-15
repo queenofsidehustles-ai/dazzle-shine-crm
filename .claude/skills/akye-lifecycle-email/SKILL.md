@@ -26,10 +26,12 @@ start a new module or a new cron for it.
 
 ## The facts emails must get right
 
-- The 30-day trial starts when the company has **one active cleaner and one
-  customer** (`onboarding.progress()['activated']`). Not "your first job", not
-  "assign a job". Any email that states the rule must say this.
-- Before that, they have **30 days** to start (`billing.START_WITHIN_DAYS`).
+- The trial is **30 days from signup** (`billing.TRIAL_DAYS`), one clock. It
+  never "starts" or "has not started", and no email may say it does.
+- Setting up means **one active cleaner and one customer**
+  (`onboarding.progress()['activated']`), recorded as `activated_at`. It is a
+  milestone inside the trial, not what starts it. Not "your first job", not
+  "assign a job".
 - When the trial ends they drop to the **free plan and keep everything**.
   Nothing is deleted. No card is on file during the trial.
 - Every owner link goes to **their own address** (`company_url(org)`, e.g.
@@ -45,8 +47,9 @@ start a new module or a new cron for it.
    only after a successful send, so a failure retries tomorrow.
 3. **Windows, not exact days.** A kind is due for a range of days, e.g.
    `DAY4 = (4, 5)`, so a missed cron day sends late instead of never.
-4. **Stop when they act.** Not-activated emails are only checked in the
-   `not_started` phase. Once activated, they can never be sent.
+4. **Stop when they act.** Not-set-up emails (`day1`, `day4`, `day5`,
+   `start_7`, `start_21`) are only due while `activated_at` is empty. Once
+   they are set up, they can never be sent.
 5. **Staleness.** Anything keyed to a past event (lapsed, activated) has a
    short window. The first run against a real database must not email
    history.
@@ -93,8 +96,8 @@ Every email follows the same shape: **the pain, the fix, one small ask.**
 2. **Show the fix in Akye, concretely.** Name the feature by what it does
    for them that day.
 3. **Make the ask small.** "About two minutes," "one cleaner and one
-   customer." Remove the risk they are guarding against ("your 30 days do
-   not start until you do").
+   customer." Remove the risk they are guarding against ("nothing is deleted
+   if it ends").
 4. **Loss over gain, with real stakes only.** When a trial ends, list exactly
    what switches off (`LOSES` in `compose()`), from `entitlements.PLANS`.
 5. **Picture next week** after a win (activated, first booking).

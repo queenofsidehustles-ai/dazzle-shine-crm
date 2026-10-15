@@ -6,7 +6,7 @@ product already records in the control plane:
   asked for early access   product_leads.created_at          (marketing.early_access)
   signed up                organizations.created_at          (signup)
   activated                organizations.activated_at        (billing.mark_activated:
-                                                              first job assigned)
+                                                              a cleaner and a customer)
   chose a plan             organizations.stripe_subscription_id (Stripe checkout)
   paying                   subscription_status == 'active'   (Stripe webhooks)
 
@@ -114,7 +114,7 @@ def compute(orgs, leads, now=None, days=None):
         {'key': 'signed_up', 'label': 'Signed up', 'n': signed_up,
          'means': 'opened a company'},
         {'key': 'activated', 'label': 'Activated', 'n': len(activated),
-         'means': 'assigned their first job, which starts the 30-day trial'},
+         'means': 'added their first cleaner and customer'},
         {'key': 'chose_plan', 'label': 'Chose a plan', 'n': len(chose_plan),
          'means': 'went through Stripe checkout'},
         {'key': 'paying', 'label': 'Paying now', 'n': len(paying),
@@ -204,7 +204,7 @@ def compute(orgs, leads, now=None, days=None):
 
 def _follow_up(orgs, leads, signup_emails, now, billing):
     """Who to get in touch with, and why. Windowless on purpose -- see compute."""
-    not_started, ending, failing = [], [], []
+    not_set_up, ending, failing = [], [], []
     for o in orgs:
         if _gone(o):
             continue
@@ -223,17 +223,17 @@ def _follow_up(orgs, leads, signup_emails, now, billing):
         if not trial or trial['expired']:
             continue
         row = dict(o, days_left=trial['days_left'])
-        if trial['phase'] == 'not_started':
-            not_started.append(row)
-        elif trial['days_left'] <= ENDING_SOON_DAYS:
+        if trial['days_left'] <= ENDING_SOON_DAYS:
             ending.append(row)
+        elif not trial['activated']:
+            not_set_up.append(row)
 
     waiting = [l for l in leads
                if not l.get('contacted_at')
                and _email(l.get('email')) not in signup_emails]
 
     return {
-        'not_started': sorted(not_started, key=lambda o: o['days_left']),
+        'not_set_up': sorted(not_set_up, key=lambda o: o['days_left']),
         'ending': sorted(ending, key=lambda o: o['days_left']),
         'failing': failing,
         'leads_waiting': sorted(waiting, key=lambda l: l.get('created_at') or now),

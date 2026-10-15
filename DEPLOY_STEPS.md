@@ -561,9 +561,9 @@ not been back — never sees it. These four emails are what reaches them:
 
 | When | What it says |
 |---|---|
-| Day 7, not started | you have not begun, and here is the one thing that starts it |
-| Day 21, not started | the last useful reminder before the door closes |
-| 3 days left, running | the one about money |
+| Day 7, not set up | two minutes to see it work |
+| Day 21, not set up | the last useful reminder before the door closes |
+| 3 days left | the one about money |
 | The day it lapses | what changed, what did not, and that nothing was deleted |
 
 Four in a month. Not a drip campaign — a cleaning company that wanted software

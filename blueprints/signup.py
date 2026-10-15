@@ -390,8 +390,7 @@ def _tell_us(slug, form, base):
               <tr><td><strong>Email</strong></td><td>{form.get('email') or ''}</td></tr>
               <tr><td><strong>Address</strong></td><td><a href="{url}">{url}</a></td></tr>
             </table>
-            <p>They are on the top plan, trialing. The 30 days start when they
-            add one cleaner and one customer.</p>''',
+            <p>They are on the top plan, trialing for 30 days from today.</p>''',
             from_name=product.name(),
             from_email=product.from_email() or None,
             reply_to=form.get('email') or to,

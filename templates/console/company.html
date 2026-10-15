@@ -28,12 +28,12 @@
   <div class="ops-card"><span class="ops-dim">Trial</span>
     {% if trial %}
       <span class="v">{% if trial.phase == 'over' %}over{% else %}{{ trial.days_left }}d{% endif %}</span>
-      <span class="ops-dim">{% if trial.phase == 'not_started' %}left to start{% elif trial.phase == 'running' %}left{% endif %}
+      <span class="ops-dim">{% if trial.phase == 'running' %}left{% endif %}
         · ends {{ trial.ends_at.strftime('%d %b') }}</span>
     {% else %}<span class="v">—</span><span class="ops-dim">not on a trial</span>{% endif %}</div>
   <div class="ops-card"><span class="ops-dim">Activated</span>
     <span class="v">{{ org.activated_at.strftime('%d %b') if org.activated_at else 'not yet' }}</span>
-    <span class="ops-dim">first job assigned</span></div>
+    <span class="ops-dim">cleaner and customer added</span></div>
   <div class="ops-card"><span class="ops-dim">Trial emails sent</span>
     <span class="v" style="font-size:var(--t-sm)">{{ (org.nudges_sent or 'none')|replace(',', ', ') }}</span></div>
 </div>

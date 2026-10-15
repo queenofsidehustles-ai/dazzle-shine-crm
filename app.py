@@ -318,7 +318,7 @@ def create_app():
                 return {'TRIAL': None}
 
             state = billing.trial_state(org)
-            if state and not state['started']:
+            if state and not state['activated']:
                 # Have they actually begun? Cheap: onboarding already knows.
                 if onboarding.progress().get('activated'):
                     if billing.mark_activated(provisioning._engine(), org['slug']):

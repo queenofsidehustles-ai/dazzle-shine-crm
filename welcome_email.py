@@ -51,8 +51,8 @@ BODY = """
     <a href="{{ url }}" style="background:#D98A2B;color:#fff;padding:14px 30px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Open my CRM</a>
   </p>
 
-  <p>You are on the top plan while you try it. Your thirty days start once you add
-     one cleaner and one customer — not today — and there is no card on file. When it ends you drop to
+  <p>You are on the top plan while you try it. Your thirty days start today, and
+     there is no card on file. When it ends you drop to
      the free plan and <strong>keep everything you entered</strong>.</p>
 
   <p style="margin-top:24px">Reply to this email if anything is confusing or broken. It

@@ -58,9 +58,9 @@ organizations = Table(
     # A founding customer's price is theirs for as long as they stay. This
     # survives every future price change, which is the whole promise.
     Column('grandfathered', Boolean, default=False),
-    # When they first assigned a job to somebody. The trial's 30 days run from
-    # here rather than from signup: a month that starts before anybody has
-    # used the product is a trial they never had.
+    # When they first had a cleaner and a customer in the product: the best
+    # sign they are really using it. A milestone only. The trial's 30 days run
+    # from signup and this does not move them.
     Column('activated_at', DateTime),
     # Which trial emails have gone to this company, comma-separated. The
     # countdown in the banner only reaches somebody who logs in, and the whole
@@ -627,14 +627,11 @@ def create(engine, slug, name, owner_email=None, attribution=None,
             f'hyphens, 3-40 characters, and not one of the reserved names.')
     if find(engine, slug):
         raise ValueError(f'{slug!r} is already taken.')
-    # Everything, for thirty days — but the thirty days do not start until they
-    # add a cleaner and a customer. Until then they have thirty days to begin, which is what
-    # `trial_ends_at` holds; `billing.mark_activated` moves it when they do.
-    #
-    # A free plan nobody has seen the paid features from is a plan nobody
-    # upgrades out of: they cannot miss the hiring pipeline if they never had
-    # it. So the trial gives the top plan and then steps down, rather than
-    # asking somebody to imagine what they are not being shown.
+    # Everything, for thirty days from now. A free plan nobody has seen the paid
+    # features from is a plan nobody upgrades out of: they cannot miss the
+    # hiring pipeline if they never had it. So the trial gives the top plan and
+    # then steps down, rather than asking somebody to imagine what they are not
+    # being shown.
     from datetime import timedelta
     import billing
     now = datetime.utcnow()

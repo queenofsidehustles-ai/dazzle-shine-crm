@@ -237,19 +237,9 @@
         }
       </script>
       {% endif %}
-      {# Where they are in the trial. Always a countdown of some kind: one
-         clock says "you have not begun", the other says "you are running
-         out", and a state with neither is how a trial becomes something
-         somebody thinks they can come back to whenever.
-
-         Two different clocks live behind TRIAL.days_left depending on phase
-         -- the 30-day trial once it starts, and a separate 30-day window to
-         start it at all. Both are thirty days now, which makes "your 30
-         days... N days left" easy to misread when N is the start-by
-         countdown. So the start-by countdown only appears once it is
-         actually close (<=7 days, matching the day-7 email nudge elsewhere
-         -- see trial_nudges.py), and when it does appear, it says plainly
-         what it is counting down to. #}
+      {# Where they are in the trial: always a countdown, because a trial with
+         no visible end is how it becomes something somebody thinks they can
+         come back to whenever. One clock, thirty days from signup. #}
       {# Only where somebody is deciding what to do next. On a phone these
          banners plus the Getting started card filled the whole first screen,
          so you scrolled past three blocks of nagging to reach today's jobs. #}
@@ -267,19 +257,9 @@
       {% endif %}
       {% if ON_START and TRIAL and not TRIAL.expired %}
       <a href="{{ url_for('billing.upgrade') }}" class="trialbar {{ 'urgent' if TRIAL.days_left <= 3 }}">
-        {% if TRIAL.phase == 'not_started' %}
-          {# Says exactly what starts it. This used to say "assign a job",
-             which was not the condition the code checked — so somebody could
-             do the thing they were told and watch nothing happen. #}
-          <b>Add your first cleaner and your first customer to start your 30-day trial.</b>
-          {% if TRIAL.days_left <= 7 %}
-            <span class="left">{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left before that offer closes</span>.
-          {% endif %}
-        {% else %}
-          <b>{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left</b>
-          of everything. After that you keep working on the free plan —
-          nothing is deleted.
-        {% endif %}
+        <b>{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left</b>
+        of everything. After that you keep working on the free plan —
+        nothing is deleted.
         <span class="go">See plans →</span>
       </a>
       {% elif ON_START and TRIAL and TRIAL.expired %}

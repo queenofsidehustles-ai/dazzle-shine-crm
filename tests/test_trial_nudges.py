@@ -64,17 +64,16 @@ def org(days_old=0, **kw):
             'owner_email': 'dana@brightside.example', 'status': 'active',
             'created_at': created, 'plan': 'scale',
             'subscription_status': 'trialing',
-            'trial_ends_at': created + timedelta(days=billing.START_WITHIN_DAYS),
+            'trial_ends_at': created + timedelta(days=billing.TRIAL_DAYS),
             'activated_at': None, 'nudges_sent': None}
     base.update(kw)
     return base
 
 
 def running(days_in, **kw):
-    """A company that started its 30 days `days_in` days ago."""
-    began = NOW - timedelta(days=days_in)
-    return org(days_old=days_in + 2, activated_at=began,
-               trial_ends_at=began + timedelta(days=billing.TRIAL_DAYS), **kw)
+    """A company that set up `days_in` days ago, two days after it signed up.
+    Setting up does not move the end date: that is 30 days from signup."""
+    return org(days_old=days_in + 2, activated_at=NOW - timedelta(days=days_in), **kw)
 
 
 print('\n1. The person who signed up and never came back')
@@ -96,7 +95,7 @@ print('\n2. A missed day does not lose the nudge')
 # is paused. Keyed to `== 7` the email would simply never be sent.
 check(tn.due(org(days_old=9)) == 'start_7',
       'a run two days late still sends the day-7 note')
-check(tn.due(org(days_old=26, nudges_sent='start_7')) == 'start_21',
+check(tn.due(org(days_old=25, nudges_sent='start_7')) == 'start_21',
       'and the day-21 one')
 check(tn.due(org(days_old=40)) is None,
       'but a window that has long closed does not reopen')
@@ -107,7 +106,7 @@ print('\n3. Never the same email twice')
 # for this. The second copy of "9 days left" is what gets a domain marked spam.
 for kind, o in (('start_7', org(days_old=8, nudges_sent='start_7')),
                 ('start_21', org(days_old=22, nudges_sent='start_7,start_21')),
-                ('ending', running(28, nudges_sent='ending')),
+                ('ending', running(26, nudges_sent='ending')),
                 ('ended', org(days_old=31,
                               trial_ends_at=NOW - timedelta(days=1),
                               nudges_sent='ended'))):
@@ -120,10 +119,10 @@ check(tn.due(running(1)) == 'activated',
 check(tn.due(running(1, nudges_sent='activated,day2')) is None,
       'and after that, leave them alone')
 check(tn.due(running(9)) is None, 'day 9 — still nothing')
-check(tn.due(running(27)) == 'ending', 'with 3 days left of 30, the one about money')
-check(tn.due(running(29)) == 'ending', 'and on the last day if it was missed')
-# They engaged, so they never get the "you have not started" emails.
-check(tn.due(running(27))not in ('start_7', 'start_21'),
+check(tn.due(running(25)) == 'ending', 'with 3 days left of 30, the one about money')
+check(tn.due(running(26)) == 'ending', 'and on the last day if it was missed')
+# They set up, so they never get the "get set up" emails.
+check(tn.due(running(25))not in ('start_7', 'start_21'),
       'and never the ones about not having begun')
 
 
@@ -186,7 +185,7 @@ for kind in tn.ALL:
 _, ended = tn.compose(o, 'ended')
 check('nothing has been deleted' in ended.lower(), 'the lapse email says nothing was deleted')
 check('free plan' in ended.lower(), 'and names the plan they are on')
-_, ending = tn.compose(running(27), 'ending')
+_, ending = tn.compose(running(25), 'ending')
 check('Nothing is deleted' in ending or 'nothing is deleted' in ending.lower(),
       'so does the one before it')
 _, s7 = tn.compose(o, 'start_7')

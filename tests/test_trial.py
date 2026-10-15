@@ -1,24 +1,18 @@
-"""Everything for a fortnight — but the fortnight starts when they begin.
+"""Everything for 30 days, one clock, from signup.
 
 A free plan nobody has seen the paid features from is a plan nobody upgrades
 out of. You cannot miss the hiring pipeline if you never had it. So a new
 company gets the top plan and steps down, rather than being asked to imagine
 what it is not being shown.
 
-Two clocks, because one is not honest:
-
-  * **30 days from the first cleaner and customer.** A month measured from signup
-    is a trial a busy company can lose without ever having used the product —
-    and then they are owed an apology and a manual extension, which is a
-    conversation worth designing out.
-
-  * **30 days from signup to make that start.** Without it the first clock
-    never runs for somebody who signs up and does nothing, and a trial that
-    waits indefinitely gives nobody a reason to begin. This was the owner's
-    objection to the activation clock, and it was the right one.
+The trial is 30 days from signup. It used to start only once somebody added a
+cleaner and a customer, with a second 30-day window to do that, and the two
+clocks needed two sentences everywhere. Now there is one number. Setting up is
+a milestone (`activated_at`) that the emails and the Funnel watch, and it does
+not start or move the trial.
 
 Nothing is deleted when it ends. They drop to the free plan and everything
-they entered is still there — including the features they can no longer use,
+they entered is still there, including the features they can no longer use,
 visible and locked, which is better ongoing pressure than any email.
 """
 import os, sys, tempfile
@@ -66,42 +60,35 @@ check(billing.plan_for(new) == 'scale',
       f'a company on day one may use the top plan ({billing.plan_for(new)})')
 
 
-print('\n2. The 30 days have not started yet')
+print('\n2. The 30 days run from signup')
 st = billing.trial_state(new)
 check(st is not None, 'there is a trial in play')
-check(st['phase'] == 'not_started', f"phase is {st['phase']}")
-check(not st['started'], 'and it says so')
-check(29 <= st['days_left'] <= 30,
-      f"the countdown is the 30-day window to begin ({st['days_left']} days)")
-
-
-print('\n3. Assigning a job starts the real clock')
-started = org(activated_at=NOW, trial_ends_at=NOW + timedelta(days=30))
-st = billing.trial_state(started)
 check(st['phase'] == 'running', f"phase is {st['phase']}")
-check(29 <= st['days_left'] <= 30, f"30 days from that moment ({st['days_left']})")
-check(billing.plan_for(started) == 'scale', 'still everything while it runs')
+check(not st['activated'], 'they have not set up yet, and that is all it says')
+check(29 <= st['days_left'] <= 30, f"30 days left ({st['days_left']})")
+check(billing.TRIAL_DAYS == 30, 'and the length is the one constant')
 
 
-print('\n4. Somebody who starts late still gets their full month')
-# They engaged on day 29. Cutting them off on day 30 would punish exactly the
-# person the second clock exists to be fair to.
-late = org(created_at=NOW - timedelta(days=29),
-           activated_at=NOW,
-           trial_ends_at=NOW + timedelta(days=30))
-st = billing.trial_state(late)
-check(st['phase'] == 'running', 'their trial is running')
-check(29 <= st['days_left'] <= 30,
-      f'with the whole month, not one day ({st["days_left"]})')
+print('\n3. Setting up does not move the end date')
+before = org(created_at=NOW - timedelta(days=10), trial_ends_at=NOW + timedelta(days=20))
+after = dict(before, activated_at=NOW)
+check(billing.trial_state(before)['days_left'] == billing.trial_state(after)['days_left'],
+      'the days left are the same before and after')
+check(billing.trial_state(after)['activated'], 'but it is recorded as set up')
+check(billing.plan_for(after) == 'scale', 'and everything stays on')
 
 
-print('\n5. Somebody who never starts runs out anyway')
-# The owner's objection to the activation clock: without a cap it is a trial
-# that waits forever, and nobody hurries for something that waits forever.
+print('\n4. A trial with no end date is bounded from signup')
+legacy = org(created_at=NOW - timedelta(days=5), trial_ends_at=None)
+st = billing.trial_state(legacy)
+check(24 <= st['days_left'] <= 25, f"30 days from signup, not forever ({st['days_left']})")
+
+
+print('\n5. Somebody who never sets up runs out like anybody else')
 idle = org(created_at=NOW - timedelta(days=31),
            trial_ends_at=NOW - timedelta(days=1))
 st = billing.trial_state(idle)
-check(st['expired'], 'the window to begin closed')
+check(st['expired'], 'the trial ended')
 check(st['phase'] == 'over', f"phase is {st['phase']}")
 check(billing.plan_for(idle) == 'solo',
       f'and they are on the free plan ({billing.plan_for(idle)})')
@@ -150,4 +137,4 @@ check('trialbar' not in page,
 if failures:
     print(f'\n\n❌ {len(failures)} trial check(s) failed.\n')
     sys.exit(1)
-print('\n\n✅ Two clocks, and neither of them stops.\n')
+print('\n\n✅ One clock, thirty days, and it never stops early.\n')

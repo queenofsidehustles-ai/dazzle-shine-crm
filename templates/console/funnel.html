@@ -81,7 +81,7 @@
 <p class="fn-means" style="margin:0 0 var(--s3)">Whatever the window above, this is everyone it applies to right now.</p>
 
 {% set fu = f.follow_up %}
-{% if not (fu.not_started or fu.ending or fu.failing or fu.leads_waiting) %}
+{% if not (fu.not_set_up or fu.ending or fu.failing or fu.leads_waiting) %}
 <div class="con-empty">Nobody needs a nudge right now.</div>
 {% endif %}
 
@@ -105,11 +105,11 @@
 </table></div>
 {% endif %}
 
-{% if fu.not_started %}
-<h3 style="font-size:var(--t-sm);margin:var(--s4) 0 var(--s2)">Signed up, never assigned a job ({{ fu.not_started|length }})</h3>
+{% if fu.not_set_up %}
+<h3 style="font-size:var(--t-sm);margin:var(--s4) 0 var(--s2)">Signed up, no cleaner and customer yet ({{ fu.not_set_up|length }})</h3>
 <div class="fn-scroll"><table class="con">
-  <tr><th>Company</th><th>Owner</th><th>Signed up</th><th>Days left to start</th></tr>
-  {% for o in fu.not_started %}
+  <tr><th>Company</th><th>Owner</th><th>Signed up</th><th>Days left</th></tr>
+  {% for o in fu.not_set_up %}
   <tr><td><a href="{{ url_for('console.company', slug=o.slug) }}">{{ o.name }}</a></td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td>
       <td>{{ o.created_at.strftime('%d %b') if o.created_at }}</td><td class="fn-num">{{ o.days_left }}</td></tr>
   {% endfor %}

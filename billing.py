@@ -103,27 +103,25 @@ def plan_for(org):
     return org.get('plan') or 'solo'
 
 
-# One number for everything about the trial: the days somebody has to start it,
-# and the days it then runs. Defined once, in entitlements.py, beside the plans
-# it is a trial of; change it there and every email, banner and end date follows.
+# One number for everything about the trial. Defined once, in entitlements.py,
+# beside the plans it is a trial of; change it there and every email, banner and
+# end date follows.
 TRIAL_DAYS = entitlements.TRIAL_DAYS
-START_WITHIN_DAYS = TRIAL_DAYS
 
 
 def trial_state(org, now=None):
     """Where a company is in its trial, in the words the banner needs.
 
-    Two clocks, because one is not honest:
+    One clock: TRIAL_DAYS from signup. It used to start only once somebody had
+    added a cleaner and a customer, with a second window to start at all. Two
+    clocks needed two sentences, two sets of emails and an explanation of
+    which number the banner was showing; one clock needs none of that. A busy
+    owner who signs up and gets pulled away loses days like anybody else, and
+    the emails are there to pull them back.
 
-      * 30 days from the moment they first add a cleaner and a customer. A
-        month measured from signup is a trial a busy company can lose
-        without ever having used the product — and then they are owed an
-        apology and a manual extension, which is a conversation worth
-        designing out.
-
-      * 30 days from signup to make that start. Without it the first clock
-        never runs for somebody who signs up and does nothing, and a trial
-        that waits indefinitely creates no reason to begin.
+    Setting up (a cleaner and a customer) is still tracked, as `activated`,
+    because it is the best predictor of who will keep the product. It just no
+    longer moves the end date.
 
     Returns None when there is no trial in play at all — a paying customer, or
     a single-business install with no control plane.
@@ -135,46 +133,33 @@ def trial_state(org, now=None):
         return None                       # paying, cancelled, or past due
 
     now = now or datetime.utcnow()
-    started = org.get('activated_at')
     ends = org.get('trial_ends_at')
     created = org.get('created_at') or now
 
     if not ends:
-        # A trial with no end date is not a trial — see plan_for. Treat it as
-        # the start-by window so it is at least bounded.
-        ends = created + timedelta(days=START_WITHIN_DAYS)
+        # A trial with no end date is not a trial — see plan_for. Bound it.
+        ends = created + timedelta(days=TRIAL_DAYS)
 
-    days = (ends - now).days
     over = ends <= now
-
     return {
-        'started': bool(started),
+        'activated': bool(org.get('activated_at')),
         'expired': over,
         'ends_at': ends,
-        'days_left': max(0, days),
-        # Distinguishing these two matters: one says "you have not begun", the
-        # other says "you are running out". They need different sentences.
-        'phase': 'over' if over else ('running' if started else 'not_started'),
+        'days_left': max(0, (ends - now).days),
+        'phase': 'over' if over else 'running',
     }
 
 
 def mark_activated(engine, slug, when=None):
-    """Start the 30 days, now that they have actually used it.
+    """Record that they have put their real business in: a cleaner and a customer.
 
-    Called the first time a company has a job with somebody assigned to it.
-    Moves the end date to thirty days from that moment — which may be later
-    than the original start-by deadline, and should be: they engaged, so they
-    get their full trial.
-
-    Does nothing if it has already been called.
-    """
+    Called the first time that is true. Writes the date and nothing else: the
+    trial's end date was fixed at signup and does not move. Does nothing if it
+    has already been called."""
     org = control_plane.find(engine, slug)
     if not org or org.get('activated_at'):
         return False
-    when = when or datetime.utcnow()
-    control_plane.set_billing(engine, slug,
-                activated_at=when,
-                trial_ends_at=when + timedelta(days=TRIAL_DAYS))
+    control_plane.set_billing(engine, slug, activated_at=when or datetime.utcnow())
     return True
 
 

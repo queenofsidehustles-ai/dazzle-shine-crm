@@ -194,7 +194,7 @@ Decisions made while building:
 - **A partner outranks a customer referral** as the Funnel channel, because only the partner earns commission. Both are still recorded.
 - **Credit is dropped** for an inactive partner, an unknown code, or a signup using the partner's own mailbox, however it is dressed up (`+tags` anywhere, dots on Gmail, case).
 - **A shared business domain is credited but held for review.** The partner and the owner at the same non-free-mail domain could be colleagues or the partner's own company, and software cannot tell. The company works normally; only that commission is held ("being checked by us" on the partner page) until staff press *It is a real introduction* in the console. Free-mail domains (gmail, yahoo and so on) never trigger it. Not yet checked: a Stripe card shared with the partner, the strongest signal, which needs the card fingerprint from Stripe.
-- **One trial constant.** The days to start and the days it runs are both `entitlements.TRIAL_DAYS` (30); `billing.TRIAL_DAYS` and `billing.START_WITHIN_DAYS` read it, and signup uses it for the first end date. The activation-based clock itself is unchanged: removing it (a plain 30 days from signup) would also retire the start-by emails and banner, which is a separate product decision.
+- **One trial, one clock.** The trial is 30 days from signup (`entitlements.TRIAL_DAYS`, read by `billing`). Setting up a cleaner and a customer is a tracked milestone (`activated_at`) but no longer starts or moves the trial, so no email says a trial "has not started". The old start-by window is gone.
 - **The Stripe webhook must send `charge.refunded`** as well as the invoice events, or refunds will not reverse a commission. Disputes are not handled automatically: reverse by hand in the console.
 - **Commission is on the invoice total before tax**, and a partial refund is left for a person.
 
@@ -315,7 +315,7 @@ at a commission cost lower than the other channels cost per customer.
 | Tax and legal | W-9 before payout, 1099-NEC, lawyer review of terms, FTC disclosure. |
 | Margin shrinks as SMS and Nana usage grows | Rate set on measured margin; grandfather the promised 12 months. |
 | Channel conflict with the Lead Specialist program | Separate agreements; Lead Specialists sell Dazzle & Shine cleaning, affiliates promote the Akye product. Make that explicit in both. |
-| ~~Trial length inconsistent~~ | **Resolved.** The trial is now 30 days everywhere (`billing.TRIAL_DAYS`, `entitlements.TRIAL_DAYS`, emails, banner, tests), matching the Scale plan trial. Note the earlier reading was only half right: the code had a 30-day *start-by* window and a 14-day trial after activation. Both are now 30. |
+| ~~Trial length inconsistent~~ | **Resolved.** The trial is now 30 days everywhere (`billing.TRIAL_DAYS`, `entitlements.TRIAL_DAYS`, emails, banner, tests), matching the Scale plan trial. Note the earlier reading was only half right: the code had a 30-day *start-by* window and a 14-day trial after activation. The trial is now one clock: 30 days from signup. |
 | Signups can be shut (`SIGNUPS_OPEN=0`) during hand onboarding | Affiliate links land on early access; confirm the cookie survives the early-access form, and tell affiliates the current state. |
 
 ---
