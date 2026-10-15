@@ -46,7 +46,8 @@
 {% if companies %}
 <div class="ops-scroll"><table class="con">
   <tr><th>Company</th><th>Signed up</th><th>Stage</th><th>Tag</th><th>Earned</th></tr>
-  {% for c in companies %}<tr><td>{{ c.name }}</td><td>{{ c.signed_up.strftime('%d %b %Y') if c.signed_up }}</td><td>{{ c.stage }}</td><td class="ops-dim">{{ c.campaign or '—' }}</td><td>{{ money(c.earned_cents) }}</td></tr>{% endfor %}
+  {% for c in companies %}<tr><td>{{ c.name }}{% if c.flag %}<br><span class="ops-bad">Held for review: {{ c.flag }}</span>{% if may_operate %}
+      <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='clear') }}" onsubmit="return confirm('Release this company\'s commission for payout?')" style="display:inline"><input type="hidden" name="slug" value="{{ c.slug }}"><button class="btn btn-outline btn-sm" type="submit">It is a real introduction</button></form>{% endif %}{% endif %}</td><td>{{ c.signed_up.strftime('%d %b %Y') if c.signed_up }}</td><td>{{ c.stage }}</td><td class="ops-dim">{{ c.campaign or '—' }}</td><td>{{ money(c.earned_cents) }}</td></tr>{% endfor %}
 </table></div>
 {% else %}<div class="con-empty">None yet.</div>{% endif %}
 

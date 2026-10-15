@@ -70,6 +70,18 @@ check(affiliates.suggest_code('Dana Lee Coaching!') == 'dana-lee-coaching', 'a c
 check(not affiliates.valid_code('admin') and not affiliates.valid_code('a'),
       'a reserved word or a one-letter code is refused')
 
+print('\n2b. Is a signup the partner introducing themselves?')
+sr = affiliates.self_referral
+check(sr('dana@gmail.com', 'Dana@Gmail.com') == 'same', 'the same address in another case')
+check(sr('dana@gmail.com', 'd.ana+akye@gmail.com') == 'same', 'a Gmail address with dots and a +tag')
+check(sr('dana@coach.com', 'dana+x@coach.com') == 'same', 'a +tag on any provider')
+check(sr('dana@coach.com', 'sam@coach.com') == 'review',
+      'a colleague on the same business domain is credited but checked')
+check(sr('dana@gmail.com', 'sam@gmail.com') is None, 'two strangers on a free provider are not')
+check(sr('dana@coach.com', 'sam@sparkle.com') is None, 'nor are different businesses')
+check(sr('dana.x@gmail.com', 'danax@gmail.com') == 'same', 'Gmail ignores dots')
+check(sr('dana@yahoo.com', 'dana.x@yahoo.com') is None, 'but Yahoo does not')
+
 # --------------------------------------------------------------------------
 # End to end, on a disposable PostgreSQL database
 
@@ -150,14 +162,14 @@ else:
 
         print('\n3. A partner is added, with sensible refusals')
         with app.app_context():
-            dana = affiliates.create(engine, 'Dana Lee', f'dana{TAG}@example.com',
+            dana = affiliates.create(engine, 'Dana Lee', f'dana{TAG}@partners.test',
                                      code=f'dana{TAG}')
         check(dana['status'] == 'active' and dana['commission_bps'] == 3000
               and dana['commission_months'] == 12 and dana['hold_days'] == 30,
               '30% for 12 months, held 30 days, by default')
         for label, kwargs in (
                 ('a duplicate code', dict(name='X', email='x@example.com', code=f'dana{TAG}')),
-                ('a duplicate email', dict(name='X', email=f'DANA{TAG}@example.com', code='other-one')),
+                ('a duplicate email', dict(name='X', email=f'DANA{TAG}@partners.test', code='other-one')),
                 ('a reserved code', dict(name='X', email='y@example.com', code='admin')),
                 ('a bad email', dict(name='X', email='nope', code='fine-code')),
                 ('a rate over 100%', dict(name='X', email='z@example.com', code='fine-code', rate_bps=20000))):
@@ -197,7 +209,7 @@ else:
 
         paused = affiliates.create if False else None
         with app.app_context():
-            pat = affiliates.create(engine, 'Pat Paused', f'pat{TAG}@example.com',
+            pat = affiliates.create(engine, 'Pat Paused', f'pat{TAG}@partners.test',
                                     code=f'pat{TAG}', status='pending')
         c2 = app.test_client()
         c2.get(f'/p/{pat["code"]}', headers=PRODUCT)
@@ -218,13 +230,41 @@ else:
         c4 = app.test_client()
         c4.get(f'/p/{dana["code"]}', headers=PRODUCT)
         slug = f'self{TAG}'
-        signup(c4, slug, email=dana['email'])
+        d_local, d_dom = dana['email'].split('@')
+        signup(c4, slug, email=f'{d_local}+mine@{d_dom}')
         with app.app_context():
             check(not control_plane.find(engine, slug).get('affiliate_code'),
-                  'a partner opening their own company is not paid for it')
+                  'a partner opening their own company, even with a +tag, is not paid for it')
 
         with app.app_context():
-            erin = affiliates.create(engine, 'Erin Coach', f'erin{TAG}@example.com',
+            colleague = affiliates.create(engine, 'Cass Coach', f'cass{TAG}@coachco.com',
+                                          code=f'cass{TAG}')
+        c4b = app.test_client()
+        c4b.get(f'/p/{colleague["code"]}', headers=PRODUCT)
+        slug = f'colleague{TAG}'
+        signup(c4b, slug, email=f'sam{TAG}@coachco.com')
+        with app.app_context():
+            o = control_plane.find(engine, slug)
+        check(o['affiliate_code'] == colleague['code'] and o['affiliate_flag'],
+              'a colleague on the same business domain is credited but flagged for review')
+        with app.app_context():
+            control_plane.set_billing(engine, slug, stripe_customer_id=f'cusc_{TAG}')
+            billing.apply_event(paid_invoice(f'in_{TAG}_c1', f'cusc_{TAG}'))
+            later = datetime.utcnow() + timedelta(days=31)
+            held = affiliates.payable_cents(engine, colleague['id'], later)
+            shown = affiliates.portal(engine, colleague, later)
+        check(held == 0 and shown['payable_cents'] == 0 and shown['pending_cents'] == 2370,
+              'its commission is earned but not payable while it is in review')
+        check(shown['ledger'][0]['state'] == 'in review', 'and the partner is told it is being checked')
+        with app.app_context():
+            check(affiliates.record_payout(engine, colleague['id'], 'staff@x', now=later) is None,
+                  'a payout skips it')
+            control_plane.clear_affiliate_flag(engine, slug)
+            check(affiliates.payable_cents(engine, colleague['id'], later) == 2370,
+                  'and pays once a person clears it')
+
+        with app.app_context():
+            erin = affiliates.create(engine, 'Erin Coach', f'erin{TAG}@partners.test',
                                      code=f'erin{TAG}')
         c5 = app.test_client()
         c5.get(f'/p/{dana["code"]}', headers=PRODUCT)
@@ -257,7 +297,8 @@ else:
             billing.apply_event(dict(ev, type='invoice.payment_succeeded'))
             with engine.connect() as conn:
                 rows = [dict(r) for r in conn.execute(text(
-                    'select * from public.affiliate_commissions order by id')).mappings()]
+                    'select * from public.affiliate_commissions where affiliate_id=:i order by id'),
+                    {'i': dana['id']}).mappings()]
         check(ok and len(rows) == 1, f'the same invoice delivered three ways earns once ({len(rows)})')
         r0 = rows[0]
         check(r0['amount_cents'] == 7900 and r0['commission_cents'] == 2370,
@@ -269,7 +310,7 @@ else:
         with app.app_context():
             billing.apply_event(paid_invoice(f'in_{TAG}_free', f'cus_{TAG}', cents=0))
             with engine.connect() as conn:
-                n = conn.execute(text('select count(*) from public.affiliate_commissions')).scalar()
+                n = conn.execute(text('select count(*) from public.affiliate_commissions where affiliate_id=:i'), {'i': dana['id']}).scalar()
         check(n == 1, 'a free invoice earns nothing')
 
         with app.app_context():
@@ -278,7 +319,7 @@ else:
             control_plane.set_billing(engine, plain['slug'], stripe_customer_id=f'cus3_{TAG}')
             billing.apply_event(paid_invoice(f'in_{TAG}_nopartner', f'cus3_{TAG}'))
             with engine.connect() as conn:
-                n = conn.execute(text('select count(*) from public.affiliate_commissions')).scalar()
+                n = conn.execute(text('select count(*) from public.affiliate_commissions where affiliate_id=:i'), {'i': dana['id']}).scalar()
         check(n == 1, 'a company with no partner earns nobody anything')
 
         with app.app_context():
@@ -290,7 +331,7 @@ else:
         check(late is None, 'a payment after the 12 months earns nothing')
         with app.app_context():
             with engine.connect() as conn:
-                n = conn.execute(text('select count(*) from public.affiliate_commissions')).scalar()
+                n = conn.execute(text('select count(*) from public.affiliate_commissions where affiliate_id=:i'), {'i': dana['id']}).scalar()
         check(n == 2, 'but one inside them does')
 
         print('\n7. A refund cancels a commission that has not been paid')
@@ -405,7 +446,7 @@ else:
         body = cc.get('/console/affiliates').data.decode()
         check('Dana Lee' in body and dana['code'] in body, 'the list shows the partner')
         r = cc.post('/console/affiliates', data={
-            'name': 'Frank Bookkeeper', 'email': f'frank{TAG}@example.com',
+            'name': 'Frank Bookkeeper', 'email': f'frank{TAG}@partners.test',
             'code': f'frank{TAG}', 'rate': '25', 'months': '6', 'hold': '14', 'active': '1'})
         with app.app_context():
             frank = affiliates.find_by_code(engine, f'frank{TAG}')
@@ -425,7 +466,7 @@ else:
             check(affiliates.find(engine, dana['id'])['status'] == 'paused', 'status can be changed')
             check(affiliates.active_partner(engine, dana['code']) is None,
                   'a paused partner is no longer credited')
-            gus = affiliates.create(engine, 'Gus Paused', f'gus{TAG}@example.com', code=f'gus{TAG}')
+            gus = affiliates.create(engine, 'Gus Paused', f'gus{TAG}@partners.test', code=f'gus{TAG}')
             affiliates.set_status(engine, gus['id'], 'paused')
             check(affiliates.consume_login(engine, affiliates.issue_login(engine, gus['id'])) is not None,
                   'but a paused partner can still sign in to see what they earned')

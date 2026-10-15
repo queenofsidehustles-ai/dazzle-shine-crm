@@ -848,6 +848,15 @@ def affiliate_action(affiliate_id, action):
                                       affiliates.money(payout['amount_cents']))
             flash(f'Recorded a payout of {affiliates.money(payout["amount_cents"])}. '
                   f'This does not send money -- send it, then it is written down.', 'success')
+    elif action == 'clear':
+        slug = (request.form.get('slug') or '').strip().lower()
+        org = control_plane.find(engine, slug)
+        if not org or org.get('affiliate_code') != partner['code']:
+            flash('That company is not one of this partner\'s.', 'error')
+        else:
+            control_plane.clear_affiliate_flag(engine, slug)
+            control_plane.log_console(engine, who, 'cleared partner review', partner['code'], slug)
+            flash(f'{org["name"]} is cleared. Its commission can now be paid out.', 'success')
     elif action == 'reverse':
         result = affiliates.reverse(engine, request.form.get('invoice') or '',
                                     (request.form.get('reason') or 'reversed by staff')[:200])

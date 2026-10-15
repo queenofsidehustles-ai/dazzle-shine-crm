@@ -87,6 +87,54 @@ def suggest_code(name):
     return s if valid_code(s) else ''
 
 
+# Mailbox providers anybody can open an address at. Sharing one of these says
+# nothing about two people being the same; sharing a business domain might.
+FREE_MAIL = frozenset({
+    'gmail.com', 'googlemail.com', 'yahoo.com', 'ymail.com', 'outlook.com',
+    'hotmail.com', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'mac.com',
+    'aol.com', 'proton.me', 'protonmail.com', 'comcast.net', 'att.net',
+    'sbcglobal.net', 'verizon.net', 'gmx.com', 'mail.com', 'zoho.com',
+})
+
+
+def normalize_email(email):
+    """The mailbox an address really delivers to.
+
+    `dana+akye@gmail.com` and `d.ana@gmail.com` are `dana@gmail.com`: a
+    partner who signs up with a variant of their own address is still the
+    partner. Dots are ignored only where the provider ignores them (Gmail)."""
+    email = _clean_email(email)
+    if '@' not in email:
+        return email
+    local, domain = email.rsplit('@', 1)
+    local = local.split('+', 1)[0]
+    if domain in ('gmail.com', 'googlemail.com'):
+        local, domain = local.replace('.', ''), 'gmail.com'
+    return f'{local}@{domain}'
+
+
+def self_referral(partner_email, owner_email):
+    """Is this signup the partner introducing themselves?
+
+    'same'   the same mailbox: drop the credit, it is not an introduction.
+    'review' the same business domain (and not a free mail provider): credit
+             it, but hold the payout for a person -- it could be a colleague
+             or the partner's own company, and only a person can tell.
+    None     nothing suggests it.
+
+    Only email is checked here. Where the Stripe card fingerprint is known, a
+    card shared with the partner is the stronger signal; see the console."""
+    a, b = normalize_email(partner_email), normalize_email(owner_email)
+    if not a or not b:
+        return None
+    if a == b:
+        return 'same'
+    da, db = a.rsplit('@', 1)[-1], b.rsplit('@', 1)[-1]
+    if da == db and da not in FREE_MAIL:
+        return 'review'
+    return None
+
+
 def _clean_email(email):
     return (email or '').strip().lower()
 
@@ -377,6 +425,13 @@ def reverse(engine, invoice_id, reason='refunded', now=None):
     return 'reversed'
 
 
+def _not_in_review():
+    """Commissions whose company nobody has flagged for a second look."""
+    flagged = select(organizations.c.slug).where(
+        organizations.c.affiliate_flag.isnot(None))
+    return affiliate_commissions.c.org_slug.notin_(flagged)
+
+
 def payable_cents(engine, affiliate_id, now=None):
     now = now or datetime.utcnow()
     with engine.connect() as conn:
@@ -384,7 +439,8 @@ def payable_cents(engine, affiliate_id, now=None):
             select(func.coalesce(func.sum(affiliate_commissions.c.commission_cents), 0))
             .where(affiliate_commissions.c.affiliate_id == affiliate_id,
                    affiliate_commissions.c.status == 'accrued',
-                   affiliate_commissions.c.payable_at <= now)).scalar() or 0
+                   affiliate_commissions.c.payable_at <= now,
+                   _not_in_review())).scalar() or 0
 
 
 def record_payout(engine, affiliate_id, created_by, method='transfer',
@@ -401,7 +457,8 @@ def record_payout(engine, affiliate_id, created_by, method='transfer',
             select(affiliate_commissions.c.id, affiliate_commissions.c.commission_cents)
             .where(affiliate_commissions.c.affiliate_id == affiliate_id,
                    affiliate_commissions.c.status == 'accrued',
-                   affiliate_commissions.c.payable_at <= now)
+                   affiliate_commissions.c.payable_at <= now,
+                   _not_in_review())
             .with_for_update()).all()
         total = sum(r[1] for r in rows)
         if not rows or total <= 0:
@@ -486,6 +543,7 @@ def portal(engine, partner, now=None):
 
     companies = []
     names = {}
+    in_review = {o['slug'] for o in orgs if o.get('affiliate_flag')}
     for o in orgs:
         if o.get('is_test') or o.get('is_demo'):
             continue
@@ -496,21 +554,25 @@ def portal(engine, partner, now=None):
         companies.append({'name': names[o['slug']], 'signed_up': o.get('created_at'),
                           'stage': stage, 'earned_cents': earned,
                           'campaign': o.get('signup_campaign') or '',
+                          'slug': o['slug'], 'flag': o.get('affiliate_flag'),
                           'activated': bool(o.get('activated_at')),
                           'paying': stage == 'paying'})
 
     accrued = [c for c in ledger if c['status'] == 'accrued']
-    payable = sum(c['commission_cents'] for c in accrued if c['payable_at'] <= now)
-    pending = sum(c['commission_cents'] for c in accrued if c['payable_at'] > now)
+    held = lambda c: c['payable_at'] > now or c['org_slug'] in in_review
+    payable = sum(c['commission_cents'] for c in accrued if not held(c))
+    pending = sum(c['commission_cents'] for c in accrued if held(c))
     paid = sum(c['commission_cents'] for c in ledger if c['status'] == 'paid')
     reversed_ = sum(c['commission_cents'] for c in ledger if c['status'] == 'reversed')
-    next_payable = min((c['payable_at'] for c in accrued if c['payable_at'] > now),
+    next_payable = min((c['payable_at'] for c in accrued
+                        if c['payable_at'] > now and c['org_slug'] not in in_review),
                        default=None)
 
     for c in ledger:
         c['company'] = names.get(c['org_slug']) or c['org_slug']
         if c['status'] == 'accrued':
-            c['state'] = 'payable' if c['payable_at'] <= now else 'on hold'
+            c['state'] = ('in review' if c['org_slug'] in in_review
+                          else 'payable' if c['payable_at'] <= now else 'on hold')
         else:
             c['state'] = c['status']
 

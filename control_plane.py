@@ -135,6 +135,12 @@ organizations = Table(
     # code, not a company address, so the two never collide. Kept only when the
     # partner exists, is active, and is not the person signing up.
     Column('affiliate_code', String(40), index=True),
+    # Why this company's partner commission is held for a person to look at, or
+    # NULL. Set when the owner and the partner share a business email domain: it
+    # may be a real introduction (a partner who is a former colleague) or the
+    # partner opening a company to earn on it, and software cannot tell. The
+    # company is credited and works normally; only the partner's payout waits.
+    Column('affiliate_flag', String(120)),
     # When she agreed to the Terms of Service, at signup. Not optional: signup
     # refuses to create the account at all without it (see blueprints/signup.py
     # _validate). Kept as a timestamp rather than a boolean because "she agreed"
@@ -630,6 +636,7 @@ def create(engine, slug, name, owner_email=None, attribution=None,
     # it. So the trial gives the top plan and then steps down, rather than
     # asking somebody to imagine what they are not being shown.
     from datetime import timedelta
+    import billing
     now = datetime.utcnow()
     came_from = _signup_attribution(engine, slug, attribution, owner_email)
     with engine.begin() as conn:
@@ -639,7 +646,7 @@ def create(engine, slug, name, owner_email=None, attribution=None,
             created_at=now,
             plan='scale',
             subscription_status='trialing',
-            trial_ends_at=now + timedelta(days=30),
+            trial_ends_at=now + timedelta(days=billing.TRIAL_DAYS),
             activated_at=None,
             terms_accepted_at=terms_accepted_at,
             **came_from))
@@ -655,8 +662,10 @@ def _signup_attribution(engine, slug, attribution, owner_email=None):
 
     A partner code is held to the same standard, and one more: it is kept only
     while the partner is active, and never when the owner signing up is the
-    partner. Credit follows a real introduction, not the partner opening a
-    company of their own to collect commission on it.
+    partner, however the address is dressed up (affiliates.self_referral).
+    Credit follows a real introduction, not the partner opening a company of
+    their own to collect commission on it. A shared business domain is not
+    proof either way, so it is credited but held for review.
     """
     a = attribution or {}
     out = {f'signup_{k}': (a.get(k) or None) and str(a[k])[:120]
@@ -669,9 +678,12 @@ def _signup_attribution(engine, slug, attribution, owner_email=None):
     if aff:
         import affiliates as _affiliates
         partner = _affiliates.find_by_code(engine, aff)
-        if (partner and partner['status'] == 'active'
-                and (owner_email or '').strip().lower() != partner['email']):
-            out['affiliate_code'] = partner['code']
+        if partner and partner['status'] == 'active':
+            verdict = _affiliates.self_referral(partner['email'], owner_email)
+            if verdict != 'same':
+                out['affiliate_code'] = partner['code']
+                if verdict == 'review':
+                    out['affiliate_flag'] = 'same email domain as the partner'
     return out
 
 
@@ -1638,3 +1650,10 @@ def update_console_doc(engine, doc_id, title, content):
                      .where(console_docs.c.id == doc_id)
                      .values(title=title, content=content,
                              updated_at=datetime.utcnow()))
+
+
+def clear_affiliate_flag(engine, slug):
+    """A person has looked and the introduction is real: release the payout."""
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(organizations.c.slug == slug)
+                     .values(affiliate_flag=None))

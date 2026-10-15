@@ -30,6 +30,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import control_plane
+import entitlements
 
 # What each plan is called at Stripe. Price IDs live in the environment because
 # they differ between test and live mode, and a test price ID in production is a
@@ -39,7 +40,6 @@ PRICE_ENV = {
     'scale': 'STRIPE_PRICE_SCALE',
 }
 
-TRIAL_DAYS = 30
 
 
 def stripe_key():
@@ -103,11 +103,11 @@ def plan_for(org):
     return org.get('plan') or 'solo'
 
 
-# How long somebody gets, and how long they have to start. Both are thirty days:
-# one number to say everywhere, and the same length the Scale plan trial has
-# always been given at signup.
-TRIAL_DAYS = 30
-START_WITHIN_DAYS = 30
+# One number for everything about the trial: the days somebody has to start it,
+# and the days it then runs. Defined once, in entitlements.py, beside the plans
+# it is a trial of; change it there and every email, banner and end date follows.
+TRIAL_DAYS = entitlements.TRIAL_DAYS
+START_WITHIN_DAYS = TRIAL_DAYS
 
 
 def trial_state(org, now=None):

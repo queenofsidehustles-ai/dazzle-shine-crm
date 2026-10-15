@@ -104,6 +104,7 @@
     <td>
       {% if c.state == 'paid' %}<span class="pt-badge good">paid</span>
       {% elif c.state == 'payable' %}<span class="pt-badge good">ready to pay</span>
+      {% elif c.state == 'in review' %}<span class="pt-badge amber">being checked by us</span>
       {% elif c.state == 'on hold' %}<span class="pt-badge amber">on hold until {{ when(c.payable_at) }}</span>
       {% else %}<span class="pt-badge warn">cancelled{% if c.reversal_reason %} · {{ c.reversal_reason }}{% endif %}</span>{% endif %}
     </td>

@@ -192,7 +192,9 @@ Decisions made while building:
 
 - **Partner codes use `/p/<code>` and their own cookie field**, not `/r/`. A company address and a partner code can then never collide.
 - **A partner outranks a customer referral** as the Funnel channel, because only the partner earns commission. Both are still recorded.
-- **Credit is dropped** for an inactive partner, an unknown code, or a signup using the partner's own email.
+- **Credit is dropped** for an inactive partner, an unknown code, or a signup using the partner's own mailbox, however it is dressed up (`+tags` anywhere, dots on Gmail, case).
+- **A shared business domain is credited but held for review.** The partner and the owner at the same non-free-mail domain could be colleagues or the partner's own company, and software cannot tell. The company works normally; only that commission is held ("being checked by us" on the partner page) until staff press *It is a real introduction* in the console. Free-mail domains (gmail, yahoo and so on) never trigger it. Not yet checked: a Stripe card shared with the partner, the strongest signal, which needs the card fingerprint from Stripe.
+- **One trial constant.** The days to start and the days it runs are both `entitlements.TRIAL_DAYS` (30); `billing.TRIAL_DAYS` and `billing.START_WITHIN_DAYS` read it, and signup uses it for the first end date. The activation-based clock itself is unchanged: removing it (a plain 30 days from signup) would also retire the start-by emails and banner, which is a separate product decision.
 - **The Stripe webhook must send `charge.refunded`** as well as the invoice events, or refunds will not reverse a commission. Disputes are not handled automatically: reverse by hand in the console.
 - **Commission is on the invoice total before tax**, and a partial refund is left for a person.
 
