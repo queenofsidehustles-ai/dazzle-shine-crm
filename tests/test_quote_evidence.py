@@ -107,6 +107,16 @@ def response(qid):
         'ip_address', 'user_agent', 'account_id')})(QuoteResponse.query.filter_by(quote_id=qid).first()))
 
 
+def sql_unguarded(statement, **params):
+    """Raw SQL with the database's triggers off -- what SQLite, or a damaged
+    restore, would allow. For proving the app checks for itself."""
+    def go():
+        db.session.execute(text('SET LOCAL session_replication_role = replica'))
+        db.session.execute(text(statement), params)
+        db.session.commit()
+    return in_tenant(go)
+
+
 def sql(statement, **params):
     """Run raw SQL in the company's schema; the error text, or None."""
     def go():
@@ -303,6 +313,10 @@ c.post(f'/quotes/{lid}/send', base_url=HOST)
 answer(app.test_client(), ltok, HOST, 'accept', name='New Contact')
 check(row(lid)['account_id'] == lead_acc,
       'a quote for a lead joins the account already made from that lead, though name and contact changed')
+la = in_tenant(lambda: db.session.get(CommercialAccount, lead_acc))
+check(la.billing_amount == 516 and la.billing_type == 'monthly' and la.frequency == 'weekly'
+      and la.contact_name == 'New Contact' and la.email == 'new.contact@leadlinked.example',
+      'and that account takes the accepted terms: price, schedule and contact')
 
 c.post(f'/quotes/{a1}/duplicate', base_url=HOST)
 dup = in_tenant(lambda: CommercialQuote.query.filter(CommercialQuote.company == 'Same Name LLC',
@@ -338,6 +352,75 @@ dr = response(did)
 check(row(did)['status'] == 'declined' and dr and dr['decision'] == 'declined'
       and dr['content_hash'] == revisions(did)[0][2] and dr['account_id'] is None,
       'declined, bound to the revision, no account')
+
+print('\n11. The frozen terms decide, not the row: closing date and seller')
+def frozen_late():
+    q = CommercialQuote(company='Frozen Late Co', contact_name='Fay', email='fay@late.example',
+                        property_type='Office Building', frequency='weekly', contract_term='annual',
+                        services='Office Cleaning', monthly_price=300, status='draft',
+                        token='tok-frozen-late', expires_at=datetime.utcnow() - timedelta(minutes=5))
+    db.session.add(q)
+    db.session.flush()
+    rev = quote_evidence.freeze(q)
+    q.issued_revision_id, q.status = rev.id, 'sent'
+    q.expires_at = datetime.utcnow() + timedelta(days=365)    # the row, moved on a year
+    db.session.commit()
+    return q.id
+fl = in_tenant(frozen_late)
+page = app.test_client().get('/quotes/view/tok-frozen-late', base_url=HOST).get_data(as_text=True)
+check('This proposal expired on' in page and 'name="signer_name"' not in page,
+      'the closing date it was sent with closes it, though the row now says next year')
+answer(app.test_client(), 'tok-frozen-late', HOST, 'accept', name='Fay',
+       terms_hash=revisions(fl)[0][2])
+check(row(fl)['status'] == 'sent' and response(fl) is None, 'and it accepts nothing')
+
+sel_id, sel_tok = new_quote(company='Seller Co')
+c.post(f'/quotes/{sel_id}/send', base_url=HOST)
+seller = json.loads(revisions(sel_id)[0][3])['seller']
+from models import BusinessSetting
+def rename(name):
+    BusinessSetting.set('business_name', name)
+    db.session.commit()
+in_tenant(lambda: rename('Renamed Later Cleaning'))
+page = app.test_client().get(f'/quotes/view/{sel_tok}', base_url=HOST).get_data(as_text=True)
+doc = page.split('class="qdoc-header"', 1)[-1][:400]
+check(seller and seller in doc and 'Renamed Later Cleaning' not in doc,
+      f'the proposal names the business it was sent from ({seller!r}), not a later rename')
+in_tenant(lambda: rename(seller))
+
+print('\n12. A quote is only ever bound to a revision of its own')
+own_id, own_tok = new_quote(company='Owner Co')
+c.post(f'/quotes/{own_id}/send', base_url=HOST)
+other_rev = revisions(sel_id)[0][0]
+err = sql('UPDATE commercial_quote SET issued_revision_id = :r WHERE id = :i', r=other_rev, i=own_id)
+check(err and 'not one of its own' in err and row(own_id)['issued_revision_id'] == revisions(own_id)[0][0],
+      'the database refuses to point a quote at another quote\'s revision')
+err = sql('UPDATE commercial_quote SET issued_revision_id = 999999 WHERE id = :i', i=own_id)
+check(err and 'not one of its own' in err, 'or at one that does not exist')
+
+sql_unguarded('UPDATE commercial_quote SET issued_revision_id = :r WHERE id = :i', r=other_rev, i=own_id)
+r = app.test_client().get(f'/quotes/view/{own_tok}', base_url=HOST)
+body = r.get_data(as_text=True)
+check(r.status_code == 409 and "can't be shown" in body and 'Seller Co' not in body,
+      'where the database could not stop it, the link shows nothing -- not the other customer\'s proposal')
+answer(app.test_client(), own_tok, HOST, 'accept', name='Owner', terms_hash=revisions(sel_id)[0][2])
+check(row(own_id)['status'] == 'sent' and response(own_id) is None, 'and accepts nothing')
+
+tam_id, tam_tok = new_quote(company='Tamper Co')
+c.post(f'/quotes/{tam_id}/send', base_url=HOST)
+tam_rev, _n, tam_hash, tam_terms, _o = revisions(tam_id)[0]
+sql_unguarded('UPDATE commercial_quote_revision SET terms = :t WHERE id = :i',
+              t=tam_terms.replace('"516.00"', '"1.00"'), i=tam_rev)
+r = app.test_client().get(f'/quotes/view/{tam_tok}', base_url=HOST)
+check(r.status_code == 409 and '1.00' not in r.get_data(as_text=True),
+      'a revision whose terms no longer match their fingerprint is not shown')
+answer(app.test_client(), tam_tok, HOST, 'accept', name='Tam', terms_hash=tam_hash)
+check(row(tam_id)['status'] == 'sent' and response(tam_id) is None,
+      'nor accepted under the fingerprint it no longer matches')
+n = len(SENT)
+r = c.post(f'/quotes/{tam_id}/send', base_url=HOST, follow_redirects=True)
+check(len(SENT) == n and 'no longer matches its' in r.get_data(as_text=True),
+      'nor resent; the owner is told why')
 
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')

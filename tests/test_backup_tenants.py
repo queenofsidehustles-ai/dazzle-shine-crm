@@ -142,8 +142,9 @@ try:
             # contract evidence, and must come back -- and stay unchangeable.
             with db.engine.begin() as c:
                 c.execute(text(
-                    "INSERT INTO tenant_acme.commercial_quote (id, company, contact_name, email, token, status) "
-                    "VALUES (1, 'Acme Office', 'Pat', 'pat@example.com', 'tok-acme', 'accepted')"))
+                    "INSERT INTO tenant_acme.commercial_quote "
+                    "(id, company, contact_name, email, token, status, issued_revision_id) "
+                    "VALUES (1, 'Acme Office', 'Pat', 'pat@example.com', 'tok-acme', 'accepted', 1)"))
                 c.execute(text(
                     "INSERT INTO tenant_acme.commercial_quote_revision "
                     "(id, quote_id, number, terms, content_hash, origin, created_at) "

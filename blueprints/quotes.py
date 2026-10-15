@@ -130,6 +130,16 @@ def _account_from_quote(q):
         existing = (CommercialAccount.query.filter_by(prospect_id=q.prospect_id)
                     .order_by(CommercialAccount.id).first())
     if existing:
+        # The proposal just accepted is the agreement now: its schedule, its
+        # price, and whoever it was made out to.
+        existing.contact_name = q.contact_name or existing.contact_name
+        existing.email = q.email or existing.email
+        existing.phone = q.phone or existing.phone
+        existing.address = q.property_address or existing.address
+        existing.frequency = _FREQ_MAP.get(q.frequency, existing.frequency)
+        existing.billing_type = 'monthly' if q.monthly_price else 'per_visit'
+        existing.billing_amount = q.monthly_price or q.price_per_visit or existing.billing_amount
+        existing.notes = '\n'.join(x for x in (existing.notes, f'Terms updated from accepted quote #{q.id}.') if x)
         return existing
     acc = CommercialAccount(
         business_name=q.company, contact_name=q.contact_name, email=q.email, phone=q.phone,
@@ -667,17 +677,28 @@ def review(quote_id):
                 db.session.commit()
         return redirect(url_for('quotes.review', quote_id=q.id))
     # Once sent, the review is of the frozen copy -- what the customer has.
+    if quote_evidence.broken(q):
+        flash(_BROKEN, 'error')
     shown = quote_evidence.as_issued(q)
     brand = shown.brand or brands.brand_for_property(shown.property_type)
     from_name, from_email, reply_to = brands.send_identity(brand)
     subject, email_html = _proposal_email(shown, _quote_url(q))
     blocking, warnings = _send_checks(shown)
     return render_template(
-        'admin/quote_review.html', q=shown, lead=_lead_for(q), doc_biz=branding.biz_name(),
+        'admin/quote_review.html', q=shown, lead=_lead_for(q), doc_biz=_seller(shown),
         email_subject=subject, email_html=email_html, from_name=from_name,
         from_email=from_email, reply_to=reply_to, blocking=blocking, warnings=warnings,
         owner_email=branding.owner_email() or '', evidence=_evidence(q),
-        expires_on=_day(q.expires_at), **_doc_ctx(shown))
+        expires_on=_day(shown.expires_at), **_doc_ctx(shown))
+
+
+_BROKEN = ('The version of this quote on the customer\'s link is missing or no longer matches its '
+           'fingerprint, so the link shows nothing and accepts nothing. Revise it to send a fresh copy.')
+
+
+def _seller(shown):
+    """The business named on the proposal: as frozen, once sent."""
+    return getattr(shown, 'seller', None) or branding.biz_name()
 
 
 def _evidence(q):
@@ -703,8 +724,12 @@ def _evidence(q):
 def document(quote_id):
     """The proposal alone, on a page of its own, to print or save as a PDF --
     the copy to keep, attach, or hand over at the walkthrough."""
-    shown = quote_evidence.as_issued(CommercialQuote.query.get_or_404(quote_id))
-    return render_template('admin/quote_print.html', q=shown, doc_biz=branding.biz_name(), **_doc_ctx(shown))
+    q = CommercialQuote.query.get_or_404(quote_id)
+    if quote_evidence.broken(q):
+        flash(_BROKEN, 'error')
+        return redirect(url_for('quotes.review', quote_id=q.id))
+    shown = quote_evidence.as_issued(q)
+    return render_template('admin/quote_print.html', q=shown, doc_biz=_seller(shown), **_doc_ctx(shown))
 
 
 @quotes_bp.route('/<int:quote_id>/circulate', methods=['POST'])
@@ -780,11 +805,15 @@ def send_quote(quote_id):
     # Only a draft takes them: a sent quote is re-sent exactly as it was.
     if 'company' in request.form and q.status == 'draft':
         _apply_form(q)
-    if q.expired:
+    if quote_evidence.broken(q):
+        flash(_BROKEN, 'error')
+        return redirect(url_for('quotes.review', quote_id=q.id))
+    if quote_evidence.as_issued(q).expired:
         # Its closing date is one of its terms; resending would offer, under
         # the same link, something that says it is closed. A revision is a
         # fresh offer with a fresh date.
-        flash(f'This offer expired on {_day(q.expires_at)}. Revise it to send a new one.', 'error')
+        flash(f'This offer expired on {_day(quote_evidence.as_issued(q).expires_at)}. '
+              'Revise it to send a new one.', 'error')
         return redirect(url_for('quotes.review', quote_id=q.id))
     blocking, _warnings = _send_checks(quote_evidence.as_issued(q))
     if blocking:
@@ -1007,10 +1036,14 @@ def _render_view(q, error=None, code=200):
     """The customer's page: the terms as sent (the frozen revision, never the
     row being worked on), and Accept only while the offer is open -- sent,
     not past its date, and complete enough to agree to."""
+    if quote_evidence.broken(q):
+        import logging
+        logging.getLogger(__name__).error('quote %s: issued revision missing, foreign or altered', q.id)
+        return render_template('public/quote_response.html', q=q, unavailable=True), 409
     shown = quote_evidence.as_issued(q)
     gaps = _binding_gaps(shown) if q.status == 'sent' else []
     return render_template('public/quote_view.html', q=shown, error=error, gaps=gaps,
-                           expires_on=_day(q.expires_at),
+                           expires_on=_day(shown.expires_at),
                            terms_hash=quote_evidence.shown_hash(q),
                            # The same context as the owner's review, so the two cannot drift apart.
                            **_doc_ctx(shown)), code
@@ -1054,7 +1087,9 @@ def _answerable(q):
     the page again, saying why. The posted hash must be the one the page
     showed -- the customer answers the terms they read, not whatever the
     link would show now."""
-    if q.status not in CommercialQuote.ANSWERABLE or q.expired:
+    if quote_evidence.broken(q):
+        return _render_view(q)
+    if q.status not in CommercialQuote.ANSWERABLE or quote_evidence.as_issued(q).expired:
         return redirect(url_for('quotes.view', token=q.token))
     if _binding_gaps(quote_evidence.as_issued(q)):
         return _render_view(q, code=409)

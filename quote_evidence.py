@@ -101,16 +101,30 @@ def freeze(q, by=None, origin='issued'):
 
 def issued(q):
     """The revision the customer's link is bound to, or None (a draft, or a
-    quote sent before revisions existed)."""
+    quote sent before revisions existed). Only one of q's own: a pointer to
+    another quote's revision is no revision at all (see broken())."""
     from models import QuoteRevision
     if not q.issued_revision_id:
         return None
-    return QuoteRevision.query.get(q.issued_revision_id)
+    rev = QuoteRevision.query.get(q.issued_revision_id)
+    return rev if rev is not None and rev.quote_id == q.id else None
 
 
 def intact(rev):
     """Its stored terms still hash to its stored hash."""
     return bool(rev) and digest(rev.terms) == rev.content_hash
+
+
+def broken(q):
+    """Sent, but its link's revision is missing, someone else's, or no longer
+    matches its fingerprint. The database stops each of these (migration
+    0029); this is for when it could not -- SQLite, a damaged restore. Such a
+    quote is neither shown nor answered: falling back to the working row
+    would offer terms nobody froze."""
+    if q.status == 'draft' or not q.issued_revision_id:
+        return False
+    rev = issued(q)
+    return rev is None or not intact(rev)
 
 
 class Frozen:
@@ -141,7 +155,17 @@ class Frozen:
         self.show_line_prices = t['show_line_prices']
         self.first_visit_premium = t['first_visit_premium']
         self.brand = t['brand']
+        self.seller = t['seller']
+        self.expires_at = datetime.fromisoformat(t['expires_at']) if t['expires_at'] else None
         self.content_hash = rev.content_hash
+
+    @property
+    def expired(self):
+        """Past the closing date it was sent with. A row moved later does not
+        reopen it; one moved earlier (never by the app) still closes it, so
+        the page and the accept route always agree."""
+        return bool(self._q.status == 'sent' and (
+            self._q.expired or (self.expires_at and self.expires_at <= datetime.utcnow())))
 
     def __getattr__(self, name):
         return getattr(self._q, name)
@@ -174,21 +198,48 @@ def provider_message_id(detail):
     return m.group(1)[:100] if m else None
 
 
-def install_guards(conn, schema=None):
-    """The UPDATE-refusing trigger on the frozen tables, for a schema built by
-    create_all() rather than by migration 0029 -- a restored backup. Postgres
-    only; a no-op elsewhere."""
-    from sqlalchemy import text
-    if conn.dialect.name != 'postgresql':
-        return
-    prefix = f'"{schema}".' if schema else ''
-    conn.execute(text(f"""
+def guard_sql(prefix=''):
+    """Migration 0029's guards, as statements: frozen tables refuse UPDATE,
+    and a quote's issued_revision_id must name a revision of that same quote.
+
+    The second is a constraint trigger checked at commit, not a foreign key:
+    a backup restore inserts quotes before their revisions, in one
+    transaction, and a key would refuse the first quote. Deferred, the check
+    runs once both are in."""
+    out = [f"""
         CREATE OR REPLACE FUNCTION {prefix}quote_evidence_frozen() RETURNS trigger
         LANGUAGE plpgsql AS $$
         BEGIN
             RAISE EXCEPTION '% rows are evidence and are never changed', TG_TABLE_NAME;
-        END $$"""))
+        END $$""", f"""
+        CREATE OR REPLACE FUNCTION {prefix}quote_issued_revision_owned() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+            IF NEW.issued_revision_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM {prefix}commercial_quote_revision r
+                WHERE r.id = NEW.issued_revision_id AND r.quote_id = NEW.id) THEN
+                RAISE EXCEPTION 'quote % is bound to revision %, which is not one of its own',
+                    NEW.id, NEW.issued_revision_id;
+            END IF;
+            RETURN NULL;
+        END $$"""]
     for table in FROZEN_TABLES:
-        conn.execute(text(f'DROP TRIGGER IF EXISTS {table}_frozen ON {prefix}{table}'))
-        conn.execute(text(f'CREATE TRIGGER {table}_frozen BEFORE UPDATE ON {prefix}{table} '
-                          f'FOR EACH ROW EXECUTE PROCEDURE {prefix}quote_evidence_frozen()'))
+        out += [f'DROP TRIGGER IF EXISTS {table}_frozen ON {prefix}{table}',
+                f'CREATE TRIGGER {table}_frozen BEFORE UPDATE ON {prefix}{table} '
+                f'FOR EACH ROW EXECUTE PROCEDURE {prefix}quote_evidence_frozen()']
+    out += [f'DROP TRIGGER IF EXISTS commercial_quote_issued_owned ON {prefix}commercial_quote',
+            f'CREATE CONSTRAINT TRIGGER commercial_quote_issued_owned '
+            f'AFTER INSERT OR UPDATE OF issued_revision_id ON {prefix}commercial_quote '
+            f'DEFERRABLE INITIALLY DEFERRED FOR EACH ROW '
+            f'EXECUTE PROCEDURE {prefix}quote_issued_revision_owned()']
+    return out
+
+
+def install_guards(conn, schema=None):
+    """The guards, for a schema built by create_all() rather than by migration
+    0029 -- a restored backup. Postgres only; a no-op elsewhere."""
+    from sqlalchemy import text
+    if conn.dialect.name != 'postgresql':
+        return
+    for statement in guard_sql(f'"{schema}".' if schema else ''):
+        conn.execute(text(statement))

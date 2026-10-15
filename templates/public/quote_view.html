@@ -40,7 +40,7 @@
   </style>
 </head>
 <body>
-  {% set doc_biz = BIZ %}
+  {% set doc_biz = q.seller or BIZ %}{# as frozen when sent #}
   {% include 'partials/quote_document.html' %}
 
   <div class="wrap" style="padding-top:0">

@@ -12,7 +12,8 @@ whether the email ever left. Three tables, each written once:
                              time, IP, browser, and the account it linked to.
 
 Revisions and responses refuse UPDATE in the database itself (a trigger), not
-only in the app. DELETE is left to foreign keys -- a revision someone answered
+only in the app, and a quote can only be bound to a revision of its own (a
+constraint trigger, checked at commit). DELETE is left to foreign keys -- a revision someone answered
 cannot go, a draft's unsent attempts go with the draft -- because a backup
 restore empties every table before refilling it.
 
@@ -113,18 +114,13 @@ def upgrade():
         )
 
     if op.get_bind().dialect.name == 'postgresql':
-        # Created in the schema being migrated, like the tables. Each trigger
-        # holds its function by reference, so search paths do not matter later.
-        op.execute("""
-            CREATE OR REPLACE FUNCTION quote_evidence_frozen() RETURNS trigger
-            LANGUAGE plpgsql AS $$
-            BEGIN
-                RAISE EXCEPTION '% rows are evidence and are never changed', TG_TABLE_NAME;
-            END $$""")
-        for table in FROZEN:
-            op.execute(f'DROP TRIGGER IF EXISTS {table}_frozen ON {table}')
-            op.execute(f'CREATE TRIGGER {table}_frozen BEFORE UPDATE ON {table} '
-                       f'FOR EACH ROW EXECUTE PROCEDURE quote_evidence_frozen()')
+        # Schema-qualified, so the ownership check reads this company's
+        # revisions whatever the search path is when it fires. The same
+        # statements re-guard a restored backup (backup._guard_evidence),
+        # hence one copy of them, in quote_evidence.
+        import quote_evidence
+        for statement in quote_evidence.guard_sql(f'"{_schema()}".'):
+            op.execute(statement)
 
 
 def downgrade():
@@ -132,7 +128,9 @@ def downgrade():
         for table in FROZEN:
             if _has_table(table):
                 op.execute(f'DROP TRIGGER IF EXISTS {table}_frozen ON {table}')
+        op.execute('DROP TRIGGER IF EXISTS commercial_quote_issued_owned ON commercial_quote')
         op.execute('DROP FUNCTION IF EXISTS quote_evidence_frozen()')
+        op.execute('DROP FUNCTION IF EXISTS quote_issued_revision_owned()')
     for table in ('commercial_quote_response', 'commercial_quote_delivery', 'commercial_quote_revision'):
         if _has_table(table):
             op.drop_table(table)
