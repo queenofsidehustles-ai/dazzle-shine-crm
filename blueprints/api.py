@@ -698,7 +698,7 @@ def applicant_followups():
                     'moved_to_no_response': no_response})
 
 
-def _resend_signature_ok(raw):
+def _resend_signature_ok(raw, secret_env=('RESEND_WEBHOOK_SECRET',)):
     """Is this really from the email service?
 
     Resend signs with Svix: the signed payload is "<id>.<timestamp>.<body>",
@@ -708,32 +708,66 @@ def _resend_signature_ok(raw):
 
     No secret configured means we cannot tell, and something we cannot
     authenticate does not get to write into a customer's records.
+
+    Each webhook set up at the email service has its own signing secret;
+    secret_env names the environment variables that may hold the one for
+    this endpoint, and a signature from any of them is accepted.
     """
     import base64
     import hashlib
     import hmac
     import os
 
-    secret = (os.environ.get('RESEND_WEBHOOK_SECRET') or '').strip()
-    if not secret:
-        return False
     msg_id = request.headers.get('svix-id', '')
     stamp = request.headers.get('svix-timestamp', '')
     header = request.headers.get('svix-signature', '')
     if not (msg_id and stamp and header):
         return False
-    try:
-        key = base64.b64decode(secret.split('_', 1)[1] if secret.startswith('whsec_')
-                               else secret)
-    except Exception:
-        return False
-    signed = f'{msg_id}.{stamp}.'.encode() + raw
-    expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
-    for part in header.split():
-        _, _, value = part.partition(',')
-        if value and hmac.compare_digest(value, expected):
-            return True
+    for name in secret_env:
+        secret = (os.environ.get(name) or '').strip()
+        if not secret:
+            continue
+        try:
+            key = base64.b64decode(secret.split('_', 1)[1] if secret.startswith('whsec_')
+                                   else secret)
+        except Exception:
+            continue
+        signed = f'{msg_id}.{stamp}.'.encode() + raw
+        expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+        for part in header.split():
+            _, _, value = part.partition(',')
+            if value and hmac.compare_digest(value, expected):
+                return True
     return False
+
+
+@api_bp.route('/email-events', methods=['POST'])
+def email_events():
+    """The email service reporting what became of a message: delivered,
+    bounced, marked as spam, delayed.
+
+    "Sent" only ever meant the service took it. These turn that into what
+    actually happened -- on the Sent log, and, for a proposal, on its
+    delivery record (delivery_events.py). Svix-signed like /email-reply,
+    with its own secret where the webhook has one.
+
+    The company comes from the tag every message is sent with
+    (notifications._tenant_tags); a message without one, or one we never
+    sent, is acknowledged and ignored. Always 200 once authenticated, so a
+    hiccup on our side never sets the service retrying the same event for
+    days -- and a retry that does arrive is recorded once."""
+    raw = request.get_data() or b''
+    if not _resend_signature_ok(raw, ('RESEND_EVENTS_WEBHOOK_SECRET', 'RESEND_WEBHOOK_SECRET')):
+        from flask import abort
+        abort(403)
+    import delivery_events
+    payload = request.get_json(silent=True) or {}
+    try:
+        outcome = delivery_events.record(payload, request.headers.get('svix-id', ''))
+    except Exception:
+        db.session.rollback()
+        outcome = 'error'
+    return jsonify({'ok': True, 'outcome': outcome}), 200
 
 
 @api_bp.route('/email-reply', methods=['POST'])

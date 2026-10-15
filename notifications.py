@@ -303,6 +303,19 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
 </div>"""
 
 
+def _tenant_tags():
+    """Resend tags naming the company a message was sent for, so what the
+    provider later reports about it (delivered, bounced -- see
+    delivery_events.py) can be filed in the right company's records."""
+    try:
+        from flask import g, has_request_context
+        slug = getattr(g, 'tenant_slug', None) if has_request_context() else None
+    except Exception:
+        slug = None
+    import re
+    return [{'name': 'tenant', 'value': slug}] if slug and re.fullmatch(r'[A-Za-z0-9_-]{1,64}', slug) else []
+
+
 def send_email(to_email, to_name, subject, html, from_name=None,
                from_email=None, reply_to=None, api_key=None, cc=None):
     """Send via Resend. Returns (ok: bool, detail: str) so callers/diagnostics
@@ -349,6 +362,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     cc = (cc or '').strip()
     if not looks_like_email(cc) or cc.lower() == (to_email or '').strip().lower():
         cc = ''
+    tags = _tenant_tags()
     try:
         resp = http_requests.post(
             'https://api.resend.com/emails',
@@ -363,6 +377,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
                 'subject': subject,
                 'html': html,
                 **({'cc': [cc]} if cc else {}),
+                **({'tags': tags} if tags else {}),
             },
             timeout=10,
         )

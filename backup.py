@@ -456,6 +456,12 @@ def restore(path, into_url, quiet=False):
 
         dropped_tables, dropped_columns = set(), {}
         with db.engine.begin() as conn:
+            if url.startswith('postgres'):
+                # Contract evidence refuses DELETE (quote_evidence.KEPT_TABLES)
+                # unless the transaction says it is a restore -- this one, which
+                # puts every row straight back.
+                from sqlalchemy import text as _text
+                conn.execute(_text("SET LOCAL akye.restoring = 'on'"))
             # Children first, so nothing is left pointing at a deleted parent.
             for schema in order:
                 for table in reversed(order[schema]):

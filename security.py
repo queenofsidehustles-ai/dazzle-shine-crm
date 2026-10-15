@@ -59,6 +59,9 @@ CSRF_EXEMPT_PATHS = frozenset({
     # else by definition and carries its own proof -- a Svix signature checked
     # in the route before anything is written.
     '/api/email-reply',
+    # The email service reporting delivered / bounced. Svix-signed, checked in
+    # the route.
+    '/api/email-events',
 })
 
 QUERY_SECRET_FORBIDDEN_PATHS = frozenset({

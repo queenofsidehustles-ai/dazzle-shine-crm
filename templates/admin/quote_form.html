@@ -41,7 +41,11 @@
 {% endif %}
 {% if quote and quote.revised_from_id %}
 <div class="card" style="border-left:4px solid var(--softer);margin-bottom:18px;padding:12px 18px;font-size:0.86rem">
+  {% if quote.amends_agreement_id %}
+  ✎ An amendment to <a href="{{ url_for('quotes.detail', quote_id=quote.revised_from_id) }}" style="color:var(--amber-deep)">the signed agreement</a>. That agreement stays in force, unchanged, until this one is accepted.
+  {% else %}
   ✎ A revision of <a href="{{ url_for('quotes.detail', quote_id=quote.revised_from_id) }}" style="color:var(--amber-deep)">an earlier proposal</a>, which is kept as it was sent.
+  {% endif %}
 </div>
 {% endif %}
 {% if locked %}
@@ -51,7 +55,7 @@
   <div style="font-size:0.85rem;color:var(--softer);margin-top:4px;line-height:1.5">
     {% if quote.status == 'sent' %}They are what {{ who }} was sent, at the link in their email. To change anything,
     revise it: this version is withdrawn — its link stops accepting — and a new draft opens with the same terms.
-    {% elif quote.status == 'accepted' %}They are what {{ who }} agreed to. For a new offer, duplicate it.
+    {% elif quote.status == 'accepted' %}They are what {{ who }} agreed to. To change the agreement, amend it: they accept the new terms, and this one is kept as it was. For an unrelated new offer, duplicate it.
     {% elif quote.status == 'declined' %}{{ who }} declined these terms. Revise it to send a new version with its own link.
     {% else %}Withdrawn{% if quote.withdrawn_at %} on {{ quote.withdrawn_at.strftime('%b %d') }}{% endif %} — its link tells {{ who }} it is no longer open.
     {% endif %}
@@ -68,6 +72,11 @@
     <form method="POST" action="{{ url_for('quotes.withdraw', quote_id=quote.id) }}" style="margin:0"
           onsubmit="return confirm('Withdraw this proposal? Its link will say it is no longer open.')">
       <button type="submit" class="btn btn-outline" style="padding:7px 14px;font-size:0.85rem">Withdraw</button>
+    </form>
+    {% endif %}
+    {% if quote.status == 'accepted' %}
+    <form method="POST" action="{{ url_for('quotes.amend', quote_id=quote.id) }}" style="margin:0">
+      <button type="submit" class="btn btn-gold" style="padding:7px 14px;font-size:0.85rem">✎ Amend agreement</button>
     </form>
     {% endif %}
     <form method="POST" action="{{ url_for('quotes.duplicate', quote_id=quote.id) }}" style="margin:0">

@@ -45,7 +45,11 @@
 
   <div class="wrap" style="padding-top:0">
     {% if q.status == 'accepted' %}
+    {% if replaced_on %}
+    <div class="status-banner" style="background:var(--ground);color:var(--muted)">You accepted this proposal ✓<br><span style="font-size:0.85rem;font-weight:500">It was replaced by an amended agreement on {{ replaced_on }}. This page shows the terms as they were.</span></div>
+    {% else %}
     <div class="status-banner status-accepted">You accepted this proposal ✓<br><span style="font-size:0.85rem;font-weight:500">We'll be in touch shortly to confirm your start date.</span></div>
+    {% endif %}
     {% elif q.status == 'declined' %}
     <div class="status-banner status-declined">You declined this proposal.<br><span style="font-size:0.85rem;font-weight:500">Questions? Call us at {{ BIZ_PHONE }}.</span></div>
     {% elif q.status == 'withdrawn' %}

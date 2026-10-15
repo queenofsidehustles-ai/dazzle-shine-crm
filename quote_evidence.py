@@ -16,7 +16,19 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 TERMS_VERSION = 1
-FROZEN_TABLES = ('commercial_quote_revision', 'commercial_quote_response')
+# Tables whose rows are never updated, and the migration that froze them.
+# A restored backup re-freezes all of them (install_guards); each migration
+# freezes only its own, since a later table does not exist yet when an
+# earlier migration runs.
+FROZEN_0029 = ('commercial_quote_revision', 'commercial_quote_response')
+FROZEN_0030 = ('commercial_agreement', 'commercial_quote_delivery_event', 'contract_audit_event')
+FROZEN_TABLES = FROZEN_0029 + FROZEN_0030
+# Tables whose rows are never deleted either: nothing else points at an
+# agreement or an audit entry, so a foreign key cannot keep them. (Revisions
+# and deliveries are not here: a draft's unsent attempts go with the draft.)
+# A backup restore empties every table before refilling it, and says so with
+# SET LOCAL akye.restoring = 'on' (backup.restore) -- the only way past.
+KEPT_TABLES = ('commercial_quote_response', 'commercial_agreement', 'contract_audit_event')
 
 
 def _money(v):
@@ -198,20 +210,47 @@ def provider_message_id(detail):
     return m.group(1)[:100] if m else None
 
 
-def guard_sql(prefix=''):
-    """Migration 0029's guards, as statements: frozen tables refuse UPDATE,
-    and a quote's issued_revision_id must name a revision of that same quote.
-
-    The second is a constraint trigger checked at commit, not a foreign key:
-    a backup restore inserts quotes before their revisions, in one
-    transaction, and a key would refuse the first quote. Deferred, the check
-    runs once both are in."""
+def frozen_sql(prefix, tables):
+    """Statements making each table refuse UPDATE."""
     out = [f"""
         CREATE OR REPLACE FUNCTION {prefix}quote_evidence_frozen() RETURNS trigger
         LANGUAGE plpgsql AS $$
         BEGIN
             RAISE EXCEPTION '% rows are evidence and are never changed', TG_TABLE_NAME;
-        END $$""", f"""
+        END $$"""]
+    for table in tables:
+        out += [f'DROP TRIGGER IF EXISTS {table}_frozen ON {prefix}{table}',
+                f'CREATE TRIGGER {table}_frozen BEFORE UPDATE ON {prefix}{table} '
+                f'FOR EACH ROW EXECUTE PROCEDURE {prefix}quote_evidence_frozen()']
+    return out
+
+
+def kept_sql(prefix, tables):
+    """Statements making each table refuse DELETE, except during a restore."""
+    out = [f"""
+        CREATE OR REPLACE FUNCTION {prefix}quote_evidence_kept() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+            IF current_setting('akye.restoring', true) = 'on' THEN
+                RETURN OLD;
+            END IF;
+            RAISE EXCEPTION '% rows are evidence and are never deleted', TG_TABLE_NAME;
+        END $$"""]
+    for table in tables:
+        out += [f'DROP TRIGGER IF EXISTS {table}_kept ON {prefix}{table}',
+                f'CREATE TRIGGER {table}_kept BEFORE DELETE ON {prefix}{table} '
+                f'FOR EACH ROW EXECUTE PROCEDURE {prefix}quote_evidence_kept()']
+    return out
+
+
+def ownership_sql(prefix):
+    """A quote's issued_revision_id must name a revision of that same quote.
+
+    A constraint trigger checked at commit, not a foreign key: a backup
+    restore inserts quotes before their revisions, in one transaction, and a
+    key would refuse the first quote. Deferred, the check runs once both are
+    in."""
+    return [f"""
         CREATE OR REPLACE FUNCTION {prefix}quote_issued_revision_owned() RETURNS trigger
         LANGUAGE plpgsql AS $$
         BEGIN
@@ -222,24 +261,25 @@ def guard_sql(prefix=''):
                     NEW.id, NEW.issued_revision_id;
             END IF;
             RETURN NULL;
-        END $$"""]
-    for table in FROZEN_TABLES:
-        out += [f'DROP TRIGGER IF EXISTS {table}_frozen ON {prefix}{table}',
-                f'CREATE TRIGGER {table}_frozen BEFORE UPDATE ON {prefix}{table} '
-                f'FOR EACH ROW EXECUTE PROCEDURE {prefix}quote_evidence_frozen()']
-    out += [f'DROP TRIGGER IF EXISTS commercial_quote_issued_owned ON {prefix}commercial_quote',
+        END $$""",
+            f'DROP TRIGGER IF EXISTS commercial_quote_issued_owned ON {prefix}commercial_quote',
             f'CREATE CONSTRAINT TRIGGER commercial_quote_issued_owned '
             f'AFTER INSERT OR UPDATE OF issued_revision_id ON {prefix}commercial_quote '
             f'DEFERRABLE INITIALLY DEFERRED FOR EACH ROW '
             f'EXECUTE PROCEDURE {prefix}quote_issued_revision_owned()']
-    return out
+
+
+def guard_sql(prefix=''):
+    """Migration 0029's guards, exactly as it installs them."""
+    return frozen_sql(prefix, FROZEN_0029) + ownership_sql(prefix)
 
 
 def install_guards(conn, schema=None):
-    """The guards, for a schema built by create_all() rather than by migration
-    0029 -- a restored backup. Postgres only; a no-op elsewhere."""
+    """Every guard, for a schema built by create_all() rather than by the
+    migrations -- a restored backup. Postgres only; a no-op elsewhere."""
     from sqlalchemy import text
     if conn.dialect.name != 'postgresql':
         return
-    for statement in guard_sql(f'"{schema}".' if schema else ''):
+    prefix = f'"{schema}".' if schema else ''
+    for statement in frozen_sql(prefix, FROZEN_TABLES) + kept_sql(prefix, KEPT_TABLES) + ownership_sql(prefix):
         conn.execute(text(statement))
