@@ -1112,6 +1112,18 @@ class CommercialQuote(db.Model):
     withdrawn_at = db.Column(db.DateTime)
     # The quote this one revises: the sent offer it replaced. Migration 0028.
     revised_from_id = db.Column(db.Integer, index=True)
+    # The frozen copy the customer's link shows and can accept: set when a
+    # send succeeds, never changed after. NULL on a draft, and on a quote sent
+    # before revisions existed (see quote_evidence.issued). Migration 0029.
+    issued_revision_id = db.Column(db.Integer, index=True)
+    # How long an offer stays open once sent, and the moment it closes. The
+    # date is part of the frozen terms; a resend does not move it.
+    valid_days = db.Column(db.Integer, default=30, server_default='30')
+    expires_at = db.Column(db.DateTime)
+    # The account this offer is for -- carried by a revision or a rebid, or
+    # set by accepting. Accepting links by this key (or the lead's), never by
+    # matching a company name or an email address.
+    account_id = db.Column(db.Integer, index=True)
 
     EDITABLE = ('draft',)
     ANSWERABLE = ('sent',)
@@ -1120,6 +1132,83 @@ class CommercialQuote(db.Model):
     def locked(self):
         """Issued: its terms are fixed. Change means a revision."""
         return self.status not in self.EDITABLE
+
+    @property
+    def expired(self):
+        """A sent offer past its date: it says so and accepts nothing."""
+        return bool(self.status == 'sent' and self.expires_at
+                    and self.expires_at <= datetime.utcnow())
+
+
+class QuoteRevision(db.Model):
+    """The exact terms of a quote as frozen for sending -- canonical JSON and
+    its SHA-256 -- written once and never changed (an ORM guard here, and a
+    database trigger from migration 0029). The customer's link is bound to
+    one of these; what they accept is checked against its hash."""
+    __tablename__ = 'commercial_quote_revision'
+    id = db.Column(db.Integer, primary_key=True)
+    quote_id = db.Column(db.Integer, db.ForeignKey('commercial_quote.id', ondelete='CASCADE'),
+                         nullable=False, index=True)
+    number = db.Column(db.Integer, nullable=False)
+    terms = db.Column(db.Text, nullable=False)
+    content_hash = db.Column(db.String(64), nullable=False)
+    # 'issued': frozen as it was sent. 'backfill': a quote sent before
+    # revisions existed, frozen as it stood when the customer answered it.
+    origin = db.Column(db.String(20), nullable=False, default='issued')
+    created_by = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (db.UniqueConstraint('quote_id', 'content_hash', name='uq_quote_revision_hash'),)
+
+
+class QuoteDelivery(db.Model):
+    """One attempt to send a revision: to whom, how, and what the provider
+    said. 'accepted_by_provider' is the mail service taking it -- not proof it
+    arrived; the provider's message id is what lets that be traced."""
+    __tablename__ = 'commercial_quote_delivery'
+    id = db.Column(db.Integer, primary_key=True)
+    quote_id = db.Column(db.Integer, nullable=False, index=True)
+    revision_id = db.Column(db.Integer, db.ForeignKey('commercial_quote_revision.id', ondelete='CASCADE'),
+                            nullable=False, index=True)
+    channel = db.Column(db.String(10), nullable=False, default='email')
+    recipient = db.Column(db.String(200))
+    provider = db.Column(db.String(30))
+    provider_message_id = db.Column(db.String(100))
+    status = db.Column(db.String(30), nullable=False)    # accepted_by_provider | failed
+    detail = db.Column(db.String(400))
+    sent_by = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    STATUSES = ('accepted_by_provider', 'failed')
+
+
+class QuoteResponse(db.Model):
+    """The customer's answer, bound to the revision they were shown: who, when,
+    from where, and the hash of the terms. One per quote (the unique key is
+    the last word on a double accept), and never changed or deleted. With the
+    account it created or joined, this is the executed agreement's record."""
+    __tablename__ = 'commercial_quote_response'
+    id = db.Column(db.Integer, primary_key=True)
+    quote_id = db.Column(db.Integer, db.ForeignKey('commercial_quote.id'), nullable=False, unique=True)
+    revision_id = db.Column(db.Integer, db.ForeignKey('commercial_quote_revision.id'), nullable=False, index=True)
+    content_hash = db.Column(db.String(64), nullable=False)
+    decision = db.Column(db.String(20), nullable=False)  # accepted | declined
+    signer_name = db.Column(db.String(120))
+    signer_title = db.Column(db.String(120))
+    signer_email = db.Column(db.String(200))             # where the offer was sent
+    ip_address = db.Column(db.String(64))
+    user_agent = db.Column(db.String(300))
+    account_id = db.Column(db.Integer, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+def _evidence_is_permanent(mapper, connection, target):
+    raise ValueError(f'{target.__tablename__} rows are evidence: written once, never changed or deleted.')
+
+
+for _model in (QuoteRevision, QuoteResponse):
+    sa.event.listen(_model, 'before_update', _evidence_is_permanent)
+    sa.event.listen(_model, 'before_delete', _evidence_is_permanent)
+sa.event.listen(QuoteDelivery, 'before_delete', _evidence_is_permanent)
 
 
 class Staff(db.Model):

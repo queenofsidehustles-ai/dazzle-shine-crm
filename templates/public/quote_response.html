@@ -27,7 +27,7 @@
     {% elif accepted %}
     <div class="icon">🎉</div>
     <h1 style="color:var(--good)">Proposal Accepted!</h1>
-    <p>Thank you, {{ q.contact_name }}! We're thrilled to partner with <strong>{{ q.company }}</strong>.</p>
+    <p>Thank you, {{ signer or q.contact_name }}! We're thrilled to partner with <strong>{{ q.company }}</strong>.</p>
     <p>Our team will reach out within 1 business day to confirm your start date and schedule.</p>
     <p style="margin-top:16px">Questions? Call us at <strong>{{ BIZ_PHONE }}</strong></p>
     {% else %}

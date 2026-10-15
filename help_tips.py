@@ -265,6 +265,15 @@ TIPS = {
         "The salesperson's part is done: the lead is qualified and the "
         "walkthrough found what the quote needs. The owner prices it and sends it.",
         None, None),
+    'quote.valid_days': (
+        'Offer open for',
+        "How long the customer has to accept once you send it. After that the "
+        "link says it expired; revise it to send a fresh offer.", None, None),
+    'quote.evidence': (
+        'Proposal record',
+        "Each version you sent, frozen with a fingerprint of its terms, every "
+        "email attempt, and who accepted: their typed name, the time and where "
+        "from.", None, None),
     'lead.assignment': (
         'Who works a lead',
         "A salesperson sees their own leads and the unassigned ones. Working an "

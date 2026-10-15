@@ -138,6 +138,20 @@ try:
                         'INSERT INTO "%%s".client (name, email, address) '
                         'VALUES (:n, :e, :a)' %% schema),
                         {'n': client, 'e': email, 'a': addr})
+            # A quote someone accepted: its frozen terms and the answer are
+            # contract evidence, and must come back -- and stay unchangeable.
+            with db.engine.begin() as c:
+                c.execute(text(
+                    "INSERT INTO tenant_acme.commercial_quote (id, company, contact_name, email, token, status) "
+                    "VALUES (1, 'Acme Office', 'Pat', 'pat@example.com', 'tok-acme', 'accepted')"))
+                c.execute(text(
+                    "INSERT INTO tenant_acme.commercial_quote_revision "
+                    "(id, quote_id, number, terms, content_hash, origin, created_at) "
+                    "VALUES (1, 1, 1, '{}', :h, 'issued', now())"), {'h': 'a' * 64})
+                c.execute(text(
+                    "INSERT INTO tenant_acme.commercial_quote_response "
+                    "(id, quote_id, revision_id, content_hash, decision, signer_name, created_at) "
+                    "VALUES (1, 1, 1, :h, 'accepted', 'Pat Signer', now())"), {'h': 'a' * 64})
         print('OK')
     ''' % ROOT, LIVE=LIVE_URL)
     check(True, 'two companies, each with its own schema and its own client')
@@ -228,6 +242,32 @@ try:
           'and Acme sees only its own client after the restore')
     check("BAKER ['T Hall']" in out,
           'and Baker sees only its own — no leakage across the restore')
+
+    out = run('''
+        import os, sys
+        sys.path.insert(0, %r)
+        from sqlalchemy import create_engine, text
+        e = create_engine(os.environ['SCRATCH'].replace(
+            'postgresql://', 'postgresql+psycopg2://', 1))
+        with e.connect() as c:
+            print('SIGNED', c.execute(text(
+                'SELECT signer_name FROM tenant_acme.commercial_quote_response')).scalar())
+        for table, col in (('commercial_quote_revision', 'terms'),
+                           ('commercial_quote_response', 'signer_name')):
+            try:
+                with e.begin() as c:
+                    c.execute(text("UPDATE tenant_acme.%%s SET %%s = 'x'" %% (table, col)))
+                print('CHANGED', table)
+            except Exception as err:
+                print('REFUSED', table, 'never changed' in str(err))
+        print('OK')
+    ''' % ROOT, SCRATCH=SCRATCH_URL)
+    check('SIGNED Pat Signer' in out,
+          'a customer\'s acceptance of a quote comes back with the company')
+    check('REFUSED commercial_quote_revision True' in out
+          and 'REFUSED commercial_quote_response True' in out,
+          'and the restored evidence still refuses to be edited -- the guard is '
+          'rebuilt with the tables, not left behind with the migrations')
 
     if HAS_CONTROL_PLANE:
       check(counts.get('organizations') == 2,

@@ -225,6 +225,13 @@ def mark_first_paid(account_id):
 @owner_required
 def delete(account_id):
     a = CommercialAccount.query.get_or_404(account_id)
+    from models import QuoteResponse
+    if QuoteResponse.query.filter_by(account_id=a.id, decision='accepted').first():
+        # The signed proposal names this account; deleting it would leave the
+        # agreement pointing at nothing. Paused keeps both.
+        flash('This account has a signed proposal on record, so it is kept. '
+              'Set it to Paused if the work has stopped.', 'error')
+        return redirect(url_for('commercial.detail', account_id=a.id))
     db.session.delete(a)
     db.session.commit()
     flash('Commercial account removed.', 'success')

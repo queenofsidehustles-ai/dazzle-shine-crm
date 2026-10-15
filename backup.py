@@ -422,6 +422,8 @@ def restore(path, into_url, quiet=False):
         if not quiet:
             print(f'  writing  {_safe_url(url)}')
         db.create_all()
+        if url.startswith('postgres'):
+            _guard_evidence(db)
 
         # One table set per schema in the file. A company's schema is rebuilt
         # from today's models exactly as public is, so a company restores onto
@@ -565,7 +567,20 @@ def _build_schema(db, schema, url, quiet=False):
     with db.engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
     md.create_all(bind=db.engine)
+    _guard_evidence(db, schema)
     return list(md.sorted_tables)
+
+
+def _guard_evidence(db, schema=None):
+    """Migration 0029's trigger -- sent quotes' frozen terms and customers'
+    answers refuse UPDATE -- on tables create_all() just built, which no
+    migration will revisit. Never fails a restore."""
+    try:
+        import quote_evidence
+        with db.engine.begin() as conn:
+            quote_evidence.install_guards(conn, schema)
+    except Exception:
+        pass
 
 
 def _stamp_schema():

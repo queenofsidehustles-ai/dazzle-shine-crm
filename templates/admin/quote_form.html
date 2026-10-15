@@ -205,6 +205,11 @@
           {% endfor %}
         </select>
       </div>
+      <div class="form-group">
+        <label>Offer open for <span style="font-weight:400">(days, from sending)</span> {{ tip('quote.valid_days') }}</label>
+        <input type="number" name="valid_days" min="1" max="365" step="1"
+               value="{{ quote.valid_days if quote and quote.valid_days else 30 }}" style="max-width:140px" />
+      </div>
       <!-- ESTIMATE HELPER: the commercial calculator, with what is ticked -->
       <div id="estHelper" style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:10px;padding:16px 18px;margin-bottom:16px">
         <div style="font-weight:700;color:var(--amber-deep);font-size:0.9rem;margin-bottom:4px">💡 Estimate Helper</div>
