@@ -137,6 +137,19 @@ def _account_from_quote(q):
     return acc
 
 
+def _hold(quote_id):
+    """The quote, with its row locked until this request commits.
+
+    Saving, sending and deleting all start here, so no two of them overlap on
+    one quote: a save that began while it was a draft can't land after a send
+    has gone out (rewriting terms under the customer's link), a draft can't be
+    deleted the moment it is sent, and a customer's accept -- a conditional
+    write on the same row -- waits for a send in progress instead of being
+    overwritten by it."""
+    return (CommercialQuote.query.filter_by(id=quote_id)
+            .with_for_update().populate_existing().first_or_404())
+
+
 def _lock_message(q):
     """Why this quote's terms can't be changed, and what to do instead."""
     if q.status == 'accepted':
@@ -414,6 +427,7 @@ def _quote_history(q):
 def detail(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
+        q = _hold(quote_id)
         if q.locked:
             flash(_lock_message(q), 'error')
             return redirect(url_for('quotes.detail', quote_id=quote_id))
@@ -597,6 +611,7 @@ def review(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
         if 'company' in request.form:
+            q = _hold(quote_id)
             if q.locked:
                 flash(_lock_message(q), 'error')
             else:
@@ -674,7 +689,10 @@ def circulate(quote_id):
 @quotes_bp.route('/<int:quote_id>/send', methods=['POST'])
 @owner_required
 def send_quote(quote_id):
-    q = CommercialQuote.query.get_or_404(quote_id)
+    # Held from here to the last commit -- email included -- so the status
+    # checked below is still the status when the email goes and when "sent"
+    # is written (see _hold). A customer answering meanwhile waits a moment.
+    q = _hold(quote_id)
     # Checked before touching anything: re-sending would put a signed
     # customer back to "sent" and restart the follow-up emails at somebody
     # who already said yes -- and _apply_form is a no-op on an accepted
@@ -693,9 +711,9 @@ def send_quote(quote_id):
     # Only a draft takes them: a sent quote is re-sent exactly as it was.
     if 'company' in request.form and q.status == 'draft':
         _apply_form(q)
-        db.session.commit()
     blocking, _warnings = _send_checks(q)
     if blocking:
+        db.session.commit()          # the draft's edits are kept either way
         flash('Not sent: ' + ' '.join(blocking), 'error')
         return redirect(url_for('quotes.review', quote_id=q.id))
     quote_url = _quote_url(q)
@@ -708,6 +726,7 @@ def send_quote(quote_id):
         html=html, from_name=from_name, from_email=from_email, reply_to=reply_to,
     )
     if not ok:
+        db.session.commit()          # the draft's edits are kept either way
         flash(f"Quote could NOT be emailed to {q.email}. {detail}", 'error')
         return redirect(url_for('quotes.detail', quote_id=q.id))
 
@@ -750,12 +769,18 @@ def delete(quote_id):
     """A draft only. Once sent, a quote is what a customer was offered -- and
     once answered, what they agreed to or turned down -- so it is kept:
     withdrawn if it should not be accepted, never erased."""
-    q = CommercialQuote.query.get_or_404(quote_id)
-    if q.locked:
+    CommercialQuote.query.get_or_404(quote_id)
+    # One conditional delete, checked against the row as it is now -- not as
+    # it was when this request read it, a moment before a send could commit.
+    gone = (CommercialQuote.query
+            .filter(CommercialQuote.id == quote_id, CommercialQuote.status.in_(CommercialQuote.EDITABLE))
+            .delete(synchronize_session=False))
+    if not gone:
+        db.session.rollback()
+        q = CommercialQuote.query.get_or_404(quote_id)
         flash(f'This quote was {q.status}, so it is kept as a record of what was offered.'
               + (' Withdraw it if it should no longer be accepted.' if q.status == 'sent' else ''), 'error')
         return redirect(url_for('quotes.detail', quote_id=q.id))
-    db.session.delete(q)
     db.session.commit()
     flash('Draft deleted.', 'success')
     return redirect(url_for('quotes.index'))

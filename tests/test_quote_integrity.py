@@ -244,6 +244,56 @@ c.post(f'/quotes/{rid}/revise', base_url=HOST)
 check(quote(rid)['status'] == 'accepted',
       'an owner withdrawing or revising just after the customer accepted cannot undo the acceptance')
 
+print('\n8. Overlapping requests on one quote: a send in progress holds it')
+import time
+c2 = fresh_postgres.owner_client(app, SLUG, 'akye.test')   # a second tab
+gate_in, gate_out = threading.Event(), threading.Event()
+
+
+def slow_send(**kw):
+    SENT.append(kw)
+    gate_in.set()
+    gate_out.wait(10)
+    return True, 'stub'
+
+
+def during_send(qid, other):
+    """Run other() while a send of qid is part-way through its email."""
+    gate_in.clear(); gate_out.clear()
+    real = Q.send_email
+    Q.send_email = slow_send
+    out = {}
+    t = threading.Thread(target=lambda: out.__setitem__(
+        'send', c.post(f'/quotes/{qid}/send', base_url=HOST).status_code))
+    t.start()
+    gate_in.wait(10)
+    o = threading.Thread(target=lambda: out.__setitem__('other', other()))
+    o.start()
+    # Give it every chance to finish on its own. Held by the send, it can't:
+    # it finishes only once the send is let go, below.
+    o.join(3)
+    gate_out.set()
+    t.join(10); o.join(10)
+    Q.send_email = real
+    return out
+
+
+eqid, _t = make('Edit Race Co')
+during_send(eqid, lambda: c2.post(f'/quotes/{eqid}', base_url=HOST, data=dict(TAMPER, company='Edit Race Co')).status_code)
+got = quote(eqid)
+check(got['status'] == 'sent' and float(got['monthly_price']) == 516,
+      'a save that started while it was a draft cannot land after the send -- the link keeps the sent terms')
+
+dqid, _t = make('Delete Race Co')
+during_send(dqid, lambda: c2.post(f'/quotes/{dqid}/delete', base_url=HOST).status_code)
+check(quote(dqid) is not None and quote(dqid)['status'] == 'sent',
+      'a draft being sent cannot be deleted out from under the email')
+
+rqid, rqtok = make('Resend Race Co', status='sent')
+out = during_send(rqid, lambda: (public(rqtok, 'accept').status_code, gate_out.is_set()))
+check(out['other'][1] and quote(rqid)['status'] == 'accepted' and accounts('Resend Race Co') == 1,
+      'a customer accepting during a resend is accepted once the resend has finished, not part-way through it')
+
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)
