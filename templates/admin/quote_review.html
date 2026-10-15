@@ -61,20 +61,27 @@
 
     <div class="card">
       <h3>Send it</h3>
-      {# Declined is re-sendable: adjust the proposal and send the revision.
-         Accepted is not -- that would put a signed customer back to "sent". #}
-      {% if q.status in ('draft', 'sent', 'declined') %}
+      {# A draft is sent; a sent quote can be sent again exactly as it was.
+         Anything else is answered or withdrawn: a new offer is a revision,
+         with its own link, so the old link keeps saying what happened. #}
+      {% if q.status in ('draft', 'sent') %}
       <form method="POST" action="{{ url_for('quotes.send_quote', quote_id=q.id) }}"
             onsubmit='return confirm({{ ("Email this proposal to " ~ (q.email or "") ~ " now?")|tojson }})'>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;padding:12px"
                 {{ 'disabled' if blocking }}>
-          {{ {'sent': '↻ Resend', 'declined': '📨 Send the revised proposal'}.get(q.status, '📨 Looks right — send') }} to {{ q.email or '…' }}
+          {{ {'sent': '↻ Resend the same proposal'}.get(q.status, '📨 Looks right — send') }} to {{ q.email or '…' }}
         </button>
       </form>
       <p style="font-size:0.78rem;color:var(--softer);margin:8px 0 0;line-height:1.5">
-        {% if blocking %}Fix the ⛔ items first.{% elif q.status == 'declined' %}They declined the last version; this sends the revision for them to accept.{% elif lead %}Sending moves {{ lead.business_name }} to Proposal, with a follow-up in three days.{% else %}You get a copy in your inbox.{% endif %}</p>
+        {% if blocking %}Fix the ⛔ items first.{% elif q.status == 'sent' %}The same terms, to the same link. To change anything, revise it.{% elif lead %}Sending moves {{ lead.business_name }} to Proposal, with a follow-up in three days.{% else %}You get a copy in your inbox.{% endif %}</p>
       {% else %}
-      <p style="font-size:0.86rem;margin:0">This quote was {{ q.status }}{% if q.responded_at %} on {{ q.responded_at.strftime('%b %d') }}{% endif %}.</p>
+      <p style="font-size:0.86rem;margin:0">This quote was {{ q.status }}{% if q.responded_at %} on {{ q.responded_at.strftime('%b %d') }}{% elif q.withdrawn_at %} on {{ q.withdrawn_at.strftime('%b %d') }}{% endif %}.</p>
+      {% endif %}
+      {% if q.status in ('sent', 'declined', 'withdrawn') %}
+      <form method="POST" action="{{ url_for('quotes.revise', quote_id=q.id) }}" style="margin-top:10px"
+            {% if q.status == 'sent' %}onsubmit="return confirm('Revise this proposal? The version they have is withdrawn — its link stops accepting — and a new draft opens with the same terms.')"{% endif %}>
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:10px">✎ {{ 'Revise — change the terms' if q.status == 'sent' else 'Revise and send a new version' }}</button>
+      </form>
       {% endif %}
     </div>
 

@@ -114,7 +114,11 @@ _FREQ_MAP = {'daily': 'nightly', 'weekly': 'weekly', 'biweekly': 'biweekly',
 
 
 def _account_from_quote(q):
-    """When a quote is accepted, create the ongoing Commercial Account (won customer)."""
+    """When a quote is accepted, create the ongoing Commercial Account (won customer).
+
+    Never commits: it is one step of accepting, and accepting is all-or-nothing
+    (see accept()). Committing here once left a quote accepted with no account
+    whenever a later step failed."""
     existing = CommercialAccount.query.filter_by(business_name=q.company, email=q.email).first()
     if existing:
         return existing
@@ -129,8 +133,18 @@ def _account_from_quote(q):
         notes=f'Created from accepted quote (brand: {q.brand or "lm"}).',
     )
     db.session.add(acc)
-    db.session.commit()
+    db.session.flush()
     return acc
+
+
+def _lock_message(q):
+    """Why this quote's terms can't be changed, and what to do instead."""
+    if q.status == 'accepted':
+        return 'This quote was accepted — its terms are locked. Duplicate it to send a revised offer.'
+    if q.status == 'sent':
+        return ('This quote was sent — its terms are fixed under the link the customer has. '
+                'Revise it to change them: the sent version is withdrawn and a new draft opens with the same terms.')
+    return f'This quote was {q.status} — its terms are fixed. Revise or duplicate it for a new offer.'
 
 
 # call-list category → the quote form's property type
@@ -175,6 +189,7 @@ def index():
         'sent': CommercialQuote.query.filter_by(status='sent').count(),
         'accepted': CommercialQuote.query.filter_by(status='accepted').count(),
         'declined': CommercialQuote.query.filter_by(status='declined').count(),
+        'withdrawn': CommercialQuote.query.filter_by(status='withdrawn').count(),
     }
     return render_template('admin/quotes.html', quotes=all_quotes,
                            counts=counts, status_filter=status_filter)
@@ -399,8 +414,8 @@ def _quote_history(q):
 def detail(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
-        if q.status == 'accepted':
-            flash('This quote was accepted — its terms are locked. Duplicate it to send a revised offer.', 'error')
+        if q.locked:
+            flash(_lock_message(q), 'error')
             return redirect(url_for('quotes.detail', quote_id=quote_id))
         _apply_form(q)
         db.session.commit()
@@ -582,8 +597,8 @@ def review(quote_id):
     q = CommercialQuote.query.get_or_404(quote_id)
     if request.method == 'POST':
         if 'company' in request.form:
-            if q.status == 'accepted':
-                flash('This quote was accepted — its terms are locked. Duplicate it to send a revised offer.', 'error')
+            if q.locked:
+                flash(_lock_message(q), 'error')
             else:
                 _apply_form(q)
                 db.session.commit()
@@ -668,9 +683,15 @@ def send_quote(quote_id):
     if q.status == 'accepted':
         flash('This quote was accepted — it is not sent again.', 'error')
         return redirect(url_for('quotes.review', quote_id=q.id))
+    if q.status not in ('draft', 'sent'):
+        # Declined or withdrawn: the customer's link says so, and stays saying
+        # so. A new offer is a revision -- a new draft, a new link.
+        flash(_lock_message(q), 'error')
+        return redirect(url_for('quotes.review', quote_id=q.id))
     # The Send button sits in the edit form and posts it. Those edits used to
     # be dropped -- change the price, press Send, and the old price went out.
-    if 'company' in request.form:
+    # Only a draft takes them: a sent quote is re-sent exactly as it was.
+    if 'company' in request.form and q.status == 'draft':
         _apply_form(q)
         db.session.commit()
     blocking, _warnings = _send_checks(q)
@@ -726,11 +747,82 @@ def send_quote(quote_id):
 @quotes_bp.route('/<int:quote_id>/delete', methods=['POST'])
 @owner_required
 def delete(quote_id):
+    """A draft only. Once sent, a quote is what a customer was offered -- and
+    once answered, what they agreed to or turned down -- so it is kept:
+    withdrawn if it should not be accepted, never erased."""
     q = CommercialQuote.query.get_or_404(quote_id)
+    if q.locked:
+        flash(f'This quote was {q.status}, so it is kept as a record of what was offered.'
+              + (' Withdraw it if it should no longer be accepted.' if q.status == 'sent' else ''), 'error')
+        return redirect(url_for('quotes.detail', quote_id=q.id))
     db.session.delete(q)
     db.session.commit()
-    flash('Quote deleted.', 'success')
+    flash('Draft deleted.', 'success')
     return redirect(url_for('quotes.index'))
+
+
+def _withdraw(q, now):
+    """Sent -> withdrawn, in one conditional write: if the customer accepted
+    or declined a moment ago, their answer stands and this does nothing.
+    True when this call withdrew it."""
+    taken = (CommercialQuote.query
+             .filter(CommercialQuote.id == q.id, CommercialQuote.status == 'sent')
+             .update({'status': 'withdrawn', 'withdrawn_at': now}, synchronize_session=False))
+    if taken:
+        q.status, q.withdrawn_at = 'withdrawn', now
+    return bool(taken)
+
+
+@quotes_bp.route('/<int:quote_id>/withdraw', methods=['POST'])
+@owner_required
+def withdraw(quote_id):
+    """Take a sent offer back: its link says so and can no longer be accepted."""
+    q = CommercialQuote.query.get_or_404(quote_id)
+    if q.status != 'sent' or not _withdraw(q, datetime.utcnow()):
+        db.session.rollback()
+        q = CommercialQuote.query.get_or_404(quote_id)
+        flash(f'Not withdrawn — this quote is {q.status}.', 'error')
+        return redirect(url_for('quotes.detail', quote_id=quote_id))
+    db.session.commit()
+    flash('Withdrawn — the customer\'s link now says this proposal is no longer open.', 'success')
+    return redirect(url_for('quotes.detail', quote_id=quote_id))
+
+
+@quotes_bp.route('/<int:quote_id>/revise', methods=['POST'])
+@owner_required
+def revise(quote_id):
+    """Change an offer that has gone out: a new draft with exactly the same
+    terms -- not re-priced -- to edit and send, while the original stays as it
+    was sent. A sent original is withdrawn in the same step, so the customer
+    can't accept the old terms while the new ones are being written."""
+    src = CommercialQuote.query.get_or_404(quote_id)
+    if src.status not in ('sent', 'declined', 'withdrawn'):
+        flash('Only a sent, declined or withdrawn quote is revised. '
+              + ('Duplicate an accepted one for a new offer.' if src.status == 'accepted'
+                 else 'A draft is edited directly.'), 'error')
+        return redirect(url_for('quotes.detail', quote_id=src.id))
+    now = datetime.utcnow()
+    if src.status == 'sent' and not _withdraw(src, now):
+        db.session.rollback()
+        src = CommercialQuote.query.get_or_404(quote_id)
+        flash(f'Not revised — the customer has just {src.status} it.', 'error')
+        return redirect(url_for('quotes.detail', quote_id=src.id))
+    q = CommercialQuote(
+        company=src.company, contact_name=src.contact_name, email=src.email,
+        phone=src.phone, property_type=src.property_type,
+        property_address=src.property_address, units=src.units, sqft=src.sqft,
+        services=src.services, frequency=src.frequency, contract_term=src.contract_term,
+        scope_notes=src.scope_notes, token=secrets.token_urlsafe(32), status='draft',
+        brand=src.brand, prospect_id=src.prospect_id, line_items=src.line_items,
+        show_line_prices=src.show_line_prices, first_visit_premium=src.first_visit_premium,
+        price_per_visit=src.price_per_visit, monthly_price=src.monthly_price,
+        revised_from_id=src.id,
+    )
+    db.session.add(q)
+    db.session.commit()
+    flash('A new draft with the same terms — change what needs changing, then send it. '
+          + ('The version they had is withdrawn.' if src.status == 'withdrawn' else ''), 'success')
+    return redirect(url_for('quotes.detail', quote_id=q.id))
 
 
 @quotes_bp.route('/<int:quote_id>/duplicate', methods=['POST'])
@@ -792,16 +884,49 @@ def view(token):
     return render_template('public/quote_view.html', q=q, **_doc_ctx(q))
 
 
+def _answer(q, status):
+    """Sent -> accepted/declined, claimed with one conditional write so that
+    of two answers arriving together (a double tap, two people at the
+    company) exactly one counts. True when this request's answer is the one."""
+    now = datetime.utcnow()
+    taken = (CommercialQuote.query
+             .filter(CommercialQuote.id == q.id, CommercialQuote.status.in_(CommercialQuote.ANSWERABLE))
+             .update({'status': status, 'responded_at': now}, synchronize_session=False))
+    if taken:
+        q.status, q.responded_at = status, now
+    return bool(taken)
+
+
+def _notify(**kw):
+    """The owner's email about an answer -- sent after it is saved, and never
+    able to undo it: a mail provider having a bad minute is not a reason to
+    show a customer an error for a proposal they did accept."""
+    try:
+        send_email(**kw)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('quote answer email not sent')
+
+
+def _not_recorded(q):
+    """Nothing was saved: say so, and that it is safe to try again."""
+    import logging
+    logging.getLogger(__name__).exception('quote %s: answer not recorded', q.id)
+    return render_template('public/quote_response.html', q=q, failed=True), 503
+
+
 @quotes_bp.route('/view/<token>/accept', methods=['POST'])
 def accept(token):
+    """Accept a sent offer -- and only a sent one: not a draft nobody sent,
+    not one withdrawn or replaced. All of it happens together or none of it
+    does: the quote accepted, the account made, the lead won. If any part
+    fails, the quote is still open and the customer is told to try again,
+    rather than left accepted with no account behind it. The owner is
+    emailed only once it is saved."""
     q = CommercialQuote.query.filter_by(token=token).first_or_404()
-    if q.status not in ('sent', 'draft'):
+    if q.status not in CommercialQuote.ANSWERABLE or not _answer(q, 'accepted'):
+        db.session.rollback()
         return redirect(url_for('quotes.view', token=token))
-    q.status = 'accepted'
-    try:
-        q.responded_at = datetime.utcnow()
-    except Exception:
-        pass
     try:
         acc = _account_from_quote(q)   # accepted quote becomes an ongoing Commercial Account
         lead = _lead_moved(q, 'won', 'won', None, None, 'Accepted the quote 🎉')
@@ -811,19 +936,12 @@ def accept(token):
         linked = _lead_for(q)
         if acc and linked and linked.agent and not acc.agent:
             acc.agent = linked.agent
-    except Exception:
-        pass
-    try:
         db.session.commit()
     except Exception:
         db.session.rollback()
-        db.session.execute(__import__('sqlalchemy').text(
-            "UPDATE commercial_quote SET status='accepted' WHERE token=:t"
-        ), {'t': token})
-        db.session.commit()
-    notify_email = branding.owner_email()
-    send_email(
-        to_email=notify_email, to_name=branding.biz_name(),
+        return _not_recorded(CommercialQuote.query.filter_by(token=token).first_or_404())
+    _notify(
+        to_email=branding.owner_email(), to_name=branding.biz_name(),
         from_name=f'{branding.biz_name()} Quotes',
         subject=f'QUOTE ACCEPTED: {q.company} — ${float(q.monthly_price or 0):,.2f}/mo',
         html=f"""
@@ -841,29 +959,22 @@ def accept(token):
 
 @quotes_bp.route('/view/<token>/decline', methods=['POST'])
 def decline(token):
+    """Decline a sent offer -- the same rules as accept()."""
     q = CommercialQuote.query.filter_by(token=token).first_or_404()
-    if q.status not in ('sent', 'draft'):
+    if q.status not in CommercialQuote.ANSWERABLE or not _answer(q, 'declined'):
+        db.session.rollback()
         return redirect(url_for('quotes.view', token=token))
-    q.status = 'declined'
     try:
-        q.responded_at = datetime.utcnow()
-    except Exception:
-        pass
-    # A declined quote is "not now", not "never" -- the same reasoning that
-    # rests a "not interested" call in nurture for a quarter.
-    _lead_moved(q, 'nurture', 'not_interested', 'Quarterly check-in', 90,
-                'Declined the quote')
-    try:
+        # A declined quote is "not now", not "never" -- the same reasoning that
+        # rests a "not interested" call in nurture for a quarter.
+        _lead_moved(q, 'nurture', 'not_interested', 'Quarterly check-in', 90,
+                    'Declined the quote')
         db.session.commit()
     except Exception:
         db.session.rollback()
-        db.session.execute(__import__('sqlalchemy').text(
-            "UPDATE commercial_quote SET status='declined' WHERE token=:t"
-        ), {'t': token})
-        db.session.commit()
-    notify_email = branding.owner_email()
-    send_email(
-        to_email=notify_email, to_name=branding.biz_name(),
+        return _not_recorded(CommercialQuote.query.filter_by(token=token).first_or_404())
+    _notify(
+        to_email=branding.owner_email(), to_name=branding.biz_name(),
         from_name=f'{branding.biz_name()} Quotes',
         subject=f'Quote declined: {q.company}',
         html=f"""

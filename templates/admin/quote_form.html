@@ -7,6 +7,9 @@
 
 {% block content %}
 {% set pre = pre or {} %}
+{# Sent, answered or withdrawn: the terms are what the customer was offered,
+   so the form is shown but not editable. A change is a revision. #}
+{% set locked = quote and quote.locked %}
 {% if lead %}
 <div class="card" style="border-left:4px solid var(--amber);margin-bottom:18px;padding:14px 18px">
   📇 For <strong>{{ lead.business_name }}</strong> on your call list
@@ -36,8 +39,49 @@
   </div>
 </div>
 {% endif %}
-<form method="POST" id="quoteForm">
+{% if quote and quote.revised_from_id %}
+<div class="card" style="border-left:4px solid var(--softer);margin-bottom:18px;padding:12px 18px;font-size:0.86rem">
+  ✎ A revision of <a href="{{ url_for('quotes.detail', quote_id=quote.revised_from_id) }}" style="color:var(--amber-deep)">an earlier proposal</a>, which is kept as it was sent.
+</div>
+{% endif %}
+{% if locked %}
+{% set who = (quote.contact_name or 'the customer') %}
+<div class="card" id="quoteLocked" style="border-left:4px solid var(--info);margin-bottom:18px;padding:14px 18px">
+  <strong>🔒 {{ {'sent': 'Sent', 'accepted': 'Accepted', 'declined': 'Declined', 'withdrawn': 'Withdrawn'}.get(quote.status, quote.status|title) }} — these terms are fixed.</strong>
+  <div style="font-size:0.85rem;color:var(--softer);margin-top:4px;line-height:1.5">
+    {% if quote.status == 'sent' %}They are what {{ who }} was sent, at the link in their email. To change anything,
+    revise it: this version is withdrawn — its link stops accepting — and a new draft opens with the same terms.
+    {% elif quote.status == 'accepted' %}They are what {{ who }} agreed to. For a new offer, duplicate it.
+    {% elif quote.status == 'declined' %}{{ who }} declined these terms. Revise it to send a new version with its own link.
+    {% else %}Withdrawn{% if quote.withdrawn_at %} on {{ quote.withdrawn_at.strftime('%b %d') }}{% endif %} — its link tells {{ who }} it is no longer open.
+    {% endif %}
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+    <a href="{{ url_for('quotes.review', quote_id=quote.id) }}" class="btn btn-outline" style="padding:7px 14px;font-size:0.85rem">👁 Review</a>
+    {% if quote.status in ('sent', 'declined', 'withdrawn') %}
+    <form method="POST" action="{{ url_for('quotes.revise', quote_id=quote.id) }}" style="margin:0"
+          {% if quote.status == 'sent' %}onsubmit="return confirm('Revise this proposal? The version they have is withdrawn and a new draft opens with the same terms.')"{% endif %}>
+      <button type="submit" class="btn btn-gold" style="padding:7px 14px;font-size:0.85rem">✎ Revise</button>
+    </form>
+    {% endif %}
+    {% if quote.status == 'sent' %}
+    <form method="POST" action="{{ url_for('quotes.withdraw', quote_id=quote.id) }}" style="margin:0"
+          onsubmit="return confirm('Withdraw this proposal? Its link will say it is no longer open.')">
+      <button type="submit" class="btn btn-outline" style="padding:7px 14px;font-size:0.85rem">Withdraw</button>
+    </form>
+    {% endif %}
+    <form method="POST" action="{{ url_for('quotes.duplicate', quote_id=quote.id) }}" style="margin:0">
+      <button type="submit" class="btn btn-outline" style="padding:7px 14px;font-size:0.85rem">⧉ Duplicate</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+<form method="POST" id="quoteForm"{% if locked %} data-locked="1"{% endif %}>
 {% if lead and not quote %}<input type="hidden" name="prospect_id" value="{{ lead.id }}">{% endif %}
+{# Locked: the editor's own buttons (add a line, remove an area...) are
+   disabled with the rest of the form; hidden too, so nothing looks usable. #}
+<style>.qf-fields[disabled] button { display: none; }</style>
+<fieldset class="qf-fields" style="border:0;padding:0;margin:0;min-width:0"{% if locked %} disabled{% endif %}>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start">
 
   <!-- Left column -->
@@ -107,7 +151,7 @@
         Quote each part of the building as its own area — the service floor's stone tile, ceramic tile and hardwood as separate lines,
         the kitchen and restrooms as areas of their own if they are included. Each line is priced from your rates in
         <a href="{{ url_for('settings.commercial') }}" style="color:var(--amber-deep)">Commercial pricing</a>; type over any price to set your own.</p>
-      {% if quote and rates_changed %}
+      {% if quote and rates_changed and not locked %}
       <div style="background:var(--warn-soft);color:var(--warn);border-radius:9px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;font-weight:600">
         ⚠ Your rates in Settings have changed since this was priced. Every line below still shows what was quoted —
         touch a line's quantity (then undo it) to see what it would cost today, or just save to keep it as is.
@@ -199,9 +243,11 @@
       <button type="button" id="draftDiscard" style="background:none;border:none;color:var(--info);font-weight:700;text-decoration:underline;cursor:pointer;padding:0">Discard it</button>
     </div>
 
+    {% if not locked %}
     <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;padding:13px">
-      💾 {{ 'Save draft' if not quote or quote.status == 'draft' else 'Save changes' }}
+      💾 Save draft
     </button>
+    {% endif %}
     {% if not quote %}
     <button type="submit" name="next" value="review" class="btn btn-dark" style="width:100%;justify-content:center;padding:13px">
       👁 Save &amp; review before sending →
@@ -240,24 +286,20 @@
     <div style="background:var(--warn-soft);color:var(--warn);padding:12px 16px;border-radius:10px;font-weight:700;text-align:center">Declined</div>
     {% endif %}
 
-    {% if quote.status != 'draft' %}
-    <button type="submit" formaction="{{ url_for('quotes.review', quote_id=quote.id) }}"
-            formnovalidate class="btn btn-outline" style="width:100%;justify-content:center;padding:11px">
-      👁 Review the proposal{{ ' & resend' if quote.status in ('sent', 'declined') }} →
-    </button>
-    {% endif %}
-
+    {% if not locked %}
     <button type="button" id="dupQuote" class="btn btn-outline" style="width:100%;justify-content:center">
       ⧉ Duplicate as a new draft
     </button>
 
     <button type="submit" formaction="{{ url_for('quotes.delete', quote_id=quote.id) }}"
             formnovalidate onclick="return confirm('Delete this quote?')"
-            class="btn btn-danger" style="width:100%;justify-content:center">Delete Quote</button>
+            class="btn btn-danger" style="width:100%;justify-content:center">Delete draft</button>
+    {% endif %}
     {% endif %}
   </div>
 
 </div>
+</fieldset>
 </form>
 
 <script>
@@ -469,7 +511,13 @@
     freqSel.addEventListener('change', () => changed());
     fvCheckbox.addEventListener('change', () => changed());
     window.waReload = function () { load(); render(); price(); };
-    load(); render(); sync(); if (hasLines()) price();
+    load(); render(); sync();
+    if (document.getElementById('quoteForm').dataset.locked) {
+      // Sent: show what was sent, not what today's rates would make it.
+      totals.style.display = 'block';
+      totals.textContent = 'As sent: ' + money(ppv.value || 0) + ' a visit'
+        + (mon.value ? ' · ' + money(mon.value) + ' a month' : '') + '.';
+    } else if (hasLines()) price();
   })();
 </script>
 
@@ -573,6 +621,8 @@
   // the form is saved; it never leaves the device.
   (function () {
     const form = document.getElementById('quoteForm');
+    // A sent quote is not being typed into; nothing to keep or bring back.
+    if (form.dataset.locked) return;
     const KEY = 'quote-draft:' + {{ ('q' ~ quote.id if quote else 'new:' ~ ((lead.id if lead else '') or ''))|tojson }};
     const fields = () => [...form.querySelectorAll('input[name], select[name], textarea[name], #est-hours')]
       .filter(el => (el.type !== 'hidden' || el.name === 'line_items_json') && el.name !== 'csrf_token');

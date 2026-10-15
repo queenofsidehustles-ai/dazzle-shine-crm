@@ -1075,7 +1075,11 @@ class CommercialQuote(db.Model):
     price_per_visit = db.Column(Money)
     monthly_price = db.Column(Money)
     scope_notes = db.Column(db.Text)
-    status = db.Column(db.String(20), default='draft')  # draft, sent, accepted, declined
+    # draft -> sent -> accepted | declined; sent -> withdrawn. Only a draft is
+    # ever edited or deleted: once sent, these are the terms a customer was
+    # offered, and a change is a new quote (revised_from_id), not this one
+    # rewritten under the link they were given. See blueprints/quotes.py.
+    status = db.Column(db.String(20), default='draft')
     token = db.Column(db.String(64), unique=True, nullable=False)
     brand = db.Column(db.String(10), default='lm')      # 'lm' (L & M) or 'dazzle'
     drip_step = db.Column(db.Integer, default=0)        # nurture follow-ups already sent
@@ -1103,6 +1107,19 @@ class CommercialQuote(db.Model):
     # -- never folded into price_per_visit or monthly_price, which stay the
     # recurring figures. Migration 0026.
     first_visit_premium = db.Column(db.Boolean, default=False)
+    # Taken back before the customer answered -- by hand, or because a
+    # revision replaced it. Its link then says so and cannot be accepted.
+    withdrawn_at = db.Column(db.DateTime)
+    # The quote this one revises: the sent offer it replaced. Migration 0028.
+    revised_from_id = db.Column(db.Integer, index=True)
+
+    EDITABLE = ('draft',)
+    ANSWERABLE = ('sent',)
+
+    @property
+    def locked(self):
+        """Issued: its terms are fixed. Change means a revision."""
+        return self.status not in self.EDITABLE
 
 
 class Staff(db.Model):
