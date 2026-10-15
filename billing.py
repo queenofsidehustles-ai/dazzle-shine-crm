@@ -39,7 +39,7 @@ PRICE_ENV = {
     'scale': 'STRIPE_PRICE_SCALE',
 }
 
-TRIAL_DAYS = 14
+TRIAL_DAYS = 30
 
 
 def stripe_key():
@@ -103,8 +103,10 @@ def plan_for(org):
     return org.get('plan') or 'solo'
 
 
-# How long somebody gets, and how long they have to start.
-TRIAL_DAYS = 14
+# How long somebody gets, and how long they have to start. Both are thirty days:
+# one number to say everywhere, and the same length the Scale plan trial has
+# always been given at signup.
+TRIAL_DAYS = 30
 START_WITHIN_DAYS = 30
 
 
@@ -113,8 +115,8 @@ def trial_state(org, now=None):
 
     Two clocks, because one is not honest:
 
-      * 14 days from the moment they first assign a job to somebody. A
-        fortnight measured from signup is a trial a busy company can lose
+      * 30 days from the moment they first add a cleaner and a customer. A
+        month measured from signup is a trial a busy company can lose
         without ever having used the product — and then they are owed an
         apology and a manual extension, which is a conversation worth
         designing out.
@@ -157,12 +159,12 @@ def trial_state(org, now=None):
 
 
 def mark_activated(engine, slug, when=None):
-    """Start the 14 days, now that they have actually used it.
+    """Start the 30 days, now that they have actually used it.
 
     Called the first time a company has a job with somebody assigned to it.
-    Moves the end date to fourteen days from that moment — which may be later
+    Moves the end date to thirty days from that moment — which may be later
     than the original start-by deadline, and should be: they engaged, so they
-    get their fortnight.
+    get their full trial.
 
     Does nothing if it has already been called.
     """
@@ -377,7 +379,22 @@ def apply_event(event):
     if kind in ('invoice.paid', 'invoice.payment_succeeded'):
         control_plane.set_billing(engine, slug, subscription_status='active',
                                   **_revenue_dates(org, 'active'))
+        # If a partner brought this company, this invoice earned them a share.
+        # Keyed on the invoice, so the same event twice earns it once, and
+        # never allowed to fail the payment above (it cannot raise).
+        import affiliates
+        affiliates.accrue(engine, slug, obj)
         return True, f'{slug}: payment received'
+
+    if kind == 'charge.refunded':
+        # A fully refunded invoice earns nothing. A partial refund is left for
+        # a person to look at: how much of a commission a part-refund undoes is
+        # a judgement, not arithmetic.
+        if obj.get('refunded') and obj.get('invoice'):
+            import affiliates
+            result = affiliates.reverse(engine, obj['invoice'], 'refunded')
+            return True, f'{slug}: refund, partner commission {result}'
+        return False, f'{slug}: ignored a partial refund'
 
     return False, f'{slug}: ignored {kind}'
 

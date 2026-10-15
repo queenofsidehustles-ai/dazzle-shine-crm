@@ -57,7 +57,7 @@ a note of their own:
     day2           day 2, everyone        your booking page is already live
     day4           day 4, not activated   where people get stuck
     day5           day 5, not activated   bring your list over
-    activated      when the 14 days start what is now switched on
+    activated      when the 30 days start what is now switched on
     feature        ~day 10 of the trial   the one useful thing not yet tried
     first_booking  first online booking   somebody booked you (sent at once)
     winback        a week after it lapsed what you would get back, once
@@ -99,7 +99,7 @@ DAY1 = (1, 2)
 DAY2 = (2, 4)
 DAY4 = (4, 5)
 DAY5 = (5, 6)
-# How long after the 14 days start the "now switched on" note still makes
+# How long after the 30 days start the "now switched on" note still makes
 # sense if the moment itself was missed.
 ACTIVATED_WITHIN_DAYS = 3
 # Days into the running trial for "one thing you have not tried". Ends before
@@ -296,7 +296,7 @@ def compose(org, kind, next_step=None):
             <p>If something is in the way, reply and tell me what it is. If it
             is just that the week got away from you — that is most people, and
             it takes two minutes.</p>''',
-            'Start my 14 days'))
+            f'Start my {billing.TRIAL_DAYS} days'))
 
     # What switches off when a trial ends, in the owner's words, from the
     # plan table (entitlements.PLANS). Said concretely because "the paid

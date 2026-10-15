@@ -63,7 +63,7 @@ countdown.
 > Now a customer. Pick one you already clean for. Real is better than made up,
 > because you'll see exactly how it works for your business.
 > Name, address, phone. Save.
-> See the banner? That's what starts your 14 days with everything switched on.
+> See the banner? That's what starts your 30 days with everything switched on.
 
 ---
 
@@ -86,7 +86,7 @@ pick a service, see the price → back to Facebook, paste into the page's bio.
 ---
 
 ## 5. Book a job and send it to a cleaner (90 sec)
-`AKYE_VIDEO_BOOK_JOB` · the "your 14 days just started" email, Getting Started
+`AKYE_VIDEO_BOOK_JOB` · the "your 30 days just started" email, Getting Started
 
 **Show:** Bookings → New → pick the customer → service, date, time → assign
 the cleaner → save → the cleaner's text on a phone.

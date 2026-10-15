@@ -1,0 +1,149 @@
+{% extends "partners/_shell.html" %}
+{% block title %}Your partner page{% endblock %}
+{% block bar %}
+<div class="right">
+  <span>{{ partner.name }}</span>
+  <form method="post" action="{{ url_for('partners.logout') }}" style="margin:0">
+    <button type="submit" class="btn btn-secondary btn-sm">Sign out</button>
+  </form>
+</div>
+{% endblock %}
+{% macro stage_class(stage) -%}
+  {%- if stage == 'paying' %}good{% elif stage in ('payment late', 'cancelled', 'closed') %}warn{% elif stage in ('trial ended', 'in trial') %}amber{% endif -%}
+{%- endmacro %}
+{% macro when(d) %}{{ d.strftime('%d %b %Y') if d else '—' }}{% endmacro %}
+
+{% block body %}
+
+{% if partner.status == 'pending' %}
+<div class="pt-notice">Your application is being reviewed. Your link will start counting as soon as you are approved, and we will email you.</div>
+{% elif partner.status == 'paused' %}
+<div class="pt-notice">Your link is paused, so new visitors are not being credited to you. Everything already earned is still yours and shown below.</div>
+{% endif %}
+
+<h2 class="pt-h" style="margin-top:var(--s4)">Your link</h2>
+<div class="pt-card">
+  <label for="pt-link" class="pt-dim" style="display:block;margin-bottom:4px">Share this anywhere. Anyone who signs up within 90 days of clicking it is credited to you.</label>
+  <div style="display:flex;gap:var(--s2);flex-wrap:wrap">
+    <input id="pt-link" type="text" readonly value="{{ link }}" style="flex:1;min-width:220px" onclick="this.select()">
+    <button type="button" class="btn btn-primary" id="pt-copy">Copy link</button>
+  </div>
+  <label for="pt-tag" class="pt-dim" style="display:block;margin:var(--s4) 0 4px">Tag it to learn which post or email works (optional), e.g. <em>newsletter-oct</em></label>
+  <input id="pt-tag" type="text" maxlength="40" placeholder="newsletter-oct" style="max-width:260px">
+  <p class="pt-dim" style="margin:var(--s3) 0 0">Please say clearly that you earn a commission when you recommend {{ PRODUCT }}, and do not promise results or features we do not have.</p>
+</div>
+
+<h2 class="pt-h">Money</h2>
+<div class="pt-tiles">
+  <div class="pt-card pt-tile good"><span class="l">Ready to pay</span><span class="v">{{ money(payable_cents) }}</span><span class="n">past the {{ partner.hold_days }}-day hold</span></div>
+  <div class="pt-card pt-tile"><span class="l">On hold</span><span class="v">{{ money(pending_cents) }}</span><span class="n">{% if next_payable_at %}next frees up {{ when(next_payable_at) }}{% else %}nothing waiting{% endif %}</span></div>
+  <div class="pt-card pt-tile"><span class="l">Paid to you</span><span class="v">{{ money(paid_cents) }}</span><span class="n">{{ payouts|length }} payment{{ '' if payouts|length == 1 else 's' }}</span></div>
+  <div class="pt-card pt-tile"><span class="l">Earned in total</span><span class="v">{{ money(lifetime_cents) }}</span><span class="n">{{ rate_pct|round(0)|int }}% for {{ partner.commission_months }} months</span></div>
+</div>
+{% if reversed_cents %}<p class="pt-dim" style="margin-top:var(--s2)">{{ money(reversed_cents) }} was cancelled because a payment was refunded. It is not counted above.</p>{% endif %}
+
+<h2 class="pt-h">Performance</h2>
+<div class="pt-tiles">
+  <div class="pt-card pt-tile"><span class="l">Clicks, 30 days</span><span class="v">{{ clicks_30 }}</span><span class="n">{{ clicks_total }} all time</span></div>
+  <div class="pt-card pt-tile"><span class="l">Signed up</span><span class="v">{{ signed_up }}</span><span class="n">{% if click_to_signup_pct is not none %}{{ click_to_signup_pct }}% of clicks{% else %}no clicks yet{% endif %}</span></div>
+  <div class="pt-card pt-tile"><span class="l">Set up</span><span class="v">{{ activated }}</span><span class="n">added a cleaner and a customer</span></div>
+  <div class="pt-card pt-tile good"><span class="l">Paying</span><span class="v">{{ paying }}</span><span class="n">{% if signup_to_paying_pct is not none %}{{ signup_to_paying_pct }}% of sign-ups{% else %}—{% endif %}</span></div>
+</div>
+
+{% set peak = (daily_clicks | map(attribute=1) | max) or 0 %}
+<div class="pt-card" style="margin-top:var(--s3)">
+  <span class="pt-dim">Clicks per day, last 30 days{% if peak %} · busiest day {{ peak }}{% endif %}</span>
+  <div role="img" aria-label="{{ clicks_30 }} clicks in the last 30 days{% if peak %}, at most {{ peak }} in a day{% endif %}"
+       style="display:flex;align-items:flex-end;gap:2px;height:64px;margin-top:var(--s3)">
+    {% for day, n in daily_clicks %}
+      <div title="{{ day.strftime('%d %b') }}: {{ n }}"
+           style="flex:1;height:{{ ((n / peak) * 100) | round | int if peak else 0 }}%;min-height:{{ 2 if n else 1 }}px;background:{{ 'var(--ink)' if n else 'var(--line)' }};border-radius:2px 2px 0 0"></div>
+    {% endfor %}
+  </div>
+</div>
+
+<h2 class="pt-h">Companies you brought</h2>
+{% if companies %}
+<div class="pt-scroll"><table class="pt">
+  <tr><th>Company</th><th>Signed up</th><th>Where they are</th><th>Tag</th><th class="num">You have earned</th></tr>
+  {% for c in companies %}
+  <tr>
+    <td><strong>{{ c.name }}</strong></td>
+    <td>{{ when(c.signed_up) }}</td>
+    <td><span class="pt-badge {{ stage_class(c.stage) }}">{{ c.stage }}</span></td>
+    <td class="pt-dim">{{ c.campaign or '—' }}</td>
+    <td class="num">{{ money(c.earned_cents) }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+<p class="pt-dim" style="margin-top:var(--s2)">You see a company's name and stage only. Their details stay private to them.</p>
+{% else %}
+<div class="pt-empty">No sign-ups yet. They appear here the moment someone signs up through your link.</div>
+{% endif %}
+
+{% if campaigns %}
+<h2 class="pt-h">By tag</h2>
+<div class="pt-scroll"><table class="pt">
+  <tr><th>Tag</th><th class="num">Clicks</th><th class="num">Signed up</th><th class="num">Set up</th><th class="num">Paying</th></tr>
+  {% for tag, r in campaigns %}
+  <tr><td>{{ tag }}</td><td class="num">{{ r.clicks }}</td><td class="num">{{ r.signed_up }}</td><td class="num">{{ r.activated }}</td><td class="num">{{ r.paying }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2 class="pt-h">What you have earned</h2>
+{% if ledger %}
+<div class="pt-scroll"><table class="pt">
+  <tr><th>Paid on</th><th>Company</th><th class="num">They paid</th><th class="num">Your share</th><th>Status</th></tr>
+  {% for c in ledger %}
+  <tr>
+    <td>{{ when(c.invoice_paid_at) }}</td>
+    <td>{{ c.company }}</td>
+    <td class="num">{{ money(c.amount_cents) }}</td>
+    <td class="num">{{ money(c.commission_cents) }}</td>
+    <td>
+      {% if c.state == 'paid' %}<span class="pt-badge good">paid</span>
+      {% elif c.state == 'payable' %}<span class="pt-badge good">ready to pay</span>
+      {% elif c.state == 'on hold' %}<span class="pt-badge amber">on hold until {{ when(c.payable_at) }}</span>
+      {% else %}<span class="pt-badge warn">cancelled{% if c.reversal_reason %} · {{ c.reversal_reason }}{% endif %}</span>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table></div>
+<p class="pt-dim" style="margin-top:var(--s2)">Before tax, on what the company actually paid. Each payment is held {{ partner.hold_days }} days in case it is refunded.</p>
+{% else %}
+<div class="pt-empty">Nothing earned yet. You earn when a company you brought makes a payment.</div>
+{% endif %}
+
+<h2 class="pt-h">Payments to you</h2>
+{% if payouts %}
+<div class="pt-scroll"><table class="pt">
+  <tr><th>Date</th><th class="num">Amount</th><th>How</th><th>Reference</th></tr>
+  {% for p in payouts %}
+  <tr><td>{{ when(p.paid_at) }}</td><td class="num">{{ money(p.amount_cents) }}</td><td>{{ p.method or '—' }}</td><td class="pt-dim">{{ p.reference or '—' }}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<div class="pt-empty">No payments yet. When money is ready to pay, we send it and record it here.</div>
+{% endif %}
+
+<p class="pt-dim" style="margin-top:var(--s8)">Questions? Reply to any email from us{% if SUPPORT_EMAIL %} or write to <a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>{% endif %}.</p>
+
+<script>
+(function () {
+  var base = {{ link|tojson }}, box = document.getElementById('pt-link'),
+      tag = document.getElementById('pt-tag'), btn = document.getElementById('pt-copy');
+  function current() {
+    var t = (tag.value || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    return t ? base + '?utm_campaign=' + t : base;
+  }
+  tag.addEventListener('input', function () { box.value = current(); });
+  btn.addEventListener('click', function () {
+    box.select();
+    var done = function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy link'; }, 1600); };
+    if (navigator.clipboard) { navigator.clipboard.writeText(box.value).then(done, function () { document.execCommand('copy'); done(); }); }
+    else { try { document.execCommand('copy'); done(); } catch (e) {} }
+  });
+})();
+</script>
+{% endblock %}

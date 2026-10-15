@@ -196,7 +196,7 @@ def progress():
 
     `activated` — has this business put its real world into the software? A
     cleaner they employ and a customer they clean for. That is the moment it
-    stops being a demo, and it is what starts the 14 days: somebody who has
+    stops being a demo, and it is what starts the 30 days: somebody who has
     entered a person and a customer has enough in front of them to judge the
     product, and somebody who has not, has not.
 

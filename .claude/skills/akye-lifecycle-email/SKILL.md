@@ -26,7 +26,7 @@ start a new module or a new cron for it.
 
 ## The facts emails must get right
 
-- The 14-day trial starts when the company has **one active cleaner and one
+- The 30-day trial starts when the company has **one active cleaner and one
   customer** (`onboarding.progress()['activated']`). Not "your first job", not
   "assign a job". Any email that states the rule must say this.
 - Before that, they have **30 days** to start (`billing.START_WITHIN_DAYS`).
@@ -93,7 +93,7 @@ Every email follows the same shape: **the pain, the fix, one small ask.**
 2. **Show the fix in Akye, concretely.** Name the feature by what it does
    for them that day.
 3. **Make the ask small.** "About two minutes," "one cleaner and one
-   customer." Remove the risk they are guarding against ("your 14 days do
+   customer." Remove the risk they are guarding against ("your 30 days do
    not start until you do").
 4. **Loss over gain, with real stakes only.** When a trial ends, list exactly
    what switches off (`LOSES` in `compose()`), from `entitlements.PLANS`.

@@ -254,7 +254,7 @@ with app.app_context():
           "and the list does not show another schema's errors as Charlie's")
     comms = get(helper, '/console/communications').data.decode()
     due = comms.split('Due today')[1].split('Every automated email')[0]
-    check(f'Ops Charlie {TAG}' in due and 'Your 14 days have not started' in due,
+    check(f'Ops Charlie {TAG}' in due and 'Your 30 days have not started' in due,
           'reopened, Charlie is due the day-7 email')
     check('Send owner emails now' not in due, 'a helper gets no send button')
     SENT.clear()

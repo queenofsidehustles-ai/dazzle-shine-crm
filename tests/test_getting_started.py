@@ -114,7 +114,7 @@ print('\n4. A job with nobody on it is not the finish line')
 #
 # `complete`, not `activated`. Those were one flag and are now two questions:
 # `activated` is "have they put their real world in here" — a cleaner and a
-# customer, which is what starts the 14-day trial — and `complete` is "is every
+# customer, which is what starts the 30-day trial — and `complete` is "is every
 # setup step done", which is what puts the getting-started card away. Using one
 # answer for both meant the trial clock only began after all six steps, while
 # the banner promised it began at the first assigned job.

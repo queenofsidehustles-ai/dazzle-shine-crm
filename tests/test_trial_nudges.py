@@ -71,7 +71,7 @@ def org(days_old=0, **kw):
 
 
 def running(days_in, **kw):
-    """A company that started its 14 days `days_in` days ago."""
+    """A company that started its 30 days `days_in` days ago."""
     began = NOW - timedelta(days=days_in)
     return org(days_old=days_in + 2, activated_at=began,
                trial_ends_at=began + timedelta(days=billing.TRIAL_DAYS), **kw)
@@ -107,7 +107,7 @@ print('\n3. Never the same email twice')
 # for this. The second copy of "9 days left" is what gets a domain marked spam.
 for kind, o in (('start_7', org(days_old=8, nudges_sent='start_7')),
                 ('start_21', org(days_old=22, nudges_sent='start_7,start_21')),
-                ('ending', running(12, nudges_sent='ending')),
+                ('ending', running(28, nudges_sent='ending')),
                 ('ended', org(days_old=31,
                               trial_ends_at=NOW - timedelta(days=1),
                               nudges_sent='ended'))):
@@ -116,14 +116,14 @@ for kind, o in (('start_7', org(days_old=8, nudges_sent='start_7')),
 
 print('\n4. Somebody who is actually using it')
 check(tn.due(running(1)) == 'activated',
-      'day 1 of 14 — the "now switched on" note, if the moment was missed')
+      'day 1 of 30 — the "now switched on" note, if the moment was missed')
 check(tn.due(running(1, nudges_sent='activated,day2')) is None,
       'and after that, leave them alone')
 check(tn.due(running(9)) is None, 'day 9 — still nothing')
-check(tn.due(running(11)) == 'ending', 'with 3 days left, the one about money')
-check(tn.due(running(13)) == 'ending', 'and on the last day if it was missed')
+check(tn.due(running(27)) == 'ending', 'with 3 days left of 30, the one about money')
+check(tn.due(running(29)) == 'ending', 'and on the last day if it was missed')
 # They engaged, so they never get the "you have not started" emails.
-check(tn.due(running(11))not in ('start_7', 'start_21'),
+check(tn.due(running(27))not in ('start_7', 'start_21'),
       'and never the ones about not having begun')
 
 
@@ -186,7 +186,7 @@ for kind in tn.ALL:
 _, ended = tn.compose(o, 'ended')
 check('nothing has been deleted' in ended.lower(), 'the lapse email says nothing was deleted')
 check('free plan' in ended.lower(), 'and names the plan they are on')
-_, ending = tn.compose(running(11), 'ending')
+_, ending = tn.compose(running(27), 'ending')
 check('Nothing is deleted' in ending or 'nothing is deleted' in ending.lower(),
       'so does the one before it')
 _, s7 = tn.compose(o, 'start_7')

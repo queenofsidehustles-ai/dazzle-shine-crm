@@ -198,6 +198,8 @@ def create_app():
     from blueprints.marketing import marketing_bp
     import blueprints.marketing as _marketing
     app.register_blueprint(marketing_bp)
+    from blueprints.partners import partners_bp
+    app.register_blueprint(partners_bp)
     _marketing.install(app)
     # Remember which link brought a visitor, so signup can say where each
     # company came from (tracking tags, referrals). Product site only.

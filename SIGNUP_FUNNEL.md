@@ -15,7 +15,7 @@ Akye, and every email along the way.
 4. **Soft banner** on the dashboard until the email is confirmed, with a way
    to fix a mistyped address (`/confirm-email`).
 5. **First week emails** push them to add one cleaner and one customer.
-6. **Activated** (one cleaner + one customer) starts the 14 days and sends a
+6. **Activated** (one cleaner + one customer) starts the 30 days and sends a
    note at that moment.
 7. **First online booking** sends a note at that moment.
 8. **Trial ending / ended / win-back** as below.
@@ -31,9 +31,9 @@ Akye, and every email along the way.
 | `day2` | day 2–4 | everyone on trial | the jobs you lose while you're cleaning |
 | `day4` | day 4–5 | not activated | what usually gets in the way |
 | `day5` | day 5–6 | not activated | your customer list is one lost phone from gone |
-| `start_7` | day 7–13 | not activated | your 14 days haven't started |
+| `start_7` | day 7–13 | not activated | your 30 days haven't started |
 | `start_21` | day 21–29 | not activated | X days left to start |
-| `activated` | at the moment, or within 3 days | just activated | your 14 days just started |
+| `activated` | at the moment, or within 3 days | just activated | your 30 days just started |
 | `first_booking` | at the moment | first online booking | somebody booked you |
 | `feature` | trial day 8–10 | a setup step still undone | before your trial ends, try this |
 | `ending` | 3 days left | running | X days left of everything |

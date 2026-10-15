@@ -111,7 +111,7 @@ check(tn.due(running(9, nudges_sent='activated,day2'), next_step=step) == 'featu
       'day 9 with a step undone — the feature note')
 check(tn.due(running(9, nudges_sent='activated,day2')) is None,
       'with nothing undone, nothing')
-check(tn.due(running(11, nudges_sent='activated,day2'), next_step=step) == 'ending',
+check(tn.due(running(27, nudges_sent='activated,day2'), next_step=step) == 'ending',
       'and never in competition with "3 days left"')
 subj, html = tn.compose(running(9), 'feature', step)
 check('Share your booking page' in html and '/settings/booking-page' in html,
@@ -312,7 +312,7 @@ client.post('/confirm-email', headers=COMPANY, data={'code': new_code})
 check(control_plane.find(engine, 'sparkle').get('email_confirmed_at'),
       'the new code does')
 
-print('\n14. The moment the 14 days start, a note — once')
+print('\n14. The moment the 30 days start, a note — once')
 SENT.clear()
 with app.app_context(), tenancy.use_tenant('sparkle'):
     from extensions import db
@@ -324,7 +324,7 @@ with app.app_context(), tenancy.use_tenant('sparkle'):
 client.get('/', headers=COMPANY, follow_redirects=True)
 client.get('/', headers=COMPANY, follow_redirects=True)
 got = [m for m in SENT if 'just started' in m['subject']]
-check(len(got) == 1, 'the "your 14 days just started" email, sent when it happened')
+check(len(got) == 1, 'the "your 30 days just started" email, sent when it happened')
 check('activated' in (control_plane.find(engine, 'sparkle').get('nudges_sent') or ''),
       'and recorded, so it is never sent again')
 

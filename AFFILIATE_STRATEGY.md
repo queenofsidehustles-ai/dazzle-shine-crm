@@ -175,6 +175,29 @@ affiliate with 20+ signups and under 10% activation.
 
 ## 7. Implementation (what to build, in order)
 
+### Built so far (October 2026)
+
+| Step | Status | Where |
+|---|---|---|
+| A. Data model | **Built** | `control_plane.py`: `affiliates`, `affiliate_logins`, `affiliate_clicks`, `affiliate_commissions`, `affiliate_payouts`, plus `organizations.affiliate_code` |
+| B. Attribution | **Built** | `attribution.py` (`aff` field, `?aff=`), `/p/<code>` in `blueprints/marketing.py`, `control_plane._signup_attribution` |
+| C. Accrue and reverse | **Built** | `billing.apply_event` (`invoice.paid`, `charge.refunded`), `affiliates.accrue` / `reverse` |
+| D. Payout | **Recorded by hand** | `affiliates.record_payout` writes the payout down. It does not move money; the Stripe Connect transfer is still to do. |
+| E. Console | **Built** | `/console/affiliates` (add, status, sign-in link, payout, reverse) |
+| F. Partner page | **Built** | `/partners` (`blueprints/partners.py`, `templates/partners/`) |
+| G. Terms and apply page | Not built | |
+| H. Customer referral credit | Not built | |
+
+Decisions made while building:
+
+- **Partner codes use `/p/<code>` and their own cookie field**, not `/r/`. A company address and a partner code can then never collide.
+- **A partner outranks a customer referral** as the Funnel channel, because only the partner earns commission. Both are still recorded.
+- **Credit is dropped** for an inactive partner, an unknown code, or a signup using the partner's own email.
+- **The Stripe webhook must send `charge.refunded`** as well as the invoice events, or refunds will not reverse a commission. Disputes are not handled automatically: reverse by hand in the console.
+- **Commission is on the invoice total before tax**, and a partial refund is left for a person.
+
+### Original plan
+
 Everything runs in the control plane (public schema), consistent with the rule in
 `entitlements.py` that billing state lives where a tenant cannot write to it.
 
@@ -290,7 +313,7 @@ at a commission cost lower than the other channels cost per customer.
 | Tax and legal | W-9 before payout, 1099-NEC, lawyer review of terms, FTC disclosure. |
 | Margin shrinks as SMS and Nana usage grows | Rate set on measured margin; grandfather the promised 12 months. |
 | Channel conflict with the Lead Specialist program | Separate agreements; Lead Specialists sell Dazzle & Shine cleaning, affiliates promote the Akye product. Make that explicit in both. |
-| **Trial length is inconsistent in code** | `entitlements.TRIAL_DAYS` and `billing.TRIAL_DAYS` are 14, but `control_plane.create` sets `trial_ends_at = now + 30 days` on a `scale` plan. Affiliate copy must state one number. Decide which is right before any partner is told "14-day trial". |
+| ~~Trial length inconsistent~~ | **Resolved.** The trial is now 30 days everywhere (`billing.TRIAL_DAYS`, `entitlements.TRIAL_DAYS`, emails, banner, tests), matching the Scale plan trial. Note the earlier reading was only half right: the code had a 30-day *start-by* window and a 14-day trial after activation. Both are now 30. |
 | Signups can be shut (`SIGNUPS_OPEN=0`) during hand onboarding | Affiliate links land on early access; confirm the cookie survives the early-access form, and tell affiliates the current state. |
 
 ---
@@ -298,7 +321,7 @@ at a commission cost lower than the other channels cost per customer.
 ## 11. First ten actions
 
 1. Decide the rate (30% for 12 months) and the hold (30 days). Write them in two lines.
-2. Resolve the 14 versus 30 day trial discrepancy and update every place the number appears.
+2. ~~Resolve the 14 versus 30 day trial discrepancy.~~ Done: 30 days everywhere.
 3. Draft the one-page affiliate terms and the disclosure rules; book a lawyer review.
 4. List 20 candidate affiliates from your own research (coaches, group admins, bookkeepers, VAs), ranked by audience fit.
 5. Verify the early-access and abandoned-signup paths store attribution from the cookie.

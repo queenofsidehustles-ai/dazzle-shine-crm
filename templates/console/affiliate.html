@@ -1,0 +1,82 @@
+{% extends "console/_shell.html" %}
+{% block title %}{{ partner.name }}{% endblock %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+{% include "console/_funnel_tabs.html" %}
+<p style="margin:0 0 var(--s3)"><a href="{{ url_for('console.affiliates_view') }}">&larr; All partners</a></p>
+<h2 style="margin:0 0 var(--s1)">{{ partner.name }} <span class="ops-badge {{ 'ops-ok' if partner.status == 'active' else ('ops-stale' if partner.status in ('pending', 'paused') else 'ops-closed') }}">{{ partner.status }}</span></h2>
+<p class="ops-dim" style="margin:0 0 var(--s4)">{{ partner.email }} · <code>{{ link }}</code> · {{ partner.commission_bps / 100 }}% for {{ partner.commission_months }} months, held {{ partner.hold_days }} days{% if partner.last_login_at %} · last signed in {{ partner.last_login_at.strftime('%d %b %Y') }}{% endif %}{% if partner.notes %}<br>{{ partner.notes }}{% endif %}</p>
+
+{% if may_operate %}
+<div class="ops-actions" style="margin-bottom:var(--s5)">
+  <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='status') }}">
+    <select name="status" aria-label="Status">
+      {% for s in ['pending', 'active', 'paused', 'ended'] %}<option value="{{ s }}" {{ 'selected' if s == partner.status }}>{{ s }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-outline btn-sm" type="submit">Set status</button>
+  </form>
+  <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='link') }}">
+    <button class="btn btn-outline btn-sm" type="submit">Email them a sign-in link</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="ops-grid">
+  <div class="ops-card"><span class="ops-dim">Ready to pay</span><span class="v">{{ money(payable_cents) }}</span></div>
+  <div class="ops-card"><span class="ops-dim">On hold</span><span class="v">{{ money(pending_cents) }}</span></div>
+  <div class="ops-card"><span class="ops-dim">Paid</span><span class="v">{{ money(paid_cents) }}</span></div>
+  <div class="ops-card"><span class="ops-dim">Reversed</span><span class="v">{{ money(reversed_cents) }}</span></div>
+  <div class="ops-card"><span class="ops-dim">Clicks / signed up / paying</span><span class="v">{{ clicks_total }} / {{ signed_up }} / {{ paying }}</span></div>
+</div>
+
+{% if may_operate and payable_cents %}
+<div class="ops-card" style="margin-bottom:var(--s5)">
+  <h3 style="font-size:var(--t-sm);margin:0 0 var(--s3)">Record a payout of {{ money(payable_cents) }}</h3>
+  <p class="ops-dim" style="margin:0 0 var(--s3)">This writes the payout down and marks the ready commissions paid. It does not send money: send it first, then record it.</p>
+  <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='payout') }}" class="ops-form">
+    <label>How <select name="method"><option value="transfer">Bank / Stripe transfer</option><option value="paypal">PayPal</option><option value="check">Check</option><option value="other">Other</option></select></label>
+    <label>Reference <input type="text" name="reference" maxlength="120" placeholder="Transfer id, check number"></label>
+    <label>Note <input type="text" name="note" maxlength="300"></label>
+    <div><button class="btn btn-sm" type="submit">Record payout</button></div>
+  </form>
+</div>
+{% endif %}
+
+<h3 class="ops-h">Companies</h3>
+{% if companies %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Company</th><th>Signed up</th><th>Stage</th><th>Tag</th><th>Earned</th></tr>
+  {% for c in companies %}<tr><td>{{ c.name }}</td><td>{{ c.signed_up.strftime('%d %b %Y') if c.signed_up }}</td><td>{{ c.stage }}</td><td class="ops-dim">{{ c.campaign or '—' }}</td><td>{{ money(c.earned_cents) }}</td></tr>{% endfor %}
+</table></div>
+{% else %}<div class="con-empty">None yet.</div>{% endif %}
+
+<h3 class="ops-h">Commissions</h3>
+{% if ledger %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Paid on</th><th>Company</th><th>Invoice</th><th>Base</th><th>Share</th><th>State</th><th></th></tr>
+  {% for c in ledger %}
+  <tr>
+    <td>{{ c.invoice_paid_at.strftime('%d %b %Y') if c.invoice_paid_at }}</td>
+    <td>{{ c.company }}</td>
+    <td class="ops-dim">{{ c.stripe_invoice_id }}</td>
+    <td>{{ money(c.amount_cents) }}</td>
+    <td>{{ money(c.commission_cents) }} <span class="ops-dim">({{ c.rate_bps / 100 }}%)</span></td>
+    <td>{{ c.state }}{% if c.state == 'on hold' %} <span class="ops-dim">until {{ c.payable_at.strftime('%d %b') }}</span>{% endif %}{% if c.reversal_reason %} <span class="ops-dim">· {{ c.reversal_reason }}</span>{% endif %}</td>
+    <td>{% if may_operate and c.status != 'reversed' %}
+      <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='reverse') }}" onsubmit="return confirm('Reverse this commission?')">
+        <input type="hidden" name="invoice" value="{{ c.stripe_invoice_id }}"><input type="hidden" name="reason" value="refunded or charged back">
+        <button class="btn btn-outline btn-sm" type="submit">Reverse</button>
+      </form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="con-empty">Nothing earned yet.</div>{% endif %}
+
+<h3 class="ops-h">Payouts</h3>
+{% if payouts %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Date</th><th>Amount</th><th>How</th><th>Reference</th><th>By</th></tr>
+  {% for p in payouts %}<tr><td>{{ p.paid_at.strftime('%d %b %Y') if p.paid_at }}</td><td>{{ money(p.amount_cents) }}</td><td>{{ p.method or '—' }}</td><td class="ops-dim">{{ p.reference or '—' }}</td><td class="ops-dim">{{ p.created_by or '—' }}</td></tr>{% endfor %}
+</table></div>
+{% else %}<div class="con-empty">None yet.</div>{% endif %}
+{% endblock %}

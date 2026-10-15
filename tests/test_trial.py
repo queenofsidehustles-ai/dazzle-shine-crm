@@ -7,7 +7,7 @@ what it is not being shown.
 
 Two clocks, because one is not honest:
 
-  * **14 days from the first job assigned.** A fortnight measured from signup
+  * **30 days from the first cleaner and customer.** A month measured from signup
     is a trial a busy company can lose without ever having used the product —
     and then they are owed an apology and a manual extension, which is a
     conversation worth designing out.
@@ -66,7 +66,7 @@ check(billing.plan_for(new) == 'scale',
       f'a company on day one may use the top plan ({billing.plan_for(new)})')
 
 
-print('\n2. The 14 days have not started yet')
+print('\n2. The 30 days have not started yet')
 st = billing.trial_state(new)
 check(st is not None, 'there is a trial in play')
 check(st['phase'] == 'not_started', f"phase is {st['phase']}")
@@ -76,23 +76,23 @@ check(29 <= st['days_left'] <= 30,
 
 
 print('\n3. Assigning a job starts the real clock')
-started = org(activated_at=NOW, trial_ends_at=NOW + timedelta(days=14))
+started = org(activated_at=NOW, trial_ends_at=NOW + timedelta(days=30))
 st = billing.trial_state(started)
 check(st['phase'] == 'running', f"phase is {st['phase']}")
-check(13 <= st['days_left'] <= 14, f"14 days from that moment ({st['days_left']})")
+check(29 <= st['days_left'] <= 30, f"30 days from that moment ({st['days_left']})")
 check(billing.plan_for(started) == 'scale', 'still everything while it runs')
 
 
-print('\n4. Somebody who starts late still gets their full fortnight')
+print('\n4. Somebody who starts late still gets their full month')
 # They engaged on day 29. Cutting them off on day 30 would punish exactly the
 # person the second clock exists to be fair to.
 late = org(created_at=NOW - timedelta(days=29),
            activated_at=NOW,
-           trial_ends_at=NOW + timedelta(days=14))
+           trial_ends_at=NOW + timedelta(days=30))
 st = billing.trial_state(late)
 check(st['phase'] == 'running', 'their trial is running')
-check(13 <= st['days_left'] <= 14,
-      f'with the whole fortnight, not one day ({st["days_left"]})')
+check(29 <= st['days_left'] <= 30,
+      f'with the whole month, not one day ({st["days_left"]})')
 
 
 print('\n5. Somebody who never starts runs out anyway')

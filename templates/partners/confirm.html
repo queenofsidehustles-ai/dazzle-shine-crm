@@ -1,0 +1,11 @@
+{% extends "partners/_shell.html" %}
+{% block title %}Sign in{% endblock %}
+{% block body %}
+<div style="max-width:380px;margin:12vh auto;text-align:center">
+  <h1 style="font-size:1.35rem;margin-bottom:var(--s3)">Open your partner page</h1>
+  <p style="color:var(--muted);font-size:var(--t-sm);margin-bottom:var(--s5)">One click and you are in.</p>
+  <form method="post" action="{{ url_for('partners.confirm', token=token) }}">
+    <button type="submit" class="btn btn-primary" style="width:100%">Yes, sign me in</button>
+  </form>
+</div>
+{% endblock %}
