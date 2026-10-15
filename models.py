@@ -1124,6 +1124,19 @@ class CommercialQuote(db.Model):
     # set by accepting. Accepting links by this key (or the lead's), never by
     # matching a company name or an email address.
     account_id = db.Column(db.Integer, index=True)
+    # An amendment: the accepted quote it changes, and that quote's agreement
+    # (NULL for one accepted before agreements were recorded). Once accepted,
+    # this replaces them; they are kept exactly as they were. At most one
+    # accepted amendment per quote -- a partial unique index, below -- so an
+    # account's terms never fork. Migration 0030.
+    amends_quote_id = db.Column(db.Integer, index=True)
+    amends_agreement_id = db.Column(db.Integer, index=True)
+
+    __table_args__ = (
+        db.Index('uq_commercial_quote_one_accepted_amendment', 'amends_quote_id', unique=True,
+                 postgresql_where=sa.text("status = 'accepted'"),
+                 sqlite_where=sa.text("status = 'accepted'")),
+    )
 
     EDITABLE = ('draft',)
     ANSWERABLE = ('sent',)
@@ -1201,11 +1214,73 @@ class QuoteResponse(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
+class CommercialAgreement(db.Model):
+    """What an acceptance made binding: the accepted revision, the customer's
+    answer, and the account it applies to, from the day it was accepted. An
+    amendment is a later agreement naming the one it replaces; nothing about
+    the replaced one changes, so "what was agreed on 3 March" always has an
+    answer. Written once (see _evidence_is_permanent)."""
+    __tablename__ = 'commercial_agreement'
+    id = db.Column(db.Integer, primary_key=True)
+    quote_id = db.Column(db.Integer, db.ForeignKey('commercial_quote.id'), nullable=False, unique=True)
+    revision_id = db.Column(db.Integer, db.ForeignKey('commercial_quote_revision.id'), nullable=False)
+    response_id = db.Column(db.Integer, db.ForeignKey('commercial_quote_response.id'), nullable=False, unique=True)
+    account_id = db.Column(db.Integer, index=True)
+    content_hash = db.Column(db.String(64), nullable=False)
+    effective_on = db.Column(db.Date, nullable=False)
+    # Unique: an agreement is replaced at most once, so terms never fork.
+    amends_agreement_id = db.Column(db.Integer, db.ForeignKey('commercial_agreement.id'), unique=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EmailDeliveryEvent(db.Model):
+    """What the mail service later said about a message we sent: delivered,
+    bounced, marked as spam, delayed -- and for which recipient. Keyed by the
+    provider's message id, not by any row of ours, so an event that arrives
+    before the send that caused it has finished saving is still kept (see
+    delivery_events.py). One row per provider event: a webhook delivered twice
+    is recorded once."""
+    __tablename__ = 'email_delivery_event'
+    id = db.Column(db.Integer, primary_key=True)
+    provider_message_id = db.Column(db.String(100), nullable=False, index=True)
+    recipient = db.Column(db.String(200))
+    event = db.Column(db.String(30), nullable=False)    # delivered | bounced | complained | delivery_delayed
+    provider_event_id = db.Column(db.String(100), unique=True)
+    occurred_at = db.Column(db.DateTime)
+    detail = db.Column(db.String(400))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    LABELS = {'delivered': 'Delivered', 'bounced': 'Bounced', 'complained': 'Marked as spam',
+              'delivery_delayed': 'Delayed'}
+
+    LABELS = {'delivered': 'Delivered', 'bounced': 'Bounced', 'complained': 'Marked as spam',
+              'delivery_delayed': 'Delayed'}
+
+
+class ContractAuditEvent(db.Model):
+    """One thing that happened to a quote or agreement: who (a login, the
+    customer, the mail service), what, when, from where, with which request.
+    Appended in the same transaction as the change it describes, so the trail
+    and the record cannot disagree; never edited (see contract_audit.py)."""
+    __tablename__ = 'contract_audit_event'
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    event = db.Column(db.String(40), nullable=False)
+    quote_id = db.Column(db.Integer, index=True)
+    revision_id = db.Column(db.Integer)
+    agreement_id = db.Column(db.Integer, index=True)
+    actor_kind = db.Column(db.String(20), nullable=False)   # staff | customer | provider | system
+    actor = db.Column(db.String(200))
+    ip_address = db.Column(db.String(64))
+    request_id = db.Column(db.String(36), index=True)
+    detail = db.Column(db.Text)                             # JSON
+
+
 def _evidence_is_permanent(mapper, connection, target):
     raise ValueError(f'{target.__tablename__} rows are evidence: written once, never changed or deleted.')
 
 
-for _model in (QuoteRevision, QuoteResponse):
+for _model in (QuoteRevision, QuoteResponse, CommercialAgreement, EmailDeliveryEvent, ContractAuditEvent):
     sa.event.listen(_model, 'before_update', _evidence_is_permanent)
     sa.event.listen(_model, 'before_delete', _evidence_is_permanent)
 sa.event.listen(QuoteDelivery, 'before_delete', _evidence_is_permanent)

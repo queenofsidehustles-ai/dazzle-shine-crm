@@ -47,6 +47,21 @@
   </form>
 </div>
 
+{% if agreements %}
+<div class="card" id="accountAgreements" style="margin-top:18px">
+  <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);margin:0 0 10px">Signed agreements</h3>
+  {% for ag, terms, signer, replaced in agreements %}
+  <p style="font-size:0.88rem;line-height:1.55;margin:0 0 10px">
+    {% if not replaced %}<span class="status status-completed">in force</span>{% else %}<span class="status status-cancelled">replaced</span>{% endif %}
+    <strong>Agreement #{{ ag.id }}</strong> from {{ ag.effective_on.strftime('%b %d, %Y') }}{% if terms and terms.monthly_price %} — ${{ '{:,.2f}'.format(terms.monthly_price|float) }}/mo{% endif %}{% if signer %}, signed by {{ signer }}{% endif %}
+    · <a href="{{ url_for('quotes.review', quote_id=ag.quote_id) }}">quote #{{ ag.quote_id }}</a>
+    {% if ag.amends_agreement_id %}<br><span style="color:var(--softer)">Amends agreement #{{ ag.amends_agreement_id }}.</span>{% endif %}
+    {% if replaced %}<br><span style="color:var(--softer)">Replaced by agreement #{{ replaced.id }} from {{ replaced.effective_on.strftime('%b %d, %Y') }}.</span>{% endif %}
+  </p>
+  {% endfor %}
+</div>
+{% endif %}
+
 <!-- Commission / first-invoice status -->
 <div class="card" style="margin-top:18px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
   <div style="font-size:0.9rem">

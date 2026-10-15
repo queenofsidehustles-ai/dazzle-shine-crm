@@ -303,6 +303,21 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
 </div>"""
 
 
+def _tenant_tags():
+    """Resend tags naming the company schema a message was sent from, so what
+    the provider later reports about it (delivered, bounced -- see
+    delivery_events.py) is filed in that company's records. Read from the
+    active tenancy, not the request: a scheduled job or a command run for one
+    company sends inside use_tenant() with no request at all. None for the
+    platform's own mail, which the webhook files under public."""
+    import re
+    import tenancy
+    schema = tenancy.current_schema()
+    if not tenancy.is_tenant() or not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', schema or ''):
+        return []
+    return [{'name': 'tenant', 'value': schema}]
+
+
 def send_email(to_email, to_name, subject, html, from_name=None,
                from_email=None, reply_to=None, api_key=None, cc=None):
     """Send via Resend. Returns (ok: bool, detail: str) so callers/diagnostics
@@ -349,6 +364,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     cc = (cc or '').strip()
     if not looks_like_email(cc) or cc.lower() == (to_email or '').strip().lower():
         cc = ''
+    tags = _tenant_tags()
     try:
         resp = http_requests.post(
             'https://api.resend.com/emails',
@@ -363,6 +379,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
                 'subject': subject,
                 'html': html,
                 **({'cc': [cc]} if cc else {}),
+                **({'tags': tags} if tags else {}),
             },
             timeout=10,
         )

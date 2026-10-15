@@ -83,6 +83,12 @@
       {% else %}
       <p style="font-size:0.86rem;margin:0">This quote was {{ q.status }}{% if q.responded_at %} on {{ q.responded_at.strftime('%b %d') }}{% elif q.withdrawn_at %} on {{ q.withdrawn_at.strftime('%b %d') }}{% endif %}.</p>
       {% endif %}
+      {% if q.status == 'accepted' and not evidence.replaced_by %}
+      <form method="POST" action="{{ url_for('quotes.amend', quote_id=q.id) }}" style="margin-top:10px">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:10px">✎ Amend this agreement</button>
+      </form>
+      <p style="font-size:0.78rem;color:var(--softer);margin:6px 0 0;line-height:1.5">A new proposal starting from these terms. This agreement stays in force, unchanged, until they accept the amendment.</p>
+      {% endif %}
       {% if q.status in ('sent', 'declined', 'withdrawn') %}
       <form method="POST" action="{{ url_for('quotes.revise', quote_id=q.id) }}" style="margin-top:10px"
             {% if q.status == 'sent' %}onsubmit="return confirm('Revise this proposal? The version they have is withdrawn — its link stops accepting — and a new draft opens with the same terms.')"{% endif %}>
@@ -91,11 +97,20 @@
       {% endif %}
     </div>
 
-    {% if evidence.revisions or evidence.deliveries %}
+    {% if evidence.revisions or evidence.deliveries or evidence.amends or evidence.replaced_by %}
     <div class="card" id="quoteEvidence">
       <h3>Proposal record {{ tip('quote.evidence') }}</h3>
-      {% if evidence.revised_from %}
+      {% if evidence.amends %}
+      <p class="rv-ev">✎ Amends the agreement accepted on <a href="{{ url_for('quotes.review', quote_id=evidence.amends.id) }}">quote #{{ evidence.amends.id }}</a>{% if q.amends_agreement_id %} (agreement #{{ q.amends_agreement_id }}){% endif %} — that agreement stays in force until this one is accepted.</p>
+      {% elif evidence.revised_from %}
       <p class="rv-ev">Revises <a href="{{ url_for('quotes.review', quote_id=evidence.revised_from.id) }}">quote #{{ evidence.revised_from.id }}</a>.</p>
+      {% endif %}
+      {% set ag = evidence.agreement %}
+      {% if ag %}
+      <p class="rv-ev" id="quoteAgreement">📜 <strong>Agreement #{{ ag.id }}</strong>, in force from {{ ag.effective_on.strftime('%b %d, %Y') }}{% if ag.amends_agreement_id %} — replaces agreement #{{ ag.amends_agreement_id }}{% endif %}
+        {% if evidence.superseded_by %}<br><span class="muted">Replaced by agreement #{{ evidence.superseded_by.id }} (<a href="{{ url_for('quotes.review', quote_id=evidence.superseded_by.quote_id) }}">quote #{{ evidence.superseded_by.quote_id }}</a>) from {{ evidence.superseded_by.effective_on.strftime('%b %d, %Y') }}. Kept as it was.</span>{% endif %}</p>
+      {% elif evidence.replaced_by %}
+      <p class="rv-ev" id="quoteAgreement">📜 Replaced by the amendment accepted on <a href="{{ url_for('quotes.review', quote_id=evidence.replaced_by.id) }}">quote #{{ evidence.replaced_by.id }}</a>{% if evidence.replaced_by.responded_at %} on {{ evidence.replaced_by.responded_at.strftime('%b %d, %Y') }}{% endif %}. Kept as it was.</p>
       {% endif %}
       {% set r = evidence.response %}
       {% if r %}
@@ -110,10 +125,24 @@
         <br><span class="muted">Frozen {{ v.created_at.strftime('%b %d, %Y %H:%M') }} UTC{% if v.created_by %} by {{ v.created_by }}{% endif %}{% if v.origin == 'backfill' %} — sent before versions were kept; frozen as it stood then{% endif %}</span></p>
       {% endfor %}
       {% for d in evidence.deliveries %}
+      {% set evs = evidence.delivery_events.get(d.id, []) %}
       <p class="rv-ev">{{ '📨' if d.status == 'accepted_by_provider' else '⚠️' }} {{ d.created_at.strftime('%b %d %H:%M') }} UTC to {{ d.recipient }}
-        <br><span class="muted">{% if d.status == 'accepted_by_provider' %}Taken by the mail service{% if d.provider_message_id %} (id <code>{{ d.provider_message_id }}</code>){% endif %} — not proof it arrived{% else %}Not sent: {{ d.detail }}{% endif %}</span></p>
+        <br><span class="muted">{% if d.status == 'accepted_by_provider' %}Taken by the mail service{% if d.provider_message_id %} (id <code>{{ d.provider_message_id }}</code>){% endif %}{% if not evs %} — not proof it arrived{% endif %}{% else %}Not sent: {{ d.detail }}{% endif %}</span>
+        {% for e in evs %}<br>{{ '✅' if e.event == 'delivered' else ('⏳' if e.event == 'delivery_delayed' else '⛔') }} {{ evidence.event_labels.get(e.event, e.event) }}{% if e.occurred_at %} {{ e.occurred_at.strftime('%b %d %H:%M') }} UTC{% endif %}{% if e.event != 'delivered' and e.detail %} <span class="muted">— {{ e.detail }}</span>{% endif %}{% endfor %}</p>
       {% endfor %}
       {% if q.viewed_at %}<p class="rv-ev muted">First opened {{ q.viewed_at.strftime('%b %d, %Y %H:%M') }} UTC.</p>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if evidence.trail %}
+    <div class="card" id="quoteTrail">
+      <details>
+        <summary><h3 style="display:inline">History ({{ evidence.trail|length }})</h3></summary>
+        {% for e, d in evidence.trail %}
+        <p class="rv-ev"><strong>{{ evidence.trail_labels.get(e.event, e.event) }}</strong>{% if e.event == 'answer_refused' and d.reason %} — {{ d.reason|replace('_', ' ') }}{% endif %}
+          <br><span class="muted">{{ e.created_at.strftime('%b %d, %Y %H:%M:%S') }} UTC · {{ e.actor or e.actor_kind }}{% if e.ip_address %} · {{ e.ip_address }}{% endif %}</span></p>
+        {% endfor %}
+      </details>
     </div>
     {% endif %}
 

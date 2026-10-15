@@ -3,11 +3,13 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from entitlements import requires_plan
 from auth import owner_required
-from models import CommercialQuote, CommercialAccount, Prospect, QuoteDelivery, QuoteResponse
+from models import (CommercialQuote, CommercialAccount, CommercialAgreement, Prospect,
+                    QuoteDelivery, QuoteResponse)
 from extensions import db
 from notifications import send_email
 import brands
 import branding
+import contract_audit as audit
 import quote_evidence
 
 quotes_bp = Blueprint('quotes', __name__, url_prefix='/quotes')
@@ -263,6 +265,8 @@ def new():
             lead.email = lead.email or q.email or None
             lead.phone = lead.phone or q.phone or None
         db.session.add(q)
+        db.session.flush()
+        audit.record('created', q, lead_id=q.prospect_id)
         db.session.commit()
         flash('Draft saved — nothing has been sent. Review it, then press Send when it is ready.', 'success')
         if request.form.get('next') == 'review':
@@ -465,6 +469,7 @@ def detail(quote_id):
             flash(_lock_message(q), 'error')
             return redirect(url_for('quotes.detail', quote_id=quote_id))
         _apply_form(q)
+        audit.record('draft_saved', q)
         db.session.commit()
         flash('Draft saved — nothing has been sent.' if q.status == 'draft' else 'Quote updated.', 'success')
         return redirect(url_for('quotes.detail', quote_id=quote_id))
@@ -674,6 +679,7 @@ def review(quote_id):
                 flash(_lock_message(q), 'error')
             else:
                 _apply_form(q)
+                audit.record('draft_saved', q)
                 db.session.commit()
         return redirect(url_for('quotes.review', quote_id=q.id))
     # Once sent, the review is of the frozen copy -- what the customer has.
@@ -707,14 +713,25 @@ def _evidence(q):
     from models import QuoteRevision
     revisions = QuoteRevision.query.filter_by(quote_id=q.id).order_by(QuoteRevision.number).all()
     response = QuoteResponse.query.filter_by(quote_id=q.id).first()
+    from models import EmailDeliveryEvent
+    import delivery_events
+    deliveries = (QuoteDelivery.query.filter_by(quote_id=q.id)
+                  .order_by(QuoteDelivery.created_at.desc()).all())
+    events = {d.id: delivery_events.for_message(d.provider_message_id, d.recipient) for d in deliveries}
+    agreement = CommercialAgreement.query.filter_by(quote_id=q.id).first()
+    amends = CommercialQuote.query.get(q.amends_quote_id) if q.amends_quote_id else None
+    replaced_by = _replaced_by(q)
+    superseded_by = (CommercialAgreement.query.filter_by(quote_id=replaced_by.id).first()
+                     if replaced_by else None)
     return dict(
         revisions=revisions, intact={r.id: quote_evidence.intact(r) for r in revisions},
         issued_id=q.issued_revision_id, response=response,
         response_matches=bool(response and any(r.id == response.revision_id
                                                and r.content_hash == response.content_hash
                                                for r in revisions)),
-        deliveries=(QuoteDelivery.query.filter_by(quote_id=q.id)
-                    .order_by(QuoteDelivery.created_at.desc()).all()),
+        deliveries=deliveries, delivery_events=events, event_labels=EmailDeliveryEvent.LABELS,
+        agreement=agreement, amends=amends, replaced_by=replaced_by, superseded_by=superseded_by,
+        trail=audit.trail(q.id), trail_labels=audit.LABELS,
         account=CommercialAccount.query.get(q.account_id) if q.account_id else None,
         revised_from=CommercialQuote.query.get(q.revised_from_id) if q.revised_from_id else None)
 
@@ -841,17 +858,26 @@ def send_quote(quote_id):
         subject=subject,
         html=html, from_name=from_name, from_email=from_email, reply_to=reply_to,
     )
-    db.session.add(QuoteDelivery(
+    delivery = QuoteDelivery(
         quote_id=q.id, revision_id=rev.id, channel='email', recipient=shown.email,
         provider='resend', provider_message_id=quote_evidence.provider_message_id(detail),
-        status='accepted_by_provider' if ok else 'failed', detail=(detail or '')[:400], sent_by=by))
+        status='accepted_by_provider' if ok else 'failed', detail=(detail or '')[:400], sent_by=by)
+    db.session.add(delivery)
+    db.session.flush()
     if not ok:
         if first_send:
             q.expires_at = None      # still a draft: nothing was offered
+        audit.record('send_failed', q, rev, delivery_id=delivery.id, recipient=shown.email,
+                     reason=(detail or '')[:200])
         db.session.commit()          # the draft's edits, and the failed attempt, are kept
         flash(f"Quote could NOT be emailed to {q.email}. {detail}", 'error')
         return redirect(url_for('quotes.detail', quote_id=q.id))
 
+    audit.record('sent' if first_send else 'resent', q, rev, delivery_id=delivery.id,
+                 recipient=shown.email, provider_message_id=delivery.provider_message_id,
+                 content_hash=rev.content_hash, expires_at=shown.expires_at)
+    import delivery_events
+    delivery_events.audit_early(delivery)
     q.status = 'sent'
     q.issued_revision_id = rev.id
     q.sent_at = now
@@ -904,6 +930,7 @@ def delete(quote_id):
         flash(f'This quote was {q.status}, so it is kept as a record of what was offered.'
               + (' Withdraw it if it should no longer be accepted.' if q.status == 'sent' else ''), 'error')
         return redirect(url_for('quotes.detail', quote_id=q.id))
+    audit.record('draft_deleted', quote_id)
     db.session.commit()
     flash('Draft deleted.', 'success')
     return redirect(url_for('quotes.index'))
@@ -931,6 +958,7 @@ def withdraw(quote_id):
         q = CommercialQuote.query.get_or_404(quote_id)
         flash(f'Not withdrawn — this quote is {q.status}.', 'error')
         return redirect(url_for('quotes.detail', quote_id=quote_id))
+    audit.record('withdrawn', q, q.issued_revision_id)
     db.session.commit()
     flash('Withdrawn — the customer\'s link now says this proposal is no longer open.', 'success')
     return redirect(url_for('quotes.detail', quote_id=quote_id))
@@ -965,8 +993,13 @@ def revise(quote_id):
         show_line_prices=src.show_line_prices, first_visit_premium=src.first_visit_premium,
         price_per_visit=src.price_per_visit, monthly_price=src.monthly_price,
         revised_from_id=src.id, account_id=src.account_id, valid_days=src.valid_days,
+        amends_quote_id=src.amends_quote_id, amends_agreement_id=src.amends_agreement_id,
     )
     db.session.add(q)
+    db.session.flush()
+    audit.record('revised', src, src.issued_revision_id, new_quote_id=q.id,
+                 withdrew=src.withdrawn_at == now or None)
+    audit.record('created', q, revised_from=src.id)
     db.session.commit()
     flash('A new draft with the same terms — change what needs changing, then send it. '
           + ('The version they had is withdrawn.' if src.status == 'withdrawn' else ''), 'success')
@@ -1014,8 +1047,54 @@ def duplicate(quote_id):
             q.line_items = json.dumps(priced)
             q.price_per_visit = priced['per_visit']
             q.monthly_price = priced['monthly']
+    audit.record('created', q, duplicated_from=src.id)
     db.session.commit()
     flash(f'Duplicated as a new draft for {q.company} — priced at today\'s rates.', 'success')
+    return redirect(url_for('quotes.detail', quote_id=q.id))
+
+
+@quotes_bp.route('/<int:quote_id>/amend', methods=['POST'])
+@owner_required
+def amend(quote_id):
+    """Change an agreement the customer has signed: a new draft starting from
+    exactly the terms they accepted (as frozen, not re-priced), sent and
+    accepted like any proposal. Once accepted it becomes the account's
+    agreement and names the one it replaces; the original quote, its answer
+    and its agreement stay exactly as they were. One amendment open at a
+    time, so an account's terms can't fork."""
+    src = CommercialQuote.query.get_or_404(quote_id)
+    if src.status != 'accepted':
+        flash('Only an accepted quote is amended — revise or duplicate this one instead.', 'error')
+        return redirect(url_for('quotes.detail', quote_id=src.id))
+    agreement = CommercialAgreement.query.filter_by(quote_id=src.id).first()
+    if _replaced_by(src):
+        flash('This agreement has already been replaced by an amendment — amend the latest one.', 'error')
+        return redirect(url_for('quotes.review', quote_id=src.id))
+    open_one = (CommercialQuote.query.filter(CommercialQuote.amends_quote_id == src.id,
+                                             CommercialQuote.status.in_(('draft', 'sent'))).first())
+    if open_one:
+        flash('An amendment to this agreement is already open — finish or withdraw that one first.', 'error')
+        return redirect(url_for('quotes.detail', quote_id=open_one.id))
+    base = quote_evidence.as_issued(src)      # the terms as accepted
+    q = CommercialQuote(
+        company=base.company, contact_name=base.contact_name, email=base.email,
+        phone=base.phone, property_type=base.property_type,
+        property_address=base.property_address, units=base.units, sqft=base.sqft,
+        services=base.services, frequency=base.frequency, contract_term=base.contract_term,
+        scope_notes=base.scope_notes, token=secrets.token_urlsafe(32), status='draft',
+        brand=base.brand, prospect_id=src.prospect_id, line_items=base.line_items,
+        show_line_prices=base.show_line_prices, first_visit_premium=base.first_visit_premium,
+        price_per_visit=base.price_per_visit, monthly_price=base.monthly_price,
+        revised_from_id=src.id, account_id=src.account_id, valid_days=src.valid_days,
+        amends_quote_id=src.id, amends_agreement_id=agreement.id if agreement else None,
+    )
+    db.session.add(q)
+    db.session.flush()
+    audit.record('amendment_started', src, src.issued_revision_id, agreement, new_quote_id=q.id)
+    audit.record('created', q, amends_quote_id=src.id, amends_agreement_id=q.amends_agreement_id)
+    db.session.commit()
+    flash('An amendment, starting from the agreed terms. Change what is changing, then send it '
+          'for them to accept — the current agreement stays in force until they do.', 'success')
     return redirect(url_for('quotes.detail', quote_id=q.id))
 
 
@@ -1028,6 +1107,7 @@ def view(token):
     is_preview = request.args.get('preview') == '1'
     if not is_preview and q.status == 'sent' and not q.viewed_at:
         q.viewed_at = datetime.utcnow()
+        audit.record('viewed', q, q.issued_revision_id)
         db.session.commit()
     return _render_view(q)
 
@@ -1042,8 +1122,10 @@ def _render_view(q, error=None, code=200):
         return render_template('public/quote_response.html', q=q, unavailable=True), 409
     shown = quote_evidence.as_issued(q)
     gaps = _binding_gaps(shown) if q.status == 'sent' else []
+    replaced = _replaced_by(q)
     return render_template('public/quote_view.html', q=shown, error=error, gaps=gaps,
                            expires_on=_day(shown.expires_at),
+                           replaced_on=_day(replaced.responded_at) if replaced else None,
                            terms_hash=quote_evidence.shown_hash(q),
                            # The same context as the owner's review, so the two cannot drift apart.
                            **_doc_ctx(shown)), code
@@ -1079,7 +1161,27 @@ def _not_recorded(q):
     """Nothing was saved: say so, and that it is safe to try again."""
     import logging
     logging.getLogger(__name__).exception('quote %s: answer not recorded', q.id)
+    audit.standalone('answer_failed', q)
     return render_template('public/quote_response.html', q=q, failed=True), 503
+
+
+def _replaced_by(q):
+    """The accepted amendment that replaced accepted quote q, or None."""
+    if q.status != 'accepted':
+        return None
+    return CommercialQuote.query.filter_by(amends_quote_id=q.id, status='accepted').first()
+
+
+def _superseded(q):
+    """For an amendment: what it would replace has already been replaced by
+    another, so accepting this would fork the account's terms. By quote, so a
+    quote accepted before agreements were recorded is held to it too (and,
+    behind this, a partial unique index on amends_quote_id)."""
+    if not q.amends_quote_id:
+        return False
+    return bool(CommercialQuote.query.filter(
+        CommercialQuote.amends_quote_id == q.amends_quote_id, CommercialQuote.id != q.id,
+        CommercialQuote.status == 'accepted').first())
 
 
 def _answerable(q):
@@ -1088,12 +1190,23 @@ def _answerable(q):
     showed -- the customer answers the terms they read, not whatever the
     link would show now."""
     if quote_evidence.broken(q):
+        audit.refused(q, 'revision_broken')
         return _render_view(q)
-    if q.status not in CommercialQuote.ANSWERABLE or quote_evidence.as_issued(q).expired:
+    if q.status not in CommercialQuote.ANSWERABLE:
+        audit.refused(q, 'not_open', status=q.status)
         return redirect(url_for('quotes.view', token=q.token))
-    if _binding_gaps(quote_evidence.as_issued(q)):
+    if quote_evidence.as_issued(q).expired:
+        audit.refused(q, 'expired')
+        return redirect(url_for('quotes.view', token=q.token))
+    if _superseded(q):
+        audit.refused(q, 'agreement_already_amended', amends_quote_id=q.amends_quote_id)
         return _render_view(q, code=409)
-    if (request.form.get('terms_hash') or '') != quote_evidence.shown_hash(q):
+    if _binding_gaps(quote_evidence.as_issued(q)):
+        audit.refused(q, 'incomplete_terms')
+        return _render_view(q, code=409)
+    posted = request.form.get('terms_hash') or ''
+    if posted != quote_evidence.shown_hash(q):
+        audit.refused(q, 'stale_terms', posted_hash=posted[:64])
         return _render_view(q, error='This proposal has changed since you opened it. '
                                      'Please read it again before you answer.', code=409)
     return None
@@ -1114,14 +1227,19 @@ def _respond(q, decision, rev, account=None):
     """The answer's record, bound to the revision the customer was shown.
     Part of the answer's transaction: it commits with it or not at all."""
     from security import client_ip
-    db.session.add(QuoteResponse(
+    response = QuoteResponse(
         quote_id=q.id, revision_id=rev.id, content_hash=rev.content_hash, decision=decision,
         signer_name=(request.form.get('signer_name') or '').strip()[:120] or None,
         signer_title=(request.form.get('signer_title') or '').strip()[:120] or None,
         signer_email=quote_evidence.Frozen(q, rev).email or None,
         ip_address=client_ip(), user_agent=(request.headers.get('User-Agent') or '')[:300] or None,
-        account_id=account.id if account else None))
+        account_id=account.id if account else None)
+    db.session.add(response)
     db.session.flush()
+    audit.record(decision, q, rev, actor_kind='customer', actor=response.signer_name or response.signer_email,
+                 content_hash=rev.content_hash, response_id=response.id,
+                 signer_title=response.signer_title, account_id=response.account_id)
+    return response
 
 
 @quotes_bp.route('/view/<token>/accept', methods=['POST'])
@@ -1141,9 +1259,10 @@ def accept(token):
     if refused:
         return refused
     if not (request.form.get('signer_name') or '').strip():
+        audit.refused(q, 'no_name')
         return _render_view(q, error='Please type your full name to accept.', code=400)
     if not _answer(q, 'accepted'):
-        db.session.rollback()
+        audit.refused(q, 'already_answered')
         return redirect(url_for('quotes.view', token=token))
     try:
         rev = _answered_revision(q)
@@ -1158,7 +1277,19 @@ def accept(token):
         linked = _lead_for(q)
         if acc and linked and linked.agent and not acc.agent:
             acc.agent = linked.agent
-        _respond(q, 'accepted', rev, acc)
+        response = _respond(q, 'accepted', rev, acc)
+        # What this acceptance made binding -- and, for an amendment, which
+        # agreement it replaces. The replaced one is left exactly as it was.
+        agreement = CommercialAgreement(
+            quote_id=q.id, revision_id=rev.id, response_id=response.id, account_id=acc.id,
+            content_hash=rev.content_hash, effective_on=response.created_at.date()
+            if response.created_at else datetime.utcnow().date(),
+            amends_agreement_id=q.amends_agreement_id)
+        db.session.add(agreement)
+        db.session.flush()
+        audit.record('agreement_executed', q, rev, agreement, actor_kind='customer',
+                     actor=response.signer_name, account_id=acc.id,
+                     amends_agreement_id=q.amends_agreement_id)
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -1191,7 +1322,7 @@ def decline(token):
     if refused:
         return refused
     if not _answer(q, 'declined'):
-        db.session.rollback()
+        audit.refused(q, 'already_answered')
         return redirect(url_for('quotes.view', token=token))
     try:
         # A declined quote is "not now", not "never" -- the same reasoning that

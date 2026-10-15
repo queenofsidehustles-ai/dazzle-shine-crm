@@ -206,7 +206,25 @@ def detail(account_id):
         flash('Account updated.', 'success')
         return redirect(url_for('commercial.detail', account_id=a.id))
     vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
-    return render_template('admin/commercial_detail.html', **_tmpl_args(a=a, vas=vas))
+    return render_template('admin/commercial_detail.html',
+                           **_tmpl_args(a=a, vas=vas, agreements=_agreements(a)))
+
+
+def _agreements(a):
+    """[(agreement, its quote's frozen terms, signer, replaced by)] for an
+    account, newest first. The one nothing has replaced is in force."""
+    from models import CommercialAgreement, CommercialQuote, QuoteResponse
+    import quote_evidence
+    rows = (CommercialAgreement.query.filter_by(account_id=a.id)
+            .order_by(CommercialAgreement.effective_on.desc(), CommercialAgreement.id.desc()).all())
+    replaced = {r.amends_agreement_id: r for r in rows if r.amends_agreement_id}
+    out = []
+    for ag in rows:
+        q = CommercialQuote.query.get(ag.quote_id)
+        response = QuoteResponse.query.get(ag.response_id)
+        out.append((ag, quote_evidence.as_issued(q) if q else None,
+                    response.signer_name if response else None, replaced.get(ag.id)))
+    return out
 
 
 @commercial_bp.route('/<int:account_id>/mark-first-paid', methods=['POST'])
