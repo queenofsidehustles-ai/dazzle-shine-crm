@@ -752,10 +752,10 @@ def email_events():
     with its own secret where the webhook has one.
 
     The company comes from the tag every message is sent with
-    (notifications._tenant_tags); a message without one, or one we never
-    sent, is acknowledged and ignored. Always 200 once authenticated, so a
-    hiccup on our side never sets the service retrying the same event for
-    days -- and a retry that does arrive is recorded once."""
+    (notifications._tenant_tags). An event we cannot use -- an untracked
+    type, a company that does not exist -- is acknowledged and dropped. One
+    we failed to save is answered 503, so the service sends it again; a
+    retry of one already saved is recorded once."""
     raw = request.get_data() or b''
     if not _resend_signature_ok(raw, ('RESEND_EVENTS_WEBHOOK_SECRET', 'RESEND_WEBHOOK_SECRET')):
         from flask import abort
@@ -764,9 +764,11 @@ def email_events():
     payload = request.get_json(silent=True) or {}
     try:
         outcome = delivery_events.record(payload, request.headers.get('svix-id', ''))
-    except Exception:
+    except delivery_events.Retry:
         db.session.rollback()
-        outcome = 'error'
+        import logging
+        logging.getLogger(__name__).exception('email event not saved; asking for a retry')
+        return jsonify({'ok': False, 'outcome': 'retry'}), 503
     return jsonify({'ok': True, 'outcome': outcome}), 200
 
 

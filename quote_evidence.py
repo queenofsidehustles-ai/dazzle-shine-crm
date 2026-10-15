@@ -21,14 +21,16 @@ TERMS_VERSION = 1
 # freezes only its own, since a later table does not exist yet when an
 # earlier migration runs.
 FROZEN_0029 = ('commercial_quote_revision', 'commercial_quote_response')
-FROZEN_0030 = ('commercial_agreement', 'commercial_quote_delivery_event', 'contract_audit_event')
+FROZEN_0030 = ('commercial_agreement', 'email_delivery_event', 'contract_audit_event')
 FROZEN_TABLES = FROZEN_0029 + FROZEN_0030
 # Tables whose rows are never deleted either: nothing else points at an
-# agreement or an audit entry, so a foreign key cannot keep them. (Revisions
+# agreement, a delivery outcome or an audit entry, so a foreign key cannot
+# keep them. (Revisions
 # and deliveries are not here: a draft's unsent attempts go with the draft.)
 # A backup restore empties every table before refilling it, and says so with
 # SET LOCAL akye.restoring = 'on' (backup.restore) -- the only way past.
-KEPT_TABLES = ('commercial_quote_response', 'commercial_agreement', 'contract_audit_event')
+KEPT_TABLES = ('commercial_quote_response', 'commercial_agreement', 'email_delivery_event',
+               'contract_audit_event')
 
 
 def _money(v):

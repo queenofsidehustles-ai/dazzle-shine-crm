@@ -1124,9 +1124,19 @@ class CommercialQuote(db.Model):
     # set by accepting. Accepting links by this key (or the lead's), never by
     # matching a company name or an email address.
     account_id = db.Column(db.Integer, index=True)
-    # An amendment: the agreement this quote, once accepted, replaces. The
-    # replaced agreement is kept exactly as it was. Migration 0030.
+    # An amendment: the accepted quote it changes, and that quote's agreement
+    # (NULL for one accepted before agreements were recorded). Once accepted,
+    # this replaces them; they are kept exactly as they were. At most one
+    # accepted amendment per quote -- a partial unique index, below -- so an
+    # account's terms never fork. Migration 0030.
+    amends_quote_id = db.Column(db.Integer, index=True)
     amends_agreement_id = db.Column(db.Integer, index=True)
+
+    __table_args__ = (
+        db.Index('uq_commercial_quote_one_accepted_amendment', 'amends_quote_id', unique=True,
+                 postgresql_where=sa.text("status = 'accepted'"),
+                 sqlite_where=sa.text("status = 'accepted'")),
+    )
 
     EDITABLE = ('draft',)
     ANSWERABLE = ('sent',)
@@ -1223,19 +1233,25 @@ class CommercialAgreement(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
-class QuoteDeliveryEvent(db.Model):
-    """What the mail service later said about a send: delivered, bounced,
-    marked as spam, delayed. One row per provider event (its id is unique, so
-    a webhook delivered twice is recorded once)."""
-    __tablename__ = 'commercial_quote_delivery_event'
+class EmailDeliveryEvent(db.Model):
+    """What the mail service later said about a message we sent: delivered,
+    bounced, marked as spam, delayed -- and for which recipient. Keyed by the
+    provider's message id, not by any row of ours, so an event that arrives
+    before the send that caused it has finished saving is still kept (see
+    delivery_events.py). One row per provider event: a webhook delivered twice
+    is recorded once."""
+    __tablename__ = 'email_delivery_event'
     id = db.Column(db.Integer, primary_key=True)
-    delivery_id = db.Column(db.Integer, db.ForeignKey('commercial_quote_delivery.id', ondelete='CASCADE'),
-                            nullable=False, index=True)
+    provider_message_id = db.Column(db.String(100), nullable=False, index=True)
+    recipient = db.Column(db.String(200))
     event = db.Column(db.String(30), nullable=False)    # delivered | bounced | complained | delivery_delayed
     provider_event_id = db.Column(db.String(100), unique=True)
     occurred_at = db.Column(db.DateTime)
     detail = db.Column(db.String(400))
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    LABELS = {'delivered': 'Delivered', 'bounced': 'Bounced', 'complained': 'Marked as spam',
+              'delivery_delayed': 'Delayed'}
 
     LABELS = {'delivered': 'Delivered', 'bounced': 'Bounced', 'complained': 'Marked as spam',
               'delivery_delayed': 'Delayed'}
@@ -1264,7 +1280,7 @@ def _evidence_is_permanent(mapper, connection, target):
     raise ValueError(f'{target.__tablename__} rows are evidence: written once, never changed or deleted.')
 
 
-for _model in (QuoteRevision, QuoteResponse, CommercialAgreement, QuoteDeliveryEvent, ContractAuditEvent):
+for _model in (QuoteRevision, QuoteResponse, CommercialAgreement, EmailDeliveryEvent, ContractAuditEvent):
     sa.event.listen(_model, 'before_update', _evidence_is_permanent)
     sa.event.listen(_model, 'before_delete', _evidence_is_permanent)
 sa.event.listen(QuoteDelivery, 'before_delete', _evidence_is_permanent)

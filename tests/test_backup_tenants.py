@@ -162,9 +162,9 @@ try:
                     "(id, quote_id, revision_id, channel, recipient, status, created_at) "
                     "VALUES (1, 1, 1, 'email', 'pat@example.com', 'accepted_by_provider', now())"))
                 c.execute(text(
-                    "INSERT INTO tenant_acme.commercial_quote_delivery_event "
-                    "(id, delivery_id, event, provider_event_id, created_at) "
-                    "VALUES (1, 1, 'delivered', 'evt_1', now())"))
+                    "INSERT INTO tenant_acme.email_delivery_event "
+                    "(id, provider_message_id, recipient, event, provider_event_id, created_at) "
+                    "VALUES (1, 're_1', 'pat@example.com', 'delivered', 'evt_1', now())"))
                 c.execute(text(
                     "INSERT INTO tenant_acme.contract_audit_event "
                     "(id, created_at, event, quote_id, agreement_id, actor_kind, actor) "
@@ -270,7 +270,7 @@ try:
             print('SIGNED', c.execute(text(
                 'SELECT signer_name FROM tenant_acme.commercial_quote_response')).scalar())
             print('KEPT', [c.execute(text('SELECT count(*) FROM tenant_acme.%%s' %% t)).scalar()
-                           for t in ('commercial_agreement', 'commercial_quote_delivery_event',
+                           for t in ('commercial_agreement', 'email_delivery_event',
                                      'contract_audit_event')])
         for table, col in (('commercial_quote_revision', 'terms'),
                            ('commercial_quote_response', 'signer_name'),

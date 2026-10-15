@@ -83,7 +83,7 @@
       {% else %}
       <p style="font-size:0.86rem;margin:0">This quote was {{ q.status }}{% if q.responded_at %} on {{ q.responded_at.strftime('%b %d') }}{% elif q.withdrawn_at %} on {{ q.withdrawn_at.strftime('%b %d') }}{% endif %}.</p>
       {% endif %}
-      {% if q.status == 'accepted' and not evidence.superseded_by %}
+      {% if q.status == 'accepted' and not evidence.replaced_by %}
       <form method="POST" action="{{ url_for('quotes.amend', quote_id=q.id) }}" style="margin-top:10px">
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:10px">✎ Amend this agreement</button>
       </form>
@@ -97,11 +97,11 @@
       {% endif %}
     </div>
 
-    {% if evidence.revisions or evidence.deliveries or evidence.amends %}
+    {% if evidence.revisions or evidence.deliveries or evidence.amends or evidence.replaced_by %}
     <div class="card" id="quoteEvidence">
       <h3>Proposal record {{ tip('quote.evidence') }}</h3>
       {% if evidence.amends %}
-      <p class="rv-ev">✎ Amends agreement #{{ evidence.amends.id }} (<a href="{{ url_for('quotes.review', quote_id=evidence.amends.quote_id) }}">quote #{{ evidence.amends.quote_id }}</a>) — that agreement stays in force until this one is accepted.</p>
+      <p class="rv-ev">✎ Amends the agreement accepted on <a href="{{ url_for('quotes.review', quote_id=evidence.amends.id) }}">quote #{{ evidence.amends.id }}</a>{% if q.amends_agreement_id %} (agreement #{{ q.amends_agreement_id }}){% endif %} — that agreement stays in force until this one is accepted.</p>
       {% elif evidence.revised_from %}
       <p class="rv-ev">Revises <a href="{{ url_for('quotes.review', quote_id=evidence.revised_from.id) }}">quote #{{ evidence.revised_from.id }}</a>.</p>
       {% endif %}
@@ -109,6 +109,8 @@
       {% if ag %}
       <p class="rv-ev" id="quoteAgreement">📜 <strong>Agreement #{{ ag.id }}</strong>, in force from {{ ag.effective_on.strftime('%b %d, %Y') }}{% if ag.amends_agreement_id %} — replaces agreement #{{ ag.amends_agreement_id }}{% endif %}
         {% if evidence.superseded_by %}<br><span class="muted">Replaced by agreement #{{ evidence.superseded_by.id }} (<a href="{{ url_for('quotes.review', quote_id=evidence.superseded_by.quote_id) }}">quote #{{ evidence.superseded_by.quote_id }}</a>) from {{ evidence.superseded_by.effective_on.strftime('%b %d, %Y') }}. Kept as it was.</span>{% endif %}</p>
+      {% elif evidence.replaced_by %}
+      <p class="rv-ev" id="quoteAgreement">📜 Replaced by the amendment accepted on <a href="{{ url_for('quotes.review', quote_id=evidence.replaced_by.id) }}">quote #{{ evidence.replaced_by.id }}</a>{% if evidence.replaced_by.responded_at %} on {{ evidence.replaced_by.responded_at.strftime('%b %d, %Y') }}{% endif %}. Kept as it was.</p>
       {% endif %}
       {% set r = evidence.response %}
       {% if r %}

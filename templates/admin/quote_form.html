@@ -41,8 +41,8 @@
 {% endif %}
 {% if quote and quote.revised_from_id %}
 <div class="card" style="border-left:4px solid var(--softer);margin-bottom:18px;padding:12px 18px;font-size:0.86rem">
-  {% if quote.amends_agreement_id %}
-  ✎ An amendment to <a href="{{ url_for('quotes.detail', quote_id=quote.revised_from_id) }}" style="color:var(--amber-deep)">the signed agreement</a>. That agreement stays in force, unchanged, until this one is accepted.
+  {% if quote.amends_quote_id %}
+  ✎ An amendment to <a href="{{ url_for('quotes.detail', quote_id=quote.amends_quote_id) }}" style="color:var(--amber-deep)">the signed agreement</a>. That agreement stays in force, unchanged, until this one is accepted.
   {% else %}
   ✎ A revision of <a href="{{ url_for('quotes.detail', quote_id=quote.revised_from_id) }}" style="color:var(--amber-deep)">an earlier proposal</a>, which is kept as it was sent.
   {% endif %}

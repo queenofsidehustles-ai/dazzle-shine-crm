@@ -248,7 +248,9 @@
             {% if m.subject %}<strong>{{ m.subject }}</strong><br>{% endif %}
             <span style="color:var(--muted)">{{ (m.body or '') | striptags | truncate(220) }}</span>
           </td>
-          <td>{% if m.status == 'sent' %}<span style="color:var(--good)">✓</span>{% else %}<span style="color:var(--warn)">failed</span>{% endif %}</td>
+          {# What the provider later said is shown as said: "delivered" is the
+             strongest proof there is, and must never read as a failure. #}
+          <td>{% if m.status == 'delivered' %}<span style="color:var(--good)">✓ delivered</span>{% elif m.status in ('sent', 'queued', 'sending', 'accepted') %}<span style="color:var(--good)">✓</span>{% elif m.status == 'bounced' %}<span style="color:var(--warn)">bounced</span>{% elif m.status == 'complained' %}<span style="color:var(--good)">✓ delivered</span> <span style="color:var(--muted)">(marked as spam)</span>{% else %}<span style="color:var(--warn)">failed</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

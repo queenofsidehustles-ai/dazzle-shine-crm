@@ -36,20 +36,29 @@ os.environ['RESEND_EVENTS_WEBHOOK_SECRET'] = 'whsec_' + base64.b64encode(WEBHOOK
 import notifications
 REAL_SEND = notifications.send_email
 SENT = []
-MSG = iter(f're_msg_{i}' for i in range(1, 1000))
-notifications.send_email = lambda *a, **k: (SENT.append(k) or (True, f'Accepted by Resend (id {next(MSG)}).'))
+NEXT_ID = []                      # set to choose the provider id the next send gets
+_counter = iter(range(1, 100000))
+
+
+def _fake_send(*a, **k):
+    SENT.append(k)
+    return True, f'Accepted by Resend (id {NEXT_ID.pop() if NEXT_ID else f"re_msg_{next(_counter)}"}).'
+
+
+notifications.send_email = _fake_send
 notifications.send_sms = lambda *a, **k: (True, 'stub')
 
 from sqlalchemy import text
 from app import create_app
 from extensions import db
 from models import (CommercialAccount, CommercialAgreement, CommercialQuote, ContractAuditEvent,
-                    OutboundLog, QuoteDelivery, QuoteDeliveryEvent, QuoteResponse)
+                    OutboundLog, QuoteDelivery, EmailDeliveryEvent, QuoteResponse)
 import provisioning
 import tenancy
 
 app = create_app()
 failures = []
+import delivery_events
 
 
 def check(cond, m):
@@ -59,6 +68,7 @@ def check(cond, m):
 
 
 SLUG = 'trail'
+SCHEMA = tenancy.schema_for(SLUG)
 HOST = f'http://{SLUG}.akye.test'
 PLATFORM = 'http://akye.test'
 with app.app_context():
@@ -233,44 +243,86 @@ dl = get(QuoteDelivery, quote_id=qid)[0]
 check(dl.provider_message_id and dl.provider_message_id.startswith('re_msg_'), 'the send kept the provider\'s message id')
 in_tenant(lambda: (db.session.add(OutboundLog(channel='email', to_address='ann@agreed.example', status='sent',
                                               provider_id=dl.provider_message_id)), db.session.commit()))
-delivered = {'type': 'email.delivered', 'created_at': '2026-10-15T12:00:00.000Z',
-             'data': {'email_id': dl.provider_message_id, 'to': ['ann@agreed.example'],
-                      'tags': {'tenant': SLUG}}}
+
+
+def ev(kind, mid, to=('ann@agreed.example',), when=None, **data):
+    return {'type': f'email.{kind}', 'created_at': when or '2026-10-15T12:00:00.000Z',
+            'data': dict({'email_id': mid, 'to': list(to), 'tags': {'tenant': SCHEMA}}, **data)}
+
+
+delivered = ev('delivered', dl.provider_message_id)
 r = webhook(delivered, event_id='evt_delivered_1')
 check(r.status_code == 200 and r.get_json()['outcome'] == 'recorded', f'a signed "delivered" is taken ({r.get_data(as_text=True)[:80]})')
 r = webhook(delivered, event_id='evt_delivered_1')
-evs = get(QuoteDeliveryEvent, delivery_id=dl.id)
-check(len(evs) == 1 and evs[0].event == 'delivered' and evs[0].occurred_at.hour == 12,
-      'recorded once against that delivery, though the service sent it twice')
+evs = get(EmailDeliveryEvent, provider_message_id=dl.provider_message_id)
+check(r.get_json()['outcome'] == 'duplicate' and len(evs) == 1 and evs[0].event == 'delivered'
+      and evs[0].occurred_at.hour == 12 and evs[0].recipient == 'ann@agreed.example',
+      'recorded once, for its recipient, though the service sent it twice')
 log = get(OutboundLog, provider_id=dl.provider_message_id)[0]
 check(log.status == 'delivered', 'and the Sent log says delivered, not just sent')
 check('delivered' in events(qid), 'the trail notes it, from the mail service')
 review = c.get(f'/quotes/{qid}/review', base_url=HOST).get_data(as_text=True)
 check('✅ Delivered' in review, 'the owner\'s record shows it delivered')
 
+webhook(ev('complained', dl.provider_message_id, when='2026-10-15T13:00:00.000Z'), event_id='evt_complained_1')
+r = webhook(delivered, event_id='evt_delivered_1')
+webhook(ev('delivered', dl.provider_message_id, when='2026-10-15T11:00:00.000Z'), event_id='evt_delivered_late')
+log = get(OutboundLog, provider_id=dl.provider_message_id)[0]
+check(r.get_json()['outcome'] == 'duplicate' and log.status == 'complained',
+      'an old event replayed, or a late one, never moves the Sent log backwards (complained stays complained)')
+
+in_tenant(lambda: (db.session.add(OutboundLog(channel='email', to_address='cust@cc.example', status='sent',
+                                              provider_id='re_cc_1')), db.session.commit()))
+webhook(ev('bounced', 're_cc_1', to=('owner-copy@cc.example',), bounce={'message': 'No such user'}))
+check(get(OutboundLog, provider_id='re_cc_1')[0].status == 'sent',
+      'a bounce at a copied address is not the customer\'s bounce')
+
 bq_id, bq_tok = new_quote(company='Bounce Co', email='nobody@bounce.example')
 c.post(f'/quotes/{bq_id}/send', base_url=HOST)
 bdl = get(QuoteDelivery, quote_id=bq_id)[0]
-webhook({'type': 'email.bounced', 'data': {'email_id': bdl.provider_message_id, 'tags': [{'name': 'tenant', 'value': SLUG}],
-                                           'bounce': {'type': 'Permanent', 'message': 'Mailbox does not exist'}}})
-bev = get(QuoteDeliveryEvent, delivery_id=bdl.id)
+webhook(ev('bounced', bdl.provider_message_id, to=('nobody@bounce.example',),
+           bounce={'type': 'Permanent', 'message': 'Mailbox does not exist'}))
+bev = get(EmailDeliveryEvent, provider_message_id=bdl.provider_message_id)
 review = c.get(f'/quotes/{bq_id}/review', base_url=HOST).get_data(as_text=True)
 check(bev and bev[0].event == 'bounced' and 'Mailbox does not exist' in bev[0].detail
       and 'Bounced' in review and 'Mailbox does not exist' in review,
       'a bounce is recorded with its reason, and the owner sees the proposal never arrived')
 
+eq_id, eq_tok = new_quote(company='Early Co', email='early@early.example')
+r = webhook(ev('delivered', 're_early_1', to=('early@early.example',)), event_id='evt_early_1')
+check(r.status_code == 200 and get(EmailDeliveryEvent, provider_message_id='re_early_1'),
+      'an event that arrives before its send has finished saving is kept, not dropped')
+NEXT_ID.append('re_early_1')
+c.post(f'/quotes/{eq_id}/send', base_url=HOST)
+review = c.get(f'/quotes/{eq_id}/review', base_url=HOST).get_data(as_text=True)
+early = [e for e in get(ContractAuditEvent, quote_id=eq_id) if e.event == 'delivered']
+check('✅ Delivered' in review and early and json.loads(early[0].detail).get('arrived_before_send_committed'),
+      'and once the send is saved, its record and trail show it delivered')
+
+real_file = delivery_events._file
+delivery_events._file = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('database went away'))
+r = webhook(ev('delivered', 're_retry_1', to=('x@retry.example',)), event_id='evt_retry_1')
+delivery_events._file = real_file
+check(r.status_code == 503 and not get(EmailDeliveryEvent, provider_message_id='re_retry_1'),
+      'an event we failed to save is answered 503, so the service sends it again')
+r = webhook(ev('delivered', 're_retry_1', to=('x@retry.example',)), event_id='evt_retry_1')
+check(r.status_code == 200 and len(get(EmailDeliveryEvent, provider_message_id='re_retry_1')) == 1,
+      'and the retry is recorded')
+
 r = webhook(delivered, key=b'not-the-real-signing-key-at-all!')
 check(r.status_code == 403, 'an unsigned or wrongly signed event is refused')
 r = app.test_client().post('/api/email-events', base_url=PLATFORM, json=delivered)
 check(r.status_code == 403, 'including one with no signature at all')
-r = webhook({'type': 'email.delivered', 'data': {'email_id': dl.provider_message_id, 'tags': {'tenant': 'nosuchco'}}})
-check(r.status_code == 200 and r.get_json()['outcome'] in ('unknown_tenant', 'not_found')
-      and len(get(QuoteDeliveryEvent, delivery_id=dl.id)) == 1,
-      'an event tagged for another company does not touch this one')
-r = webhook({'type': 'email.opened', 'data': {'email_id': dl.provider_message_id, 'tags': {'tenant': SLUG}}})
+n = len(get(EmailDeliveryEvent, provider_message_id=dl.provider_message_id))
+for tag in ('tenant_nosuchco', 'nosuchco', 'tenant_trail; DROP TABLE x'):
+    r = webhook(ev('bounced', dl.provider_message_id, tags={'tenant': tag}))
+    check(r.status_code == 200 and r.get_json()['outcome'] == 'unknown_tenant'
+          and len(get(EmailDeliveryEvent, provider_message_id=dl.provider_message_id)) == n,
+          f'an event tagged for a company that is not there ({tag!r}) touches nothing')
+r = webhook(ev('opened', dl.provider_message_id))
 check(r.status_code == 200 and r.get_json()['outcome'] == 'ignored', 'event types we do not track are acknowledged and ignored')
 
-print('\n5. Every email names the company it was sent for, so its outcome can find its way back')
+print('\n5. Every email names the company it was sent from, so its outcome can find its way back')
 captured = []
 
 
@@ -285,17 +337,49 @@ real_post = notifications.http_requests.post
 notifications.http_requests.post = lambda url, **k: (captured.append(k.get('json')) or _Resp())
 os.environ['RESEND_API_KEY'] = 'test-key-not-real'
 try:
-    from flask import g
-    with app.test_request_context('/', base_url=HOST):
-        g.tenant_slug = SLUG
-        with tenancy.use_tenant(SLUG):
-            ok, _ = REAL_SEND(to_email='x@example.com', to_name='X', subject='s', html='<p>h</p>')
-            db.session.remove()
+    with app.test_request_context('/', base_url=HOST), tenancy.use_tenant(SLUG):
+        REAL_SEND(to_email='x@example.com', to_name='X', subject='s', html='<p>h</p>')
+        db.session.remove()
+    with app.app_context(), tenancy.use_tenant(SLUG):        # a scheduled job: no request at all
+        REAL_SEND(to_email='y@example.com', to_name='Y', subject='s', html='<p>h</p>')
+        db.session.remove()
+    with app.app_context():                                   # the platform's own mail
+        REAL_SEND(to_email='z@example.com', to_name='Z', subject='s', html='<p>h</p>')
+        db.session.remove()
 finally:
     notifications.http_requests.post = real_post
     os.environ.pop('RESEND_API_KEY', None)
-check(captured and {'name': 'tenant', 'value': SLUG} in (captured[0].get('tags') or []),
-      'the message carries a tenant tag (nothing left this machine: the HTTP call was intercepted)')
+tags = [c_.get('tags') or [] for c_ in captured]
+check(len(captured) == 3 and {'name': 'tenant', 'value': SCHEMA} in tags[0] and {'name': 'tenant', 'value': SCHEMA} in tags[1]
+      and tags[2] == [],
+      'in a request and in a job alike, the message carries its company; the platform\'s own does not '
+      '(nothing left this machine: the HTTP call was intercepted)')
+
+print('\n6. A quote accepted before agreements were recorded is amended once, not forked')
+def legacy():
+    q = CommercialQuote(company='Legacy Signed Co', contact_name='Lee', email='lee@legacy.example',
+                        property_type='Office Building', frequency='weekly', contract_term='annual',
+                        services='Office Cleaning', monthly_price=400, status='accepted', token='tok-legacy-signed')
+    db.session.add(q)
+    db.session.commit()
+    return q.id
+lid = in_tenant(legacy)
+c.post(f'/quotes/{lid}/amend', base_url=HOST)
+a1 = in_tenant(lambda: CommercialQuote.query.filter_by(amends_quote_id=lid).first())
+check(a1 is not None and a1.amends_agreement_id is None and a1.status == 'draft',
+      'it can be amended, though it has no agreement row')
+c.post(f'/quotes/{a1.id}/send', base_url=HOST)
+answer(app.test_client(), a1.token, HOST, 'accept', name='Lee')
+r = c.post(f'/quotes/{lid}/amend', base_url=HOST, follow_redirects=True)
+check(in_tenant(lambda: CommercialQuote.query.filter_by(amends_quote_id=lid).count()) == 1
+      and 'already been replaced' in r.get_data(as_text=True),
+      'once that amendment is accepted, amending the original again is refused')
+review = c.get(f'/quotes/{lid}/review', base_url=HOST).get_data(as_text=True)
+check(f'quote #{a1.id}' in review and 'Amend this agreement' not in review,
+      'and its record says what replaced it')
+err = sql("INSERT INTO commercial_quote (company, contact_name, email, token, status, amends_quote_id) "
+          "VALUES ('Fork Co', 'F', 'f@fork.example', 'tok-fork', 'accepted', :l)", l=lid)
+check(err is not None, 'the database itself allows one accepted amendment per quote')
 
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')

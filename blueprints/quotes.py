@@ -713,27 +713,24 @@ def _evidence(q):
     from models import QuoteRevision
     revisions = QuoteRevision.query.filter_by(quote_id=q.id).order_by(QuoteRevision.number).all()
     response = QuoteResponse.query.filter_by(quote_id=q.id).first()
-    from models import QuoteDeliveryEvent
+    from models import EmailDeliveryEvent
+    import delivery_events
     deliveries = (QuoteDelivery.query.filter_by(quote_id=q.id)
                   .order_by(QuoteDelivery.created_at.desc()).all())
-    events = {}
-    if deliveries:
-        for ev in (QuoteDeliveryEvent.query
-                   .filter(QuoteDeliveryEvent.delivery_id.in_([d.id for d in deliveries]))
-                   .order_by(QuoteDeliveryEvent.created_at).all()):
-            events.setdefault(ev.delivery_id, []).append(ev)
+    events = {d.id: delivery_events.for_message(d.provider_message_id, d.recipient) for d in deliveries}
     agreement = CommercialAgreement.query.filter_by(quote_id=q.id).first()
-    amends = CommercialAgreement.query.get(q.amends_agreement_id) if q.amends_agreement_id else None
-    superseded_by = (CommercialAgreement.query.filter_by(amends_agreement_id=agreement.id).first()
-                     if agreement else None)
+    amends = CommercialQuote.query.get(q.amends_quote_id) if q.amends_quote_id else None
+    replaced_by = _replaced_by(q)
+    superseded_by = (CommercialAgreement.query.filter_by(quote_id=replaced_by.id).first()
+                     if replaced_by else None)
     return dict(
         revisions=revisions, intact={r.id: quote_evidence.intact(r) for r in revisions},
         issued_id=q.issued_revision_id, response=response,
         response_matches=bool(response and any(r.id == response.revision_id
                                                and r.content_hash == response.content_hash
                                                for r in revisions)),
-        deliveries=deliveries, delivery_events=events, event_labels=QuoteDeliveryEvent.LABELS,
-        agreement=agreement, amends=amends, superseded_by=superseded_by,
+        deliveries=deliveries, delivery_events=events, event_labels=EmailDeliveryEvent.LABELS,
+        agreement=agreement, amends=amends, replaced_by=replaced_by, superseded_by=superseded_by,
         trail=audit.trail(q.id), trail_labels=audit.LABELS,
         account=CommercialAccount.query.get(q.account_id) if q.account_id else None,
         revised_from=CommercialQuote.query.get(q.revised_from_id) if q.revised_from_id else None)
@@ -879,6 +876,8 @@ def send_quote(quote_id):
     audit.record('sent' if first_send else 'resent', q, rev, delivery_id=delivery.id,
                  recipient=shown.email, provider_message_id=delivery.provider_message_id,
                  content_hash=rev.content_hash, expires_at=shown.expires_at)
+    import delivery_events
+    delivery_events.audit_early(delivery)
     q.status = 'sent'
     q.issued_revision_id = rev.id
     q.sent_at = now
@@ -994,7 +993,7 @@ def revise(quote_id):
         show_line_prices=src.show_line_prices, first_visit_premium=src.first_visit_premium,
         price_per_visit=src.price_per_visit, monthly_price=src.monthly_price,
         revised_from_id=src.id, account_id=src.account_id, valid_days=src.valid_days,
-        amends_agreement_id=src.amends_agreement_id,
+        amends_quote_id=src.amends_quote_id, amends_agreement_id=src.amends_agreement_id,
     )
     db.session.add(q)
     db.session.flush()
@@ -1068,13 +1067,11 @@ def amend(quote_id):
         flash('Only an accepted quote is amended — revise or duplicate this one instead.', 'error')
         return redirect(url_for('quotes.detail', quote_id=src.id))
     agreement = CommercialAgreement.query.filter_by(quote_id=src.id).first()
-    if agreement and CommercialAgreement.query.filter_by(amends_agreement_id=agreement.id).first():
+    if _replaced_by(src):
         flash('This agreement has already been replaced by an amendment — amend the latest one.', 'error')
         return redirect(url_for('quotes.review', quote_id=src.id))
-    open_one = (CommercialQuote.query.filter(
-        CommercialQuote.revised_from_id == src.id if agreement is None
-        else CommercialQuote.amends_agreement_id == agreement.id,
-        CommercialQuote.status.in_(('draft', 'sent'))).first())
+    open_one = (CommercialQuote.query.filter(CommercialQuote.amends_quote_id == src.id,
+                                             CommercialQuote.status.in_(('draft', 'sent'))).first())
     if open_one:
         flash('An amendment to this agreement is already open — finish or withdraw that one first.', 'error')
         return redirect(url_for('quotes.detail', quote_id=open_one.id))
@@ -1089,12 +1086,12 @@ def amend(quote_id):
         show_line_prices=base.show_line_prices, first_visit_premium=base.first_visit_premium,
         price_per_visit=base.price_per_visit, monthly_price=base.monthly_price,
         revised_from_id=src.id, account_id=src.account_id, valid_days=src.valid_days,
-        amends_agreement_id=agreement.id if agreement else None,
+        amends_quote_id=src.id, amends_agreement_id=agreement.id if agreement else None,
     )
     db.session.add(q)
     db.session.flush()
     audit.record('amendment_started', src, src.issued_revision_id, agreement, new_quote_id=q.id)
-    audit.record('created', q, amends_agreement_id=q.amends_agreement_id, revised_from=src.id)
+    audit.record('created', q, amends_quote_id=src.id, amends_agreement_id=q.amends_agreement_id)
     db.session.commit()
     flash('An amendment, starting from the agreed terms. Change what is changing, then send it '
           'for them to accept — the current agreement stays in force until they do.', 'success')
@@ -1125,13 +1122,10 @@ def _render_view(q, error=None, code=200):
         return render_template('public/quote_response.html', q=q, unavailable=True), 409
     shown = quote_evidence.as_issued(q)
     gaps = _binding_gaps(shown) if q.status == 'sent' else []
-    replaced = None
-    if q.status == 'accepted':
-        mine = CommercialAgreement.query.filter_by(quote_id=q.id).first()
-        replaced = mine and CommercialAgreement.query.filter_by(amends_agreement_id=mine.id).first()
+    replaced = _replaced_by(q)
     return render_template('public/quote_view.html', q=shown, error=error, gaps=gaps,
                            expires_on=_day(shown.expires_at),
-                           replaced_on=_day(replaced.effective_on) if replaced else None,
+                           replaced_on=_day(replaced.responded_at) if replaced else None,
                            terms_hash=quote_evidence.shown_hash(q),
                            # The same context as the owner's review, so the two cannot drift apart.
                            **_doc_ctx(shown)), code
@@ -1171,11 +1165,23 @@ def _not_recorded(q):
     return render_template('public/quote_response.html', q=q, failed=True), 503
 
 
+def _replaced_by(q):
+    """The accepted amendment that replaced accepted quote q, or None."""
+    if q.status != 'accepted':
+        return None
+    return CommercialQuote.query.filter_by(amends_quote_id=q.id, status='accepted').first()
+
+
 def _superseded(q):
-    """For an amendment: the agreement it would replace has already been
-    replaced by another, so accepting this would fork the account's terms."""
-    return bool(q.amends_agreement_id and CommercialAgreement.query.filter_by(
-        amends_agreement_id=q.amends_agreement_id).first())
+    """For an amendment: what it would replace has already been replaced by
+    another, so accepting this would fork the account's terms. By quote, so a
+    quote accepted before agreements were recorded is held to it too (and,
+    behind this, a partial unique index on amends_quote_id)."""
+    if not q.amends_quote_id:
+        return False
+    return bool(CommercialQuote.query.filter(
+        CommercialQuote.amends_quote_id == q.amends_quote_id, CommercialQuote.id != q.id,
+        CommercialQuote.status == 'accepted').first())
 
 
 def _answerable(q):
@@ -1193,7 +1199,7 @@ def _answerable(q):
         audit.refused(q, 'expired')
         return redirect(url_for('quotes.view', token=q.token))
     if _superseded(q):
-        audit.refused(q, 'agreement_already_amended', agreement_id=q.amends_agreement_id)
+        audit.refused(q, 'agreement_already_amended', amends_quote_id=q.amends_quote_id)
         return _render_view(q, code=409)
     if _binding_gaps(quote_evidence.as_issued(q)):
         audit.refused(q, 'incomplete_terms')

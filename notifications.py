@@ -304,16 +304,18 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
 
 
 def _tenant_tags():
-    """Resend tags naming the company a message was sent for, so what the
-    provider later reports about it (delivered, bounced -- see
-    delivery_events.py) can be filed in the right company's records."""
-    try:
-        from flask import g, has_request_context
-        slug = getattr(g, 'tenant_slug', None) if has_request_context() else None
-    except Exception:
-        slug = None
+    """Resend tags naming the company schema a message was sent from, so what
+    the provider later reports about it (delivered, bounced -- see
+    delivery_events.py) is filed in that company's records. Read from the
+    active tenancy, not the request: a scheduled job or a command run for one
+    company sends inside use_tenant() with no request at all. None for the
+    platform's own mail, which the webhook files under public."""
     import re
-    return [{'name': 'tenant', 'value': slug}] if slug and re.fullmatch(r'[A-Za-z0-9_-]{1,64}', slug) else []
+    import tenancy
+    schema = tenancy.current_schema()
+    if not tenancy.is_tenant() or not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', schema or ''):
+        return []
+    return [{'name': 'tenant', 'value': schema}]
 
 
 def send_email(to_email, to_name, subject, html, from_name=None,
