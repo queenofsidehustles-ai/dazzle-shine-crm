@@ -13,19 +13,41 @@ the emails. No code change and no redeploy needed beyond Railway's restart.
 
 ---
 
-## 1. What it looks like once it's set up (45 sec)
+## 1. What it looks like once it's set up (60 sec)
 `AKYE_VIDEO_OVERVIEW` · shows above the signup form
 
-**Show:** dashboard with today's jobs → calendar week → a job's details →
-cleaner's phone text → booking page → a paid invoice.
+The point of this one is how a job reaches the team: it goes out to everyone,
+the first to claim it gets it, and only then do they see the address.
+
+**Show:** today's jobs → open the job that's open to claim (in the demo,
+Leticia Ashford's 2:30) → Send to team → the text a cleaner gets → the claim
+page with no address → tap Claim → full address, time, checklist and
+directions → a paid invoice.
 
 **Say:**
-> This is a cleaning business once it's set up in Akye.
-> Today's jobs, right here. The whole week on the calendar.
-> Each job goes to a cleaner's phone with the address, the time and the checklist.
-> Customers book themselves on your own booking page and see your price up front.
+> This is a cleaning business running on Akye.
+> Here's a job that needs a cleaner. One tap, and it goes out to the whole team.
+> Every cleaner gets a text with the bedrooms, bathrooms, what it pays and the area. No address yet.
+> First one to claim it gets it, kind of like Uber for your cleaning jobs.
+> Once she claims it, the full address, time and checklist show up, with directions.
+> Everyone else sees it's been taken. No group chat, no calling around.
 > And when the job's done, you get paid.
 > Setting yours up takes a few minutes. The form is right below.
+
+**Recording the cleaner's side in the demo.** The demo company never sends a
+real text (demo_guard.py), so:
+
+1. After Send to team, open the **Sent Log**. Every text the team would have
+   received is there, word for word. It is labeled "not sent" because it is
+   the demo, so zoom in on the message itself.
+2. Copy the claim link from that text into a second browser window narrowed
+   to phone width (about 390 wide; Chrome: right-click → Inspect → the phone
+   icon). Show the page without the address, tap **Claim**, show the address
+   appear.
+3. Ask for the demo to be rebuilt afterwards, because claiming changes it for
+   the next visitor (DEMO.md).
+
+Never record this in a real company: Send to team texts every real cleaner.
 
 ---
 
