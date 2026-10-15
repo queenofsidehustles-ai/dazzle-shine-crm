@@ -31,7 +31,8 @@
           <td style="font-weight:700">${{ '{:,.2f}'.format(q.monthly_price or 0) }}/mo</td>
           <td>
             {% set colors = {'draft':'status-pending','sent':'status-confirmed','accepted':'status-completed','declined':'status-cancelled','withdrawn':'status-cancelled'} %}
-            <span class="status {{ colors.get(q.status,'status-pending') }}">{{ q.status }}</span>
+            {% if q.expired %}<span class="status status-cancelled" title="Past its closing date — revise it to send a fresh offer">expired</span>
+            {% else %}<span class="status {{ colors.get(q.status,'status-pending') }}">{{ q.status }}</span>{% endif %}
             {% if q.status == 'sent' and q.viewed_at %}<br><span style="font-size:0.72rem;color:var(--good);font-weight:600">👁 opened</span>{% endif %}
           </td>
           <td style="font-size:0.82rem;color:var(--softer)">{{ q.created_at.strftime('%b %d') }}</td>

@@ -30,6 +30,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 import fresh_postgres  # a multi-company app needs PostgreSQL schemas
+from quote_answer import answer
 os.environ['DATABASE_URL'] = fresh_postgres.url('dsm_test_commercial_lead_by_hand')
 os.environ['SECRET_KEY'] = 'test'
 os.environ['BASE_DOMAIN'] = 'akye.test'
@@ -175,7 +176,7 @@ check('Quote emailed' in (p['notes'] or ''), 'and the notes say a quote went')
 
 print('\n5. Accepting wins it; declining rests it')
 anon = app.test_client()
-anon.post(f'/quotes/view/{token}/accept', base_url=HOST)
+answer(anon, token, HOST, 'accept', name='Dana Ruiz')
 p = lead('Sunrise Pediatrics')
 with app.app_context(), tenancy.use_tenant(SLUG):
     acc = CommercialAccount.query.filter_by(business_name='Sunrise Pediatrics').first()
@@ -196,7 +197,8 @@ c.post('/find-leads/add', base_url=HOST, data={
 m = lead('Maple Office Park')
 c.post('/quotes/new', base_url=HOST, data={
     'prospect_id': m['id'], 'company': 'Maple Office Park', 'contact_name': 'Lee',
-    'email': 'lee@maple.example', 'property_type': 'Office Building', 'monthly_price': '900'})
+    'email': 'lee@maple.example', 'property_type': 'Office Building', 'monthly_price': '900',
+    'frequency': 'weekly', 'contract_term': 'month_to_month', 'services': ['Office Cleaning']})
 with app.app_context(), tenancy.use_tenant(SLUG):
     q2 = CommercialQuote.query.filter_by(company='Maple Office Park').first()
     t2 = q2.token
@@ -212,7 +214,7 @@ c.post('/quotes/new', base_url=HOST, data={
 check(lead('Quiet Office Co')['phone'] == '(301) 555-0400',
       'a phone number first given on the quote is kept on the lead too')
 c.post(f'/quotes/{q2.id}/send', base_url=HOST)
-anon.post(f'/quotes/view/{t2}/decline', base_url=HOST)
+answer(anon, t2, HOST, 'decline', name='')
 m = lead('Maple Office Park')
 check(m['stage'] == 'nurture' and m['next_action'] == 'Quarterly check-in'
       and m['next_action_date'] > TODAY,
@@ -709,6 +711,7 @@ check('Save draft' in page and 'value="2400"' in page, 'reopened, it is still a 
 c.post(f'/quotes/{hq_id}/send', base_url=HOST, data={
     'company': 'Half Known Diner', 'contact_name': 'Rosa Diaz', 'email': 'rosa@diner.example',
     'property_type': 'Restaurant / Food Service', 'sqft': '2400', 'frequency': 'weekly',
+    'contract_term': 'month_to_month',
     'services': ['Floor Care (Sweep & Mop)'], 'price_per_visit': '195', 'monthly_price': '839'})
 with app.app_context(), tenancy.use_tenant(SLUG):
     hq = db.session.get(CommercialQuote, hq_id)
@@ -1278,11 +1281,12 @@ with app.app_context(), tenancy.use_tenant(SLUG):
     db.session.commit()
     q = CommercialQuote(company='Quoted Cafe', contact_name='Cafe Owner', email='cafe@quoted.example',
                         property_type='Restaurant / Food Service', frequency='weekly',
+                        contract_term='month_to_month', services='Kitchen / Break Room',
                         monthly_price=500, status='sent', token='tok-quoted-cafe', prospect_id=tp.id)
     db.session.add(q)
     db.session.commit()
     db.session.remove()
-app.test_client().post('/quotes/view/tok-quoted-cafe/accept', base_url=HOST)
+answer(app.test_client(), 'tok-quoted-cafe', HOST, 'accept', name='Cafe Owner')
 with app.app_context(), tenancy.use_tenant(SLUG):
     acct = CommercialAccount.query.filter_by(business_name='Quoted Cafe').first()
     cafe_agent = acct.agent if acct else None

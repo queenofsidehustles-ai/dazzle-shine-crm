@@ -23,6 +23,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 import fresh_postgres  # a multi-company app needs PostgreSQL schemas
+from quote_answer import answer, shown_hash
 os.environ['DATABASE_URL'] = fresh_postgres.url('dsm_test_quote_integrity')
 os.environ['SECRET_KEY'] = 'test'
 os.environ['BASE_DOMAIN'] = 'akye.test'
@@ -98,9 +99,12 @@ def accounts(company):
 
 
 def public(token, action=None):
+    """The customer's link -- and answering it as their browser would, with
+    the terms reference the page showed (blank when it showed none) and a
+    typed name."""
     cl = app.test_client()
     if action:
-        return cl.post(f'/quotes/view/{token}/{action}', base_url=HOST)
+        return answer(cl, token, HOST, action)
     return cl.get(f'/quotes/view/{token}', base_url=HOST)
 
 
@@ -229,8 +233,9 @@ cid, ctok = make('Race Co', status='sent')
 results, gate = [], threading.Barrier(4)
 def press():
     cl = app.test_client()
+    h = shown_hash(cl, ctok, HOST)
     gate.wait()
-    results.append(cl.post(f'/quotes/view/{ctok}/accept', base_url=HOST).status_code)
+    results.append(answer(cl, ctok, HOST, 'accept', terms_hash=h).status_code)
 threads = [threading.Thread(target=press) for _ in range(4)]
 [t.start() for t in threads]
 [t.join() for t in threads]

@@ -327,6 +327,8 @@ def run_lifecycle_emails():
     for q in CommercialQuote.query.filter(CommercialQuote.status == 'sent').all():
         if not q.email or is_opted_out(q.email):
             continue
+        if q.expired:
+            continue     # "still interested?" about an offer whose link says it closed
         base = q.sent_at or q.created_at
         if not base:
             continue

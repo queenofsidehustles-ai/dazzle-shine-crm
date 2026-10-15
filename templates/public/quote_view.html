@@ -30,11 +30,17 @@
     .status-banner { padding: 18px 24px; border-radius: 12px; text-align: center; font-weight: 700; font-size: 1.1rem; margin-top: 20px; }
     .status-accepted { background: var(--good-soft); color: var(--good); }
     .status-declined { background: var(--warn-soft); color: var(--warn); }
+    .sign { background: #fff; border-radius: 14px; border: 1px solid var(--line); padding: 22px; margin-top: 20px; }
+    .sign label { display: block; font-size: 0.82rem; font-weight: 600; color: var(--softer); margin: 0 0 6px; }
+    .sign input { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font: inherit; font-size: 1rem; margin-bottom: 14px; }
+    .sign .fine { font-size: 0.78rem; color: var(--softer); line-height: 1.6; margin-bottom: 14px; }
+    .notice { padding: 14px 18px; border-radius: 12px; background: var(--warn-soft); color: var(--warn); font-weight: 600; margin-top: 20px; }
+    .ref { text-align: center; font-size: 0.75rem; color: var(--softer); margin-top: 14px; }
     @media (max-width: 480px) { .action-row { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
-  {% set doc_biz = BIZ %}
+  {% set doc_biz = q.seller or BIZ %}{# as frozen when sent #}
   {% include 'partials/quote_document.html' %}
 
   <div class="wrap" style="padding-top:0">
@@ -49,18 +55,30 @@
     {% elif q.status != 'sent' %}
     {# A draft nobody has sent: the owner's own preview. Nothing to accept. #}
     <div class="status-banner" style="background:var(--ground);color:var(--muted)">Draft — not sent yet. This is a preview; there is nothing to accept.</div>
+    {% elif q.expired %}
+    <div class="status-banner status-declined">This proposal expired on {{ expires_on }}.<br><span style="font-size:0.85rem;font-weight:500">We'd be glad to send you an up-to-date one — call us at {{ BIZ_PHONE }}.</span></div>
+    {% elif gaps %}
+    {# Sent before an offer had to say what it costs and covers. #}
+    <div class="status-banner status-declined">This proposal can't be accepted online yet.<br><span style="font-size:0.85rem;font-weight:500">It is missing some details. Please call us at {{ BIZ_PHONE }} and we'll send a complete one.</span></div>
     {% else %}
-    <div class="action-row">
-      <form method="POST" action="{{ url_for('quotes.accept', token=q.token) }}">
-        <button type="submit" class="btn-accept">Accept This Proposal</button>
-      </form>
-      <form method="POST" action="{{ url_for('quotes.decline', token=q.token) }}"
-            onsubmit="return confirm('Are you sure you want to decline this proposal?')">
-        <button type="submit" class="btn-decline">Decline</button>
-      </form>
-    </div>
+    {% if error %}<div class="notice" role="alert">{{ error }}</div>{% endif %}
+    <form method="POST" action="{{ url_for('quotes.accept', token=q.token) }}" class="sign">
+      <input type="hidden" name="terms_hash" value="{{ terms_hash }}" />
+      <label for="signerName">Your full name</label>
+      <input id="signerName" name="signer_name" autocomplete="name" required maxlength="120" placeholder="Type your full name" />
+      <label for="signerTitle">Your title <span style="font-weight:400">(optional)</span></label>
+      <input id="signerTitle" name="signer_title" autocomplete="organization-title" maxlength="120" placeholder="e.g. Property Manager" />
+      <p class="fine">By typing your name and pressing Accept, you agree to this proposal for {{ q.company }}, exactly as shown above{% if expires_on %}. It is open until {{ expires_on }}{% endif %}.</p>
+      <button type="submit" class="btn-accept">Accept This Proposal</button>
+    </form>
+    <form method="POST" action="{{ url_for('quotes.decline', token=q.token) }}" style="margin-top:12px"
+          onsubmit="return confirm('Are you sure you want to decline this proposal?')">
+      <input type="hidden" name="terms_hash" value="{{ terms_hash }}" />
+      <button type="submit" class="btn-decline">Decline</button>
+    </form>
     <p style="text-align:center;font-size:0.8rem;color:var(--softer);margin-top:14px">Questions before deciding? Call {{ BIZ_PHONE }} or email us — we're happy to adjust.</p>
     {% endif %}
+    {% if q.status != 'draft' %}<p class="ref">Proposal reference {{ terms_hash[:12] }}</p>{% endif %}
   </div>
 </body>
 </html>
