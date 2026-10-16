@@ -672,6 +672,7 @@ messages.
 | `PRODUCT_RESEND_API_KEY` | Email sent as Akye: console outreach, trial emails, directory invites. |
 | `PRODUCT_TWILIO_ACCOUNT_SID`, `PRODUCT_TWILIO_AUTH_TOKEN`, `PRODUCT_TWILIO_PHONE` | Akye's own number for console texts to leads, and the STOP/START webhook. These are separate from `TWILIO_*`, so Akye never pitches from a company's number. |
 | `PRODUCT_HOST` | Where the scheduler calls the product's own jobs. Default `www.<BASE_DOMAIN>`. |
+| `METRICS_API_KEY` | Lets something that is not a person read `/console/metrics.json` — every company, what it pays, and whether its automations collect — with an `X-Api-Key` header. Leave it unset and only a signed-in console account can read it; unset never means open. Treat it like a password: it sees every company at once. |
 | `LEGAL_UPDATED`, `SECURITY_UPDATED` | The "last updated" date on the legal and security pages. Change it when you change the text. |
 | `ALLOWED_FORM_ORIGINS` | Other sites, comma separated, allowed to post forms to the app, such as the getakye.com directory's claim form. The default is `getakye.com,www.getakye.com,getakye.netlify.app`; setting this replaces it. |
 | `ALLOWED_ORIGINS` | Extra sites, comma separated, allowed to call the booking API from a browser. Each company's own website is allowed automatically. |

@@ -90,6 +90,11 @@ def snapshot(slug, now=None):
             data = {
                 'ok': True,
                 'jobs': jobs,
+                # How this business asked for balances to be collected:
+                # auto, ask or never. The hourly charge job runs for everybody
+                # and charges only 'auto', so this is the difference between a
+                # timetable that fires and a timetable that collects.
+                'balance_mode': automations.balance_mode(),
                 'jobs_broken': sum(1 for j in jobs
                                    if j['state'] in ('never', 'stale', 'failing')),
                 'errors': errors,
