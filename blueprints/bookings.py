@@ -1117,8 +1117,30 @@ def assign(booking_id):
     import rbac
     b = Booking.query.get_or_404(booking_id)
     who = (request.form.get('assign_to') or '').strip()
+
+    # How many people the job needs is set in the same breath as who does it,
+    # and it has to be applied BEFORE anything is offered: it decides how many
+    # spots the team message advertises and how the pot divides per cleaner.
+    if 'crew_size' in request.form:
+        try:
+            want = max(1, min(6, int(request.form.get('crew_size') or 1)))
+        except ValueError:
+            want = b.crew_size or 1
+        # Never below the people already on it -- that would strand somebody,
+        # and orphan an already-paid share.
+        want = max(want, len(b.crew))
+        if want != (b.crew_size or 1):
+            b.crew_size = want
+            db.session.commit()
+
     if not who:
-        flash('Pick a cleaner, or choose to offer it to the whole team.', 'warning')
+        # Changing only the headcount is a real thing to want, so saying so is
+        # better than scolding her for not picking a name as well.
+        if 'crew_size' in request.form:
+            flash(f'This job is set to {b.crew_size} paid cleaner'
+                  f'{"s" if b.crew_size != 1 else ""}.', 'success')
+        else:
+            flash('Pick a cleaner, or choose to offer it to the whole team.', 'warning')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     # The pay is read before anybody is told anything, so the figure in the
@@ -1152,8 +1174,8 @@ def assign(booking_id):
         flash(f'{s.name} is already on this job.', 'warning')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
     if b.spots_left <= 0:
-        # Raise the headcount for her rather than refusing: she picked a second
-        # person, which is what wanting a second person looks like.
+        # Picking somebody when every spot is taken is what wanting one more
+        # person looks like, so make room rather than refusing.
         b.crew_size = min(6, (b.crew_size or 1) + 1)
 
     amount = pay if pay is not None else b.default_crew_pay(s)
