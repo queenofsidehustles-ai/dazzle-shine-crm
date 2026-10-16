@@ -13,19 +13,41 @@ the emails. No code change and no redeploy needed beyond Railway's restart.
 
 ---
 
-## 1. What it looks like once it's set up (45 sec)
+## 1. What it looks like once it's set up (60 sec)
 `AKYE_VIDEO_OVERVIEW` · shows above the signup form
 
-**Show:** dashboard with today's jobs → calendar week → a job's details →
-cleaner's phone text → booking page → a paid invoice.
+The point of this one is how a job reaches the team: it goes out to everyone,
+the first to claim it gets it, and only then do they see the address.
+
+**Show:** today's jobs → open the job that's open to claim (in the demo,
+Leticia Ashford's 2:30) → Send to team → the text a cleaner gets → the claim
+page with no address → tap Claim → full address, time, checklist and
+directions → a paid invoice.
 
 **Say:**
-> This is a cleaning business once it's set up in Akye.
-> Today's jobs, right here. The whole week on the calendar.
-> Each job goes to a cleaner's phone with the address, the time and the checklist.
-> Customers book themselves on your own booking page and see your price up front.
+> This is a cleaning business running on Akye.
+> Here's a job that needs a cleaner. One tap, and it goes out to the whole team.
+> Every cleaner gets a text with the bedrooms, bathrooms, what it pays and the area. No address yet.
+> First one to claim it gets it, kind of like Uber for your cleaning jobs.
+> Once she claims it, the full address, time and checklist show up, with directions.
+> Everyone else sees it's been taken. No group chat, no calling around.
 > And when the job's done, you get paid.
 > Setting yours up takes a few minutes. The form is right below.
+
+**Recording the cleaner's side in the demo.** The demo company never sends a
+real text (demo_guard.py), so:
+
+1. After Send to team, open the **Sent Log**. Every text the team would have
+   received is there, word for word. It is labeled "not sent" because it is
+   the demo, so zoom in on the message itself.
+2. Copy the claim link from that text into a second browser window narrowed
+   to phone width (about 390 wide; Chrome: right-click → Inspect → the phone
+   icon). Show the page without the address, tap **Claim**, show the address
+   appear.
+3. Ask for the demo to be rebuilt afterwards, because claiming changes it for
+   the next visitor (DEMO.md).
+
+Never record this in a real company: Send to team texts every real cleaner.
 
 ---
 
@@ -114,6 +136,79 @@ page → upload → the customers list filled in.
 > Go to Migration, and upload it.
 > And there they are, ready to book.
 > You can do the same with your team.
+
+---
+
+# Start here: onboarding videos
+
+What a new owner sees right after signing up. The Getting started page
+(onboarding.journey) already walks them through six steps in order, with one
+"Next" box. These videos sit on that path:
+
+| Start here | Covers Getting started step | Video |
+|---|---|---|
+| 1 | the whole page | **S1 Welcome** (new, below) |
+| 2 | Tell us about your business, Check your prices | **S2 Your business and your prices** (new, below) |
+| 3 | Add a cleaner, Add a customer | #3 above |
+| 4 | Schedule a job and assign it | #5 above |
+| then | Connect Stripe (Settings → Setup) | **S3 Get paid** (new, below) |
+
+Record S1, S2 and S3 in a **fresh test company you sign up for**, not the
+demo: the demo refuses changes to its business details and connection keys
+(demo_guard.py), so those screens can't be filled in there.
+
+## S1. Welcome: your first 15 minutes (60 sec)
+`AKYE_VIDEO_START` · top of Getting started *(slot not wired yet)*
+
+**Show:** Getting started page → the progress bar → the gold "Next" box →
+the list of steps → the "full setup list" link at the bottom.
+
+**Say:**
+> Welcome to Akye. Let's get your first job on the calendar.
+> This is your Getting started list. Six steps, in order. The gold box always shows the next one.
+> You don't have to do it all today. The goal is one real job, booked and sent to a cleaner.
+> Your details and prices first. Then a cleaner, a customer, and a job.
+> Taking card payments comes after that, when you're ready.
+> Each step has a short video like this one. Let's start.
+
+## S2. Your business and your prices (90 sec)
+`AKYE_VIDEO_BUSINESS_PRICES` · Getting started steps 1 and 2 *(slot not wired yet)*
+
+**Show:** Settings → Business: Business Name, Phone, Email, Text alerts to,
+Address, Time Zone → scroll to Customer Service & Payment Terms → Save.
+Then Settings → Pricing: the 2 bed / 2 bath price → **Fill in the rest** →
+change one cell → deposit → cleaner pay per hour → Save.
+
+**Say:**
+> First, your business. Name, phone and email. These go on every quote, invoice and text your customers get.
+> "Text alerts to" is your cell. That's where Akye texts you when something needs you.
+> Check your time zone, so reminders go out at the right time.
+> Scroll down to your customer terms. They're a starting draft. Read them and make them yours. Save.
+> Now your prices. Type what you charge for a standard clean of a two-bed, two-bath house.
+> Press Fill in the rest, and it suggests every size from that one number.
+> Change any you want. These are your prices.
+> Deep cleans and move-outs are worked out from your standard price, so you keep one list.
+> Set your deposit and what you pay your cleaners. Save.
+> Now every quote comes out in your numbers.
+
+## S3. Get paid: connect Stripe (2 min)
+`AKYE_VIDEO_STRIPE` · Settings → Connections *(slot not wired yet)*
+
+**Show:** Settings → Connections → the Stripe card → Open Stripe → Developers
+→ API keys → copy the Publishable key → Reveal and copy the Secret key →
+paste both → Save → Test Stripe connection.
+
+Use Stripe **test** keys (`pk_test_`, `sk_test_`) for the recording and blur
+the secret key anyway. Never show a live secret key on screen.
+
+**Say:**
+> When you're ready to take cards, connect Stripe. Your customers' money goes straight to your own Stripe account.
+> Go to stripe.com and sign up. They'll ask for your business details and a bank account. That's where your money lands.
+> In Stripe, click Developers, then API keys.
+> Copy the Publishable key. It starts with "pk."
+> Click Reveal on the Secret key and copy it. It starts with "sk." Treat it like a password.
+> Paste both here and press Save. Then press Test Stripe connection.
+> Last thing: take a one-dollar test payment and check it shows up in Stripe. Two minutes, and you know it works.
 
 ---
 
