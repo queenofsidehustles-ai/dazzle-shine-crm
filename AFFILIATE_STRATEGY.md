@@ -182,8 +182,8 @@ affiliate with 20+ signups and under 10% activation.
 | A. Data model | **Built** | `control_plane.py`: `affiliates`, `affiliate_logins`, `affiliate_clicks`, `affiliate_commissions`, `affiliate_payouts`, plus `organizations.affiliate_code` |
 | B. Attribution | **Built** | `attribution.py` (`aff` field, `?aff=`), `/p/<code>` in `blueprints/marketing.py`, `control_plane._signup_attribution` |
 | C. Accrue and reverse | **Built** | `billing.apply_event` (`invoice.paid`, `charge.refunded`), `affiliates.accrue` / `reverse` |
-| D. Payout | **Recorded by hand** | `affiliates.record_payout` writes the payout down. It does not move money; the Stripe Connect transfer is still to do. |
-| E. Console | **Built** | `/console/affiliates` (add, status, sign-in link, payout, reverse) |
+| D. Payout | **Built** | Stripe Connect transfers from Akye's own account (`partner_payouts.py`, `affiliates.pay_via_stripe` / `retry_payout`). Partners set up their own bank details on their partner page. A manual record (PayPal, check) remains for payouts sent outside Stripe. |
+| E. Console | **Built** | Top-level **Partners** tab with a count of partners to approve or pay (`/console/affiliates`); add, status, sign-in link, pay by Stripe, retry, refresh payout status, record a manual payout, reverse, clear a review. The company page shows the partner who brought it. Health shows payout readiness. The partner emails are in Communications. |
 | F. Partner page | **Built** | `/partners` (`blueprints/partners.py`, `templates/partners/`) |
 | G. Terms and apply page | Not built | |
 | H. Customer referral credit | Not built | |
@@ -197,6 +197,8 @@ Decisions made while building:
 - **One trial, one clock.** The trial is 30 days from signup (`entitlements.TRIAL_DAYS`, read by `billing`). Setting up a cleaner and a customer is a tracked milestone (`activated_at`) but no longer starts or moves the trial, so no email says a trial "has not started". The old start-by window is gone.
 - **The Stripe webhook must send `charge.refunded`** as well as the invoice events, or refunds will not reverse a commission. Disputes are not handled automatically: reverse by hand in the console.
 - **Payouts under $50 roll over** (`affiliates.MIN_PAYOUT_CENTS`). The 12-month term is exclusive: the payment a year after the first is the thirteenth and earns nothing. A refund that arrives before its payment leaves a zero reversed row, so the payment earns nothing. A ledger error raises, so Stripe retries the webhook.
+- **Payouts are paid in two phases.** The commissions are claimed first (`paying`), then one Stripe transfer is sent with an idempotency key built from the payout id. If Stripe refuses, the commissions are released. If the answer is unknown (a dropped connection), nothing is released and the console offers a safe retry, so a partner is never paid twice or left unpaid.
+- **Payouts come from Akye's platform Stripe account** (`STRIPE_PLATFORM_SECRET_KEY`), not a cleaning company's own key, and the key is passed per request so it never changes the global one. Partners are US individuals (Express accounts); a partner outside the US needs a manual payout for now.
 - **Commission is on the invoice total before tax**, and a partial refund is left for a person.
 
 ### Original plan

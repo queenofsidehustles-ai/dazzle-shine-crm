@@ -271,7 +271,11 @@ affiliates = Table(
     # Covers refunds and chargebacks.
     Column('hold_days', Integer, nullable=False, default=30),
     Column('terms_accepted_at', DateTime),
+    # The partner's Stripe Connect account (partner_payouts.py), and whether
+    # Stripe has said it can receive money. A copy of Stripe's answer, refreshed
+    # when they finish onboarding or staff press refresh; never a promise.
     Column('payout_account_id', String(64)),
+    Column('payout_ready', Boolean, default=False),
     Column('notes', String(500)),
     Column('created_by', String(200)),
     Column('created_at', DateTime, default=datetime.utcnow),
@@ -337,6 +341,11 @@ affiliate_payouts = Table(
     Column('note', String(300)),
     Column('paid_at', DateTime, default=datetime.utcnow),
     Column('created_by', String(200)),
+    # pending (claimed, transfer not confirmed) | paid | failed (released).
+    # NULL on a payout written before this column existed, which means paid.
+    Column('status', String(12)),
+    Column('stripe_transfer_id', String(64)),
+    Column('failure', String(300)),
 )
 
 
@@ -589,6 +598,8 @@ def ensure_columns(engine):
     _ensure_table_columns(engine, organizations)
     _ensure_table_columns(engine, product_leads)
     _ensure_table_columns(engine, console_users)
+    _ensure_table_columns(engine, affiliates)
+    _ensure_table_columns(engine, affiliate_payouts)
 
 
 def ensure_table(engine):

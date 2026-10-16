@@ -67,14 +67,21 @@ def link_for(code):
     return f'{product.scheme_for(host)}://{host}/p/{code}' if host else f'/p/{code}'
 
 
+def partners_url():
+    """The partner page's own address, for emails."""
+    host = product.canonical_host() or product.domain()
+    return f'{product.scheme_for(host)}://{host}/partners' if host else '/partners'
+
+
 @partners_bp.route('')
 @partners_bp.route('/')
 @partner_required
 def dashboard():
     partner = request.partner
     data = affiliates.portal(_engine(), partner)
+    import partner_payouts
     data.update(link=link_for(partner['code']), now=datetime.utcnow(),
-                money=affiliates.money)
+                money=affiliates.money, payouts_available=partner_payouts.configured())
     return render_template('partners/dashboard.html', **data)
 
 
@@ -109,30 +116,10 @@ def _send_link(email):
 
 
 def deliver_link(partner, url):
-    """The email itself. Also used by the console's 'send a link' button."""
-    import notifications
-    name = product.name()
-    html = f"""<div style="font-family:Inter,Arial,sans-serif;max-width:520px;margin:auto;color:#16213a;line-height:1.6">
-  <p>Hi {_first(partner['name'])},</p>
-  <p>Here is your sign-in link for your {name} partner page. It works once, for the next
-     hour.</p>
-  <p style="margin:26px 0"><a href="{url}" style="background:#D98A2B;color:#fff;padding:13px 28px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Open my partner page</a></p>
-  <p style="color:#6b7590;font-size:14px">If you did not ask for this, ignore it. Nothing happens until the
-     link is used.</p>
-</div>"""
-    ok, detail = notifications.send_email(
-        partner['email'], partner['name'], f'Your {name} partner page', html,
-        from_name=name, from_email=product.from_email() or None,
-        reply_to=product.support_email() or None,
-        api_key=product.resend_api_key() or None)
-    control_plane.record_product_message(
-        _engine(), None, 'partner_login', partner['email'],
-        f'Your {name} partner page', ok, detail, sent_by='auto')
-    return ok, detail
-
-
-def _first(name):
-    return (name or '').strip().split(' ')[0] or 'there'
+    """The sign-in email. Also used by the console's 'send a link' button."""
+    import partner_mail
+    subject, html = partner_mail.login_email(partner, url)
+    return partner_mail.deliver(partner, subject, html, 'partner_login', _engine())
 
 
 @partners_bp.route('/login/<token>', methods=['GET', 'POST'])
@@ -150,6 +137,50 @@ def confirm(token):
         return render_template('partners/login.html', sent=False, expired=True), 410
     session[SESSION_KEY] = partner['id']
     session.permanent = True
+    return redirect(url_for('partners.dashboard'))
+
+
+@partners_bp.route('/payouts/setup', methods=['GET', 'POST'])
+@partner_required
+def payouts_setup():
+    """Send the partner to Stripe to say where their money should go.
+
+    GET as well as POST because Stripe's onboarding link expires and its
+    `refresh_url` sends the partner back here to get a new one. Either way it
+    only ever creates the partner's own account or a link for it."""
+    import partner_payouts
+    partner = request.partner
+    if not partner_payouts.configured():
+        flash('Payouts are not switched on yet. We will email you when they are.', 'error')
+        return redirect(url_for('partners.dashboard'))
+    engine = _engine()
+    ok, account = affiliates.ensure_payout_account(
+        engine, partner['id'],
+        lambda email, name: partner_payouts.create_account(
+            email, name, idempotency_key=f'affiliate-account-{partner["id"]}'))
+    if not ok:
+        flash(f'Stripe could not start your setup: {account}', 'error')
+        return redirect(url_for('partners.dashboard'))
+    here = url_for('partners.payouts_setup', _external=True)
+    back = url_for('partners.payouts_return', _external=True)
+    ok, value = partner_payouts.onboarding_link(account, here, back)
+    if not ok:
+        flash(f'Stripe could not open your setup page: {value}', 'error')
+        return redirect(url_for('partners.dashboard'))
+    return redirect(value)
+
+
+@partners_bp.route('/payouts/return')
+@partner_required
+def payouts_return():
+    """Where Stripe sends them back. Ask Stripe, rather than trusting the visit."""
+    ok, ready = affiliates.refresh_payout_status(_engine(), request.partner)
+    if not ok:
+        flash(f'We could not check with Stripe just now: {ready}', 'error')
+    elif ready:
+        flash('Payouts are set up. We will pay you by bank transfer once your balance reaches the minimum.', 'success')
+    else:
+        flash('Stripe still needs a few details before it can pay you. Open setup again to finish.', 'error')
     return redirect(url_for('partners.dashboard'))
 
 
