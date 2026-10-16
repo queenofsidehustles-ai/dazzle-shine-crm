@@ -133,6 +133,11 @@ try:
                 with db.engine.begin() as c:
                     c.execute(text('CREATE SCHEMA IF NOT EXISTS "%%s"' %% schema))
                 md.create_all(bind=db.engine)
+                # The guards a provisioned company has (migrations 0029-0031):
+                # with them, an audit entry is chained as it is written.
+                import quote_evidence
+                with db.engine.begin() as c:
+                    quote_evidence.install_guards(c, schema)
                 with db.engine.begin() as c:
                     c.execute(text(
                         'INSERT INTO "%%s".client (name, email, address) '
@@ -148,15 +153,15 @@ try:
                 c.execute(text(
                     "INSERT INTO tenant_acme.commercial_quote_revision "
                     "(id, quote_id, number, terms, content_hash, origin, created_at) "
-                    "VALUES (1, 1, 1, '{}', :h, 'issued', now())"), {'h': 'a' * 64})
+                    "VALUES (1, 1, 1, '{}', :h, 'issued', now())"), {'h': quote_evidence.digest('{}')})
                 c.execute(text(
                     "INSERT INTO tenant_acme.commercial_quote_response "
                     "(id, quote_id, revision_id, content_hash, decision, signer_name, created_at) "
-                    "VALUES (1, 1, 1, :h, 'accepted', 'Pat Signer', now())"), {'h': 'a' * 64})
+                    "VALUES (1, 1, 1, :h, 'accepted', 'Pat Signer', now())"), {'h': quote_evidence.digest('{}')})
                 c.execute(text(
                     "INSERT INTO tenant_acme.commercial_agreement "
                     "(id, quote_id, revision_id, response_id, content_hash, effective_on, created_at) "
-                    "VALUES (1, 1, 1, 1, :h, current_date, now())"), {'h': 'a' * 64})
+                    "VALUES (1, 1, 1, 1, :h, current_date, now())"), {'h': quote_evidence.digest('{}')})
                 c.execute(text(
                     "INSERT INTO tenant_acme.commercial_quote_delivery "
                     "(id, quote_id, revision_id, channel, recipient, status, created_at) "

@@ -37,6 +37,18 @@ class Retry(Exception):
     the email service tries again later."""
 
 
+# What /api/email-events reports to the errors page (errors.capture), which
+# emails the platform owner the first time each happens and again if it keeps
+# happening. Two classes, so the two are two alerts rather than one.
+class SignatureRefused(RuntimeError):
+    """A call with no valid signature: an attacker, or -- far likelier, and
+    the reason this alerts -- a webhook secret that does not match Resend's."""
+
+
+class EventNotSaved(RuntimeError):
+    """An event the service will send again, because saving it failed."""
+
+
 def _tag(data, name):
     """A tag's value, whichever shape the payload uses: {"tenant": "x"} or
     [{"name": "tenant", "value": "x"}]."""
