@@ -72,7 +72,7 @@
       <p style="font-size:0.86rem;margin:0">This offer expired on {{ expires_on }}. Revise it to send a fresh one with a new date.</p>
       {% elif q.status in ('draft', 'sent') %}
       <form method="POST" action="{{ url_for('quotes.send_quote', quote_id=q.id) }}"
-            onsubmit='return confirm({{ ("Email this proposal to " ~ (q.email or "") ~ " now?")|tojson }})'>
+            onsubmit="return confirm('{{ ('Email this proposal to ' ~ (q.email or '') ~ ' now?')|js }}')">
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;padding:12px"
                 {{ 'disabled' if blocking }}>
           {{ {'sent': '↻ Resend the same proposal'}.get(q.status, '📨 Looks right — send') }} to {{ q.email or '…' }}

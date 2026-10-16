@@ -30,7 +30,7 @@
     <form method="POST">
       <div class="stars" id="stars">
         {% for i in range(1,6) %}
-        <span class="star" data-val="{{ i }}" onclick="pick({{ i }})" title="{{ i }} star{{ 's' if i > 1 }}">⭐</span>
+        <span class="star" data-val="{{ i }}" onclick="pick({{ i|int }})" title="{{ i }} star{{ 's' if i > 1 }}">⭐</span>
         {% endfor %}
       </div>
       <input type="hidden" name="stars" id="stars-input" value="0" />

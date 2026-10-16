@@ -75,7 +75,7 @@
           Status: <span class="status status-confirmed">Active</span> — receiving job assignments.
         </div>
         <form method="POST" action="{{ url_for('contractors.staff_toggle_active', staff_id=s.id) }}"
-              onsubmit="return confirm('Deactivate {{ s.name }}? They will immediately stop getting job assignments and notifications. No message is sent to them, and you can reactivate anytime.')"
+              onsubmit="return confirm('Deactivate {{ s.name|js }}? They will immediately stop getting job assignments and notifications. No message is sent to them, and you can reactivate anytime.')"
               style="margin:0">
           <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">🚫 Deactivate — stop sending jobs</button>
         </form>
@@ -163,14 +163,14 @@
       {% if not s.welcome_forms_at %}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
         <span style="font-size:0.85rem;color:var(--amber-deep)">📋 Onboarding Forms</span>
-        <button onclick="copyLink('{{ url_for('contractors.onboarding_forms', token=s.agreement_token, _external=True) }}')"
+        <button onclick="copyLink('{{ (url_for('contractors.onboarding_forms', token=s.agreement_token, _external=True))|js }}')"
                 class="btn btn-outline" style="padding:5px 12px;font-size:0.75rem;flex-shrink:0">Copy Link</button>
       </div>
       {% endif %}
       {% if s.orientation_token and not s.orientation_completed_at %}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span style="font-size:0.85rem;color:var(--amber-deep)">🎓 Orientation Complete</span>
-        <button onclick="copyLink('{{ url_for('contractors.orientation_complete', token=s.orientation_token, _external=True) }}')"
+        <button onclick="copyLink('{{ (url_for('contractors.orientation_complete', token=s.orientation_token, _external=True))|js }}')"
                 class="btn btn-outline" style="padding:5px 12px;font-size:0.75rem;flex-shrink:0">Copy Link</button>
       </div>
       {% endif %}
@@ -205,7 +205,7 @@
                style="font-size:0.8rem;font-weight:600;color:var(--ink-2);text-decoration:none;border:1px solid var(--line);
                       border-radius:7px;padding:6px 12px">View</a>
             <form method="POST" action="{{ url_for('contractors.delete_document', doc_id=doc.id) }}"
-                  onsubmit="return confirm('Delete {{ s.name }}\'s {{ label[2:] }}? This cannot be undone.')"
+                  onsubmit="return confirm('Delete {{ s.name|js }}\'s {{ label[2:]|js }}? This cannot be undone.')"
                   style="display:inline">
               <button type="submit" title="Delete"
                       style="background:none;border:1px solid var(--warn-soft);border-radius:7px;padding:6px 10px;
@@ -298,7 +298,7 @@
           <span>✅</span><span style="font-weight:700;color:var(--good);font-size:0.88rem">Verified on Stripe — ready to pay</span>
         </div>
         <form method="POST" action="{{ url_for('contractors.pay_contractor', staff_id=s.id) }}"
-              onsubmit="return confirm('Send $' + this.amount.value + ' to {{ s.name }} via Stripe? This sends real money.')">
+              onsubmit="return confirm('Send $' + this.amount.value + ' to {{ s.name|js }} via Stripe? This sends real money.')">
           <div style="display:flex;gap:8px;margin-bottom:8px">
             <span style="align-self:center;font-weight:700;color:var(--muted)">$</span>
             <input name="amount" type="number" step="0.01" min="0.01" placeholder="0.00" required
@@ -367,7 +367,7 @@
         <h2 style="font-size:1rem;font-weight:700;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Onboarding Details</h2>
         {% if s.orientation_completed_at %}
         <form method="POST" action="{{ url_for('contractors.reset_orientation', staff_id=s.id) }}"
-              onsubmit="return confirm('Reset orientation for {{ s.name.split()[0] }}? They will need to re-complete training.')">
+              onsubmit="return confirm('Reset orientation for {{ s.name.split()[0]|js }}? They will need to re-complete training.')">
           <button type="submit" class="btn btn-outline" style="padding:4px 10px;font-size:0.72rem;color:var(--warn);border-color:var(--warn-soft)">
             Reset Orientation
           </button>
@@ -421,7 +421,7 @@
       {% for key, label in steps %}
       {% set is_done = key in completed %}
       <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line-soft);cursor:pointer"
-           onclick="toggleStep('{{ key }}', this)">
+           onclick="toggleStep('{{ key|js }}', this)">
         <div style="width:22px;height:22px;border-radius:6px;border:2px solid {{ 'var(--amber)' if is_done else 'var(--line)' }};
                     background:{{ 'var(--amber)' if is_done else 'white' }};display:flex;align-items:center;justify-content:center;flex-shrink:0">
           {% if is_done %}<span style="color:white;font-size:0.8rem">✓</span>{% endif %}

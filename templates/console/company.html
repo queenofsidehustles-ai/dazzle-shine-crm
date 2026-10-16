@@ -83,7 +83,7 @@
 </table></div>
 {% if may_operate %}
 <form method="post" action="{{ url_for('console.resolve_errors', slug=org.slug) }}"
-      onsubmit="return confirm('Mark all {{ snap.open_errors }} open errors sorted? Any that happens again will reopen.')"
+      onsubmit="return confirm('Mark all {{ snap.open_errors|js }} open errors sorted? Any that happens again will reopen.')"
       style="margin:8px 0">
   <button class="btn btn-outline btn-sm" type="submit">Mark all sorted</button>
 </form>
@@ -116,7 +116,7 @@
   {% if trial %}
   
 <form method="post" action="{{ url_for('console.send_welcome', slug=org.slug) }}"
-      style="display:inline" onsubmit="return confirm('Send the welcome email to {{ org.owner_email }}?')">
+      style="display:inline" onsubmit="return confirm('Send the welcome email to {{ org.owner_email|js }}?')">
   <button type="submit">Send welcome email</button>
 </form>
 <form method="post" action="{{ url_for('console.extend_trial', slug=org.slug) }}">
@@ -133,7 +133,7 @@
   {% endif %}
   {% if org.status == 'active' %}
   <form method="post" action="{{ url_for('console.suspend_company', slug=org.slug) }}"
-        onsubmit='return confirm({{ ("Suspend " ~ org.name ~ "? Nobody there will be able to sign in.")|tojson }})'>
+        onsubmit="return confirm('{{ ('Suspend ' ~ org.name ~ '? Nobody there will be able to sign in.')|js }}')">
     <label for="reason" class="ops-dim">Suspend</label>
     <input type="text" name="reason" id="reason" required placeholder="Why — this goes in the record">
     <button class="btn btn-outline btn-sm" type="submit">Suspend</button>

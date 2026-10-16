@@ -133,7 +133,7 @@
                   </a>
                 {% else %}
                   <form method="POST" action="{{ url_for('interviews.send_invite', app_id=a.id) }}"
-                        onsubmit="return confirm('Re-send interview link to {{ a.name }}?')">
+                        onsubmit="return confirm('Re-send interview link to {{ a.name|js }}?')">
                     <button style="background:var(--bg);color:var(--purple-mid);border:1px solid var(--border);
                                    padding:6px 14px;border-radius:6px;font-size:0.82rem;font-weight:600;
                                    cursor:pointer">

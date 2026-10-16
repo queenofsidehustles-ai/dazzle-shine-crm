@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Your job — {{ biz }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Inter,sans-serif;background:var(--ground);color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:16px;max-width:440px;width:100%;padding:34px 28px;text-align:center;box-shadow:0 8px 40px rgba(15,7,40,0.09)}
+    h1{font-size:1.3rem;margin:10px 0 6px}
+    p{color:var(--muted);line-height:1.6;font-size:0.95rem}
+    button{width:100%;border:none;border-radius:999px;padding:15px;font-weight:700;font-size:1.05rem;cursor:pointer;margin-top:18px;font-family:inherit}
+    .yes{background:var(--amber);color:var(--info)}
+    .no{background:#fff;border:1px solid var(--warn-soft);color:var(--warn)}
+    .ok{color:#065f46}.bad{color:#991b1b}
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% if done == 'accepted' %}
+      <h1 class="ok">✅ Job accepted!</h1>
+      <p>We'll see you on {{ booking.preferred_date or 'the scheduled date' }}.</p>
+    {% elif done == 'declined' %}
+      <h1 class="bad">Job declined</h1>
+      <p>We've let the office know and will reassign it. Thank you for telling us!</p>
+    {% else %}
+      {# A link opened is not an answer given: mail scanners open links too.
+         The answer is the button, which only a person presses. #}
+      <h1>{{ 'Accept this job?' if action == 'accept' else 'Decline this job?' }}</h1>
+      <p>{{ booking.preferred_date or 'Date to be confirmed' }}{% if booking.preferred_time %} · {{ booking.preferred_time }}{% endif %}{% if booking.city %} · {{ booking.city }}{% endif %}</p>
+      <form method="POST">
+        <input type="hidden" name="action" value="{{ action }}">
+        <input type="hidden" name="token" value="{{ token }}">
+        {% if action == 'accept' %}
+          <button type="submit" class="yes">✅ Yes, I'll take it</button>
+        {% else %}
+          <button type="submit" class="no">I can't make this one</button>
+        {% endif %}
+      </form>
+    {% endif %}
+  </div>
+</body>
+</html>

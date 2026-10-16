@@ -336,7 +336,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
             {% if is_owner %}
             <form method="POST" style="display:inline"
                   action="{{ url_for('places_finder.delete', prospect_id=p.id) }}"
-                  onsubmit="return confirm('Remove {{ p.business_name }} from the call list?')">
+                  onsubmit="return confirm('Remove {{ p.business_name|js }} from the call list?')">
               <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:var(--warn)">✕</button>
             </form>
             {% endif %}

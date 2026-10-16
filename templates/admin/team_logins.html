@@ -68,11 +68,11 @@
                  person who has known it. This just sends the same reset link
                  /forgot sends, so there's only ever the one path in. #}
               <form method="POST" action="{{ url_for('team_logins.reset', user_id=u.id) }}"
-                    onsubmit="return confirm('Send {{ u.name }} a link to set a new password?')">
+                    onsubmit="return confirm('Send {{ u.name|js }} a link to set a new password?')">
                 <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:0.78rem">Send reset link</button>
               </form>
               <form method="POST" action="{{ url_for('team_logins.delete', user_id=u.id) }}"
-                    onsubmit="return confirm('Remove {{ u.name }}\'s login for good?')">
+                    onsubmit="return confirm('Remove {{ u.name|js }}\'s login for good?')">
                 <button type="submit" class="btn btn-outline" style="padding:5px 9px;font-size:0.78rem;color:var(--warn)">✕</button>
               </form>
             </div>

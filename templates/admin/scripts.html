@@ -60,7 +60,7 @@
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
-        <button onclick="copyScript(this, `{{ s.content | replace('`','\\`') | replace('\n','\\n') }}`)"
+        <button onclick="copyScript(this, '{{ s.content|js }}')"
                 class="btn btn-gold" style="padding:5px 14px;font-size:0.78rem;white-space:nowrap">
           Copy
         </button>

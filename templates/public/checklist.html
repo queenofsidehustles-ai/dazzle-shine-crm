@@ -176,7 +176,7 @@
           {% set completed = checklist.get_completed() %}
           {% set ns = namespace(i=0) %}
           {% macro row(item, idx) %}
-            <div class="checklist-item {{ 'done' if idx in completed }}" onclick="toggleItem({{ idx }}, this)">
+            <div class="checklist-item {{ 'done' if idx in completed }}" onclick="toggleItem({{ idx|int }}, this)">
               <div class="box">{% if idx in completed %}<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7l4 4 6-7" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>{% endif %}</div>
               <div class="text">{{ item }}</div>
             </div>

@@ -678,7 +678,7 @@
         Balance collected ✓
       </div>
       {% elif booking.stripe_payment_method_id %}
-      <button onclick="chargeBalance({{ booking.id }}, {{ due }})"
+      <button onclick="chargeBalance({{ booking.id|int }}, {{ due|float }})"
               id="charge-btn" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px"
               {{ 'disabled' if due <= 0 }}>
         {{ 'Nothing to charge' if due <= 0 else 'Charge $%.2f Now' % due }}
@@ -911,7 +911,7 @@
           </div>
           {% if not c.paid_at %}
           <button type="submit" formaction="{{ url_for('bookings.remove_crew', booking_id=booking.id, crew_id=c.id) }}"
-                  onclick="return confirm('Remove {{ c.staff.name if c.staff else 'this cleaner' }} from this job? Their spot re-opens.')"
+                  onclick="return confirm('Remove {{ (c.staff.name if c.staff else 'this cleaner')|js }} from this job? Their spot re-opens.')"
                   title="Remove from crew"
                   style="background:none;border:1px solid var(--warn-soft);color:var(--warn);border-radius:7px;padding:5px 9px;cursor:pointer;font-weight:700">✕</button>
           {% endif %}
@@ -1133,7 +1133,7 @@
           <div style="display:flex;gap:7px">
             <button type="submit" name="to" value="me" class="btn btn-outline" style="flex:1;justify-content:center">✉️ Test to me</button>
             <button type="submit" name="to" value="customer" class="btn btn-gold" style="flex:1;justify-content:center"
-                    onclick="return confirm('Ask {{ booking.name }} to confirm this booking?');"
+                    onclick="return confirm('Ask {{ booking.name|js }} to confirm this booking?');"
                     {% if not booking.email and not booking.phone %}disabled{% endif %}>Send to {{ booking.name.split()[0] }}</button>
           </div>
         </form>

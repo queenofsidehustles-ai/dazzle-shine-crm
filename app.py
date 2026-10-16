@@ -2608,13 +2608,6 @@ def _seed_pricing_defaults():
         pass
 
 
-if __name__ == '__main__':
-    app = create_app()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8001)), debug=True)
-
-# Redeploy trigger: ensure clean boot runs _migrate_db (adds access_notes + recent columns to prod)
-
-
 def _grandfather_established_business():
     """A business already running on this CRM does not get downgraded by the
     arrival of plans.
@@ -2662,3 +2655,11 @@ def _grandfather_established_business():
         BusinessSetting.set('plan', 'solo')
         BusinessSetting.set('plan_status', 'active')
     db.session.commit()
+
+
+if __name__ == '__main__':
+    # Local development only -- production runs gunicorn. On this machine's
+    # loopback, and the debugger only when asked for: the Werkzeug debugger
+    # runs whatever code it is sent, so it must never face a network.
+    create_app().run(host='127.0.0.1', port=int(os.environ.get('PORT', 8001)),
+                     debug=os.environ.get('FLASK_DEBUG') == '1')

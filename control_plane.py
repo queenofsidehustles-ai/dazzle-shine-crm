@@ -1259,16 +1259,29 @@ def all_feedback(engine, limit=200):
     return [dict(r) for r in rows]
 
 
-def feedback_shot(engine, feedback_id):
-    """(bytes, content-type) for one screenshot, or (None, None)."""
+# What a screenshot may be served as. The type is whatever the browser that
+# sent it claimed; an image/svg+xml "screenshot" is a page that runs script, at
+# our address, for whoever opens it.
+SHOT_TYPES = ('image/jpeg', 'image/png', 'image/webp')
+
+
+def feedback_shot(engine, feedback_id, org_slug=Ellipsis):
+    """(bytes, content-type) for one screenshot, or (None, None).
+
+    `org_slug`, when given, is the only company whose feedback may come back
+    (None for a single-business install's own); the console, which reads
+    everybody's, leaves it out.
+    """
+    q = select(feedback.c.shot, feedback.c.shot_type).where(feedback.c.id == feedback_id)
+    if org_slug is not Ellipsis:
+        q = q.where(feedback.c.org_slug.is_(None) if org_slug is None
+                    else feedback.c.org_slug == org_slug)
     with engine.connect() as conn:
-        row = conn.execute(
-            select(feedback.c.shot, feedback.c.shot_type)
-            .where(feedback.c.id == feedback_id)
-        ).first()
+        row = conn.execute(q).first()
     if not row or not row[0]:
         return None, None
-    return row[0], (row[1] or 'image/jpeg')
+    ctype = (row[1] or 'image/jpeg').lower()
+    return row[0], (ctype if ctype in SHOT_TYPES else 'application/octet-stream')
 
 
 def mark_feedback_read(engine, feedback_id):
