@@ -280,6 +280,7 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                         pad = '      ' if schema != PUBLIC else '    '
                         print(f'{pad}{table.name:<28} {n:>7}')
             evidence = _evidence_digests(conn, by_schema)
+            anchor = _against_last_night(conn, evidence, _previous_manifest(out_dir))
 
     size = os.path.getsize(path)
     tenant_rows = sum(sum(t.values()) for t in tenant_counts.values())
@@ -293,7 +294,8 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                 # head and evidence hashes. certify.py compare checks a later
                 # database against it; verify() checks the restore against it.
                 'evidence': {s: d for s, d in evidence.items() if 'error' not in d},
-                'evidence_problems': [f'{s}: {d["error"]}' for s, d in evidence.items() if 'error' in d]}
+                'evidence_problems': [f'{s}: {d["error"]}' for s, d in evidence.items() if 'error' in d]
+                + anchor}
 
     previous = _previous_manifest(out_dir)
     problems = _sanity_check(manifest, previous) + manifest['evidence_problems']
@@ -318,19 +320,29 @@ class BackupFailed(Exception):
     pass
 
 
+def _chained(tables):
+    return any(t.name == 'contract_audit_event' and 'chain_seq' in {c.name for c in t.columns}
+               for t in tables)
+
+
 def _evidence_digests(conn, by_schema):
     """{schema: evidence_check.digest(...)} for every schema holding the
     contract evidence tables (Postgres only). A chain that does not recompute
     is recorded as an error: that is the tampering this exists to catch, and
-    it fails the backup loudly rather than being written down as the truth."""
+    it fails the backup loudly rather than being written down as the truth.
+
+    A database from before migration 0031 has no chain anywhere and gets no
+    digests. One where some companies have it and one does not is a migration
+    that did not finish, and that company is an error, not a silent gap."""
     if conn.dialect.name != 'postgresql':
         return {}
     import evidence_check
     out = {}
+    any_chained = any(_chained(tables) for tables in by_schema.values())
     for schema, tables in by_schema.items():
-        names = {t.name for t in tables}
-        if 'contract_audit_event' not in names or 'chain_seq' not in {
-                c.name for t in tables if t.name == 'contract_audit_event' for c in t.columns}:
+        if not _chained(tables):
+            if any_chained and schema != PUBLIC:
+                out[schema] = {'error': 'its contract evidence has no audit chain (migration 0031 did not reach it)'}
             continue
         bad = (evidence_check.audit_chain(conn, schema)['problems']
                + evidence_check.reconcile(conn, schema)['tampered'])
@@ -339,6 +351,34 @@ def _evidence_digests(conn, by_schema):
             continue
         out[schema] = evidence_check.digest(conn, schema)
     return out
+
+
+def _against_last_night(conn, evidence, previous):
+    """Problems with tonight's evidence against what the last backup wrote down
+    -- the check that makes the record outside the database worth having. A
+    chain rebuilt between two backups recomputes perfectly on its own; only
+    the head written down before shows it is not the chain that was there.
+
+    Skipped for demo companies, which are rebuilt from scratch on purpose,
+    and for companies no longer here (the count checks speak for those)."""
+    then = (previous or {}).get('evidence') or {}
+    if not then or conn.dialect.name != 'postgresql':
+        return []
+    import evidence_check
+    from sqlalchemy import text
+    demo = set()
+    try:
+        demo = {r[0] for r in conn.execute(text(
+            'SELECT schema_name FROM public.organizations WHERE is_demo'))}
+    except Exception:
+        pass
+    problems = []
+    for schema, digest in sorted(then.items()):
+        if schema in demo or schema not in evidence or 'error' in evidence[schema]:
+            continue
+        problems += [f'{schema}: {p} since the last backup' for p in
+                     evidence_check.compare(conn, schema, digest)['problems']]
+    return problems
 
 
 def _previous_manifest(out_dir):
@@ -781,7 +821,9 @@ def _verify_evidence(path, scratch_url, tenants):
                                  evidence_check.compare(conn, schema, written[schema])['problems']]
                     problems += [f'{schema}: {p}' for p in
                                  evidence_check.reconcile(conn, schema)['tampered']]
-                if schema != PUBLIC and (schema in written or not written):
+                elif written and schema != PUBLIC:
+                    problems.append(f'{schema}: the backup wrote down no evidence for it')
+                if schema != PUBLIC:
                     report = evidence_check.schema_report(conn, schema)
                     problems += [f'{schema}: {p}' for p in report['problems']
                                  if p.startswith(('guard', 'index'))]

@@ -50,14 +50,23 @@ def _preflight(slug):
         raise Refused(f'{slug} is not a demo company; the journey writes records and runs only on one')
     if not (os.environ.get('BASE_DOMAIN') or '').strip():
         raise Refused('BASE_DOMAIN is not set; the journey reaches the company at its own address')
+    # Booting the app migrates every schema that is behind -- public and every
+    # company, not only this one. So all of them must already be on this
+    # code's head, or the journey would be what migrated production.
     head = evidence_check.head_revision()
     with engine.connect() as conn:
-        version = conn.execute(text(
-            f'SELECT version_num FROM "{org["schema_name"]}".alembic_version')).scalar()
-    if version != head:
-        raise Refused(f'{slug} is on {version}, this code on {head}: deploy first, '
-                      'so that this is not what migrates it')
+        behind = []
+        for schema in ['public'] + evidence_check.inventory(conn)['schemas']:
+            found = conn.execute(text('SELECT to_regclass(:t)'),
+                                 {'t': f'"{schema}".alembic_version'}).scalar()
+            version = conn.execute(text(
+                f'SELECT version_num FROM "{schema}".alembic_version')).scalar() if found else None
+            if version != head:
+                behind.append(f'{schema} ({version})')
     engine.dispose()
+    if behind:
+        raise Refused(f'not every schema is on {head}: {", ".join(behind[:5])}'
+                      f'{" …" if len(behind) > 5 else ""}. Deploy first, so that this is not what migrates them')
     return org
 
 
@@ -242,11 +251,18 @@ class Journey:
         self.check(len(self.all(QuoteResponse, quote_id=qid)) == 1
                    and len(self.all(CommercialAgreement, quote_id=qid)) == 1,
                    'a second acceptance of the same link records nothing')
-        self.owner.post(f'/quotes/{qid}', base_url=self.host, data=dict(self.form, monthly_price='1'))
-        self.owner.post(f'/quotes/{qid}/delete', base_url=self.host)
+        edit = self.owner.post(f'/quotes/{qid}', base_url=self.host, data=dict(self.form, monthly_price='1'))
+        gone = self.owner.post(f'/quotes/{qid}/delete', base_url=self.host)
         q = self.quote(qid)
         self.check(q and (q['monthly_price'], q['status']) == before[:2],
                    'the accepted quote can be neither edited nor deleted')
+        for what, r in (('edit', edit), ('delete', gone)):
+            # Refused by the rule, not by a crash or a lost session: the
+            # owner is sent back to the quote, still signed in.
+            where = r.headers.get('Location', '')
+            self.check(r.status_code in (302, 303) and f'/quotes/{qid}' in where and 'login' not in where,
+                       f'the {what} was answered with a refusal, not an error',
+                       status=r.status_code, location=where)
         for what, sql in (
                 ('UPDATE a revision', 'UPDATE {s}commercial_quote_revision SET terms = terms WHERE quote_id = :q'),
                 ('DELETE an answer', 'DELETE FROM {s}commercial_quote_response WHERE quote_id = :q'),

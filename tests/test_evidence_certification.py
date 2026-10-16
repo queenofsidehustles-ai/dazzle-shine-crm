@@ -191,6 +191,29 @@ with engine.connect() as conn:
     p = evidence_check.schema_report(conn, SA)['problems']
 check(any('commercial_agreement_kept' in x and 'switched off' in x for x in p), 'and names it')
 as_owner('ALTER TABLE {s}commercial_agreement ENABLE TRIGGER commercial_agreement_kept')
+as_owner('ALTER TABLE {s}commercial_agreement ENABLE REPLICA TRIGGER commercial_agreement_kept')
+with engine.connect() as conn:
+    p = evidence_check.schema_report(conn, SA)['problems']
+check(any('commercial_agreement_kept' in x and 'replica-only' in x for x in p),
+      'a guard set to fire only for replication -- never for the app -- counts as off')
+as_owner('ALTER TABLE {s}commercial_agreement ENABLE TRIGGER commercial_agreement_kept')
+check(certify.main(['schema', '--company', 'no-such-company']) == 1
+      and certify.main(['evidence', '--company', 'no-such-company']) == 1,
+      'a company name that matches nothing fails, rather than certifying nothing')
+sql('CREATE SCHEMA tenant_orphan')
+check(certify.main(['schema']) == 1, 'a company schema on no company\'s row fails the inventory')
+sql('DROP SCHEMA tenant_orphan')
+as_owner('DROP INDEX {s}uq_contract_audit_event_chain_seq',
+         'CREATE INDEX uq_contract_audit_event_chain_seq ON {s}contract_audit_event (chain_seq)')
+with engine.connect() as conn:
+    p = evidence_check.schema_report(conn, SA)['problems']
+check(any('uq_contract_audit_event_chain_seq' in x and 'not what it should be' in x for x in p),
+      'an index with the right name but no longer unique fails')
+as_owner('DROP INDEX {s}uq_contract_audit_event_chain_seq',
+         'CREATE UNIQUE INDEX uq_contract_audit_event_chain_seq ON {s}contract_audit_event (chain_seq)')
+with engine.connect() as conn:
+    check(evidence_check.schema_report(conn, SA)['problems'] == [],
+          'and the migrations\' own definitions pass (the partial amendment index included)')
 
 print('\n4. The backup writes the evidence down outside, and the restore is held to it')
 bdir = tempfile.mkdtemp()
@@ -220,7 +243,54 @@ try:
 except backup.BackupFailed as e:
     check('no longer hash' in str(e), f'a backup with altered terms fails verification')
 
+# A chain rebuilt between two backups recomputes on its own; last night's
+# head is what shows it. Here: the newest entry deleted (as a restore may).
+night = tempfile.mkdtemp()
+backup.create(night, os.environ['DATABASE_URL'], quiet=True)
+sql(f"UPDATE public.organizations SET is_demo = true WHERE slug = '{DEMO}'")
+for schema in (SA, SD):
+    as_owner("SET LOCAL akye.restoring = 'on'",
+             'DELETE FROM {s}contract_audit_event WHERE chain_seq = '
+             '(SELECT max(chain_seq) FROM {s}contract_audit_event)', schema=schema)
+with engine.connect() as conn:
+    check(evidence_check.audit_chain(conn, SA)['problems'] == [],
+          'with its newest entry gone, the chain is still whole on its own')
+try:
+    backup.create(night, os.environ['DATABASE_URL'], quiet=True)
+    check(False, 'the next backup holds it to what the last one wrote down, and fails')
+except backup.BackupFailed as e:
+    check(f'{SA}: audit chain' in str(e) and 'since the last backup' in str(e),
+          'the next backup holds it to what the last one wrote down, and fails')
+    check(SD not in str(e), 'a demo company, rebuilt on purpose, is not held to it')
+sql(f"UPDATE public.organizations SET is_demo = false WHERE slug = '{DEMO}'")
+
+# A company migration 0031 did not reach is an error, not a silent gap.
+LAG = 'evlag'
+with app.app_context():
+    provisioning.provision(LAG, 'Lagging Cleaning', quiet=True)
+    db.session.remove()
+as_owner('DROP TRIGGER contract_audit_event_chain ON {s}contract_audit_event',
+         'ALTER TABLE {s}contract_audit_event DROP COLUMN chain_seq, DROP COLUMN prev_hash, '
+         'DROP COLUMN row_hash', schema=tenancy.schema_for(LAG))
+try:
+    backup.create(tempfile.mkdtemp(), os.environ['DATABASE_URL'], quiet=True)
+    check(False, 'a company without the audit chain fails the backup')
+except backup.BackupFailed as e:
+    check(f'{tenancy.schema_for(LAG)}: its contract evidence has no audit chain' in str(e),
+          'a company without the audit chain fails the backup, by name')
+sql(f'DROP SCHEMA "{tenancy.schema_for(LAG)}" CASCADE')
+sql(f"DELETE FROM public.organizations WHERE slug = '{LAG}'")
+
 print('\n5. An edit by somebody able to switch the guards off still shows')
+# Any field of an answer, not only its hash: here, who signed it.
+as_owner('ALTER TABLE {s}commercial_quote_response DISABLE TRIGGER commercial_quote_response_frozen',
+         "UPDATE {s}commercial_quote_response SET signer_name = 'Someone Else'",
+         'ALTER TABLE {s}commercial_quote_response ENABLE TRIGGER commercial_quote_response_frozen')
+with engine.connect() as conn:
+    then = json.load(open(bad.replace('.json.gz', '.manifest.json')))['evidence'][SA]
+    cmp = evidence_check.compare(conn, SA, then)
+check(any(x.startswith('response ') and 'has changed' in x for x in cmp['problems']),
+      'a changed signer on an answer shows against the record written down')
 as_owner('ALTER TABLE {s}contract_audit_event DISABLE TRIGGER contract_audit_event_frozen',
          "UPDATE {s}contract_audit_event SET actor = 'Someone Else' WHERE event = 'accepted'",
          'ALTER TABLE {s}contract_audit_event ENABLE TRIGGER contract_audit_event_frozen')
@@ -252,6 +322,12 @@ print('\n6. G2: the journey, on a demo company')
 sql(f"UPDATE public.organizations SET is_demo = true WHERE slug = '{DEMO}'")
 sql(f"UPDATE public.organizations SET is_demo = false WHERE slug = '{A}'")
 check(certify.main(['journey', '--company', A]) == 1, 'refused on a company that is not a demo')
+sql("UPDATE public.alembic_version SET version_num = '0030_contract_trail'")
+pack = certify.main(['journey', '--company', DEMO, '--out', f'{out}/behind.json'])
+behind = json.load(open(f'{out}/behind.json'))
+check(pack == 1 and any('public (0030_contract_trail)' in p for p in behind['problems']),
+      'refused while any schema -- public here -- is behind, since booting would migrate it')
+sql(f"UPDATE public.alembic_version SET version_num = '{evidence_check.head_revision()}'")
 fresh_postgres.owner_client(app, DEMO, 'akye.test')   # the demo's seeded owner, here
 before = len(SENT)
 jout = f'{out}/j.json'
@@ -291,6 +367,13 @@ r = app.test_client().post('/api/email-events', base_url=PLATFORM,
                            json={'type': 'email.delivered', 'data': {'email_id': 'x'}})
 check(r.status_code == 403 and logged('SignatureRefused') == 1,
       'an unsigned event is refused and logged as an error (a wrong secret looks like this)')
+r = app.test_client().post('/api/email-events', base_url=HOST,
+                           json={'type': 'email.delivered', 'data': {'email_id': 'x'}})
+with app.app_context(), tenancy.use_tenant(A):
+    in_company = ErrorLog.query.filter_by(kind='SignatureRefused').count()
+    db.session.remove()
+check(r.status_code == 403 and in_company == 0 and logged('SignatureRefused') == 1,
+      "the same at a company's address is refused with no alert: no false incident in its errors or inbox")
 real_ok, real_record = api_bp_module._resend_signature_ok, delivery_events.record
 api_bp_module._resend_signature_ok = lambda *a, **k: True
 

@@ -58,11 +58,17 @@ def _emit(result, out, ok_line):
 
 
 def _schemas(conn, only=None):
+    """Every company schema, or those named. A name that matches none is a
+    problem, not an empty pass: a typo must not certify nothing."""
     import evidence_check
+    import tenancy
     inv = evidence_check.inventory(conn)
     schemas = inv['schemas']
     if only:
-        schemas = [s for s in schemas if s in only or s.split('_', 1)[-1] in only]
+        wanted = {name if name.startswith(tenancy.SCHEMA_PREFIX) else tenancy.SCHEMA_PREFIX + name
+                  for name in only}
+        inv['problems'] += [f'no company schema {w}' for w in sorted(wanted - set(schemas))]
+        schemas = [s for s in schemas if s in wanted]
     return inv, schemas
 
 
@@ -92,6 +98,7 @@ def cmd_evidence(args):
     with engine.connect() as conn, conn.begin():
         evidence_check.read_only(conn)
         inv, schemas = _schemas(conn, args.company)
+        problems = inv['problems'] if args.company else []
         for s in schemas:
             rec = evidence_check.reconcile(conn, s)
             chain = evidence_check.audit_chain(conn, s)
@@ -102,7 +109,7 @@ def cmd_evidence(args):
             c = rec['counts']
             print(f'  {mark} {s:<36} {c.get("accepted_quotes", 0)} accepted, '
                   f'{c.get("agreements", 0)} agreements, {chain["length"]} audit entries')
-    return _emit({'command': 'evidence', 'sections': sections}, args.out,
+    return _emit({'command': 'evidence', 'sections': sections, 'problems': problems}, args.out,
                  'every hash, link and audit chain checks out')
 
 

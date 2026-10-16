@@ -34,7 +34,14 @@ import quote_evidence
 EVIDENCE_TABLES = ('commercial_quote', 'commercial_quote_revision', 'commercial_quote_delivery',
                    'commercial_quote_response', 'commercial_agreement', 'email_delivery_event',
                    'contract_audit_event')
-INDEXES = ('uq_commercial_quote_one_accepted_amendment', 'uq_contract_audit_event_chain_seq')
+# Each index by name, with what its definition must say: an index of that name
+# that is not unique, or covers the wrong column, or has lost its condition,
+# protects nothing.
+INDEXES = {
+    'uq_commercial_quote_one_accepted_amendment': (
+        'CREATE UNIQUE INDEX', '(amends_quote_id)', "WHERE ((status)::text = 'accepted'::text)"),
+    'uq_contract_audit_event_chain_seq': ('CREATE UNIQUE INDEX', '(chain_seq)'),
+}
 
 
 def required_triggers():
@@ -80,6 +87,7 @@ def inventory(conn):
                 for o in orgs if o['schema_name'] not in have and o['status'] not in ('purged',)]
     listed = {o['schema_name'] for o in orgs}
     strays = [s for s in schemas if s not in listed and not s.endswith('__next')]
+    problems += [f'schema {s} belongs to no company on the list' for s in strays]
     return {'orgs': orgs, 'schemas': schemas, 'unlisted_schemas': strays, 'problems': problems}
 
 
@@ -116,13 +124,18 @@ def schema_report(conn, schema):
     for key in required_triggers():
         if key not in triggers:
             p.append(f'guard {key[1]} on {key[0]} is missing')
-        elif triggers[key] == 'D':
-            p.append(f'guard {key[1]} on {key[0]} is switched off')
-    indexes = {r[0] for r in conn.execute(text(
-        'SELECT indexname FROM pg_indexes WHERE schemaname = :s'), {'s': schema})}
-    for name in INDEXES:
+        elif triggers[key] not in ('O', 'A'):
+            # 'D' is off; 'R' fires only for replication sessions -- the app's
+            # own ordinary sessions never meet it. Only O and A guard them.
+            p.append(f'guard {key[1]} on {key[0]} is switched off '
+                     f'({"replica-only" if triggers[key] == "R" else "disabled"})')
+    indexes = {r[0]: r[1] for r in conn.execute(text(
+        'SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = :s'), {'s': schema})}
+    for name, must in INDEXES.items():
         if name not in indexes:
             p.append(f'index {name} is missing')
+        elif not all(m in ' '.join(indexes[name].split()) for m in must):
+            p.append(f'index {name} is not what it should be: {indexes[name]}')
     who = conn.execute(text(
         'SELECT current_user, r.rolsuper FROM pg_roles r WHERE r.rolname = current_user')).first()
     owner = conn.execute(text(
@@ -241,18 +254,32 @@ def audit_chain(conn, schema):
     return out
 
 
+# The written-once tables, each row written down as one hash over every
+# column: a signer's name, a timestamp, an IP, which account or response an
+# agreement points at -- any of it changed and the row no longer matches.
+DIGESTED = {'revisions': 'commercial_quote_revision', 'responses': 'commercial_quote_response',
+            'agreements': 'commercial_agreement', 'delivery_events': 'email_delivery_event'}
+
+
+def row_digest(row):
+    """One hash over every column of a row, by column name."""
+    import json
+    return quote_evidence.digest(json.dumps(
+        {k: (None if v is None else str(v)) for k, v in dict(row).items()},
+        sort_keys=True, separators=(',', ':'), ensure_ascii=False))
+
+
 def digest(conn, schema):
-    """What the backup writes down: hashes and ids, nothing else."""
-    chain = audit_chain(conn, schema)
-    return {
-        'audit_head': chain['head'],
-        'revisions': {str(r['id']): r['content_hash'] for r in _rows(
-            conn, schema, 'SELECT id, content_hash FROM {s}commercial_quote_revision')},
-        'responses': {str(r['id']): [r['quote_id'], r['content_hash'], r['decision']] for r in _rows(
-            conn, schema, 'SELECT id, quote_id, content_hash, decision FROM {s}commercial_quote_response')},
-        'agreements': {str(r['id']): [r['quote_id'], r['content_hash']] for r in _rows(
-            conn, schema, 'SELECT id, quote_id, content_hash FROM {s}commercial_agreement')},
-    }
+    """What the backup writes down: per-row hashes by id, and the chain's head.
+    Hashes and ids only -- nothing that could be read back as data."""
+    out = {'audit_head': audit_chain(conn, schema)['head']}
+    for kind, table in DIGESTED.items():
+        out[kind] = {str(r['id']): row_digest(r) for r in _rows(conn, schema, f'SELECT * FROM {{s}}{table}')}
+    # Which quote each revision belongs to: a revision may go -- with a draft
+    # whose send failed, deleted afterwards -- but only together with its quote.
+    out['revision_quotes'] = {str(r['id']): r['quote_id'] for r in _rows(
+        conn, schema, 'SELECT id, quote_id FROM {s}commercial_quote_revision')}
+    return out
 
 
 def compare(conn, schema, then):
@@ -260,13 +287,18 @@ def compare(conn, schema, then):
     out = {'schema': schema, 'problems': []}
     p = out['problems']
     now = digest(conn, schema)
-    for kind in ('revisions', 'responses', 'agreements'):
+    quotes = {r['id'] for r in _rows(conn, schema, 'SELECT id FROM {s}commercial_quote')}
+    for kind in DIGESTED:
         for key, value in (then.get(kind) or {}).items():
             have = now[kind].get(key)
+            label = kind[:-1].replace('_', ' ')
+            if have is None and kind == 'revisions' and \
+                    (then.get('revision_quotes') or {}).get(key) not in quotes:
+                continue   # went with its draft, which was deleted
             if have is None:
-                p.append(f'{kind[:-1]} {key} is gone')
+                p.append(f'{label} {key} is gone')
             elif have != value:
-                p.append(f'{kind[:-1]} {key} has changed')
+                p.append(f'{label} {key} has changed')
     head = then.get('audit_head')
     if head:
         row = conn.execute(text(
