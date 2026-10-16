@@ -37,9 +37,10 @@ def switch_brand(key):
     """
     import brands
     brands.set_active(key)
-    nxt = request.form.get('next') or request.referrer or url_for('admin.dashboard')
+    import security
     # Only ever bounce back inside this app.
-    return redirect(nxt if nxt.startswith('/') else url_for('admin.dashboard'))
+    return redirect(security.local_target(request.form.get('next'), request.referrer)
+                    or url_for('admin.dashboard'))
 
 
 @settings_bp.route('/setup')

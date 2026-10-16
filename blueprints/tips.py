@@ -34,8 +34,8 @@ def dismiss():
         adoption.dismiss(key)
     if request.accept_mimetypes.best == 'application/json' or request.is_json:
         return ('', 204)
-    back = request.form.get('next') or ''
-    return redirect(back if back.startswith('/') and not back.startswith('//') else url_for('admin.dashboard'))
+    import security
+    return redirect(security.local_target(request.form.get('next')) or url_for('admin.dashboard'))
 
 
 @tips_bp.route('/go/<key>')

@@ -64,7 +64,11 @@ CSRF_EXEMPT_PATHS = frozenset({
     '/api/email-events',
 })
 
-QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
+# Every company job the scheduler runs (automations.JOBS), each called at that
+# company's own address. owner-digest and rental-turnovers were missing, so they
+# took their key in the URL and ran with no company address at all;
+# tests/test_review_fixes.py now holds this list to automations.JOBS.
+CRON_PATHS = frozenset({
     '/api/reminders',
     '/api/charge-balances',
     '/api/send-drips',
@@ -72,8 +76,17 @@ QUERY_SECRET_FORBIDDEN_PATHS = frozenset({
     '/api/insurance-expiry',
     '/api/applicant-followups',
     '/api/lifecycle-emails',
+    '/api/owner-digest',
+    '/api/rental-turnovers',
 })
-CRON_PATHS = QUERY_SECRET_FORBIDDEN_PATHS
+# The product's own jobs (scheduler.PRODUCT_JOBS, and the demo rebuild), run at
+# the product's address rather than a company's.
+PRODUCT_CRON_PATHS = frozenset({
+    '/api/trial-nudges',
+    '/api/lead-nurture',
+    '/api/rebuild-demo',
+})
+QUERY_SECRET_FORBIDDEN_PATHS = CRON_PATHS | PRODUCT_CRON_PATHS
 # Tenant-scoped provider webhooks only. Each company connects its own Twilio
 # number, so /messages/incoming needs a resolved tenant host before it can even
 # know which company's auth token to validate the signature against.
@@ -421,6 +434,29 @@ def _record_rejected_origin(header, value, path):
         pass
 
 
+def local_target(*candidates):
+    """The first of `candidates` that stays on this site, as a path; else None.
+
+    For "back to where you were" redirects that take a `next` field or the
+    Referer. A path must start with one / -- //host and /\\host both mean
+    another site to a browser. A full URL counts only if it names this host,
+    and comes back as its path.
+    """
+    for value in candidates:
+        value = (value or '').strip()
+        if not value or '\\' in value or any(ord(c) < 32 for c in value):
+            continue
+        if value.startswith('/') and not value.startswith('//'):
+            return value
+        try:
+            parts = urlparse(value)
+        except ValueError:
+            continue
+        if parts.scheme in ('http', 'https') and parts.netloc.lower() == (request.host or '').lower():
+            return (parts.path or '/') + (f'?{parts.query}' if parts.query else '')
+    return None
+
+
 def client_ip():
     return (request.remote_addr or 'unknown')[:45]
 
@@ -509,8 +545,42 @@ def apply_security_headers(response):
     return response
 
 
+# Characters that mean nothing to a JavaScript string, an HTML attribute or a
+# <script> element. Everything else is written as a \uXXXX escape.
+_JS_PLAIN = frozenset('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+                      '0123456789 ,.:!?@#%*-_/')
+
+
+def js_string(value):
+    r"""`value` as the inside of a JavaScript string literal, safe to write
+    between the quotes of `confirm('Delete {{ name|js }}?')` in an inline
+    handler, or of `'{{ x|js }}'` in a <script>.
+
+    The usual HTML escaping is not enough in either place. In an attribute the
+    browser decodes &#39; back to ' before the script runs, so a name like
+    x'+(code)+' ran `code` when an owner clicked Delete. Inside a <script>
+    nothing is decoded, but a trailing backslash still swallows the closing
+    quote. Here every character outside a short plain list becomes \uXXXX, so
+    nothing in the value can end the string, the attribute or the script, in
+    single or double quotes alike. The string reads the same once JavaScript
+    has it.
+    """
+    from markupsafe import Markup
+    text = '' if value is None else str(value)
+    out = []
+    for ch in text:
+        if ch in _JS_PLAIN:
+            out.append(ch)
+            continue
+        data = ch.encode('utf-16-be')
+        for i in range(0, len(data), 2):
+            out.append('\\u%04x' % int.from_bytes(data[i:i + 2], 'big'))
+    return Markup(''.join(out))
+
+
 def install(app):
     validate_secret(app)
+    app.jinja_env.filters['js'] = js_string
     harden_session(app)
     app.before_request(reject_query_credentials)
     app.before_request(require_tenant_for_machine_route)

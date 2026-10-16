@@ -18,7 +18,7 @@
     <div style="margin-top:8px">
     {% for v in variables %}
       <code style="background:var(--amber-soft);padding:2px 7px;border-radius:4px;margin:3px;display:inline-block;cursor:pointer"
-            onclick="insertVar('{{ v }}')" title="Click to copy">{{ v }}</code>
+            onclick="insertVar('{{ v|js }}')" title="Click to copy">{{ v }}</code>
     {% endfor %}
     </div>
     <p style="margin-top:8px;margin-bottom:0;font-size:0.77rem">Click any variable to copy it, then paste it into the subject or body below.</p>

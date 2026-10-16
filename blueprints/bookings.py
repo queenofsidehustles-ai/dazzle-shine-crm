@@ -952,7 +952,8 @@ def broadcast(booking_id):
     # Offered from the list, not just the detail page (see bookings.html's row
     # actions) -- land back where the click happened rather than forcing a
     # detour through the job it was about.
-    return redirect(request.form.get('next') or request.referrer
+    import security
+    return redirect(security.local_target(request.form.get('next'), request.referrer)
                     or url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -1605,7 +1606,8 @@ def hold(booking_id):
     # Held from the list, not just the detail page (see bookings.html's row
     # actions) -- every early return below shares this, so the list-hold
     # button lands back on the list whichever branch it hits.
-    back = redirect(request.form.get('next') or request.referrer
+    import security
+    back = redirect(security.local_target(request.form.get('next'), request.referrer)
                     or url_for('bookings.detail', booking_id=booking_id))
     if b.status in ('completed', 'cancelled'):
         flash(f'That job is {b.status_label.lower()} — there is nothing to put on hold.',
@@ -2720,32 +2722,82 @@ def delete_client(client_id):
 
 # ── Cleaner accept / decline ────────────────────────────────────────────────────
 
-@bookings_bp.route('/<int:booking_id>/cleaner-response', methods=['GET'])
+def cleaner_response_token(booking):
+    """The token on a cleaner's accept / decline links for `booking`.
+
+    Signed over the company, the job and the cleaner it was offered to. The
+    old one was sha256(booking id + secret): the same token for job #N at
+    every company on the platform, so a link one company sent opened job #N at
+    any other; and it outlived a reassignment, so whoever was first offered the
+    job could still decline it for whoever has it now.
+    """
+    import hmac
+    import os
+    import tenancy
+    secret = (os.environ.get('SECRET_KEY') or '').encode()
+    who = (booking.assigned_cleaner or '').strip().lower()
+    msg = f'cleaner-response:{tenancy.current_schema()}:{booking.id}:{who}'.encode()
+    return hmac.new(secret, msg, 'sha256').hexdigest()[:32]
+
+
+def _legacy_cleaner_token(booking_id):
+    """What links sent before cleaner_response_token() carry. Honoured on a
+    single-business install only, where there is no other company for it to
+    open; on the platform an old link asks for a fresh one."""
+    import hashlib
+    import os
+    return hashlib.sha256(f"{booking_id}{os.environ.get('SECRET_KEY', 'secret')}".encode()).hexdigest()[:16]
+
+
+def _cleaner_token_ok(booking, token):
+    import hmac
+    import os
+    token = (token or '').strip()
+    if not token or not booking.assigned_cleaner:
+        return False
+    if hmac.compare_digest(token, cleaner_response_token(booking)):
+        return True
+    return (not (os.environ.get('BASE_DOMAIN') or '').strip()
+            and hmac.compare_digest(token, _legacy_cleaner_token(booking.id)))
+
+
+@bookings_bp.route('/<int:booking_id>/cleaner-response', methods=['GET', 'POST'])
 def cleaner_response(booking_id):
-    """Public link — cleaner accepts or declines a job."""
+    """Public link -- the cleaner accepts or declines a job.
+
+    Opening the link only asks; the answer is a POST from the button on that
+    page. Email security scanners open every link in a message, and on a GET
+    they used to accept and then decline the job -- and a decline unassigns
+    the cleaner.
+    """
     booking = Booking.query.get_or_404(booking_id)
-    action = request.args.get('action', '')
-    token = request.args.get('token', '')
-    import hashlib, os
-    expected = hashlib.sha256(f"{booking_id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
-    if token != expected:
-        return 'Invalid link.', 400
+    action = (request.values.get('action') or '').strip()
+    token = request.values.get('token') or ''
+    if not _cleaner_token_ok(booking, token):
+        return ('This link is no longer valid -- the job may have been reassigned. '
+                'Please contact the office.', 400)
+    if action not in ('accept', 'decline'):
+        return 'Unknown action.', 400
+    if request.method == 'GET':
+        return render_template('public/cleaner_response.html', booking=booking, action=action,
+                               token=token, done=None, biz=branding.biz_name())
     who = booking.assigned_cleaner or 'The cleaner'
     if action == 'accept':
         booking.cleaner_response = 'accepted'
         booking.internal_notes = (booking.internal_notes or '') + f'\n[Cleaner accepted job on {datetime.utcnow().strftime("%b %d %Y")}]'
         db.session.commit()
         _alert_owner_response(booking, who, accepted=True)
-        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#065f46">✅ Job accepted! We\'ll see you on ' + (booking.preferred_date or 'the scheduled date') + '.</h2>'
-    elif action == 'decline':
+        done = 'accepted'
+    else:
         booking.cleaner_response = 'declined'
         booking.internal_notes = (booking.internal_notes or '') + f'\n[{who} declined job on {datetime.utcnow().strftime("%b %d %Y")} — needs reassignment]'
         db.session.commit()
         _alert_owner_response(booking, who, accepted=False)
         booking.assigned_cleaner = ''      # unassign after the alert so we know who declined
         db.session.commit()
-        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#991b1b">Job declined. We\'ve let the office know and will reassign. Thank you for telling us!</h2>'
-    return 'Unknown action.', 400
+        done = 'declined'
+    return render_template('public/cleaner_response.html', booking=booking, action=action,
+                           token='', done=done, biz=branding.biz_name())
 
 
 def _alert_owner_response(booking, cleaner_name, accepted):
@@ -3018,7 +3070,6 @@ def _create_next_recurring(booking):
 
 def _notify_cleaner(booking):
     """Email the assigned cleaner with job details, earnings, and accept/decline links."""
-    import hashlib, os
     from models import Staff
     from notifications import send_email
     from pricing import SERVICES
@@ -3043,7 +3094,7 @@ def _notify_cleaner(booking):
     size_line = booking.size_line()
 
     base = branding.crm_base()
-    token = hashlib.sha256(f"{booking.id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
+    token = cleaner_response_token(booking)
     accept_url = f"{base}/bookings/{booking.id}/cleaner-response?action=accept&token={token}"
     decline_url = f"{base}/bookings/{booking.id}/cleaner-response?action=decline&token={token}"
     svc_label = SERVICES.get(booking.service_type, {}).get('label', booking.service_type.title())

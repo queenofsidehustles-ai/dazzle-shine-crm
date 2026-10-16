@@ -415,8 +415,20 @@ def send_email(to_email, to_name, subject, html, from_name=None,
 
 
 def add_to_mailerlite(email, name, group_id=None):
+    """Add a website lead to the MailerLite list in MAILERLITE_API_KEY.
+
+    That list belongs to whoever set the variable: one business, on its own
+    single-business install. On the multi-company platform every company's
+    website posts to /api/quote, and sending their customers to that one list
+    handed one business's leads to another's mailing account. So only a
+    single-business install's own leads go: never from a company's schema, and
+    never on the platform (BASE_DOMAIN set) at all.
+    """
     import demo_guard
+    import tenancy
     if demo_guard.active():
+        return
+    if (os.environ.get('BASE_DOMAIN') or '').strip() or tenancy.current_schema() != tenancy.PUBLIC:
         return
     api_key = os.environ.get('MAILERLITE_API_KEY')
     if not group_id:

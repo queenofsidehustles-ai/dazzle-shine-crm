@@ -1,3 +1,4 @@
+import hmac
 import os
 import secrets
 import stripe
@@ -43,6 +44,20 @@ def add_cors(response, origin):
     return response
 
 
+def _cron_key_ok():
+    """Whether a scheduled-job call carries REMINDER_API_KEY in X-Api-Key.
+
+    The header only: a key in the URL ends up in every proxy and access log
+    on the way (security.QUERY_SECRET_FORBIDDEN_PATHS refuses it outright).
+    Trimmed on both sides -- a key pasted into a settings box with a trailing
+    newline is not a different key, and a 403 is indistinguishable from a
+    scheduler that never ran -- and compared in constant time.
+    """
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    given = (request.headers.get('X-Api-Key') or '').strip()
+    return bool(expected) and hmac.compare_digest(given.encode(), expected.encode())
+
+
 # ── Public config (Stripe publishable key) ───────────────────────────────────
 
 @api_bp.route('/config', methods=['GET', 'OPTIONS'])
@@ -58,12 +73,7 @@ def get_config():
 
 @api_bp.route('/reminders', methods=['POST'])
 def send_reminders():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -145,12 +155,7 @@ def send_reminders():
 
 @api_bp.route('/charge-balances', methods=['POST'])
 def charge_balances():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -397,12 +402,7 @@ def _send_commercial_alert(lead, company, facility_label, sqft, frequency, messa
 
 @api_bp.route('/send-drips', methods=['POST'])
 def send_drips():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -439,12 +439,7 @@ def lsa_followups():
     """Advance the text sequence for people who called through Google Ads and
     never booked. Sends only what is due, and re-checks every reason to stop at
     the moment of sending rather than trusting the state it was queued in."""
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -472,12 +467,7 @@ def insurance_expiry():
     Silent when there is nothing to say. An email every morning saying
     "nothing expiring" is how the one that matters stops being read.
     """
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides, same as the others: a key pasted with a trailing
-    # newline is not a different key, and a 403 is indistinguishable from a
-    # scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # The per-business on/off switch exists on the multi-company product and
@@ -564,12 +554,7 @@ def owner_digest():
     Off unless a business turns it on (see automations.DEFAULT_OFF) — nobody
     should wake up to a new daily email they never asked for.
     """
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     if not automations.is_enabled('owner-digest'):
@@ -589,12 +574,7 @@ def owner_digest():
 
 @api_bp.route('/applicant-followups', methods=['POST'])
 def applicant_followups():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -917,9 +897,7 @@ def rental_turnovers():
     the cleaner's schedule rewritten at 2am, and a feed read too eagerly is a
     feed that rate-limits. Anything urgent is a button on the page.
     """
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     if not automations.is_enabled('rental-turnovers'):
         return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
@@ -935,12 +913,7 @@ def rental_turnovers():
 
 @api_bp.route('/lifecycle-emails', methods=['POST'])
 def lifecycle_emails():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -967,12 +940,7 @@ def lifecycle_emails():
 
 @api_bp.route('/trial-nudges', methods=['POST'])
 def trial_nudges():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     import trial_nudges as tn
     dry = request.args.get('dry_run') in ('1', 'true', 'yes')
@@ -990,9 +958,7 @@ def trial_nudges():
 
 @api_bp.route('/lead-nurture', methods=['POST'])
 def lead_nurture():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     import lead_nurture as ln
     dry = request.args.get('dry_run') in ('1', 'true', 'yes')
@@ -1013,13 +979,10 @@ def lead_nurture():
 
 @api_bp.route('/rebuild-demo', methods=['POST'])
 def rebuild_demo():
-    import hmac
     import product
     if not product.is_product_site():
         return jsonify({'ok': False, 'error': 'Not found'}), 404
-    api_key = (request.headers.get('X-Api-Key') or '').strip()
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or not hmac.compare_digest(api_key, expected):
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     import subprocess
     import sys

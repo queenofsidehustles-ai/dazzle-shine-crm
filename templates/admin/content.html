@@ -58,7 +58,7 @@
         <div style="background:var(--ground);border-radius:9px;padding:14px;font-size:0.9rem;line-height:1.7;white-space:pre-wrap;max-height:200px;overflow-y:auto">{{ post.caption }}</div>
 
         <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
-          <button onclick="copyText(this, `{{ post.caption | replace('`','\\`') | replace('\n','\\n') }}`)"
+          <button onclick="copyText(this, '{{ post.caption|js }}')"
                   class="btn btn-outline" style="padding:6px 14px;font-size:0.82rem">Copy</button>
 
           {% if post.status == 'draft' %}

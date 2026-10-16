@@ -204,7 +204,7 @@
 
 <script>
   const VALID_BATHS = {{ valid_baths | tojson }};
-  const CRM_URL = '{{ CRM_BASE }}';
+  const CRM_URL = '{{ CRM_BASE|js }}';
 
   let pricingData = null;
 
@@ -308,7 +308,7 @@
       extras: extras.join(','),
     });
     document.getElementById('book-btn').href =
-      '{{ BIZ_BOOKING_LINK }}?' + params.toString();
+      '{{ BIZ_BOOKING_LINK|js }}?' + params.toString();
   }
 
   // Service card selection

@@ -85,7 +85,7 @@
 </div>
 
 <form method="POST" action="{{ url_for('commercial.delete', account_id=a.id) }}"
-      onsubmit="return confirm('Delete {{ a.business_name }}? This cannot be undone.')" style="margin-top:16px">
+      onsubmit="return confirm('Delete {{ a.business_name|js }}? This cannot be undone.')" style="margin-top:16px">
   <button type="submit" class="btn btn-outline" style="padding:7px 14px;font-size:0.82rem;color:var(--warn)">Delete account</button>
 </form>
 
