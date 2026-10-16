@@ -35,12 +35,12 @@ jobs:
       TEST_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
     steps:
       - name: Checkout exact candidate revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
       - name: Verify exact candidate revision
         run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip

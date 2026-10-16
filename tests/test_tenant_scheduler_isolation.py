@@ -85,6 +85,6 @@ def test_automation_workflow_uses_triggering_revision_not_hardcoded_branch():
     workflow = Path('.github/workflows/automations.yml').read_text()
 
     assert 'ref: akye-stable' not in workflow
-    assert 'actions/checkout@v4' in workflow
+    assert 'actions/checkout@' in workflow
     assert 'git rev-parse HEAD' in workflow
     assert 'Scheduler source:' in workflow

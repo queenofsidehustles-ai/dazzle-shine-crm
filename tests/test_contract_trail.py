@@ -204,6 +204,9 @@ check(in_tenant(lambda: CommercialQuote.query.filter_by(amends_agreement_id=ag[0
 page = c.get(f'/quotes/{amd.id}', base_url=HOST).get_data(as_text=True)
 check('An amendment to' in page and 'stays in force' in page, 'the draft says what it amends')
 c.post(f'/quotes/{amd.id}', base_url=HOST, data=dict(FORM, monthly_price='600', price_per_visit='140'))
+draft_review = c.get(f'/quotes/{amd.id}/review', base_url=HOST).get_data(as_text=True)
+check('Before it goes out' in draft_review and 'Send for review first' in draft_review,
+      'a draft still gets its pre-send checks and the review copy')
 c.post(f'/quotes/{amd.id}/send', base_url=HOST)
 page = app.test_client().get(f'/quotes/view/{tok}', base_url=HOST).get_data(as_text=True)
 check('You accepted this proposal' in page and 'replaced' not in page,
@@ -223,6 +226,8 @@ check('replaced by an amended agreement' in page, 'the old link says it has been
 review = c.get(f'/quotes/{qid}/review', base_url=HOST).get_data(as_text=True)
 check(f'Replaced by agreement #{ags[1].id}' in review and 'Amend this agreement' not in review,
       'the owner sees what replaced it, and is not offered to amend a replaced agreement')
+check('Before it goes out' not in review and 'Send for review first' not in review,
+      'an accepted quote is not offered pre-send checks or a "DRAFT" review copy')
 r = c.post(f'/quotes/{qid}/amend', base_url=HOST, follow_redirects=True)
 check('already been replaced' in r.get_data(as_text=True)
       and in_tenant(lambda: CommercialQuote.query.filter_by(amends_agreement_id=ag[0].id).count()) == 1,

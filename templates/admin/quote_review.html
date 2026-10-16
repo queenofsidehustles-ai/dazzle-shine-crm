@@ -53,6 +53,11 @@
   </div>
 
   <div class="rv-side">
+    {# The pre-send checks and the review copy are for a quote that can still
+       be sent -- a draft, or a sent one being sent again. Once it is
+       answered or withdrawn, its terms are settled: checking them, or
+       circulating a "DRAFT" of them, only misleads. #}
+    {% if q.status in ('draft', 'sent') %}
     <div class="card">
       <h3>Before it goes out</h3>
       {% for m in blocking %}<p class="rv-check block">{{ m }}</p>{% endfor %}
@@ -62,6 +67,7 @@
       <a href="{{ url_for('quotes.detail', quote_id=q.id) }}" style="font-size:0.85rem;color:var(--amber-deep);font-weight:600">Fix it in the quote →</a>
       {% endif %}
     </div>
+    {% endif %}
 
     <div class="card">
       <h3>Send it</h3>
@@ -146,6 +152,7 @@
     </div>
     {% endif %}
 
+    {% if q.status in ('draft', 'sent') %}
     <div class="card">
       <h3>Send for review first</h3>
       <p style="font-size:0.82rem;color:var(--softer);margin:0 0 10px;line-height:1.5">
@@ -157,6 +164,7 @@
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📤 Send draft for review</button>
       </form>
     </div>
+    {% endif %}
 
     <div class="card">
       <h3>Keep a copy</h3>
