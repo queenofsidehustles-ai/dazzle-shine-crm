@@ -875,11 +875,14 @@ def affiliate_action(affiliate_id, action):
             ok, message, pay = affiliates.pay_via_stripe(engine, affiliate_id, who)
         else:
             ok, message, pay = affiliates.retry_payout(
-                engine, int(request.form.get('payout') or 0))
-        control_plane.log_console(
-            engine, who, 'partner payout sent' if ok else 'partner payout not sent',
-            partner['code'], message[:300])
-        if ok and pay:
+                engine, int(request.form.get('payout') or 0), affiliate_id=affiliate_id)
+        # Only the request that actually made the payout paid logs it and emails
+        # the partner; a second, simultaneous retry reports and does neither.
+        if not ok or (pay and pay.get('finished_now', True)):
+            control_plane.log_console(
+                engine, who, 'partner payout sent' if ok else 'partner payout not sent',
+                partner['code'], message[:300])
+        if ok and pay and pay.get('finished_now', True):
             import partner_mail
             from blueprints.partners import partners_url
             subject, html = partner_mail.payout_email(
@@ -900,6 +903,7 @@ def affiliate_action(affiliate_id, action):
         flash({'reversed': 'Commission reversed.',
                'already paid': 'That commission was already paid out. Settle it with the partner by hand.',
                'already reversed': 'Already reversed.',
+               'being paid': 'That commission is part of a payout being sent. Wait for it to finish, then reverse it if it was released, or settle with the partner if it was paid.',
                'none': 'No such commission.'}.get(result, result),
               'success' if result == 'reversed' else 'error')
     else:

@@ -154,7 +154,19 @@ def history_for(engine, needle):
              if needle == (l.get('email') or '').lower()
              or needle in (l.get('company') or '').lower()
              or needle in (l.get('name') or '').lower()]
+    import affiliates
+    partners = [a for a in affiliates.all_affiliates(engine)
+                if needle in (a.get('code') or '').lower()
+                or needle in (a.get('name') or '').lower()
+                or needle == (a.get('email') or '').lower()]
     rows = []
+    for a in partners[:10]:
+        for m in control_plane.product_messages_for(engine, email=a['email']):
+            rows.append({'when': m['sent_at'], 'to': m['to_address'],
+                         'who': a.get('name'),
+                         'label': LABELS.get(m['kind'], m['kind']),
+                         'subject': m.get('subject'), 'ok': m.get('ok'),
+                         'detail': m.get('detail'), 'by': m.get('sent_by')})
     for o in orgs[:10]:
         for m in control_plane.product_messages_for(engine, slug=o['slug']):
             rows.append({'when': m['sent_at'], 'to': m['to_address'],
@@ -180,7 +192,7 @@ def history_for(engine, needle):
                          'detail': m.get('detail'),
                          'by': 'auto' if key else by})
     rows.sort(key=lambda r: r['when'] or datetime.min, reverse=True)
-    return {'orgs': orgs[:10], 'leads': leads[:10]}, rows
+    return {'orgs': orgs[:10], 'leads': leads[:10], 'partners': partners[:10]}, rows
 
 
 def sample_preview(key):

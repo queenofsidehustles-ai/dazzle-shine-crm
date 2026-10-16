@@ -154,14 +154,13 @@ def payouts_setup():
         flash('Payouts are not switched on yet. We will email you when they are.', 'error')
         return redirect(url_for('partners.dashboard'))
     engine = _engine()
-    account = partner.get('payout_account_id')
-    if not account:
-        ok, value = partner_payouts.create_account(partner['email'], partner['name'])
-        if not ok:
-            flash(f'Stripe could not start your setup: {value}', 'error')
-            return redirect(url_for('partners.dashboard'))
-        account = value
-        affiliates.set_payout_account(engine, partner['id'], account, ready=False)
+    ok, account = affiliates.ensure_payout_account(
+        engine, partner['id'],
+        lambda email, name: partner_payouts.create_account(
+            email, name, idempotency_key=f'affiliate-account-{partner["id"]}'))
+    if not ok:
+        flash(f'Stripe could not start your setup: {account}', 'error')
+        return redirect(url_for('partners.dashboard'))
     here = url_for('partners.payouts_setup', _external=True)
     back = url_for('partners.payouts_return', _external=True)
     ok, value = partner_payouts.onboarding_link(account, here, back)

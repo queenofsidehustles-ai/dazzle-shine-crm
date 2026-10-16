@@ -87,7 +87,7 @@ BEHAVIOUR = {'transfer': 'ok', 'ready': True}
 TRANSFERS = {}
 
 
-def fake_create_account(email, name=''):
+def fake_create_account(email, name='', idempotency_key=None):
     CALLS['account'].append((email, name))
     return True, f'acct_{len(CALLS["account"])}'
 
@@ -329,6 +329,108 @@ try:
     check(prev.status_code == 200 and b'$118.50' in prev.data, 'and previews them')
     check(cc.get('/console/communications/preview/partner_login').status_code == 200,
           'including the sign-in link')
+    print('\n9. Review findings: the cases that were wrong')
+    # (a) A reversal cannot reach a commission already claimed for a transfer.
+    with app.app_context():
+        seed(ready['id'], 'co20', 6000)
+        BEHAVIOUR['transfer'] = 'drop'
+        ok, msg, held = affiliates.pay_via_stripe(engine, ready['id'], 'staff@x')
+        BEHAVIOUR['transfer'] = 'ok'
+        claimed = [e for e in entries(ready['id']) if e['payout_id'] == held['id']][0]
+        got = affiliates.reverse(engine, claimed['stripe_invoice_id'])
+    check(held['status'] == 'pending' and got == 'being paid',
+          'a commission claimed for a transfer cannot be reversed underneath it')
+    check([e['status'] for e in entries(ready['id']) if e['id'] == claimed['id']] == ['paying'],
+          'and it stays claimed')
+
+    # (b) The pending payout counts as needing staff, even with no balance.
+    with app.app_context():
+        flagged = affiliates.waiting_count(engine)
+        no_balance = affiliates.payable_cents(engine, ready['id'])
+    check(no_balance < affiliates.MIN_PAYOUT_CENTS and flagged >= 1,
+          'an unconfirmed transfer is counted in the console badge')
+
+    # (c) Retry is bound to the partner in the URL.
+    with app.app_context():
+        wrong = affiliates.retry_payout(engine, held['id'], affiliate_id=newbie['id'])
+    check(not wrong[0] and 'different partner' in wrong[1]
+          and affiliates.payout(engine, held['id'])['status'] == 'pending',
+          "retrying one partner's payout through another's page does nothing")
+
+    # (d) Two simultaneous retries: one transfer, one email, one record.
+    SENT.clear()
+    gate2 = threading.Barrier(2)
+    outs = []
+
+    def retry():
+        with app.app_context():
+            gate2.wait()
+            outs.append(affiliates.retry_payout(engine, held['id'], affiliate_id=ready['id']))
+
+    ts = [threading.Thread(target=retry) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    check(all(o[0] for o in outs) and sum(1 for o in outs if o[2].get('finished_now')) == 1,
+          'both retries succeed but only one is the one that finished it')
+    check(affiliates.payout(engine, held['id'])['status'] == 'paid'
+          and [e['status'] for e in entries(ready['id']) if e['payout_id'] == held['id']] == ['paid'],
+          'the payout and its commissions end up paid, once')
+
+    # (e) The real Stripe exception classes are told apart correctly.
+    import stripe
+    real_create = stripe.Transfer.create
+    importlib_reload = None
+    for exc, expect_uncertain in (
+            (stripe.InvalidRequestError('Insufficient funds', param=None), False),
+            (stripe.APIConnectionError('reset'), True),
+            (RuntimeError('a bug of ours'), True)):
+        def boom(*a, **k):
+            raise exc
+        stripe.Transfer.create = boom
+        try:
+            real_transfer = type(partner_payouts)('real')
+            exec(compile(src, 'partner_payouts_real', 'exec'), real_transfer.__dict__)
+            ok, value, uncertain = real_transfer.transfer('acct_x', 100, 'd', 'k')
+        finally:
+            stripe.Transfer.create = real_create
+        check(not ok and uncertain is expect_uncertain,
+              f'{type(exc).__name__}: ' + ('unknown outcome, keep it pending' if expect_uncertain
+                                           else 'a definite refusal, release it'))
+
+    # (f) One Stripe account however many times setup is pressed.
+    with app.app_context():
+        solo = affiliates.create(engine, 'Solo Sam', f'sam{TAG}@partners.test', code=f'sam{TAG}')
+    made = []
+
+    def slow_create(email, name):
+        import time
+        made.append(email)
+        time.sleep(0.4)
+        return True, f'acct_once_{len(made)}'
+
+    gate3 = threading.Barrier(2)
+    got_ids = []
+
+    def setup():
+        with app.app_context():
+            gate3.wait()
+            got_ids.append(affiliates.ensure_payout_account(engine, solo['id'], slow_create))
+
+    ts = [threading.Thread(target=setup) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    check(len(made) == 1 and got_ids[0] == got_ids[1] == (True, 'acct_once_1'),
+          'two overlapping setups create one Stripe account and both get it')
+
+    # (g) Partner emails are findable in Communications history.
+    cc2 = app.test_client()
+    cc2.post('/console/login', data={'email': mgr, 'password': mpass})
+    with app.app_context():
+        import partner_mail
+        partner_mail.deliver(ready, 'Your Akye partner page', '<p>x</p>', 'partner_login', engine)
+    page = cc2.get(f'/console/communications?q={ready["email"]}').data.decode()
+    check('Partners:' in page and 'Ready Rae' in page and 'Your partner page sign-in link' in page,
+          "searching a partner's email finds the partner and what was sent to them")
 finally:
     try:
         from extensions import db

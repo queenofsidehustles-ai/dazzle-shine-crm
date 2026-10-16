@@ -29,6 +29,8 @@
   {% for o in found.orgs %}<a href="{{ url_for('console.company', slug=o.slug) }}">{{ o.name }}</a> ({{ o.owner_email }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
 {% if found.leads %}<p class="ops-dim" style="margin:0 0 var(--s2)">Leads:
   {% for l in found.leads %}{{ l.name or l.email }} ({{ l.email or 'no email' }}{{ ', invited' if l.invited_at }}{{ ', unsubscribed' if l.unsubscribed_at }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if found.partners %}<p class="ops-dim" style="margin:0 0 var(--s2)">Partners:
+  {% for a in found.partners %}<a href="{{ url_for('console.affiliate', affiliate_id=a.id) }}">{{ a.name }}</a> ({{ a.email }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
 {% if history %}
 <div class="ops-scroll"><table class="con">
   <tr><th>When</th><th>To</th><th>Email</th><th>Result</th><th>By</th></tr>

@@ -37,15 +37,24 @@ def _message(exc):
     return getattr(exc, 'user_message', None) or str(exc)
 
 
-def create_account(email, name=''):
+def _error_class(stripe, name):
+    """A Stripe exception class by name, wherever this SDK keeps it: top level
+    in current versions, under `stripe.error` in older ones. Never None-checked
+    by the caller, so a missing one is an empty tuple (matches nothing)."""
+    found = getattr(stripe, name, None) or getattr(getattr(stripe, 'error', None), name, None)
+    return found if isinstance(found, type) else ()
+
+
+def create_account(email, name='', idempotency_key=None):
     """An Express connected account that can receive transfers.
     (True, account_id) or (False, error)."""
     if not configured():
         return False, 'Stripe is not set up on this deployment.'
     stripe = _stripe()
     try:
+        extra = {'idempotency_key': idempotency_key} if idempotency_key else {}
         acct = stripe.Account.create(
-            api_key=billing.stripe_key(),
+            api_key=billing.stripe_key(), **extra,
             type='express', country='US', email=email or None,
             business_type='individual',
             capabilities={'transfers': {'requested': True}},
@@ -113,6 +122,8 @@ def transfer(account_id, amount_cents, description, idempotency_key):
         # A response from Stripe that says no is a definite no. Anything else
         # (the connection dropped, the request timed out, a bug on our side)
         # leaves the answer unknown.
-        definite = isinstance(e, getattr(stripe, 'StripeError', ())) \
-            and not isinstance(e, getattr(stripe, 'APIConnectionError', ()))
+        base = _error_class(stripe, 'StripeError')
+        dropped = _error_class(stripe, 'APIConnectionError')
+        definite = bool(base) and isinstance(e, base) \
+            and not (dropped and isinstance(e, dropped))
         return False, _message(e), not definite
