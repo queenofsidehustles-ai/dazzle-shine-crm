@@ -77,6 +77,82 @@ jobs:
           echo "Scheduler source: $(git rev-parse HEAD)"
         id: source
 
+      # Does the code charging the cards match the code serving the pages?
+      #
+      # A scheduled workflow runs from the default branch, always. Production
+      # runs whichever branch Railway is pointed at, which is a dashboard
+      # setting this repository cannot see. Those are two independent choices
+      # and nothing made them agree: on 2026-10-07 the default branch was
+      # `main` and production reported `akye-stable`, 24 commits apart, and
+      # the only reason it worked is that scheduler.py happened to be
+      # identical on both.
+      #
+      # Comparing the two commits would warn on every run and be ignored
+      # within a week, because under a two-line release model they are
+      # *supposed* to differ. So this compares only the files that decide what
+      # the scheduler does, against the branch production names itself at
+      # /version -- no branch is hard-coded here, for the same reason the
+      # checkout above does not hard-code one.
+      #
+      # It warns and does not fail. A reporting check that can stop every
+      # company's reminders and balance collection is a worse fault than the
+      # drift it is reporting.
+      - name: Check production is running this scheduler
+        continue-on-error: true
+        env:
+          PRODUCT_HOST: www.akyehq.com
+          # The scheduler, and the one job that moves money through it.
+          WATCH: scheduler.py blueprints/api.py automations.py
+        run: |
+          set +e
+          v=$(curl -fsS --max-time 20 "https://$PRODUCT_HOST/version")
+          if [ -z "$v" ]; then
+            echo "::warning::Could not read https://$PRODUCT_HOST/version — drift not checked."
+            exit 0
+          fi
+          echo "Production: $v"
+          deployed=$(printf '%s' "$v" | python3 -c \
+            'import json,sys; print(json.load(sys.stdin).get("channel",""))')
+          build=$(printf '%s' "$v" | python3 -c \
+            'import json,sys; print(json.load(sys.stdin).get("build",""))')
+          here=$(git rev-parse --short HEAD)
+          {
+            echo "### Scheduler vs production"
+            echo ""
+            echo "| | branch | build |"
+            echo "|---|---|---|"
+            echo "| this run | \`${GITHUB_REF_NAME}\` | \`${here}\` |"
+            echo "| production | \`${deployed}\` | \`${build}\` |"
+          } >> $GITHUB_STEP_SUMMARY
+          if [ -z "$deployed" ] || [ "$deployed" = "$GITHUB_REF_NAME" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Same line — nothing to compare." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          git fetch --depth=1 origin "$deployed" 2>/dev/null
+          if [ $? -ne 0 ]; then
+            echo "::warning::Production reports branch '$deployed', which could not be fetched."
+            exit 0
+          fi
+          drift=""
+          for f in $WATCH; do
+            git diff --quiet FETCH_HEAD HEAD -- "$f" || drift="$drift $f"
+          done
+          if [ -n "$drift" ]; then
+            echo "::warning::Scheduler differs from deployed branch '$deployed' in:$drift"
+            {
+              echo ""
+              echo "⚠️ **Divergence in the files that decide what this scheduler does:**"
+              for f in $drift; do echo "- \`$f\`"; done
+              echo ""
+              echo "This run drives production from code production is not serving."
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Different branches, same scheduler." >> $GITHUB_STEP_SUMMARY
+          fi
+          exit 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

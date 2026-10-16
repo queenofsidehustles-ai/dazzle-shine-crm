@@ -133,6 +133,65 @@ Check it took: `https://www.akyehq.com/version` should report
 `"channel":"akye-stable"`. If it still says `feature/tenancy`, the source
 didn't save.
 
+## The third branch choice: what the automations run
+
+Two settings decide which code a customer gets, and both are above. There is a
+third, it is not in Railway, and nothing used to say it out loud:
+
+**A scheduled GitHub Actions workflow always fires from the repository's default
+branch.** Not from the branch you released, not from the branch Railway is
+serving — from whichever branch GitHub calls default. `.github/workflows/automations.yml`
+is what walks every company and asks it to send reminders and charge balances,
+so the default branch is the branch that moves money.
+
+That makes three independent choices which nothing forced to agree:
+
+| Choice | Where it is set | On 2026-10-07 |
+|---|---|---|
+| What customers are served | Railway → Akye service → Source | `akye-stable` |
+| What the CRM customers are served | Railway → their service → Source | `stable` |
+| What drives every company's automations | GitHub → default branch | `main` |
+
+On 2026-10-07 the first and the third named different branches, 24 commits
+apart, and the only reason nothing broke is that `scheduler.py` happened to be
+byte-identical on both. That is luck, and it had already been relied on once:
+`main` was at the time missing `private_media.py` and `city_switch.py`
+entirely, both of which were live in production.
+
+### The rule
+
+`akye-stable` is what customers run, so `akye-stable` is authoritative for
+Akye. The default branch does not have to equal it — the two-line release model
+above is deliberate and worth keeping — but **the files that decide what the
+scheduler does must be identical on both**, because the scheduler runs from one
+and acts on the other.
+
+Enforced rather than remembered. Every Automations run now reads
+`https://www.akyehq.com/version`, takes the branch production names itself,
+and compares `scheduler.py`, `blueprints/api.py` and `automations.py` against
+it. Divergence is a warning on the run and a block in its summary:
+
+> ⚠️ Divergence in the files that decide what this scheduler does: `scheduler.py`
+> This run drives production from code production is not serving.
+
+It warns and does not fail, deliberately: a reporting check that can stop every
+company's reminders and balance collection is a worse fault than the drift it
+reports. So it has to be looked at — it is in the step summary of every run,
+and `gh run list --workflow=automations.yml` is where to see them.
+
+No branch is hard-coded in that check, for the same reason the checkout in that
+workflow does not hard-code one: provenance has to come from the run itself,
+and a branch written into a file is a second release nobody announced.
+
+### A note on the table above
+
+The four-branch table says `feature/tenancy` is the bench Akye is built on.
+That is no longer what happens: Akye work now lands on `akye-stable` directly,
+and on 2026-10-06 a commit called *Promote akye-stable to main* merged that line
+into `main`. If `feature/tenancy` is finished with, say so there — a branch
+table that describes last quarter's habit is read by somebody one day as
+instructions.
+
 ## Your own instance
 
 Stays on `main` deliberately. You want your changes immediately; that is the
