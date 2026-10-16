@@ -549,6 +549,12 @@ def partner_link(code):
                                     campaign=found.get('campaign'),
                                     landing=request.path)
         new = attribution.merge(stored, found)
+        if new and not stored.get('aff'):
+            # The partner's touch is the one that earns the credit, so the tags
+            # on their link describe it: they replace older ad tags, so the
+            # click, the signup and the partner's by-tag table all agree.
+            new.update({k: v for k, v in tags.items()
+                        if k in ('source', 'medium', 'campaign')})
         if new:
             attribution.write(response, new, secret, secure=request.is_secure)
     except Exception as e:

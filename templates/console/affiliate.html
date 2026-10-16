@@ -29,7 +29,7 @@
   <div class="ops-card"><span class="ops-dim">Clicks / signed up / paying</span><span class="v">{{ clicks_total }} / {{ signed_up }} / {{ paying }}</span></div>
 </div>
 
-{% if may_operate and payable_cents %}
+{% if may_operate and payable_cents and payable_cents >= min_payout_cents %}
 <div class="ops-card" style="margin-bottom:var(--s5)">
   <h3 style="font-size:var(--t-sm);margin:0 0 var(--s3)">Record a payout of {{ money(payable_cents) }}</h3>
   <p class="ops-dim" style="margin:0 0 var(--s3)">This writes the payout down and marks the ready commissions paid. It does not send money: send it first, then record it.</p>
@@ -40,6 +40,10 @@
     <div><button class="btn btn-sm" type="submit">Record payout</button></div>
   </form>
 </div>
+{% endif %}
+
+{% if payable_cents and payable_cents < min_payout_cents %}
+<p class="ops-dim" style="margin:0 0 var(--s5)">{{ money(payable_cents) }} is ready, under the {{ money(min_payout_cents) }} minimum, so it rolls over to the next payout.</p>
 {% endif %}
 
 <h3 class="ops-h">Companies</h3>

@@ -377,7 +377,7 @@ def apply_event(event):
         # a judgement, not arithmetic.
         if obj.get('refunded') and obj.get('invoice'):
             import affiliates
-            result = affiliates.reverse(engine, obj['invoice'], 'refunded')
+            result = affiliates.reverse(engine, obj['invoice'], 'refunded', slug=slug)
             return True, f'{slug}: refund, partner commission {result}'
         return False, f'{slug}: ignored a partial refund'
 

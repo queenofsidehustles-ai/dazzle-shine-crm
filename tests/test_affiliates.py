@@ -286,6 +286,25 @@ else:
         check(o['affiliate_code'] == dana['code'] and o['referred_by'] == first,
               'a partner and a customer referral are both recorded')
 
+        c7 = app.test_client()
+        c7.get('/?aff=nonsense-code', headers=PRODUCT)
+        c7.get(f'/p/{dana["code"]}', headers=PRODUCT)
+        slug = f'real{TAG}'
+        signup(c7, slug)
+        with app.app_context():
+            check(control_plane.find(engine, slug).get('affiliate_code') == dana['code'],
+                  'a made-up ?aff= on a page does not block the real partner link later')
+
+        c8 = app.test_client()
+        c8.get('/?utm_source=facebook&utm_campaign=oldad', headers=PRODUCT)
+        c8.get(f'/p/{dana["code"]}?utm_campaign=Newsletter', headers=PRODUCT)
+        slug = f'tagged{TAG}'
+        signup(c8, slug)
+        with app.app_context():
+            o = control_plane.find(engine, slug)
+        check(o['affiliate_code'] == dana['code'] and o['signup_campaign'] == 'newsletter',
+              f"the partner's own tag replaces an older ad's, so click and signup agree ({o['signup_campaign']})")
+
         print('\n6. Money follows a paid invoice, and only once')
         with app.app_context():
             control_plane.set_billing(engine, first, stripe_customer_id=f'cus_{TAG}',
@@ -333,6 +352,27 @@ else:
             with engine.connect() as conn:
                 n = conn.execute(text('select count(*) from public.affiliate_commissions where affiliate_id=:i'), {'i': dana['id']}).scalar()
         check(n == 2, 'but one inside them does')
+        with app.app_context():
+            with engine.connect() as conn:
+                first_paid = conn.execute(text(
+                    'select min(invoice_paid_at) from public.affiliate_commissions '
+                    'where affiliate_id=:i and status != :s'), {'i': dana['id'], 's': 'reversed'}).scalar()
+            anniversary = affiliates.add_months(first_paid, 12)
+            check(affiliates.accrue(engine, first, {'id': f'in_{TAG}_m13b', 'amount_paid': 7900},
+                                    now=anniversary) is None,
+                  'the payment exactly a year after the first is the thirteenth, and earns nothing')
+            check(affiliates.add_months(datetime(2026, 1, 31), 1) == datetime(2026, 2, 28),
+                  'months are calendar months, clamped to the end of a short one')
+            control_plane.set_test_account(engine, f'both{TAG}', True)
+            check(affiliates.accrue(engine, f'both{TAG}', {'id': f'in_{TAG}_test', 'amount_paid': 7900}) is None,
+                  'a test company never earns a partner anything')
+            control_plane.set_test_account(engine, f'both{TAG}', False)
+            try:
+                bad = dict(engine=None)
+                affiliates.accrue(None, first, {'id': f'in_{TAG}_boom', 'amount_paid': 7900})
+                check(False, 'a ledger error is raised so Stripe retries')
+            except Exception:
+                check(True, 'a ledger error is raised so Stripe retries, not swallowed')
 
         print('\n7. A refund cancels a commission that has not been paid')
         with app.app_context():
@@ -347,6 +387,18 @@ else:
         check(before == 'already reversed', 'and reversing twice does nothing more')
         check(partial[0] is False, 'a partial refund is left for a person')
 
+        with app.app_context():
+            billing.apply_event({'type': 'charge.refunded', 'data': {'object': {
+                'id': 'ch_early', 'customer': f'cus_{TAG}', 'invoice': f'in_{TAG}_early',
+                'refunded': True}}})
+            billing.apply_event(paid_invoice(f'in_{TAG}_early', f'cus_{TAG}'))
+            with engine.connect() as conn:
+                got = conn.execute(text(
+                    'select status, commission_cents from public.affiliate_commissions '
+                    'where stripe_invoice_id=:i'), {'i': f'in_{TAG}_early'}).all()
+        check(got == [('reversed', 0)],
+              'a refund that arrives before its payment still means no commission')
+
         print('\n8. Payouts: only what is ready, only once')
         with app.app_context():
             check(affiliates.payable_cents(engine, dana['id']) == 0, 'nothing is ready inside the hold')
@@ -355,8 +407,12 @@ else:
             later = datetime.utcnow() + timedelta(days=31)
             check(affiliates.payable_cents(engine, dana['id'], later) == 2370,
                   'after the hold it is $23.70 (the reversed one is not counted)')
-            p1 = affiliates.record_payout(engine, dana['id'], 'staff@x', reference='tr_1', now=later)
-            p2 = affiliates.record_payout(engine, dana['id'], 'staff@x', reference='tr_1', now=later)
+            under = affiliates.record_payout(engine, dana['id'], 'staff@x', now=later)
+            check(under is None, 'a balance under the $50 minimum rolls over, not paid in pieces')
+            p1 = affiliates.record_payout(engine, dana['id'], 'staff@x', reference='tr_1',
+                                          now=later, minimum_cents=0)
+            p2 = affiliates.record_payout(engine, dana['id'], 'staff@x', reference='tr_1',
+                                          now=later, minimum_cents=0)
         check(p1 and p1['amount_cents'] == 2370, 'the payout is recorded')
         check(p2 is None, 'and pressing the button again pays nothing twice')
 

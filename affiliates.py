@@ -61,7 +61,20 @@ LOGIN_MINUTES = 60
 # ignored. Enough for a lost email; not enough to use us as a mailer.
 LOGIN_REQUESTS_PER_HOUR = 3
 
-_DAYS_PER_MONTH = 30.4375
+# Payouts below this roll over to the next one, so a $23.70 balance is not a
+# transfer fee and a tax line of its own.
+MIN_PAYOUT_CENTS = 5000
+
+
+def add_months(when, months):
+    """`when` plus whole calendar months, clamping the day (31 Jan + 1 month is
+    the last day of February)."""
+    import calendar
+    index = when.year * 12 + (when.month - 1) + months
+    year, month = divmod(index, 12)
+    month += 1
+    day = min(when.day, calendar.monthrange(year, month)[1])
+    return when.replace(year=year, month=month, day=day)
 
 CODE_RE = re.compile(r'^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$')
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
@@ -341,14 +354,15 @@ def accrue(engine, slug, invoice, now=None):
     """Record the commission a paid invoice earned. Returns the row, or None.
 
     Safe to call any number of times for the same invoice. Does nothing for a
-    company with no partner, a free or fully discounted invoice, or an invoice
-    past the partner's commission window. Never raises: a ledger problem must
-    not be the reason a payment is treated as unprocessed."""
-    try:
-        return _accrue(engine, slug, invoice, now)
-    except Exception as e:
-        print(f'  ⚠️  affiliate commission not recorded: {type(e).__name__}: {e}')
-        return None
+    company with no partner, a test or demo company, a free or fully discounted
+    invoice, or an invoice past the partner's commission window.
+
+    Deliberately lets a database error raise. The Stripe webhook turns an
+    exception into a 500, Stripe retries, and the retry is safe because the
+    invoice id is unique. Swallowing the error would answer 200, Stripe would
+    stop, and the partner would be underpaid with nothing left to reconstruct
+    it from."""
+    return _accrue(engine, slug, invoice, now)
 
 
 def _accrue(engine, slug, invoice, now):
@@ -358,8 +372,8 @@ def _accrue(engine, slug, invoice, now):
         return None
     org = control_plane.find(engine, slug)
     code = org and org.get('affiliate_code')
-    if not code:
-        return None
+    if not code or org.get('is_test') or org.get('is_demo'):
+        return None                  # a test company never earns anybody money
     partner = find_by_code(engine, code)
     if not partner:
         return None
@@ -379,12 +393,14 @@ def _accrue(engine, slug, invoice, now):
         first = conn.execute(
             select(func.min(affiliate_commissions.c.invoice_paid_at)).where(
                 affiliate_commissions.c.affiliate_id == partner['id'],
-                affiliate_commissions.c.org_slug == slug)).scalar()
+                affiliate_commissions.c.org_slug == slug,
+                affiliate_commissions.c.status != 'reversed')).scalar()
         if first:
-            ends = first + timedelta(
-                days=partner['commission_months'] * _DAYS_PER_MONTH)
-            if paid_at > ends:
-                return None                       # past the 12 months
+            # Exclusive: a monthly plan first paid on 1 January is paid again on
+            # 1 January a year later, and that thirteenth payment is outside a
+            # twelve-month term. An averaged day count would let it in.
+            if paid_at >= add_months(first, partner['commission_months']):
+                return None                       # past the term
         commission = base * partner['commission_bps'] // 10000
         if commission <= 0:
             return None
@@ -400,20 +416,39 @@ def _accrue(engine, slug, invoice, now):
     return dict(row)
 
 
-def reverse(engine, invoice_id, reason='refunded', now=None):
+def reverse(engine, invoice_id, reason='refunded', now=None, slug=None):
     """Cancel the commission an invoice earned (refund, chargeback).
 
     Only an unpaid commission is reversed here. One already paid out is left
     alone and reported to the caller as such, so staff can settle it by hand:
     quietly rewriting history that a partner has already been paid against is
     how a ledger stops being believed. Returns 'reversed', 'already paid',
-    'already reversed' or 'none'."""
+    'already reversed' or 'none'.
+
+    Stripe does not promise to deliver events in order, so a refund can arrive
+    before the payment it refunds. With `slug` given and no commission yet, a
+    zero-value reversed row is written under the invoice id: the payment event,
+    when it comes, finds the invoice already recorded and earns nothing."""
     now = now or datetime.utcnow()
     with engine.begin() as conn:
         row = conn.execute(select(affiliate_commissions).where(
             affiliate_commissions.c.stripe_invoice_id == invoice_id)).mappings().first()
         if not row:
-            return 'none'
+            partner = None
+            if slug:
+                org = control_plane.find(engine, slug)
+                partner = org and org.get('affiliate_code') and find_by_code(
+                    engine, org['affiliate_code'])
+            if not partner:
+                return 'none'
+            conn.execute(insert(affiliate_commissions).values(
+                affiliate_id=partner['id'], org_slug=slug,
+                stripe_invoice_id=invoice_id, invoice_paid_at=None,
+                amount_cents=0, rate_bps=partner['commission_bps'],
+                commission_cents=0, status='reversed', payable_at=now,
+                reversed_at=now, reversal_reason=(reason or '')[:200] or None,
+                created_at=now))
+            return 'reversed'
         if row['status'] == 'reversed':
             return 'already reversed'
         if row['status'] == 'paid':
@@ -444,8 +479,12 @@ def payable_cents(engine, affiliate_id, now=None):
 
 
 def record_payout(engine, affiliate_id, created_by, method='transfer',
-                  reference=None, note=None, now=None):
+                  reference=None, note=None, now=None,
+                  minimum_cents=MIN_PAYOUT_CENTS):
     """Pay out everything that is payable, as one payout. Returns it, or None.
+
+    None as well when the balance is under `minimum_cents` (default $50): it
+    rolls over to the next payout instead of being paid in pieces.
 
     Records that money was sent; it does not send any. Marking the rows and
     writing the payout happen in one transaction, and rows are claimed by an
@@ -461,7 +500,7 @@ def record_payout(engine, affiliate_id, created_by, method='transfer',
                    _not_in_review())
             .with_for_update()).all()
         total = sum(r[1] for r in rows)
-        if not rows or total <= 0:
+        if not rows or total <= 0 or total < minimum_cents:
             return None
         payout_id = conn.execute(insert(affiliate_payouts).values(
             affiliate_id=affiliate_id, amount_cents=total,
@@ -618,6 +657,7 @@ def portal(engine, partner, now=None):
         'lifetime_cents': payable + pending + paid,
         'next_payable_at': next_payable,
         'rate_pct': partner['commission_bps'] / 100,
+        'min_payout_cents': MIN_PAYOUT_CENTS,
     }
 
 

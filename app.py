@@ -324,8 +324,11 @@ def create_app():
                     if billing.mark_activated(provisioning._engine(), org['slug']):
                         # The moment it became real, marked when it happened
                         # rather than tomorrow morning (trial_nudges.send_event).
-                        import trial_nudges
-                        trial_nudges.send_event(org['slug'], 'activated')
+                        # Not once the trial is over: "everything is on until
+                        # <a date in the past>" would be false.
+                        if not state['expired']:
+                            import trial_nudges
+                            trial_nudges.send_event(org['slug'], 'activated')
                     org = billing.current_org()
                     state = billing.trial_state(org)
             return {'TRIAL': state}

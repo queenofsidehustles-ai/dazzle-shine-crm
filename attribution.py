@@ -173,6 +173,17 @@ def label(row):
     return get('referrer') or 'direct'
 
 
+def _active_partner(code):
+    """Is this the code of a partner whose link is honoured? False on any error:
+    when in doubt, remember nothing rather than the wrong thing."""
+    try:
+        import affiliates
+        import provisioning
+        return bool(affiliates.active_partner(provisioning._engine(), code))
+    except Exception:
+        return False
+
+
 def install(app):
     """Remember tracking tags and referrals seen on the product's own site."""
     from flask import request
@@ -188,6 +199,13 @@ def install(app):
             secret = app.secret_key
             found = from_request(request.args, request.referrer,
                                  request.host, request.path)
+            if found.get('aff') and not _active_partner(found['aff']):
+                # Only a real, active partner may take the one partner slot.
+                # Otherwise anybody typing ?aff=nonsense into a page would
+                # stop the genuine partner's link from being remembered later.
+                found.pop('aff')
+                if not (set(found) - {'landing'}):
+                    return response
             new = merge(read(request.cookies, secret), found)
             if new:
                 write(response, new, secret, secure=request.is_secure)

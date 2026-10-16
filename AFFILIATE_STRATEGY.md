@@ -196,6 +196,7 @@ Decisions made while building:
 - **A shared business domain is credited but held for review.** The partner and the owner at the same non-free-mail domain could be colleagues or the partner's own company, and software cannot tell. The company works normally; only that commission is held ("being checked by us" on the partner page) until staff press *It is a real introduction* in the console. Free-mail domains (gmail, yahoo and so on) never trigger it. Not yet checked: a Stripe card shared with the partner, the strongest signal, which needs the card fingerprint from Stripe.
 - **One trial, one clock.** The trial is 30 days from signup (`entitlements.TRIAL_DAYS`, read by `billing`). Setting up a cleaner and a customer is a tracked milestone (`activated_at`) but no longer starts or moves the trial, so no email says a trial "has not started". The old start-by window is gone.
 - **The Stripe webhook must send `charge.refunded`** as well as the invoice events, or refunds will not reverse a commission. Disputes are not handled automatically: reverse by hand in the console.
+- **Payouts under $50 roll over** (`affiliates.MIN_PAYOUT_CENTS`). The 12-month term is exclusive: the payment a year after the first is the thirteenth and earns nothing. A refund that arrives before its payment leaves a zero reversed row, so the payment earns nothing. A ledger error raises, so Stripe retries the webhook.
 - **Commission is on the invoice total before tax**, and a partial refund is left for a person.
 
 ### Original plan
