@@ -51,6 +51,10 @@ CATALOG = [
      'Day 8', 'Same, until they sign up'),
     ('nurture_4', 'lead', 'Last one from us',
      'Day 13', 'Same, then nothing'),
+    ('partner_login', 'partner', 'Your partner page sign-in link',
+     'When they ask for one', 'An affiliate partner'),
+    ('partner_paid', 'partner', 'We sent you a payout',
+     'When a payout is sent', 'An affiliate partner'),
 ]
 
 # Whole-sequence switches, checked before the per-email ones.
@@ -60,7 +64,10 @@ ALL_LEAD = 'lead_all'
 # The welcome email carries their web address and confirm code. Switching it
 # off would leave a new owner with no written record of either, so it is
 # always on and the console says so.
-ALWAYS_ON = {'welcome'}
+# The two partner emails are transactional -- a sign-in link they asked for and
+# a note that money was sent -- so they are not a sequence and have no switch.
+ALWAYS_ON = {'welcome', 'partner_login', 'partner_paid'}
+PARTNER_KEYS = {'partner_login', 'partner_paid'}
 
 LABELS = {k: label for k, _a, label, _w, _who in CATALOG}
 
@@ -115,7 +122,7 @@ def recent(engine, limit=100):
                      'label': LABELS.get(m.get('kind'), m.get('kind')),
                      'subject': m.get('subject'), 'ok': m.get('ok'),
                      'detail': m.get('detail'), 'by': m.get('sent_by'),
-                     'audience': 'owner'})
+                     'audience': 'partner' if m.get('kind') in PARTNER_KEYS else 'owner'})
     for m in control_plane.lead_messages(engine, limit=limit):
         by = m.get('sent_by') or ''
         key = ('nurture_' + by.split(' ', 1)[1]) if by.startswith('nurture ') else None
@@ -198,6 +205,13 @@ def sample_preview(key):
         return ('Sparkle Cleaning is set up — here is your address',
                 welcome_email.build('Sparkle Cleaning', 'owner@example.com', host,
                                     'Dana', '123456', f'https://{host}/confirm-email/…'))
+    if key in PARTNER_KEYS:
+        import partner_mail
+        sample = {'name': 'Dana Lee', 'email': 'dana@example.com'}
+        if key == 'partner_login':
+            return partner_mail.login_email(sample, 'https://akyehq.com/partners/login/…')
+        return partner_mail.payout_email(sample, '$118.50', 'tr_1Example',
+                                         'https://akyehq.com/partners')
     if key and key.startswith('nurture_'):
         step = int(key.split('_')[1])
         lead = {'email': 'lee@example.com', 'name': 'Lee Carter',

@@ -104,6 +104,12 @@
       <td class="wrap">{{ when }}</td><td class="wrap">{{ who }}</td><td>{{ sent.get(key, 0) }}</td>
       <td>{{ switch(key, switches.get(key, True)) }}{% if not lead_on %} <span class="ops-dim">(all held)</span>{% endif %}</td></tr>
   {% endfor %}
+  <tr><td colspan="4"><span class="comms-aud">To affiliate partners</span></td><td></td></tr>
+  {% for key, aud, label, when, who in catalog if aud == 'partner' %}
+  <tr><td class="wrap"><a href="{{ url_for('console.communications_preview', key=key) }}">{{ label }}</a></td>
+      <td class="wrap">{{ when }}</td><td class="wrap">{{ who }}</td><td>{{ sent.get(key, 0) }}</td>
+      <td><span class="ops-badge ops-ok" title="Transactional: a link they asked for, a payment notice">always on</span></td></tr>
+  {% endfor %}
 </table></div>
 <p class="ops-dim" style="margin-top:var(--s2)">Click an email to see it with sample details.
   An email switched off is skipped, not marked as sent, so switching it back on inside its window still sends it.
@@ -115,7 +121,7 @@
   <tr><th>When</th><th>Who</th><th>To</th><th>Email</th><th>Result</th><th>By</th></tr>
   {% for r in recent %}
   <tr><td style="white-space:nowrap">{{ r.when.strftime('%d %b %H:%M') if r.when }}</td>
-      <td>{% if r.audience == 'owner' and r.who %}<a href="{{ url_for('console.company', slug=r.who) }}">{{ names.get(r.who, r.who) }}</a>{% else %}{{ r.who or 'Lead' }}{% endif %}</td>
+      <td>{% if r.audience == 'partner' %}Partner{% elif r.audience == 'owner' and r.who %}<a href="{{ url_for('console.company', slug=r.who) }}">{{ names.get(r.who, r.who) }}</a>{% else %}{{ r.who or 'Lead' }}{% endif %}</td>
       <td>{{ r.to }}</td><td class="wrap">{{ r.label }}</td>
       <td>{% if r.ok %}<span class="ops-good">sent</span>{% else %}<span class="ops-bad" title="{{ r.detail }}">failed</span>{% endif %}</td>
       <td>{{ r.by }}</td></tr>

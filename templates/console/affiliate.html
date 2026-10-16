@@ -29,10 +29,48 @@
   <div class="ops-card"><span class="ops-dim">Clicks / signed up / paying</span><span class="v">{{ clicks_total }} / {{ signed_up }} / {{ paying }}</span></div>
 </div>
 
+<div class="ops-card" style="margin-bottom:var(--s5)">
+  <h3 style="font-size:var(--t-sm);margin:0 0 var(--s2)">Payout account</h3>
+  <p style="margin:0 0 var(--s2)">
+    {% if partner.payout_ready %}<span class="ops-badge ops-ok">ready</span> Stripe can pay {{ partner.name }}.
+    {% elif partner.payout_account_id %}<span class="ops-badge ops-stale">setup unfinished</span> They started payout setup with Stripe but have not finished.
+    {% else %}<span class="ops-badge ops-never">not set up</span> They set up payouts on their own partner page.{% endif %}
+    {% if not stripe_ready %}<span class="ops-bad">Stripe is not set up on this deployment.</span>{% endif %}
+  </p>
+  {% if may_operate %}
+  <div class="ops-actions">
+    {% if partner.payout_account_id %}
+    <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='refresh') }}">
+      <button class="btn btn-outline btn-sm" type="submit">Refresh from Stripe</button>
+    </form>{% endif %}
+    {% if payable_cents and payable_cents >= min_payout_cents %}
+      {% if can_stripe %}
+      <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='stripe') }}"
+            onsubmit="return confirm('Send {{ money(payable_cents) }} to {{ partner.name }} from the Akye Stripe balance? This moves real money.')">
+        <button class="btn btn-sm" type="submit">Pay {{ money(payable_cents) }} by Stripe transfer</button>
+      </form>
+      {% else %}<span class="ops-dim">Cannot pay by Stripe yet: {{ why_not }}</span>{% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% for p in payouts if p.status == 'pending' %}
+<div class="ops-card" style="margin-bottom:var(--s5);border-color:var(--amber-line);background:var(--amber-soft)">
+  <strong>{{ money(p.amount_cents) }} was claimed for a transfer that has not been confirmed.</strong>
+  <p class="ops-dim" style="margin:var(--s2) 0">Stripe did not answer, so we do not know whether it went. Retrying is safe: it cannot send twice.</p>
+  {% if may_operate %}
+  <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='retry') }}">
+    <input type="hidden" name="payout" value="{{ p.id }}">
+    <button class="btn btn-sm" type="submit">Retry the transfer</button>
+  </form>{% endif %}
+</div>
+{% endfor %}
+
 {% if may_operate and payable_cents and payable_cents >= min_payout_cents %}
 <div class="ops-card" style="margin-bottom:var(--s5)">
-  <h3 style="font-size:var(--t-sm);margin:0 0 var(--s3)">Record a payout of {{ money(payable_cents) }}</h3>
-  <p class="ops-dim" style="margin:0 0 var(--s3)">This writes the payout down and marks the ready commissions paid. It does not send money: send it first, then record it.</p>
+  <h3 style="font-size:var(--t-sm);margin:0 0 var(--s3)">Or record a payout sent another way: {{ money(payable_cents) }}</h3>
+  <p class="ops-dim" style="margin:0 0 var(--s3)">For PayPal or a check. This writes the payout down and marks the ready commissions paid. It does not send money: send it first, then record it.</p>
   <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='payout') }}" class="ops-form">
     <label>How <select name="method"><option value="transfer">Bank / Stripe transfer</option><option value="paypal">PayPal</option><option value="check">Check</option><option value="other">Other</option></select></label>
     <label>Reference <input type="text" name="reference" maxlength="120" placeholder="Transfer id, check number"></label>
@@ -80,8 +118,11 @@
 <h3 class="ops-h">Payouts</h3>
 {% if payouts %}
 <div class="ops-scroll"><table class="con">
-  <tr><th>Date</th><th>Amount</th><th>How</th><th>Reference</th><th>By</th></tr>
-  {% for p in payouts %}<tr><td>{{ p.paid_at.strftime('%d %b %Y') if p.paid_at }}</td><td>{{ money(p.amount_cents) }}</td><td>{{ p.method or '—' }}</td><td class="ops-dim">{{ p.reference or '—' }}</td><td class="ops-dim">{{ p.created_by or '—' }}</td></tr>{% endfor %}
+  <tr><th>Date</th><th>Amount</th><th>How</th><th>Status</th><th>Reference</th><th>By</th></tr>
+  {% for p in payouts %}<tr><td>{{ p.paid_at.strftime('%d %b %Y') if p.paid_at }}</td><td>{{ money(p.amount_cents) }}</td><td>{{ p.method or '—' }}</td>
+    <td>{% if p.status == 'pending' %}<span class="ops-badge ops-stale">unconfirmed</span>{% elif p.status == 'failed' %}<span class="ops-badge ops-closed" title="{{ p.failure }}">refused</span>{% else %}<span class="ops-badge ops-ok">sent</span>{% endif %}
+        {% if p.status == 'failed' and p.failure %}<br><span class="ops-dim">{{ p.failure }}</span>{% endif %}</td>
+    <td class="ops-dim">{{ p.reference or '—' }}</td><td class="ops-dim">{{ p.created_by or '—' }}</td></tr>{% endfor %}
 </table></div>
 {% else %}<div class="con-empty">None yet.</div>{% endif %}
 {% endblock %}

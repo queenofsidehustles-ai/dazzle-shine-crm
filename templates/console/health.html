@@ -18,6 +18,17 @@
 </div>
 {% endif %}
 
+<h3 class="ops-h">Partner payouts</h3>
+<div class="ops-card">
+  {% if payouts.stripe %}<p class="ops-good" style="margin:0 0 var(--s2)">Stripe is set up for payouts</p>
+  {% else %}<p class="ops-bad" style="margin:0 0 var(--s2)">Stripe is not set up for payouts. Partners cannot be paid by transfer until STRIPE_PLATFORM_SECRET_KEY is set.</p>{% endif %}
+  <span class="ops-dim">Webhook {{ 'configured' if payouts.webhook else 'missing (STRIPE_PLATFORM_WEBHOOK_SECRET): commissions will not accrue' }}
+    · {{ payouts.partners }} partner{{ '' if payouts.partners == 1 else 's' }}, {{ payouts.ready }} ready to be paid
+    · {{ payouts.waiting }} need{{ 's' if payouts.waiting == 1 }} attention</span>
+  <p class="ops-dim" style="margin:var(--s2) 0 0">The Stripe webhook must send <code>invoice.paid</code> and <code>charge.refunded</code>, or commissions will not accrue or reverse.
+    <a href="{{ url_for('console.affiliates_view') }}">Open partners</a></p>
+</div>
+
 <h3 class="ops-h">Automations, every company</h3>
 {% if orgs %}
 <div class="ops-scroll"><table class="con ops-matrix">
