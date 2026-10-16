@@ -257,6 +257,9 @@ answer(app.test_client(), etok, HOST, 'accept', name='Late Buyer', terms_hash=eh
 check(row(eid)['status'] == 'sent' and response(eid) is None, 'and posting anyway accepts nothing')
 check('>expired</span>' in c.get('/quotes/', base_url=HOST).get_data(as_text=True),
       'the owner\'s list says expired, not sent')
+rv = c.get(f'/quotes/{eid}/review', base_url=HOST).get_data(as_text=True)
+check('Before it goes out' not in rv and 'Send for review first' not in rv,
+      'its review page offers no pre-send checks or "DRAFT" copy of terms that have closed')
 n = len(SENT)
 c.post(f'/quotes/{eid}/send', base_url=HOST)
 check(len(SENT) == n, 'it is not resent under a link that says it is closed -- a revision is a fresh offer')

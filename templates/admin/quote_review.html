@@ -54,10 +54,11 @@
 
   <div class="rv-side">
     {# The pre-send checks and the review copy are for a quote that can still
-       be sent -- a draft, or a sent one being sent again. Once it is
-       answered or withdrawn, its terms are settled: checking them, or
+       be sent -- a draft, or a sent one being sent again, while it is open.
+       Once it is answered, withdrawn or past its date, its terms are settled
+       (an expired offer is revised, not resent): checking them, or
        circulating a "DRAFT" of them, only misleads. #}
-    {% if q.status in ('draft', 'sent') %}
+    {% if q.status in ('draft', 'sent') and not q.expired %}
     <div class="card">
       <h3>Before it goes out</h3>
       {% for m in blocking %}<p class="rv-check block">{{ m }}</p>{% endfor %}
@@ -152,7 +153,7 @@
     </div>
     {% endif %}
 
-    {% if q.status in ('draft', 'sent') %}
+    {% if q.status in ('draft', 'sent') and not q.expired %}
     <div class="card">
       <h3>Send for review first</h3>
       <p style="font-size:0.82rem;color:var(--softer);margin:0 0 10px;line-height:1.5">

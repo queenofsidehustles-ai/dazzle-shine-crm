@@ -158,7 +158,10 @@ def restore(found, database_url):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     os.environ['DATABASE_URL'] = database_url
     from sqlalchemy import create_engine, MetaData, select
-    engine = create_engine(database_url)
+    import backup
+    # Normalised as the app does: a bare postgresql:// means psycopg 3 to
+    # SQLAlchemy 2.1, which is not installed.
+    engine = create_engine(backup.normalise(database_url))
     md = MetaData()
     md.reflect(bind=engine)
 
