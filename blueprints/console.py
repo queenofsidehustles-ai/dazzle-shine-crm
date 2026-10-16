@@ -740,6 +740,138 @@ def sales_view():
                            me=request.console_user, counts=_counts(engine))
 
 
+# --------------------------------------------------------------------------
+# Affiliate partners
+#
+# Who recommends the product, what they brought, what they are owed. Nothing
+# here touches a company: a partner can be paused, a commission reversed, a
+# payout recorded, and the companies they referred never notice.
+
+@console_bp.route('/affiliates', methods=['GET', 'POST'])
+@console_required
+def affiliates_view():
+    import affiliates
+    engine = _engine()
+    here = url_for('console.affiliates_view')
+    if request.method == 'POST':
+        if not _may_operate():
+            return _refuse(here)
+        try:
+            partner = affiliates.create(
+                engine, request.form.get('name'), request.form.get('email'),
+                code=request.form.get('code'),
+                status='active' if request.form.get('active') else 'pending',
+                rate_bps=int(round(float(request.form.get('rate') or 30) * 100)),
+                months=int(request.form.get('months') or affiliates.DEFAULT_MONTHS),
+                hold_days=int(request.form.get('hold') or affiliates.DEFAULT_HOLD_DAYS),
+                created_by=request.console_user['email'],
+                notes=request.form.get('notes'))
+        except (ValueError, TypeError) as exc:
+            flash(str(exc), 'error')
+            return redirect(here)
+        control_plane.log_console(engine, request.console_user['email'],
+                                  'added partner', partner['code'], partner['email'])
+        flash(f'{partner["name"]} added as {partner["status"]}. Their link is /p/{partner["code"]}.',
+              'success')
+        return redirect(url_for('console.affiliate', affiliate_id=partner['id']))
+
+    rows = []
+    for a in affiliates.all_affiliates(engine):
+        d = affiliates.portal(engine, a)
+        rows.append(dict(a, clicks=d['clicks_total'], signed_up=d['signed_up'],
+                         paying=d['paying'], payable=d['payable_cents'],
+                         owed=d['payable_cents'] + d['pending_cents'],
+                         paid=d['paid_cents']))
+    return render_template('console/affiliates.html', rows=rows, money=affiliates.money,
+                           may_operate=_may_operate(), defaults=affiliates,
+                           me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/affiliates/<int:affiliate_id>')
+@console_required
+def affiliate(affiliate_id):
+    import affiliates
+    from blueprints.partners import link_for
+    engine = _engine()
+    partner = affiliates.find(engine, affiliate_id)
+    if not partner:
+        flash('No such partner.', 'error')
+        return redirect(url_for('console.affiliates_view'))
+    data = affiliates.portal(engine, partner)
+    return render_template('console/affiliate.html', link=link_for(partner['code']),
+                           money=affiliates.money, may_operate=_may_operate(),
+                           me=request.console_user, counts=_counts(engine), **data)
+
+
+@console_bp.route('/affiliates/<int:affiliate_id>/<action>', methods=['POST'])
+@console_required
+def affiliate_action(affiliate_id, action):
+    import affiliates
+    engine = _engine()
+    here = url_for('console.affiliate', affiliate_id=affiliate_id)
+    if not _may_operate():
+        return _refuse(here)
+    partner = affiliates.find(engine, affiliate_id)
+    if not partner:
+        flash('No such partner.', 'error')
+        return redirect(url_for('console.affiliates_view'))
+    who = request.console_user['email']
+    if action == 'status':
+        status = request.form.get('status')
+        try:
+            affiliates.set_status(engine, affiliate_id, status)
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return redirect(here)
+        control_plane.log_console(engine, who, f'partner {status}', partner['code'])
+        flash(f'{partner["name"]} is now {status}. Companies already referred stay credited '
+              f'to them.', 'success')
+    elif action == 'link':
+        from blueprints.partners import deliver_link
+        raw = affiliates.issue_login(engine, affiliate_id)
+        if not raw:
+            flash('A link was already sent several times in the last hour. Try again later.', 'error')
+        else:
+            ok, detail = deliver_link(
+                partner, url_for('partners.confirm', token=raw, _external=True))
+            flash(f'Sign-in link sent to {partner["email"]}.' if ok
+                  else f'The email did not send: {detail}', 'success' if ok else 'error')
+            control_plane.log_console(engine, who, 'sent partner link', partner['code'])
+    elif action == 'payout':
+        payout = affiliates.record_payout(
+            engine, affiliate_id, who, method=request.form.get('method') or 'transfer',
+            reference=request.form.get('reference'), note=request.form.get('note'))
+        if not payout:
+            flash('Nothing is ready to pay yet.', 'error')
+        else:
+            control_plane.log_console(engine, who, 'recorded partner payout', partner['code'],
+                                      affiliates.money(payout['amount_cents']))
+            flash(f'Recorded a payout of {affiliates.money(payout["amount_cents"])}. '
+                  f'This does not send money -- send it, then it is written down.', 'success')
+    elif action == 'clear':
+        slug = (request.form.get('slug') or '').strip().lower()
+        org = control_plane.find(engine, slug)
+        if not org or org.get('affiliate_code') != partner['code']:
+            flash('That company is not one of this partner\'s.', 'error')
+        else:
+            control_plane.clear_affiliate_flag(engine, slug)
+            control_plane.log_console(engine, who, 'cleared partner review', partner['code'], slug)
+            flash(f'{org["name"]} is cleared. Its commission can now be paid out.', 'success')
+    elif action == 'reverse':
+        result = affiliates.reverse(engine, request.form.get('invoice') or '',
+                                    (request.form.get('reason') or 'reversed by staff')[:200])
+        control_plane.log_console(engine, who, 'reversed commission', partner['code'],
+                                  f'{request.form.get("invoice")}: {result}')
+        flash({'reversed': 'Commission reversed.',
+               'already paid': 'That commission was already paid out. Settle it with the partner by hand.',
+               'already reversed': 'Already reversed.',
+               'none': 'No such commission.'}.get(result, result),
+              'success' if result == 'reversed' else 'error')
+    else:
+        flash('Unknown action.', 'error')
+    return redirect(here)
+
+
 PROMO_CODE_RE = re.compile(r'^[A-Z0-9][A-Z0-9_-]{2,39}$')
 
 

@@ -1,0 +1,41 @@
+{% extends "console/_shell.html" %}
+{% block title %}Partners{% endblock %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+{% include "console/_funnel_tabs.html" %}
+<p class="ops-dim" style="margin:0 0 var(--s4)">People who recommend {{ PRODUCT }} and earn a share of what the companies they bring pay. Their link is <code>/p/&lt;code&gt;</code>. Commission follows a paid invoice, never a signup.</p>
+
+{% if may_operate %}
+<div class="ops-card" style="margin-bottom:var(--s5)">
+  <h3 style="font-size:var(--t-sm);margin:0 0 var(--s3)">Add a partner</h3>
+  <form method="post" action="{{ url_for('console.affiliates_view') }}" class="ops-form">
+    <label>Name <input type="text" name="name" required maxlength="200"></label>
+    <label>Email <input type="email" name="email" required maxlength="200"></label>
+    <label>Code <input type="text" name="code" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9\-]{1,38}[A-Za-z0-9]" placeholder="from their name"></label>
+    <label>Commission % <input type="number" name="rate" min="0" max="100" step="0.5" value="30"></label>
+    <label>Months paid <input type="number" name="months" min="1" max="60" value="{{ defaults.DEFAULT_MONTHS }}"></label>
+    <label>Hold (days) <input type="number" name="hold" min="0" max="180" value="{{ defaults.DEFAULT_HOLD_DAYS }}"></label>
+    <label>Note <input type="text" name="notes" maxlength="500" placeholder="Who they are, how they found us"></label>
+    <label style="display:flex;gap:var(--s2);align-items:center"><input type="checkbox" name="active" value="1" checked> Approved: start crediting now</label>
+    <div><button class="btn btn-sm" type="submit">Add partner</button></div>
+  </form>
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Partner</th><th>Link</th><th>Clicks</th><th>Companies</th><th>Owed</th><th>Paid</th><th>Status</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="{{ url_for('console.affiliate', affiliate_id=r.id) }}"><strong>{{ r.name }}</strong></a><br><span class="ops-dim">{{ r.email }}</span></td>
+    <td><code>/p/{{ r.code }}</code><br><span class="ops-dim">{{ r.commission_bps / 100 }}% for {{ r.commission_months }} mo</span></td>
+    <td>{{ r.clicks }}</td>
+    <td>{{ r.signed_up }}{% if r.paying %}, {{ r.paying }} paying{% endif %}</td>
+    <td>{{ money(r.owed) }}{% if r.payable %}<br><span class="ops-good">{{ money(r.payable) }} ready</span>{% endif %}</td>
+    <td>{{ money(r.paid) }}</td>
+    <td><span class="ops-badge {{ 'ops-ok' if r.status == 'active' else ('ops-stale' if r.status in ('pending', 'paused') else 'ops-closed') }}">{{ r.status }}</span></td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="con-empty">No partners yet.</div>{% endif %}
+{% endblock %}

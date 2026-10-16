@@ -121,9 +121,9 @@ check(f30['follow_up'] == f['follow_up'], 'the follow-up list is the same whatev
 
 print('\n4. Who to get in touch with')
 fu = f['follow_up']
-check([o['name'] for o in fu['not_started']] == ['Charlie'],
-      'signed up and never assigned a job')
-check(fu['not_started'][0]['days_left'] == 25, 'with 25 days left to start')
+check([o['name'] for o in fu['not_set_up']] == ['Charlie'],
+      'signed up and no cleaner and customer yet')
+check(fu['not_set_up'][0]['days_left'] == 25, 'with 25 days of trial left')
 check([o['name'] for o in fu['ending']] == ['Delta'] and fu['ending'][0]['days_left'] == 2,
       'trial ending in 2 days with no plan')
 check([o['name'] for o in fu['failing']] == ['Foxtrot'], 'card failing')
@@ -150,7 +150,7 @@ fo = funnel.compute(with_optout, LEADS, now=NOW, days=None)
 check(fo['stages'][0]['n'] == f['stages'][0]['n'] + 1,
       'she still counts as a signup -- opting out of nudges is not opting out of the funnel')
 check(all(o['name'] != 'Uniform' for rows in fo['follow_up'].values() for o in rows),
-      'but she is off the trial nudge lists -- not_started, ending')
+      'but she is off the trial nudge lists -- not_set_up, ending')
 
 print('\n4d. Opting out of nudges does not hide a payment that actually failed')
 # The checkbox promises no trial emails and no lead-chasing. A failed charge
@@ -237,8 +237,8 @@ with app.app_context():
         check(label in body, f'the "{label}" stage is shown')
     check(f'Funnel Ending {TAG}' in body.split('Trial ends in')[1].split('</table>')[0],
           'the company with a day of trial left is under "trial ends"')
-    check(f'Funnel Idle {TAG}' in body.split('never assigned a job')[1].split('</table>')[0],
-          'the company that never started is under "never assigned a job"')
+    check(f'Funnel Idle {TAG}' in body.split('no cleaner and customer yet')[1].split('</table>')[0],
+          'the company that never started is under "no cleaner and customer yet"')
     check(LEAD_EMAIL in body, 'the uncontacted lead is listed')
     check(c.get('/console/funnel?window=nonsense').status_code == 200,
           'an unknown window falls back instead of erroring')

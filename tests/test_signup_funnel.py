@@ -59,16 +59,16 @@ def org(days_old=0, **kw):
             'owner_email': 'dana@brightside.example', 'status': 'active',
             'created_at': created, 'plan': 'scale',
             'subscription_status': 'trialing',
-            'trial_ends_at': created + timedelta(days=billing.START_WITHIN_DAYS),
+            'trial_ends_at': created + timedelta(days=billing.TRIAL_DAYS),
             'activated_at': None, 'nudges_sent': None}
     base.update(kw)
     return base
 
 
 def running(days_in, **kw):
-    began = NOW - timedelta(days=days_in)
-    return org(days_old=days_in + 2, activated_at=began,
-               trial_ends_at=began + timedelta(days=billing.TRIAL_DAYS), **kw)
+    """Set up `days_in` days ago, two days after signing up. The end date is
+    30 days from signup and setting up does not move it."""
+    return org(days_old=days_in + 2, activated_at=NOW - timedelta(days=days_in), **kw)
 
 
 print('\n1. The first week is no longer silent')
@@ -111,7 +111,7 @@ check(tn.due(running(9, nudges_sent='activated,day2'), next_step=step) == 'featu
       'day 9 with a step undone — the feature note')
 check(tn.due(running(9, nudges_sent='activated,day2')) is None,
       'with nothing undone, nothing')
-check(tn.due(running(11, nudges_sent='activated,day2'), next_step=step) == 'ending',
+check(tn.due(running(25, nudges_sent='activated,day2'), next_step=step) == 'ending',
       'and never in competition with "3 days left"')
 subj, html = tn.compose(running(9), 'feature', step)
 check('Share your booking page' in html and '/settings/booking-page' in html,
@@ -254,8 +254,8 @@ code = email_confirm.code('sparkle', 'dana@sparkle.test')
 check(len(welcome) == 1, 'one email to them, not a welcome and a separate confirm')
 check(welcome and code in welcome[0]['html'] and 'sparkle.rollcall.test' in welcome[0]['html'],
       'it carries their address and their code')
-check(welcome and 'add one cleaner and one customer' in ' '.join(welcome[0]['html'].split()),
-      'and the trial rule the code actually uses')
+check(welcome and 'thirty days start today' in ' '.join(welcome[0]['html'].split()),
+      'and the trial rule the code actually uses: thirty days from today')
 link = re.search(r'href="(https?://sparkle\.rollcall\.test/confirm-email/[^"]+)"',
                  welcome[0]['html']) if welcome else None
 check(link is not None, 'and a link to the "is this you?" page on their own address')
@@ -312,7 +312,7 @@ client.post('/confirm-email', headers=COMPANY, data={'code': new_code})
 check(control_plane.find(engine, 'sparkle').get('email_confirmed_at'),
       'the new code does')
 
-print('\n14. The moment the 14 days start, a note — once')
+print('\n14. The moment they are set up, a note — once')
 SENT.clear()
 with app.app_context(), tenancy.use_tenant('sparkle'):
     from extensions import db
@@ -323,8 +323,8 @@ with app.app_context(), tenancy.use_tenant('sparkle'):
     db.session.remove()
 client.get('/', headers=COMPANY, follow_redirects=True)
 client.get('/', headers=COMPANY, follow_redirects=True)
-got = [m for m in SENT if 'just started' in m['subject']]
-check(len(got) == 1, 'the "your 14 days just started" email, sent when it happened')
+got = [m for m in SENT if 'you are set up' in m['subject']]
+check(len(got) == 1, 'the "you are set up" email, sent when it happened')
 check('activated' in (control_plane.find(engine, 'sparkle').get('nudges_sent') or ''),
       'and recorded, so it is never sent again')
 

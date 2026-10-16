@@ -198,6 +198,8 @@ def create_app():
     from blueprints.marketing import marketing_bp
     import blueprints.marketing as _marketing
     app.register_blueprint(marketing_bp)
+    from blueprints.partners import partners_bp
+    app.register_blueprint(partners_bp)
     _marketing.install(app)
     # Remember which link brought a visitor, so signup can say where each
     # company came from (tracking tags, referrals). Product site only.
@@ -316,14 +318,17 @@ def create_app():
                 return {'TRIAL': None}
 
             state = billing.trial_state(org)
-            if state and not state['started']:
+            if state and not state['activated']:
                 # Have they actually begun? Cheap: onboarding already knows.
                 if onboarding.progress().get('activated'):
                     if billing.mark_activated(provisioning._engine(), org['slug']):
                         # The moment it became real, marked when it happened
                         # rather than tomorrow morning (trial_nudges.send_event).
-                        import trial_nudges
-                        trial_nudges.send_event(org['slug'], 'activated')
+                        # Not once the trial is over: "everything is on until
+                        # <a date in the past>" would be false.
+                        if not state['expired']:
+                            import trial_nudges
+                            trial_nudges.send_event(org['slug'], 'activated')
                     org = billing.current_org()
                     state = billing.trial_state(org)
             return {'TRIAL': state}

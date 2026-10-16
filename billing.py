@@ -30,6 +30,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import control_plane
+import entitlements
 
 # What each plan is called at Stripe. Price IDs live in the environment because
 # they differ between test and live mode, and a test price ID in production is a
@@ -39,7 +40,6 @@ PRICE_ENV = {
     'scale': 'STRIPE_PRICE_SCALE',
 }
 
-TRIAL_DAYS = 14
 
 
 def stripe_key():
@@ -103,25 +103,25 @@ def plan_for(org):
     return org.get('plan') or 'solo'
 
 
-# How long somebody gets, and how long they have to start.
-TRIAL_DAYS = 14
-START_WITHIN_DAYS = 30
+# One number for everything about the trial. Defined once, in entitlements.py,
+# beside the plans it is a trial of; change it there and every email, banner and
+# end date follows.
+TRIAL_DAYS = entitlements.TRIAL_DAYS
 
 
 def trial_state(org, now=None):
     """Where a company is in its trial, in the words the banner needs.
 
-    Two clocks, because one is not honest:
+    One clock: TRIAL_DAYS from signup. It used to start only once somebody had
+    added a cleaner and a customer, with a second window to start at all. Two
+    clocks needed two sentences, two sets of emails and an explanation of
+    which number the banner was showing; one clock needs none of that. A busy
+    owner who signs up and gets pulled away loses days like anybody else, and
+    the emails are there to pull them back.
 
-      * 14 days from the moment they first assign a job to somebody. A
-        fortnight measured from signup is a trial a busy company can lose
-        without ever having used the product — and then they are owed an
-        apology and a manual extension, which is a conversation worth
-        designing out.
-
-      * 30 days from signup to make that start. Without it the first clock
-        never runs for somebody who signs up and does nothing, and a trial
-        that waits indefinitely creates no reason to begin.
+    Setting up (a cleaner and a customer) is still tracked, as `activated`,
+    because it is the best predictor of who will keep the product. It just no
+    longer moves the end date.
 
     Returns None when there is no trial in play at all — a paying customer, or
     a single-business install with no control plane.
@@ -133,46 +133,33 @@ def trial_state(org, now=None):
         return None                       # paying, cancelled, or past due
 
     now = now or datetime.utcnow()
-    started = org.get('activated_at')
     ends = org.get('trial_ends_at')
     created = org.get('created_at') or now
 
     if not ends:
-        # A trial with no end date is not a trial — see plan_for. Treat it as
-        # the start-by window so it is at least bounded.
-        ends = created + timedelta(days=START_WITHIN_DAYS)
+        # A trial with no end date is not a trial — see plan_for. Bound it.
+        ends = created + timedelta(days=TRIAL_DAYS)
 
-    days = (ends - now).days
     over = ends <= now
-
     return {
-        'started': bool(started),
+        'activated': bool(org.get('activated_at')),
         'expired': over,
         'ends_at': ends,
-        'days_left': max(0, days),
-        # Distinguishing these two matters: one says "you have not begun", the
-        # other says "you are running out". They need different sentences.
-        'phase': 'over' if over else ('running' if started else 'not_started'),
+        'days_left': max(0, (ends - now).days),
+        'phase': 'over' if over else 'running',
     }
 
 
 def mark_activated(engine, slug, when=None):
-    """Start the 14 days, now that they have actually used it.
+    """Record that they have put their real business in: a cleaner and a customer.
 
-    Called the first time a company has a job with somebody assigned to it.
-    Moves the end date to fourteen days from that moment — which may be later
-    than the original start-by deadline, and should be: they engaged, so they
-    get their fortnight.
-
-    Does nothing if it has already been called.
-    """
+    Called the first time that is true. Writes the date and nothing else: the
+    trial's end date was fixed at signup and does not move. Does nothing if it
+    has already been called."""
     org = control_plane.find(engine, slug)
     if not org or org.get('activated_at'):
         return False
-    when = when or datetime.utcnow()
-    control_plane.set_billing(engine, slug,
-                activated_at=when,
-                trial_ends_at=when + timedelta(days=TRIAL_DAYS))
+    control_plane.set_billing(engine, slug, activated_at=when or datetime.utcnow())
     return True
 
 
@@ -377,7 +364,22 @@ def apply_event(event):
     if kind in ('invoice.paid', 'invoice.payment_succeeded'):
         control_plane.set_billing(engine, slug, subscription_status='active',
                                   **_revenue_dates(org, 'active'))
+        # If a partner brought this company, this invoice earned them a share.
+        # Keyed on the invoice, so the same event twice earns it once, and
+        # never allowed to fail the payment above (it cannot raise).
+        import affiliates
+        affiliates.accrue(engine, slug, obj)
         return True, f'{slug}: payment received'
+
+    if kind == 'charge.refunded':
+        # A fully refunded invoice earns nothing. A partial refund is left for
+        # a person to look at: how much of a commission a part-refund undoes is
+        # a judgement, not arithmetic.
+        if obj.get('refunded') and obj.get('invoice'):
+            import affiliates
+            result = affiliates.reverse(engine, obj['invoice'], 'refunded', slug=slug)
+            return True, f'{slug}: refund, partner commission {result}'
+        return False, f'{slug}: ignored a partial refund'
 
     return False, f'{slug}: ignored {kind}'
 

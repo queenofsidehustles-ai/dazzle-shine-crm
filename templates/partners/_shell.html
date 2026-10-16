@@ -1,0 +1,59 @@
+{# The partner page shell. Plain on purpose, like the console: it is opened on a
+   phone between other things, so it loads fast and reads top to bottom. #}
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{% block title %}Partner page{% endblock %} — {{ PRODUCT }}</title>
+<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}">
+<style>
+  body { background: var(--ground); margin: 0; }
+  .pt-wrap { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; }
+  .pt-bar { display: flex; align-items: center; gap: var(--s4); padding: var(--s4) 0; flex-wrap: wrap; }
+  .pt-bar .name { font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
+  .pt-bar .right { margin-left: auto; display: flex; gap: var(--s3); align-items: center;
+                   font-size: var(--t-sm); color: var(--muted); }
+  .pt-h { font-size: 1.05rem; margin: var(--s8) 0 var(--s3); color: var(--ink); }
+  .pt-dim { font-size: var(--t-xs); color: var(--softer); }
+  .pt-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+             padding: var(--s4); }
+  .pt-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+              gap: var(--s3); }
+  .pt-tile .l { font-size: var(--t-xs); color: var(--softer); text-transform: uppercase;
+                letter-spacing: .06em; display: block; }
+  .pt-tile .v { font-size: 1.45rem; font-weight: 750; color: var(--ink); display: block;
+                margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .pt-tile .n { font-size: var(--t-xs); color: var(--muted); display: block; margin-top: 2px; }
+  .pt-tile.good .v { color: var(--good); }
+  .pt-scroll { overflow-x: auto; }
+  table.pt { width: 100%; border-collapse: collapse; background: var(--surface);
+             border: 1px solid var(--line); border-radius: var(--r); }
+  table.pt th, table.pt td { text-align: left; padding: var(--s3) var(--s4);
+                             border-bottom: 1px solid var(--line-soft); font-size: var(--t-sm);
+                             white-space: nowrap; }
+  table.pt th { font-size: var(--t-xs); text-transform: uppercase; letter-spacing: .06em;
+                color: var(--softer); }
+  table.pt td.num, table.pt th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pt-badge { display: inline-block; padding: 2px 9px; border-radius: var(--r-pill);
+              font-size: var(--t-xs); font-weight: 700; background: var(--line-soft);
+              color: var(--muted); }
+  .pt-badge.good { background: var(--good-soft); color: var(--good); }
+  .pt-badge.amber { background: var(--amber-soft); color: var(--amber-deep); }
+  .pt-badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .pt-empty { color: var(--softer); padding: var(--s6) 0; text-align: center; font-size: var(--t-sm); }
+  .pt-notice { background: var(--amber-soft); border: 1px solid var(--amber-line);
+               border-radius: var(--r); padding: var(--s4); font-size: var(--t-sm); }
+</style>
+</head><body>
+<div class="pt-wrap">
+  <div class="pt-bar">
+    <span class="name">{{ PRODUCT }} partners</span>
+    {% block bar %}{% endblock %}
+  </div>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="pt-notice" style="margin-bottom:var(--s3)">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</div>
+</body></html>
