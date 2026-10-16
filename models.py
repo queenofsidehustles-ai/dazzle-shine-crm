@@ -1274,6 +1274,11 @@ class ContractAuditEvent(db.Model):
     ip_address = db.Column(db.String(64))
     request_id = db.Column(db.String(36), index=True)
     detail = db.Column(db.Text)                             # JSON
+    # Its place in the trail's hash chain, filled in by the database on insert
+    # (quote_evidence.audit_chain_sql, migration 0031) -- never by this code.
+    chain_seq = db.Column(db.BigInteger)   # unique: migration 0031's index
+    prev_hash = db.Column(db.String(64))
+    row_hash = db.Column(db.String(64))
 
 
 def _evidence_is_permanent(mapper, connection, target):

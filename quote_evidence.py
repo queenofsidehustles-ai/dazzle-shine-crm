@@ -271,6 +271,103 @@ def ownership_sql(prefix):
             f'EXECUTE PROCEDURE {prefix}quote_issued_revision_owned()']
 
 
+# The audit trail as a hash chain. Every contract_audit_event row carries its
+# place in the chain (chain_seq), the hash of the row before it (prev_hash) and
+# its own (row_hash), computed by the database on insert -- under a lock, so
+# two requests cannot both claim the same place. A row changed afterwards no
+# longer hashes to its row_hash, and every row after it names the wrong
+# predecessor. The triggers above already refuse edits; the chain is what still
+# shows an edit made by somebody able to switch those triggers off (the
+# database's owner can), once the chain's head has been written down somewhere
+# that person cannot reach -- the nightly backup's manifest (backup.py).
+AUDIT_GENESIS = '0' * 64
+AUDIT_FIELDS = ('event', 'quote_id', 'revision_id', 'agreement_id', 'actor_kind', 'actor',
+                'ip_address', 'request_id', 'detail')
+
+
+def _field(value):
+    return '-' if value is None else f'{len(str(value))}:{value}'
+
+
+def audit_row_hash(row, seq, prev):
+    """What the database computes for one audit row (audit_chain_sql), here
+    so a checker can recompute the chain without trusting the stored hashes.
+    `row` is a mapping or an object with the audit columns."""
+    get = (lambda k: row[k]) if hasattr(row, 'keys') else (lambda k: getattr(row, k))
+    created = get('created_at')
+    stamp = created.strftime('%Y-%m-%dT%H:%M:%S.%f') if created is not None else None
+    parts = [str(get('id')), str(seq), prev, _field(stamp)] + [
+        _field(None if get(k) is None else str(get(k))) for k in AUDIT_FIELDS]
+    return digest('|'.join(parts))
+
+
+def audit_chain_sql(prefix):
+    """The function that hashes one row, the trigger that chains each insert,
+    and the unique index that keeps the chain a single line."""
+    fields = ', '.join(f'{prefix}audit_field(NEW.{k}::text)' for k in AUDIT_FIELDS)
+    return [f"""
+        CREATE OR REPLACE FUNCTION {prefix}audit_field(v text) RETURNS text
+        LANGUAGE sql IMMUTABLE AS $$
+            SELECT CASE WHEN v IS NULL THEN '-' ELSE length(v)::text || ':' || v END
+        $$""", f"""
+        CREATE OR REPLACE FUNCTION {prefix}contract_audit_chain() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        DECLARE
+            last_seq bigint;
+            last_hash text;
+        BEGIN
+            -- A restore puts the chain back exactly as it was taken, so it
+            -- can be checked against the copy written down outside.
+            IF current_setting('akye.restoring', true) = 'on' AND NEW.row_hash IS NOT NULL THEN
+                RETURN NEW;
+            END IF;
+            PERFORM pg_advisory_xact_lock(hashtext(TG_TABLE_SCHEMA || '.contract_audit_chain'));
+            EXECUTE format('SELECT chain_seq, row_hash FROM %I.%I WHERE chain_seq IS NOT NULL '
+                           'ORDER BY chain_seq DESC LIMIT 1', TG_TABLE_SCHEMA, TG_TABLE_NAME)
+                INTO last_seq, last_hash;
+            NEW.chain_seq := COALESCE(last_seq, 0) + 1;
+            NEW.prev_hash := COALESCE(last_hash, '{AUDIT_GENESIS}');
+            NEW.row_hash := encode(sha256(convert_to(concat_ws('|',
+                NEW.id::text, NEW.chain_seq::text, NEW.prev_hash,
+                {prefix}audit_field(to_char(NEW.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.US')),
+                {fields}), 'UTF8')), 'hex');
+            RETURN NEW;
+        END $$""",
+            f'DROP TRIGGER IF EXISTS contract_audit_event_chain ON {prefix}contract_audit_event',
+            f'CREATE TRIGGER contract_audit_event_chain BEFORE INSERT ON {prefix}contract_audit_event '
+            f'FOR EACH ROW EXECUTE PROCEDURE {prefix}contract_audit_chain()',
+            f'CREATE UNIQUE INDEX IF NOT EXISTS uq_contract_audit_event_chain_seq '
+            f'ON {prefix}contract_audit_event (chain_seq)']
+
+
+def audit_backfill_sql(prefix):
+    """Chain the rows written before the chain existed, oldest first. Run
+    once, by migration 0031, with the frozen trigger briefly off -- it only
+    fills the three new columns in."""
+    args = ', '.join(f'{prefix}audit_field(r.{k}::text)' for k in AUDIT_FIELDS)
+    return [
+        f'ALTER TABLE {prefix}contract_audit_event DISABLE TRIGGER contract_audit_event_frozen',
+        f"""
+        DO $$
+        DECLARE
+            r record;
+            prev text := '{AUDIT_GENESIS}';
+            seq bigint := 0;
+            h text;
+        BEGIN
+            FOR r IN SELECT * FROM {prefix}contract_audit_event WHERE chain_seq IS NULL ORDER BY id LOOP
+                seq := seq + 1;
+                h := encode(sha256(convert_to(concat_ws('|', r.id::text, seq::text, prev,
+                    {prefix}audit_field(to_char(r.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.US')),
+                    {args}), 'UTF8')), 'hex');
+                UPDATE {prefix}contract_audit_event
+                   SET chain_seq = seq, prev_hash = prev, row_hash = h WHERE id = r.id;
+                prev := h;
+            END LOOP;
+        END $$""",
+        f'ALTER TABLE {prefix}contract_audit_event ENABLE TRIGGER contract_audit_event_frozen']
+
+
 def guard_sql(prefix=''):
     """Migration 0029's guards, exactly as it installs them."""
     return frozen_sql(prefix, FROZEN_0029) + ownership_sql(prefix)
@@ -283,5 +380,6 @@ def install_guards(conn, schema=None):
     if conn.dialect.name != 'postgresql':
         return
     prefix = f'"{schema}".' if schema else ''
-    for statement in frozen_sql(prefix, FROZEN_TABLES) + kept_sql(prefix, KEPT_TABLES) + ownership_sql(prefix):
+    for statement in (frozen_sql(prefix, FROZEN_TABLES) + kept_sql(prefix, KEPT_TABLES)
+                      + ownership_sql(prefix) + audit_chain_sql(prefix)):
         conn.execute(text(statement))

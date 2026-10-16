@@ -207,6 +207,7 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
     fails outright on the first mismatch, which is a poor reason to have no
     backup. Whatever is actually in there is what gets copied.
     """
+    from sqlalchemy import text
     engine = _read_engine(database_url)
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H-%M-%SZ')
@@ -251,7 +252,13 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
             'source': _safe_url(url),
             'release': _release(),
         }) + '\n')
+        evidence = {}
         with engine.connect() as conn:
+            # One snapshot for the whole dump, so the copy is of one moment --
+            # and the evidence digest below describes exactly the rows in it.
+            if conn.dialect.name == 'postgresql':
+                conn = conn.execution_options(isolation_level='REPEATABLE READ')
+                conn.execute(text('SET TRANSACTION READ ONLY'))
             for schema in schemas:
                 if schema != PUBLIC:
                     tenant_counts[schema] = {}
@@ -272,6 +279,7 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                     if n and not quiet:
                         pad = '      ' if schema != PUBLIC else '    '
                         print(f'{pad}{table.name:<28} {n:>7}')
+            evidence = _evidence_digests(conn, by_schema)
 
     size = os.path.getsize(path)
     tenant_rows = sum(sum(t.values()) for t in tenant_counts.values())
@@ -280,10 +288,15 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                 'tenant_counts': tenant_counts,
                 'tenant_rows': tenant_rows,
                 'total_rows': sum(counts.values()) + tenant_rows,
-                'taken_at': datetime.datetime.utcnow().isoformat()}
+                'taken_at': datetime.datetime.utcnow().isoformat(),
+                # Written down outside the database: each company's audit chain
+                # head and evidence hashes. certify.py compare checks a later
+                # database against it; verify() checks the restore against it.
+                'evidence': {s: d for s, d in evidence.items() if 'error' not in d},
+                'evidence_problems': [f'{s}: {d["error"]}' for s, d in evidence.items() if 'error' in d]}
 
     previous = _previous_manifest(out_dir)
-    problems = _sanity_check(manifest, previous)
+    problems = _sanity_check(manifest, previous) + manifest['evidence_problems']
 
     # Written even when the checks fail, so the next run can see what happened
     # and so --list does not have to decompress every file to say anything.
@@ -303,6 +316,29 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
 
 class BackupFailed(Exception):
     pass
+
+
+def _evidence_digests(conn, by_schema):
+    """{schema: evidence_check.digest(...)} for every schema holding the
+    contract evidence tables (Postgres only). A chain that does not recompute
+    is recorded as an error: that is the tampering this exists to catch, and
+    it fails the backup loudly rather than being written down as the truth."""
+    if conn.dialect.name != 'postgresql':
+        return {}
+    import evidence_check
+    out = {}
+    for schema, tables in by_schema.items():
+        names = {t.name for t in tables}
+        if 'contract_audit_event' not in names or 'chain_seq' not in {
+                c.name for t in tables if t.name == 'contract_audit_event' for c in t.columns}:
+            continue
+        bad = (evidence_check.audit_chain(conn, schema)['problems']
+               + evidence_check.reconcile(conn, schema)['tampered'])
+        if bad:
+            out[schema] = {'error': '; '.join(bad[:5])}
+            continue
+        out[schema] = evidence_check.digest(conn, schema)
+    return out
 
 
 def _previous_manifest(out_dir):
@@ -691,6 +727,14 @@ def verify(path, quiet=False, scratch_url=None):
     if problems:
         raise BackupFailed('restore did not match the backup: ' + '; '.join(problems))
 
+    # The contract evidence came back exactly as it was written down when the
+    # backup was taken (the sidecar manifest's digests), its audit chains
+    # still recompute, and every guard is back on: a restore that brought
+    # the rows back but left them editable, or changed one, is not a restore.
+    evidence_problems = _verify_evidence(path, scratch_url, tenants)
+    if evidence_problems:
+        raise BackupFailed('restored evidence does not match: ' + '; '.join(evidence_problems[:10]))
+
     # RECOVERY-03: structurally correct is not the same as traffic-ready. A
     # backup taken during a closed tenant's 30-day retention window can
     # legitimately contain its schema; restoring it must not silently make
@@ -713,6 +757,37 @@ def verify(path, quiet=False, scratch_url=None):
         print(f'  ✅ verified — {total:,} rows restored and counted back, '
               f'across {len(expected)} tables')
     return True, manifest
+
+
+def _verify_evidence(path, scratch_url, tenants):
+    """Problems with the restored contract evidence, against the digests the
+    sidecar manifest wrote down at backup time. Postgres scratch only."""
+    if not scratch_url.startswith('postgres'):
+        return []
+    sidecar = path.replace('.json.gz', '.manifest.json')
+    written = {}
+    if os.path.exists(sidecar):
+        with open(sidecar) as fh:
+            written = json.load(fh).get('evidence') or {}
+    import evidence_check
+    problems = []
+    engine = _read_engine(scratch_url)
+    try:
+        with engine.connect() as conn, conn.begin():
+            evidence_check.read_only(conn)
+            for schema in [PUBLIC] + list(tenants):
+                if schema in written:
+                    problems += [f'{schema}: {p}' for p in
+                                 evidence_check.compare(conn, schema, written[schema])['problems']]
+                    problems += [f'{schema}: {p}' for p in
+                                 evidence_check.reconcile(conn, schema)['tampered']]
+                if schema != PUBLIC and (schema in written or not written):
+                    report = evidence_check.schema_report(conn, schema)
+                    problems += [f'{schema}: {p}' for p in report['problems']
+                                 if p.startswith(('guard', 'index'))]
+    finally:
+        engine.dispose()
+    return problems
 
 
 # ---------------------------------------------------------------------------

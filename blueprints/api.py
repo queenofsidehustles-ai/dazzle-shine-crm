@@ -736,18 +736,24 @@ def email_events():
     type, a company that does not exist -- is acknowledged and dropped. One
     we failed to save is answered 503, so the service sends it again; a
     retry of one already saved is recorded once."""
+    import delivery_events
+    import errors
     raw = request.get_data() or b''
     if not _resend_signature_ok(raw, ('RESEND_EVENTS_WEBHOOK_SECRET', 'RESEND_WEBHOOK_SECRET')):
+        errors.capture(delivery_events.SignatureRefused(
+            'Resend delivery event refused: no valid signature. If these keep coming, '
+            'RESEND_EVENTS_WEBHOOK_SECRET is not the webhook\'s signing secret.'))
         from flask import abort
         abort(403)
-    import delivery_events
     payload = request.get_json(silent=True) or {}
     try:
         outcome = delivery_events.record(payload, request.headers.get('svix-id', ''))
-    except delivery_events.Retry:
+    except delivery_events.Retry as e:
         db.session.rollback()
         import logging
         logging.getLogger(__name__).exception('email event not saved; asking for a retry')
+        errors.capture(delivery_events.EventNotSaved(
+            f'Resend delivery event not saved; Resend will retry it: {str(e)[:200]}'))
         return jsonify({'ok': False, 'outcome': 'retry'}), 503
     return jsonify({'ok': True, 'outcome': outcome}), 200
 
