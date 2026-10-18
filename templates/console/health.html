@@ -60,7 +60,7 @@
 {% if ph.usage %}
 <div class="ops-scroll"><table class="con">
   <tr><th>Company</th><th>Texts</th><th>Nana</th><th>Setup chat</th><th>Lead searches</th></tr>
-  {% macro cell(c) %}<td>{% if c.state == 'over' %}<span class="ops-bad">{{ c.used }} / {{ c.limit }}</span>{% elif c.state == 'near' %}<span class="ops-badge ops-stale">{{ c.used }} / {{ c.limit }}</span>{% else %}{{ c.used }}{% if c.limit %}<span class="ops-dim"> / {{ c.limit }}</span>{% endif %}{% endif %}</td>{% endmacro %}
+  {% macro cell(c) %}<td>{% if c.state == 'over' %}<span class="ops-bad">{{ c.used }} / {{ c.limit }}</span>{% elif c.state == 'near' %}<span class="ops-badge ops-stale">{{ c.used }} / {{ c.limit }}</span>{% else %}{{ c.used }}{% if c.limit is not none %}<span class="ops-dim"> / {{ c.limit }}</span>{% endif %}{% endif %}</td>{% endmacro %}
   {% for r in ph.usage %}
   <tr><td><a href="{{ url_for('console.company', slug=r.slug) }}">{{ r.name }}</a> <span class="ops-dim">{{ r.plan }}</span></td>{{ cell(r.sms) }}{{ cell(r.nana) }}{{ cell(r.setup) }}{{ cell(r.searches) }}</tr>
   {% endfor %}

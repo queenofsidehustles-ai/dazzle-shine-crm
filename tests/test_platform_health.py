@@ -240,6 +240,16 @@ try:
     check(rows[0]['sms']['state'] == 'over' and rows[0]['sms']['limit'] == 1000, 'at the text limit: over')
     check(rows[0]['searches']['state'] == 'near', '85% of the searches: near')
     check(totals['sms'] == 1005, 'with a total across companies')
+    zero = [{'slug': 'free', 'name': 'Free Co', 'plan': 'solo', 'subscription_status': 'active'}]
+    zrows, _ = platform_health.usage_rows(zero, {'free': {'ok': True, 'usage': {
+        'sms': 7, 'nana': 0, 'setup_chat': 0, 'lead_searches': 2}}})
+    check(zrows and zrows[0]['sms']['limit'] == 0 and zrows[0]['sms']['state'] == 'over'
+          and zrows[0]['searches']['state'] == 'over',
+          'a free company that used texts or searches is over a limit of zero, not "unlimited"')
+    zrows, _ = platform_health.usage_rows(zero, {'free': {'ok': True, 'usage': {
+        'sms': 0, 'nana': 3, 'setup_chat': 0, 'lead_searches': 0}}})
+    check(zrows[0]['sms']['state'] == '' and zrows[0]['nana']['limit'] == 300,
+          'and one that used none of it is not flagged')
 
     print('\n8. The switches')
     with app.app_context():
@@ -300,6 +310,37 @@ try:
         platform_switches.clear_cache()
         check(platform_switches.is_on('ai', Broken()) and platform_switches.is_on('sms', Broken()),
               'an unreadable database means ON: a kill switch must not fail closed')
+
+    print('\n8b. The switches reach every path (review findings)')
+    with app.app_context():
+        import speech
+        os.environ['OPENAI_API_KEY'] = 'sk-test'
+        check(speech.provider() is not None, 'speech has a provider while AI is on')
+        platform_switches.set_switch(engine, 'ai', False, 'staff@x')
+        check(speech.provider() is None, 'AI off: no paid speech either, the page falls back to the free voice')
+        platform_switches.set_switch(engine, 'ai', True, 'staff@x')
+        os.environ.pop('OPENAI_API_KEY', None)
+
+        import lead_outreach
+        platform_switches.set_switch(engine, 'sms', False, 'staff@x')
+        ok, detail = lead_outreach.send_text(
+            engine, {'id': 1, 'phone': '4075550100', 'name': 'x'}, 'Hi', 'test')
+        check(not ok and 'switched off' in detail,
+              'texting off: console outreach is refused too, not only the company send path')
+        platform_switches.set_switch(engine, 'sms', True, 'staff@x')
+
+        # Pruning keeps the evidence that something stopped.
+        old = NOW - timedelta(days=120)
+        control_plane.record_platform_run(engine, 'backup:gone', ok=True, now=old)
+        control_plane.record_platform_run(engine, 'backup:gone', ok=False, detail='broke',
+                                          now=old + timedelta(days=1))
+        control_plane.record_platform_run(engine, 'job:other', ok=True,
+                                          now=NOW.replace(minute=10))   # minute % 10 == 0: prunes
+        kept = control_plane.platform_runs_for(engine, 'backup:gone', 10)
+        check(len(kept) == 2 and control_plane.last_ok_platform_run(engine, 'backup:gone'),
+              'an outage older than the retention window still shows: newest row and last success survive pruning')
+        check(platform_health.run_state(engine, 'backup:gone', 36, now=NOW)['state'] == 'failed',
+              'so it is failed, not quietly "not reported yet"')
 
     print('\n9. The console')
     mgr, mpass = f'mgr-{TAG}@example.com', 'a-real-console-password-1'

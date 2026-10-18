@@ -191,8 +191,15 @@ def usage_rows(orgs, snaps):
     import setup_assistant
 
     def cell(used, limit):
-        pct = (used / limit) if limit else 0
-        state = 'over' if limit and used >= limit else ('near' if limit and pct >= USAGE_WARN else '')
+        # None is unlimited; 0 is a real limit (the free plan sends no texts and
+        # runs no lead searches), so any use at all is over it. Truthiness would
+        # have read both as unlimited and hidden exactly the unexpected use this
+        # section exists to show.
+        if limit is None:
+            return {'used': used, 'limit': None, 'pct': 0, 'state': ''}
+        pct = (used / limit) if limit else (1.0 if used else 0.0)
+        state = ('over' if used and used >= limit
+                 else 'near' if limit and pct >= USAGE_WARN else '')
         return {'used': used, 'limit': limit, 'pct': round(pct * 100), 'state': state}
 
     rows = []

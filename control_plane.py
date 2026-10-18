@@ -1701,7 +1701,8 @@ def record_platform_run(engine, kind, ok=True, items=None, detail=None, now=None
     be the reason the job fails.
 
     Rows older than PLATFORM_RUN_KEEP_DAYS are pruned as a side effect, so a
-    Stripe webhook that fires all day cannot grow this table without limit."""
+    Stripe webhook that fires all day cannot grow this table without limit.
+    The newest row and newest success of each kind are always kept."""
     try:
         now = now or datetime.utcnow()
         with engine.begin() as conn:
@@ -1710,8 +1711,17 @@ def record_platform_run(engine, kind, ok=True, items=None, detail=None, now=None
                 items=int(items) if items is not None else None,
                 detail=(detail or '')[:400] or None, at=now))
             if now.minute % 10 == 0:          # cheap, and often enough
+                # Never the newest row of a kind, nor its newest success: a job
+                # that stopped reporting 45 days ago must still read as stale
+                # (not as "never reported", which is quiet), and "last good"
+                # has to survive for the page to say how long it has been.
+                newest = select(func.max(platform_runs.c.id)).group_by(platform_runs.c.kind)
+                newest_ok = select(func.max(platform_runs.c.id)).where(
+                    platform_runs.c.ok.is_(True)).group_by(platform_runs.c.kind)
                 conn.execute(delete(platform_runs).where(
-                    platform_runs.c.at < now - timedelta(days=PLATFORM_RUN_KEEP_DAYS)))
+                    platform_runs.c.at < now - timedelta(days=PLATFORM_RUN_KEEP_DAYS),
+                    platform_runs.c.id.notin_(newest),
+                    platform_runs.c.id.notin_(newest_ok)))
         return True
     except Exception as e:
         print(f'  ⚠️  platform run not recorded: {type(e).__name__}: {e}')
