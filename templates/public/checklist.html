@@ -572,7 +572,7 @@
 
     function showDone() {
       $('flow').innerHTML =
-        '<div class="card"><div class="final-banner">🎉 Job closed out!<br><span style="font-weight:500;font-size:0.92rem">Your photos were sent to the office. Great work — thank you!</span></div></div>';
+        '<div class="card"><div class="final-banner">🎉 Job closed out!<br><span style="font-weight:500;font-size:0.92rem">' + (beforePhotos.length || afterPhotos.length ? 'Your photos were sent to the office. ' : 'The office has been notified. ') + 'Great work — thank you!</span></div></div>';
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
