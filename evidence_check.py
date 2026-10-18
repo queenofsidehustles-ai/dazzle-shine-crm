@@ -27,6 +27,8 @@ a mistake here is an error, not a change.
 Each returns a dict with a list of `problems` (strings naming ids, never
 customer data); an empty list is a pass.
 """
+from datetime import datetime
+
 from sqlalchemy import text
 
 import quote_evidence
@@ -148,6 +150,11 @@ def schema_report(conn, schema):
     return out
 
 
+# When migration 0029 reached akye-stable (#91), in UTC as responded_at is
+# stored. No acceptance before it can have recorded an answer.
+ANSWERS_RECORDED_FROM = datetime(2026, 10, 15, 21, 45)
+
+
 def _rows(conn, schema, sql, **params):
     return conn.execute(text(sql.format(s=f'"{schema}".')), params).mappings().all()
 
@@ -162,14 +169,14 @@ def reconcile(conn, schema):
         p.append(msg)
         t.append(msg)
     revs = {r['id']: r for r in _rows(conn, schema,
-            'SELECT id, quote_id, terms, content_hash FROM {s}commercial_quote_revision')}
+            'SELECT id, quote_id, terms, content_hash, created_at FROM {s}commercial_quote_revision')}
     n['revisions'] = len(revs)
     for r in revs.values():
         if quote_evidence.digest(r['terms']) != r['content_hash']:
             changed(f'revision {r["id"]}: its terms no longer hash to its hash')
     quotes = {q['id']: q for q in _rows(conn, schema,
-              'SELECT id, status, account_id, issued_revision_id, amends_quote_id, amends_agreement_id '
-              'FROM {s}commercial_quote')}
+              'SELECT id, status, account_id, issued_revision_id, amends_quote_id, amends_agreement_id, '
+              'responded_at FROM {s}commercial_quote')}
     n['quotes'] = len(quotes)
     for q in quotes.values():
         rid = q['issued_revision_id']
@@ -205,12 +212,27 @@ def reconcile(conn, schema):
         if a['amends_agreement_id'] is not None and a['amends_agreement_id'] not in by_id:
             p.append(f'agreement {a["id"]}: amends agreement {a["amends_agreement_id"]}, which does not exist')
     accepted = [q for q in quotes.values() if q['status'] == 'accepted']
+    frozen = {r['quote_id'] for r in revs.values()}
+    first_evidence = min((r['created_at'] for r in (*revs.values(), *responses.values()) if r['created_at']),
+                         default=None)
     n['accepted_quotes'] = len(accepted)
     successors = {}
     for q in accepted:
         resp = responses.get(q['id'])
         if resp is None or resp['decision'] != 'accepted':
-            p.append(f'quote {q["id"]}: accepted with no acceptance recorded')
+            # Quotes accepted before answers were recorded (migration 0029)
+            # kept only a status and a time: no terms were frozen for them,
+            # and every acceptance since freezes a revision first. One with a
+            # revision, or answered after 0029 shipped or after this company's
+            # first evidence, is a missing record -- a company with no evidence
+            # at all is no proof of age.
+            if (resp is None and q['issued_revision_id'] is None and q['id'] not in frozen
+                    and q['responded_at'] and q['responded_at'] < ANSWERS_RECORDED_FROM
+                    and (first_evidence is None or q['responded_at'] < first_evidence)):
+                ex.append(f'quote {q["id"]}: accepted before answers were recorded; '
+                          'its status and time are its only record')
+            else:
+                p.append(f'quote {q["id"]}: accepted with no acceptance recorded')
             continue
         if q['account_id'] not in accounts:
             p.append(f'quote {q["id"]}: accepted with no account behind it')
