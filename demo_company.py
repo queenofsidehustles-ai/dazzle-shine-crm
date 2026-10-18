@@ -77,6 +77,10 @@ COMPANY = {
 OWNER = ('Sarah Mitchell', 'sarah@brightnest.example', 'owner')
 OPS = ('Priya Shah', 'priya@brightnest.example', 'dispatcher')
 RNG_SEED = 20260926
+# BrightNest charges 20% above Akye's starting price list: Sarah raised her
+# prices and sells more add-ons. Cleaner pay is hours x labor rate, so it does
+# not move with price -- the lift lands in profit, not in pay.
+PRICE_LIFT = 1.20
 BIZ_TZ = COMPANY['timezone']
 
 # name, email, phone digits, level, language, color, months on the team.
@@ -239,6 +243,7 @@ class Builder:
         import automations
         for k, v in COMPANY.items():
             BusinessSetting.set(k, v)
+        self.price_list()
         for name, email, role in (OWNER, OPS):
             u = User(name=name, username=email, role=role, active=True,
                      created_at=at(self.d(-200 if role == 'owner' else -120), '9:00 AM'))
@@ -253,6 +258,18 @@ class Builder:
         automations.set_balance_mode('ask')
         automations.set_cleaner_reminders_enabled(True)
         db.session.commit()
+
+    def price_list(self):
+        """BrightNest's own price list (Settings -> Pricing): the starting list
+        lifted by PRICE_LIFT, to the nearest $5 as a person would set it. Hours
+        and the labor rate are left alone, so pay per job is unchanged."""
+        import pricing
+        from models import PricingSetting
+        for size, default in pricing.PRICE_MATRIX_DEFAULTS.items():
+            pricing.set_std_price(*size, round(default * PRICE_LIFT / 5) * 5)
+        for name, default in pricing.EXTRAS.items():
+            PricingSetting.set(f"extra_{name.lower().replace(' ', '_')}",
+                               round(default * PRICE_LIFT / 5) * 5)
 
     # stage: team ---------------------------------------------------------
     def team_(self):
