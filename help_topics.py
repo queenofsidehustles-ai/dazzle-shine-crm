@@ -43,8 +43,7 @@ TOPICS = [
                    'and time zone exactly as you want customers to see them, because they appear on quotes, '
                    'invoices and emails. The branding card sets your header and button colours and your email '
                    'tagline, which your booking page uses too. Put your mobile in "Text alerts to" so you get a '
-                   'text when a cleaner or customer texts in; leave it blank and replies still land in Messages, '
-                   'you just are not pinged.'),
+                   'text when a cleaner or customer texts in; if you leave it blank, alerts go to your business phone number instead. Replies always land in Messages.'),
         'link': ('Business settings', '/settings/business'),
     },
     {
@@ -100,7 +99,7 @@ TOPICS = [
         'key': 'deposits',
         'title': 'Deposits',
         'keywords': ['deposit', 'deposits', 'down payment', 'hold my spot', 'booking fee', 'not confirmed'],
-        'answer': ('Set your booking deposit on Pricing, under Deposit. It goes toward the total, it is not an '
+        'answer': ('Set your booking deposit on Pricing, under Deposit. Note: some customer emails and texts currently still say $50 whatever amount you set, so keep it at $50 for now or tell customers the amount yourself. It goes toward the total, it is not an '
                    'extra charge. When a customer books through your booking page, the booking stays pending '
                    'and they are emailed and texted a link to pay the deposit; paying it confirms the booking '
                    'and saves their card for the balance. When you create a booking yourself you can choose '
@@ -215,8 +214,7 @@ TOPICS = [
         'title': 'Assigning a cleaner to a job',
         'keywords': ['assign', 'assign cleaner', 'send job', 'give job', 'dispatch', 'who is cleaning',
                      'unassigned', 'work order'],
-        'answer': ('Open the job and pick the cleaner under Assigned Cleaner, then save; they are emailed the job '
-                   'with accept and decline links, and the cleaning checklist is sent. Or, in the "Who\'s paid for '
+        'answer': ('Open the job and pick the cleaner under Assigned Cleaner, then save; they are emailed and texted the job with accept and decline links, and the cleaning checklist is sent. Or, in the "Who\'s paid for '
                    'this job" card, add a specific cleaner with their pay and send it straight away, which emails '
                    'and texts them the address, their pay and the checklist. Your dashboard warns you about jobs '
                    'tomorrow with nobody on them.'),
@@ -293,7 +291,7 @@ TOPICS = [
                    'ready-made adverts to post free on Indeed, Facebook groups or Craigslist, with the right '
                    'version for contractors or employees. Applicants can apply in English or Spanish from their '
                    'phone. Someone with no cleaning experience or no transportation gets a polite automatic '
-                   'rejection; everyone else is sent a video interview link about ten minutes later. Applicants '
+                   'rejection; everyone else is sent a video interview link about ten minutes later. A cleaning company that applies skips the interview and is held for you to review their insurance. Applicants '
                    'who stall are followed up automatically.'),
         'link': ('Applications', '/contractors/applications'),
     },
@@ -328,8 +326,7 @@ TOPICS = [
                      'paperwork', 'non-solicitation', 'non solicitation', 'poaching'],
         'answer': ('When someone accepts your offer they become a team member and get one onboarding page: sign '
                    'the work agreement, set up how they get paid, choose a pay schedule and start date, send a '
-                   'photo ID and W-9, and read the training guide. The built-in agreement matches the worker type '
-                   'set in Settings, Business (1099 contractor or W-2 employee). The contractor version includes a '
+                   'photo ID and W-9, and read the training guide. The built-in agreement matches the worker type set in Settings, Business (1099 contractor or W-2 employee), though the onboarding page itself still says contractor agreement and asks for a W-9 either way. The contractor version includes a '
                    '24-month non-solicitation clause with a $2,000 buyout, and your customer terms ask customers '
                    'not to hire your cleaners directly. You can replace the wording with your own; it is not legal advice.'),
         'link': ('Business settings', '/settings/business'),
@@ -343,8 +340,7 @@ TOPICS = [
                      'on my way', 'sign off', 'cleaning checklist', 'tasks'],
         'answer': ('Each job\'s cleaner gets a checklist link. They tap On My Way, which texts and emails the '
                    'customer, then Clock In, tick off each task, add at least one before and one after photo, '
-                   'and Clock Out. If the customer is home they can sign off and leave a star rating. Submitting '
-                   'the photos marks the job completed and emails you. Photos are kept private. Edit what is on '
+                   'and Clock Out. If the customer is home they can sign off and leave a star rating. Submitting the photos marks the job completed and emails you. To also send the customer a review request, set the job to Completed yourself on the job page. Photos are kept private. Edit what is on '
                    'each service\'s list on the Cleaning Checklist page.'),
         'link': ('Cleaning Checklist', '/workorders/templates'),
     },
@@ -404,8 +400,7 @@ TOPICS = [
                    'then in Stripe go to Developers, API keys, copy the publishable and secret keys and paste them '
                    'into Settings, Connections. Test keys let you try everything without charging real cards; swap '
                    'in live keys when you are ready. Press "Test Stripe connection" and check it names your '
-                   'business. On Akye, texting, email, job photos and lead search are provided for you, so Stripe '
-                   'is the one thing you connect.'),
+                   'business. On Akye, texting, email and job photos are provided for you (lead search depends on your plan), so Stripe is the one thing you connect.'),
         'link': ('Connections', '/settings/connections'),
     },
     {
@@ -413,8 +408,7 @@ TOPICS = [
         'title': 'Taking payments, payment links and invoices',
         'keywords': ['payment', 'take payment', 'payment link', 'invoice', 'invoices', 'qr code', 'mark paid',
                      'collect', 'balance', 'receipt'],
-        'answer': ('On the job page, the Send to customer card sends a payment link or an invoice by email and '
-                   'text. The Money card has Take Payment, which opens the card page with a QR code the customer '
+        'answer': ('On the job page, the Send to customer card sends a payment link by email and text, or an invoice by email. The Money card has Take Payment, which opens the card page with a QR code the customer '
                    'can scan, and Mark paid for cash or other payments, with the date the money arrived and an '
                    'optional receipt. You can also record a deposit paid outside Stripe. Paid jobs have a receipt '
                    'you can print or save. Tips added on the payment page are kept separate for the cleaner.'),
@@ -459,7 +453,7 @@ TOPICS = [
         'key': 'reviews-ratings',
         'title': 'Ratings, reviews and your Google review link',
         'keywords': ['review', 'reviews', 'rating', 'ratings', 'google review', 'stars', 'feedback from customers'],
-        'answer': ('When you change a job\'s status to Completed on the job page, the customer is emailed and '
+        'answer': ('When you change a job\'s status to Completed on the job page (not when a cleaner\'s photo submission or Nana marks it finished), the customer is emailed and '
                    'texted a link to rate it, unless you ticked "Don\'t ask this customer for a review". People '
                    'who give 4 or 5 stars see a Leave a Google Review button and can add a tip; below 4 stars, you '
                    'are emailed so you can make it right. Add your Google review link in Settings, Business; with '
@@ -580,8 +574,7 @@ TOPICS = [
         'key': 'spanish',
         'title': 'Spanish and translation',
         'keywords': ['spanish', 'espanol', 'translate', 'translation', 'language', 'bilingual', 'english'],
-        'answer': ('Set a cleaner\'s language to Spanish on their profile and the texts they get are translated '
-                   'automatically, and their job pages show in Spanish. In a Messages conversation, switch on '
+        'answer': ('Set a cleaner\'s language to Spanish on their profile and their job pages show in Spanish. Job board offers, schedule changes, pay updates, availability requests and team messages are translated; job assignments, work orders and day-before reminders still go in English. In a Messages conversation, switch on '
                    'Spanish translation: you type English, they get Spanish, and their replies show in English. '
                    'Applicants can apply and record their interview in Spanish, and you see an English translation.'),
         'link': ('Team', '/contractors/team'),
