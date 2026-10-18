@@ -213,7 +213,11 @@
           Next: {{ SETUP.next.title }}. {{ SETUP.next.why }}
         </div>
         <div class="setup-nudge-acts">
+          {% if SETUP_CHAT %}
+          <a class="btn-primary" href="{{ url_for('settings.getting_started', focus=1) }}">Finish with Nana</a>
+          {% else %}
           <a class="btn-primary" href="{{ SETUP.next.link }}">{{ SETUP.next.cta }}</a>
+          {% endif %}
           <button type="button" class="btn-quiet" onclick="hideNudge()">Later</button>
         </div>
       </div>
@@ -324,5 +328,8 @@
   {# On every screen, deliberately. A beta tester who has to go and find
      somewhere to report a problem mostly does not. #}
   {% if session.get('logged_in') %}{% include '_feedback.html' %}{% endif %}
+{% if SETUP and not SETUP.complete and SETUP_CHAT and request.endpoint == 'admin.dashboard' %}
+  {% include "admin/_nana_welcome.html" %}
+{% endif %}
 </body>
 </html>

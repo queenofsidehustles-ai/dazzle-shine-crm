@@ -93,7 +93,12 @@ def system_prompt(profile):
         '3. Call several tools if the question needs them -- independent '
         'lookups together in one turn, at most four at a time. Look at what '
         'comes back before deciding what else to ask for.\n'
-        '4. Write nothing before or between tool calls. When you have enough, '
+        '4. Questions about how Akye itself works -- hiring, onboarding '
+        'cleaners, payments, the booking page, settings, any feature -- go to '
+        'the how_to tool. Answer from what it returns, in your own plain '
+        'words. If it does not cover the question, say you are not sure and '
+        'suggest Akye support. Never describe a feature from memory.\n'
+        '5. Write nothing before or between tool calls. When you have enough, '
         'write only the final answer.\n\n'
 
         'WHAT YOU CANNOT DO\n'
@@ -247,6 +252,7 @@ ARG_HINTS = {
     'name': {'type': 'string', 'description': 'A person or customer name, as the owner said it.'},
     'customer': {'type': 'string', 'description': 'The customer whose job it is.'},
     'about': {'type': 'string', 'description': 'What the email should say, in the owner\'s words.'},
+    'question': {'type': 'string', 'description': 'The owner\'s how-to question, in their words.'},
     'to': {'type': 'string', 'description': 'Who it is for: a customer, lead or company name.'},
 }
 
@@ -433,7 +439,7 @@ def _call_tool(name, args):
     if isinstance(out, dict):
         # A draft or a button to press. It travels back to the page as itself,
         # never rewritten by the model on the way out.
-        prop = {k: out[k] for k in ('confirm', 'draft') if k in out} or None
+        prop = {k: out[k] for k in ('confirm', 'draft', 'link') if k in out} or None
         return out.get('say') or '', prop
     return out or '', None
 
