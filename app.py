@@ -529,6 +529,21 @@ def create_app():
 
         migrate.run_at_boot(app)
 
+        # The control plane's own additive columns (closed_at, purged_at).
+        # control_plane.find() selects them unconditionally, so an existing
+        # deployment's `public.organizations` — created before those columns
+        # existed — must be backfilled before any tenant request runs, not
+        # merely by the CLI paths that happened to call ensure_table()
+        # already. It also has to come before migrate_all(), which reads the
+        # company list and would otherwise fail on a column not yet added.
+        # Never fatal: this deployment may have no control plane at
+        # all (a single-business instance) or run on SQLite, neither of
+        # which is an error.
+        try:
+            import control_plane
+            control_plane.ensure_table(db.engine)
+        except Exception as _e:
+            print(f'  ⚠️  control plane not migrated: {_e}')
         # And every company's own schema. run_at_boot handles the default
         # schema only, so without this the first release carrying a migration
         # leaves every existing customer on the old one — the new table simply
@@ -541,19 +556,6 @@ def create_app():
         except Exception as _e:
             print(f'  ⚠️  company schemas not migrated: {_e}')
 
-        # The control plane's own additive columns (closed_at, purged_at).
-        # control_plane.find() selects them unconditionally, so an existing
-        # deployment's `public.organizations` — created before those columns
-        # existed — must be backfilled before any tenant request runs, not
-        # merely by the CLI paths that happened to call ensure_table()
-        # already. Never fatal: this deployment may have no control plane at
-        # all (a single-business instance) or run on SQLite, neither of
-        # which is an error.
-        try:
-            import control_plane
-            control_plane.ensure_table(db.engine)
-        except Exception as _e:
-            print(f'  ⚠️  control plane not migrated: {_e}')
         db.create_all()
         _migrate_db()
         _seed_checklists()
@@ -664,6 +666,23 @@ def _apply_template_patches():
     """One-time content patches to LIVE email templates (idempotent via flags),
     so fixes reach existing installs without the owner pasting anything."""
     from models import EmailTemplate, BusinessSetting
+    # Patch 0: photos are optional now, so no checklist item may ask a cleaner
+    # to attest to photos. Rewords in place (completed items are by index).
+    if not BusinessSetting.get('tmpl_patch_photo_items_v1'):
+        from models import ChecklistTemplate, JobChecklist
+        swaps = (('— document condition with photos', '— check and note condition'),
+                 ('Take photos when complete', 'Final look-over before leaving'))
+        rows = (ChecklistTemplate.query.all()
+                + JobChecklist.query.filter(JobChecklist.photos_submitted_at.is_(None)).all())
+        for row in rows:
+            text = row.items or ''
+            for old, new in swaps:
+                text = text.replace(old, new)
+            if text != (row.items or ''):
+                row.items = text
+        BusinessSetting.set('tmpl_patch_photo_items_v1', '1')
+        db.session.commit()
+
     # Patch 1: client anti-poaching / buyout clause in the booking confirmation
     if not BusinessSetting.get('tmpl_patch_buyout_v1'):
         t = EmailTemplate.query.filter_by(trigger='booking_confirmed').first()
@@ -1153,7 +1172,7 @@ def _seed_checklists():
             'Re-clean all glass, mirrors and interior windows',
             'Damp-mop all hard floors a second time',
             'Spot-clean marks left by trades returning to the site',
-            'Final walkthrough with the customer — document condition with photos',
+            'Final walkthrough with the customer — check and note condition',
         ]),
         ('Post-Construction — Full Service', 'postcon_full', [
             'Haul out all remaining construction debris, packaging and jobsite trash',
@@ -1176,7 +1195,7 @@ def _seed_checklists():
             'Straighten furniture and décor',
             'Check and replace light bulbs if needed',
             'Check for guest left-behind items',
-            'Take photos when complete',
+            'Final look-over before leaving',
         ]),
         ('Apartment / Condo Cleaning', 'apartment', [
             'Dust all surfaces',

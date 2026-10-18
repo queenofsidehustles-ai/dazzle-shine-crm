@@ -346,8 +346,8 @@ def mark_complete(booking_id):
     Runs the same follow-through as choosing Completed on the booking page.
     """
     booking = Booking.query.get_or_404(booking_id)
-    if booking.status in ('completed', 'cancelled'):
-        flash(f'This booking is already {booking.status}.', 'info')
+    if booking.status in ('completed', 'cancelled', 'on_hold'):
+        flash(f'This booking is {booking.status.replace("_", " ")}, so it can\'t be marked complete here.', 'info')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
     from datetime import datetime as _dt
     booking.status = 'completed'

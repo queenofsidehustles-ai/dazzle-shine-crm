@@ -41,7 +41,7 @@ DEFAULT_ITEMS = {
         'All deep clean tasks', 'Clean inside all cabinets and drawers',
         'Clean inside oven', 'Clean inside refrigerator', 'Clean inside dishwasher',
         'Clean all closets', 'Remove all remaining debris',
-        'Final walkthrough — document condition with photos',
+        'Final walkthrough — check and note condition',
     ],
     # The three post-construction rungs are one job in three sizes, so each one
     # is written as the rung below it plus what that rung does not include.
@@ -77,7 +77,7 @@ DEFAULT_ITEMS = {
         'Re-clean all glass, mirrors and interior windows',
         'Damp-mop all hard floors a second time',
         'Spot-clean marks left by trades returning to the site',
-        'Final walkthrough with the customer — document condition with photos',
+        'Final walkthrough with the customer — check and note condition',
     ],
     # Debris goes first because it happens first: detail cleaning a room still
     # full of offcuts and packaging is work done twice.
