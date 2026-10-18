@@ -147,7 +147,9 @@ with app.app_context():
           f"Alpha: its one error and its failing reminders ({row_a[-160:]!r})")
     check('2 errors' in row_b and 'automation' not in row_b,
           'Bravo: its own two errors, and none of Alpha\'s automation trouble')
-    check('>>Health</a>' not in body and '>Health</a>' in body, 'Health is in the navigation')
+    # The tab may carry a count of what needs a look, so match the link, not its end.
+    check('>>Health' not in body and 'console/health' in body and '>Health' in body,
+          'Health is in the navigation')
     check('asked 2×' in body, 'a lead who asked twice is one row, counted')
 
     print('\n4. The company page reads that company and nobody else')
