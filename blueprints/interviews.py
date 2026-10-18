@@ -122,7 +122,7 @@ def translate_response(resp_id):
         db.session.commit()
         flash('Translated to English.', 'success')
     else:
-        flash("Couldn't translate that one — check that OPENROUTER_API_KEY is set "
+        flash("Couldn't translate that one — check that ANTHROPIC_API_KEY is set "
               "on the server.", 'error')
     return redirect(request.referrer or
                     url_for('interviews.review_interview', app_id=r.application_id))
