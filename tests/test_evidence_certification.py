@@ -230,6 +230,22 @@ with engine.connect() as conn:
     check(evidence_check.schema_report(conn, SA)['problems'] == [],
           'and the migrations\' own definitions pass (the partial amendment index included)')
 
+# A guard whose body names a schema stops working once that schema is renamed
+# or gone -- the demo's did, built under a staging name. schema fails it, and
+# 0032 re-creates it naming none.
+as_owner('CREATE OR REPLACE FUNCTION {s}quote_issued_revision_owned() RETURNS trigger '
+         'LANGUAGE plpgsql AS $$ BEGIN PERFORM 1 FROM "tenant_gone__next".commercial_quote_revision; '
+         'RETURN NULL; END $$')
+with engine.connect() as conn:
+    p = evidence_check.schema_report(conn, SA)['problems']
+check(any('commercial_quote_issued_owned' in x and 'tenant_gone__next' in x for x in p),
+      'a guard naming another schema in its body fails schema')
+sql("UPDATE {s}alembic_version SET version_num = '0031_audit_chain'")
+provisioning.migrate_schema(engine, SA)
+with engine.connect() as conn:
+    check(evidence_check.schema_report(conn, SA)['problems'] == [],
+          'and migration 0032 re-creates it, naming no schema')
+
 print('\n4. The backup writes the evidence down outside, and the restore is held to it')
 bdir = tempfile.mkdtemp()
 path, manifest = backup.create(bdir, os.environ['DATABASE_URL'], quiet=True)

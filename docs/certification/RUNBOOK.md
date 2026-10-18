@@ -25,6 +25,7 @@ Production commands go through Railway (`railway run …`), so the database pass
 - checks every schema is on the code's migration head;
 - checks every table and column from migrations 0028–0031 is present;
 - checks every guard trigger is present and **switched on**;
+- checks every guard runs a function in its own schema that names no other schema. A guard naming another schema stops working when that schema is renamed, as the demo's did (migration 0032);
 - checks both unique indexes are present.
 
 It also reports which database login it ran as, and whether that login owns the tables. **On Railway it does.** The owner can switch guards off, so the guards stop mistakes, not the owner.

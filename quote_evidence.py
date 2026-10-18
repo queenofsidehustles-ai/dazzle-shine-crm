@@ -251,16 +251,26 @@ def ownership_sql(prefix):
     A constraint trigger checked at commit, not a foreign key: a backup
     restore inserts quotes before their revisions, in one transaction, and a
     key would refuse the first quote. Deferred, the check runs once both are
-    in."""
+    in.
+
+    The body finds the revisions next to the quote it was fired for
+    (TG_TABLE_SCHEMA) rather than naming a schema: a company built under one
+    schema name and renamed (the demo, demo_company.py) keeps its functions,
+    and a name written into them would point at a schema that is gone."""
     return [f"""
         CREATE OR REPLACE FUNCTION {prefix}quote_issued_revision_owned() RETURNS trigger
         LANGUAGE plpgsql AS $$
+        DECLARE
+            owned boolean;
         BEGIN
-            IF NEW.issued_revision_id IS NOT NULL AND NOT EXISTS (
-                SELECT 1 FROM {prefix}commercial_quote_revision r
-                WHERE r.id = NEW.issued_revision_id AND r.quote_id = NEW.id) THEN
-                RAISE EXCEPTION 'quote % is bound to revision %, which is not one of its own',
-                    NEW.id, NEW.issued_revision_id;
+            IF NEW.issued_revision_id IS NOT NULL THEN
+                EXECUTE format('SELECT EXISTS (SELECT 1 FROM %I.commercial_quote_revision r '
+                               'WHERE r.id = $1 AND r.quote_id = $2)', TG_TABLE_SCHEMA)
+                    INTO owned USING NEW.issued_revision_id, NEW.id;
+                IF NOT owned THEN
+                    RAISE EXCEPTION 'quote % is bound to revision %, which is not one of its own',
+                        NEW.id, NEW.issued_revision_id;
+                END IF;
             END IF;
             RETURN NULL;
         END $$""",
@@ -301,10 +311,17 @@ def audit_row_hash(row, seq, prev):
     return digest('|'.join(parts))
 
 
+def _field_sql(expr):
+    """audit_field, written out: the chain trigger names no function or table
+    by its schema (see ownership_sql for why)."""
+    return f"CASE WHEN ({expr}) IS NULL THEN '-' ELSE length({expr})::text || ':' || ({expr}) END"
+
+
 def audit_chain_sql(prefix):
     """The function that hashes one row, the trigger that chains each insert,
     and the unique index that keeps the chain a single line."""
-    fields = ', '.join(f'{prefix}audit_field(NEW.{k}::text)' for k in AUDIT_FIELDS)
+    fields = ', '.join(_field_sql(f'NEW.{k}::text') for k in AUDIT_FIELDS)
+    stamp = _field_sql("to_char(NEW.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.US')")
     return [f"""
         CREATE OR REPLACE FUNCTION {prefix}audit_field(v text) RETURNS text
         LANGUAGE sql IMMUTABLE AS $$
@@ -329,7 +346,7 @@ def audit_chain_sql(prefix):
             NEW.prev_hash := COALESCE(last_hash, '{AUDIT_GENESIS}');
             NEW.row_hash := encode(sha256(convert_to(concat_ws('|',
                 NEW.id::text, NEW.chain_seq::text, NEW.prev_hash,
-                {prefix}audit_field(to_char(NEW.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.US')),
+                {stamp},
                 {fields}), 'UTF8')), 'hex');
             RETURN NEW;
         END $$""",
