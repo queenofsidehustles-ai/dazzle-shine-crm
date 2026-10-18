@@ -1,0 +1,51 @@
+{# The welcome pop-up on the dashboard while setup is unfinished.
+
+   Once a day at most, and "Later" means later: a prompt you cannot put away
+   becomes an obstacle. It goes for good when setup is done (base_admin only
+   includes it while SETUP is incomplete). #}
+<style>
+  .nw-back{position:fixed;inset:0;background:rgba(22,33,58,.45);display:flex;align-items:center;
+           justify-content:center;padding:16px;z-index:1000}
+  .nw-back[hidden]{display:none}
+  .nw{background:var(--surface,#fff);border-radius:16px;max-width:420px;width:100%;padding:26px 24px 20px;
+      box-shadow:0 20px 50px rgba(22,33,58,.25)}
+  .nw h2{margin:0 0 8px;font-size:1.25rem}
+  .nw p{margin:0 0 14px;color:var(--muted);line-height:1.55}
+  .nw-bar{height:8px;background:var(--line,#e3e7f0);border-radius:999px;overflow:hidden;margin:0 0 6px}
+  .nw-bar span{display:block;height:100%;background:var(--amber,#f0a44b);border-radius:999px}
+  .nw small{display:block;color:var(--softer);margin-bottom:18px}
+  .nw-acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .nw-acts .btn-quiet{background:none;border:0;color:var(--muted);cursor:pointer;font:inherit;padding:8px}
+</style>
+<div class="nw-back" id="nanawelcome" hidden role="dialog" aria-modal="true" aria-labelledby="nw-title">
+  <div class="nw">
+    <h2 id="nw-title">Let's finish setting up {{ BIZ }}</h2>
+    <p>Nana can walk you through the rest. Just answer a few questions — type or
+       tap the mic and talk — and she fills everything in. Nothing saves until
+       you tap Save.</p>
+    <div class="nw-bar"><span style="width:{{ SETUP.percent }}%"></span></div>
+    <small>{{ SETUP.done }} of {{ SETUP.total }} steps done{% if SETUP.next %} · Next: {{ SETUP.next.title }}{% endif %}</small>
+    <div class="nw-acts">
+      <a class="btn-primary" href="{{ url_for('settings.getting_started', focus=1) }}">Set up with Nana</a>
+      <button type="button" class="btn-quiet" id="nw-later">Later</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var el = document.getElementById('nanawelcome');
+  if (!el) return;
+  var key = 'nana-welcome-' + new Date().toISOString().slice(0, 10);
+  try { if (localStorage.getItem(key) === '1') return; } catch (e) {}
+  el.hidden = false;
+  function later() {
+    el.hidden = true;
+    try { localStorage.setItem(key, '1'); } catch (e) {}
+  }
+  document.getElementById('nw-later').addEventListener('click', later);
+  el.addEventListener('click', function (e) { if (e.target === el) later(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !el.hidden) later(); });
+  var go = el.querySelector('.btn-primary');
+  if (go) go.focus();
+})();
+</script>

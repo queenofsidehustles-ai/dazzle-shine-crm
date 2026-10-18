@@ -377,6 +377,12 @@ def tool_show_page(page=''):
     return f'A button to "{PAGES[page][0]}" is on screen.', _link_card(*PAGES[page])
 
 
+def tool_how_to(question=''):
+    import help_guide
+    text, link = help_guide.answer(question)
+    return text, (_link_card(*link) if link else None)
+
+
 _S = {'type': 'string'}
 
 TOOLS = {
@@ -402,6 +408,10 @@ TOOLS = {
         tool_offer_customer, 'Show an Add card for one customer the owner named.',
         {'name': _S, 'phone': _S, 'email': _S, 'address': _S, 'city': _S,
          'zip_code': _S}),
+    'how_to': (
+        tool_how_to, 'Look up how Akye works or how to do something in it '
+        '(hiring, onboarding cleaners, payments, the booking page, any feature).',
+        {'question': {'type': 'string', 'description': 'Their question, in their words.'}}),
     'show_page': (
         tool_show_page, 'Show a button to a page they need to do something on '
         'themselves. Pages: ' + ', '.join(PAGES) + '.',
@@ -465,18 +475,11 @@ def system_prompt(opening):
         'not to type it here and point them to the right page with show_page. '
         'Never promise features that are not described below.\n\n'
 
-        'WHAT AKYE DOES (for their questions)\n'
-        'Bookings, quotes and a customer list in one place. A booking page '
-        'where customers see the price and book themselves. Open jobs are texted '
-        'to the whole team with the size, pay and ZIP; the first cleaner to '
-        'claim one gets the full details. Hiring with video interviews and test '
-        'cleans, and automatic onboarding for new cleaners. Invoices, payment '
-        'links and automatic payments through Stripe, and cleaner payouts. '
-        'Before and after photos on each job. After a job, happy customers are '
-        'sent to leave a Google review. Commercial leads: find property '
-        'managers and offices nearby and follow up by email. Existing team or '
-        'customer lists can be imported. For anything else, say you are not '
-        'sure and suggest they check with Akye support.\n\n'
+        'QUESTIONS ABOUT HOW AKYE WORKS\n'
+        'Call how_to and answer from what it returns, briefly and in plain '
+        'words, then come back to the setup step. If it does not cover the '
+        'question, say you are not sure and suggest Akye support. Never '
+        'describe a feature from memory.\n\n'
 
         f'Your opening message to them was:\n"{opening}"\n\n'
         'Style: no headings, no lists unless they ask, no exclamation marks.'

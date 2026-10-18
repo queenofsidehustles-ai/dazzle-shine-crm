@@ -290,16 +290,27 @@ def create_app():
                 except Exception:
                     setup = None
 
+            # Whether Nana's setup chat is on, so the welcome pop-up and the
+            # nudge can offer her. Only asked while setup is unfinished.
+            setup_chat = False
+            if setup is not None and not setup.get('complete'):
+                try:
+                    import setup_assistant
+                    setup_chat = setup_assistant.configured()
+                except Exception:
+                    setup_chat = False
+
             return {'NAV': navigation.sidebar(role, can, setup_done),
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
                     'NAV_TITLE': navigation.title_for(request.endpoint),
                     'NAV_TABS': tabs,
                     'NAV_ACTIVE_TAB': active_tab,
-                    'SETUP': setup}
+                    'SETUP': setup,
+                    'SETUP_CHAT': setup_chat}
         except Exception:
             # A broken menu must never take a working page down with it.
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [],
-                    'NAV_ACTIVE_TAB': None, 'SETUP': None}
+                    'NAV_ACTIVE_TAB': None, 'SETUP': None, 'SETUP_CHAT': False}
 
     @app.context_processor
     def inject_trial():
