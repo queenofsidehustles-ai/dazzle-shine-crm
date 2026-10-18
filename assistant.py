@@ -93,7 +93,9 @@ def _api_key(explicit=None):
 def configured():
     """Nana can answer: Claude is set up, or the older OpenRouter key is."""
     import llm
-    return llm.ready() or bool(_api_key())
+    # Whether a key is set, not whether this is the demo: the page has its
+    # own demo sentence, and the demo used to read as configured here.
+    return bool(llm.key() or os.environ.get('OPENROUTER_API_KEY'))
 
 
 # ---------------------------------------------------------------------------

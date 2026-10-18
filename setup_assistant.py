@@ -21,9 +21,9 @@ Nana points at the page and stops.
 
 ## Paid for by the platform's Claude API credits
 
-This talks to the Claude API directly (ANTHROPIC_API_KEY), not through
-OpenRouter like the rest of Nana, because the Claude Max plan behind Akye
-comes with monthly Claude API credits. Haiku is plenty for this job: the hard
+This talks to the Claude API directly (ANTHROPIC_API_KEY), like the rest of
+Nana when that key is set, because the Claude Max plan behind Akye comes
+with monthly Claude API credits. Haiku is plenty for this job: the hard
 part is asking the right next question, not deep reasoning. A full setup
 conversation is a few cents.
 

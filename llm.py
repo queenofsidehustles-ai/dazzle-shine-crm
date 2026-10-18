@@ -26,6 +26,10 @@ class ClaudeError(Exception):
     """The API answered with an error, or did not answer."""
 
 
+class ClaudeUnreachable(ClaudeError):
+    """The request never got an answer: network, timeout."""
+
+
 def key():
     return (os.environ.get('ANTHROPIC_API_KEY') or '').strip()
 
@@ -45,20 +49,27 @@ def ready():
 
 def post(body, timeout=30):
     """Send one Messages API request. Returns the parsed reply or raises."""
+    import time
     import requests
-    try:
-        r = requests.post(API_URL, timeout=timeout, json=body, headers={
-            'x-api-key': key(),
-            'anthropic-version': API_VERSION,
-            'content-type': 'application/json',
-        })
-        out = r.json()
-    except Exception as e:
-        raise ClaudeError(f'could not reach Claude: {type(e).__name__}') from e
-    if not isinstance(out, dict) or out.get('type') == 'error':
-        err = out.get('error') if isinstance(out, dict) else None
-        raise ClaudeError(str((err or {}).get('message') or out)[:200])
-    return out
+    for attempt in (1, 2):
+        try:
+            r = requests.post(API_URL, timeout=timeout, json=body, headers={
+                'x-api-key': key(),
+                'anthropic-version': API_VERSION,
+                'content-type': 'application/json',
+            })
+            out = r.json()
+        except Exception as e:
+            raise ClaudeUnreachable(f'could not reach Claude: {type(e).__name__}') from e
+        if isinstance(out, dict) and out.get('type') != 'error':
+            return out
+        err = (out.get('error') if isinstance(out, dict) else None) or {}
+        # Busy or rate-limited is usually gone a moment later. One more try.
+        if attempt == 1 and (getattr(r, 'status_code', 0) in (429, 529)
+                             or err.get('type') in ('overloaded_error', 'rate_limit_error')):
+            time.sleep(1.5)
+            continue
+        raise ClaudeError(str(err.get('message') or out)[:200])
 
 
 def text_of(reply):

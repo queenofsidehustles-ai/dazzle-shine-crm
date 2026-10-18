@@ -97,6 +97,26 @@ with app.app_context(), app.test_request_context():
     out = agent.run('tell me about my team')
 check(out['say'] == 'Ama Owusu is on your team.', 'the corrected answer is shown')
 check('37' in SENT[-1]['messages'][-1]['content'], 'Claude was told which sentence was wrong')
+check(SENT[-1].get('tools') and SENT[-1].get('tool_choice') == {'type': 'none'},
+      'the retry declares tools (required with tool history) but cannot call one')
+check(SENT[-1]['messages'][-2]['content'] == 'Ama Owusu has cleaned 37 homes for you.',
+      'the retry quotes only the rejected answer, not earlier preamble')
+
+print('\n3b. Out of steps, she is asked for an answer rather than showing a preamble')
+SENT.clear()
+with app.app_context(), app.test_request_context():
+    SCRIPT[:] = [tool('team', tid=f's{i}', text='Let me check.') for i in range(agent.MAX_STEPS)] + [
+        say('Ama Owusu is on your team.')]
+    out = agent.run('team please')
+check(out['say'] == 'Ama Owusu is on your team.', 'final answer, not "Let me check."')
+check(SENT[-1].get('tool_choice') == {'type': 'none'}, 'the last call forbids more lookups')
+
+print('\n3c. Markdown bold is stripped, and today is known')
+with app.app_context(), app.test_request_context():
+    SCRIPT[:] = [say('**Ama Owusu** is on your team.')]
+    out = agent.run('team')
+check(out['say'] == 'Ama Owusu is on your team.', 'no asterisks on the page')
+check('Today is ' in SENT[-1]['system'][0]['text'], 'the prompt tells her today\'s date')
 
 with app.app_context(), app.test_request_context():
     SCRIPT[:] = [tool('team'), say('You made $9,999 from Ama Owusu.'),
@@ -127,6 +147,10 @@ with app.app_context(), app.test_request_context():
     SCRIPT[:] = [llm.ClaudeError('overloaded')]
     out = agent.run('hello')
 check(out['say'] == assistant.TROUBLE['service-error'], 'service error sentence')
+with app.app_context(), app.test_request_context():
+    SCRIPT[:] = [llm.ClaudeUnreachable('timeout')]
+    out = agent.run('hello')
+check(out['say'] == assistant.TROUBLE['unreachable'], 'a timeout says it could not reach her')
 
 print('\n7. Email drafts and translation are written by Claude')
 with app.app_context(), app.test_request_context():
