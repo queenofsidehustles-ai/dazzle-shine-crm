@@ -508,6 +508,18 @@
       wrap.appendChild(f);
     }
 
+    // A page to go and do it on, from the help guide. Only in-app paths.
+    if (data.link && data.link.href && data.link.href.charAt(0) === '/'
+        && data.link.href.charAt(1) !== '/' && data.link.href.charAt(1) !== '\\') {
+      const a = document.createElement('a');
+      a.className = 'btn';
+      a.style.cssText = 'display:inline-block;margin-top:10px';
+      a.href = data.link.href;
+      a.textContent = (data.link.label || 'Open') + ' →';
+      wrap.appendChild(document.createElement('br'));
+      wrap.appendChild(a);
+    }
+
     // The other half of hands-free. Reading the screen defeats the point of
     // having asked out loud.
     sayOutLoud(data.say || '');

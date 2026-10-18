@@ -816,8 +816,21 @@ def _who(name):
     return None
 
 
+def how_to(question=''):
+    """How Akye works, from the help guide. Never from the model's memory."""
+    import help_guide
+    text, link = help_guide.answer(question)
+    out = {'say': text}
+    if link:
+        out['link'] = {'label': link[0], 'href': link[1]}
+    return out
+
+
 # name -> (function, what it is for, argument names)
 TOOLS = {
+    'how_to':          (how_to, 'how Akye itself works or how to do something in it: '
+                                 'hiring, onboarding cleaners, payments, prices, the booking '
+                                 'page, settings, any feature', ['question']),
     'money_made':      (money_made, 'how much money came in, for a period', ['period']),
     'money_owed':      (money_owed, 'how much is owed / outstanding / unpaid', []),
     'jobs_on':         (jobs_on, 'what is booked on a day: today, tomorrow, yesterday', ['day']),

@@ -23,17 +23,46 @@
   .sa-dots i:nth-child(2){animation-delay:.15s}.sa-dots i:nth-child(3){animation-delay:.3s}
   .sa-form .btn-primary{flex:0 0 auto}
   @media (max-width:520px){.sa-head small{display:none}.sa-log{padding:14px 12px}.sa-form{padding:10px 12px}.sa-msg,.sa-box{max-width:94%}}
+  /* Focused: the chat as a window over the page, the first time. */
+  .sa-backdrop{position:fixed;inset:0;background:rgba(22,33,58,.45);z-index:1000}
+  .sa-backdrop[hidden]{display:none}
+  #sa.sa-focus{position:fixed;z-index:1001;left:50%;top:50%;transform:translate(-50%,-50%);
+               width:min(640px,calc(100vw - 24px));max-height:calc(100vh - 32px);margin:0;
+               display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(22,33,58,.25)}
+  #sa.sa-focus .sa-log{flex:1;max-height:none;min-height:240px}
+  .sa-close{display:none}
+  #sa.sa-focus .sa-close{display:inline-block}
+  .sa-tools{margin-left:auto;display:flex;gap:12px;align-items:center}
+  .sa-tools button,.sa-tools label{background:none;border:0;color:var(--softer);font-size:0.8rem;cursor:pointer;
+                                   display:flex;align-items:center;gap:4px;white-space:nowrap}
+  .sa-head .sa-tools button{margin-left:0}
+  .sa-mic{flex:0 0 auto;width:46px;border:1px solid var(--line, var(--border));border-radius:10px;
+          background:var(--surface,#fff);font-size:1.15rem;cursor:pointer}
+  .sa-mic[hidden]{display:none}
+  .sa-mic.on{background:var(--amber-soft, #fdf3e6);border-color:var(--amber, #f0a44b);animation:sa-p 1.2s infinite}
+  @keyframes sa-p{50%{box-shadow:0 0 0 6px rgba(240,164,75,.25)}}
+  @media (prefers-reduced-motion: reduce){.sa-mic.on{animation:none}}
+  @media (max-width:520px){ #sa.sa-focus{top:12px;transform:translateX(-50%);max-height:calc(100vh - 24px)}}
   @keyframes sa-b{0%,80%,100%{opacity:.3}40%{opacity:1}}
 </style>
 
-<div class="card sa-card" id="sa">
+<div class="sa-backdrop" id="sa-backdrop" hidden></div>
+<div class="card sa-card{{ ' sa-focus' if chat_focus else '' }}" id="sa"
+     role="{{ 'dialog' if chat_focus else 'region' }}" aria-label="Set up with {{ assistant_name }}">
   <div class="sa-head">
     <h3>Set up with {{ assistant_name }}</h3>
     <small>Nothing saves until you tap the button</small>
-    <button type="button" id="sa-reset">Start over</button>
+    <div class="sa-tools">
+      {# The owner's choice, remembered on this device, and shared with
+         Nana's own page so it is one setting rather than two. #}
+      <label id="sa-speak-wrap" hidden><input type="checkbox" id="sa-speak"> 🔊 Read aloud</label>
+      <button type="button" id="sa-reset">Start over</button>
+      <button type="button" class="sa-close" id="sa-close" aria-label="Close and show the setup list">✕</button>
+    </div>
   </div>
   <div class="sa-log" id="sa-log" aria-live="polite"></div>
   <form class="sa-form" id="sa-form">
+    <button type="button" class="sa-mic" id="sa-mic" hidden aria-label="Talk instead of typing">🎤</button>
     <input id="sa-q" autocomplete="off" placeholder="Type your answer or a question…" aria-label="Your message">
     <button class="btn-primary" type="submit">Send</button>
   </form>
@@ -47,9 +76,108 @@
     confirm: '{{ url_for("setup_assistant.confirm") }}',
     reset: '{{ url_for("setup_assistant.reset") }}',
   };
-  const history = {{ chat | tojson }};
+  const past = {{ chat | tojson }};
 
   function scroll() { log.scrollTop = log.scrollHeight; }
+
+  // ── Voice ─────────────────────────────────────────────────────────────
+  // Both halves are the browser's own: nothing to pay for, and the owner's
+  // voice never reaches this server -- only the words it turned into.
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const canSpeak = 'speechSynthesis' in window;
+  const speakBox = document.getElementById('sa-speak');
+  const mic = document.getElementById('sa-mic');
+  let voice = null, rec = null, listening = false;
+
+  if (canSpeak) {
+    document.getElementById('sa-speak-wrap').hidden = false;
+    try { speakBox.checked = localStorage.getItem('nana-speak') === '1'; } catch (e) {}
+    speakBox.addEventListener('change', function () {
+      try { localStorage.setItem('nana-speak', speakBox.checked ? '1' : '0'); } catch (e) {}
+      if (!speakBox.checked) { try { speechSynthesis.cancel(); } catch (e) {} }
+    });
+    pickVoice();
+    speechSynthesis.onvoiceschanged = pickVoice;   // Chrome fills the list late
+  }
+
+  // The device's best voice in the page's language: one it downloaded beats
+  // the robotic built-in default. Nana's page lets the owner choose one; if
+  // she has, that choice is used here too.
+  function pickVoice() {
+    try {
+      const all = speechSynthesis.getVoices() || [];
+      const lang = (document.documentElement.lang || 'en').slice(0, 2);
+      let saved = null;
+      try { saved = localStorage.getItem('nana-voice'); } catch (e) {}
+      const mine = all.filter(function (v) { return (v.lang || '').slice(0, 2) === lang; });
+      voice = all.find(function (v) { return v.name === saved; })
+           || mine.find(function (v) { return !v.localService; })
+           || mine.find(function (v) { return /natural|enhanced|premium|samantha|google/i.test(v.name); })
+           || mine[0] || null;
+    } catch (e) { voice = null; }
+  }
+
+  function speak(text) {
+    if (!canSpeak || !speakBox.checked || !text) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (voice) { u.voice = voice; u.lang = voice.lang; }
+      u.rate = 0.97; u.pitch = 1.06;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  if (Rec) {
+    mic.hidden = false;
+    mic.addEventListener('click', function () {
+      if (listening) { rec && rec.stop(); return; }
+      try { speechSynthesis.cancel(); } catch (e) {}
+      rec = new Rec();
+      rec.lang = document.documentElement.lang || 'en-US';
+      rec.interimResults = true;
+      rec.continuous = false;
+      const box = document.getElementById('sa-q');
+      rec.onstart = function () { listening = true; mic.classList.add('on'); box.placeholder = 'Listening…'; };
+      rec.onend = function () { listening = false; mic.classList.remove('on');
+                                box.placeholder = 'Type your answer or a question…'; };
+      rec.onerror = function (e) {
+        box.placeholder = e.error === 'not-allowed'
+          ? 'Microphone blocked — allow it in your browser settings.'
+          : 'Didn’t catch that — tap the mic and try again.';
+      };
+      rec.onresult = function (e) {
+        let said = '';
+        for (const r of e.results) said += r[0].transcript;
+        box.value = said;
+        // Only once it stops changing; sending a half-heard sentence asks
+        // half a question.
+        if (e.results[e.results.length - 1].isFinal) {
+          document.getElementById('sa-form').requestSubmit();
+        }
+      };
+      rec.start();
+    });
+  }
+
+  // ── Focused window ─────────────────────────────────────────────────────
+  const sa = document.getElementById('sa');
+  const backdrop = document.getElementById('sa-backdrop');
+  function unfocus() {
+    sa.classList.remove('sa-focus');
+    sa.setAttribute('role', 'region');
+    backdrop.hidden = true;
+    if (window.history && window.history.replaceState && location.search.indexOf('focus') !== -1) {
+      window.history.replaceState(null, '', location.pathname);
+    }
+  }
+  if (sa.classList.contains('sa-focus')) {
+    backdrop.hidden = false;
+    backdrop.addEventListener('click', unfocus);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') unfocus(); });
+    window.setTimeout(function () { document.getElementById('sa-q').focus(); }, 50);
+  }
+  document.getElementById('sa-close').addEventListener('click', unfocus);
 
   function bubble(text, who) {
     const d = document.createElement('div');
@@ -113,7 +241,7 @@
       note.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
       box.appendChild(note);
       if (data.ok) {
-        if (data.follow) bubble(data.follow, 'assistant');
+        if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
         (data.cards || []).forEach(render);
         updateProgress(data.progress);
       }
@@ -158,7 +286,7 @@
     } catch (e) {}
   }
 
-  history.forEach(function (m) {
+  past.forEach(function (m) {
     if (m.hidden) return;
     if (m.content) bubble(m.content, m.role);
     (m.cards || []).forEach(render);
@@ -189,6 +317,7 @@
     send.disabled = false;
     wait.remove();
     bubble(data.say, 'assistant');
+    speak(data.say);
     (data.cards || []).forEach(render);
     scroll();
   });

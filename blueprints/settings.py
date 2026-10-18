@@ -114,7 +114,12 @@ def getting_started():
     if session.get('role') == 'owner' and setup_assistant.configured():
         from blueprints.setup_assistant_routes import transcript
         chat = transcript()
+    # Opened as a focused window the first time, or when a pop-up sent them
+    # here to use it. After that it sits on the page with the list.
+    focus = bool(chat) and (request.args.get('focus') == '1'
+                            or not any(m.get('role') == 'user' for m in chat))
     return render_template('admin/getting_started.html', p=p, chat=chat,
+                           chat_focus=focus,
                            assistant_name=setup_assistant.NAME)
 
 

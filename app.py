@@ -301,6 +301,15 @@ def create_app():
             import adoption
             if request.method == 'GET':
                 adoption.note_visit(request.endpoint, nav)
+            # Whether Nana's setup chat is on, so the welcome pop-up and the
+            # nudge can offer her. Only asked while setup is unfinished.
+            setup_chat = False
+            if setup is not None and not setup.get('complete'):
+                try:
+                    import setup_assistant
+                    setup_chat = setup_assistant.configured()
+                except Exception:
+                    setup_chat = False
             return {'NAV': nav,
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
                     'NAV_TITLE': navigation.title_for(request.endpoint),
@@ -310,13 +319,14 @@ def create_app():
                     'MENU_TIPS': help_tips.for_menu(nav),
                     'NAV_DOTS': adoption.dots(nav, setup_done),
                     'SUGGESTION': adoption.suggestion(nav, setup_done),
-                    'PAGE_TIP': request.endpoint if request.endpoint in help_tips.TIPS else None}
+                    'PAGE_TIP': request.endpoint if request.endpoint in help_tips.TIPS else None,
+                    'SETUP_CHAT': setup_chat}
         except Exception:
             # A broken menu must never take a working page down with it.
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [],
                     'NAV_ACTIVE_TAB': None, 'SETUP': None,
                     'MENU_TIPS': {}, 'PAGE_TIP': None,
-                    'NAV_DOTS': set(), 'SUGGESTION': None}
+                    'NAV_DOTS': set(), 'SUGGESTION': None, 'SETUP_CHAT': False}
 
     @app.context_processor
     def inject_trial():
