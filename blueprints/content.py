@@ -77,7 +77,7 @@ def _write(prompt, max_tokens):
 
 def _ai_ready():
     import llm
-    return llm.ready() or bool(os.environ.get('OPENROUTER_API_KEY'))
+    return llm.ready() or (llm.ai_enabled() and bool(os.environ.get('OPENROUTER_API_KEY')))
 
 
 @content_bp.route('/generate', methods=['POST'])

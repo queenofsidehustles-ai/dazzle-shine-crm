@@ -349,6 +349,27 @@ affiliate_payouts = Table(
 )
 
 
+# What the platform's own background work last did, one row per run.
+#
+# Backups, the central scheduler, the product's daily jobs and Stripe's webhook
+# all run somewhere a person is not looking: a GitHub Action, a cron, a request
+# from Stripe. When one stops, nothing happens, which is exactly how nobody
+# notices. Each reports in here when it finishes, success or failure, so the
+# console can say "the last backup was 31 hours ago" rather than staying quiet.
+#
+# `kind` names the thing: backup:akye, scheduler:hourly, scheduler:daily,
+# job:trial-nudges, job:lead-nurture, stripe:webhook.
+platform_runs = Table(
+    'platform_runs', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('kind', String(60), nullable=False, index=True),
+    Column('ok', Boolean, nullable=False, default=True),
+    Column('items', Integer),                  # what it did: rows, emails, events
+    Column('detail', String(400)),
+    Column('at', DateTime, default=datetime.utcnow, index=True),
+)
+
+
 # Beta feedback, from any page of any company's CRM.
 #
 # In the control plane rather than in a tenant schema, for one reason: the
@@ -611,7 +632,8 @@ def ensure_table(engine):
                         promo_codes, product_lead_messages, signup_attempts,
                         product_messages, product_switches,
                         affiliates, affiliate_logins, affiliate_clicks,
-                        affiliate_commissions, affiliate_payouts])
+                        affiliate_commissions, affiliate_payouts,
+                        platform_runs])
     ensure_columns(engine)
 
 
@@ -1665,3 +1687,76 @@ def clear_affiliate_flag(engine, slug):
     with engine.begin() as conn:
         conn.execute(update(organizations).where(organizations.c.slug == slug)
                      .values(affiliate_flag=None))
+
+
+# ---------------------------------------------------------------------------
+# Platform runs: what the background work last did
+# ---------------------------------------------------------------------------
+
+PLATFORM_RUN_KEEP_DAYS = 45
+
+
+def record_platform_run(engine, kind, ok=True, items=None, detail=None, now=None):
+    """Write down that something ran. Never raises: a note about a job must not
+    be the reason the job fails.
+
+    Rows older than PLATFORM_RUN_KEEP_DAYS are pruned as a side effect, so a
+    Stripe webhook that fires all day cannot grow this table without limit.
+    The newest row and newest success of each kind are always kept."""
+    try:
+        now = now or datetime.utcnow()
+        with engine.begin() as conn:
+            conn.execute(insert(platform_runs).values(
+                kind=(kind or '')[:60], ok=bool(ok),
+                items=int(items) if items is not None else None,
+                detail=(detail or '')[:400] or None, at=now))
+            if now.minute % 10 == 0:          # cheap, and often enough
+                # Never the newest row of a kind, nor its newest success: a job
+                # that stopped reporting 45 days ago must still read as stale
+                # (not as "never reported", which is quiet), and "last good"
+                # has to survive for the page to say how long it has been.
+                newest = select(func.max(platform_runs.c.id)).group_by(platform_runs.c.kind)
+                newest_ok = select(func.max(platform_runs.c.id)).where(
+                    platform_runs.c.ok.is_(True)).group_by(platform_runs.c.kind)
+                conn.execute(delete(platform_runs).where(
+                    platform_runs.c.at < now - timedelta(days=PLATFORM_RUN_KEEP_DAYS),
+                    platform_runs.c.id.notin_(newest),
+                    platform_runs.c.id.notin_(newest_ok)))
+        return True
+    except Exception as e:
+        print(f'  ⚠️  platform run not recorded: {type(e).__name__}: {e}')
+        return False
+
+
+def platform_runs_for(engine, kind, limit=1):
+    """The most recent runs of one kind, newest first. [] if unreadable."""
+    try:
+        with engine.connect() as conn:
+            return [dict(r) for r in conn.execute(
+                select(platform_runs).where(platform_runs.c.kind == kind)
+                .order_by(platform_runs.c.at.desc(), platform_runs.c.id.desc())
+                .limit(limit)).mappings()]
+    except Exception:
+        return []
+
+
+def last_ok_platform_run(engine, kind):
+    """When this kind last succeeded, or None."""
+    try:
+        with engine.connect() as conn:
+            return conn.execute(
+                select(func.max(platform_runs.c.at)).where(
+                    platform_runs.c.kind == kind, platform_runs.c.ok.is_(True))).scalar()
+    except Exception:
+        return None
+
+
+def platform_run_kinds(engine, prefix):
+    """Every kind that has ever reported, starting with `prefix`."""
+    try:
+        with engine.connect() as conn:
+            return sorted(conn.execute(
+                select(platform_runs.c.kind).where(
+                    platform_runs.c.kind.like(prefix + '%')).distinct()).scalars())
+    except Exception:
+        return []

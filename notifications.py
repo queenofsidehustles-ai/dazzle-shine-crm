@@ -454,6 +454,17 @@ def send_sms(to_phone, message):
     blocked = _demo_blocked('sms', to_phone, None, None, message)
     if blocked:
         return blocked
+    # The console's emergency switch (platform_switches.py): every text from
+    # every company, for a runaway bill or abuse. Checked here, the one place
+    # a text leaves from, for the same reason the plan check is.
+    try:
+        import platform_switches
+        if not platform_switches.is_on('sms'):
+            detail = 'Texting is switched off for the whole product. This was not sent.'
+            _log_outbound('sms', to_phone, None, None, message, False, detail)
+            return False, detail
+    except Exception:
+        pass          # a switch lookup must never be the reason a text fails
     # The free plan sends no texts, and this is the only limit in the product
     # that is about money rather than product design: every message costs real
     # cash, every month, forever, to somebody who has never paid anything. It is

@@ -648,12 +648,56 @@ def health():
                'partners': len(partners),
                'ready': sum(1 for a in partners if a.get('payout_ready')),
                'waiting': affiliates.waiting_count(engine)}
+    import platform_health
+    ph = platform_health.build(engine, orgs, snaps)
     return render_template(
-        'console/health.html', payouts=payouts, orgs=[o for o in orgs if o['slug'] in snaps],
+        'console/health.html', ph=ph, payouts=payouts,
+        orgs=[o for o in orgs if o['slug'] in snaps],
         snaps=snaps, job_labels=job_labels, mail=product.mail_status(),
         nudges=preview.get('plan') or [], names=names, closed=closed,
         may_operate=_may_operate(), me=request.console_user,
         counts=_counts(engine))
+
+
+@console_bp.route('/health/switch', methods=['POST'])
+@console_required
+def platform_switch():
+    """Turn one part of the whole product off or on (platform_switches.py)."""
+    import platform_switches
+    here = url_for('console.health') + '#switches'
+    if not _may_operate():
+        return _refuse(here)
+    key = request.form.get('key') or ''
+    on = request.form.get('on') == '1'
+    engine = _engine()
+    try:
+        platform_switches.set_switch(engine, key, on, request.console_user['email'])
+    except ValueError:
+        flash('That is not a switch.', 'error')
+        return redirect(here)
+    label = dict((k, l) for k, l, *_ in platform_switches.SWITCHES)[key]
+    control_plane.log_console(engine, request.console_user['email'],
+                              'platform switch ' + ('on' if on else 'off'), key, label)
+    flash(f'{label} is now {"on" if on else "OFF"}.' + (
+        '' if on else ' It takes effect within a few seconds.'), 'success')
+    return redirect(here)
+
+
+@console_bp.route('/health/errors/resolve', methods=['POST'])
+@console_required
+def resolve_platform_errors():
+    """Tick off platform errors somebody has looked at. One, or all."""
+    import platform_health
+    here = url_for('console.health') + '#errors'
+    if not _may_operate():
+        return _refuse(here)
+    engine = _engine()
+    one = request.form.get('id')
+    platform_health.resolve_platform_errors(engine, one)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'platform errors resolved', one or 'all')
+    flash('Marked as looked at. A fault that comes back reopens itself.', 'success')
+    return redirect(here)
 
 
 def _automation_jobs():
@@ -1808,10 +1852,16 @@ def _counts(engine):
         partners = affiliates.waiting_count(engine)
     except Exception:
         partners = 0                # a pill must never take a page down
+    try:
+        import platform_health
+        health = len(platform_health.attention(engine))
+    except Exception:
+        health = 0                  # same: a pill never takes a page down
     return {'feedback': control_plane.unread_feedback(engine),
             'support': control_plane.unanswered_support(engine),
             'leads': control_plane.new_leads_count(engine),
-            'partners': partners}
+            'partners': partners,
+            'health': health}
 
 
 # --------------------------------------------------------------------------

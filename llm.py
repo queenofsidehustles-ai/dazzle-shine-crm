@@ -30,7 +30,20 @@ class ClaudeUnreachable(ClaudeError):
     """The request never got an answer: network, timeout."""
 
 
+def ai_enabled():
+    """The console's AI switch (platform_switches.py). On unless turned off."""
+    try:
+        import platform_switches
+        return platform_switches.is_on('ai')
+    except Exception:
+        return True
+
+
 def key():
+    """The Claude key, or '' when AI has been switched off from the console, so
+    every caller falls back exactly as it does with no key set."""
+    if not ai_enabled():
+        return ''
     return (os.environ.get('ANTHROPIC_API_KEY') or '').strip()
 
 

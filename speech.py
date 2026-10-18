@@ -126,7 +126,13 @@ def provider():
     signed up for. Demo companies deliberately get the free browser voice.
     """
     import demo_guard
+    import llm
     if demo_guard.active():
+        return None
+    # The console's AI switch (platform_switches.py). Speech is a paid model call
+    # too, so it stops with the rest; the page falls back to the free browser
+    # voice, exactly as it does with no key.
+    if not llm.ai_enabled():
         return None
     direct = (os.environ.get('OPENAI_API_KEY') or '').strip()
     if direct:
