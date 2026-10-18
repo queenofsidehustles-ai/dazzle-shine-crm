@@ -10,16 +10,22 @@ Two models, because the jobs differ in cost and difficulty:
 
 - FAST: short writing jobs -- an email draft, a translation, a social post.
 - SMART: Nana working out what an owner asked, looking things up in several
-  steps, and answering. Haiku 5.5 by default; set NANA_MODEL to a Sonnet
+  steps, and answering. Haiku 4.5 by default; set NANA_MODEL to a Sonnet
   model if a business needs more depth and the credits allow it.
+
+Model names are checked against Anthropic's published list, never typed from
+memory. `check()` below exists because the two times this was got wrong, the
+name looked plausible and nothing failed loudly: every caller turns an API
+error into an apology, so a model that does not exist reads as an assistant
+that has nothing to say.
 """
 import os
 
 API_URL = 'https://api.anthropic.com/v1/messages'
 API_VERSION = '2023-06-01'
 
-FAST_MODEL = os.environ.get('CLAUDE_FAST_MODEL', 'claude-haiku-5-5')
-SMART_MODEL = os.environ.get('NANA_MODEL', 'claude-haiku-5-5')
+FAST_MODEL = os.environ.get('CLAUDE_FAST_MODEL', 'claude-haiku-4-5')
+SMART_MODEL = os.environ.get('NANA_MODEL', 'claude-haiku-4-5')
 
 
 class ClaudeError(Exception):
@@ -100,3 +106,23 @@ def complete(system, user, max_tokens=600, model=None, timeout=30):
     if not said:
         raise ClaudeError(f'empty reply (stop_reason={reply.get("stop_reason")})')
     return said
+
+
+def check(model=None):
+    """Ask Claude one cheap question on a configured model. (ok, detail).
+
+    The smallest request that still proves the whole path: the key works, the
+    model name exists, and an answer comes back. Nothing else in here reports
+    a failure -- agent.py returns an apology, translate.py returns the text
+    untranslated -- so without this, a wrong model name is invisible until a
+    customer notices Nana has gone vague.
+    """
+    name = model or SMART_MODEL
+    if not key():
+        return False, 'No ANTHROPIC_API_KEY set.'
+    try:
+        reply = post({'model': name, 'max_tokens': 1,
+                      'messages': [{'role': 'user', 'content': 'hi'}]}, timeout=15)
+    except ClaudeError as e:
+        return False, f'{name}: {e}'
+    return True, f'{name} answered (stop_reason={reply.get("stop_reason")}).'
