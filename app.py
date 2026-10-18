@@ -30,6 +30,7 @@ from blueprints.scripts import scripts_bp
 from blueprints.sops import sops_bp
 from blueprints.faq import faq_bp
 from blueprints.assistant_routes import assistant_bp
+from blueprints.setup_assistant_routes import setup_assistant_bp
 from blueprints.email_templates import email_templates_bp
 from blueprints.interviews import interviews_bp
 from blueprints.pricing_public import pricing_public_bp
@@ -231,6 +232,7 @@ def create_app():
     app.register_blueprint(sops_bp)
     app.register_blueprint(faq_bp)
     app.register_blueprint(assistant_bp)
+    app.register_blueprint(setup_assistant_bp)
     app.register_blueprint(email_templates_bp)
     app.register_blueprint(interviews_bp)
     app.register_blueprint(pricing_public_bp)
@@ -299,6 +301,15 @@ def create_app():
             import adoption
             if request.method == 'GET':
                 adoption.note_visit(request.endpoint, nav)
+            # Whether Nana's setup chat is on, so the welcome pop-up and the
+            # nudge can offer her. Only asked while setup is unfinished.
+            setup_chat = False
+            if setup is not None and not setup.get('complete'):
+                try:
+                    import setup_assistant
+                    setup_chat = setup_assistant.configured()
+                except Exception:
+                    setup_chat = False
             return {'NAV': nav,
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
                     'NAV_TITLE': navigation.title_for(request.endpoint),
@@ -308,13 +319,14 @@ def create_app():
                     'MENU_TIPS': help_tips.for_menu(nav),
                     'NAV_DOTS': adoption.dots(nav, setup_done),
                     'SUGGESTION': adoption.suggestion(nav, setup_done),
-                    'PAGE_TIP': request.endpoint if request.endpoint in help_tips.TIPS else None}
+                    'PAGE_TIP': request.endpoint if request.endpoint in help_tips.TIPS else None,
+                    'SETUP_CHAT': setup_chat}
         except Exception:
             # A broken menu must never take a working page down with it.
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [],
                     'NAV_ACTIVE_TAB': None, 'SETUP': None,
                     'MENU_TIPS': {}, 'PAGE_TIP': None,
-                    'NAV_DOTS': set(), 'SUGGESTION': None}
+                    'NAV_DOTS': set(), 'SUGGESTION': None, 'SETUP_CHAT': False}
 
     @app.context_processor
     def inject_trial():
@@ -1642,7 +1654,7 @@ Service: {{service_type}}
 Bedrooms: {{beds}} | Bathrooms: {{baths}}
 Estimated Total: ${{quote_amount}}
 
-Ready to book? All we need is a $50 deposit to hold your spot — the remaining balance is charged to your card the morning of your appointment.
+Ready to book? All we need is a ${{deposit}} deposit to hold your spot — the remaining balance is charged to your card the morning of your appointment.
 
 You can book online at {{booking_link}} or call us at {{phone}} and we'll get you scheduled in minutes.
 
@@ -1659,7 +1671,7 @@ We'd love to help you reclaim your time. Here's what you get when you book with 
 
 - Background-checked, insured cleaners
 - Satisfaction guaranteed — if something's missed we'll come back
-- Only a $50 deposit to hold your spot
+- Only a ${{deposit}} deposit to hold your spot
 - The balance is charged the morning of your cleaning — nothing more due today
 
 Booking takes less than 2 minutes: {{booking_link}}
@@ -1938,6 +1950,22 @@ Thanks again for being part of the team."""),
         db.session.add(EmailTemplate(trigger=trigger, category=cat, name=name,
                        description=desc, subject=subject, body=body.strip()))
         added += 1
+
+    # The lead emails used to say "$50" in their own words, whatever deposit
+    # the business had set. Copies already saved get the exact old phrases
+    # swapped for the placeholder -- nothing else an owner wrote is touched,
+    # and once swapped the phrase is gone, so this runs once per template.
+    swaps = (('a $50 deposit to hold your spot', 'a ${{deposit}} deposit to hold your spot'),
+             ('Only a $50 deposit to hold your spot', 'Only a ${{deposit}} deposit to hold your spot'))
+    for t in EmailTemplate.query.filter(
+            EmailTemplate.trigger.in_(('lead_quote', 'lead_drip_day2'))).all():
+        body = t.body or ''
+        new = body
+        for old_txt, new_txt in swaps:
+            new = new.replace(old_txt, new_txt)
+        if new != body:
+            t.body = new
+            added += 1
     if added:
         db.session.commit()
 

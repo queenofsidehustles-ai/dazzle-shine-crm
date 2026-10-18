@@ -1461,7 +1461,7 @@ def _send_confirmation(booking: Booking):
         subject=f'New booking + deposit paid: {booking.name} — {booking.service_label}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2>New Booking — $50 Deposit Received</h2>
+  <h2>New Booking — {_dollars(booking.deposit_amount_paid or get_deposit())} Deposit Received</h2>
   <p><strong>Name:</strong> {booking.name}</p>
   <p><strong>Email:</strong> {booking.email}</p>
   <p><strong>Phone:</strong> {booking.phone}</p>
@@ -1477,9 +1477,24 @@ def _send_confirmation(booking: Booking):
     )
 
 
+def _dollars(amount):
+    """$50, or $49.50 -- how a person writes a deposit in a sentence."""
+    try:
+        v = float(amount or 0)
+    except (TypeError, ValueError):
+        v = 0.0
+    return f'${v:,.0f}' if v == int(v) else f'${v:,.2f}'
+
+
 def _send_deposit_request(booking: Booking):
     """Tentative booking: confirm we received it, but make clear it's NOT locked in
-    until the $50 deposit is paid. Includes a secure Pay Deposit link."""
+    until the deposit is paid. Includes a secure Pay Deposit link.
+
+    The amount is the deposit set on Pricing -- the same figure the payment
+    page will charge. It was written as "$50" in every message here, so a
+    business that changed its deposit told customers one number and charged
+    another.
+    """
     from flask import url_for
     notify_email = branding.owner_email()
     biz = branding.biz_name()
@@ -1487,6 +1502,7 @@ def _send_deposit_request(booking: Booking):
     date_text = booking.preferred_date or 'Flexible'
     time_text = booking.preferred_time or 'Flexible'
     first = (booking.name or 'there').split()[0]
+    dep = _dollars(get_deposit())
 
     try:
         pay_url = url_for('deposit.pay_deposit_page', token=booking.deposit_token, _external=True)
@@ -1505,7 +1521,7 @@ def _send_deposit_request(booking: Booking):
     <div style="background:#fff8e1;border:2px solid #f59e0b;border-radius:10px;padding:16px 18px;margin:0 0 22px">
       <p style="margin:0;color:#92400e;font-weight:700;font-size:1rem">⚠️ Your booking is NOT confirmed yet</p>
       <p style="margin:8px 0 0;color:#7c4a04;line-height:1.6;font-size:0.92rem">
-        To lock in your date and time, please pay your <strong>$50 deposit</strong> below.
+        To lock in your date and time, please pay your <strong>{dep} deposit</strong> below.
         Your spot is held only once the deposit is received. The deposit goes toward your total —
         it is not an extra charge.
       </p>
@@ -1516,14 +1532,14 @@ def _send_deposit_request(booking: Booking):
       <tr><td style="padding:5px 0;color:#9a95ad">Home</td><td style="padding:5px 0;font-weight:600;text-align:right">{booking.bedrooms} bed / {booking.bathrooms} bath</td></tr>
       <tr><td style="padding:5px 0;color:#9a95ad">Date</td><td style="padding:5px 0;font-weight:600;text-align:right">{date_text} {('· ' + time_text) if time_text != 'Flexible' else ''}</td></tr>
       <tr><td style="padding:5px 0;color:#9a95ad">Estimated total</td><td style="padding:5px 0;font-weight:600;text-align:right">${booking.price:.2f}</td></tr>
-      <tr><td style="padding:5px 0;color:#9a95ad">Deposit to confirm</td><td style="padding:5px 0;font-weight:700;text-align:right;color:#065f46">$50.00</td></tr>
+      <tr><td style="padding:5px 0;color:#9a95ad">Deposit to confirm</td><td style="padding:5px 0;font-weight:700;text-align:right;color:#065f46">${float(get_deposit()):.2f}</td></tr>
       <tr><td style="padding:5px 0;color:#9a95ad">Balance after cleaning</td><td style="padding:5px 0;font-weight:600;text-align:right">${booking.balance_due:.2f}</td></tr>
     </table>
 
     <div style="text-align:center;margin-bottom:18px">
       <a href="{pay_url}" style="background:#d3a84f;color:#1f1333;padding:16px 40px;border-radius:8px;
          text-decoration:none;font-weight:700;font-size:1.1rem;display:inline-block">
-        Pay My $50 Deposit & Confirm →
+        Pay My {dep} Deposit & Confirm →
       </a>
     </div>
 
@@ -1536,14 +1552,14 @@ def _send_deposit_request(booking: Booking):
   </div>
 </div>"""
     send_email(to_email=booking.email, to_name=booking.name,
-               subject=f"Action needed: confirm your cleaning with a $50 deposit — {biz}",
+               subject=f"Action needed: confirm your cleaning with a {dep} deposit — {biz}",
                html=html)
 
     # SMS to customer
     send_sms(
         booking.phone,
         f"Hi {first}! {biz} got your booking request for {date_text}. "
-        f"It's NOT confirmed until your $50 deposit is paid. "
+        f"It's NOT confirmed until your {dep} deposit is paid. "
         f"Pay here to lock your spot: {pay_url}  Reply STOP to opt out.",
     )
 
@@ -1554,7 +1570,7 @@ def _send_deposit_request(booking: Booking):
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <h2>Tentative Booking — Deposit Not Paid Yet</h2>
-  <p>This booking is held but <strong>not confirmed</strong> until the $50 deposit is paid.
+  <p>This booking is held but <strong>not confirmed</strong> until the {dep} deposit is paid.
      Consider following up if the deposit isn't paid soon.</p>
   <p><strong>Name:</strong> {booking.name}</p>
   <p><strong>Email:</strong> {booking.email}</p>

@@ -240,6 +240,9 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
         'phone': biz_phone,
         'first_name': to_name.split()[0] if to_name else '',
         'full_name': to_name or '',
+        # The deposit set on Pricing, for any template that mentions it. A
+        # caller that knows what this booking actually paid passes its own.
+        'deposit': _deposit_text(),
     }
     if variables:
         v.update(variables)
@@ -266,6 +269,15 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
     ok, _detail = send_email(to_email=to_email, to_name=to_name, subject=subject,
                              html=html, from_name=biz, cc=cc)
     return bool(ok)
+
+
+def _deposit_text():
+    try:
+        from pricing import get_deposit
+        d = float(get_deposit() or 0)
+    except Exception:
+        return ''
+    return f'{d:.0f}' if d == int(d) else f'{d:.2f}'
 
 
 def _sub(text, variables):

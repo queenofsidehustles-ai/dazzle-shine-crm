@@ -236,7 +236,17 @@ def new():
             last = max(client.bookings, key=lambda b: b.created_at or datetime.min)
     return render_template('admin/booking_new.html',
                            service_labels=SERVICE_LABELS, extras=EXTRAS, frequency_labels=_FREQ,
-                           default_lead_fee=get_lead_fee(), client=client, last=last)
+                           default_lead_fee=get_lead_fee(), client=client, last=last,
+                           deposit=_pricing_deposit())
+
+
+def _pricing_deposit():
+    """The deposit set on Pricing, for the "send a deposit link" option."""
+    from pricing import get_deposit
+    try:
+        return float(get_deposit() or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 @bookings_bp.route('/calendar')

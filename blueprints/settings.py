@@ -2,7 +2,7 @@ import csv
 import io
 import re
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, session
 from entitlements import requires_plan
 from auth import login_required, owner_required
 from models import PricingSetting, BusinessSetting, Prospect, Client, Booking, Staff
@@ -106,7 +106,21 @@ def getting_started():
     minutes ago does not yet know what a Stripe key is for; what they need is
     one thing to do next and a sense that it ends somewhere."""
     import onboarding
-    return render_template('admin/getting_started.html', p=onboarding.progress())
+    p = onboarding.progress()
+    # The setup chat, for the owner, when a Claude API key is set. Without one
+    # (or in the demo) the page is exactly the list it always was.
+    chat = None
+    import setup_assistant
+    if session.get('role') == 'owner' and setup_assistant.configured():
+        from blueprints.setup_assistant_routes import transcript
+        chat = transcript()
+    # Opened as a focused window the first time, or when a pop-up sent them
+    # here to use it. After that it sits on the page with the list.
+    focus = bool(chat) and (request.args.get('focus') == '1'
+                            or not any(m.get('role') == 'user' for m in chat))
+    return render_template('admin/getting_started.html', p=p, chat=chat,
+                           chat_focus=focus,
+                           assistant_name=setup_assistant.NAME)
 
 
 @settings_bp.route('/automations/save', methods=['POST'])
