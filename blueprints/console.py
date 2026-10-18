@@ -288,11 +288,23 @@ def companies():
     import billing
     import console_data
     engine = _engine()
-    orgs = control_plane.all_orgs(engine)
+    q = (request.args.get('q') or '').strip()
+    show_archived = request.args.get('show') == 'archived'
+    everyone = control_plane.all_orgs(engine)
+    archived_count = sum(1 for o in everyone if o.get('archived_at'))
+    orgs = [o for o in everyone if bool(o.get('archived_at')) == show_archived]
+    if q:
+        needle = q.lower()
+        orgs = [o for o in orgs if needle in ' '.join(
+            str(o.get(k) or '') for k in ('name', 'slug', 'owner_email')).lower()]
+    # Most recent sign-ups first.
+    orgs.sort(key=lambda o: o.get('created_at') or datetime.min, reverse=True)
     snaps = console_data.snapshots(orgs)
     rows = [dict(o, trial=billing.trial_state(o), snap=snaps.get(o['slug']))
             for o in orgs]
-    return render_template('console/companies.html', rows=rows,
+    return render_template('console/companies.html', rows=rows, q=q,
+                           show_archived=show_archived,
+                           archived_count=archived_count,
                            leads=console_data.dedupe_leads(control_plane.all_leads(engine)),
                            me=request.console_user, counts=_counts(engine))
 
@@ -565,6 +577,27 @@ def mark_test_account(slug):
           f'{"left out of" if is_test else "counted in"} the funnel and sales numbers'
           f'{" and never sent trial reminders" if is_test else ""}.', 'success')
     return redirect(here)
+
+
+@console_bp.route('/companies/<slug>/archive', methods=['POST'])
+@console_required
+def archive_company(slug):
+    """Hide a company from the default list, or bring it back. Nothing else changes."""
+    if not _may_operate():
+        return _refuse(url_for('console.companies'))
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    if not org:
+        flash(f'No company at {slug}.', 'error')
+        return redirect(url_for('console.companies'))
+    archive = request.form.get('on') == '1'
+    control_plane.set_archived(engine, slug, archive)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'archived' if archive else 'unarchived', slug)
+    flash(f'{org["name"]} is {"archived — find it under Archived" if archive else "back in the main list"}.',
+          'success')
+    return redirect(url_for('console.companies') if archive
+                    else url_for('console.company', slug=slug))
 
 
 @console_bp.route('/companies/<slug>/reactivate', methods=['POST'])

@@ -503,9 +503,7 @@ def submit_complete(token):
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
     before = _private_photo_refs(checklist, 'before')
     after = _private_photo_refs(checklist, 'after')
-    if not before or not after:
-        return jsonify({'ok': False,
-            'error': 'Please add at least one BEFORE photo and one AFTER photo.'}), 400
+    # Photos are encouraged, not required: a job can be closed out without them.
 
     checklist.photos_submitted_at = datetime.utcnow()
     if not checklist.completed_at:
@@ -535,13 +533,14 @@ def submit_complete(token):
                        if checklist.client_rating else '')
         send_email(
             to_email=owner_email, to_name=branding.biz_name(),
-            subject=f'Job completed — {booking.name} ({len(before)} before / {len(after)} after photos)',
+            subject=(f'Job completed — {booking.name} ({len(before)} before / {len(after)} after photos)'
+                     if before or after else f'Job completed — {booking.name} (no photos)'),
             html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <h2 style="color:#b98a33">Job Closed Out — Ready for Payment Review</h2>
   <p><strong>{booking.assigned_cleaner or 'Cleaner'}</strong> finished the job for
-     <strong>{booking.name}</strong> and submitted photos.</p>
-  <p>📸 {len(before)} before photo(s) · {len(after)} after photo(s)</p>
+     <strong>{booking.name}</strong> and closed it out.</p>
+  <p>📸 {f'{len(before)} before photo(s) · {len(after)} after photo(s)' if before or after else 'No photos were added.'}</p>
   {hours_html}{sign_html}{rating_html}
   <p><a href="{review_url}" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Review Photos &amp; Release Payment →</a></p>
 </div>""",
@@ -554,7 +553,7 @@ def submit_complete(token):
     if owner_phone:
         send_sms(owner_phone,
                  f"✅ Job done: {booking.assigned_cleaner or 'Cleaner'} finished {booking.name}'s "
-                 f"cleaning and submitted {len(before)} before + {len(after)} after photos. "
+                 f"cleaning ({len(before)} before + {len(after)} after photos). "
                  f"Review to release payment.")
 
     return jsonify({'ok': True})
