@@ -943,7 +943,7 @@ def lifecycle_emails():
 
 # ── Trial nudges (cron — run once daily) ─────────────────────────────────────
 # The countdown in the banner only reaches somebody who logs in, and the whole
-# reason the trial has a start-by cap is the owner who does not. This is the
+# reason the trial has a fixed end is the owner who does not. This is the
 # half of that feature that leaves the building.
 #
 # Deliberately once a day and no more. Every nudge is recorded against the

@@ -508,6 +508,56 @@ def referral(ref):
     return response
 
 
+@marketing_bp.route('/p/<code>')
+def partner_link(code):
+    """An affiliate partner's link: akyehq.com/p/<their code>.
+
+    Remembers which partner sent the visitor (in the same signed cookie as
+    everything else in attribution.py) and shows the home page. Tracking tags
+    on the link (?utm_campaign=newsletter) are kept too, so a partner can tell
+    which of their posts worked. A code that is unknown, or belongs to a
+    partner who is not active, lands on the home page and is remembered as
+    nothing: a dead link must not be an error page for someone a partner
+    sent in good faith, and must not earn anybody anything.
+
+    A click is counted once per browser per partner, so a refresh is not a
+    second visitor.
+    """
+    _require_product_site()
+    import affiliates
+    import attribution
+    from flask import current_app
+    response = redirect('/')
+    try:
+        import provisioning
+        engine = provisioning._engine()
+        partner = affiliates.active_partner(engine, attribution.clean_code(code))
+        if not partner:
+            return response
+        secret = current_app.secret_key
+        stored = attribution.read(request.cookies, secret)
+        tags = attribution.from_request(request.args, None, request.host, request.path)
+        found = {k: v for k, v in tags.items() if k in ('source', 'medium', 'campaign', 'content')}
+        found.update(aff=partner['code'], landing=request.path[:120])
+        if stored.get('aff') != partner['code']:
+            affiliates.record_click(engine, partner['id'],
+                                    campaign=found.get('campaign'),
+                                    landing=request.path)
+        new = attribution.merge(stored, found)
+        if new and not stored.get('aff'):
+            # The partner's touch is the one that earns the credit, so the tags
+            # on their link describe it: they replace older ad tags, so the
+            # click, the signup and the partner's by-tag table all agree.
+            new.update({k: v for k, v in tags.items()
+                        if k in ('source', 'medium', 'campaign', 'content')})
+        if new:
+            attribution.write(response, new, secret, secure=request.is_secure)
+    except Exception as e:
+        # Losing a click must never cost somebody the page they asked for.
+        print(f'  ⚠️  partner link not recorded: {type(e).__name__}: {e}')
+    return response
+
+
 @marketing_bp.route('/early-access', methods=['GET', 'POST'])
 def early_access():
     """For somebody who wants it before the door is open.

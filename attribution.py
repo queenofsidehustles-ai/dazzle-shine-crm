@@ -6,6 +6,7 @@ link are read, both only on the product's own site:
 
   tracking tags   ?utm_source=newsletter&utm_medium=email&utm_campaign=founding
   a referral      /r/<company address>, or ?ref=<company address> on any page
+  a partner       /p/<partner code>,    or ?aff=<partner code>    on any page
 
 ## First touch, kept in a cookie
 
@@ -25,6 +26,17 @@ The cookie is signed with the app's secret key. Faking one would only
 mislabel your own signup, but referrals may earn a reward, and a reward
 should not be claimable by editing a cookie.
 
+## Partners
+
+An affiliate partner's code lives in its own field (`aff`), apart from a
+company's referral (`ref`), so the two can never be confused or collide on the
+same name. Like a referral it is a personal introduction, so it is added to a
+cookie that already holds tracking tags: the partner who recommended the
+product gets the credit even when an ad got there first. Once a partner is
+stored, a different partner does not replace them -- the first recommendation
+is the one that counts. Whether the code names a real, active partner is
+decided at signup (control_plane._signup_attribution), never here.
+
 ## What is stored
 
 Short, cleaned strings only -- never a full URL with whatever else was in its
@@ -38,7 +50,7 @@ COOKIE = 'akye_src'
 MAX_AGE = 90 * 24 * 3600          # a quarter: long enough for a slow decision
 PARAMS = {'utm_source': 'source', 'utm_medium': 'medium',
           'utm_campaign': 'campaign', 'utm_content': 'content'}
-FIELDS = ('source', 'medium', 'campaign', 'content', 'ref', 'referrer',
+FIELDS = ('source', 'medium', 'campaign', 'content', 'ref', 'aff', 'referrer',
           'landing', 'fbc')
 
 # Most fields are a word or two. `fbc` is Meta's click id wrapped in their
@@ -77,6 +89,11 @@ def clean_ref(value):
     return _REF_UNSAFE.sub('', (value or '').strip().lower())[:40]
 
 
+def clean_code(value):
+    """A partner code: the characters a company address may use."""
+    return _REF_UNSAFE.sub('', (value or '').strip().lower())[:40]
+
+
 def _serializer(secret):
     from itsdangerous import URLSafeSerializer
     return URLSafeSerializer(secret, salt='akye-attribution')
@@ -105,6 +122,9 @@ def from_request(args, referrer, host, path):
     fbc = _fbc(args.get('fbclid'))
     if fbc:
         found['fbc'] = fbc
+    aff = clean_code(args.get('aff'))
+    if aff:
+        found['aff'] = aff
     if not found:
         outside = _external_host(referrer, host)
         if outside:
@@ -147,13 +167,16 @@ def read(cookies, secret):
 
 
 def merge(stored, found):
-    """First touch wins; a referral is added if none is stored yet."""
+    """First touch wins; a referral and a partner are each added if none is
+    stored yet."""
     if not found:
         return None
     if not stored:
         return found
-    if found.get('ref') and not stored.get('ref'):
-        return dict(stored, ref=found['ref'])
+    added = {k: found[k] for k in ('ref', 'aff')
+             if found.get(k) and not stored.get(k)}
+    if added:
+        return dict(stored, **added)
     return None                     # nothing new worth writing
 
 
@@ -174,10 +197,15 @@ def label(row):
     """One short name for where a company or lead came from.
 
     Reads either a cookie's fields or an organizations row's signup_* columns.
-    A referral counts as the channel 'referral' whatever tags came with it:
-    the invitation is what brought them.
+    A partner counts as the channel 'partner · <code>' and a referral as
+    'referral', whatever tags came with them: the introduction is what brought
+    them. A partner outranks a customer referral because it is the one that
+    earns a commission, so it is the one the Funnel must be able to count.
     """
     get = lambda k: row.get(k) or row.get(f'signup_{k}') or ''
+    code = row.get('affiliate_code') or get('aff')
+    if code:
+        return f'partner · {code}'
     if row.get('referred_by') or get('ref'):
         return 'referral'
     source = get('source')
@@ -198,6 +226,17 @@ def ad(row):
     return (row.get('content') or row.get('signup_content') or '').strip()
 
 
+def _active_partner(code):
+    """Is this the code of a partner whose link is honoured? False on any error:
+    when in doubt, remember nothing rather than the wrong thing."""
+    try:
+        import affiliates
+        import provisioning
+        return bool(affiliates.active_partner(provisioning._engine(), code))
+    except Exception:
+        return False
+
+
 def install(app):
     """Remember tracking tags and referrals seen on the product's own site."""
     from flask import request
@@ -208,11 +247,18 @@ def install(app):
             import product
             if request.method != 'GET' or not product.is_product_site():
                 return response
-            if request.path.startswith(('/static', '/r/')):
-                return response     # /r/ writes its own cookie
+            if request.path.startswith(('/static', '/r/', '/p/')):
+                return response     # /r/ and /p/ write their own cookie
             secret = app.secret_key
             found = from_request(request.args, request.referrer,
                                  request.host, request.path)
+            if found.get('aff') and not _active_partner(found['aff']):
+                # Only a real, active partner may take the one partner slot.
+                # Otherwise anybody typing ?aff=nonsense into a page would
+                # stop the genuine partner's link from being remembered later.
+                found.pop('aff')
+                if not (set(found) - {'landing'}):
+                    return response
             new = merge(read(request.cookies, secret), found)
             if new:
                 write(response, new, secret, secure=request.is_secure)

@@ -46,7 +46,7 @@ DEFAULT_PLAN = 'solo'
 # The trial is a full Pro trial, not a crippled one. A company with six cleaners
 # cannot evaluate this product inside the Solo limits — they would be testing a
 # tool built for somebody else and concluding, correctly, that it does not fit.
-TRIAL_DAYS = 14
+TRIAL_DAYS = 30
 
 
 # ---------------------------------------------------------------------------

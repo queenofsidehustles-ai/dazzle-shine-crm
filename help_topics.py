@@ -605,8 +605,9 @@ TOPICS = [
         'title': 'Your plan and free trial',
         'keywords': ['plan', 'trial', 'free trial', 'billing', 'subscription', 'upgrade', 'locked', 'padlock',
                      'cancel subscription', 'card on file for akye'],
-        'answer': ('A new account gets a 14-day free trial with every feature. The 14 days start once you '
-                   'have added a cleaner and a customer, and you have 30 days from signing up to do that. '
+        'answer': ('A new account gets a 30-day free trial with every feature, counted from the day you '
+                   'sign up. Adding a cleaner and a customer does not change the date; it is just the '
+                   'quickest way to see it work. '
                    'Your plan and the days left are shown on Billing and at the top of Settings, Business. A'
                    ' feature your plan does not include shows a lock and takes you to a page comparing '
                    'plans. If a trial ends without a paid plan, or a payment fails, you drop to the free '

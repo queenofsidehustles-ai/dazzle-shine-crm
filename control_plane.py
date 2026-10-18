@@ -58,9 +58,9 @@ organizations = Table(
     # A founding customer's price is theirs for as long as they stay. This
     # survives every future price change, which is the whole promise.
     Column('grandfathered', Boolean, default=False),
-    # When they first assigned a job to somebody. The trial's 14 days run from
-    # here rather than from signup: a fortnight that starts before anybody has
-    # used the product is a trial they never had.
+    # When they first had a cleaner and a customer in the product: the best
+    # sign they are really using it. A milestone only. The trial's 30 days run
+    # from signup and this does not move them.
     Column('activated_at', DateTime),
     # Which trial emails have gone to this company, comma-separated. The
     # countdown in the banner only reaches somebody who logs in, and the whole
@@ -138,6 +138,16 @@ organizations = Table(
     # getting the width wrong here is not something a later deploy repairs.
     Column('signup_fbc', String(255)),
     Column('referred_by', String(40), index=True),
+    # The affiliate partner whose link brought them (affiliates.py). A partner
+    # code, not a company address, so the two never collide. Kept only when the
+    # partner exists, is active, and is not the person signing up.
+    Column('affiliate_code', String(40), index=True),
+    # Why this company's partner commission is held for a person to look at, or
+    # NULL. Set when the owner and the partner share a business email domain: it
+    # may be a real introduction (a partner who is a former colleague) or the
+    # partner opening a company to earn on it, and software cannot tell. The
+    # company is credited and works normally; only the partner's payout waits.
+    Column('affiliate_flag', String(120)),
     # When she agreed to the Terms of Service, at signup. Not optional: signup
     # refuses to create the account at all without it (see blueprints/signup.py
     # _validate). Kept as a timestamp rather than a boolean because "she agreed"
@@ -238,6 +248,102 @@ promo_codes = Table(
     Column('active', Boolean, default=True),
     Column('created_by', String(200)),
     Column('created_at', DateTime, default=datetime.utcnow),
+)
+
+
+# ── Affiliate partners ─────────────────────────────────────────────────────
+#
+# People who recommend the product to cleaning-company owners and earn a share
+# of what those owners pay. Here, in the control plane, for the same reason
+# `organizations` is: this is the product's own book, not any one company's,
+# and a tenant's session must never be able to write to it. Nothing in these
+# tables can change what a company is entitled to; a commission problem is
+# settled between Akye and the partner and never touches a customer's plan.
+affiliates = Table(
+    'affiliates', control_metadata,
+    Column('id', Integer, primary_key=True),
+    # Appears in the link (/p/<code>) and is stamped on every company they
+    # bring. Immutable once issued, like a company address.
+    Column('code', String(40), unique=True, nullable=False),
+    Column('name', String(200), nullable=False),
+    Column('email', String(200), unique=True, nullable=False),   # lower-case
+    # pending | active | paused | ended. Only 'active' links are honoured.
+    Column('status', String(20), nullable=False, default='pending'),
+    # Basis points, so 30% is 3000 and no float ever touches money.
+    Column('commission_bps', Integer, nullable=False, default=3000),
+    # How many months of a company's payments earn commission, from its first
+    # paid invoice.
+    Column('commission_months', Integer, nullable=False, default=12),
+    # Days between an invoice being paid and its commission becoming payable.
+    # Covers refunds and chargebacks.
+    Column('hold_days', Integer, nullable=False, default=30),
+    Column('terms_accepted_at', DateTime),
+    Column('payout_account_id', String(64)),
+    Column('notes', String(500)),
+    Column('created_by', String(200)),
+    Column('created_at', DateTime, default=datetime.utcnow),
+    Column('last_login_at', DateTime),
+)
+
+# A single-use sign-in link. Only a hash is stored, for the same reason a
+# password reset token's is (models.LoginToken): a leaked backup hands over
+# nothing that still works.
+affiliate_logins = Table(
+    'affiliate_logins', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('affiliate_id', Integer, nullable=False, index=True),
+    Column('token_hash', String(64), unique=True, nullable=False),
+    Column('expires_at', DateTime, nullable=False),
+    Column('used_at', DateTime),
+    Column('created_at', DateTime, default=datetime.utcnow),
+)
+
+# One row per visit to a partner's link from a browser that was not already
+# carrying that partner's cookie, so a refresh is not a click.
+affiliate_clicks = Table(
+    'affiliate_clicks', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('affiliate_id', Integer, nullable=False, index=True),
+    Column('clicked_at', DateTime, default=datetime.utcnow, index=True),
+    Column('campaign', String(120)),
+    Column('landing', String(120)),
+)
+
+# What each partner has earned. One row per paid Stripe invoice, and the
+# invoice id is unique: Stripe delivers the same webhook more than once, and a
+# ledger that says "this invoice earned this much" can be told five times
+# where one that adds to a total cannot (the rule billing.py is built on).
+affiliate_commissions = Table(
+    'affiliate_commissions', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('affiliate_id', Integer, nullable=False, index=True),
+    Column('org_slug', String(40), nullable=False, index=True),
+    Column('stripe_invoice_id', String(80), unique=True, nullable=False),
+    Column('invoice_paid_at', DateTime),
+    Column('amount_cents', Integer, nullable=False),        # what commission is on
+    Column('rate_bps', Integer, nullable=False),
+    Column('commission_cents', Integer, nullable=False),
+    # accrued -> paid, or accrued -> reversed. 'Payable' is not stored: it is
+    # accrued with payable_at in the past, so nothing has to run for the
+    # hold to end.
+    Column('status', String(12), nullable=False, default='accrued'),
+    Column('payable_at', DateTime, nullable=False),
+    Column('payout_id', Integer, index=True),
+    Column('reversed_at', DateTime),
+    Column('reversal_reason', String(200)),
+    Column('created_at', DateTime, default=datetime.utcnow),
+)
+
+affiliate_payouts = Table(
+    'affiliate_payouts', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('affiliate_id', Integer, nullable=False, index=True),
+    Column('amount_cents', Integer, nullable=False),
+    Column('method', String(40)),               # transfer | paypal | check | other
+    Column('reference', String(120)),           # the transfer id, check number...
+    Column('note', String(300)),
+    Column('paid_at', DateTime, default=datetime.utcnow),
+    Column('created_by', String(200)),
 )
 
 
@@ -583,7 +689,9 @@ def ensure_table(engine):
                         switch_tokens,
                         promo_codes, product_lead_messages, signup_attempts,
                         tip_events,
-                        product_messages, product_switches])
+                        product_messages, product_switches,
+                        affiliates, affiliate_logins, affiliate_clicks,
+                        affiliate_commissions, affiliate_payouts])
     ensure_columns(engine)
 
 
@@ -610,17 +718,15 @@ def create(engine, slug, name, owner_email=None, attribution=None,
             f'hyphens, 3-40 characters, and not one of the reserved names.')
     if find(engine, slug):
         raise ValueError(f'{slug!r} is already taken.')
-    # Everything, for a fortnight — but the fortnight does not start until they
-    # assign a job. Until then they have thirty days to begin, which is what
-    # `trial_ends_at` holds; `billing.mark_activated` moves it when they do.
-    #
-    # A free plan nobody has seen the paid features from is a plan nobody
-    # upgrades out of: they cannot miss the hiring pipeline if they never had
-    # it. So the trial gives the top plan and then steps down, rather than
-    # asking somebody to imagine what they are not being shown.
+    # Everything, for thirty days from now. A free plan nobody has seen the paid
+    # features from is a plan nobody upgrades out of: they cannot miss the
+    # hiring pipeline if they never had it. So the trial gives the top plan and
+    # then steps down, rather than asking somebody to imagine what they are not
+    # being shown.
     from datetime import timedelta
+    import billing
     now = datetime.utcnow()
-    came_from = _signup_attribution(engine, slug, attribution)
+    came_from = _signup_attribution(engine, slug, attribution, owner_email)
     with engine.begin() as conn:
         conn.execute(insert(organizations).values(
             slug=slug, name=name, schema_name=tenancy.schema_for(slug),
@@ -628,19 +734,26 @@ def create(engine, slug, name, owner_email=None, attribution=None,
             created_at=now,
             plan='scale',
             subscription_status='trialing',
-            trial_ends_at=now + timedelta(days=30),
+            trial_ends_at=now + timedelta(days=billing.TRIAL_DAYS),
             activated_at=None,
             terms_accepted_at=terms_accepted_at,
             **came_from))
     return find(engine, slug)
 
 
-def _signup_attribution(engine, slug, attribution):
-    """The signup_* and referred_by values for a new company.
+def _signup_attribution(engine, slug, attribution, owner_email=None):
+    """The signup_* , referred_by and affiliate_code values for a new company.
 
     A referral is kept only when it names a company that exists and is not
     the one being created: anybody can type ?ref=, and a reward should not
     follow a name that was made up or a company referring itself.
+
+    A partner code is held to the same standard, and one more: it is kept only
+    while the partner is active, and never when the owner signing up is the
+    partner, however the address is dressed up (affiliates.self_referral).
+    Credit follows a real introduction, not the partner opening a company of
+    their own to collect commission on it. A shared business domain is not
+    proof either way, so it is credited but held for review.
     """
     a = attribution or {}
     import attribution as _attr
@@ -652,6 +765,16 @@ def _signup_attribution(engine, slug, attribution):
     ref = (a.get('ref') or '').strip().lower()
     if ref and ref != slug and find(engine, ref):
         out['referred_by'] = ref
+    aff = (a.get('aff') or '').strip().lower()
+    if aff:
+        import affiliates as _affiliates
+        partner = _affiliates.find_by_code(engine, aff)
+        if partner and partner['status'] == 'active':
+            verdict = _affiliates.self_referral(partner['email'], owner_email)
+            if verdict != 'same':
+                out['affiliate_code'] = partner['code']
+                if verdict == 'review':
+                    out['affiliate_flag'] = 'same email domain as the partner'
     return out
 
 
@@ -704,8 +827,9 @@ def set_billing(engine, slug, **fields):
 
     The whitelist is the point: a caller that has not thought about which
     field it is writing cannot write one by accident. `activated_at` is on it
-    because the trial clock starts from the product being used, which is
-    something only this application knows and Stripe never will.
+    because it records when a company was first really set up (a cleaner and a
+    customer), which only this application knows and Stripe never will. It is a
+    milestone: the trial itself runs 30 days from signup.
     """
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
@@ -1650,3 +1774,10 @@ def claim_switch_token(engine, jti):
         return True
     except Exception:
         return False
+
+
+def clear_affiliate_flag(engine, slug):
+    """A person has looked and the introduction is real: release the payout."""
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(organizations.c.slug == slug)
+                     .values(affiliate_flag=None))
