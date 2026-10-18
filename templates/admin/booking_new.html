@@ -172,7 +172,7 @@
         <input type="radio" name="payment_option" value="none" checked style="width:auto"> No prepayment — collect later (invoice auto-sends the morning of the job)
       </label>
       <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500;margin-top:8px">
-        <input type="radio" name="payment_option" value="deposit" style="width:auto"> Send a $50 deposit link now
+        <input type="radio" name="payment_option" value="deposit" style="width:auto"> Send a ${{ ('%.0f'|format(deposit)) if deposit == deposit|int else ('%.2f'|format(deposit)) }} deposit link now
       </label>
       <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500;margin-top:8px">
         <input type="radio" name="payment_option" value="full" style="width:auto"> Send a full-payment link now

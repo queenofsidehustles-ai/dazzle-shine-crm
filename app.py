@@ -1654,7 +1654,7 @@ Service: {{service_type}}
 Bedrooms: {{beds}} | Bathrooms: {{baths}}
 Estimated Total: ${{quote_amount}}
 
-Ready to book? All we need is a $50 deposit to hold your spot — the remaining balance is charged to your card the morning of your appointment.
+Ready to book? All we need is a ${{deposit}} deposit to hold your spot — the remaining balance is charged to your card the morning of your appointment.
 
 You can book online at {{booking_link}} or call us at {{phone}} and we'll get you scheduled in minutes.
 
@@ -1671,7 +1671,7 @@ We'd love to help you reclaim your time. Here's what you get when you book with 
 
 - Background-checked, insured cleaners
 - Satisfaction guaranteed — if something's missed we'll come back
-- Only a $50 deposit to hold your spot
+- Only a ${{deposit}} deposit to hold your spot
 - The balance is charged the morning of your cleaning — nothing more due today
 
 Booking takes less than 2 minutes: {{booking_link}}
@@ -1950,6 +1950,22 @@ Thanks again for being part of the team."""),
         db.session.add(EmailTemplate(trigger=trigger, category=cat, name=name,
                        description=desc, subject=subject, body=body.strip()))
         added += 1
+
+    # The lead emails used to say "$50" in their own words, whatever deposit
+    # the business had set. Copies already saved get the exact old phrases
+    # swapped for the placeholder -- nothing else an owner wrote is touched,
+    # and once swapped the phrase is gone, so this runs once per template.
+    swaps = (('a $50 deposit to hold your spot', 'a ${{deposit}} deposit to hold your spot'),
+             ('Only a $50 deposit to hold your spot', 'Only a ${{deposit}} deposit to hold your spot'))
+    for t in EmailTemplate.query.filter(
+            EmailTemplate.trigger.in_(('lead_quote', 'lead_drip_day2'))).all():
+        body = t.body or ''
+        new = body
+        for old_txt, new_txt in swaps:
+            new = new.replace(old_txt, new_txt)
+        if new != body:
+            t.body = new
+            added += 1
     if added:
         db.session.commit()
 

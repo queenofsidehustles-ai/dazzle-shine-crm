@@ -199,6 +199,16 @@ def reports():
     deposits_collected = db.session.query(func.count(Booking.id)).filter(
         Booking.deposit_paid == True,
     ).scalar() or 0
+    # What those deposits came to. Each booking records what it actually paid;
+    # older ones from before that was recorded count at today's deposit. This
+    # used to be the count times a flat $50.
+    from pricing import get_deposit
+    from sqlalchemy import case
+    _paid = db.session.query(
+        func.coalesce(func.sum(Booking.deposit_amount_paid), 0),
+        func.sum(case((Booking.deposit_amount_paid.is_(None), 1), else_=0)),
+    ).filter(Booking.deposit_paid == True).first()
+    deposits_total = float(_paid[0] or 0) + int(_paid[1] or 0) * float(get_deposit() or 0)
 
     # Top services
     service_rows = db.session.query(
@@ -238,6 +248,7 @@ def reports():
         profit_ytd=profit_ytd,
         balance_outstanding=round(float(balance_outstanding), 2),
         deposits_collected=deposits_collected,
+        deposits_total=deposits_total,
         service_data=service_data,
         leads_total=leads_total,
         leads_converted=leads_converted,
