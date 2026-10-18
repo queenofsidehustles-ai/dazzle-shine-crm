@@ -99,11 +99,12 @@ TOPICS = [
         'key': 'deposits',
         'title': 'Deposits',
         'keywords': ['deposit', 'deposits', 'down payment', 'hold my spot', 'booking fee', 'not confirmed'],
-        'answer': ('Set your booking deposit on Pricing, under Deposit. Note: some customer emails and texts currently still say $50 whatever amount you set, so keep it at $50 for now or tell customers the amount yourself. It goes toward the total, it is not an '
-                   'extra charge. When a customer books through your booking page, the booking stays pending '
-                   'and they are emailed and texted a link to pay the deposit; paying it confirms the booking '
-                   'and saves their card for the balance. When you create a booking yourself you can choose '
-                   'to send a deposit link, a full payment link, or nothing.'),
+        'answer': ('Set your booking deposit on Pricing, under Deposit; the emails, texts and payment page '
+                   'all use that amount. It goes toward the total, it is not an extra charge. When a '
+                   'customer books through your booking page, the booking stays pending and they are emailed'
+                   ' and texted a link to pay the deposit; paying it confirms the booking and saves their '
+                   'card for the balance. When you create a booking yourself you can choose to send a '
+                   'deposit link, a full payment link, or nothing.'),
         'link': ('Pricing', '/settings/pricing'),
     },
     {
