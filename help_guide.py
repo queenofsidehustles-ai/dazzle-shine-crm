@@ -52,8 +52,10 @@ def _topics():
     try:
         from models import Faq
         for f in Faq.query.limit(200).all():
+            # The question is the keyword list: it is in the words somebody
+            # in this business actually used, so it should win a close match.
             topics.append({'key': f'faq-{f.id}', 'title': f.question,
-                           'keywords': [], 'answer': f.answer, 'link': None})
+                           'keywords': [f.question], 'answer': f.answer, 'link': None})
     except Exception:
         pass
     return topics
