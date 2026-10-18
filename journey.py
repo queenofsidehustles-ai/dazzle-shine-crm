@@ -28,6 +28,7 @@ import os
 import re
 import secrets
 from datetime import datetime
+from urllib.parse import urlsplit
 
 CERT_NAME = 'Certification Signer'
 CERT_EMAIL = 'certification@example.com'
@@ -99,7 +100,17 @@ class Journey:
         print(f'  {"✅" if ok else "❌"} {what}')
         if not ok:
             self.problems.append(what)
+            if facts.get('response'):
+                print(f'      answered {facts["response"]}')
         return ok
+
+    @staticmethod
+    def _answer(r):
+        """What a request was answered with, for a failed step: the status and
+        where it was sent. A redirect to the login or another page is the
+        usual reason, and says which check refused it."""
+        location = urlsplit(r.headers.get('Location') or '')
+        return {'status': r.status_code, 'location': location.path or None}
 
     def tenant(self, fn):
         import tenancy
@@ -187,7 +198,8 @@ class Journey:
                 'price_per_visit': '120', 'monthly_price': price}
             r = self.owner.post('/quotes/new', base_url=self.host, data=self.form)
             m = re.search(r'/quotes/(\d+)', r.headers.get('Location', ''))
-            if not self.check(r.status_code == 302 and m, f'{tag}: the owner creates a draft'):
+            if not self.check(r.status_code == 302 and m, f'{tag}: the owner creates a draft',
+                              response=self._answer(r)):
                 return None
             qid = int(m.group(1))
         else:
@@ -202,7 +214,8 @@ class Journey:
         self.check(q['status'] == 'sent' and rev and rev['quote_id'] == qid,
                    f'{tag}: sending freezes revision {rev and rev["id"]} and binds the link to it',
                    revision_id=rev and rev['id'], content_hash=rev and rev['content_hash'],
-                   approved_by=rev and rev.get('created_by'), issued_at=rev and str(rev['created_at']))
+                   approved_by=rev and rev.get('created_by'), issued_at=rev and str(rev['created_at']),
+                   response=self._answer(r))
         self.check(delivery and delivery['revision_id'] == (rev and rev['id'])
                    and (delivery.get('provider_message_id') or '').startswith('cert-'),
                    f'{tag}: the delivery names that revision and the message id',
@@ -297,7 +310,7 @@ class Journey:
         r = self.owner.post(f'/quotes/{qid}/amend', base_url=self.host)
         new = self.tenant(lambda: [x.id for x in CommercialQuote.query.filter_by(amends_quote_id=qid).all()])
         if not self.check(r.status_code == 302 and len(new) == 1,
-                          'amending opens one draft for the same account'):
+                          'amending opens one draft for the same account', response=self._answer(r)):
             return
         nid = new[0]
         self.owner.post(f'/quotes/{nid}', base_url=self.host,

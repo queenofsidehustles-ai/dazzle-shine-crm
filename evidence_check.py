@@ -27,6 +27,7 @@ a mistake here is an error, not a change.
 Each returns a dict with a list of `problems` (strings naming ids, never
 customer data); an empty list is a pass.
 """
+import re
 from datetime import datetime
 
 from sqlalchemy import text
@@ -119,10 +120,32 @@ def schema_report(conn, schema):
         for c in (model.columns if model is not None else []):
             if c.name not in cols[table]:
                 p.append(f'column {table}.{c.name} is missing')
-    triggers = {(t, n): e for t, n, e in conn.execute(text(
-        'SELECT c.relname, t.tgname, t.tgenabled FROM pg_trigger t '
+    rows = conn.execute(text(
+        'SELECT c.relname, t.tgname, t.tgenabled, p.proname, pn.nspname, p.prosrc FROM pg_trigger t '
         'JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace '
-        'WHERE n.nspname = :s AND NOT t.tgisinternal'), {'s': schema})}
+        'JOIN pg_proc p ON p.oid = t.tgfoid JOIN pg_namespace pn ON pn.oid = p.pronamespace '
+        'WHERE n.nspname = :s AND NOT t.tgisinternal'), {'s': schema}).all()
+    triggers = {(r[0], r[1]): r[2] for r in rows}
+    required = set(required_triggers())
+    import tenancy
+    schemas = set(conn.execute(text(
+        "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg\\_%' "
+        "AND nspname <> 'information_schema'")).scalars())
+    for table, name, _, fn, fn_schema, body in rows:
+        if (table, name) not in required:
+            continue
+        # A guard whose function lives elsewhere, or names another schema in
+        # its body, stops working when that schema is renamed or dropped --
+        # as the demo's did, built under a staging name (0032). Quoted, any
+        # qualifier is a schema; unquoted, one that is a schema or looks like
+        # a company's (NEW.id and r.id are not).
+        quoted = set(re.findall(r'"([^"]+)"\s*\.', body or ''))
+        bare = {m.lower() for m in re.findall(r'(?<![\w$".])([A-Za-z_][\w$]*)\s*\.', body or '')}
+        bare = {m for m in bare if m in schemas or m.startswith(tenancy.SCHEMA_PREFIX)}
+        named = (quoted | bare) - {schema}
+        if fn_schema != schema or named:
+            p.append(f'guard {name} on {table} runs {fn_schema}.{fn}(), which names '
+                     f'{", ".join(sorted(named or {fn_schema}))}, not this schema')
     for key in required_triggers():
         if key not in triggers:
             p.append(f'guard {key[1]} on {key[0]} is missing')
