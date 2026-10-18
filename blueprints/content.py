@@ -135,6 +135,15 @@ def mark_posted(post_id):
     return jsonify({'ok': True})
 
 
+def _deposit_phrase():
+    from pricing import get_deposit
+    try:
+        d = float(get_deposit() or 0)
+    except (TypeError, ValueError):
+        return 'a small deposit'
+    return f'${d:.0f} deposit' if d == int(d) else f'${d:.2f} deposit'
+
+
 @content_bp.route('/generate-ads', methods=['POST'])
 @login_required
 def generate_ads():
@@ -149,7 +158,7 @@ def generate_ads():
     prompt = f"""Create a complete Google Responsive Search Ad for a cleaning business.
 
 Business: {branding.biz_name()} — {service_focus} in {location}
-{('Key selling points: ' + usp) if usp else 'Key selling points: professional, reliable, insured, easy online booking, $50 deposit to hold your spot'}
+{('Key selling points: ' + usp) if usp else 'Key selling points: professional, reliable, insured, easy online booking, ' + _deposit_phrase() + ' to hold your spot'}
 
 Rules:
 - Headlines: exactly 15, each MAX 30 characters (count carefully!)
