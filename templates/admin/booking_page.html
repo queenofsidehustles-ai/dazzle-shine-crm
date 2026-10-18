@@ -131,6 +131,24 @@
   </label>
 </div>
 
+{# Where to go once it is ticked. Without this the page was a dead end in
+   the middle of setup: tick the box and nothing says what comes next. #}
+{% if SETUP and not SETUP.complete %}
+<div class="card" id="nextstep" style="max-width:760px;display:{{ 'flex' if shared else 'none' }};
+     align-items:center;gap:14px;flex-wrap:wrap;border:1px solid var(--amber-line);
+     background:var(--amber-soft)">
+  <div style="flex:1;min-width:200px">
+    <strong>Nice — that's done.</strong>
+    <span style="color:var(--muted)">On to the next setup step.</span>
+  </div>
+  {% if SETUP_CHAT %}
+  <a class="btn-primary" href="{{ url_for('settings.getting_started', focus=1) }}">Continue with Nana →</a>
+  {% else %}
+  <a class="btn-primary" href="{{ url_for('settings.getting_started') }}">Next step →</a>
+  {% endif %}
+</div>
+{% endif %}
+
 <script>
 function wire(btnId, codeId, label) {
   const btn = document.getElementById(btnId);
@@ -166,5 +184,13 @@ wire('copyurl', 'bookurl', 'Copy link');
 wire('copysnippet', 'snippet', 'Copy');
 wire('copyembedurl', 'embedurl', 'Copy');
 document.getElementById('sharedbox').addEventListener('change', e => save(e.target.checked));
+// Show the way on as soon as it is ticked, and hide it again if unticked.
+function showNext(on) {
+  const n = document.getElementById('nextstep');
+  if (n) n.style.display = on ? 'flex' : 'none';
+}
+document.getElementById('sharedbox').addEventListener('change', e => showNext(e.target.checked));
+document.querySelectorAll('#copyurl,#copysnippet,#copyembedurl').forEach(b =>
+  b.addEventListener('click', () => showNext(true)));
 </script>
 {% endblock %}
