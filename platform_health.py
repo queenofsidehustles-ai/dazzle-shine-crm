@@ -45,7 +45,6 @@ USAGE_WARN = 0.8
 
 LABELS = {
     'backup:akye': 'Akye database, every company',
-    'backup:dazzle': 'Dazzle & Shine CRM',
     'scheduler:hourly': 'Scheduler, hourly',
     'scheduler:daily': 'Scheduler, daily',
     'job:trial-nudges': 'Trial emails to owners',
