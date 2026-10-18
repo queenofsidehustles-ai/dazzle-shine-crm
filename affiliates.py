@@ -593,6 +593,9 @@ def payout(engine, payout_id):
 def can_pay_by_stripe(partner):
     """(True, '') or (False, why not) -- in words staff can act on."""
     import partner_payouts
+    import platform_switches
+    if not platform_switches.is_on('partner_payouts'):
+        return False, 'Partner payouts are switched off in Health. Nothing is lost; turn it back on to pay.'
     if not partner_payouts.configured():
         return False, 'Stripe is not set up on this deployment (STRIPE_PLATFORM_SECRET_KEY).'
     if not partner.get('payout_account_id'):

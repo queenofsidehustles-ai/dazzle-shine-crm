@@ -907,6 +907,49 @@ def lifecycle_emails():
 # hourly would still be a schedule that sends "3 days left" the moment the
 # threshold is crossed rather than in the morning.
 
+def _record_product_job(job, items, failed=0):
+    """Note that one of the product's own daily jobs ran, in the control plane
+    where the console reads it. (automations.record writes to whichever company
+    schema is current, and on the product's address there is none.)"""
+    try:
+        import control_plane
+        import provisioning
+        control_plane.record_platform_run(
+            provisioning._engine(), f'job:{job}', ok=not failed, items=items,
+            detail=(f'{failed} failed' if failed else None))
+    except Exception:
+        pass
+
+
+def _cron_key_ok():
+    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    return bool(expected) and api_key == expected
+
+
+@api_bp.route('/platform-run', methods=['POST'])
+def platform_run():
+    """Where backups and the scheduler say how they went (platform_report.py).
+
+    Only the kinds that run somewhere the product cannot see: the jobs the
+    product runs itself write their own record. Anything else is refused, so
+    a leaked key cannot be used to fill the console with invented history."""
+    if not _cron_key_ok():
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    data = request.get_json(silent=True) or {}
+    kind = str(data.get('kind') or '').strip()
+    if not (kind.startswith('backup:') or kind.startswith('scheduler:')) or len(kind) > 60:
+        return jsonify({'ok': False, 'error': 'Unknown kind'}), 400
+    import control_plane
+    import provisioning
+    control_plane.ensure_table(provisioning._engine())
+    done = control_plane.record_platform_run(
+        provisioning._engine(), kind, ok=bool(data.get('ok', True)),
+        items=data.get('items') if isinstance(data.get('items'), int) else None,
+        detail=str(data.get('detail') or '')[:400])
+    return jsonify({'ok': done}), (200 if done else 500)
+
+
 @api_bp.route('/trial-nudges', methods=['POST'])
 def trial_nudges():
     api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
@@ -922,6 +965,7 @@ def trial_nudges():
     sent = sum(counts.get(k, 0) for k in tn.ALL)
     if not dry:
         automations.record('trial-nudges', items=sent)
+        _record_product_job('trial-nudges', sent, counts.get('failed', 0))
     return jsonify({'ok': True, 'sent': sent, **counts})
 
 
@@ -942,6 +986,7 @@ def lead_nurture():
     counts.pop('plan', None)            # addresses stay out of the scheduler log
     if not dry:
         automations.record('lead-nurture', items=counts.get('sent', 0))
+        _record_product_job('lead-nurture', counts.get('sent', 0), counts.get('failed', 0))
     return jsonify({'ok': True, **counts})
 
 

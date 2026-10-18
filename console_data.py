@@ -49,6 +49,27 @@ def schema_ready(slug):
         return False
 
 
+def _usage_this_month():
+    """What this company used this month of the things that cost Akye money.
+
+    Each count is its own try: one that cannot be read is zero, and must not
+    stop the company's other numbers from showing. Called inside the company's
+    own schema."""
+    import assistant
+    import entitlements
+    import setup_assistant
+    out = {}
+    for key, fn in (('sms', entitlements._count_sms_this_month),
+                    ('nana', assistant.used_this_month),
+                    ('setup_chat', setup_assistant.used_this_month),
+                    ('lead_searches', entitlements._count_lead_searches_this_month)):
+        try:
+            out[key] = int(fn() or 0)
+        except Exception:
+            out[key] = 0
+    return out
+
+
 def snapshot(slug, now=None):
     """One company's health and activity, read inside its own schema."""
     import automations
@@ -83,6 +104,7 @@ def snapshot(slug, now=None):
                 'count': e.count or 1, 'first_seen': e.first_seen,
                 'last_seen': e.last_seen,
             } for e in open_q.order_by(ErrorLog.last_seen.desc()).limit(10).all()]
+            usage = _usage_this_month()
             users = User.query.all()
             owner_logins = [u.last_login for u in users
                             if u.role == 'owner' and u.last_login]
@@ -93,6 +115,7 @@ def snapshot(slug, now=None):
                 'jobs_broken': sum(1 for j in jobs
                                    if j['state'] in ('never', 'stale', 'failing')),
                 'errors': errors,
+                'usage': usage,
                 'open_errors': open_q.count(),
                 # Occurrences, not rows: one row stands for every repeat.
                 'blocked': int(db.session.query(func.coalesce(

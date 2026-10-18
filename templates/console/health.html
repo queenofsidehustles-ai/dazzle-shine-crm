@@ -4,7 +4,94 @@
 {% include "console/_ops_style.html" %}
 <h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Health</h2>
 
-<h3 class="ops-h" style="margin-top:0">Product email</h3>
+{% macro badge(state) %}<span class="ops-badge {{ {'ok': 'ops-ok', 'stale': 'ops-stale', 'failed': 'ops-closed', 'never': 'ops-never'}[state] }}">{{ {'never': 'not reported yet'}.get(state, state) }}</span>{% endmacro %}
+{% macro run_row(r) %}
+<tr><td>{{ r.label }}</td><td>{{ badge(r.state) }}</td>
+    <td>{{ r.last_ok_ago }}</td>
+    <td class="ops-dim">{{ r.detail or '' }}{% if r.count is not none and not r.detail %}{{ '{:,}'.format(r.count) }}{% endif %}</td></tr>
+{% endmacro %}
+
+{% if ph.problems %}
+<div class="ops-card" style="border-color:var(--warn);background:var(--warn-soft);margin-bottom:var(--s5)">
+  <strong style="color:var(--warn)">Needs a look ({{ ph.problems|length }})</strong>
+  <ul style="margin:var(--s2) 0 0;padding-left:var(--s5)">
+    {% for p in ph.problems %}<li><strong>{{ p.where }}:</strong> {{ p.text }}</li>{% endfor %}
+  </ul>
+</div>
+{% else %}
+<p class="ops-good" style="margin:0 0 var(--s4)">Nothing needs a look: backups, background jobs and Stripe are reporting in.</p>
+{% endif %}
+{% if ph.release %}<p class="ops-dim" style="margin:0 0 var(--s4)">Running release: <code>{{ ph.release }}</code></p>{% endif %}
+
+<h3 class="ops-h" style="margin-top:0">Backups</h3>
+<div class="ops-scroll"><table class="con">
+  <tr><th>What</th><th>State</th><th>Last good</th><th>Last run said</th></tr>
+  {% for r in ph.backups %}{{ run_row(r) }}{% endfor %}
+</table></div>
+<p class="ops-dim" style="margin-top:var(--s2)">The nightly backup runs on GitHub and reports here when it finishes. Stale means no good backup in 36 hours.
+  <strong>Not reported yet</strong> on a new deployment is normal until tonight's run; if it stays, check that the workflow has <code>REMINDER_API_KEY</code>.</p>
+
+<h3 class="ops-h">Background jobs</h3>
+<div class="ops-scroll"><table class="con">
+  <tr><th>What</th><th>State</th><th>Last good</th><th>Last run said</th></tr>
+  {% for r in ph.scheduler %}{{ run_row(r) }}{% endfor %}
+  {% for r in ph.jobs %}{{ run_row(r) }}{% endfor %}
+  {{ run_row(ph.stripe) }}
+</table></div>
+<p class="ops-dim" style="margin-top:var(--s2)">The scheduler wakes every company's automations; the two daily jobs are the product's own emails.
+  Stripe's webhook is what turns a payment into a plan, so a failure here means somebody paid and was not upgraded.</p>
+
+<h3 class="ops-h" id="errors">Platform errors{% if ph.error_total %} ({{ ph.error_total }}){% endif %}</h3>
+{% if ph.errors %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>What broke</th><th>Where</th><th>Times</th><th>Last seen</th>{% if may_operate %}<th></th>{% endif %}</tr>
+  {% for e in ph.errors %}
+  <tr><td class="wrap"><strong>{{ e.kind }}</strong><br><span class="ops-dim">{{ e.message }}</span></td>
+      <td class="ops-dim">{{ e.endpoint or e.path or '—' }}</td><td>{{ e.count }}</td>
+      <td>{{ e.last_seen.strftime('%d %b %H:%M') if e.last_seen }}</td>
+      {% if may_operate %}<td><form method="post" action="{{ url_for('console.resolve_platform_errors') }}"><input type="hidden" name="id" value="{{ e.id }}"><button class="btn btn-outline btn-sm" type="submit">Looked at</button></form></td>{% endif %}</tr>
+  {% endfor %}
+</table></div>
+{% if may_operate and ph.error_total > 1 %}<form method="post" action="{{ url_for('console.resolve_platform_errors') }}" style="margin-top:var(--s2)"><button class="btn btn-outline btn-sm" type="submit">Mark all as looked at</button></form>{% endif %}
+<p class="ops-dim" style="margin-top:var(--s2)">Faults outside any company's CRM: the product's own pages, the console and Stripe's webhook. A company's own errors are on its page.</p>
+{% else %}<div class="con-empty">No unresolved platform errors.</div>{% endif %}
+
+<h3 class="ops-h">Usage this month</h3>
+{% if ph.usage %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Company</th><th>Texts</th><th>Nana</th><th>Setup chat</th><th>Lead searches</th></tr>
+  {% macro cell(c) %}<td>{% if c.state == 'over' %}<span class="ops-bad">{{ c.used }} / {{ c.limit }}</span>{% elif c.state == 'near' %}<span class="ops-badge ops-stale">{{ c.used }} / {{ c.limit }}</span>{% else %}{{ c.used }}{% if c.limit %}<span class="ops-dim"> / {{ c.limit }}</span>{% endif %}{% endif %}</td>{% endmacro %}
+  {% for r in ph.usage %}
+  <tr><td><a href="{{ url_for('console.company', slug=r.slug) }}">{{ r.name }}</a> <span class="ops-dim">{{ r.plan }}</span></td>{{ cell(r.sms) }}{{ cell(r.nana) }}{{ cell(r.setup) }}{{ cell(r.searches) }}</tr>
+  {% endfor %}
+  <tr><td><strong>All companies</strong></td><td><strong>{{ ph.usage_totals.sms }}</strong></td><td><strong>{{ ph.usage_totals.nana }}</strong></td><td><strong>{{ ph.usage_totals.setup }}</strong></td><td><strong>{{ ph.usage_totals.searches }}</strong></td></tr>
+</table></div>
+<p class="ops-dim" style="margin-top:var(--s2)">Counts against each company's monthly limit, busiest first. Amber is past 80%, red is at the limit.
+  These are calls, not dollars: what each one costs is on the provider's own dashboard (Twilio, Anthropic, Google).</p>
+{% else %}<div class="con-empty">No usage recorded yet this month.</div>{% endif %}
+
+<h3 class="ops-h" id="switches">Switches</h3>
+<div class="ops-card">
+  <p class="ops-dim" style="margin:0 0 var(--s3)">Emergency controls for the whole product. Everything is on unless it says otherwise. A change takes effect within a few seconds and is written to the Record.</p>
+  {% for s in ph.switches %}
+  <div style="display:flex;gap:var(--s4);align-items:center;flex-wrap:wrap;padding:var(--s3) 0;border-top:1px solid var(--line-soft)">
+    <div style="flex:1;min-width:240px"><strong>{{ s.label }}</strong>
+      <span class="ops-badge {{ 'ops-ok' if s.on else 'ops-closed' }}" style="margin-left:var(--s2)">{{ 'on' if s.on else 'OFF' }}</span>
+      <div class="ops-dim">{{ s.blurb }}</div>
+      {% if s.caution %}<div class="ops-bad">{{ s.caution }}</div>{% endif %}
+      {% if s.held_by_env %}<div class="ops-bad">Closed by the SIGNUPS_OPEN=0 environment setting. The console cannot reopen it.</div>{% endif %}
+      {% if s.by and not s.on %}<div class="ops-dim">Turned off by {{ s.by }}{{ ', ' ~ s.at.strftime('%d %b %H:%M') if s.at }}</div>{% endif %}</div>
+    {% if may_operate %}
+    <form method="post" action="{{ url_for('console.platform_switch') }}"
+          {% if s.on %}onsubmit="return confirm('Turn off {{ s.label }} for the whole product?')"{% endif %}>
+      <input type="hidden" name="key" value="{{ s.key }}"><input type="hidden" name="on" value="{{ '0' if s.on else '1' }}">
+      <button class="btn {{ 'btn-outline' if s.on else '' }} btn-sm" type="submit">{{ 'Turn off' if s.on else 'Turn on' }}</button>
+    </form>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<h3 class="ops-h">Product email</h3>
 {% if not mail.applies %}
 <p class="ops-dim">This deployment is not the hosted product, so there is no product email.</p>
 {% else %}
