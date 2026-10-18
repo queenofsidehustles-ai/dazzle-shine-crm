@@ -37,7 +37,7 @@ def page():
     prefill_q = (request.args.get('q') or '').strip()
     return render_template('admin/assistant.html',
                            name=assistant.NAME,
-                           configured=bool(assistant.os.environ.get('OPENROUTER_API_KEY')),
+                           configured=assistant.configured(),
                            left=assistant.remaining(),
                            limit=assistant.MONTHLY_LIMIT,
                            real_voice=speech.configured(),

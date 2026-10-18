@@ -90,10 +90,11 @@ def system_prompt(profile):
         'a complaint, how to price a recurring clean — you may simply know. '
         'Say it plainly. Say "typically" or "in most areas" where it varies, '
         'and never dress general knowledge up as a fact about their books.\n'
-        '3. Call several tools if the question needs them. Look at what comes '
-        'back before deciding what else to ask for.\n'
-        '4. When you have enough, answer. Do not narrate what you are about '
-        'to do.\n\n'
+        '3. Call several tools if the question needs them -- independent '
+        'lookups together in one turn, at most four at a time. Look at what '
+        'comes back before deciding what else to ask for.\n'
+        '4. Write nothing before or between tool calls. When you have enough, '
+        'write only the final answer.\n\n'
 
         'WHAT YOU CANNOT DO\n'
         'You cannot text anybody and cannot charge a card, ever. You can offer '
@@ -102,6 +103,7 @@ def system_prompt(profile):
         'sent, texted, booked or charged anything.\n\n'
 
         'STYLE\n'
+        'Plain text only: no markdown, no bold, no bullet symbols. '
         'Short paragraphs, plain words, no headings, no numbered lists, no '
         'exclamation marks, no motivational filler. Name the actual customers, '
         'jobs and companies you found rather than talking in general terms. '
@@ -117,6 +119,10 @@ def run(question, history=None, api_key=None):
     if demo_guard.active():
         # The main path every question to Nana takes: no platform key for the demo.
         return {'say': assistant.TROUBLE['demo']}
+    import llm
+    if llm.ready():
+        return run_claude(question, history=history)
+
     key = assistant._api_key(api_key)
     if not key:
         return {'say': assistant.TROUBLE['not-configured']}
@@ -211,6 +217,188 @@ def run(question, history=None, api_key=None):
             })
 
     # Out of steps. Say what was found rather than nothing at all.
+    return _finish(_plain(seen) or 'I could not get to the bottom of that one.',
+                   seen + profile, question, proposal)
+
+
+# ---------------------------------------------------------------------------
+# The same loop, on the Claude API
+# ---------------------------------------------------------------------------
+#
+# Same tools, same rules, same figure check -- only the conversation format
+# differs. Claude takes tools as {name, description, input_schema}, answers
+# with tool_use blocks, and expects each one answered with a tool_result in
+# the next user turn. Its whole reply (thinking included) goes back as-is.
+
+# Gunicorn kills a request at 60 seconds; stop looping well before that.
+DEADLINE_SECONDS = 50
+
+# Thinking and the answer share this budget; it is a ceiling, not a charge.
+MAX_TOKENS = 6000
+
+
+# What each argument accepts. A bare "period: string" left the model guessing
+# at wording the lookup code would not recognise, and a guess that misses
+# quietly answers for the wrong dates.
+ARG_HINTS = {
+    'period': {'type': 'string', 'description':
+               'One of: "this month", "last month", "this week", "this year".'},
+    'day': {'type': 'string', 'enum': ['today', 'tomorrow', 'yesterday']},
+    'name': {'type': 'string', 'description': 'A person or customer name, as the owner said it.'},
+    'customer': {'type': 'string', 'description': 'The customer whose job it is.'},
+    'about': {'type': 'string', 'description': 'What the email should say, in the owner\'s words.'},
+    'to': {'type': 'string', 'description': 'Who it is for: a customer, lead or company name.'},
+}
+
+
+def claude_tools():
+    out = []
+    for name, (_fn, what, args) in assistant.TOOLS.items():
+        out.append({'name': name, 'description': what,
+                    'input_schema': {'type': 'object',
+                                     'properties': {a: dict(ARG_HINTS.get(a, {'type': 'string'}))
+                                                    for a in args}}})
+    if out:
+        # The tool list is the same on every call, so it is cached with the
+        # system prompt rather than paid for in full each step.
+        out[-1]['cache_control'] = {'type': 'ephemeral'}
+    return out
+
+
+def _alternate(history):
+    """Stored history -> user/assistant turns that alternate and start with user."""
+    msgs = []
+    for m in history or []:
+        role, text = m.get('role'), (m.get('content') or '').strip()
+        if role not in ('user', 'assistant') or not text:
+            continue
+        if msgs and msgs[-1]['role'] == role:
+            msgs[-1]['content'] += '\n\n' + text
+        else:
+            msgs.append({'role': role, 'content': text})
+    while msgs and msgs[0]['role'] != 'user':
+        msgs.pop(0)
+    if msgs and msgs[-1]['role'] == 'user':
+        # The new question follows; two user turns in a row are not allowed.
+        msgs.pop()
+    return msgs
+
+
+def run_claude(question, history=None):
+    import time
+    import llm
+
+    question = (question or '').strip()
+    if not question:
+        return {'say': f'Ask {assistant.NAME} something.'}
+    # Today's date, so "this week" and "overdue" mean something. It sits in
+    # the profile so a date she repeats from it passes the figure check.
+    profile = assistant.business_profile() + [
+        f'Today is {assistant._today():%A %-d %B %Y}.']
+    system = llm.cached_system(system_prompt(profile))
+    messages = _alternate(history)
+    messages.append({'role': 'user', 'content': question[:1000]})
+    tools = claude_tools()
+    seen = []
+    final = ''         # what she wrote on the turn that ended the loop
+    proposal = None
+    deadline = time.monotonic() + DEADLINE_SECONDS
+
+    def ask_again(bad_line):
+        try:
+            fix = messages + [{'role': 'assistant', 'content': final or '...'},
+                              {'role': 'user', 'content': (
+                'This sentence states a figure about my business that no tool '
+                'gave you: "' + bad_line + '". Say the same thing again without '
+                'it. Either leave the number out, or make plain that it is a '
+                'target rather than something from my books. Everything else '
+                'in your answer was fine — keep it.')}]
+            left = deadline - time.monotonic()
+            if left < 5:
+                return ''
+            # Tools must be declared whenever tool_use blocks are in the
+            # history, even when she is not allowed to call one.
+            reply = llm.post({'model': llm.SMART_MODEL, 'max_tokens': MAX_TOKENS,
+                              'system': system, 'tools': tools,
+                              'tool_choice': {'type': 'none'}, 'messages': fix},
+                             timeout=min(25, left))
+            return llm.text_of(reply)
+        except Exception:
+            return ''
+
+    def answer_now():
+        """Out of steps, or a turn with no words: ask for the answer, no tools."""
+        left = deadline - time.monotonic()
+        if left < 5:
+            return ''
+        try:
+            reply = llm.post({'model': llm.SMART_MODEL, 'max_tokens': MAX_TOKENS,
+                              'system': system, 'tools': tools,
+                              'tool_choice': {'type': 'none'},
+                              'messages': messages + ([{'role': 'user', 'content':
+                                  'Answer my question now with what you found.'}]
+                                  if messages[-1]['role'] == 'assistant' else [])},
+                             timeout=min(25, left))
+            return llm.text_of(reply)
+        except Exception:
+            return ''
+
+    for step in range(MAX_STEPS):
+        left = deadline - time.monotonic()
+        if left < 5:
+            break
+        try:
+            reply = llm.post({'model': llm.SMART_MODEL, 'max_tokens': MAX_TOKENS,
+                              'system': system, 'tools': tools,
+                              'messages': messages}, timeout=min(30, left))
+        except llm.ClaudeError as e:
+            assistant._record(f'agent (Claude): {e}')
+            if seen:
+                break
+            return {'say': assistant.TROUBLE['unreachable' if isinstance(
+                e, llm.ClaudeUnreachable) else 'service-error']}
+
+        content = reply.get('content') or []
+        uses = [b for b in content if b.get('type') == 'tool_use']
+
+        if not uses or reply.get('stop_reason') == 'max_tokens':
+            # Only this turn's words are the answer. Text from earlier turns
+            # was her thinking out loud between lookups.
+            final = llm.text_of(reply) if not uses else ''
+            if not final:
+                final = answer_now()
+            if not final:
+                assistant._record(f'agent said nothing at step {step} '
+                                  f'(stop_reason={reply.get("stop_reason")})')
+                if not seen:
+                    return {'say': assistant.TROUBLE['service-error']}
+                break
+            return _finish(final, seen + profile, question, proposal,
+                           retry=ask_again)
+
+        messages.append({'role': 'assistant', 'content': content})
+        results = []
+        for i, b in enumerate(uses):
+            if i >= 4:
+                # Every call needs an answer or the next request is refused.
+                results.append({'type': 'tool_result', 'tool_use_id': b.get('id'),
+                                'content': 'Not run: too many at once.',
+                                'is_error': True})
+                continue
+            args = b.get('input') if isinstance(b.get('input'), dict) else {}
+            out, prop = _call_tool(b.get('name'), args)
+            if prop:
+                proposal = prop
+            if out:
+                seen.append(out)
+            results.append({'type': 'tool_result', 'tool_use_id': b.get('id'),
+                            'content': out or 'nothing found'})
+        messages.append({'role': 'user', 'content': results})
+
+    if not final:
+        final = answer_now()
+    if final:
+        return _finish(final, seen + profile, question, proposal, retry=ask_again)
     return _finish(_plain(seen) or 'I could not get to the bottom of that one.',
                    seen + profile, question, proposal)
 
@@ -375,12 +563,14 @@ def _plain(seen):
 
 
 def _is_profile(line):
-    return line.startswith(('Business name:', 'Based in:', 'Website:',
+    return line.startswith(('Today is ', 'Business name:', 'Based in:', 'Website:',
                             'Phone:', 'Services it books most:',
                             'It does commercial work'))
 
 
 def _wrap(said, proposal):
+    # The page shows text as text, so markdown would arrive as asterisks.
+    said = re.sub(r'\*\*(.+?)\*\*', r'\1', said or '')
     out = {'say': said}
     if proposal:
         out.update(proposal)
