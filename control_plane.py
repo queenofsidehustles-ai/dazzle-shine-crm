@@ -1638,6 +1638,17 @@ def log_console(engine, actor, action, target=None, detail=None):
         pass
 
 
+def console_log_for(engine, target, action=None, limit=1):
+    """The newest log lines about one target, optionally of one kind."""
+    q = select(console_log).where(console_log.c.target == target)
+    if action:
+        q = q.where(console_log.c.action == action)
+    with engine.connect() as conn:
+        return [dict(r) for r in conn.execute(
+            q.order_by(console_log.c.created_at.desc(), console_log.c.id.desc())
+            .limit(limit)).mappings()]
+
+
 def console_log_all(engine, limit=300):
     with engine.connect() as conn:
         rows = conn.execute(select(console_log).order_by(

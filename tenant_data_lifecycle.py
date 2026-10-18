@@ -72,6 +72,39 @@ def close_tenant(engine, slug, *, now=None):
     return lifecycle_state(engine, slug)
 
 
+def reopen_tenant(engine, slug, *, now=None):
+    """Undo a closure, while the data still exists. Never a purged tenant.
+
+    A closure the console can start has to be one it can take back, or one
+    mistaken click becomes an outage that only a database session can fix. The
+    company comes back **suspended**, not active: access stays denied until a
+    person deliberately reactivates it, so reopening never restores access by
+    itself. The closure timestamp is cleared, so a later closure starts a fresh
+    30-day clock rather than inheriting the old one.
+
+    Fails closed: anything other than a closed, not-yet-purged tenant is refused.
+    """
+    org = _org(engine, slug)
+    if not org:
+        raise LifecycleError(f'no tenant {slug!r}')
+    if org.get('purged_at'):
+        raise LifecycleError('a purged tenant cannot be reopened')
+    if org.get('status') != 'closed' or not org.get('closed_at'):
+        raise LifecycleError('only a closed tenant can be reopened')
+    if org.get('schema_name') != tenancy.schema_for(slug):
+        raise LifecycleError('control-plane schema assignment does not match tenant slug')
+    now = now or datetime.utcnow()
+    with engine.begin() as conn:
+        done = conn.execute(text(
+            "UPDATE public.organizations "
+            "SET status = 'suspended', suspended_at = :now, closed_at = NULL "
+            "WHERE slug = :slug AND status = 'closed' AND purged_at IS NULL"),
+            {'slug': slug, 'now': now}).rowcount
+    if not done:
+        raise LifecycleError('tenant lifecycle changed while reopening')
+    return lifecycle_state(engine, slug)
+
+
 def lifecycle_state(engine, slug):
     org = _org(engine, slug)
     if not org:
