@@ -247,9 +247,12 @@ as_owner('CREATE OR REPLACE FUNCTION {s}quote_issued_revision_owned() RETURNS tr
          'LANGUAGE plpgsql AS $$ BEGIN PERFORM 1 FROM "tenant_gone__next".commercial_quote_revision; '
          'RETURN NULL; END $$')
 r = owner.post('/quotes/new', base_url=HOST, data=dict(FORM, company='Broken Guard'))
-logged = rows("SELECT kind, path FROM {s}error_log WHERE path = '/quotes/new'")
+logged = rows("SELECT kind, path, message, traceback FROM {s}error_log WHERE path = '/quotes/new'")
 check(r.status_code == 500 and logged and logged[0]['kind'] in ('ProgrammingError', 'InvalidSchemaName'),
       'the crash it causes is on the company\'s errors page')
+kept = ' '.join(f'{x["message"]} {x["traceback"]}' for x in logged)
+check(not any(v in kept for v in ('Pat Private', 'pat@private.example', '1 Secret St')),
+      'without the customer details the failed write carried')
 sql("UPDATE {s}alembic_version SET version_num = '0031_audit_chain'")
 provisioning.migrate_schema(engine, SA)
 with engine.connect() as conn:
