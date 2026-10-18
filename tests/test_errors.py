@@ -50,6 +50,16 @@ def _boom2():
     raise KeyError('a different thing')
 
 
+@app.route('/_boom_db')
+def _boom_db():
+    # A write the database refuses, as the demo's broken guard did (a missing
+    # schema): the session is left needing a rollback before it can be used.
+    from models import CommercialQuote
+    db.session.add(CommercialQuote(company=None, contact_name='Pat Private',
+                                   email='pat@private.example', token='secret-link-token'))
+    db.session.flush()
+
+
 # One route per scenario below. The fingerprint is (endpoint, exception), so
 # reusing a path would land inside the 24-hour cooldown and send nothing —
 # the test would then pass by measuring silence.
@@ -276,5 +286,43 @@ finally:
 
 os.environ['BASE_DOMAIN'] = ''
 _tenancy._current.set('public')
+
+print('\n15. A crash in the database is recorded too, though it broke the session')
+# The error is written with the request's own session. A database error had
+# already broken it, so the write failed, was swallowed, and the most serious
+# crashes never reached the errors page or anyone's inbox.
+before = len(SENT)
+r = c.get('/_boom_db')
+check(r.status_code == 500, 'the visitor gets the clean 500 page')
+with app.app_context():
+    row = ErrorLog.query.filter_by(path='/_boom_db').first()
+    check(row is not None and row.kind == 'IntegrityError', 'and the fault is on the errors page')
+check(len(SENT) > before, 'and the owner is emailed about it')
+# The database's error quoted the row it refused: a customer's name, email and
+# link token. None of it is kept or emailed; the statement and columns are.
+with app.app_context():
+    row = ErrorLog.query.filter_by(path='/_boom_db').first()
+    kept = f'{row.message} {row.traceback} ' + ' '.join(m['html'] for m in MAIL)
+check(not any(v in kept for v in ('Pat Private', 'pat@private.example', 'secret-link-token'))
+      and 'commercial_quote' in row.message and '(values hidden)' in kept,
+      'and the values it quoted are not kept or emailed')
+
+# A commit that failed may still have landed; doing it again would count the
+# fault twice. Only the lookup in a broken session is retried.
+with app.app_context():
+    sess = db.session()
+    real = sess.commit
+    def landed_then_raised():
+        real()
+        raise RuntimeError('connection lost after commit')
+    sess.commit = landed_then_raised
+    try:
+        ErrorLog.record(kind='X', message='once', path='/_once', fingerprint='commit-once')
+    finally:
+        sess.commit = real
+    db.session.rollback()
+    row = ErrorLog.query.filter_by(fingerprint='commit-once').all()
+    check(len(row) == 1 and row[0].count == 1, 'a commit that landed and then raised is counted once')
+
 
 print('\n\n✅ All error-reporting tests passed.\n')

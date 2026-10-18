@@ -48,6 +48,7 @@ nothing here depends on an account with anybody.
 """
 import hashlib
 import os
+import re
 import traceback as tb_module
 from datetime import datetime, timedelta
 
@@ -55,6 +56,26 @@ ALERT_COOLDOWN = timedelta(hours=24)
 
 # Errors that mean "somebody typed a bad URL", not "the software is broken".
 IGNORED_STATUS = {400, 401, 403, 404, 405, 408, 410, 429}
+
+
+# A database error's text carries the values it was writing: SQLAlchemy adds
+# the statement's parameters, Postgres the offending row or key. On a quote
+# that is a customer's name, email, address and link token -- exactly what
+# this log promises not to keep, and it is emailed. The statement and the
+# column names stay; the values go.
+_HIDDEN = '(values hidden)'
+_REDACT = (
+    (re.compile(r'^\[parameters: .*$', re.M), f'[parameters: {_HIDDEN}]'),
+    (re.compile(r'(Failing row contains ).*$', re.M), rf'\1{_HIDDEN}'),
+    (re.compile(r'(Key \([^)]*\)=)\(.*\)', re.M), rf'\1{_HIDDEN}'),
+)
+
+
+def redact(text):
+    """`text` with any values a database error quoted taken out."""
+    for pattern, replacement in _REDACT:
+        text = pattern.sub(replacement, text or '')
+    return text
 
 
 def fingerprint(endpoint, exc):
@@ -121,12 +142,12 @@ def capture(exc, path=None, method=None):
     except Exception:
         pass
 
-    trace = ''.join(tb_module.format_exception(
-        type(exc), exc, exc.__traceback__))[-6000:]
+    trace = redact(''.join(tb_module.format_exception(
+        type(exc), exc, exc.__traceback__)))[-6000:]
 
     row, is_new = ErrorLog.record(
         kind=type(exc).__name__,
-        message=str(exc)[:400],
+        message=redact(str(exc))[:400],
         path=(path or '')[:300],
         method=(method or '')[:10],
         endpoint=endpoint[:120],

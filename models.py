@@ -2366,12 +2366,24 @@ class ErrorLog(db.Model):
     @staticmethod
     def record(kind, message, path='', method='', endpoint='', who='',
                traceback='', fingerprint=None, return_new=False):
-        """Add an occurrence. Returns the row, or (row, is_new)."""
+        """Add an occurrence. Returns the row, or (row, is_new).
+
+        Written with the request's own session. When the error was the
+        database refusing something, that session is already broken and its
+        first query fails; the work it held is lost either way, so it is
+        rolled back and the lookup tried once more. Only the lookup: a commit
+        that failed may still have landed, and doing it again would count the
+        fault twice. Without this, the most serious crashes were the ones
+        never recorded."""
         from extensions import db as _db
         fp = fingerprint or hashlib.sha256(
             f'{endpoint}|{kind}|{path}'.encode()).hexdigest()[:32]
         try:
-            row = ErrorLog.query.filter_by(fingerprint=fp).first()
+            try:
+                row = ErrorLog.query.filter_by(fingerprint=fp).first()
+            except Exception:
+                _db.session.rollback()
+                row = ErrorLog.query.filter_by(fingerprint=fp).first()
             is_new = row is None
             if row is None:
                 row = ErrorLog(fingerprint=fp, kind=kind, message=message,
