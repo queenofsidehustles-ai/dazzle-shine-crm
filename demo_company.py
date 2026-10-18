@@ -77,10 +77,10 @@ COMPANY = {
 OWNER = ('Sarah Mitchell', 'sarah@brightnest.example', 'owner')
 OPS = ('Priya Shah', 'priya@brightnest.example', 'dispatcher')
 RNG_SEED = 20260926
-# BrightNest charges 20% above Akye's starting price list: Sarah raised her
+# BrightNest charges 12% above Akye's starting price list: Sarah raised her
 # prices and sells more add-ons. Cleaner pay is hours x labor rate, so it does
 # not move with price -- the lift lands in profit, not in pay.
-PRICE_LIFT = 1.20
+PRICE_LIFT = 1.12
 BIZ_TZ = COMPANY['timezone']
 
 # name, email, phone digits, level, language, color, months on the team.

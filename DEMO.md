@@ -102,7 +102,7 @@ Run it after people have used the demo: failures show what they changed.
 | Customers | 52: weekly, bi-weekly and monthly plans, occasional, one-time, four brand new, three gone quiet, two who owe money |
 | Jobs | 188: about 156 completed over five months, 5 today, 24 upcoming |
 | Money | 156 invoices, 2 overdue; card, Zelle, cash and check payments with tips; monthly card fees; recurring and one-off expenses |
-| Prices | The price list and add-ons are Akye's starting list lifted 20% (`PRICE_LIFT` in `demo_company.py`). Cleaner pay is hours × labor rate, so it does not move: net profit is about $23.1k (40.8% margin) on $56.7k revenue |
+| Prices | The price list and add-ons are Akye's starting list lifted 12% (`PRICE_LIFT` in `demo_company.py`). Cleaner pay is hours × labor rate, so it does not move: net profit is about $19.5k (36.8% margin) on $53.1k revenue |
 | Pay | Cleaner pay goes out on the Friday after each job; anything since last Friday is still waiting |
 | Pipeline | 22 leads (new, contacted, won, lost), 2 commercial accounts, 3 commercial quotes |
 | Reviews | 20, averaging 4.7 |
