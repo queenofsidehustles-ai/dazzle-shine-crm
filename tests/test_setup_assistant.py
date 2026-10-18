@@ -49,7 +49,7 @@ H = {'Origin': 'http://localhost'}
 SCRIPT, SENT = [], []
 
 
-def fake_post(body):
+def fake_post(body, timeout=20):
     SENT.append(body)
     return SCRIPT.pop(0) if SCRIPT else {'type': 'error', 'error': {'message': 'empty'}}
 
@@ -215,10 +215,55 @@ msgs = setup_assistant._api_history([
 check(msgs[0]['role'] == 'user', 'starts with the owner')
 check([m['role'] for m in msgs] == ['user', 'assistant'], 'repeated turns are merged')
 
-print('\n11. Start over clears the chat')
-c.post('/settings/getting-started/assistant/reset', headers=H)
+print('\n11. The conversation lives in the database, not the login cookie')
+with app.app_context():
+    BusinessSetting.set(setup_assistant._month_key(), '0')
+    db.session.commit()
 with c.session_transaction() as s:
-    check(setup_assistant.SESSION_KEY not in s, 'conversation forgotten')
+    check(not any('setup' in k for k in s.keys()), 'nothing chat-related in the cookie')
+with app.test_request_context():
+    chat = setup_assistant.load_chat()
+check(any(m.get('role') == 'user' for m in chat), 'the chat was saved server-side')
+done_cards = [x for m in chat for x in (m.get('cards') or [])
+              if x.get('kind') == 'confirm' and x.get('done')]
+check(done_cards and all(x['done'].startswith('✅') for x in done_cards),
+      'a saved card remembers it was saved, even after a second press')
+check(any(m.get('hidden') for m in chat), 'the button press is noted as hidden context')
+r = c.get('/settings/getting-started')
+check(b'pressed the button' in r.data and b'm.hidden' in r.data,
+      'hidden turns are in the data but the page skips them')
+
+print('\n12. Replies the API really sends')
+# Text alongside the tool call, then an empty turn afterwards.
+SCRIPT[:] = [{'content': [{'type': 'text', 'text': 'Here is the card.'},
+                          {'type': 'tool_use', 'id': 'a', 'name': 'get_prices', 'input': {}}],
+              'stop_reason': 'tool_use'},
+             {'content': [], 'stop_reason': 'end_turn'}]
+out = c.post('/settings/getting-started/assistant/ask', json={'q': 'prices?'}, headers=H).get_json()
+check(out['say'] == 'Here is the card.', 'text written before the tool call is kept')
+
+SCRIPT[:] = [{'content': [{'type': 'tool_use', 'id': f'u{i}', 'name': 'get_prices', 'input': {}}
+                          for i in range(6)], 'stop_reason': 'tool_use'},
+             say('ok')]
+c.post('/settings/getting-started/assistant/ask', json={'q': 'x'}, headers=H)
+results = SENT[-1]['messages'][-1]['content']
+check(len(results) == 6 and {r['tool_use_id'] for r in results} == {f'u{i}' for i in range(6)},
+      'every tool call gets an answer, even past the limit')
+check(sum(1 for r in results if r.get('is_error')) == 2, 'the extras are marked not run')
+
+SCRIPT[:] = [{'content': [{'type': 'tool_use', 'id': 'm', 'name': 'offer_add_customer',
+                           'input': {'name': 'Ri'}}], 'stop_reason': 'max_tokens'}]
+out = c.post('/settings/getting-started/assistant/ask', json={'q': 'x'}, headers=H).get_json()
+check(not out['cards'], 'a reply cut off mid-tool-call runs nothing')
+
+with app.test_request_context():
+    text, card = setup_assistant.tool_offer_customer(name='Rita', zip_code='32827-12345678')
+    check(card is None and 'too long' in text, 'a value too long for its column is refused')
+
+print('\n13. Start over clears the chat')
+c.post('/settings/getting-started/assistant/reset', headers=H)
+with app.test_request_context():
+    check(setup_assistant.load_chat() == [], 'conversation forgotten')
 
 if failures:
     print(f'\n❌ {len(failures)} setup assistant check(s) failed')

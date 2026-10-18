@@ -48,12 +48,42 @@ MONTHLY_LIMIT = int(os.environ.get('SETUP_ASSISTANT_MONTHLY_LIMIT') or 80)
 
 # Model calls within one message: look at progress, offer a card, answer.
 MAX_STEPS = 5
+DEADLINE_SECONDS = 50
 
 # Conversation carried into each call. Enough for "that's my cell" to mean
 # something; short enough that a long chat does not become a long bill.
 HISTORY_MESSAGES = 14
 
-SESSION_KEY = 'setup_chat'
+# The conversation is kept in the database, not the login cookie: a cookie
+# over 4KB is silently dropped by the browser, and the login goes with it.
+MAX_KEPT = 30
+
+
+def _chat_key():
+    from flask import session
+    return f'setup_chat_{session.get("user_id") or "owner"}'
+
+
+def load_chat():
+    try:
+        chat = json.loads(_setting(_chat_key()) or '[]')
+    except ValueError:
+        chat = []
+    return chat if isinstance(chat, list) else []
+
+
+def save_chat(chat):
+    from extensions import db
+    from models import BusinessSetting
+    BusinessSetting.set(_chat_key(), json.dumps(chat[-MAX_KEPT:]))
+    db.session.commit()
+
+
+def clear_chat():
+    from extensions import db
+    from models import BusinessSetting
+    BusinessSetting.set(_chat_key(), '')
+    db.session.commit()
 
 
 def api_key():
@@ -190,7 +220,7 @@ def tool_prices():
 _PHONE_DIGITS = re.compile(r'\d')
 
 
-def _clean(v, n=200):
+def _clean(v, n=300):
     return (str(v or '')).strip()[:n]
 
 
@@ -201,6 +231,20 @@ def _phone_ok(v):
 def _email_ok(v):
     from notifications import looks_like_email
     return looks_like_email(v)
+
+
+# The database columns these land in. A value longer than its column fails on
+# Postgres after the card's token is spent, so it is refused before the card.
+CLIENT_LIMITS = {'name': 100, 'phone': 20, 'email': 120, 'address': 200,
+                 'city': 50, 'zip_code': 10}
+STAFF_LIMITS = {'name': 100, 'phone': 20, 'email': 120}
+
+
+def _too_long(vals, limits):
+    for k, cap in limits.items():
+        if len(vals.get(k) or '') > cap:
+            return f'Not offered: the {k.replace("_", " ")} is too long (max {cap} characters).'
+    return ''
 
 
 def _offer(action, payload, title, lines, label):
@@ -268,9 +312,12 @@ def tool_offer_prices(two_bed_two_bath_price=''):
 
 def tool_offer_cleaner(name='', phone='', email=''):
     from blueprints.staff import _name_taken
-    name, phone, email = _clean(name, 100), _clean(phone, 40), _clean(email).lower()
+    name, phone, email = _clean(name), _clean(phone), _clean(email).lower()
     if not name:
         return 'Not offered: a cleaner needs a name.', None
+    long = _too_long({'name': name, 'phone': phone, 'email': email}, STAFF_LIMITS)
+    if long:
+        return long, None
     if phone and not _phone_ok(phone):
         return f'Not offered: "{phone}" does not look like a full phone number.', None
     if email and not _email_ok(email):
@@ -293,11 +340,14 @@ def tool_offer_cleaner(name='', phone='', email=''):
 
 
 def tool_offer_customer(name='', phone='', email='', address='', city='', zip_code=''):
-    vals = {'name': _clean(name, 120), 'phone': _clean(phone, 40),
-            'email': _clean(email).lower(), 'address': _clean(address),
-            'city': _clean(city, 100), 'zip_code': _clean(zip_code, 20)}
+    vals = {'name': _clean(name, 300), 'phone': _clean(phone, 300),
+            'email': _clean(email, 300).lower(), 'address': _clean(address, 300),
+            'city': _clean(city, 300), 'zip_code': _clean(zip_code, 300)}
     if not vals['name']:
         return 'Not offered: a customer needs a name.', None
+    long = _too_long(vals, CLIENT_LIMITS)
+    if long:
+        return long, None
     if vals['phone'] and not _phone_ok(vals['phone']):
         return f'Not offered: "{vals["phone"]}" does not look like a full phone number.', None
     if vals['email'] and not _email_ok(vals['email']):
@@ -475,9 +525,9 @@ TROUBLE = {
 # The loop
 # ---------------------------------------------------------------------------
 
-def _post(body):
+def _post(body, timeout=20):
     import requests
-    r = requests.post(API_URL, timeout=45, json=body, headers={
+    r = requests.post(API_URL, timeout=timeout, json=body, headers={
         'x-api-key': api_key(),
         'anthropic-version': API_VERSION,
         'content-type': 'application/json',
@@ -520,35 +570,63 @@ def ask(message, history=None, opening=''):
     system = system_prompt(opening)
     tools = tool_schema()
     cards = []
+    said = []          # text from every step: Claude often writes its sentence
+                       # alongside the tool call, then says nothing after it
+    # Gunicorn kills a request at 60 seconds. Stop well before that.
+    import time
+    deadline = time.monotonic() + DEADLINE_SECONDS
+
+    def finish():
+        if said:
+            return {'say': '\n\n'.join(said), 'cards': cards}
+        if cards:
+            return {'say': 'Check the card below.', 'cards': cards}
+        return {'say': TROUBLE['error'], 'cards': cards}
 
     for _step in range(MAX_STEPS):
+        left = deadline - time.monotonic()
+        if left < 5:
+            break
         try:
             resp = _post({'model': MODEL, 'max_tokens': 1500, 'system': system,
-                          'tools': tools, 'messages': messages})
+                          'tools': tools, 'messages': messages},
+                         timeout=min(20, left))
         except Exception as e:
             assistant._record(f'setup assistant could not reach Claude: {type(e).__name__}')
+            if said or cards:
+                return finish()
             return {'say': TROUBLE['unreachable'], 'cards': cards}
 
         if not isinstance(resp, dict) or resp.get('type') == 'error':
-            err = (resp or {}).get('error') if isinstance(resp, dict) else None
+            err = resp.get('error') if isinstance(resp, dict) else None
             assistant._record('setup assistant: ' + str((err or {}).get('message', resp))[:200])
+            if said or cards:
+                return finish()
             return {'say': TROUBLE['error'], 'cards': cards}
 
         content = resp.get('content') or []
-        uses = [b for b in content if b.get('type') == 'tool_use']
         text = '\n\n'.join((b.get('text') or '').strip() for b in content
-                           if b.get('type') == 'text' and (b.get('text') or '').strip())
+                            if b.get('type') == 'text' and (b.get('text') or '').strip())
+        if text:
+            said.append(text)
+        uses = [b for b in content if b.get('type') == 'tool_use']
 
-        if not uses:
-            if not text:
+        # Cut off mid-reply: a tool call written halfway has half its input.
+        if resp.get('stop_reason') == 'max_tokens' or not uses:
+            if not said and not cards:
                 assistant._record(f'setup assistant said nothing '
                                   f'(stop_reason={resp.get("stop_reason")})')
-                return {'say': TROUBLE['error'], 'cards': cards}
-            return {'say': text, 'cards': cards}
+            return finish()
 
         messages.append({'role': 'assistant', 'content': content})
         results = []
-        for b in uses[:4]:
+        for i, b in enumerate(uses):
+            # Every tool_use needs an answer or the next call is rejected.
+            if i >= 4:
+                results.append({'type': 'tool_result', 'tool_use_id': b.get('id'),
+                                'content': 'Not run: too many at once. Do one thing at a time.',
+                                'is_error': True})
+                continue
             out, card = _run_tool(b.get('name'), b.get('input'))
             if card:
                 cards.append(card)
@@ -556,9 +634,7 @@ def ask(message, history=None, opening=''):
                             'content': out or 'done'})
         messages.append({'role': 'user', 'content': results})
 
-    if cards:
-        return {'say': 'Check the card below.', 'cards': cards}
-    return {'say': TROUBLE['error'], 'cards': cards}
+    return finish()
 
 
 # ---------------------------------------------------------------------------
