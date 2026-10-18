@@ -38,7 +38,7 @@ Both are checked below.
 `certify.py evidence` (also read-only) works through every company. It checks that:
 - every revision's terms still hash to its stored hash;
 - every answer and agreement names its revision's hash;
-- every accepted quote has its answer and account;
+- every accepted quote has its answer and account. A quote accepted before answers were recorded (migration 0029) kept only a status and a time; it is listed as an *exception* when no terms were ever frozen for it and it was accepted before the company's first revision or answer. Otherwise it is a problem;
 - every quote accepted since agreements began also has its agreement. Older ones are listed as *exceptions*, not problems: their answer is their record;
 - there is at most one accepted amendment per quote;
 - every company's audit chain recomputes from its rows.

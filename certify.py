@@ -28,7 +28,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
@@ -43,7 +43,7 @@ def _emit(result, out, ok_line):
     problems = [p for section in result.get('sections', []) for p in section.get('problems', [])]
     problems += result.get('problems', [])
     result['passed'] = not problems
-    result['checked_at'] = datetime.utcnow().isoformat() + 'Z'
+    result['checked_at'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
     if out:
         with open(out, 'w') as fh:
             json.dump(result, fh, indent=2, default=str)
