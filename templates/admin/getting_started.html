@@ -13,6 +13,10 @@
     <a href="{{ url_for('bookings.calendar') }}" class="btn-primary">Open the calendar</a>
   </div>
 {% else %}
+  {# The chat comes first when it is switched on: answering a question is an
+     easier first move than choosing a page. The list stays underneath for
+     anybody who would rather click. #}
+  {% if chat %}{% include "admin/_setup_assistant.html" %}{% endif %}
   <div class="card" style="max-width:660px">
     <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px">
       <h2 style="margin:0">Getting started</h2>
