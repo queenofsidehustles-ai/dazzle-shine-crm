@@ -27,6 +27,8 @@ a mistake here is an error, not a change.
 Each returns a dict with a list of `problems` (strings naming ids, never
 customer data); an empty list is a pass.
 """
+from datetime import datetime
+
 from sqlalchemy import text
 
 import quote_evidence
@@ -148,6 +150,11 @@ def schema_report(conn, schema):
     return out
 
 
+# When migration 0029 reached akye-stable (#91), in UTC as responded_at is
+# stored. No acceptance before it can have recorded an answer.
+ANSWERS_RECORDED_FROM = datetime(2026, 10, 15, 21, 45)
+
+
 def _rows(conn, schema, sql, **params):
     return conn.execute(text(sql.format(s=f'"{schema}".')), params).mappings().all()
 
@@ -216,10 +223,12 @@ def reconcile(conn, schema):
             # Quotes accepted before answers were recorded (migration 0029)
             # kept only a status and a time: no terms were frozen for them,
             # and every acceptance since freezes a revision first. One with a
-            # revision, or answered after this company's first evidence, is a
-            # missing record.
+            # revision, or answered after 0029 shipped or after this company's
+            # first evidence, is a missing record -- a company with no evidence
+            # at all is no proof of age.
             if (resp is None and q['issued_revision_id'] is None and q['id'] not in frozen
-                    and q['responded_at'] and (first_evidence is None or q['responded_at'] < first_evidence)):
+                    and q['responded_at'] and q['responded_at'] < ANSWERS_RECORDED_FROM
+                    and (first_evidence is None or q['responded_at'] < first_evidence)):
                 ex.append(f'quote {q["id"]}: accepted before answers were recorded; '
                           'its status and time are its only record')
             else:

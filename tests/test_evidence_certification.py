@@ -179,17 +179,20 @@ dump = json.dumps(ev)
 check('Pat Private' not in dump and 'pat@private.example' not in dump and '1 Secret St' not in dump,
       'its output names no customer')
 # An acceptance from before answers were recorded (0029) left only a status
-# and a time; production had two. One without its answer since is missing.
-sql("INSERT INTO {s}commercial_quote (company, contact_name, email, token, status, responded_at) "
-    "VALUES ('Old Co', 'Old', 'old@example.com', 'legacy-token', 'accepted', now() - interval '90 days')")
-check(certify.main(['evidence', '--company', A, '--out', f'{out}/e.json']) == 0
-      and any('accepted before answers were recorded' in e
-              for e in json.load(open(f'{out}/e.json'))['sections'][0]['exceptions']),
-      'a quote accepted before answers were recorded is listed, not failed')
-sql("UPDATE {s}commercial_quote SET responded_at = now() WHERE token = 'legacy-token'")
-check(certify.main(['evidence', '--company', A]) == 1,
-      'one accepted after this company\'s first evidence, with no answer, fails')
-sql("DELETE FROM {s}commercial_quote WHERE token = 'legacy-token'")
+# and a time; production had two. One without its answer since is missing,
+# in a company with no evidence at all too: that is no proof of age.
+for schema, slug in ((SA, A), (SD, DEMO)):
+    sql("INSERT INTO {s}commercial_quote (company, contact_name, email, token, status, responded_at) "
+        "VALUES ('Old Co', 'Old', 'old@example.com', 'legacy-token', 'accepted', '2026-07-06 12:29')",
+        schema=schema)
+    check(certify.main(['evidence', '--company', slug, '--out', f'{out}/e.json']) == 0
+          and any('accepted before answers were recorded' in e
+                  for e in json.load(open(f'{out}/e.json'))['sections'][0]['exceptions']),
+          f'{slug}: a quote accepted before answers were recorded is listed, not failed')
+    sql("UPDATE {s}commercial_quote SET responded_at = now() WHERE token = 'legacy-token'", schema=schema)
+    check(certify.main(['evidence', '--company', slug]) == 1,
+          f'{slug}: one accepted since, with no answer, fails')
+    sql("DELETE FROM {s}commercial_quote WHERE token = 'legacy-token'", schema=schema)
 with engine.connect() as conn, conn.begin():
     evidence_check.read_only(conn)
     try:
