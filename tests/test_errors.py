@@ -50,6 +50,15 @@ def _boom2():
     raise KeyError('a different thing')
 
 
+@app.route('/_boom_db')
+def _boom_db():
+    # A write the database refuses, as the demo's broken guard did (a missing
+    # schema): the session is left needing a rollback before it can be used.
+    from models import CommercialQuote
+    db.session.add(CommercialQuote(company=None, contact_name='x', email='x', token='t'))
+    db.session.flush()
+
+
 # One route per scenario below. The fingerprint is (endpoint, exception), so
 # reusing a path would land inside the 24-hour cooldown and send nothing —
 # the test would then pass by measuring silence.
@@ -276,5 +285,17 @@ finally:
 
 os.environ['BASE_DOMAIN'] = ''
 _tenancy._current.set('public')
+
+print('\n15. A crash in the database is recorded too, though it broke the session')
+# The error is written with the request's own session. A database error had
+# already broken it, so the write failed, was swallowed, and the most serious
+# crashes never reached the errors page or anyone's inbox.
+before = len(SENT)
+r = c.get('/_boom_db')
+check(r.status_code == 500, 'the visitor gets the clean 500 page')
+with app.app_context():
+    row = ErrorLog.query.filter_by(path='/_boom_db').first()
+    check(row is not None and row.kind == 'IntegrityError', 'and the fault is on the errors page')
+check(len(SENT) > before, 'and the owner is emailed about it')
 
 print('\n\n✅ All error-reporting tests passed.\n')

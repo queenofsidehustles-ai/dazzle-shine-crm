@@ -2366,36 +2366,49 @@ class ErrorLog(db.Model):
     @staticmethod
     def record(kind, message, path='', method='', endpoint='', who='',
                traceback='', fingerprint=None, return_new=False):
-        """Add an occurrence. Returns the row, or (row, is_new)."""
+        """Add an occurrence. Returns the row, or (row, is_new).
+
+        Written with the request's own session. When the error was the
+        database refusing something, that session is already broken and the
+        first try fails; the work it held is lost either way, so it is rolled
+        back and the error written on a second try. Without that, the most
+        serious crashes were the ones never recorded."""
         from extensions import db as _db
         fp = fingerprint or hashlib.sha256(
             f'{endpoint}|{kind}|{path}'.encode()).hexdigest()[:32]
-        try:
-            row = ErrorLog.query.filter_by(fingerprint=fp).first()
-            is_new = row is None
-            if row is None:
-                row = ErrorLog(fingerprint=fp, kind=kind, message=message,
-                               path=path, method=method, endpoint=endpoint,
-                               who=who, traceback=traceback, count=1)
-                _db.session.add(row)
-            else:
-                row.count = (row.count or 0) + 1
-                row.last_seen = datetime.utcnow()
-                row.message = message or row.message
-                row.who = who or row.who
-                if traceback:
-                    row.traceback = traceback
-                # A fault that comes back after being ticked off is not
-                # resolved, whatever anyone clicked.
-                row.resolved = False
-            _db.session.commit()
-            return (row, is_new) if return_new else row
-        except Exception:
+        for _ in range(2):
             try:
-                _db.session.rollback()
+                return ErrorLog._record(fp, kind, message, path, method, endpoint, who,
+                                        traceback, return_new)
             except Exception:
-                pass
-            return (None, False) if return_new else None
+                try:
+                    _db.session.rollback()
+                except Exception:
+                    pass
+        return (None, False) if return_new else None
+
+    @staticmethod
+    def _record(fp, kind, message, path, method, endpoint, who, traceback, return_new):
+        from extensions import db as _db
+        row = ErrorLog.query.filter_by(fingerprint=fp).first()
+        is_new = row is None
+        if row is None:
+            row = ErrorLog(fingerprint=fp, kind=kind, message=message,
+                           path=path, method=method, endpoint=endpoint,
+                           who=who, traceback=traceback, count=1)
+            _db.session.add(row)
+        else:
+            row.count = (row.count or 0) + 1
+            row.last_seen = datetime.utcnow()
+            row.message = message or row.message
+            row.who = who or row.who
+            if traceback:
+                row.traceback = traceback
+            # A fault that comes back after being ticked off is not
+            # resolved, whatever anyone clicked.
+            row.resolved = False
+        _db.session.commit()
+        return (row, is_new) if return_new else row
 
     @property
     def age(self):
