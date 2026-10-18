@@ -233,13 +233,14 @@ with engine.connect() as conn:
 # A guard whose body names a schema stops working once that schema is renamed
 # or gone -- the demo's did, built under a staging name. schema fails it, and
 # 0032 re-creates it naming none.
-as_owner('CREATE OR REPLACE FUNCTION {s}quote_issued_revision_owned() RETURNS trigger '
-         'LANGUAGE plpgsql AS $$ BEGIN PERFORM 1 FROM "tenant_gone__next".commercial_quote_revision; '
-         'RETURN NULL; END $$')
-with engine.connect() as conn:
-    p = evidence_check.schema_report(conn, SA)['problems']
-check(any('commercial_quote_issued_owned' in x and 'tenant_gone__next' in x for x in p),
-      'a guard naming another schema in its body fails schema')
+for named in ('"tenant_gone__next"', 'tenant_gone__next', 'public'):
+    as_owner('CREATE OR REPLACE FUNCTION {s}quote_issued_revision_owned() RETURNS trigger '
+             f'LANGUAGE plpgsql AS $$ BEGIN PERFORM 1 FROM {named}.commercial_quote_revision; '
+             'RETURN NULL; END $$')
+    with engine.connect() as conn:
+        p = evidence_check.schema_report(conn, SA)['problems']
+    check(any('commercial_quote_issued_owned' in x and named.strip('"') in x for x in p),
+          f'a guard naming another schema in its body ({named}) fails schema')
 sql("UPDATE {s}alembic_version SET version_num = '0031_audit_chain'")
 provisioning.migrate_schema(engine, SA)
 with engine.connect() as conn:

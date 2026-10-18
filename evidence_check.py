@@ -127,13 +127,22 @@ def schema_report(conn, schema):
         'WHERE n.nspname = :s AND NOT t.tgisinternal'), {'s': schema}).all()
     triggers = {(r[0], r[1]): r[2] for r in rows}
     required = set(required_triggers())
+    import tenancy
+    schemas = set(conn.execute(text(
+        "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg\\_%' "
+        "AND nspname <> 'information_schema'")).scalars())
     for table, name, _, fn, fn_schema, body in rows:
         if (table, name) not in required:
             continue
         # A guard whose function lives elsewhere, or names another schema in
         # its body, stops working when that schema is renamed or dropped --
-        # as the demo's did, built under a staging name (0032).
-        named = {m for m in re.findall(r'"([^"]+)"\s*\.', body or '')} - {schema}
+        # as the demo's did, built under a staging name (0032). Quoted, any
+        # qualifier is a schema; unquoted, one that is a schema or looks like
+        # a company's (NEW.id and r.id are not).
+        quoted = set(re.findall(r'"([^"]+)"\s*\.', body or ''))
+        bare = {m.lower() for m in re.findall(r'(?<![\w$".])([A-Za-z_][\w$]*)\s*\.', body or '')}
+        bare = {m for m in bare if m in schemas or m.startswith(tenancy.SCHEMA_PREFIX)}
+        named = (quoted | bare) - {schema}
         if fn_schema != schema or named:
             p.append(f'guard {name} on {table} runs {fn_schema}.{fn}(), which names '
                      f'{", ".join(sorted(named or {fn_schema}))}, not this schema')
