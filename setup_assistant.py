@@ -138,29 +138,85 @@ DONE_PROMPT = ('That\'s every setup step done. One more thing worth doing: '
 DONE_LINK = ('Connect payments', '/settings/connections')
 
 
+# Steps the owner chose to skip in the chat. Only the chat's order uses
+# this: the getting-started list still shows every unfinished step, so
+# skipping is "not now", never "pretend it is done".
+SKIPPED_KEY = 'setup_chat_skipped'
+
+
+def skipped():
+    return [k for k in _setting(SKIPPED_KEY).split(',') if k]
+
+
+def skip(step_key):
+    from extensions import db
+    from models import BusinessSetting
+    keys = skipped()
+    if step_key and step_key not in keys:
+        keys.append(step_key)
+    BusinessSetting.set(SKIPPED_KEY, ','.join(keys))
+    db.session.commit()
+
+
 def _next_step():
+    """The first unfinished step the owner has not skipped.
+
+    Once every unfinished step has been skipped, the skips are forgotten and
+    it starts again from the first unfinished one -- a chat that has run out
+    of things to say while setup is still incomplete is a dead end.
+    """
     import onboarding
-    return onboarding.progress().get('next')
+    steps = [s for s in onboarding.progress()['steps'] if not s['done']]
+    if not steps:
+        return None
+    gone = set(skipped())
+    for st in steps:
+        if st['key'] not in gone:
+            return st
+    try:
+        from extensions import db
+        from models import BusinessSetting
+        BusinessSetting.set(SKIPPED_KEY, '')
+        db.session.commit()
+    except Exception:
+        pass
+    return steps[0]
+
+
+def next_message(done_line=''):
+    """The chat's next turn: what to say, its buttons, and which step it is about.
+
+    Every step that is not finished gets a "Skip for now" button, so nobody is
+    stuck on a step they cannot or will not do today.
+    """
+    step = _next_step()
+    if step is None:
+        return ((done_line + ' ' + DONE_PROMPT).strip(),
+                [_link_card(*DONE_LINK)], 'done')
+    text = STEP_PROMPTS.get(step['key'], step.get('why') or '')
+    cards = []
+    link = STEP_LINKS.get(step['key'])
+    if link:
+        cards.append(_link_card(*link))
+    cards.append({'kind': 'skip', 'label': 'Skip for now', 'step': step['key']})
+    return (done_line + ' ' + text).strip(), cards, step['key']
 
 
 def nudge():
     """What to say next, and a button if the step lives on another page."""
-    step = _next_step()
-    if step is None:
-        return DONE_PROMPT, _link_card(*DONE_LINK)
-    text = STEP_PROMPTS.get(step['key'], step.get('why') or '')
-    link = STEP_LINKS.get(step['key'])
-    return text, (_link_card(*link) if link else None)
+    text, cards, _key = next_message()
+    links = [c for c in cards if c.get('kind') == 'link']
+    return text, (links[0] if links else None)
 
 
 def greeting():
-    text, link = nudge()
     opener = (f'Hi, I\'m {NAME}. I\'ll get you set up in a few minutes, one '
               f'question at a time. You can type your answers, ask me anything '
               f'about how Akye works, or skip a step.')
     if _next_step() is None:
         opener = f'Hi, I\'m {NAME}. You\'re all set up.'
-    return f'{opener}\n\n{text}', link
+    text, cards, key = next_message()
+    return f'{opener}\n\n{text}', cards, key
 
 
 def _link_card(label, href):

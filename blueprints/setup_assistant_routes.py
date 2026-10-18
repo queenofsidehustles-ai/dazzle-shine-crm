@@ -12,19 +12,47 @@ setup_assistant_bp = Blueprint('setup_assistant', __name__,
                                url_prefix='/settings/getting-started/assistant')
 
 
+def _last_step(chat):
+    """Which step the chat last asked about."""
+    for m in reversed(chat):
+        if m.get('role') == 'assistant' and m.get('step'):
+            return m['step']
+    return None
+
+
 def transcript():
-    """The conversation so far. Each entry: role, content, cards, hidden?
+    """The conversation so far. Each entry: role, content, cards, step?, hidden?
 
     Until the owner has said anything, the opening line is rebuilt on every
-    visit, so it asks about the step that is actually next rather than the one
-    that was next when the page was first opened.
+    visit, so it asks about the step that is actually next.
+
+    After that, the chat catches up with work done elsewhere. An owner who
+    leaves to share her booking page and ticks it off there comes back to a
+    chat that still asks about the booking page -- the step it asked about
+    is finished, but nothing told the chat. So when the next step has moved
+    on, Nana says so and asks the next question.
     """
     chat = setup_assistant.load_chat()
     if not any(m.get('role') == 'user' for m in chat):
-        text, link = setup_assistant.greeting()
-        chat = [{'role': 'assistant', 'content': text,
-                 'cards': [link] if link else []}]
+        text, cards, key = setup_assistant.greeting()
+        return [{'role': 'assistant', 'content': text, 'cards': cards, 'step': key}]
+    last = _last_step(chat)
+    nxt = setup_assistant._next_step()
+    now = nxt['key'] if nxt else 'done'
+    if last and last != now:
+        text, cards, key = setup_assistant.next_message(
+            'That step is done.' if _was_finished(last) else '')
+        chat = chat + [{'role': 'assistant', 'content': text, 'cards': cards, 'step': key}]
+        setup_assistant.save_chat(chat)
     return chat
+
+
+def _was_finished(step_key):
+    import onboarding
+    for s in onboarding.progress()['steps']:
+        if s['key'] == step_key:
+            return bool(s['done'])
+    return False
 
 
 @setup_assistant_bp.route('/ask', methods=['POST'])
@@ -52,7 +80,7 @@ def confirm():
     data = request.get_json(silent=True) or {}
     token = (data.get('token') or request.form.get('token') or '').strip()
     ok, said = setup_assistant.confirm(token)
-    follow, link = ('', None)
+    follow = ''
     chat = transcript()
     # The card remembers what happened to it, so after a reload it shows the
     # outcome instead of a button that would only say it is already done.
@@ -62,20 +90,41 @@ def confirm():
                     and not (c.get('done') or '').startswith('✅')):
                 # A second press on a saved card must not overwrite "saved".
                 c['done'] = ('✅ ' if ok else '⚠️ ') + said
+    cards = []
     if ok:
-        follow, link = setup_assistant.nudge()
+        follow, cards, key = setup_assistant.next_message()
         chat = chat + [
             # Context for the model, never shown as something the owner typed.
             {'role': 'user', 'content': f'(I pressed the button. {said})', 'hidden': True},
-            {'role': 'assistant', 'content': follow, 'cards': [link] if link else []},
+            {'role': 'assistant', 'content': follow, 'cards': cards, 'step': key},
         ]
     setup_assistant.save_chat(chat)
     import onboarding
     p = onboarding.progress()
     return jsonify({'ok': ok, 'say': said, 'follow': follow,
-                    'cards': [link] if link else [],
+                    'cards': cards,
                     'progress': {'done': p['done'], 'total': p['total'],
                                  'percent': p['percent']}})
+
+
+@setup_assistant_bp.route('/skip', methods=['POST'])
+@login_required
+@owner_required
+def skip():
+    """Not now. The chat moves on; the getting-started list keeps the step."""
+    data = request.get_json(silent=True) or {}
+    step = (data.get('step') or '').strip()
+    import onboarding
+    if step not in {s['key'] for s in onboarding.progress()['steps']}:
+        return jsonify({'ok': False, 'say': '', 'cards': []})
+    setup_assistant.skip(step)
+    text, cards, key = setup_assistant.next_message('No problem, we can come back to that.')
+    chat = transcript() + [
+        {'role': 'user', 'content': f'(I skipped the {step} step for now.)', 'hidden': True},
+        {'role': 'assistant', 'content': text, 'cards': cards, 'step': key},
+    ]
+    setup_assistant.save_chat(chat)
+    return jsonify({'ok': True, 'say': text, 'cards': cards})
 
 
 @setup_assistant_bp.route('/reset', methods=['POST'])
@@ -83,4 +132,9 @@ def confirm():
 @owner_required
 def reset():
     setup_assistant.clear_chat()
+    # Starting over brings skipped steps back too.
+    from extensions import db
+    from models import BusinessSetting
+    BusinessSetting.set(setup_assistant.SKIPPED_KEY, '')
+    db.session.commit()
     return jsonify({'ok': True})
