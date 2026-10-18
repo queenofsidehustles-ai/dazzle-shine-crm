@@ -1,5 +1,5 @@
-"""Lightweight text translation via OpenRouter (Claude Haiku) — reuses the
-same key/model as the Content Studio. Fails soft: returns the original text
+"""Lightweight text translation via Claude (the platform's Claude API credits),
+or OpenRouter when no Claude key is set. Fails soft: returns the original text
 if the API key is missing or the call errors, so messaging never breaks."""
 import os
 import requests
@@ -14,8 +14,9 @@ def translate(text, target='es'):
     import demo_guard
     if demo_guard.active():
         return text
+    import llm
     api_key = os.environ.get('OPENROUTER_API_KEY')
-    if not api_key:
+    if not api_key and not llm.ready():
         return text
     lang = _LANG.get(target, target)
     prompt = (
@@ -24,6 +25,13 @@ def translate(text, target='es'):
         f"friendly, and concise. If it is already in {lang}, return it unchanged. "
         f"Reply with ONLY the translation — no quotes, no notes.\n\n{text}"
     )
+    if llm.ready():
+        try:
+            return llm.complete('You translate short messages. Reply with only the translation.',
+                                prompt, max_tokens=1200, timeout=15) or text
+        except Exception:
+            if not api_key:
+                return text
     try:
         res = requests.post(
             'https://openrouter.ai/api/v1/chat/completions',

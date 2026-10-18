@@ -90,6 +90,14 @@ def _api_key(explicit=None):
     return (explicit or os.environ.get('OPENROUTER_API_KEY') or '').strip()
 
 
+def configured():
+    """Nana can answer: Claude is set up, or the older OpenRouter key is."""
+    import llm
+    # Whether a key is set, not whether this is the demo: the page has its
+    # own demo sentence, and the demo used to read as configured here.
+    return bool(llm.key() or os.environ.get('OPENROUTER_API_KEY'))
+
+
 # ---------------------------------------------------------------------------
 # The questions this business can answer
 # ---------------------------------------------------------------------------
@@ -558,8 +566,9 @@ def draft_email(about='', to='', api_key=None):
     except Exception:
         pass
 
+    import llm
     key = _api_key(api_key)
-    if not key:
+    if not key and not llm.ready():
         return {'say': 'I cannot write it — no writing key is set up on this account.'}
 
     import requests
@@ -584,13 +593,19 @@ def draft_email(about='', to='', api_key=None):
         '\n\nReply with a subject line on the first line, prefixed exactly '
         '"Subject: ", then a blank line, then the email body. No signature.')
     try:
-        r = requests.post(API_URL, timeout=25, headers={
-            'Authorization': f'Bearer {key}', 'Content-Type': 'application/json',
-        }, json={'model': MODEL, 'max_tokens': 320,
-                 'messages': [{'role': 'system', 'content': system},
-                              {'role': 'user', 'content': about[:400]}]})
-        body = r.json()['choices'][0]['message']['content'].strip()
-    except Exception:
+        if llm.ready():
+            # Room for thinking as well as the email: a 320-token cap that
+            # suited a non-thinking model can cut a thinking one off mid-word.
+            body = llm.complete(system, about[:400], max_tokens=1500).strip()
+        else:
+            r = requests.post(API_URL, timeout=25, headers={
+                'Authorization': f'Bearer {key}', 'Content-Type': 'application/json',
+            }, json={'model': MODEL, 'max_tokens': 320,
+                     'messages': [{'role': 'system', 'content': system},
+                                  {'role': 'user', 'content': about[:400]}]})
+            body = r.json()['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        _record(f'draft_email: {type(e).__name__}: {str(e)[:120]}')
         return {'say': 'Could not write it just then. Try again.'}
 
     # Split the subject back off. If the model ignored the instruction the
@@ -923,8 +938,8 @@ def _record(detail):
 # What the owner is told, by what actually went wrong. Never the same sentence
 # twice: each one points at a different thing to go and fix.
 TROUBLE = {
-    'not-configured': (f'{NAME} is not switched on yet. Add an OpenRouter key in '
-                       f'Settings and she will start answering.'),
+    'not-configured': (f'{NAME} is not switched on yet. Add a Claude API key '
+                       f'(ANTHROPIC_API_KEY) and she will start answering.'),
     'demo': (f'{NAME} is switched off in the demo — every question would be paid '
              f'for on a real AI service. In your own company she answers questions '
              f'about your jobs, customers and money.'),
