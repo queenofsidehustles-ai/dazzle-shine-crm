@@ -639,9 +639,12 @@ def health():
               for o in orgs if o.get('status') == 'closed' and o.get('closed_at')
               and not o.get('purged_at')]
     job_labels = [(key, label) for key, label, _b, _c in _automation_jobs()]
+    import llm
     return render_template(
         'console/health.html', orgs=[o for o in orgs if o['slug'] in snaps],
         snaps=snaps, job_labels=job_labels, mail=product.mail_status(),
+        ai={'key': bool(llm.key()), 'fast': llm.FAST_MODEL,
+            'smart': llm.SMART_MODEL},
         nudges=preview.get('plan') or [], names=names, closed=closed,
         may_operate=_may_operate(), me=request.console_user,
         counts=_counts(engine))
@@ -676,6 +679,26 @@ def test_email():
               f'the same as arrived.', 'success')
     else:
         flash(f'Not sent: {detail}', 'error')
+    return redirect(url_for('console.health'))
+
+
+@console_bp.route('/health/test-ai', methods=['POST'])
+@console_required
+def test_ai():
+    """Ask Claude one question, on the model this deployment is configured with.
+
+    Every other path swallows an API failure to keep a page working, which is
+    right for a customer and wrong for whoever has to know. This is the one
+    place the error is the answer.
+    """
+    import llm
+    engine = _engine()
+    me = request.console_user
+    ok, detail = llm.check()
+    control_plane.log_console(engine, me['email'], 'tested Claude',
+                              llm.SMART_MODEL, ('ok: ' if ok else 'failed: ') + detail[:300])
+    flash(detail if ok else f'Claude did not answer: {detail}',
+          'success' if ok else 'error')
     return redirect(url_for('console.health'))
 
 

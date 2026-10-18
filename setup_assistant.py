@@ -40,7 +40,7 @@ NAME = assistant.NAME
 
 API_URL = 'https://api.anthropic.com/v1/messages'
 API_VERSION = '2023-06-01'
-MODEL = os.environ.get('SETUP_ASSISTANT_MODEL', 'claude-haiku-5-5')
+MODEL = os.environ.get('SETUP_ASSISTANT_MODEL', 'claude-haiku-4-5')
 
 # Messages per company per month. Setup takes twenty or thirty; the cap is
 # there so one confused afternoon cannot spend somebody else's credits.
