@@ -16,7 +16,7 @@ def translate(text, target='es'):
         return text
     import llm
     api_key = os.environ.get('OPENROUTER_API_KEY')
-    if not api_key and not llm.ready():
+    if not llm.ai_enabled() or (not api_key and not llm.ready()):
         return text
     lang = _LANG.get(target, target)
     prompt = (

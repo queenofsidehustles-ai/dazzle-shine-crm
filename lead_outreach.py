@@ -241,6 +241,12 @@ def send_email(engine, lead, subject, body_template, sent_by):
 def send_text(engine, lead, body_template, sent_by, now_utc=None):
     """(ok, detail). Checked, sent from the product's own number, written down."""
     import control_plane
+    import platform_switches
+    # The console's Texting switch (platform_switches.py). Outreach goes straight
+    # to Twilio rather than through notifications.send_sms, so it has to check
+    # for itself: an emergency switch that left this path open would not be one.
+    if not platform_switches.is_on('sms'):
+        return False, 'Texting is switched off for the whole product. This was not sent.'
     block = sms_block(lead) or control_plane.number_text_block(engine, lead.get('phone'))
     if block:
         return False, block
