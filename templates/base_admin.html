@@ -216,7 +216,7 @@
       {% endif %}
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, msg in messages %}
-          <div class="flash flash-{{ category }}">{{ msg }}</div>
+          <div class="flash {{ category }}">{{ msg }}</div>
         {% endfor %}
       {% endwith %}
       {# One reminder a day, naming the single next step and nothing else.
