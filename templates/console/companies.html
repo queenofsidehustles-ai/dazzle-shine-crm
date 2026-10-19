@@ -2,7 +2,15 @@
 {% block title %}Companies{% endblock %}
 {% block body %}
 {% include "console/_ops_style.html" %}
-<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Companies ({{ rows|length }})</h2>
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">{{ 'Archived companies' if show_archived else 'Companies' }} ({{ rows|length }})</h2>
+<form method="get" style="display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap;margin:0 0 var(--s3)">
+  {% if show_archived %}<input type="hidden" name="show" value="archived">{% endif %}
+  <input type="search" name="q" value="{{ q }}" placeholder="Search name, address or email" aria-label="Search companies" style="min-width:16rem;flex:1;max-width:26rem">
+  <button class="btn btn-outline btn-sm">Search</button>
+  {% if q %}<a href="{{ url_for('console.companies', show='archived' if show_archived) }}" class="ops-dim">Clear</a>{% endif %}
+  {% if show_archived %}<a href="{{ url_for('console.companies') }}" class="ops-dim">Back to active list</a>
+  {% elif archived_count %}<a href="{{ url_for('console.companies', show='archived') }}" class="ops-dim">Archived ({{ archived_count }})</a>{% endif %}
+</form>
 {% if rows %}
 <div class="ops-scroll"><table class="con">
   <tr><th>Company</th><th>Status</th><th>Trial / plan</th><th>Last sign-in</th>
@@ -37,7 +45,7 @@
   {% endfor %}
 </table></div>
 {% else %}
-<div class="con-empty">No companies yet.</div>
+<div class="con-empty">{{ 'No companies match.' if q else ('Nothing archived.' if show_archived else 'No companies yet.') }}</div>
 {% endif %}
 
 <div style="display:flex;align-items:baseline;gap:var(--s4);margin:var(--s6) 0 var(--s3);flex-wrap:wrap">

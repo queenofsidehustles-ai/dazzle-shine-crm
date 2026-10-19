@@ -206,7 +206,7 @@
           <span class="step-lock" id="lock-photos"></span>
         </div>
         <div class="step-body">
-          <div class="photo-head">📸 Before Photos <span class="req-tag" id="before-tag">Required</span></div>
+          <div class="photo-head">📸 Before Photos <span class="req-tag" id="before-tag">Optional</span></div>
           <div class="photo-sub">Take these <strong>when you arrive</strong>, before you start.</div>
           <div class="photo-grid" id="before-grid">
             <label class="add-photo"><span class="plus">📷</span><span>Take photo</span>
@@ -214,7 +214,7 @@
             <label class="add-photo"><span class="plus">🖼️</span><span>Upload</span>
               <input type="file" accept="image/*" onchange="uploadPhoto(this,'before')" /></label>
           </div>
-          <div class="photo-head">✨ After Photos <span class="req-tag" id="after-tag">Required</span></div>
+          <div class="photo-head">✨ After Photos <span class="req-tag" id="after-tag">Optional</span></div>
           <div class="photo-sub">Take these <strong>when you finish</strong>, showing the results.</div>
           <div class="photo-grid" id="after-grid">
             <label class="add-photo"><span class="plus">📷</span><span>Take photo</span>
@@ -291,7 +291,7 @@
         <div class="step-body">
           <button class="big-btn btn-green" id="btn-finish" onclick="finishJob()" disabled>✅ Close Out Job</button>
           <div class="err" id="finish-err"></div>
-          <div class="muted">Finishing sends your photos to the office and closes the job.</div>
+          <div class="muted">Finishing sends any photos you added to the office and closes the job.</div>
         </div>
       </div>
 
@@ -329,10 +329,10 @@
     // ── Derived gates ─────────────────────────────────────────────────────────
     const checklistDone = () => TOTAL === 0 || completed.size >= TOTAL;
     const photosReady   = () => beforePhotos.length > 0 && afterPhotos.length > 0;
-    const canClockOut   = () => S.clockIn && checklistDone() && photosReady();
+    const canClockOut   = () => S.clockIn && checklistDone();
     const signSettled   = () => S.signed || signSkipped;
     const reviewSettled = () => S.rating != null || reviewSkipped;
-    const canFinish     = () => S.clockOut && photosReady() && signSettled() && reviewSettled();
+    const canFinish     = () => S.clockOut && signSettled() && reviewSettled();
 
     // ── Render the whole stepper ──────────────────────────────────────────────
     function setStep(id, {locked, done, active}) {
@@ -361,11 +361,11 @@
       setStep('checklist', { locked: !S.clockIn, done: S.clockIn && checklistDone(), active: S.clockIn && !checklistDone() });
 
       // Step 4
-      setStep('photos', { locked: !S.clockIn, done: S.clockIn && photosReady(), active: S.clockIn && !photosReady() });
+      setStep('photos', { locked: !S.clockIn, done: S.clockIn && photosReady(), active: S.clockIn && !photosReady() && !S.clockOut });
 
       // Step 5
       const clockoutActive = canClockOut() && !S.clockOut;
-      setStep('clockout', { locked: !canClockOut() && !S.clockOut, done: S.clockOut, active: clockoutActive, lockLabel: '🔒 Finish checklist + photos first' });
+      setStep('clockout', { locked: !canClockOut() && !S.clockOut, done: S.clockOut, active: clockoutActive, lockLabel: '🔒 Finish the checklist first' });
       $('clockout-btn-wrap').style.display = S.clockOut ? 'none' : 'block';
       if (S.clockOut) {
         $('clockout-stamp').style.display = 'block';
@@ -464,7 +464,7 @@
       });
       const tag = $(phase + '-tag');
       if (list.length > 0) { tag.textContent = list.length + ' added'; tag.classList.add('done-tag'); }
-      else { tag.textContent = 'Required'; tag.classList.remove('done-tag'); }
+      else { tag.textContent = 'Optional'; tag.classList.remove('done-tag'); }
     }
     async function uploadPhoto(input, phase) {
       if (!input.files || !input.files[0]) return;
@@ -572,7 +572,7 @@
 
     function showDone() {
       $('flow').innerHTML =
-        '<div class="card"><div class="final-banner">🎉 Job closed out!<br><span style="font-weight:500;font-size:0.92rem">Your photos were sent to the office. Great work — thank you!</span></div></div>';
+        '<div class="card"><div class="final-banner">🎉 Job closed out!<br><span style="font-weight:500;font-size:0.92rem">' + (beforePhotos.length || afterPhotos.length ? 'Your photos were sent to the office. ' : 'The office has been notified. ') + 'Great work — thank you!</span></div></div>';
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 

@@ -338,6 +338,37 @@ def calendar():
     )
 
 
+@bookings_bp.route('/<int:booking_id>/mark-complete', methods=['POST'])
+@login_required
+def mark_complete(booking_id):
+    """Close a booking as completed by hand, with no photos needed.
+
+    Runs the same follow-through as choosing Completed on the booking page.
+    """
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.status in ('completed', 'cancelled', 'on_hold'):
+        flash(f'This booking is {booking.status.replace("_", " ")}, so it can\'t be marked complete here.', 'info')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    from datetime import datetime as _dt
+    booking.status = 'completed'
+    booking.completed_at = _dt.utcnow()
+    db.session.commit()
+    try:
+        import contractor_pay
+        contractor_pay.queue_for_booking(booking)
+        _send_followup_email(booking)
+        if not booking.skip_review:
+            _send_rating_request(booking)
+        _create_next_recurring(booking)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        flash('Marked complete ✅ — but a follow-up step errored.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    flash('Marked complete.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
 @bookings_bp.route('/<int:booking_id>', methods=['GET', 'POST'])
 @login_required
 def detail(booking_id):

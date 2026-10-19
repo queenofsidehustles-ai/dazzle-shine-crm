@@ -115,6 +115,10 @@ organizations = Table(
     # out of every funnel and sales count and never sent trial reminders; a
     # suspension says nothing about whether an account was real.
     Column('is_test', Boolean),
+    # Set from the console to tidy a company out of the default list (old
+    # tests, churned signups). Only hides it there: status, billing and
+    # automations are untouched, and unarchiving clears it.
+    Column('archived_at', DateTime),
     # A fictional company for showing the product (demo_company.py). Implies
     # is_test, and more: demo_guard.py stops anything it does from leaving
     # Akye -- no email, text, Stripe or subscription -- and only a demo
@@ -688,6 +692,12 @@ def set_test_account(engine, slug, is_test):
         if not is_test:
             q = q.where(organizations.c.is_demo.isnot(True))
         conn.execute(q.values(is_test=bool(is_test)))
+
+
+def set_archived(engine, slug, archived):
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(organizations.c.slug == slug)
+                     .values(archived_at=datetime.utcnow() if archived else None))
 
 
 def set_status(engine, slug, status):
