@@ -25,6 +25,8 @@
   .sa-prefix{padding:0 2px 0 11px;color:var(--softer)}
   .sa-field input{width:100%;border:0;outline:0;padding:11px 12px;font:inherit;font-size:16px;background:transparent;color:inherit}
   .sa-formcard .btn-primary{margin-top:12px}
+  .sa-secondary{display:block;margin-top:10px;color:var(--gold-deep, var(--gold));font-size:0.86rem;font-weight:600;text-decoration:none}
+  .sa-secondary:hover{text-decoration:underline}
   .sa-link{align-self:flex-start}
   .sa-skip{align-self:flex-start;background:none;border:0;padding:2px 4px;color:var(--muted);
            font:inherit;font-size:0.85rem;text-decoration:underline;cursor:pointer}
@@ -325,6 +327,16 @@
       log.appendChild(box);
       return;
     }
+    // A quiet secondary way out, for a card that offers one (e.g. edit the
+    // terms instead of accepting them). Same-site paths only.
+    let sec = null;
+    const sh = (c.secondary && c.secondary.href) || '';
+    if (sh.charAt(0) === '/' && sh.charAt(1) !== '/' && sh.charAt(1) !== '\\') {
+      sec = document.createElement('a');
+      sec.className = 'sa-secondary';
+      sec.href = sh;
+      sec.textContent = (c.secondary.label || 'Edit') + ' →';
+    }
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn-primary';
@@ -342,6 +354,7 @@
         return;
       }
       btn.remove();
+      if (sec) sec.remove();
       const note = document.createElement('div');
       note.className = 'sa-note';
       note.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
@@ -354,6 +367,7 @@
       scroll();
     });
     box.appendChild(btn);
+    if (sec) box.appendChild(sec);
     log.appendChild(box);
   }
 

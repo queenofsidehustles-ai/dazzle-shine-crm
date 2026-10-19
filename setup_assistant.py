@@ -224,17 +224,21 @@ def next_message(done_line=''):
     link = STEP_LINKS.get(step['key'])
     if link and not cards:
         cards.append(_link_card(*link))
-    # "Step 2 of 4", from the same list the progress meter counts, so the
-    # owner can see the setup is a short, finite thing rather than an open chat.
+    # "Step 2 of 4": counted over the REQUIRED steps only, the same four the
+    # progress meter counts, so the card and the meter never disagree. The
+    # optional extras that come after (payments, booking page, team...) get no
+    # number -- they are not step five of four, they are what's left to do once
+    # setup is already finished.
     try:
         import onboarding
-        all_steps = onboarding.progress()['steps']
-        total = len(all_steps)
-        no = next((i + 1 for i, s in enumerate(all_steps)
+        required = [s for s in onboarding.progress()['steps'] if s.get('required')]
+        total = len(required)
+        no = next((i + 1 for i, s in enumerate(required)
                    if s['key'] == step['key']), None)
-        for c in cards:
-            if c.get('kind') in ('form', 'confirm'):
-                c['step_no'], c['step_total'] = no, total
+        if no:
+            for c in cards:
+                if c.get('kind') in ('form', 'confirm'):
+                    c['step_no'], c['step_total'] = no, total
     except Exception:
         pass
     cards.append({'kind': 'skip', 'label': 'Skip for now', 'step': step['key']})
@@ -494,6 +498,11 @@ def terms_card():
              'Not happy? Tell us within 48 hours and we put it right']
     card = _offer('setup_accept_terms', {'accepted': '1'},
                   'Your customer terms', lines, 'Accept these')
+    # Most owners accept the sensible draft in one tap. The few who want to
+    # change a line need somewhere to go that is not the chat box -- a quiet
+    # link under the button, to the terms editor on the business page.
+    card['secondary'] = {'label': 'Prefer to change them? Edit your terms',
+                         'href': '/settings/business'}
     return lines, card
 
 
