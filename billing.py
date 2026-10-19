@@ -413,12 +413,6 @@ def apply_event(event):
         if obj.get('refunded') and obj.get('invoice'):
             import affiliates
             result = affiliates.reverse(engine, obj['invoice'], 'refunded', slug=slug)
-            if result == 'already paid':
-                # Nothing to rewrite, but not something to lose either: the
-                # partner was paid on money that has gone back to the customer.
-                # False lands it in the error log, where staff will see it.
-                return False, (f'{slug}: refunded invoice {obj["invoice"]} was already '
-                               f'paid out to the partner; settle by hand')
             return True, f'{slug}: refund, partner commission {result}'
         return False, f'{slug}: ignored a partial refund'
 

@@ -961,7 +961,8 @@ def affiliate_action(affiliate_id, action):
         control_plane.log_console(engine, who, 'reversed commission', partner['code'],
                                   f'{request.form.get("invoice")}: {result}')
         flash({'reversed': 'Commission reversed.',
-               'already paid': 'That commission was already paid out. Settle it with the partner by hand.',
+               'debited': 'That commission was already paid out, so a matching debit now comes off their next payout.',
+               'already debited': 'A debit for that commission is already recorded.',
                'already reversed': 'Already reversed.',
                'none': 'No such commission.'}.get(result, result),
               'success' if result == 'reversed' else 'error')

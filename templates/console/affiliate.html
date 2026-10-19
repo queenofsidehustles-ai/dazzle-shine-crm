@@ -42,7 +42,9 @@
 </div>
 {% endif %}
 
-{% if payable_cents and payable_cents < min_payout_cents %}
+{% if payable_cents < 0 %}
+<p class="ops-dim" style="margin:0 0 var(--s5)">{{ money(-payable_cents) }} is owed back: a refunded payment was already paid out. It comes off their next payout; nothing is sent until they have earned it back.</p>
+{% elif payable_cents and payable_cents < min_payout_cents %}
 <p class="ops-dim" style="margin:0 0 var(--s5)">{{ money(payable_cents) }} is ready, under the {{ money(min_payout_cents) }} minimum, so it rolls over to the next payout.</p>
 {% endif %}
 
