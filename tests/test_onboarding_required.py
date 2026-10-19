@@ -60,10 +60,13 @@ with app.app_context():
 
 print('\n1. The required steps are the ones that stop a business trading')
 req = keys(required=True)
-check(req == ['business', 'timezone', 'pricing', 'terms', 'payments', 'balance'],
+check(req == ['business', 'pricing', 'terms', 'balance'],
       f'required, in order: {req}')
-check(keys(required=False) == ['booking_page', 'team', 'client', 'job'],
-      'and a cleaner, a customer and a job are offered, not demanded')
+# Not on it because nobody is asked: the ZIP decides the timezone at signup,
+# before the owner sees a screen.
+check('timezone' not in req, 'the timezone is worked out, not asked')
+check(keys(required=False) == ['payments', 'booking_page', 'team', 'client', 'job'],
+      'payments is tracked rather than required; the rest are offered')
 
 print('\n2. None of them need a customer, a cleaner or a job')
 check(not ({'team', 'client', 'job'} & set(req)),
@@ -71,7 +74,7 @@ check(not ({'team', 'client', 'job'} & set(req)),
 
 print('\n3. The four that were missing are really checked')
 d = done_map()
-for k in ('timezone', 'terms', 'payments', 'balance'):
+for k in ('terms', 'balance', 'payments'):
     check(d[k] is False, f'{k} starts unfinished rather than quietly assumed')
 
 print('\n4. A default that was never chosen is not a decision')
@@ -98,21 +101,23 @@ with app.app_context():
     db.session.commit()
     p = onboarding.progress()
 check(p['complete'] is True, 'every required step done is "complete"')
-check(p['done'] == p['total'] == 6 and p['percent'] == 100,
+check(p['done'] == p['total'] == 4 and p['percent'] == 100,
       f"and the bar is full at {p['done']}/{p['total']} ({p['percent']}%)")
-check(p['optional_done'] == 0 and p['optional_total'] == 4,
-      'with the four optional ones still outstanding')
+check(p['optional_done'] == 1 and p['optional_total'] == 5,
+      'payments done by the Stripe key above, four offered ones outstanding')
 check(p['next'] is not None and p['next']['key'] == 'booking_page',
       'there is still a next thing to offer, so the chat does not go quiet')
 check(p['next_required'] is None, 'but nothing required is waiting')
 
-print('\n6. A half-filled business is not finished')
+print('\n6. A business with no phone number is not finished')
+# The phone is the one field here signup cannot provide and customers
+# actually need -- it is on every quote, invoice and reminder they get.
 with app.app_context():
-    BusinessSetting.set('email', '')
+    BusinessSetting.set('phone', '')
     db.session.commit()
     p = onboarding.progress()
 check(p['complete'] is False and p['next_required']['key'] == 'business',
-      'a business name alone no longer counts as having details')
+      'a name and an email alone are not details a customer can use')
 
 if failures:
     print(f'\n❌ {len(failures)} onboarding check(s) failed')

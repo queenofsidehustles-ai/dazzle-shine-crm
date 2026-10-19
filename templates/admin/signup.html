@@ -41,6 +41,21 @@
       later.
     </div>
 
+    {# One field, and it does four jobs: the timezone everything is scheduled
+       against, the Google lookup that fills in their phone and address, the
+       local price we propose, and their own records. A city would do none of
+       them reliably -- there are thirty-odd Springfields. #}
+    <label for="zip_code">Business ZIP code</label>
+    <input id="zip_code" name="zip_code" required inputmode="numeric"
+           pattern="[0-9]{5}(-[0-9]{4})?" maxlength="10"
+           value="{{ form.zip_code or '' }}" placeholder="32801" />
+    <p class="small">So your reminders go out at the right hour, and we can fill
+       in the rest of your details for you.</p>
+
+    {# The browser already knows the timezone. Asking would be a question with
+       a right answer we could have worked out ourselves. #}
+    <input type="hidden" id="browser_tz" name="browser_tz" value="" />
+
     <label for="name">Your name</label>
     <input id="name" name="name" required value="{{ form.name or '' }}" />
 
@@ -72,6 +87,14 @@
        pressing it gets them. #}
     <button type="submit">Start my free trial</button>
   </form>
+<script>
+  // Best-effort: a browser that will not say, or says something ZoneInfo does
+  // not know, simply leaves this empty and the ZIP decides instead.
+  try {
+    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    document.getElementById('browser_tz').value = tz;
+  } catch (e) {}
+</script>
 
   <a class="back" href="/login">Already have an account? Sign in</a>
 
