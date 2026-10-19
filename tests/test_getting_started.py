@@ -48,6 +48,9 @@ def client():
 
 with app.app_context():
     db.create_all()
+    BusinessSetting.set('zip_code', '32801')
+    BusinessSetting.set('timezone', 'America/New_York')
+    db.session.commit()
 
 print('\n1. A brand-new business is told one thing to do')
 with app.app_context():
@@ -73,7 +76,7 @@ check(b'0%' in r.data or b'done' in r.data, 'with progress on it')
 print('\n2. The dashboard says the same thing, without being asked')
 r = c.get('/')
 check(b'Getting started' in r.data, 'a new business sees it on the dashboard')
-check(b'Tell us about your business' in r.data, 'naming the next step')
+check(b'Check your details' in r.data, 'naming the next step')
 
 print('\n3. Each step done moves it along, in order')
 # Read the order from the journey rather than restating it. What is being
@@ -90,8 +93,6 @@ with app.app_context():
             BusinessSetting.set('business_name', 'Sparkle Cleaning')
             BusinessSetting.set('phone', '(407) 555-0100')
             BusinessSetting.set('email', 'hello@sparkle.test')
-        elif key == 'timezone':
-            BusinessSetting.set('timezone', 'America/Chicago')
         elif key == 'terms':
             BusinessSetting.set('terms_reviewed', '1')
         elif key == 'payments':
@@ -234,7 +235,12 @@ check("'setup-nudge-' + new Date()" in shell,
 # The cost question: an established business must not recompute its onboarding
 # on every page load for the rest of its life.
 appsrc = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app.py')).read()
-check('if not setup_done and session.get(\'role\') == \'owner\'' in appsrc,
-      'progress is only worked out for an owner who has not finished')
+check("BusinessSetting.get('setup_complete') != _ob.SETUP_VERSION" in appsrc,
+      'progress is only worked out while the flag is not the current version')
+# And the flag is versioned, so adding a required step asks everybody again
+# rather than leaving established businesses latched on a list they never saw.
+check('SETUP_VERSION' in open(os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'onboarding.py')).read(),
+      'the flag carries the version of the list it was written for')
 
 print('\n\n✅ All getting-started tests passed.\n')

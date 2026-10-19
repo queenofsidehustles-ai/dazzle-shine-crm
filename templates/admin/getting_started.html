@@ -79,49 +79,22 @@
       </div>
     {% endif %}
 
-    {# The next step is the box above. It was ALSO listed here with a 👉, so the
-       same thing appeared twice on one card — which is what made the "Next"
-       panel read as floating loose rather than leading the list. Everything
-       else, in order, and the current one is not repeated. #}
-    {% for s in p.steps %}
-      {% if loop.first and not s.required %}{% set _ = 0 %}{% endif %}
-      {% if not s.required and (loop.first or p.steps[loop.index0 - 1].required) %}
-        <div style="margin:18px 0 2px;font-size:0.72rem;letter-spacing:.12em;
-                    text-transform:uppercase;color:var(--softer);font-weight:700">
-          Optional — whenever you have them</div>
-      {% endif %}
-      {% if not (p.next and s.key == p.next.key) %}
-      <div style="display:flex;gap:12px;align-items:baseline;padding:9px 0;
-                  border-top:1px solid var(--border)">
-        <div style="flex:0 0 20px;font-size:0.95rem">{{ '✅' if s.done else '○' }}</div>
-        <div style="flex:1">
-          <div style="font-weight:600{{ ';text-decoration:line-through;color:var(--softer)' if s.done else '' }}">
-            {{ s.title }}</div>
-          {% if not s.done %}
-            <div style="color:var(--softer);font-size:0.86rem;margin-top:2px">{{ s.why }}
-              {% if s.secondary %}
-              · <a href="{{ s.secondary.link }}" style="color:var(--gold-deep);font-weight:600">{{ s.secondary.label }}</a>
-              {% endif %}
-              {% if s.video and VIDEOS.get(s.video) %}
-              · <a href="{{ VIDEOS[s.video] }}" target="_blank" rel="noopener"
-                   style="color:var(--gold-deep);font-weight:600">▶ Watch (1 min)</a>
-              {% endif %}
-            </div>
-          {% endif %}
-        </div>
-        <a href="{{ s.link }}" style="color:var(--gold-deep);font-size:0.88rem;
-                                      font-weight:600;text-decoration:none;white-space:nowrap">{{ 'Review' if s.done else 'Do it' }}</a>
-      </div>
-      {% endif %}
-    {% endfor %}
-  </div>
-
-  <p style="color:var(--softer);font-size:0.86rem;max-width:660px;margin-top:14px">
-    Connecting payments, email and texting comes after this —
-    <a href="{{ url_for('settings.setup') }}" style="color:var(--gold-deep)">the full setup list</a>
-    is there when you want it.
-  </p>
-{% endif %}
+    {# One thing at a time. This was every remaining step in a list, which is
+       what made a nearly-finished setup look like a pile of work -- and four
+       of the rows were optional anyway, so a business with no customers yet
+       was looking at a list it could not finish. The required ones are
+       summarised in a line; the optional ones are offered one at a time, by
+       Nana or by the card above, as they become the next thing. #}
+    {% set left = p.steps | rejectattr('done') | rejectattr('required') | list %}
+    {% if p.complete and left %}
+    <p style="color:var(--softer);font-size:0.86rem;margin:18px 0 0;
+              padding-top:14px;border-top:1px solid var(--border)">
+      {{ left | length }} more thing{{ 's' if left | length != 1 }} you can do
+      whenever you have {{ 'them' if left | length != 1 else 'it' }} —
+      {{ left | map(attribute='title') | join(', ') | lower }}.
+    </p>
+    {% endif %}
+  {% endif %}
 {# Akye's ads: record the finished signup once (set by signup.welcome). #}
 {% if session.pop('meta_signup_complete', False) %}{% with meta_event='CompleteRegistration', meta_event_id=session.pop('meta_signup_event_id', '') %}{% include '_meta_pixel.html' %}{% endwith %}{% endif %}
 {% endblock %}
