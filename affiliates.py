@@ -420,11 +420,13 @@ def reverse(engine, invoice_id, reason='refunded', now=None, slug=None,
             affiliate_id=None):
     """Cancel the commission an invoice earned (refund, chargeback).
 
-    Only an unpaid commission is reversed here. One already paid out is left
-    alone and reported to the caller as such, so staff can settle it by hand:
-    quietly rewriting history that a partner has already been paid against is
-    how a ledger stops being believed. Returns 'reversed', 'already paid',
-    'already reversed', 'being paid' or 'none'.
+    An unpaid commission is reversed in place. One already paid out is never
+    rewritten -- a ledger a partner has been paid against has to stay
+    believable -- so the money is taken back with a debit instead: a negative
+    commission under `clawback:<invoice id>`, payable at once, that nets
+    against their next payout. Until their balance covers it, they are paid
+    nothing. Returns 'reversed', 'debited' (paid already; a debit now stands),
+    'already debited', 'already reversed', 'being paid' or 'none'.
 
     Stripe does not promise to deliver events in order, so a refund can arrive
     before the payment it refunds. With `slug` given and no commission yet, a
@@ -458,7 +460,18 @@ def reverse(engine, invoice_id, reason='refunded', now=None, slug=None,
         if row['status'] == 'reversed':
             return 'already reversed'
         if row['status'] == 'paid':
-            return 'already paid'
+            debit_id = f'clawback:{invoice_id}'
+            if conn.execute(select(affiliate_commissions.c.id).where(
+                    affiliate_commissions.c.stripe_invoice_id == debit_id)).first():
+                return 'already debited'
+            conn.execute(insert(affiliate_commissions).values(
+                affiliate_id=row['affiliate_id'], org_slug=row['org_slug'],
+                stripe_invoice_id=debit_id, invoice_paid_at=row['invoice_paid_at'],
+                amount_cents=0, rate_bps=row['rate_bps'],
+                commission_cents=-row['commission_cents'], status='accrued',
+                payable_at=now, reversal_reason=(reason or '')[:200] or None,
+                created_at=now))
+            return 'debited'
         if row['status'] == 'paying':
             # Claimed for a transfer that has been, or may yet be, sent. Letting
             # it become 'reversed' now would leave a paid payout whose
@@ -832,6 +845,8 @@ def portal(engine, partner, now=None, staff=False):
             c['state'] = 'sending'
         else:
             c['state'] = c['status']
+        if c['commission_cents'] < 0:
+            c['state'] = 'refund debit'
 
     # By campaign tag: the one question a partner can act on, "which of my
     # posts and emails actually brought people?".

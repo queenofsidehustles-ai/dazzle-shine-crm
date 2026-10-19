@@ -57,9 +57,20 @@ EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[a-z]{2,}$', re.I)
 
 # Every signup creates a whole schema for a company. Without limits, a script
 # could create thousands and take the database down for every real company.
-# Three companies a day from one address covers somebody setting up a second
-# business; the daily ceiling is a circuit breaker, raised with an env var.
-SIGNUPS_PER_ADDRESS_PER_DAY = 3
+# The daily ceiling below is the circuit breaker, raised with an env var.
+#
+# Ten a day from one address, not three. Three covers somebody opening a
+# second business and nothing else: it refuses an owner signing up customers
+# from one office, a trade stand, or anybody testing the thing -- and because
+# the refusal reads as a sensible rule rather than a fault, the first
+# assumption is always that signup is broken. Ten still stops a script.
+#
+# Worth knowing what this counts: the address the app sees, which behind a
+# proxy is only the visitor's if ProxyFix is reading the right hop. Console →
+# Health shows the addresses actually recorded, so a cap that has quietly
+# become a cap on everybody is visible rather than inferred.
+SIGNUPS_PER_ADDRESS_PER_DAY = int(
+    os.environ.get('SIGNUPS_PER_ADDRESS_PER_DAY') or 10)
 DEFAULT_DAILY_SIGNUP_CAP = 50
 # A field people never see. Browsers leave it empty; form-filling bots do not.
 HONEYPOT_FIELD = 'website'
@@ -286,7 +297,8 @@ def signup():
 
     if request.method == 'POST':
         form = {k: (request.form.get(k) or '').strip()
-                for k in ('business', 'slug', 'name', 'email')}
+                for k in ('business', 'slug', 'name', 'email', 'zip_code',
+                          'browser_tz')}
         form['email'] = form['email'].lower()
         password = request.form.get('password') or ''
         slug = form['slug'].lower() or suggest_slug(form['business'])
@@ -420,6 +432,14 @@ def _validate(form, slug, password, terms_accepted=False):
         return 'What is your name?'
     if not EMAIL_RE.match(form['email'] or ''):
         return 'That email address does not look right.'
+    # Refused here rather than fixed up later: a ZIP we cannot place is a
+    # timezone we cannot work out, and that is the one setting whose being
+    # wrong never announces itself.
+    import zip_zones
+    if len(zip_zones.digits(form.get('zip_code'))) != 5:
+        return 'What is the business ZIP code? Five digits.'
+    if not zip_zones.zone_for_zip(form.get('zip_code')):
+        return 'That does not look like a US ZIP code.'
     if len(password) < 8:
         return 'Please use a password of at least 8 characters.'
     if password.lower() in ('password', '12345678', 'changeme'):
@@ -483,6 +503,17 @@ def _create_everything(slug, form, password, attribution=None, terms_accepted=Fa
                 from models import BusinessSetting
                 BusinessSetting.set('business_name', form['business'])
                 BusinessSetting.set('email', form['email'])
+                # The ZIP, and with it the timezone -- worked out rather than
+                # asked. Everything is scheduled against the timezone and the
+                # default is New York, so a business that is never asked and
+                # never tells us runs an hour out forever without a symptom.
+                import zip_zones
+                zip_code = zip_zones.digits(form.get('zip_code'))
+                if zip_code:
+                    BusinessSetting.set('zip_code', zip_code)
+                zone, _source = zip_zones.resolve(zip_code, form.get('browser_tz'))
+                if zone:
+                    BusinessSetting.set('timezone', zone)
                 db.session.commit()
                 raw, _ = LoginToken.issue(owner, 'signup', email=form['email'])
 

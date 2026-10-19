@@ -29,12 +29,12 @@
   <div class="ops-card"><span class="ops-dim">Trial</span>
     {% if trial %}
       <span class="v">{% if trial.phase == 'over' %}over{% else %}{{ trial.days_left }}d{% endif %}</span>
-      <span class="ops-dim">{% if trial.phase == 'running' %}left{% endif %}
+      <span class="ops-dim">{% if trial.phase == 'not_started' %}left to start{% elif trial.phase == 'running' %}left{% endif %}
         · ends {{ trial.ends_at.strftime('%d %b') }}</span>
     {% else %}<span class="v">—</span><span class="ops-dim">not on a trial</span>{% endif %}</div>
   <div class="ops-card"><span class="ops-dim">Activated</span>
     <span class="v">{{ org.activated_at.strftime('%d %b') if org.activated_at else 'not yet' }}</span>
-    <span class="ops-dim">cleaner and customer added</span></div>
+    <span class="ops-dim">first job assigned</span></div>
   <div class="ops-card"><span class="ops-dim">Trial emails sent</span>
     <span class="v" style="font-size:var(--t-sm)">{{ (org.nudges_sent or 'none')|replace(',', ', ') }}</span></div>
 </div>
@@ -146,6 +146,14 @@
   {% endif %}
 </div>
 <p class="ops-dim" style="margin-top:var(--s3)">A test account is left out of the Funnel and Sales numbers and never sent trial reminders; it still works normally. Closing a company and purging its data are not done from here. They start and end a legal retention period, so they are run from a terminal (<code>tenant_lifecycle_cli.py</code>).</p>
+{% endif %}
+
+{% if may_operate %}
+<form method="post" action="{{ url_for('console.archive_company', slug=org.slug) }}" style="margin-top:var(--s3)">
+  <input type="hidden" name="on" value="{{ '0' if org.archived_at else '1' }}">
+  <button class="btn btn-outline btn-sm" type="submit">{{ 'Unarchive' if org.archived_at else 'Archive' }}</button>
+  <span class="ops-dim">{{ 'Archived — hidden from the main list.' if org.archived_at else 'Hides it from the main list. Nothing else changes.' }}</span>
+</form>
 {% endif %}
 
 <h3 class="ops-h">Emails we have sent them</h3>

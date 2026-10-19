@@ -128,7 +128,9 @@ c = owner()
 code, html = page(c, '/')
 check(code == 200 and 'nav-dot' not in sidebar(html) and suggested(html) is None,
       'no dots and no "Did you know?" -- Getting started is the one thing to look at')
-in_tenant(lambda: (BusinessSetting.set('setup_complete', '1'), db.session.commit()))
+import onboarding as _ob
+in_tenant(lambda: (BusinessSetting.set('setup_complete', _ob.SETUP_VERSION),
+                   db.session.commit()))
 
 
 print('\n2. A few dots, on what pays back most, and one suggestion per sign-in')

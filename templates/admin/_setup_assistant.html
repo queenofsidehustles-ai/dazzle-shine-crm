@@ -16,6 +16,17 @@
   .sa-box div{font-size:0.9rem;color:var(--muted);line-height:1.5}
   .sa-box .btn-primary{margin-top:10px}
   .sa-box .sa-note{margin-top:8px;font-weight:600}
+  .sa-step{font-size:0.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--softer);margin-bottom:5px}
+  .sa-formcard .sa-sub{color:var(--muted);font-size:0.86rem;margin:3px 0 10px;font-weight:400}
+  .sa-field{display:block;margin:9px 0}
+  .sa-field .sa-flabel{display:block;font-size:0.8rem;color:var(--softer);margin-bottom:3px}
+  .sa-inwrap{display:flex;align-items:center;border:1px solid var(--line, var(--border));border-radius:10px;overflow:hidden;background:var(--surface, #fff)}
+  .sa-inwrap:focus-within{border-color:var(--amber, var(--gold));box-shadow:0 0 0 3px rgba(240,164,75,.15)}
+  .sa-prefix{padding:0 2px 0 11px;color:var(--softer)}
+  .sa-field input{width:100%;border:0;outline:0;padding:11px 12px;font:inherit;font-size:16px;background:transparent;color:inherit}
+  .sa-formcard .btn-primary{margin-top:12px}
+  .sa-secondary{display:block;margin-top:10px;color:var(--gold-deep, var(--gold));font-size:0.86rem;font-weight:600;text-decoration:none}
+  .sa-secondary:hover{text-decoration:underline}
   .sa-link{align-self:flex-start}
   .sa-skip{align-self:flex-start;background:none;border:0;padding:2px 4px;color:var(--muted);
            font:inherit;font-size:0.85rem;text-decoration:underline;cursor:pointer}
@@ -65,7 +76,7 @@
   <div class="sa-log" id="sa-log" aria-live="polite"></div>
   <form class="sa-form" id="sa-form">
     <button type="button" class="sa-mic" id="sa-mic" hidden aria-label="Talk instead of typing">🎤</button>
-    <input id="sa-q" autocomplete="off" placeholder="Type your answer or a question…" aria-label="Your message">
+    <input id="sa-q" autocomplete="off" placeholder="Ask Nana anything, or type an answer…" aria-label="Ask Nana a question">
     <button class="btn-primary" type="submit">Send</button>
   </form>
 </div>
@@ -76,6 +87,7 @@
   const URLS = {
     ask: '{{ url_for("setup_assistant.ask") }}',
     confirm: '{{ url_for("setup_assistant.confirm") }}',
+    save: '{{ url_for("setup_assistant.save") }}',
     reset: '{{ url_for("setup_assistant.reset") }}',
     skip: '{{ url_for("setup_assistant.skip") }}',
   };
@@ -203,9 +215,102 @@
     log.appendChild(a);
   }
 
+  // "Step 2 of 4" — small, above a step's card, so setup reads as a short
+  // finite list rather than an open-ended chat.
+  function stepLine(box, c) {
+    if (!c.step_no || !c.step_total) return;
+    const s = document.createElement('div');
+    s.className = 'sa-step';
+    s.textContent = 'Step ' + c.step_no + ' of ' + c.step_total;
+    box.appendChild(s);
+  }
+
+  // An editable card: boxes prefilled, usually just tap Save, but every value
+  // can be typed over. The server validates and saves what was typed.
+  function formCard(c) {
+    const box = document.createElement('div');
+    box.className = 'sa-box sa-formcard';
+    stepLine(box, c);
+    const t = document.createElement('b');
+    t.textContent = c.title || 'Your details';
+    box.appendChild(t);
+    if (c.note) {
+      const n = document.createElement('div');
+      n.className = 'sa-sub';
+      n.textContent = c.note;
+      box.appendChild(n);
+    }
+    const inputs = {};
+    (c.fields || []).forEach(function (f) {
+      const wrap = document.createElement('label');
+      wrap.className = 'sa-field';
+      const lab = document.createElement('span');
+      lab.className = 'sa-flabel';
+      lab.textContent = f.label + (f.optional ? ' (optional)' : '');
+      wrap.appendChild(lab);
+      const row = document.createElement('span');
+      row.className = 'sa-inwrap';
+      if (f.prefix) {
+        const p = document.createElement('span');
+        p.className = 'sa-prefix';
+        p.textContent = f.prefix;
+        row.appendChild(p);
+      }
+      const inp = document.createElement('input');
+      inp.type = f.type || 'text';
+      if (inp.type === 'number') { inp.inputMode = 'decimal'; inp.min = '0'; }
+      inp.value = f.value || '';
+      inp.placeholder = f.placeholder || '';
+      row.appendChild(inp);
+      wrap.appendChild(row);
+      box.appendChild(wrap);
+      inputs[f.name] = inp;
+    });
+    const note = document.createElement('div');
+    note.className = 'sa-note';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-primary';
+    btn.textContent = c.label || 'Save';
+    btn.addEventListener('click', async function () {
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      const fields = {};
+      Object.keys(inputs).forEach(function (k) { fields[k] = inputs[k].value.trim(); });
+      let data;
+      try {
+        data = await post(URLS.save, { step: c.step, fields: fields });
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = c.label || 'Save';
+        return;
+      }
+      if (!data.ok) {
+        // A bad value: keep the boxes, say why, let them fix it in place.
+        btn.disabled = false;
+        btn.textContent = c.label || 'Save';
+        note.textContent = '⚠️ ' + (data.say || 'Could not save that.');
+        if (!note.parentNode) box.appendChild(note);
+        scroll();
+        return;
+      }
+      Object.keys(inputs).forEach(function (k) { inputs[k].disabled = true; });
+      btn.remove();
+      note.textContent = '✅ ' + (data.say || 'Saved.');
+      box.appendChild(note);
+      if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
+      (data.cards || []).forEach(render);
+      updateProgress(data.progress);
+      scroll();
+    });
+    box.appendChild(btn);
+    log.appendChild(box);
+  }
+
   function confirmCard(c) {
     const box = document.createElement('div');
     box.className = 'sa-box';
+    stepLine(box, c);
     const t = document.createElement('b');
     t.textContent = c.title || 'Check this';
     box.appendChild(t);
@@ -221,6 +326,16 @@
       box.appendChild(note);
       log.appendChild(box);
       return;
+    }
+    // A quiet secondary way out, for a card that offers one (e.g. edit the
+    // terms instead of accepting them). Same-site paths only.
+    let sec = null;
+    const sh = (c.secondary && c.secondary.href) || '';
+    if (sh.charAt(0) === '/' && sh.charAt(1) !== '/' && sh.charAt(1) !== '\\') {
+      sec = document.createElement('a');
+      sec.className = 'sa-secondary';
+      sec.href = sh;
+      sec.textContent = (c.secondary.label || 'Edit') + ' →';
     }
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -239,6 +354,7 @@
         return;
       }
       btn.remove();
+      if (sec) sec.remove();
       const note = document.createElement('div');
       note.className = 'sa-note';
       note.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
@@ -251,6 +367,7 @@
       scroll();
     });
     box.appendChild(btn);
+    if (sec) box.appendChild(sec);
     log.appendChild(box);
   }
 
@@ -278,7 +395,8 @@
 
   function render(c) {
     if (!c) return;
-    if (c.kind === 'confirm') confirmCard(c);
+    if (c.kind === 'form') formCard(c);
+    else if (c.kind === 'confirm') confirmCard(c);
     else if (c.kind === 'link') linkCard(c);
     else if (c.kind === 'skip') skipCard(c);
   }

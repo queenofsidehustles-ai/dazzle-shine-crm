@@ -288,11 +288,23 @@ def companies():
     import billing
     import console_data
     engine = _engine()
-    orgs = control_plane.all_orgs(engine)
+    q = (request.args.get('q') or '').strip()
+    show_archived = request.args.get('show') == 'archived'
+    everyone = control_plane.all_orgs(engine)
+    archived_count = sum(1 for o in everyone if o.get('archived_at'))
+    orgs = [o for o in everyone if bool(o.get('archived_at')) == show_archived]
+    if q:
+        needle = q.lower()
+        orgs = [o for o in orgs if needle in ' '.join(
+            str(o.get(k) or '') for k in ('name', 'slug', 'owner_email')).lower()]
+    # Most recent sign-ups first.
+    orgs.sort(key=lambda o: o.get('created_at') or datetime.min, reverse=True)
     snaps = console_data.snapshots(orgs)
     rows = [dict(o, trial=billing.trial_state(o), snap=snaps.get(o['slug']))
             for o in orgs]
-    return render_template('console/companies.html', rows=rows,
+    return render_template('console/companies.html', rows=rows, q=q,
+                           show_archived=show_archived,
+                           archived_count=archived_count,
                            leads=console_data.dedupe_leads(control_plane.all_leads(engine)),
                            me=request.console_user, counts=_counts(engine))
 
@@ -567,6 +579,27 @@ def mark_test_account(slug):
     return redirect(here)
 
 
+@console_bp.route('/companies/<slug>/archive', methods=['POST'])
+@console_required
+def archive_company(slug):
+    """Hide a company from the default list, or bring it back. Nothing else changes."""
+    if not _may_operate():
+        return _refuse(url_for('console.companies'))
+    engine = _engine()
+    org = control_plane.find(engine, slug)
+    if not org:
+        flash(f'No company at {slug}.', 'error')
+        return redirect(url_for('console.companies'))
+    archive = request.form.get('on') == '1'
+    control_plane.set_archived(engine, slug, archive)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'archived' if archive else 'unarchived', slug)
+    flash(f'{org["name"]} is {"archived — find it under Archived" if archive else "back in the main list"}.',
+          'success')
+    return redirect(url_for('console.companies') if archive
+                    else url_for('console.company', slug=slug))
+
+
 @console_bp.route('/companies/<slug>/reactivate', methods=['POST'])
 @console_required
 def reactivate_company(slug):
@@ -649,8 +682,26 @@ def health():
                'partners': len(partners),
                'ready': sum(1 for a in partners if a.get('payout_ready')),
                'waiting': affiliates.waiting_count(engine)}
+    # Why a signup was refused, rather than guessing. See signups_view below.
+    import security as _sec
+    import blueprints.signup as _signup
+    attempts = control_plane.signup_attempts_by_ip(
+        engine, datetime.utcnow() - timedelta(days=1))
+    signups = {
+        'attempts': attempts,
+        'total': sum(a['count'] for a in attempts),
+        'addresses': len(attempts),
+        'per_address_cap': _signup.SIGNUPS_PER_ADDRESS_PER_DAY,
+        'limits_on': _signup._limits_apply(),
+        # What this very request looks like to the cap, beside the header it
+        # was derived from. If everybody shares one address, these two
+        # disagreeing is where it shows.
+        'you': _sec.client_ip(),
+        'forwarded': (request.headers.get('X-Forwarded-For') or '')[:120],
+    }
     return render_template(
-        'console/health.html', payouts=payouts, orgs=[o for o in orgs if o['slug'] in snaps],
+        'console/health.html', signups=signups, payouts=payouts,
+        orgs=[o for o in orgs if o['slug'] in snaps],
         snaps=snaps, job_labels=job_labels, mail=product.mail_status(),
         ai={'key': bool(llm.key()), 'fast': llm.FAST_MODEL,
             'smart': llm.SMART_MODEL},
@@ -966,7 +1017,8 @@ def affiliate_action(affiliate_id, action):
         control_plane.log_console(engine, who, 'reversed commission', partner['code'],
                                   f'{request.form.get("invoice")}: {result}')
         flash({'reversed': 'Commission reversed.',
-               'already paid': 'That commission was already paid out. Settle it with the partner by hand.',
+               'debited': 'That commission was already paid out, so a matching debit now comes off their next payout.',
+               'already debited': 'A debit for that commission is already recorded.',
                'already reversed': 'Already reversed.',
                'being paid': 'That commission is part of a payout being sent. Wait for it to finish, then reverse it if it was released, or settle with the partner if it was paid.',
                'none': 'No such commission.'}.get(result, result),

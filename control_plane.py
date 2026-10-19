@@ -115,6 +115,10 @@ organizations = Table(
     # out of every funnel and sales count and never sent trial reminders; a
     # suspension says nothing about whether an account was real.
     Column('is_test', Boolean),
+    # Set from the console to tidy a company out of the default list (old
+    # tests, churned signups). Only hides it there: status, billing and
+    # automations are untouched, and unarchiving clears it.
+    Column('archived_at', DateTime),
     # A fictional company for showing the product (demo_company.py). Implies
     # is_test, and more: demo_guard.py stops anything it does from leaving
     # Akye -- no email, text, Stripe or subscription -- and only a demo
@@ -824,6 +828,12 @@ def set_test_account(engine, slug, is_test):
         conn.execute(q.values(is_test=bool(is_test)))
 
 
+def set_archived(engine, slug, archived):
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(organizations.c.slug == slug)
+                     .values(archived_at=datetime.utcnow() if archived else None))
+
+
 def set_status(engine, slug, status):
     values = {'status': status}
     if status == 'suspended':
@@ -838,9 +848,10 @@ def set_billing(engine, slug, **fields):
 
     The whitelist is the point: a caller that has not thought about which
     field it is writing cannot write one by accident. `activated_at` is on it
-    because it records when a company was first really set up (a cleaner and a
-    customer), which only this application knows and Stripe never will. It is a
-    milestone: the trial itself runs 30 days from signup.
+    because when a company first got the software working is something only
+    this application knows and Stripe never will -- it no longer starts the
+    trial clock, which runs from signup, but it is still the most useful
+    thing there is to know about a trial.
     """
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
@@ -1653,6 +1664,31 @@ def record_signup_attempt(engine, ip):
                 signup_attempts.c.created_at < datetime.utcnow() - timedelta(days=7)))
     except Exception:
         pass
+
+
+def signup_attempts_by_ip(engine, since, limit=20):
+    """Who has been trying to sign up, grouped by the address we recorded.
+
+    The signup cap is per address, which is only true if the address we store
+    is the visitor's. Behind a proxy it can quietly become the proxy's, and
+    then a limit meant to stop one script turns into a limit on everybody --
+    three signups anywhere and the product is shut for a day. That failure
+    looks exactly like the rule working, which is why it needs showing rather
+    than reasoning about.
+    """
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(signup_attempts.c.ip,
+                       func.count().label('n'),
+                       func.max(signup_attempts.c.created_at).label('last'))
+                .where(signup_attempts.c.created_at >= since)
+                .group_by(signup_attempts.c.ip)
+                .order_by(func.count().desc())
+                .limit(limit)).all()
+            return [{'ip': r[0], 'count': r[1], 'last': r[2]} for r in rows]
+    except Exception:
+        return []
 
 
 def signup_attempts_since(engine, ip, since):

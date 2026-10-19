@@ -139,7 +139,8 @@ else:
             return c.post('/signup', headers=PRODUCT, data={
                 'business': f'{slug.title()} Cleaning', 'slug': slug,
                 'name': 'Owner Person', 'email': email or f'{slug}@example.com',
-                'password': 'a-perfectly-fine-password', 'terms_accepted': '1'})
+                'password': 'a-perfectly-fine-password', 'terms_accepted': '1',
+                'zip_code': '10001'})
 
         def cookie_of(response):
             for h in response.headers.getlist('Set-Cookie'):
@@ -574,6 +575,31 @@ else:
         check(hc.get('/console/affiliates').status_code == 200, 'and can read')
         body = cc.get('/console/funnel?window=all').data.decode()
         check(f'partner · {dana["code"]}' in body, 'the Funnel counts the partner as a channel')
+
+        print('\n13. A refund after the partner was paid takes the money back from their next payout')
+        long_ago = datetime.utcnow() - timedelta(days=60)
+        with app.app_context():
+            ok, msg = billing.apply_event({'type': 'charge.refunded', 'data': {'object': {
+                'id': 'ch_late', 'customer': f'cus_{TAG}', 'invoice': f'in_{TAG}_1',
+                'refunded': True}}})
+            again = affiliates.reverse(engine, f'in_{TAG}_1')
+            owed = affiliates.payable_cents(engine, dana['id'], datetime.utcnow() + timedelta(days=31))
+            nothing = affiliates.record_payout(engine, dana['id'], 'staff@x', minimum_cents=0,
+                                               now=datetime.utcnow() + timedelta(days=31))
+        check(ok and 'debited' in msg, f'a refund of a paid commission is recorded, not lost ({msg})')
+        check(again == 'already debited', 'and the same refund twice debits once')
+        check(owed == -2370, f'the partner now owes $23.70 against their next payout ({owed})')
+        check(nothing is None, 'and is paid nothing until they have earned it back')
+        with app.app_context():
+            affiliates.accrue(engine, first, {'id': f'in_{TAG}_after1', 'amount_paid': 7900}, now=long_ago)
+            affiliates.accrue(engine, first, {'id': f'in_{TAG}_after2', 'amount_paid': 7900}, now=long_ago)
+            net = affiliates.payable_cents(engine, dana['id'])
+            payout = affiliates.record_payout(engine, dana['id'], 'staff@x', minimum_cents=0)
+            shown = affiliates.portal(engine, dana)
+        check(net == 2370, f'two new payments earn $47.40, less the $23.70 debit ({net})')
+        check(payout and payout['amount_cents'] == 2370, 'and the payout is the net')
+        check(any(c['state'] == 'refund debit' for c in shown['ledger']),
+              'the ledger shows the debit as a refund debit')
     finally:
         try:
             from extensions import db

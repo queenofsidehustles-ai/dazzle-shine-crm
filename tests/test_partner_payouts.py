@@ -196,6 +196,31 @@ try:
     check(not again[0] and len(CALLS['transfer']) == 1,
           'pressing again sends nothing more')
 
+    print('\n3b. A refund after payout is netted off the next Stripe transfer')
+    with app.app_context():
+        dee = affiliates.create(engine, 'Debit Dee', f'dee{TAG}@partners.test', code=f'dee{TAG}')
+        affiliates.set_payout_account(engine, dee['id'], 'acct_dee', ready=True)
+        for i in range(3):
+            seed(dee['id'], f'dee{i}', 2370)
+        first_pay = affiliates.pay_via_stripe(engine, dee['id'], 'staff@x')
+        paid_one = [e for e in entries(dee['id']) if e['status'] == 'paid'][0]
+        result = affiliates.reverse(engine, paid_one['stripe_invoice_id'])
+        for i in range(4):
+            seed(dee['id'], f'deemore{i}', 2370)         # +$94.80 earned since
+        before = len(CALLS['transfer'])
+        ok, msg, pay = affiliates.pay_via_stripe(engine, dee['id'], 'staff@x')
+    check(first_pay[0], 'Dee is paid the first $71.10')
+    check(result == 'debited', f'the refund of a paid commission becomes a debit ({result})')
+    check(ok and pay['amount_cents'] == 9480 - 2370,
+          f'the transfer is the net, $71.10 not $94.80 ({msg!r})')
+    check(len(CALLS['transfer']) == before + 1 and CALLS['transfer'][-1][1] == 7110,
+          'and that is what Stripe is asked to send')
+    check(not [e for e in entries(dee['id']) if e['status'] in ('accrued', 'paying')],
+          'the debit is settled with the payout, not left to be netted twice')
+    del CALLS['transfer'][before - 1:]      # keep the later sections' transfer counts about their own payouts
+    for p_ in (first_pay[2], pay):
+        TRANSFERS.pop(f"affiliate-payout-{p_['id']}", None)
+
     print('\n4. Stripe refuses: nothing moved, so everything is released')
     with app.app_context():
         seed(ready['id'], 'co9', 6000)
