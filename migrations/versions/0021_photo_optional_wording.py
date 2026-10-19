@@ -7,8 +7,8 @@ replaced in place, so a job's ticked items (stored by position) stay ticked.
 from alembic import op
 import sqlalchemy as sa
 
-revision = '0033_photo_optional_wording'
-down_revision = '0032_guards_follow_schema'
+revision = '0021_photo_optional_wording'
+down_revision = '0020_booking_cc'
 branch_labels = None
 depends_on = None
 
