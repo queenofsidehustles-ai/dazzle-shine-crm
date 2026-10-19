@@ -117,8 +117,10 @@ STEP_PROMPTS = {
     'pricing': 'What do you charge for a standard clean of a 2-bed, 2-bath?',
     'terms': 'Your customer terms are ready. Have a look and accept them.',
     'balance': 'When a job’s finished, should the rest come off the card on file?',
-    'payments': 'Last thing, and it needs you: connecting payments. Your bank '
-                'details stay with you.',
+    'payments': ('That’s the four essentials done — you can take bookings right '
+                 'now. The one thing left, whenever you’re ready: connect '
+                 'payments so customers can pay by card. Your bank details stay '
+                 'with you.'),
     'booking_page': 'Want to put your booking page where customers can find it?',
     'team': 'Add a cleaner? Yourself counts, if you’re still cleaning.',
     'client': 'Add a customer you already clean for?',
@@ -221,6 +223,13 @@ def next_message(done_line=''):
         # The business prompt reads differently with boxes already filled in
         # than with blank ones to complete.
         text = text(any(c.get('prefilled') for c in cards))
+    # The payments step is the seam right after the four required ones. Its own
+    # wording already says "that's the essentials done", so a generic "That step
+    # is done." in front of it is both redundant and quietly wrong -- the owner
+    # did not just finish an optional step, they finished setup. Drop the prefix
+    # here only; later optional steps (booking page, team...) still get it.
+    if step.get('key') == 'payments':
+        done_line = ''
     link = STEP_LINKS.get(step['key'])
     if link and not cards:
         cards.append(_link_card(*link))
