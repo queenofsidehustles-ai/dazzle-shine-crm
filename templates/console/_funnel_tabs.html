@@ -10,4 +10,5 @@
   <a href="{{ url_for('console.sales_view') }}" class="{{ 'on' if request.endpoint == 'console.sales_view' }}">Sales</a>
   <a href="{{ url_for('console.discounts') }}" class="{{ 'on' if request.endpoint == 'console.discounts' }}">Discount codes</a>
   <a href="{{ url_for('console.tips_view') }}" class="{{ 'on' if request.endpoint == 'console.tips_view' }}">Help tips</a>
+  <a href="{{ url_for('console.affiliates_view') }}" class="{{ 'on' if request.endpoint in ('console.affiliates_view', 'console.affiliate') }}">Partners</a>
 </nav>

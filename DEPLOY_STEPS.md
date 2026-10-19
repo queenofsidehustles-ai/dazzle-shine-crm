@@ -308,7 +308,7 @@ is the proof.
 
 1. Stripe → **Developers** → **Webhooks** → **+ Add endpoint**.
 2. Endpoint URL: `https://akyehq.com/api/stripe/webhook`
-3. Under **Select events**, tick exactly these seven:
+3. Under **Select events**, tick exactly these eight:
    - `checkout.session.completed`
    - `customer.subscription.created`
    - `customer.subscription.updated`
@@ -316,6 +316,7 @@ is the proof.
    - `invoice.paid`
    - `invoice.payment_succeeded`
    - `invoice.payment_failed`
+   - `charge.refunded` (reverses a partner's commission on a fully refunded invoice)
 4. Click **Add endpoint**.
 5. On the page that appears, find **Signing secret** and click to reveal it. It
    starts `whsec_`. Copy it.
@@ -561,9 +562,9 @@ not been back — never sees it. These four emails are what reaches them:
 
 | When | What it says |
 |---|---|
-| Day 7, not started | you have not begun, and here is the one thing that starts it |
-| Day 21, not started | the last useful reminder before the door closes |
-| 3 days left, running | the one about money |
+| Day 7, not set up | two minutes to see it work |
+| Day 21, not set up | the last useful reminder before the door closes |
+| 3 days left | the one about money |
 | The day it lapses | what changed, what did not, and that nothing was deleted |
 
 Four in a month. Not a drip campaign — a cleaning company that wanted software

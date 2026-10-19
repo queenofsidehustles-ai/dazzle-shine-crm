@@ -262,8 +262,8 @@ code = email_confirm.code('sparkle', 'dana@sparkle.test')
 check(len(welcome) == 1, 'one email to them, not a welcome and a separate confirm')
 check(welcome and code in welcome[0]['html'] and 'sparkle.rollcall.test' in welcome[0]['html'],
       'it carries their address and their code')
-check(welcome and 'add one cleaner and one customer' in ' '.join(welcome[0]['html'].split()),
-      'and the trial rule the code actually uses')
+check(welcome and 'Your thirty days start today' in ' '.join(welcome[0]['html'].split()),
+      'and the trial rule the code actually uses: thirty days from signup')
 link = re.search(r'href="(https?://sparkle\.rollcall\.test/confirm-email/[^"]+)"',
                  welcome[0]['html']) if welcome else None
 check(link is not None, 'and a link to the "is this you?" page on their own address')
