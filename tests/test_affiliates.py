@@ -305,6 +305,28 @@ else:
         check(o['affiliate_code'] == dana['code'] and o['signup_campaign'] == 'newsletter',
               f"the partner's own tag replaces an older ad's, so click and signup agree ({o['signup_campaign']})")
 
+        c5.get(f'/p/{erin["code"]}', headers=PRODUCT)
+        c5.get(f'/p/{erin["code"]}', headers=PRODUCT)
+        check(clicks(erin['id']) == 1,
+              'refreshing a second partner link is not another click, even when the first partner holds the credit')
+
+        c9 = app.test_client()
+        c9.get('/?utm_source=facebook&utm_campaign=oldad&utm_content=ad7', headers=PRODUCT)
+        c9.get(f'/p/{dana["code"]}', headers=PRODUCT)
+        slug = f'untagged{TAG}'
+        signup(c9, slug)
+        with app.app_context():
+            o = control_plane.find(engine, slug)
+        check(o['affiliate_code'] == dana['code'] and not o.get('signup_campaign')
+              and not o.get('signup_source') and not o.get('signup_content'),
+              'a partner link with no tags clears an older ad, so the signup matches the click')
+
+        from blueprints.partners import _trusted_url
+        with app.test_request_context('/partners/login', headers={'Host': 'evil.test'}):
+            link = _trusted_url('partners.confirm', token='abc')
+        check(link.startswith('https://akyehq.test/') and 'evil.test' not in link,
+              f'a sign-in link is built from the product host, not the request host ({link})')
+
         print('\n6. Money follows a paid invoice, and only once')
         with app.app_context():
             control_plane.set_billing(engine, first, stripe_customer_id=f'cus_{TAG}',
@@ -386,6 +408,23 @@ else:
         check(ok and 'reversed' in msg, f'a fully refunded invoice is reversed ({msg})')
         check(before == 'already reversed', 'and reversing twice does nothing more')
         check(partial[0] is False, 'a partial refund is left for a person')
+        with app.app_context():
+            wrong = affiliates.reverse(engine, f'in_{TAG}_1', affiliate_id=erin['id'])
+        check(wrong == 'none', 'a reversal scoped to another partner finds nothing')
+
+        with app.app_context():
+            early = paid_invoice(f'in_{TAG}_order', f'cus_unseen_{TAG}')
+            early['data']['object']['subscription_details'] = {'metadata': {'slug': first}}
+            ok, msg = billing.apply_event(early)
+            with engine.connect() as conn:
+                got = conn.execute(text('select count(*) from affiliate_commissions '
+                                        'where stripe_invoice_id=:i'),
+                                   {'i': f'in_{TAG}_order'}).scalar()
+            affiliates.reverse(engine, f'in_{TAG}_order', 'test cleanup')
+        check(ok and got == 1,
+              'an invoice that arrives before the checkout is matched by its subscription metadata')
+
+
 
         with app.app_context():
             billing.apply_event({'type': 'charge.refunded', 'data': {'object': {

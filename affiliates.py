@@ -416,7 +416,8 @@ def _accrue(engine, slug, invoice, now):
     return dict(row)
 
 
-def reverse(engine, invoice_id, reason='refunded', now=None, slug=None):
+def reverse(engine, invoice_id, reason='refunded', now=None, slug=None,
+            affiliate_id=None):
     """Cancel the commission an invoice earned (refund, chargeback).
 
     Only an unpaid commission is reversed here. One already paid out is left
@@ -428,11 +429,16 @@ def reverse(engine, invoice_id, reason='refunded', now=None, slug=None):
     Stripe does not promise to deliver events in order, so a refund can arrive
     before the payment it refunds. With `slug` given and no commission yet, a
     zero-value reversed row is written under the invoice id: the payment event,
-    when it comes, finds the invoice already recorded and earns nothing."""
+    when it comes, finds the invoice already recorded and earns nothing.
+
+    With `affiliate_id` given, only that partner's commission may be reversed:
+    an invoice belonging to anybody else reads as 'none'."""
     now = now or datetime.utcnow()
     with engine.begin() as conn:
         row = conn.execute(select(affiliate_commissions).where(
             affiliate_commissions.c.stripe_invoice_id == invoice_id)).mappings().first()
+        if row and affiliate_id is not None and row['affiliate_id'] != affiliate_id:
+            return 'none'
         if not row:
             partner = None
             if slug:

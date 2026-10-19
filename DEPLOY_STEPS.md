@@ -308,7 +308,7 @@ is the proof.
 
 1. Stripe → **Developers** → **Webhooks** → **+ Add endpoint**.
 2. Endpoint URL: `https://akyehq.com/api/stripe/webhook`
-3. Under **Select events**, tick exactly these seven:
+3. Under **Select events**, tick exactly these eight:
    - `checkout.session.completed`
    - `customer.subscription.created`
    - `customer.subscription.updated`
@@ -316,6 +316,7 @@ is the proof.
    - `invoice.paid`
    - `invoice.payment_succeeded`
    - `invoice.payment_failed`
+   - `charge.refunded` (reverses a partner's commission on a fully refunded invoice)
 4. Click **Add endpoint**.
 5. On the page that appears, find **Signing secret** and click to reveal it. It
    starts `whsec_`. Copy it.

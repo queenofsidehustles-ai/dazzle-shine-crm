@@ -539,17 +539,27 @@ def partner_link(code):
         tags = attribution.from_request(request.args, None, request.host, request.path)
         found = {k: v for k, v in tags.items() if k in ('source', 'medium', 'campaign', 'content')}
         found.update(aff=partner['code'], landing=request.path[:120])
-        if stored.get('aff') != partner['code']:
+        # Which partners this browser has already clicked. The attribution
+        # cookie cannot say: when a browser is credited to partner A, opening
+        # B's link leaves A in it, so B's refreshes would each look new.
+        seen = [c for c in (request.cookies.get('akye_seen_aff') or '').split(',') if c][:20]
+        if partner['code'] not in seen:
             affiliates.record_click(engine, partner['id'],
                                     campaign=found.get('campaign'),
                                     landing=request.path)
+            seen.append(partner['code'])
+            response.set_cookie('akye_seen_aff', ','.join(seen[-20:]),
+                                max_age=attribution.MAX_AGE, httponly=True,
+                                samesite='Lax', secure=request.is_secure)
         new = attribution.merge(stored, found)
         if new and not stored.get('aff'):
             # The partner's touch is the one that earns the credit, so the tags
             # on their link describe it: they replace older ad tags, so the
             # click, the signup and the partner's by-tag table all agree.
-            new.update({k: v for k, v in tags.items()
-                        if k in ('source', 'medium', 'campaign', 'content')})
+            for k in ('source', 'medium', 'campaign', 'content'):
+                new.pop(k, None)
+                if tags.get(k):
+                    new[k] = tags[k]
         if new:
             attribution.write(response, new, secret, secure=request.is_secure)
     except Exception as e:

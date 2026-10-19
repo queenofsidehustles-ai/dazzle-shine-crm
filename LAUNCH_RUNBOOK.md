@@ -148,6 +148,7 @@ browser redirect never does.
    - `customer.subscription.deleted`
    - `invoice.paid`
    - `invoice.payment_failed`
+   - `charge.refunded`
 4. Save, then copy the **Signing secret** (`whsec_…`).
 5. Put it in Railway as `STRIPE_PLATFORM_WEBHOOK_SECRET`. Redeploy.
 

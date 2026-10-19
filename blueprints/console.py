@@ -891,13 +891,13 @@ def affiliate_action(affiliate_id, action):
         flash(f'{partner["name"]} is now {status}. Companies already referred stay credited '
               f'to them.', 'success')
     elif action == 'link':
-        from blueprints.partners import deliver_link
+        from blueprints.partners import deliver_link, _trusted_url
         raw = affiliates.issue_login(engine, affiliate_id)
         if not raw:
             flash('A link was already sent several times in the last hour. Try again later.', 'error')
         else:
             ok, detail = deliver_link(
-                partner, url_for('partners.confirm', token=raw, _external=True))
+                partner, _trusted_url('partners.confirm', token=raw))
             flash(f'Sign-in link sent to {partner["email"]}.' if ok
                   else f'The email did not send: {detail}', 'success' if ok else 'error')
             control_plane.log_console(engine, who, 'sent partner link', partner['code'])
@@ -923,7 +923,8 @@ def affiliate_action(affiliate_id, action):
             flash(f'{org["name"]} is cleared. Its commission can now be paid out.', 'success')
     elif action == 'reverse':
         result = affiliates.reverse(engine, request.form.get('invoice') or '',
-                                    (request.form.get('reason') or 'reversed by staff')[:200])
+                                    (request.form.get('reason') or 'reversed by staff')[:200],
+                                    affiliate_id=partner['id'])
         control_plane.log_console(engine, who, 'reversed commission', partner['code'],
                                   f'{request.form.get("invoice")}: {result}')
         flash({'reversed': 'Commission reversed.',
