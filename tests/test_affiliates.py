@@ -624,6 +624,15 @@ else:
         check(rf[0] and 'reversed' in rf[1], f'so a refund that follows is found and reversed ({rf[1]})')
 
         with app.app_context():
+            try:
+                billing.apply_event({'type': 'charge.refunded', 'data': {'object': {
+                    'id': 'ch_lost', 'customer': f'cus_nobody_{TAG}', 'invoice': f'in_{TAG}_x',
+                    'refunded': True}}})
+                retried = False
+            except LookupError:
+                retried = True
+        check(retried, 'a refund for a customer not mapped yet is retried by Stripe, not lost')
+        with app.app_context():
             affiliates.reverse(engine, f'in_{TAG}_c1')
             year_on = datetime.utcnow() + timedelta(days=400)
             thirteenth = affiliates.accrue(engine, cslug, {

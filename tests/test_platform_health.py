@@ -101,6 +101,10 @@ try:
     print('\n1. Four states, and "never" is not an alarm')
     check(state('backup:akye')['state'] == 'never', 'nothing reported yet: not reported yet')
     with app.app_context():
+        listed = {r['kind'] for r in platform_health.backups(engine, NOW)}
+    check({'backup:akye', 'backup:dazzle'} <= listed,
+          'every backup target the workflow runs is listed, reported or not')
+    with app.app_context():
         check(not platform_health.attention(engine, NOW),
               'and an untouched deployment does not light the alarm on day one')
         run_at('backup:akye', 5, items=1000, detail='ok')

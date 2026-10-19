@@ -343,6 +343,13 @@ def apply_event(event):
         org = control_plane.find(engine, slug)
     if org is None and customer:
         org = control_plane.find_by_customer(engine, customer)
+    if org is None and kind == 'charge.refunded' and obj.get('invoice'):
+        # Not "nothing to do": the payment this refunds may simply not have
+        # been mapped yet (events can arrive out of order, or be delayed by an
+        # outage). Raising makes the webhook answer 500, so Stripe delivers it
+        # again later instead of the refund being lost for good, which would
+        # let the invoice.paid that follows pay a commission on money returned.
+        raise LookupError(f'refund for an unmapped customer ({customer}); retry later')
     if org is None:
         # An event for something we do not know about. Acknowledged so Stripe
         # stops retrying; recorded so somebody can look.
