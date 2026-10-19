@@ -145,6 +145,8 @@ try:
           'no key: refused')
     check(c.post('/api/platform-run', headers=dict(PRODUCT, **{'X-Api-Key': 'wrong'}), json=body).status_code == 403,
           'wrong key: refused')
+    check(c.post('/api/platform-run?api_key=' + KEY['X-Api-Key'], headers=PRODUCT, json=body).status_code == 403,
+          'the right key in the URL: refused too, it would end up in every proxy log')
     h = dict(PRODUCT, **KEY)
     r = c.post('/api/platform-run', headers=h, json=body)
     check(r.status_code == 200 and r.get_json()['ok'], 'the right key is accepted')

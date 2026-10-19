@@ -185,7 +185,9 @@ check(product_jobs <= security.PRODUCT_CRON_PATHS, 'every product job refuses a 
 api_src = (ROOT / 'blueprints' / 'api.py').read_text()
 check("api_key != expected" not in api_src and "request.args.get('api_key'" not in api_src,
       'no job compares its key with != or reads it from the URL')
-check(api_src.count('if not _cron_key_ok():') == 12, 'all twelve jobs use the one check')
+# Twelve scheduled jobs and the endpoint backups and the scheduler report to.
+check(api_src.count('if not _cron_key_ok():') == 13, 'all twelve jobs and the platform-run report use the one check')
+check(api_src.count('def _cron_key_ok(') == 1, 'and there is only one such check, so a second cannot override it')
 cl = app.test_client()
 r = cl.post('/api/owner-digest?api_key=cron-key', base_url=HOST_A)
 check(r.status_code == 403, f'owner-digest refuses its key in the URL ({r.status_code})')

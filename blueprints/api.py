@@ -965,12 +965,6 @@ def _record_product_job(job, items, failed=0):
         pass
 
 
-def _cron_key_ok():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    return bool(expected) and api_key == expected
-
-
 @api_bp.route('/platform-run', methods=['POST'])
 def platform_run():
     """Where backups and the scheduler say how they went (platform_report.py).
