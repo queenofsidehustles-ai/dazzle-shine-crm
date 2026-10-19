@@ -111,7 +111,10 @@ def configured():
 # and explain only if somebody hesitates. The old six ran to 217 words before
 # the owner had answered a single question.
 STEP_PROMPTS = {
-    'business': 'First, a quick check of your details — the ones customers see.',
+    'business': lambda has_card: (
+        'Quick check — is this right?' if has_card else
+        'What phone number should customers see? I have your name and email '
+        'already.'),
     'pricing': 'What do you charge for a standard clean of a 2-bed, 2-bath?',
     'terms': 'Your customer terms are ready. Have a look and accept them.',
     'balance': 'When a job’s finished, should the rest come off the card on file?',
@@ -124,6 +127,7 @@ STEP_PROMPTS = {
 }
 
 STEP_LINKS = {
+    'business': ('Open my details', '/settings/business'),
     'timezone': ('Set my timezone', '/settings/business'),
     'terms': ('Read my terms', '/settings/business'),
     'payments': ('Connect payments', '/settings/connections'),
@@ -195,7 +199,6 @@ def next_message(done_line=''):
     if step is None:
         return ((done_line + ' ' + DONE_PROMPT).strip(),
                 [_link_card(*DONE_LINK)], 'done')
-    text = STEP_PROMPTS.get(step['key'], step.get('why') or '')
     cards = []
     # The card comes with the question, already filled in, built here rather
     # than by the model. Three reasons: it is instant, it costs nothing, and
@@ -212,6 +215,11 @@ def next_message(done_line=''):
                     cards.append(card)
     except Exception:
         assistant._record(f'setup card for {step["key"]} could not be built')
+    # Chosen after the cards, because for some steps the question is not the
+    # same when there is nothing on screen to point at.
+    text = STEP_PROMPTS.get(step['key'], step.get('why') or '')
+    if callable(text):
+        text = text(bool(cards))
     link = STEP_LINKS.get(step['key'])
     if link and not cards:
         cards.append(_link_card(*link))
@@ -382,9 +390,11 @@ def prefilled_business_card():
         lines.append(f'{FIELD_LABELS.get(f, f.title())}: {value}')
 
     if not payload:
-        # Nothing to confirm yet. The model asks for a phone number instead,
-        # which is the one field here that customers actually need.
-        return [], None
+        # Nothing of theirs to confirm: a business too new to be listed, with
+        # no phone on file yet. There is no card, and the question above asks
+        # for the phone in plain words rather than gesturing at a card that
+        # was never built.
+        return lines, None
     card = _offer('setup_save_business', payload, 'Your details', lines,
                   'Looks right')
     return lines, card
@@ -907,6 +917,25 @@ def ask(message, history=None, opening=''):
 # Each one checks again. The card was right when it was offered; the world
 # can move before the button is pressed.
 
+def _timezone_from_zip():
+    """Set the timezone from the ZIP, if we have one and no timezone yet.
+
+    Derived wherever a ZIP turns up, rather than asked. A company that joined
+    before the ZIP field existed gets its timezone the moment it tells us
+    where it is, without ever being asked a question whose right answer we
+    could work out.
+    """
+    from extensions import db
+    from models import BusinessSetting
+    import zip_zones
+    if (BusinessSetting.get('timezone') or '').strip():
+        return
+    zone = zip_zones.zone_for_zip(BusinessSetting.get('zip_code'))
+    if zone:
+        BusinessSetting.set('timezone', zone)
+        db.session.commit()
+
+
 def save_business(payload):
     import demo_guard
     from extensions import db
@@ -922,6 +951,7 @@ def save_business(payload):
     if not saved:
         return False, 'There was nothing to save.'
     db.session.commit()
+    _timezone_from_zip()
     try:
         import legacy_brands
         legacy_brands.restore_if_original()

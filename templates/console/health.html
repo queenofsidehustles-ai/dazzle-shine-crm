@@ -18,6 +18,46 @@
 </div>
 {% endif %}
 
+<h3 class="ops-h">Signups, last 24 hours</h3>
+<div class="ops-card">
+  {% if not signups.limits_on %}
+  <p class="ops-bad" style="margin:0 0 var(--s2)">Limits are switched off
+    (SIGNUP_LIMITS=0) — anyone can open any number of companies.</p>
+  {% endif %}
+  <p style="margin:0 0 var(--s2)">
+    <strong>{{ signups.total }}</strong> attempt{{ 's' if signups.total != 1 }}
+    from <strong>{{ signups.addresses }}</strong>
+    address{{ 'es' if signups.addresses != 1 }} ·
+    cap is {{ signups.per_address_cap }} per address per day
+  </p>
+  {# The cap is per address, which is only true if the address recorded is
+     the visitor's. Behind a proxy it can quietly become the proxy's, and
+     then one rule meant to stop a script shuts the product for everybody.
+     That failure looks exactly like the rule working, so it is shown. #}
+  <span class="ops-dim">You look like <strong>{{ signups.you }}</strong>{%
+    if signups.forwarded %} · forwarded-for: {{ signups.forwarded }}{% endif %}</span>
+  {% if signups.addresses == 1 and signups.total > 1 %}
+  <p class="ops-bad" style="margin:var(--s2) 0 0">
+    Every attempt came from one address. If those were different people, the
+    per-address cap is acting on everybody at once.
+  </p>
+  {% endif %}
+  {% if signups.attempts %}
+  <table class="con" style="margin-top:var(--s3)">
+    <tr><th>Address</th><th>Attempts</th><th>Last</th></tr>
+    {% for a in signups.attempts %}
+    <tr>
+      <td>{{ a.ip }}{% if a.ip == signups.you %} <span class="ops-dim">(you)</span>{% endif %}</td>
+      <td{% if a.count >= signups.per_address_cap %} class="ops-bad"{% endif %}>{{ a.count }}</td>
+      <td class="ops-dim">{{ a.last.strftime('%d %b %H:%M') if a.last else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="ops-dim" style="margin:var(--s2) 0 0">No signup attempts in the last day.</p>
+  {% endif %}
+</div>
+
 <h3 class="ops-h">Nana and Claude</h3>
 <div class="ops-card">
   {% if ai.key %}<p class="ops-good" style="margin:0 0 var(--s2)">Key set</p>

@@ -198,8 +198,15 @@ def journey():
         # are not blanks to fill in. They are the defaults that are wrong for
         # this particular business, and the whole of setup is confirming
         # them.
+        # The phone, and only the phone. The timezone is derived -- from the
+        # ZIP at signup, or from the ZIP whenever one arrives -- so requiring
+        # it here made the step impossible for every company that signed up
+        # before the ZIP field existed: nothing in the chat asked for a
+        # timezone, so nothing could ever finish the step, and the banner
+        # kept pointing back at it. A step nobody can complete is worse than
+        # a step that is missing.
         {'key': 'business', 'required': True,
-         'done': setting('phone') and setting('timezone'),
+         'done': setting('phone'),
          'title': 'Check your details',
          'why': 'What customers see on every quote, invoice and reminder.',
          'cta': 'Check them', 'link': '/settings/business'},

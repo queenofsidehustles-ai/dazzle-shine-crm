@@ -71,7 +71,14 @@ with app.test_request_context():
     session['role'] = 'owner'
     for key in ('business', 'pricing', 'terms', 'balance'):
         text = setup_assistant.STEP_PROMPTS[key]
-        check(len(text.split()) <= 25, f'{key}: the question is one line ({len(text.split())} words)')
+        # The business question depends on whether there was anything to put
+        # on a card, so it is a callable. Both forms have to be short.
+        forms = [text(True), text(False)] if callable(text) else [text]
+        for form in forms:
+            check(len(form.split()) <= 25,
+                  f'{key}: the question is one line ({len(form.split())} words)')
+        check(not callable(text) or '?' in text(False),
+              f'{key}: with nothing to show, it asks rather than announces')
 with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'

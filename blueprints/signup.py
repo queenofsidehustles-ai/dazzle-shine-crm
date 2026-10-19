@@ -57,9 +57,20 @@ EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[a-z]{2,}$', re.I)
 
 # Every signup creates a whole schema for a company. Without limits, a script
 # could create thousands and take the database down for every real company.
-# Three companies a day from one address covers somebody setting up a second
-# business; the daily ceiling is a circuit breaker, raised with an env var.
-SIGNUPS_PER_ADDRESS_PER_DAY = 3
+# The daily ceiling below is the circuit breaker, raised with an env var.
+#
+# Ten a day from one address, not three. Three covers somebody opening a
+# second business and nothing else: it refuses an owner signing up customers
+# from one office, a trade stand, or anybody testing the thing -- and because
+# the refusal reads as a sensible rule rather than a fault, the first
+# assumption is always that signup is broken. Ten still stops a script.
+#
+# Worth knowing what this counts: the address the app sees, which behind a
+# proxy is only the visitor's if ProxyFix is reading the right hop. Console →
+# Health shows the addresses actually recorded, so a cap that has quietly
+# become a cap on everybody is visible rather than inferred.
+SIGNUPS_PER_ADDRESS_PER_DAY = int(
+    os.environ.get('SIGNUPS_PER_ADDRESS_PER_DAY') or 10)
 DEFAULT_DAILY_SIGNUP_CAP = 50
 # A field people never see. Browsers leave it empty; form-filling bots do not.
 HONEYPOT_FIELD = 'website'

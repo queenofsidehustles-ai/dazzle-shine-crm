@@ -19,6 +19,11 @@ os.environ['DATABASE_URL'] = os.environ.get(
 os.environ['SECRET_KEY'] = 'test-secret'
 os.environ['BASE_DOMAIN'] = 'akyehq.test'
 os.environ['SIGNUPS_OPEN'] = '1'
+# Pinned, so this tests the mechanism rather than the number. The live cap is
+# ten -- three refused an owner signing up customers from one office, and the
+# refusal reads as a rule working rather than a fault, so the first guess is
+# always that signup is broken.
+os.environ['SIGNUPS_PER_ADDRESS_PER_DAY'] = '3'
 os.environ.pop('CONSOLE_REQUIRE_2FA', None)
 os.environ.pop('SIGNUP_LIMITS', None)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -181,8 +186,10 @@ for i in range(4):
     slug_i = f'ip{i}{TAG}'
     r = signup(client(ip), slug_i)
     made.append(exists(slug_i))
+import blueprints.signup as _signup
+check(_signup.SIGNUPS_PER_ADDRESS_PER_DAY == 3, 'the cap is what this test pinned')
 check(made == [True, True, True, False],
-      f'three companies a day from one address, then no more ({made})')
+      f'as many as the cap from one address, then no more ({made})')
 check('as many new companies as we can open from one place' in r.get_data(as_text=True),
       'and it says why')
 
