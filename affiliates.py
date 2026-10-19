@@ -424,7 +424,7 @@ def reverse(engine, invoice_id, reason='refunded', now=None, slug=None,
     alone and reported to the caller as such, so staff can settle it by hand:
     quietly rewriting history that a partner has already been paid against is
     how a ledger stops being believed. Returns 'reversed', 'already paid',
-    'already reversed' or 'none'.
+    'already reversed', 'being paid' or 'none'.
 
     Stripe does not promise to deliver events in order, so a refund can arrive
     before the payment it refunds. With `slug` given and no commission yet, a
@@ -459,6 +459,12 @@ def reverse(engine, invoice_id, reason='refunded', now=None, slug=None,
             return 'already reversed'
         if row['status'] == 'paid':
             return 'already paid'
+        if row['status'] == 'paying':
+            # Claimed for a transfer that has been, or may yet be, sent. Letting
+            # it become 'reversed' now would leave a paid payout whose
+            # commission is recorded as cancelled. Settle it after the payout
+            # resolves (paid, then settle by hand; or released, then reverse).
+            return 'being paid'
         conn.execute(update(affiliate_commissions).where(
             affiliate_commissions.c.id == row['id']).values(
                 status='reversed', reversed_at=now,
@@ -484,19 +490,14 @@ def payable_cents(engine, affiliate_id, now=None):
                    _not_in_review())).scalar() or 0
 
 
-def record_payout(engine, affiliate_id, created_by, method='transfer',
-                  reference=None, note=None, now=None,
-                  minimum_cents=MIN_PAYOUT_CENTS):
-    """Pay out everything that is payable, as one payout. Returns it, or None.
+def _claim(engine, affiliate_id, created_by, method, reference, note, now,
+           minimum_cents, payout_status, row_status):
+    """Pick up everything payable and attach it to one new payout row.
 
-    None as well when the balance is under `minimum_cents` (default $50): it
-    rolls over to the next payout instead of being paid in pieces.
-
-    Records that money was sent; it does not send any. Marking the rows and
-    writing the payout happen in one transaction, and rows are claimed by an
-    UPDATE ... WHERE status = 'accrued', so two staff pressing the button at
-    the same moment cannot pay the same commission twice."""
-    now = now or datetime.utcnow()
+    One transaction, and rows are claimed by UPDATE ... WHERE status =
+    'accrued', so two people pressing the button at the same moment cannot pay
+    the same commission twice. None when nothing is payable or the balance is
+    under the minimum (it rolls over)."""
     with engine.begin() as conn:
         rows = conn.execute(
             select(affiliate_commissions.c.id, affiliate_commissions.c.commission_cents)
@@ -513,15 +514,218 @@ def record_payout(engine, affiliate_id, created_by, method='transfer',
             method=(method or '')[:40] or None,
             reference=(reference or '')[:120] or None,
             note=(note or '')[:300] or None, paid_at=now,
-            created_by=(created_by or '')[:200] or None
+            created_by=(created_by or '')[:200] or None,
+            status=payout_status
         ).returning(affiliate_payouts.c.id)).scalar()
         conn.execute(update(affiliate_commissions).where(
             affiliate_commissions.c.id.in_([r[0] for r in rows]),
             affiliate_commissions.c.status == 'accrued')
-            .values(status='paid', payout_id=payout_id))
+            .values(status=row_status, payout_id=payout_id))
         row = conn.execute(select(affiliate_payouts).where(
             affiliate_payouts.c.id == payout_id)).mappings().first()
     return dict(row)
+
+
+def record_payout(engine, affiliate_id, created_by, method='transfer',
+                  reference=None, note=None, now=None,
+                  minimum_cents=MIN_PAYOUT_CENTS):
+    """Write down a payout that was sent outside Stripe (PayPal, a check).
+
+    Pays out everything that is payable, as one payout. Returns it, or None
+    when nothing is payable or the balance is under `minimum_cents` (default
+    $50): it rolls over to the next payout instead of being paid in pieces.
+
+    Records that money was sent; it does not send any."""
+    return _claim(engine, affiliate_id, created_by, method, reference, note,
+                  now or datetime.utcnow(), minimum_cents, 'paid', 'paid')
+
+
+# ---------------------------------------------------------------------------
+# Paying through Stripe
+#
+# Two phases, because a transfer cannot be undone and a network can drop.
+#
+#   1. Claim: everything payable is attached to a new payout, status 'pending',
+#      and the commissions go to 'paying'. Nothing can claim them again.
+#   2. Send: one Stripe transfer, with an idempotency key derived from the
+#      payout id, so sending twice makes one transfer.
+#
+# The outcome is one of three:
+#   sent       payout 'paid', commissions 'paid', Stripe's transfer id kept.
+#   refused    Stripe said no (no funds, account not ready). Nothing moved, so
+#              the commissions go back to 'accrued' and the payout is 'failed'.
+#   unknown    the connection dropped. Nothing is released: the payout stays
+#              'pending' and the console offers a retry, which is safe because
+#              of the key. Releasing here could pay the partner twice.
+# ---------------------------------------------------------------------------
+
+def _finish(engine, payout_id, transfer_id, now):
+    """Mark a pending payout paid. True only for the call that made the change.
+
+    Two staff retrying the same payout both get the same transfer back from
+    Stripe, so both reach here. The UPDATE ... WHERE status = 'pending' lets
+    exactly one through, and only that one may log it and email the partner."""
+    with engine.begin() as conn:
+        done = conn.execute(update(affiliate_payouts).where(
+            affiliate_payouts.c.id == payout_id,
+            affiliate_payouts.c.status == 'pending')
+            .values(status='paid', stripe_transfer_id=transfer_id,
+                    reference=transfer_id, paid_at=now, failure=None)).rowcount
+        if done:
+            conn.execute(update(affiliate_commissions)
+                         .where(affiliate_commissions.c.payout_id == payout_id,
+                                affiliate_commissions.c.status == 'paying')
+                         .values(status='paid'))
+    return bool(done)
+
+
+def _release(engine, payout_id, error):
+    with engine.begin() as conn:
+        conn.execute(update(affiliate_payouts).where(affiliate_payouts.c.id == payout_id)
+                     .values(status='failed', failure=(error or '')[:300]))
+        conn.execute(update(affiliate_commissions)
+                     .where(affiliate_commissions.c.payout_id == payout_id,
+                            affiliate_commissions.c.status == 'paying')
+                     .values(status='accrued', payout_id=None))
+
+
+def payout(engine, payout_id):
+    with engine.connect() as conn:
+        row = conn.execute(select(affiliate_payouts).where(
+            affiliate_payouts.c.id == payout_id)).mappings().first()
+    return dict(row) if row else None
+
+
+def can_pay_by_stripe(partner):
+    """(True, '') or (False, why not) -- in words staff can act on."""
+    import partner_payouts
+    if not partner_payouts.configured():
+        return False, 'Stripe is not set up on this deployment (STRIPE_PLATFORM_SECRET_KEY).'
+    if not partner.get('payout_account_id'):
+        return False, f'{partner["name"]} has not set up payouts yet. They do it on their partner page.'
+    if not partner.get('payout_ready'):
+        return False, (f'{partner["name"]} has not finished payout setup with Stripe. '
+                       f'Refresh their status once they have.')
+    return True, ''
+
+
+def _send(engine, partner, pay, now):
+    """Send the transfer for a claimed payout and settle the books on the answer."""
+    import partner_payouts
+    ok, value, uncertain = partner_payouts.transfer(
+        partner['payout_account_id'], pay['amount_cents'],
+        f'Akye partner commission {partner["code"]} (payout {pay["id"]})',
+        idempotency_key=f'affiliate-payout-{pay["id"]}')
+    if ok:
+        first = _finish(engine, pay['id'], value, now)
+        done = dict(payout(engine, pay['id']), finished_now=first)
+        if not first:
+            return True, (f'{money(pay["amount_cents"])} to {partner["name"]} was already '
+                          f'confirmed as sent.'), done
+        return True, f'Sent {money(pay["amount_cents"])} to {partner["name"]}.', done
+    if uncertain:
+        return False, (f'Could not confirm the transfer ({value}). Nothing was released. '
+                       f'Press Retry: it is safe, Stripe will not send it twice.'), pay
+    _release(engine, pay['id'], value)
+    return False, f'Stripe refused the transfer: {value}', payout(engine, pay['id'])
+
+
+def pay_via_stripe(engine, affiliate_id, created_by, now=None,
+                   minimum_cents=MIN_PAYOUT_CENTS):
+    """Pay everything that is payable by Stripe transfer. (ok, message, payout).
+
+    THIS MOVES REAL MONEY in live mode."""
+    now = now or datetime.utcnow()
+    partner = find(engine, affiliate_id)
+    if not partner:
+        return False, 'No such partner.', None
+    allowed, why = can_pay_by_stripe(partner)
+    if not allowed:
+        return False, why, None
+    pay = _claim(engine, affiliate_id, created_by, 'stripe', None, None, now,
+                 minimum_cents, 'pending', 'paying')
+    if not pay:
+        return False, (f'Nothing to pay: no commission is past its hold, or the balance '
+                       f'is under {money(minimum_cents)} and rolls over.'), None
+    return _send(engine, partner, pay, now)
+
+
+def retry_payout(engine, payout_id, now=None, affiliate_id=None):
+    """Send a payout that was claimed but never confirmed. (ok, message, payout).
+
+    Only a 'pending' payout. The idempotency key is the same as the first
+    attempt's, so if Stripe did make the transfer, this returns it."""
+    now = now or datetime.utcnow()
+    pay = payout(engine, payout_id)
+    if affiliate_id is not None and pay and pay['affiliate_id'] != affiliate_id:
+        return False, 'That payout belongs to a different partner.', None
+    if not pay or pay.get('status') != 'pending':
+        return False, 'That payout is not waiting to be sent.', pay
+    partner = find(engine, pay['affiliate_id'])
+    allowed, why = can_pay_by_stripe(partner) if partner else (False, 'No such partner.')
+    if not allowed:
+        return False, why, pay
+    return _send(engine, partner, pay, now)
+
+
+def set_payout_account(engine, affiliate_id, account_id, ready=False):
+    with engine.begin() as conn:
+        conn.execute(update(affiliates).where(affiliates.c.id == affiliate_id)
+                     .values(payout_account_id=account_id, payout_ready=bool(ready)))
+
+
+def ensure_payout_account(engine, affiliate_id, create):
+    """The partner's Stripe account id, creating it exactly once.
+
+    `create` is called as create(email, name) -> (ok, id_or_error). The
+    partner's row is locked for the whole call, so a double-click or two
+    overlapping requests wait for each other, and the second sees the account
+    the first made instead of creating an orphan the partner would have to
+    onboard all over again. (ok, account_id_or_error)."""
+    with engine.begin() as conn:
+        row = conn.execute(select(affiliates).where(affiliates.c.id == affiliate_id)
+                           .with_for_update()).mappings().first()
+        if not row:
+            return False, 'No such partner.'
+        if row['payout_account_id']:
+            return True, row['payout_account_id']
+        ok, value = create(row['email'], row['name'])
+        if not ok:
+            return False, value
+        conn.execute(update(affiliates).where(affiliates.c.id == affiliate_id)
+                     .values(payout_account_id=value, payout_ready=False))
+        return True, value
+
+
+def refresh_payout_status(engine, partner):
+    """Ask Stripe whether the partner's account can receive money, and keep the
+    answer. (ok, ready_or_error)."""
+    import partner_payouts
+    if not partner.get('payout_account_id'):
+        return True, False
+    ok, st = partner_payouts.account_status(partner['payout_account_id'])
+    if not ok:
+        return False, st
+    ready = bool(st['payouts_enabled'])
+    set_payout_account(engine, partner['id'], partner['payout_account_id'], ready)
+    return True, ready
+
+
+def waiting_count(engine, now=None):
+    """Partners who need somebody at the console: an application to approve, a
+    balance at or over the minimum to pay, or a transfer whose outcome is not
+    confirmed (money that may or may not have moved). For the nav pill."""
+    now = now or datetime.utcnow()
+    with engine.connect() as conn:
+        unconfirmed = set(conn.execute(
+            select(affiliate_payouts.c.affiliate_id).where(
+                affiliate_payouts.c.status == 'pending')).scalars())
+    n = 0
+    for a in all_affiliates(engine):
+        if (a['status'] == 'pending' or a['id'] in unconfirmed
+                or payable_cents(engine, a['id'], now) >= MIN_PAYOUT_CENTS):
+            n += 1
+    return n
 
 
 # ---------------------------------------------------------------------------
@@ -562,8 +766,11 @@ def _by_day(rows, key, days, now):
             for i in range(days - 1, -1, -1)]
 
 
-def portal(engine, partner, now=None):
-    """Everything the partner page shows, in one dict."""
+def portal(engine, partner, now=None, staff=False):
+    """Everything the partner page shows, in one dict.
+
+    `staff` also includes payouts that failed and were released: the console
+    wants the whole history, the partner only the ones that happened."""
     now = now or datetime.utcnow()
     pid, code = partner['id'], partner['code']
     since30 = now - timedelta(days=30)
@@ -603,12 +810,15 @@ def portal(engine, partner, now=None):
                           'activated': bool(o.get('activated_at')),
                           'paying': stage == 'paying'})
 
+    if not staff:
+        payouts = [p for p in payouts if p.get('status') in (None, 'paid', 'pending')]
     accrued = [c for c in ledger if c['status'] == 'accrued']
     held = lambda c: c['payable_at'] > now or c['org_slug'] in in_review
     payable = sum(c['commission_cents'] for c in accrued if not held(c))
     pending = sum(c['commission_cents'] for c in accrued if held(c))
     paid = sum(c['commission_cents'] for c in ledger if c['status'] == 'paid')
     reversed_ = sum(c['commission_cents'] for c in ledger if c['status'] == 'reversed')
+    sending = sum(c['commission_cents'] for c in ledger if c['status'] == 'paying')
     next_payable = min((c['payable_at'] for c in accrued
                         if c['payable_at'] > now and c['org_slug'] not in in_review),
                        default=None)
@@ -618,6 +828,8 @@ def portal(engine, partner, now=None):
         if c['status'] == 'accrued':
             c['state'] = ('in review' if c['org_slug'] in in_review
                           else 'payable' if c['payable_at'] <= now else 'on hold')
+        elif c['status'] == 'paying':
+            c['state'] = 'sending'
         else:
             c['state'] = c['status']
 
@@ -660,7 +872,10 @@ def portal(engine, partner, now=None):
         'pending_cents': pending,
         'paid_cents': paid,
         'reversed_cents': reversed_,
-        'lifetime_cents': payable + pending + paid,
+        'sending_cents': sending,
+        'lifetime_cents': payable + pending + paid + sending,
+        'payout_ready': bool(partner.get('payout_ready')),
+        'payout_started': bool(partner.get('payout_account_id')),
         'next_payable_at': next_payable,
         'rate_pct': partner['commission_bps'] / 100,
         'min_payout_cents': MIN_PAYOUT_CENTS,

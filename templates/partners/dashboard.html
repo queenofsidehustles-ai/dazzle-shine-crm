@@ -37,10 +37,28 @@
 <div class="pt-tiles">
   <div class="pt-card pt-tile good"><span class="l">Ready to pay</span><span class="v">{{ money(payable_cents) }}</span><span class="n">past the {{ partner.hold_days }}-day hold{% if payable_cents and payable_cents < min_payout_cents %} · paid once it reaches {{ money(min_payout_cents) }}{% endif %}</span></div>
   <div class="pt-card pt-tile"><span class="l">On hold</span><span class="v">{{ money(pending_cents) }}</span><span class="n">{% if next_payable_at %}next frees up {{ when(next_payable_at) }}{% else %}nothing waiting{% endif %}</span></div>
-  <div class="pt-card pt-tile"><span class="l">Paid to you</span><span class="v">{{ money(paid_cents) }}</span><span class="n">{{ payouts|length }} payment{{ '' if payouts|length == 1 else 's' }}</span></div>
+  <div class="pt-card pt-tile"><span class="l">Paid to you</span><span class="v">{{ money(paid_cents) }}</span><span class="n">{% if sending_cents %}{{ money(sending_cents) }} on its way{% else %}{{ payouts|length }} payment{{ '' if payouts|length == 1 else 's' }}{% endif %}</span></div>
   <div class="pt-card pt-tile"><span class="l">Earned in total</span><span class="v">{{ money(lifetime_cents) }}</span><span class="n">{{ rate_pct|round(0)|int }}% for {{ partner.commission_months }} months</span></div>
 </div>
 {% if reversed_cents %}<p class="pt-dim" style="margin-top:var(--s2)">{{ money(reversed_cents) }} was cancelled because a payment was refunded. It is not counted above.</p>{% endif %}
+
+{% if payouts_available %}
+<div class="pt-card" style="margin-top:var(--s3)">
+  {% if payout_ready %}
+    <strong>Payouts are set up.</strong>
+    <span class="pt-dim" style="display:block;margin-top:2px">We send your balance to your bank through Stripe once it reaches {{ money(min_payout_cents) }}. Nothing for you to do.</span>
+  {% elif payout_started %}
+    <strong>Finish setting up payouts.</strong>
+    <span class="pt-dim" style="display:block;margin:2px 0 var(--s3)">Stripe still needs a few details before it can send you money.</span>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('partners.payouts_setup') }}">Continue setup</a>
+    <a class="btn btn-secondary btn-sm" href="{{ url_for('partners.payouts_return') }}">I have finished</a>
+  {% else %}
+    <strong>Set up payouts</strong>
+    <span class="pt-dim" style="display:block;margin:2px 0 var(--s3)">Tell Stripe where to send your money. It takes a few minutes, and your bank and tax details go to Stripe, not to us.</span>
+    <form method="post" action="{{ url_for('partners.payouts_setup') }}" style="margin:0"><button class="btn btn-primary btn-sm" type="submit">Set up payouts</button></form>
+  {% endif %}
+</div>
+{% endif %}
 
 <h2 class="pt-h">Performance</h2>
 <div class="pt-tiles">
@@ -104,6 +122,7 @@
     <td>
       {% if c.state == 'paid' %}<span class="pt-badge good">paid</span>
       {% elif c.state == 'payable' %}<span class="pt-badge good">ready to pay</span>
+      {% elif c.state == 'sending' %}<span class="pt-badge amber">on its way</span>
       {% elif c.state == 'in review' %}<span class="pt-badge amber">being checked by us</span>
       {% elif c.state == 'on hold' %}<span class="pt-badge amber">on hold until {{ when(c.payable_at) }}</span>
       {% else %}<span class="pt-badge warn">cancelled{% if c.reversal_reason %} · {{ c.reversal_reason }}{% endif %}</span>{% endif %}
@@ -119,13 +138,13 @@
 <h2 class="pt-h">Payments to you</h2>
 {% if payouts %}
 <div class="pt-scroll"><table class="pt">
-  <tr><th>Date</th><th class="num">Amount</th><th>How</th><th>Reference</th></tr>
+  <tr><th>Date</th><th class="num">Amount</th><th>How</th><th>Status</th><th>Reference</th></tr>
   {% for p in payouts %}
-  <tr><td>{{ when(p.paid_at) }}</td><td class="num">{{ money(p.amount_cents) }}</td><td>{{ p.method or '—' }}</td><td class="pt-dim">{{ p.reference or '—' }}</td></tr>
+  <tr><td>{{ when(p.paid_at) }}</td><td class="num">{{ money(p.amount_cents) }}</td><td>{{ 'bank transfer' if p.method == 'stripe' else (p.method or '—') }}</td><td>{% if p.status == 'pending' %}<span class="pt-badge amber">sending</span>{% else %}<span class="pt-badge good">sent</span>{% endif %}</td><td class="pt-dim">{{ p.reference or '—' }}</td></tr>
   {% endfor %}
 </table></div>
 {% else %}
-<div class="pt-empty">No payments yet. When money is ready to pay, we send it and record it here.</div>
+<div class="pt-empty">No payments yet. When your balance reaches {{ money(min_payout_cents) }}, we send it and record it here.</div>
 {% endif %}
 
 <p class="pt-dim" style="margin-top:var(--s8)">Questions? Reply to any email from us{% if SUPPORT_EMAIL %} or write to <a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>{% endif %}.</p>

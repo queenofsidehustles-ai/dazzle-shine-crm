@@ -15,6 +15,7 @@
   Came from: <strong>{{ came_from }}</strong>
   {%- if org.signup_medium %} · {{ org.signup_medium }}{% endif %}
   {%- if org.signup_landing %} · landed on <code>{{ org.signup_landing }}</code>{% endif %}
+  {%- if org.affiliate_code %} · brought by partner <a href="{{ url_for('console.affiliates_view') }}">{{ org.affiliate_code }}</a>{% if org.affiliate_flag %} <span class="ops-bad">(commission held: {{ org.affiliate_flag }})</span>{% endif %}{% endif %}
   {%- if org.referred_by %} · referred by <a href="{{ url_for('console.company', slug=org.referred_by) }}">{{ org.referred_by }}</a>{% endif %}
   {%- if referred %} · referred {{ referred|length }}:
     {% for c in referred %}<a href="{{ url_for('console.company', slug=c.slug) }}">{{ c.name or c.slug }}</a>{{ ', ' if not loop.last }}{% endfor %}
