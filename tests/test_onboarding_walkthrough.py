@@ -67,6 +67,19 @@ def tap(card):
         return setup_assistant.confirm(card['token'])
 
 
+def fill_and_save(step, card):
+    """What the owner does to an editable card: fill any required-but-empty
+    box, then press Save. A brand-new company's details card has no phone, so
+    that is the one box that has to be typed before Save does anything."""
+    fields = {f['name']: f['value'] for f in card.get('fields', [])}
+    if step == 'business' and not fields.get('phone'):
+        fields['phone'] = '(407) 555-0100'
+    with app.app_context(), app.test_request_context():
+        from flask import session
+        session['role'] = 'owner'
+        return setup_assistant.save_form(step, fields)
+
+
 def progress():
     with app.app_context():
         return onboarding.progress()
@@ -91,15 +104,19 @@ for label, fixture in (
             break                      # required steps are what must be walkable
         text, cards, kinds, _k = offered(key)
         confirms = [c for c in cards if c.get('kind') == 'confirm']
+        forms = [c for c in cards if c.get('kind') == 'form']
         links = [c for c in cards if c.get('kind') == 'link']
 
         check(bool(text.strip()), f'{key}: says something')
-        check(bool(confirms) or '?' in text,
+        check(bool(confirms or forms) or '?' in text,
               f'{key}: offers a card, or asks a question in plain words')
-        check(bool(confirms or links),
+        check(bool(confirms or forms or links),
               f'{key}: has a way through that is not the chat box')
 
-        if confirms:
+        if forms:
+            ok, said = fill_and_save(key, forms[0])
+            check(ok, f'{key}: filling it in and saving works — {said[:48]}')
+        elif confirms:
             ok, said = tap(confirms[0])
             check(ok, f'{key}: tapping it works — {said[:48]}')
         else:
