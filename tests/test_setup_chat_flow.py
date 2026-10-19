@@ -38,8 +38,18 @@ with c.session_transaction() as s:
 
 with app.app_context():
     db.create_all()
+    # Everything required, so this file is about what it says it is about:
+    # the optional tail, and not having a dead end in it. The required steps
+    # have their own coverage in test_onboarding_required.py.
     BusinessSetting.set('business_name', 'Sparkle Co')
+    BusinessSetting.set('phone', '(407) 555-0100')
+    BusinessSetting.set('email', 'hello@sparkle.co')
+    BusinessSetting.set('timezone', 'America/New_York')
     BusinessSetting.set('pricing_reviewed', '1')
+    BusinessSetting.set('terms_reviewed', '1')
+    import integrations
+    integrations.set('stripe_secret_key', 'sk_live_testonly')
+    BusinessSetting.set('balance_collection', 'ask')
     db.session.commit()
 
 

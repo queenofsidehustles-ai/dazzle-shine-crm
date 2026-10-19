@@ -312,6 +312,12 @@
   <div class="card" data-card-key="money">
     <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">The money</h2>
       <div style="">
+      {% if booking.status not in ('completed', 'cancelled', 'on_hold') %}
+      <form method="POST" action="{{ url_for('bookings.mark_complete', booking_id=booking.id) }}" style="margin-bottom:16px"
+            onsubmit="return confirm('Mark this booking complete? No photos needed.')">
+        <button type="submit" class="btn btn-outline btn-sm">✅ Mark complete (no photos needed)</button>
+      </form>
+      {% endif %}
       <form method="POST" id="jobEditForm">
         <div class="form-group">
           <label>Status</label>

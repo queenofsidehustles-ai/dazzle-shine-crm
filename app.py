@@ -304,9 +304,11 @@ def create_app():
             if request.method == 'GET':
                 adoption.note_visit(request.endpoint, nav)
             # Whether Nana's setup chat is on, so the welcome pop-up and the
-            # nudge can offer her. Only asked while setup is unfinished.
+            # nudge can offer her. Asked while there is a step left -- which
+            # outlasts `complete`, because that now means able to trade and
+            # the optional steps carry on after it.
             setup_chat = False
-            if setup is not None and not setup.get('complete'):
+            if setup is not None and setup.get('next'):
                 try:
                     import setup_assistant
                     setup_chat = setup_assistant.configured()
@@ -349,7 +351,11 @@ def create_app():
                 return {'TRIAL': None}
 
             state = billing.trial_state(org)
-            if state and not state['activated']:
+            # Not "has the trial started" any more -- under one clock it always
+            # has, and asking that question here stopped activation ever being
+            # recorded at all. The question is whether this company has been
+            # stamped yet.
+            if state and not org.get('activated_at'):
                 # Have they actually begun? Cheap: onboarding already knows.
                 if onboarding.progress().get('activated'):
                     if billing.mark_activated(provisioning._engine(), org['slug']):
@@ -591,6 +597,21 @@ def create_app():
 
         migrate.run_at_boot(app)
 
+        # The control plane's own additive columns (closed_at, purged_at).
+        # control_plane.find() selects them unconditionally, so an existing
+        # deployment's `public.organizations` — created before those columns
+        # existed — must be backfilled before any tenant request runs, not
+        # merely by the CLI paths that happened to call ensure_table()
+        # already. It also has to come before migrate_all(), which reads the
+        # company list and would otherwise fail on a column not yet added.
+        # Never fatal: this deployment may have no control plane at
+        # all (a single-business instance) or run on SQLite, neither of
+        # which is an error.
+        try:
+            import control_plane
+            control_plane.ensure_table(db.engine)
+        except Exception as _e:
+            print(f'  ⚠️  control plane not migrated: {_e}')
         # And every company's own schema. run_at_boot handles the default
         # schema only, so without this the first release carrying a migration
         # leaves every existing customer on the old one — the new table simply
@@ -603,19 +624,6 @@ def create_app():
         except Exception as _e:
             print(f'  ⚠️  company schemas not migrated: {_e}')
 
-        # The control plane's own additive columns (closed_at, purged_at).
-        # control_plane.find() selects them unconditionally, so an existing
-        # deployment's `public.organizations` — created before those columns
-        # existed — must be backfilled before any tenant request runs, not
-        # merely by the CLI paths that happened to call ensure_table()
-        # already. Never fatal: this deployment may have no control plane at
-        # all (a single-business instance) or run on SQLite, neither of
-        # which is an error.
-        try:
-            import control_plane
-            control_plane.ensure_table(db.engine)
-        except Exception as _e:
-            print(f'  ⚠️  control plane not migrated: {_e}')
         db.create_all()
         _migrate_db()
         _seed_checklists()
@@ -1215,7 +1223,7 @@ def _seed_checklists():
             'Re-clean all glass, mirrors and interior windows',
             'Damp-mop all hard floors a second time',
             'Spot-clean marks left by trades returning to the site',
-            'Final walkthrough with the customer — document condition with photos',
+            'Final walkthrough with the customer — check and note condition',
         ]),
         ('Post-Construction — Full Service', 'postcon_full', [
             'Haul out all remaining construction debris, packaging and jobsite trash',
@@ -1238,7 +1246,7 @@ def _seed_checklists():
             'Straighten furniture and décor',
             'Check and replace light bulbs if needed',
             'Check for guest left-behind items',
-            'Take photos when complete',
+            'Final look-over before leaving',
         ]),
         ('Apartment / Condo Cleaning', 'apartment', [
             'Dust all surfaces',

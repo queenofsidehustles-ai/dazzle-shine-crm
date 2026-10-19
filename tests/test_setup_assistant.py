@@ -87,8 +87,9 @@ print('\n2. With a key the owner gets the chat, opening on the next step')
 c = owner()
 r = c.get('/settings/getting-started')
 check(b'Set up with' in r.data, 'chat is on the page')
-# The name comes from signup, so the first open step is pricing.
-check(b'2-bedroom, 2-bathroom' in r.data, 'and the opening asks about the next open step')
+# The name comes from signup, but business details are not finished until
+# there is a phone and an email on them too, so that is the first open step.
+check(b'phone number and email' in r.data, 'and the opening asks about the next open step')
 
 va = app.test_client()
 with va.session_transaction() as s:
@@ -122,8 +123,9 @@ check(res['ok'] is True, 'pressing Save works')
 with app.app_context():
     check(BusinessSetting.get('phone') == '(407) 555-0100', 'phone saved as shown')
     check(BusinessSetting.get('email') == 'hello@sparkle.co', 'email saved as shown')
-    check(onboarding.progress()['next']['key'] == 'pricing', 'setup moved on to pricing')
-check('2-bedroom' in (res.get('follow') or ''), 'and the follow-up asks about prices')
+    check(onboarding.progress()['next']['key'] == 'timezone',
+          'setup moved on to the timezone, which everything is scheduled against')
+check('timezone' in (res.get('follow') or ''), 'and the follow-up asks about the timezone')
 r = c.post('/settings/getting-started/assistant/confirm',
            json={'token': cards[0]['token']}, headers=H)
 check(r.get_json()['ok'] is False and 'already' in r.get_json()['say'],

@@ -30,7 +30,6 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import control_plane
-import entitlements
 
 # What each plan is called at Stripe. Price IDs live in the environment because
 # they differ between test and live mode, and a test price ID in production is a
@@ -39,8 +38,6 @@ PRICE_ENV = {
     'pro': 'STRIPE_PRICE_PRO',
     'scale': 'STRIPE_PRICE_SCALE',
 }
-
-
 
 def stripe_key():
     """The product's own Stripe account — not a customer's.
@@ -97,31 +94,55 @@ def plan_for(org):
         # dates, which is what a half-written record or a hand-edited row looks
         # like, quietly granted the top plan to somebody who had paid nothing.
         # Missing information must never be read as permission.
-        ends = org.get('trial_ends_at')
+        # The same rule the banner reads. These two disagreeing is how a
+        # company gets told it has twelve days left while already being on
+        # the free plan.
+        ends = trial_ends(org)
         if not ends or ends < datetime.utcnow():
             return 'solo'
     return org.get('plan') or 'solo'
 
 
-# One number for everything about the trial. Defined once, in entitlements.py,
-# beside the plans it is a trial of; change it there and every email, banner and
-# end date follows.
-TRIAL_DAYS = entitlements.TRIAL_DAYS
+# How long somebody gets. One clock, from signup.
+TRIAL_DAYS = 30
+
+
+def trial_ends(org, now=None):
+    """When this company's trial runs out. One rule, one place.
+
+    Thirty days from signup, except where an older trial already ran to a
+    later date -- one written under the two-clock rule, or extended by hand.
+    Nobody loses days they already had.
+
+    A row with no signup date is a half-written record, and missing
+    information must never be read as permission: it falls back to whatever
+    was stored, which may be nothing, which means no trial.
+    """
+    if not org:
+        return None
+    created = org.get('created_at')
+    stored = org.get('trial_ends_at')
+    if not created:
+        return stored
+    ends = created + timedelta(days=TRIAL_DAYS)
+    if stored and stored > ends:
+        ends = stored
+    return ends
 
 
 def trial_state(org, now=None):
     """Where a company is in its trial, in the words the banner needs.
 
-    One clock: TRIAL_DAYS from signup. It used to start only once somebody had
-    added a cleaner and a customer, with a second window to start at all. Two
-    clocks needed two sentences, two sets of emails and an explanation of
-    which number the banner was showing; one clock needs none of that. A busy
-    owner who signs up and gets pulled away loses days like anybody else, and
-    the emails are there to pull them back.
+    One clock: thirty days from signup. It used to be two — a fortnight that
+    began when a company added a cleaner and a customer, inside a month to
+    make that start. The reasoning was sound and the shape was not: it could
+    not be said in a sentence, the rule the code ran was not the rule the
+    emails described, and it made a brand-new owner invent a customer she did
+    not have before her trial would begin.
 
-    Setting up (a cleaner and a customer) is still tracked, as `activated`,
-    because it is the best predictor of who will keep the product. It just no
-    longer moves the end date.
+    Nobody loses days to the change. Where an older trial was already running
+    to a later date -- a company that activated in its fourth week, or a
+    support extension -- that date stands.
 
     Returns None when there is no trial in play at all — a paying customer, or
     a single-business install with no control plane.
@@ -133,33 +154,41 @@ def trial_state(org, now=None):
         return None                       # paying, cancelled, or past due
 
     now = now or datetime.utcnow()
-    ends = org.get('trial_ends_at')
-    created = org.get('created_at') or now
+    ends = trial_ends(org, now) or (org.get('created_at') or now)
 
-    if not ends:
-        # A trial with no end date is not a trial — see plan_for. Bound it.
-        ends = created + timedelta(days=TRIAL_DAYS)
-
+    days = (ends - now).days
     over = ends <= now
+
     return {
-        'activated': bool(org.get('activated_at')),
+        # Kept for callers that still ask. Under one clock every trial is
+        # running from the moment it exists, so this is always true.
+        'started': True,
         'expired': over,
         'ends_at': ends,
-        'days_left': max(0, (ends - now).days),
+        'days_left': max(0, days),
+        # `activated` is no longer what starts the clock, but it is still
+        # worth knowing whether they ever got it working.
+        'activated': bool(org.get('activated_at')),
         'phase': 'over' if over else 'running',
     }
 
 
 def mark_activated(engine, slug, when=None):
-    """Record that they have put their real business in: a cleaner and a customer.
+    """Write down the moment a company first got the software working.
 
-    Called the first time that is true. Writes the date and nothing else: the
-    trial's end date was fixed at signup and does not move. Does nothing if it
-    has already been called."""
+    It used to start the clock. It does not any more -- the trial is thirty
+    days from signup whatever they do -- but when it happened is the most
+    useful number there is about a trial, and it is what the 'activated'
+    email answers to. So it is still recorded; it just no longer moves
+    anybody's end date.
+
+    Does nothing if it has already been called.
+    """
     org = control_plane.find(engine, slug)
     if not org or org.get('activated_at'):
         return False
-    control_plane.set_billing(engine, slug, activated_at=when or datetime.utcnow())
+    control_plane.set_billing(engine, slug,
+                              activated_at=when or datetime.utcnow())
     return True
 
 

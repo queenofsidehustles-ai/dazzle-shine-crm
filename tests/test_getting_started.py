@@ -88,6 +88,18 @@ with app.app_context():
         # Do that step the way a real owner would.
         if key == 'business':
             BusinessSetting.set('business_name', 'Sparkle Cleaning')
+            BusinessSetting.set('phone', '(407) 555-0100')
+            BusinessSetting.set('email', 'hello@sparkle.test')
+        elif key == 'timezone':
+            BusinessSetting.set('timezone', 'America/Chicago')
+        elif key == 'terms':
+            BusinessSetting.set('terms_reviewed', '1')
+        elif key == 'payments':
+            import integrations
+            integrations.set('stripe_secret_key', 'sk_live_gettingstarted')
+        elif key == 'balance':
+            import automations
+            automations.set_balance_mode('ask')
         elif key == 'pricing':
             BusinessSetting.set('pricing_reviewed', '1')
         elif key == 'booking_page':
@@ -112,26 +124,28 @@ print('\n4. A job with nobody on it is not the finish line')
 # Booking something and never assigning it is exactly the state a business gets
 # stuck in, and calling that "done" would hide the one step that matters.
 #
-# `complete`, not `activated`. Those were one flag and are now two questions:
-# `activated` is "have they put their real world in here" — a cleaner and a
-# customer, which is what starts the 30-day trial — and `complete` is "is every
-# setup step done", which is what puts the getting-started card away. Using one
-# answer for both meant the trial clock only began after all six steps, while
-# the banner promised it began at the first assigned job.
+# `complete`, not `activated`. Those are two questions: `activated` is "have
+# they put their real world in here" — a cleaner and a customer — and
+# `complete` is "can this business trade", which is what puts the
+# getting-started card away. Neither drives billing any more: the trial is
+# thirty days from signup whatever a company does.
 with app.app_context():
     BookingCrew.query.delete()
     db.session.commit()
     p = onboarding.progress()
-check(p['complete'] is False, 'an unassigned job does not finish the setup')
+    _req = len([s for s in onboarding.journey() if s.get('required')])
+check(p['next']['key'] == 'job', 'the job step is unfinished and still offered')
 check(p['activated'] is True,
-      'though the trial has started — they have a cleaner and a customer')
-check(p['next']['key'] == 'job', 'and the remaining step is still the job')
-with app.app_context():
-    _n = len(onboarding.journey())
-check(p['done'] == _n - 1,
-      f'every step but the last is done ({p["done"]} of {_n})')
-check(p['percent'] == round((_n - 1) / _n * 100),
-      f'and the percentage matches ({p["percent"]}%)')
+      'their own world is in there — a cleaner and a customer')
+# Being able to trade does not depend on having assigned a job. It used to,
+# which is how somebody with no customers yet was told her setup was
+# unfinished for a reason she could do nothing about.
+check(p['complete'] is True,
+      'but every required step is done, so the business can trade')
+check(p['done'] == p['total'] == _req and p['percent'] == 100,
+      f'the bar counts the required steps and is full ({p["done"]}/{p["total"]})')
+check(p['optional_done'] == p['optional_total'] - 1,
+      f'with one optional step left ({p["optional_done"]} of {p["optional_total"]})')
 
 print('\n5. Assigning it is the moment it counts')
 with app.app_context():
@@ -195,7 +209,11 @@ print('\nSetup progress is visible from every screen, not just the setup page')
 # existed in onboarding.progress() -- they were just only ever shown on the
 # one page somebody had to go looking for.
 shell = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates', 'base_admin.html')).read()
-check('SETUP and not SETUP.complete' in shell,
+# `SETUP.next`, not `not SETUP.complete`: complete now means able to trade,
+# and the optional steps outlive it. Keyed to completeness the meter would
+# disappear the moment the required list was finished, with four steps still
+# on the page under it.
+check('SETUP and SETUP.next' in shell,
       'the meter is drawn only while there is setup left to do')
 check('SETUP.percent' in shell and 'SETUP.done' in shell,
       'and shows how far along they are')
