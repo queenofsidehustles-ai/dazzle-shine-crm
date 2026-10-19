@@ -723,23 +723,6 @@ def _apply_template_patches():
     """One-time content patches to LIVE email templates (idempotent via flags),
     so fixes reach existing installs without the owner pasting anything."""
     from models import EmailTemplate, BusinessSetting
-    # Patch 0: photos are optional now, so no checklist item may ask a cleaner
-    # to attest to photos. Rewords in place (completed items are by index).
-    if not BusinessSetting.get('tmpl_patch_photo_items_v1'):
-        from models import ChecklistTemplate, JobChecklist
-        swaps = (('— document condition with photos', '— check and note condition'),
-                 ('Take photos when complete', 'Final look-over before leaving'))
-        rows = (ChecklistTemplate.query.all()
-                + JobChecklist.query.filter(JobChecklist.photos_submitted_at.is_(None)).all())
-        for row in rows:
-            text = row.items or ''
-            for old, new in swaps:
-                text = text.replace(old, new)
-            if text != (row.items or ''):
-                row.items = text
-        BusinessSetting.set('tmpl_patch_photo_items_v1', '1')
-        db.session.commit()
-
     # Patch 1: client anti-poaching / buyout clause in the booking confirmation
     if not BusinessSetting.get('tmpl_patch_buyout_v1'):
         t = EmailTemplate.query.filter_by(trigger='booking_confirmed').first()

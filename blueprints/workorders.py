@@ -504,6 +504,13 @@ def submit_complete(token):
     before = _private_photo_refs(checklist, 'before')
     after = _private_photo_refs(checklist, 'after')
     # Photos are encouraged, not required: a job can be closed out without them.
+    # The rest of the workflow is still enforced here, because the button gate in
+    # the page is only a convenience: the job must have been started, and every
+    # checklist item ticked.
+    if not checklist.clock_in_at:
+        return jsonify({'ok': False, 'error': 'Clock in before closing out the job.'}), 400
+    if checklist.get_items() and len(checklist.get_completed()) < len(checklist.get_items()):
+        return jsonify({'ok': False, 'error': 'Finish the checklist before closing out the job.'}), 400
 
     checklist.photos_submitted_at = datetime.utcnow()
     if not checklist.completed_at:
