@@ -110,9 +110,24 @@ STEP_PROMPTS = {
     'business': ('Let\'s start with the basics. What phone number and email '
                  'should your customers see? (Your business name too, if it '
                  'isn\'t right yet.)'),
+    'timezone': ('Quick one next: which timezone are you in? Everything gets '
+                 'scheduled against it — tomorrow\'s reminders, the day\'s plan, '
+                 'your end-of-day numbers. Left alone it assumes New York.'),
     'pricing': ('Now your prices. What do you charge for a standard clean of a '
                 '2-bedroom, 2-bathroom home? I\'ll build the rest of your price '
                 'list from that one number, and you can tweak any of it later.'),
+    'terms': ('Next, your customer terms. These are what people agree to when '
+              'they book — cancellations, access, what happens if nobody\'s home. '
+              'They come as a sensible draft, but you\'re the one who has to stand '
+              'behind them, so give them a read and change anything that isn\'t you.'),
+    'payments': ('Now the one I can\'t do for you: connecting payments. Until it\'s '
+                 'connected, deposits and payment links look right and collect '
+                 'nothing. It\'s on the Connections page, and your bank details stay '
+                 'with you — I never see them.'),
+    'balance': ('One decision left: when a job\'s finished, should the rest come off '
+                'the card on file automatically, or wait for you to say so? There\'s '
+                'no wrong answer, but until you pick one nothing gets taken, and the '
+                'money just sits there owed.'),
     'booking_page': ('Good news: you already have a booking page where customers '
                      'pick a service, see your price and book themselves. The '
                      'next step is putting the link somewhere they\'ll see it, '
@@ -127,15 +142,23 @@ STEP_PROMPTS = {
 }
 
 STEP_LINKS = {
+    'timezone': ('Set my timezone', '/settings/business'),
+    'terms': ('Read my terms', '/settings/business'),
+    'payments': ('Connect payments', '/settings/connections'),
+    'balance': ('Choose how balances are paid', '/settings/automations'),
     'booking_page': ('Open my booking page', '/settings/booking-page'),
     'job': ('Book a job', '/bookings/new'),
 }
 
-DONE_PROMPT = ('That\'s every setup step done. One more thing worth doing: '
-               'connect payments so customers can pay by card. You\'ll do that '
-               'yourself on the Connections page, so your bank details stay '
-               'with you.')
-DONE_LINK = ('Connect payments', '/settings/connections')
+# Payments used to live here, as "one more thing worth doing" after setup
+# was declared finished -- which read as optional, and is the one thing
+# standing between a booking and being paid for it. It is a required step
+# now, so by the time this is said it is already done.
+DONE_PROMPT = ('That\'s you ready to trade — business details, timezone, prices, '
+               'terms, payments and balances all sorted. Anything else is your '
+               'own world going in: your cleaners, your customers, your first '
+               'job. Say the word whenever you want to start on those.')
+DONE_LINK = ('See what\'s left', '/settings/getting-started')
 
 
 # Steps the owner chose to skip in the chat. Only the chat's order uses

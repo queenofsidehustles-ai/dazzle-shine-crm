@@ -302,9 +302,11 @@ def create_app():
             if request.method == 'GET':
                 adoption.note_visit(request.endpoint, nav)
             # Whether Nana's setup chat is on, so the welcome pop-up and the
-            # nudge can offer her. Only asked while setup is unfinished.
+            # nudge can offer her. Asked while there is a step left -- which
+            # outlasts `complete`, because that now means able to trade and
+            # the optional steps carry on after it.
             setup_chat = False
-            if setup is not None and not setup.get('complete'):
+            if setup is not None and setup.get('next'):
                 try:
                     import setup_assistant
                     setup_chat = setup_assistant.configured()

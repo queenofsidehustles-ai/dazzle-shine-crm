@@ -2,17 +2,33 @@
 {% block title %}Getting started · {{ BIZ }}{% endblock %}
 {% block content %}
 
-{% if p.complete %}
+{# `complete` means able to trade -- every required step done. The optional
+   ones are the business's own world going in, and they are offered rather
+   than insisted on, so finishing the required list must not make them
+   vanish off the page. Only when there is genuinely nothing left does this
+   become a card with nothing under it. #}
+{% if p.complete and p.optional_done == p.optional_total %}
   <div class="card" style="max-width:660px;text-align:center;padding:34px">
     <div style="font-size:2.2rem">🎉</div>
     <h2 style="margin:10px 0 6px">You're up and running</h2>
     <p style="color:var(--muted);line-height:1.6;margin:0 0 20px">
-      Your team, your customers, your prices and a job on the calendar. That is
+      Set up to trade, and your own cleaners, customers and jobs in it. That is
       the whole loop — everything from here is just doing it more often.
     </p>
     <a href="{{ url_for('bookings.calendar') }}" class="btn-primary">Open the calendar</a>
   </div>
 {% else %}
+  {% if p.complete %}
+  <div class="card" style="max-width:660px;padding:18px 20px;margin-bottom:14px;
+              border-left:4px solid var(--good)">
+    <div style="font-weight:700;margin-bottom:4px">✅ You can take money</div>
+    <p style="color:var(--muted);margin:0;line-height:1.55;font-size:0.92rem">
+      Business details, timezone, prices, terms, payments and balances are all
+      set. What is left below is your own world going in — do it whenever you
+      have it. Nothing is waiting on it.
+    </p>
+  </div>
+  {% endif %}
   {# The chat comes first when it is switched on: answering a question is an
      easier first move than choosing a page. The list stays underneath for
      anybody who would rather click. #}
@@ -32,7 +48,8 @@
        percentage of an unstated total, next to a bar already showing the same
        thing, next to "1 of 6 done" showing it a third time. Say the goal. #}
     <p style="color:var(--softer);font-size:0.86rem;margin:0 0 22px">
-      You're aiming for one real job, booked and assigned to a cleaner.
+      {% if p.complete %}Set up to trade. The rest is yours to add when you have it.
+      {% else %}You're aiming to be able to take a booking and get paid for it.{% endif %}
     </p>
 
     {# One next action, prominent. A screen of twelve equal buttons is a screen
@@ -67,6 +84,12 @@
        panel read as floating loose rather than leading the list. Everything
        else, in order, and the current one is not repeated. #}
     {% for s in p.steps %}
+      {% if loop.first and not s.required %}{% set _ = 0 %}{% endif %}
+      {% if not s.required and (loop.first or p.steps[loop.index0 - 1].required) %}
+        <div style="margin:18px 0 2px;font-size:0.72rem;letter-spacing:.12em;
+                    text-transform:uppercase;color:var(--softer);font-weight:700">
+          Optional — whenever you have them</div>
+      {% endif %}
       {% if not (p.next and s.key == p.next.key) %}
       <div style="display:flex;gap:12px;align-items:baseline;padding:9px 0;
                   border-top:1px solid var(--border)">

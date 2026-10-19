@@ -111,7 +111,7 @@
        about setup. Somebody who cannot see how much is left assumes it is a
        lot, and a job half done that looks endless is the one that gets
        abandoned. Disappears for good once the last step is ticked. #}
-    {% if SETUP and not SETUP.complete %}
+    {% if SETUP and SETUP.next %}
     <a href="{{ url_for('settings.getting_started') }}" class="setup-meter">
       <span class="setup-line">
         <span>Setting up</span>
@@ -231,7 +231,7 @@
          nudge and becomes an obstacle, and the person it annoys most is the
          one who has decided to do it later today anyway. It comes back
          tomorrow, and it stops for good when setup is finished. #}
-      {% if SETUP and not SETUP.complete and SETUP.next
+      {% if SETUP and SETUP.next
             and request.endpoint not in ('admin.dashboard', 'settings.getting_started') %}
       <div class="setup-nudge" id="setupnudge" hidden>
         <div class="setup-nudge-body">
@@ -380,7 +380,7 @@
   {# On every screen, deliberately. A beta tester who has to go and find
      somewhere to report a problem mostly does not. #}
   {% if session.get('logged_in') %}{% include '_feedback.html' %}{% endif %}
-{% if SETUP and not SETUP.complete and SETUP_CHAT and request.endpoint == 'admin.dashboard' %}
+{% if SETUP and SETUP.next and SETUP_CHAT and request.endpoint == 'admin.dashboard' %}
   {% include "admin/_nana_welcome.html" %}
 {% endif %}
 </body>
