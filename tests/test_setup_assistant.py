@@ -69,6 +69,10 @@ def say(text):
 with app.app_context():
     db.create_all()
     BusinessSetting.set('business_name', 'Sparkle Co')
+    # Signup works both of these out now -- the ZIP, and the timezone from it
+    # -- so a company arriving at the chat already has them.
+    BusinessSetting.set('zip_code', '32801')
+    BusinessSetting.set('timezone', 'America/New_York')
     db.session.commit()
 
 print('\n1. Without a key there is no chat')
@@ -87,9 +91,11 @@ print('\n2. With a key the owner gets the chat, opening on the next step')
 c = owner()
 r = c.get('/settings/getting-started')
 check(b'Set up with' in r.data, 'chat is on the page')
-# The name comes from signup, but business details are not finished until
-# there is a phone and an email on them too, so that is the first open step.
-check(b'phone number and email' in r.data, 'and the opening asks about the next open step')
+# Signup gives the name, the ZIP and the timezone. What it cannot give is a
+# phone number -- so the first open step is the details card, with the name
+# prefilled and the phone box empty for the owner to type into.
+check(b'Your details' in r.data,
+      'and the opening shows the editable details card for the next open step')
 
 va = app.test_client()
 with va.session_transaction() as s:
@@ -123,9 +129,9 @@ check(res['ok'] is True, 'pressing Save works')
 with app.app_context():
     check(BusinessSetting.get('phone') == '(407) 555-0100', 'phone saved as shown')
     check(BusinessSetting.get('email') == 'hello@sparkle.co', 'email saved as shown')
-    check(onboarding.progress()['next']['key'] == 'timezone',
-          'setup moved on to the timezone, which everything is scheduled against')
-check('timezone' in (res.get('follow') or ''), 'and the follow-up asks about the timezone')
+    check(onboarding.progress()['next']['key'] == 'pricing',
+          'setup moved on to the prices')
+check('2-bed' in (res.get('follow') or ''), 'and the follow-up asks about the prices')
 r = c.post('/settings/getting-started/assistant/confirm',
            json={'token': cards[0]['token']}, headers=H)
 check(r.get_json()['ok'] is False and 'already' in r.get_json()['say'],

@@ -274,23 +274,29 @@ def create_app():
             # sits. Cheap: the flag is written once the last step is done and
             # read from settings thereafter, so an established business is not
             # recomputing its onboarding on every page.
-            setup_done = True
+            # Two questions, and they are not the same one.
+            #
+            # `setup_done` decides whether to pile anything else on: the
+            # feature dots and the "did you know" both wait for it. That is
+            # about being able to trade, which is `complete`.
+            #
+            # `setup` is what the meter, the card and Nana's chat read, and it
+            # has to outlive `complete` -- the optional steps come after it,
+            # and keying this to completeness made them vanish off the page
+            # the moment the required list was finished.
+            #
+            # The flag is the cache: current means nothing is left at all and
+            # none of this has to be worked out again.
+            setup, setup_done = None, True
             try:
                 from models import BusinessSetting
+                import onboarding as _ob
                 if session.get('role') == 'owner':
-                    setup_done = BusinessSetting.get('setup_complete') == '1'
+                    if BusinessSetting.get('setup_complete') != _ob.SETUP_VERSION:
+                        setup = _ob.progress()
+                        setup_done = bool(setup['complete'])
             except Exception:
-                pass
-            # How far through setup, for the meter and the reminder. Only
-            # worked out for an owner who has not finished -- an established
-            # business pays nothing for a question it answered months ago.
-            setup = None
-            if not setup_done and session.get('role') == 'owner':
-                try:
-                    import onboarding
-                    setup = onboarding.progress()
-                except Exception:
-                    setup = None
+                setup, setup_done = None, True
 
             nav = navigation.sidebar(role, can, setup_done)
             # What each menu item is for, shown on hover (help_tips.py), and
@@ -548,15 +554,23 @@ def create_app():
             from models import BusinessSetting
             if not session.get('logged_in') or session.get('role') != 'owner':
                 return {'SETUP_PENDING': None}
-            if BusinessSetting.get('setup_complete') == '1':
-                return {'SETUP_PENDING': None}
             import onboarding
-            s = onboarding.summary()
-            if s['complete']:
-                BusinessSetting.set('setup_complete', '1')
+            if BusinessSetting.get('setup_complete') == onboarding.SETUP_VERSION:
+                return {'SETUP_PENDING': None}
+            p = onboarding.progress()
+            # Latched only when there is genuinely nothing left -- optional
+            # steps included. Latching at `complete` would switch off the
+            # meter and the chat while four steps were still on the page.
+            if p['next'] is None:
+                BusinessSetting.set('setup_complete', onboarding.SETUP_VERSION)
                 db.session.commit()
                 return {'SETUP_PENDING': None}
-            n = len(s['blocking'])
+            # The nag counts what is actually blocking, which is the required
+            # steps. "3 things" about a cleaner they have not hired yet is a
+            # reminder to ignore.
+            n = sum(1 for s in p['steps'] if s.get('required') and not s['done'])
+            if not n:
+                return {'SETUP_PENDING': None}
             return {'SETUP_PENDING': f"{n} thing{'s' if n != 1 else ''}"}
         except Exception:
             return {'SETUP_PENDING': None}

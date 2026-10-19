@@ -673,8 +673,26 @@ def health():
               and not o.get('purged_at')]
     job_labels = [(key, label) for key, label, _b, _c in _automation_jobs()]
     import llm
+    # Why a signup was refused, rather than guessing. See signups_view below.
+    import security as _sec
+    import blueprints.signup as _signup
+    attempts = control_plane.signup_attempts_by_ip(
+        engine, datetime.utcnow() - timedelta(days=1))
+    signups = {
+        'attempts': attempts,
+        'total': sum(a['count'] for a in attempts),
+        'addresses': len(attempts),
+        'per_address_cap': _signup.SIGNUPS_PER_ADDRESS_PER_DAY,
+        'limits_on': _signup._limits_apply(),
+        # What this very request looks like to the cap, beside the header it
+        # was derived from. If everybody shares one address, these two
+        # disagreeing is where it shows.
+        'you': _sec.client_ip(),
+        'forwarded': (request.headers.get('X-Forwarded-For') or '')[:120],
+    }
     return render_template(
-        'console/health.html', orgs=[o for o in orgs if o['slug'] in snaps],
+        'console/health.html', signups=signups,
+        orgs=[o for o in orgs if o['slug'] in snaps],
         snaps=snaps, job_labels=job_labels, mail=product.mail_status(),
         ai={'key': bool(llm.key()), 'fast': llm.FAST_MODEL,
             'smart': llm.SMART_MODEL},
