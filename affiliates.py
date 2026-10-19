@@ -287,10 +287,18 @@ def issue_login(engine, affiliate_id, now=None):
 
     Returns the raw token; only its hash is kept."""
     now = now or datetime.utcnow()
-    if login_requests_recent(engine, affiliate_id, now) >= LOGIN_REQUESTS_PER_HOUR:
-        return None
     raw = secrets.token_urlsafe(32)
     with engine.begin() as conn:
+        # The partner's row is locked for the count and the insert together.
+        # Counted outside, parallel requests all see the same few and all pass.
+        conn.execute(select(affiliates.c.id).where(affiliates.c.id == affiliate_id)
+                     .with_for_update())
+        recent = conn.execute(
+            select(func.count()).select_from(affiliate_logins).where(
+                affiliate_logins.c.affiliate_id == affiliate_id,
+                affiliate_logins.c.created_at >= now - timedelta(hours=1))).scalar() or 0
+        if recent >= LOGIN_REQUESTS_PER_HOUR:
+            return None
         conn.execute(insert(affiliate_logins).values(
             affiliate_id=affiliate_id, token_hash=_hash(raw), created_at=now,
             expires_at=now + timedelta(minutes=LOGIN_MINUTES)))
@@ -393,9 +401,11 @@ def _accrue(engine, slug, invoice, now):
         first = conn.execute(
             select(func.min(affiliate_commissions.c.invoice_paid_at)).where(
                 affiliate_commissions.c.affiliate_id == partner['id'],
-                affiliate_commissions.c.org_slug == slug,
-                affiliate_commissions.c.status != 'reversed')).scalar()
+                affiliate_commissions.c.org_slug == slug)).scalar()
         if first:
+            # The first real payment, even if it was refunded since: refunding
+            # it does not start a fresh twelve months. A refund that arrived
+            # before its payment leaves no paid date, so it does not count.
             # Exclusive: a monthly plan first paid on 1 January is paid again on
             # 1 January a year later, and that thirteenth payment is outside a
             # twelve-month term. An averaged day count would let it in.
@@ -437,8 +447,11 @@ def reverse(engine, invoice_id, reason='refunded', now=None, slug=None,
     an invoice belonging to anybody else reads as 'none'."""
     now = now or datetime.utcnow()
     with engine.begin() as conn:
+        # Locked: a payout claiming this row at the same moment must finish
+        # first, so the state decided on below is the one that is really there.
         row = conn.execute(select(affiliate_commissions).where(
-            affiliate_commissions.c.stripe_invoice_id == invoice_id)).mappings().first()
+            affiliate_commissions.c.stripe_invoice_id == invoice_id)
+            .with_for_update()).mappings().first()
         if row and affiliate_id is not None and row['affiliate_id'] != affiliate_id:
             return 'none'
         if not row:
