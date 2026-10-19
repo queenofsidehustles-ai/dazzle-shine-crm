@@ -594,8 +594,11 @@ def archive_company(slug):
     control_plane.set_archived(engine, slug, archive)
     control_plane.log_console(engine, request.console_user['email'],
                               'archived' if archive else 'unarchived', slug)
-    flash(f'{org["name"]} is {"archived — find it under Archived" if archive else "back in the main list"}.',
-          'success')
+    # Archive only tidies the list; say so, so nobody archives a company
+    # expecting it to stop being billed or signed in to (that is suspend).
+    flash(f'{org["name"]} is archived — find it under Archived. Only the list changes: '
+          f'its sign-in, billing and automations carry on. Suspend it to stop those.'
+          if archive else f'{org["name"]} is back in the main list.', 'success')
     return redirect(url_for('console.companies') if archive
                     else url_for('console.company', slug=slug))
 

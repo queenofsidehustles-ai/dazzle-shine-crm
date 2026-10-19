@@ -712,13 +712,18 @@ def _fix_sequences(db, conn_url='', tables=None, schema=PUBLIC):
                 ), {'t': f'{schema}.{table.name}', 'c': col.name})
 
 
-def verify(path, quiet=False, scratch_url=None):
+def verify(path, quiet=False, scratch_url=None, require_evidence=False):
     """Restore into a throwaway database and check it came back whole.
 
     This is the whole point of the file. Everything above it produces a
     plausible-looking artefact; this is the only part that finds out whether
     the artefact is any good, and it runs on every scheduled backup so the
     answer is never more than a day old.
+
+    require_evidence: the backup was made by this code, which always writes
+    the contract evidence down, so a sidecar without it is a failure rather
+    than an older backup to be let through (the nightly run). Off for
+    verifying a backup taken before evidence was recorded.
     """
     manifest = read_manifest(path)
     tenants = [s for s in (manifest.get('schemas') or []) if s != PUBLIC]
@@ -771,7 +776,7 @@ def verify(path, quiet=False, scratch_url=None):
     # backup was taken (the sidecar manifest's digests), its audit chains
     # still recompute, and every guard is back on: a restore that brought
     # the rows back but left them editable, or changed one, is not a restore.
-    evidence_problems = _verify_evidence(path, scratch_url, tenants)
+    evidence_problems = _verify_evidence(path, scratch_url, tenants, require_evidence)
     if evidence_problems:
         raise BackupFailed('restored evidence does not match: ' + '; '.join(evidence_problems[:10]))
 
@@ -799,7 +804,7 @@ def verify(path, quiet=False, scratch_url=None):
     return True, manifest
 
 
-def _verify_evidence(path, scratch_url, tenants):
+def _verify_evidence(path, scratch_url, tenants, require=False):
     """Problems with the restored contract evidence, against the digests the
     sidecar manifest wrote down at backup time. Postgres scratch only."""
     if not scratch_url.startswith('postgres'):
@@ -809,6 +814,11 @@ def _verify_evidence(path, scratch_url, tenants):
     if os.path.exists(sidecar):
         with open(sidecar) as fh:
             written = json.load(fh).get('evidence') or {}
+    if require and tenants and not written:
+        # Without this a manifest with nothing written down passed: every
+        # per-company check below is skipped when there is nothing to hold
+        # the restore to, and a green run would prove nothing about evidence.
+        return ['the backup wrote down no contract evidence at all']
     import evidence_check
     problems = []
     engine = _read_engine(scratch_url)
@@ -939,7 +949,7 @@ def main():
 
     if args.verify:
         try:
-            verify(path)
+            verify(path, require_evidence=True)
         except BackupFailed as e:
             print(f'  ❌ {e}')
             return 1

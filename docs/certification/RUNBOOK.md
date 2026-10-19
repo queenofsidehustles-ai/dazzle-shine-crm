@@ -5,7 +5,7 @@ This runbook goes with the GREEN remediation plan (2026-10-16). Each gate has:
 - the file it produces;
 - what a pass looks like.
 
-Production commands go through Railway (`railway run …`), so the database password never leaves Railway and is never pasted anywhere. Keep every output file in the evidence archive. Each file holds ids, hashes and counts, and no customer data.
+Production commands go through Railway, so the database password never leaves Railway and is never pasted anywhere: either `railway run python3 certify.py …` from a terminal, or in the dashboard, the app service's **Console** tab, where the app's Python is `/opt/venv/bin/python` (plain `python3` there lacks the app's packages). Keep every output file in the evidence archive. Each file holds ids, hashes and counts, and no customer data.
 
 | Gate | Command | Pass |
 |---|---|---|
@@ -17,6 +17,9 @@ Production commands go through Railway (`railway run …`), so the database pass
 | G4 Mail provider | Manual steps (below) | every step ticked |
 | G5 Restore | Nightly backup run (Actions → Nightly backup), plus `certify.py compare` | job green; exit 0 |
 | G6 Sign-off | This table filled in, the files archived, approvals recorded | — |
+| Tenants | `certify.py tenants --out tenants.json` (read-only): companies by real/test/demo, status, billing, and what happened in the last 24 hours and 7 days | exit 0; figures reconcile with the console |
+
+**The certified commit's own CI:** every push to `akye-stable` runs the full regression suite, the golden journeys, privacy lifecycle and launch certification on that exact commit (Actions → filter by branch `akye-stable`, event `push`). Record those run ids with the SHA; a search for pull-request runs finds none on a merge commit, which is not a missing run.
 
 ## G1: schema and guards
 `certify.py schema` runs in a read-only transaction. It:
@@ -83,7 +86,12 @@ Both are checked below.
   - every audit chain recomputes;
   - every guard is back on.
 
-**Comparing later:** to hold the live database against any earlier manifest, run `railway run python3 certify.py compare backup-<date>.manifest.json --out g5-compare.json`. It passes if everything written down then is still there, unchanged, and the audit chain has only grown by appending.
+A run made by this code must write that evidence down: a fresh backup whose manifest has none fails, rather than passing by checking nothing.
+
+**Comparing later:** to hold the live database against an earlier manifest:
+1. GitHub → Actions → Nightly backup → the run → Artifacts → download `backup-manifest-akye` and unzip it. It holds counts, ids and hashes only; the backup itself is the separate, encrypted artifact.
+2. Railway → the app service → Console → the file panel's **Upload**, and upload the `.manifest.json`.
+3. Run `/opt/venv/bin/python certify.py compare <that file> --out g5-compare.json`. It passes if everything written down then is still there, unchanged, and the audit chain has only grown by appending.
 
 **A backup fails loudly**, keeping the file and naming the rows, in either case:
 - an audit chain doesn't recompute;
