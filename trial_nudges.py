@@ -57,7 +57,7 @@ a note of their own:
     day2           day 2, everyone        your booking page is already live
     day4           day 4, not activated   where people get stuck
     day5           day 5, not activated   bring your list over
-    activated      when the 14 days start what is now switched on
+    activated      when they first get it working, what that means
     feature        ~day 10 of the trial   the one useful thing not yet tried
     first_booking  first online booking   somebody booked you (sent at once)
     winback        a week after it lapsed what you would get back, once
@@ -83,7 +83,11 @@ import product
 # the schedule is paused, a deploy runs long — and a nudge keyed to `== 7`
 # would simply never be sent rather than being sent a day late.
 START_7 = (7, 13)
-START_21 = (21, 29)
+# Stops short of the last three days so it never competes with 'ending',
+# which is the better letter to get when the trial is actually running out.
+# Under the old two-clock rule this ran to 29 because it was counting down to
+# a different deadline -- the chance to start -- which no longer exists.
+START_21 = (21, 26)
 
 # How close to the end "nearly over" starts.
 ENDING_WITHIN_DAYS = 3
@@ -99,7 +103,7 @@ DAY1 = (1, 2)
 DAY2 = (2, 4)
 DAY4 = (4, 5)
 DAY5 = (5, 6)
-# How long after the 14 days start the "now switched on" note still makes
+# How long after they first get it working the "that is it working" note makes
 # sense if the moment itself was missed.
 ACTIVATED_WITHIN_DAYS = 3
 # Days into the running trial for "one thing you have not tried". Ends before
@@ -191,31 +195,37 @@ def due(org, now=None, next_step=None):
             return 'winback'
         return None
 
-    if state['phase'] == 'running':
-        if state['days_left'] <= ENDING_WITHIN_DAYS and 'ending' not in already:
-            return 'ending'
+    # Every trial is running now, so there is one sequence rather than two.
+    # It is still keyed on days since signup, which is what the clock runs on.
+    if state['days_left'] <= ENDING_WITHIN_DAYS and 'ending' not in already:
+        return 'ending'
+
+    activated = bool(org.get('activated_at'))
+    if activated:
         began = org.get('activated_at') or now
         days_in = (now - began).days
         if days_in <= ACTIVATED_WITHIN_DAYS and 'activated' not in already:
             return 'activated'
-        if open_(DAY2, 'day2'):
-            return 'day2'
-        if next_step and open_(FEATURE, 'feature', days_in):
-            return 'feature'
-        return None
+    else:
+        # The ones who have not got it working yet. These used to be the
+        # "your days have not started" notes; the days start regardless now,
+        # which is a better reason to write, not a worse one.
+        if START_21[0] <= age <= START_21[1] and 'start_21' not in already:
+            return 'start_21'
+        if START_7[0] <= age <= START_7[1] and 'start_7' not in already:
+            return 'start_7'
 
-    # Not started. The two that matter most, because this is the person the
-    # banner cannot reach.
-    if START_21[0] <= age <= START_21[1] and 'start_21' not in already:
-        return 'start_21'
-    if START_7[0] <= age <= START_7[1] and 'start_7' not in already:
-        return 'start_7'
     # The first week, earliest first: a run that missed yesterday sends
     # yesterday's note today and today's tomorrow, rather than skipping one.
     for window, kind in ((DAY1, 'day1'), (DAY2, 'day2'),
                          (DAY4, 'day4'), (DAY5, 'day5')):
         if open_(window, kind):
             return kind
+
+    if next_step and activated:
+        began = org.get('activated_at') or now
+        if open_(FEATURE, 'feature', (now - began).days):
+            return 'feature'
     return None
 
 
@@ -267,36 +277,34 @@ def compose(org, kind, next_step=None):
 </div>'''
 
     if kind == 'start_7':
-        return (f'{name}: your {billing.TRIAL_DAYS} days haven\'t started yet',
+        return (f'{name}: a week in — shall we get it working?',
                 wrap(
-            f'Your {billing.TRIAL_DAYS} days haven\'t started yet',
+            'A week in, and nothing has run through it yet',
             f'''<p>You have everything — scheduling, the team, quotes, hiring,
-            the lot — and the clock has not begun. It starts when you add your
-            first cleaner and your first customer, so nothing is running down
-            while you are still setting up.</p>
+            the lot — and so far none of it has had a real job to do.</p>
             <p><strong>Two things, about two minutes:</strong> add one cleaner
             (yourself counts, if you are still cleaning) and one customer you
-            already clean for. That is enough to see the whole thing work, and
-            it is what starts your {billing.TRIAL_DAYS} days.</p>
+            already clean for. That is enough to see the whole thing work
+            end to end.</p>
             <p style="color:#7a8499;font-size:14px">You have
-            <strong>{left} day{plural}</strong> to make that start.</p>''',
+            <strong>{left} day{plural}</strong> left of your
+            {billing.TRIAL_DAYS} days.</p>''',
             'Add a cleaner', f'{url}/staff/new'))
 
     if kind == 'start_21':
-        return (f'{name}: {left} day{plural} left to start your trial',
+        return (f'{name}: {left} day{plural} left on your trial',
                 wrap(
-            f'{left} day{plural} left to start your trial',
-            f'''<p>Your account still has everything on it, and the
-            {billing.TRIAL_DAYS} days still have not begun — they begin when you
-            add your first cleaner and your first customer.</p>
+            f'{left} day{plural} left, and it has not been used yet',
+            f'''<p>Your account still has everything on it, and nothing has
+            run through it — no cleaner, no customer, no job.</p>
             <p>After <strong>{left} day{plural}</strong> the account drops to
             the free plan. Nothing is deleted and you can keep working, but the
             hiring pipeline, the automations and the rest go quiet, and you
             will not have seen them.</p>
             <p>If something is in the way, reply and tell me what it is. If it
-            is just that the week got away from you — that is most people, and
+            is just that the month got away from you — that is most people, and
             it takes two minutes.</p>''',
-            'Start my 14 days'))
+            'Set it up'))
 
     # What switches off when a trial ends, in the owner's words, from the
     # plan table (entitlements.PLANS). Said concretely because "the paid
@@ -411,12 +419,13 @@ def compose(org, kind, next_step=None):
     # ── Moments ───────────────────────────────────────────────────────────
     if kind == 'activated':
         ends = state.get('ends_at')
-        until = f"{ends.strftime('%B')} {ends.day}" if ends else 'two weeks from now'
-        return (f'{name}: your {billing.TRIAL_DAYS} days just started',
+        until = f"{ends.strftime('%B')} {ends.day}" if ends else 'the end of your trial'
+        return (f'{name}: that is it working',
                 wrap(
-            f'Your {billing.TRIAL_DAYS} days just started',
-            f'''<p>You added a cleaner and a customer, so everything is switched
-            on until <strong>{until}</strong>.</p>
+            'That is it working',
+            f'''<p>You added a cleaner and a customer, so there is a real
+            business in there now. Everything stays switched on until
+            <strong>{until}</strong>.</p>
             <p>Picture next week: jobs land on your cleaners&rsquo; phones,
             customers get their reminders without you, and you are not
             rebuilding the schedule from texts at night.</p>

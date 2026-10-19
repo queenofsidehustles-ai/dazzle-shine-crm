@@ -223,7 +223,10 @@ def _follow_up(orgs, leads, signup_emails, now, billing):
         if not trial or trial['expired']:
             continue
         row = dict(o, days_left=trial['days_left'])
-        if trial['phase'] == 'not_started':
+        # Every trial runs from signup now, so "not started" can no longer
+        # mean the clock. It means the more useful thing it always stood in
+        # for: signed up, paying attention to nothing, nothing in there yet.
+        if not trial.get('activated'):
             not_started.append(row)
         elif trial['days_left'] <= ENDING_SOON_DAYS:
             ending.append(row)
