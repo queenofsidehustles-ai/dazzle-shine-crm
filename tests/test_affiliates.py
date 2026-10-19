@@ -410,6 +410,10 @@ else:
         check(before == 'already reversed', 'and reversing twice does nothing more')
         check(partial[0] is False, 'a partial refund is left for a person')
         with app.app_context():
+            check(control_plane.find(engine, first).get('affiliate_flag'),
+                  'and its company is held for review until one looks')
+            control_plane.clear_affiliate_flag(engine, first)
+        with app.app_context():
             wrong = affiliates.reverse(engine, f'in_{TAG}_1', affiliate_id=erin['id'])
         check(wrong == 'none', 'a reversal scoped to another partner finds nothing')
 
@@ -600,6 +604,51 @@ else:
         check(payout and payout['amount_cents'] == 2370, 'and the payout is the net')
         check(any(c['state'] == 'refund debit' for c in shown['ledger']),
               'the ledger shows the debit as a refund debit')
+
+        print('\n14. Review findings on Stripe ordering, the term, refunds and sign-in links')
+        with app.app_context():
+            # The colleague's company: forget its Stripe customer, then let an
+            # invoice arrive first, matched only by its subscription's metadata.
+            cslug = f'colleague{TAG}'
+            control_plane.set_billing(engine, cslug, stripe_customer_id=None)
+            early = paid_invoice(f'in_{TAG}_c_early', f'cus_early_{TAG}')
+            early['data']['object']['subscription_details'] = {'metadata': {'slug': cslug}}
+            ok, msg = billing.apply_event(early)
+            stored = control_plane.find(engine, cslug).get('stripe_customer_id')
+        check(ok and stored == f'cus_early_{TAG}',
+              'an invoice that beats the checkout still remembers its customer')
+        with app.app_context():
+            rf = billing.apply_event({'type': 'charge.refunded', 'data': {'object': {
+                'id': 'ch_c', 'customer': f'cus_early_{TAG}', 'invoice': f'in_{TAG}_c_early',
+                'refunded': True}}})
+        check(rf[0] and 'reversed' in rf[1], f'so a refund that follows is found and reversed ({rf[1]})')
+
+        with app.app_context():
+            affiliates.reverse(engine, f'in_{TAG}_c1')
+            year_on = datetime.utcnow() + timedelta(days=400)
+            thirteenth = affiliates.accrue(engine, cslug, {
+                'id': f'in_{TAG}_c13', 'amount_paid': 7900,
+                'status_transitions': {'paid_at': int(year_on.timestamp())}})
+        check(thirteenth is None,
+              'refunding the first payment does not start the twelve months again')
+
+        with app.app_context():
+            one = billing.apply_event({'type': 'charge.refunded', 'data': {'object': {
+                'id': 'ch_p', 'customer': f'cus_{TAG}', 'invoice': f'in_{TAG}_1', 'refunded': False}}})
+            flagged = control_plane.find(engine, first).get('affiliate_flag')
+            held = affiliates.payable_cents(engine, dana['id'], datetime.utcnow() + timedelta(days=90))
+            control_plane.clear_affiliate_flag(engine, first)
+        check(one[0] is False and flagged and held == 0,
+              f'a partial refund holds the company\'s commissions for a person ({flagged!r}, ${held / 100:.2f} payable)')
+
+        with app.app_context():
+            tia = affiliates.create(engine, 'Tia Quota', f'tia{TAG}@partners.test', code=f'tia{TAG}')
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            tokens = list(pool.map(lambda _: affiliates.issue_login(engine, tia['id']), range(8)))
+        issued = [t for t in tokens if t]
+        check(len(issued) == affiliates.LOGIN_REQUESTS_PER_HOUR,
+              f'eight parallel sign-in requests get {len(issued)} links, not eight')
     finally:
         try:
             from extensions import db

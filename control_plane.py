@@ -1823,6 +1823,19 @@ def claim_switch_token(engine, jti):
         return False
 
 
+def hold_affiliate_commissions(engine, slug, reason):
+    """Put a partner's company under review, unless it already is.
+
+    Its commissions stop being payable until a person has looked. Does nothing
+    for a company with no partner."""
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(
+            organizations.c.slug == slug,
+            organizations.c.affiliate_code.isnot(None),
+            organizations.c.affiliate_flag.is_(None))
+            .values(affiliate_flag=(reason or '')[:120]))
+
+
 def clear_affiliate_flag(engine, slug):
     """A person has looked and the introduction is real: release the payout."""
     with engine.begin() as conn:
