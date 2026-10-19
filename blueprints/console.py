@@ -673,6 +673,15 @@ def health():
               and not o.get('purged_at')]
     job_labels = [(key, label) for key, label, _b, _c in _automation_jobs()]
     import llm
+    import affiliates
+    import billing
+    import partner_payouts
+    partners = affiliates.all_affiliates(engine)
+    payouts = {'stripe': partner_payouts.configured(),
+               'webhook': bool(billing.webhook_secret()),
+               'partners': len(partners),
+               'ready': sum(1 for a in partners if a.get('payout_ready')),
+               'waiting': affiliates.waiting_count(engine)}
     # Why a signup was refused, rather than guessing. See signups_view below.
     import security as _sec
     import blueprints.signup as _signup
@@ -691,7 +700,7 @@ def health():
         'forwarded': (request.headers.get('X-Forwarded-For') or '')[:120],
     }
     return render_template(
-        'console/health.html', signups=signups,
+        'console/health.html', signups=signups, payouts=payouts,
         orgs=[o for o in orgs if o['slug'] in snaps],
         snaps=snaps, job_labels=job_labels, mail=product.mail_status(),
         ai={'key': bool(llm.key()), 'fast': llm.FAST_MODEL,
@@ -912,8 +921,12 @@ def affiliate(affiliate_id):
     if not partner:
         flash('No such partner.', 'error')
         return redirect(url_for('console.affiliates_view'))
-    data = affiliates.portal(engine, partner)
+    import partner_payouts
+    data = affiliates.portal(engine, partner, staff=True)
+    can_stripe, why_not = affiliates.can_pay_by_stripe(partner)
     return render_template('console/affiliate.html', link=link_for(partner['code']),
+                           can_stripe=can_stripe, why_not=why_not,
+                           stripe_ready=partner_payouts.configured(),
                            money=affiliates.money, may_operate=_may_operate(),
                            me=request.console_user, counts=_counts(engine), **data)
 
@@ -972,6 +985,31 @@ def affiliate_action(affiliate_id, action):
             control_plane.clear_affiliate_flag(engine, slug)
             control_plane.log_console(engine, who, 'cleared partner review', partner['code'], slug)
             flash(f'{org["name"]} is cleared. Its commission can now be paid out.', 'success')
+    elif action in ('stripe', 'retry'):
+        if action == 'stripe':
+            ok, message, pay = affiliates.pay_via_stripe(engine, affiliate_id, who)
+        else:
+            ok, message, pay = affiliates.retry_payout(
+                engine, int(request.form.get('payout') or 0), affiliate_id=affiliate_id)
+        # Only the request that actually made the payout paid logs it and emails
+        # the partner; a second, simultaneous retry reports and does neither.
+        if not ok or (pay and pay.get('finished_now', True)):
+            control_plane.log_console(
+                engine, who, 'partner payout sent' if ok else 'partner payout not sent',
+                partner['code'], message[:300])
+        if ok and pay and pay.get('finished_now', True):
+            import partner_mail
+            from blueprints.partners import partners_url
+            subject, html = partner_mail.payout_email(
+                partner, affiliates.money(pay['amount_cents']),
+                pay.get('stripe_transfer_id'), partners_url())
+            partner_mail.deliver(partner, subject, html, 'partner_paid', engine)
+        flash(message, 'success' if ok else 'error')
+    elif action == 'refresh':
+        ok, ready = affiliates.refresh_payout_status(engine, partner)
+        flash((f'{partner["name"]} can receive payouts.' if ready else
+               f'{partner["name"]} has not finished payout setup with Stripe.') if ok
+              else f'Stripe did not answer: {ready}', 'success' if ok and ready else 'error')
     elif action == 'reverse':
         result = affiliates.reverse(engine, request.form.get('invoice') or '',
                                     (request.form.get('reason') or 'reversed by staff')[:200],
@@ -982,6 +1020,7 @@ def affiliate_action(affiliate_id, action):
                'debited': 'That commission was already paid out, so a matching debit now comes off their next payout.',
                'already debited': 'A debit for that commission is already recorded.',
                'already reversed': 'Already reversed.',
+               'being paid': 'That commission is part of a payout being sent. Wait for it to finish, then reverse it if it was released, or settle with the partner if it was paid.',
                'none': 'No such commission.'}.get(result, result),
               'success' if result == 'reversed' else 'error')
     else:
@@ -1881,9 +1920,15 @@ def log():
 
 
 def _counts(engine):
+    import affiliates
+    try:
+        partners = affiliates.waiting_count(engine)
+    except Exception:
+        partners = 0                # a pill must never take a page down
     return {'feedback': control_plane.unread_feedback(engine),
             'support': control_plane.unanswered_support(engine),
-            'leads': control_plane.new_leads_count(engine)}
+            'leads': control_plane.new_leads_count(engine),
+            'partners': partners}
 
 
 # --------------------------------------------------------------------------
