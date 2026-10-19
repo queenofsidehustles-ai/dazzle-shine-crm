@@ -365,8 +365,8 @@ def compose(org, kind, next_step=None):
             customer</strong> you already clean for. Then you can watch a job
             go straight to their phone with the address, the time and the
             checklist.</p>
-            <p>About two minutes. Your {billing.TRIAL_DAYS} days do not start
-            until you do, so you lose nothing by starting now.</p>
+            <p>About two minutes. Your {billing.TRIAL_DAYS} days are already
+            running, so the sooner you see it work the better.</p>
             {funnel_videos.email_block('team_and_customer')}''',
             'Add my first cleaner', f'{url}/staff/new'))
 

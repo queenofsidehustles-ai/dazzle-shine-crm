@@ -26,7 +26,6 @@
     <td>
       {% if r.trial %}
         {% if r.trial.phase == 'over' %}<span class="ops-bad">trial over</span>
-        {% elif r.trial.phase == 'not_started' %}not started · {{ r.trial.days_left }}d to start
         {% else %}{{ r.trial.days_left }}d left{% endif %}
       {% else %}{{ r.plan or 'solo' }} · {{ r.subscription_status }}{% endif %}
     </td>
