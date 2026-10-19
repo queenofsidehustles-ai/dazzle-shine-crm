@@ -107,6 +107,35 @@ def confirm():
                                  'percent': p['percent']}})
 
 
+@setup_assistant_bp.route('/save', methods=['POST'])
+@login_required
+@owner_required
+def save():
+    """Save an editable card's boxes. Like confirm, but the values come from
+    the form and are validated server-side, not replayed from a token."""
+    data = request.get_json(silent=True) or {}
+    step = (data.get('step') or '').strip()
+    fields = data.get('fields') or {}
+    import onboarding
+    if step not in {s['key'] for s in onboarding.progress()['steps']}:
+        return jsonify({'ok': False, 'say': 'That step is not on your list.',
+                        'cards': []})
+    ok, said = setup_assistant.save_form(step, fields)
+    follow, cards = '', []
+    if ok:
+        chat = transcript()
+        follow, cards, key = setup_assistant.next_message()
+        chat = chat + [
+            {'role': 'user', 'content': f'(I saved my {step} details.)', 'hidden': True},
+            {'role': 'assistant', 'content': follow, 'cards': cards, 'step': key},
+        ]
+        setup_assistant.save_chat(chat)
+    p = onboarding.progress()
+    return jsonify({'ok': ok, 'say': said, 'follow': follow, 'cards': cards,
+                    'progress': {'done': p['done'], 'total': p['total'],
+                                 'percent': p['percent']}})
+
+
 @setup_assistant_bp.route('/skip', methods=['POST'])
 @login_required
 @owner_required

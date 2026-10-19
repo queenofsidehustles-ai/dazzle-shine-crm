@@ -71,13 +71,25 @@ with app.test_request_context():
     session['role'] = 'owner'
     for key in ('business', 'pricing', 'terms', 'balance'):
         text = setup_assistant.STEP_PROMPTS[key]
-        check(len(text.split()) <= 25, f'{key}: the question is one line ({len(text.split())} words)')
+        # The business question depends on whether the boxes came prefilled,
+        # so it is a callable. Both forms have to be short.
+        forms = [text(True), text(False)] if callable(text) else [text]
+        for form in forms:
+            check(len(form.split()) <= 25,
+                  f'{key}: the question is one line ({len(form.split())} words)')
+        # The business step always arrives with an editable card, so both the
+        # prefilled and the blank wording point at the Save button on screen.
+        check(not callable(text) or 'Save' in text(False),
+              f'{key}: the prompt points at the card rather than a dead end')
 with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'
     _l, price = setup_assistant.price_card()
-    check(price is not None and price['kind'] == 'confirm',
-          'the prices come up already filled in, not as a blank')
+    check(price is not None and price['kind'] == 'form',
+          'the prices come up as an editable card, already filled in')
+    check(price['fields'][0]['name'] == 'two_bed_two_bath'
+          and price['fields'][0]['value'],
+          'with the 2/2 price in a box the owner can type over')
     check('$' in price['lines'][0], f"and show the number: {price['lines'][0]}")
     _l, terms = setup_assistant.terms_card()
     check(terms is not None and len(terms['lines']) == 4,
@@ -95,6 +107,10 @@ with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'
     lines, card = setup_assistant.prefilled_business_card()
+    check(card is not None and card['kind'] == 'form',
+          'the details arrive as an editable card, never a blank dead end')
+    check({f['name'] for f in card['fields']} >= {'business_name', 'phone', 'address'},
+          'with boxes for the details customers see')
     check(any('Sparkle Cleaning' in l for l in lines) if lines else True,
           'the card shows what we do know')
     check(any('Central' in l for l in lines) if lines else True,

@@ -1532,6 +1532,31 @@ def record_signup_attempt(engine, ip):
         pass
 
 
+def signup_attempts_by_ip(engine, since, limit=20):
+    """Who has been trying to sign up, grouped by the address we recorded.
+
+    The signup cap is per address, which is only true if the address we store
+    is the visitor's. Behind a proxy it can quietly become the proxy's, and
+    then a limit meant to stop one script turns into a limit on everybody --
+    three signups anywhere and the product is shut for a day. That failure
+    looks exactly like the rule working, which is why it needs showing rather
+    than reasoning about.
+    """
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(signup_attempts.c.ip,
+                       func.count().label('n'),
+                       func.max(signup_attempts.c.created_at).label('last'))
+                .where(signup_attempts.c.created_at >= since)
+                .group_by(signup_attempts.c.ip)
+                .order_by(func.count().desc())
+                .limit(limit)).all()
+            return [{'ip': r[0], 'count': r[1], 'last': r[2]} for r in rows]
+    except Exception:
+        return []
+
+
 def signup_attempts_since(engine, ip, since):
     try:
         with engine.connect() as conn:
