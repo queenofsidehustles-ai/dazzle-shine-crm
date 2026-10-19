@@ -78,6 +78,16 @@ def redact(text):
     return text
 
 
+def _shape(message):
+    """A message with its particulars filed off, so near-identical ones group.
+
+    Numbers become '#': 'client 41 not found' and 'client 87 not found' are one
+    fault, which is the same reason the message is left out of a fingerprint
+    that already has a line number.
+    """
+    return re.sub(r'\d+', '#', (message or '').strip().lower())[:80]
+
+
 def fingerprint(endpoint, exc):
     """What makes two crashes the same crash.
 
@@ -85,6 +95,15 @@ def fingerprint(endpoint, exc):
     message itself is left out on purpose — 'Client 41 not found' and
     'Client 87 not found' are one bug, and grouping them by message would file
     them as two.
+
+    Unless there is no line. An exception that was built rather than raised
+    carries no traceback, and every one of those from a given caller would
+    otherwise be the same fault forever: Nana unreachable, Nana answering with
+    a model that does not exist and Nana saying nothing all filed as one row,
+    the message overwritten by whichever came last. Alerting is once per
+    fingerprint per day, so the second kind of failure that day is silent --
+    which is how a model name that did not exist ran for a day unnoticed. With
+    no line to tell them apart, the shape of the message is all there is.
     """
     frame = ''
     tb = getattr(exc, '__traceback__', None)
@@ -92,6 +111,8 @@ def fingerprint(endpoint, exc):
         frame = f'{tb.tb_frame.f_code.co_filename}:{tb.tb_lineno}'
         tb = tb.tb_next          # keep walking — we want the deepest frame
     raw = f'{endpoint}|{type(exc).__name__}|{frame}'
+    if not frame:
+        raw += f'|{_shape(str(exc))}'
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
