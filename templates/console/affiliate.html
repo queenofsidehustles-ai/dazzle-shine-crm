@@ -46,7 +46,7 @@
     {% if payable_cents and payable_cents >= min_payout_cents %}
       {% if can_stripe %}
       <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='stripe') }}"
-            onsubmit="return confirm('Send {{ money(payable_cents) }} to {{ partner.name }} from the Akye Stripe balance? This moves real money.')">
+            onsubmit="return confirm('Send {{ money(payable_cents)|js }} to {{ partner.name|js }} from the Akye Stripe balance? This moves real money.')">
         <button class="btn btn-sm" type="submit">Pay {{ money(payable_cents) }} by Stripe transfer</button>
       </form>
       {% else %}<span class="ops-dim">Cannot pay by Stripe yet: {{ why_not }}</span>{% endif %}
