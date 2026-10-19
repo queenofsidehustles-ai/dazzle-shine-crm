@@ -41,7 +41,7 @@ DEFAULT_ITEMS = {
         'All deep clean tasks', 'Clean inside all cabinets and drawers',
         'Clean inside oven', 'Clean inside refrigerator', 'Clean inside dishwasher',
         'Clean all closets', 'Remove all remaining debris',
-        'Final walkthrough — document condition with photos',
+        'Final walkthrough — check and note condition',
     ],
     # The three post-construction rungs are one job in three sizes, so each one
     # is written as the rung below it plus what that rung does not include.
@@ -77,7 +77,7 @@ DEFAULT_ITEMS = {
         'Re-clean all glass, mirrors and interior windows',
         'Damp-mop all hard floors a second time',
         'Spot-clean marks left by trades returning to the site',
-        'Final walkthrough with the customer — document condition with photos',
+        'Final walkthrough with the customer — check and note condition',
     ],
     # Debris goes first because it happens first: detail cleaning a room still
     # full of offcuts and packaging is work done twice.
@@ -503,9 +503,14 @@ def submit_complete(token):
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
     before = _private_photo_refs(checklist, 'before')
     after = _private_photo_refs(checklist, 'after')
-    if not before or not after:
-        return jsonify({'ok': False,
-            'error': 'Please add at least one BEFORE photo and one AFTER photo.'}), 400
+    # Photos are encouraged, not required: a job can be closed out without them.
+    # The rest of the workflow is still enforced here, because the button gate in
+    # the page is only a convenience: the job must have been started, and every
+    # checklist item ticked.
+    if not checklist.clock_in_at:
+        return jsonify({'ok': False, 'error': 'Clock in before closing out the job.'}), 400
+    if checklist.get_items() and len(checklist.get_completed()) < len(checklist.get_items()):
+        return jsonify({'ok': False, 'error': 'Finish the checklist before closing out the job.'}), 400
 
     checklist.photos_submitted_at = datetime.utcnow()
     if not checklist.completed_at:
@@ -535,13 +540,14 @@ def submit_complete(token):
                        if checklist.client_rating else '')
         send_email(
             to_email=owner_email, to_name=branding.biz_name(),
-            subject=f'Job completed — {booking.name} ({len(before)} before / {len(after)} after photos)',
+            subject=(f'Job completed — {booking.name} ({len(before)} before / {len(after)} after photos)'
+                     if before or after else f'Job completed — {booking.name} (no photos)'),
             html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <h2 style="color:#b98a33">Job Closed Out — Ready for Payment Review</h2>
   <p><strong>{booking.assigned_cleaner or 'Cleaner'}</strong> finished the job for
-     <strong>{booking.name}</strong> and submitted photos.</p>
-  <p>📸 {len(before)} before photo(s) · {len(after)} after photo(s)</p>
+     <strong>{booking.name}</strong> and closed it out.</p>
+  <p>📸 {f'{len(before)} before photo(s) · {len(after)} after photo(s)' if before or after else 'No photos were added.'}</p>
   {hours_html}{sign_html}{rating_html}
   <p><a href="{review_url}" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Review Photos &amp; Release Payment →</a></p>
 </div>""",
@@ -554,7 +560,7 @@ def submit_complete(token):
     if owner_phone:
         send_sms(owner_phone,
                  f"✅ Job done: {booking.assigned_cleaner or 'Cleaner'} finished {booking.name}'s "
-                 f"cleaning and submitted {len(before)} before + {len(after)} after photos. "
+                 f"cleaning ({len(before)} before + {len(after)} after photos). "
                  f"Review to release payment.")
 
     return jsonify({'ok': True})
