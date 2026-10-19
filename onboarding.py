@@ -10,6 +10,18 @@ Ordered by what would hurt most if it were skipped.
 """
 
 
+# What `setup_complete` has to say to count as finished.
+#
+# The flag is written once and read on every page after, so an established
+# business is not recomputing its onboarding forever. That is the right trade
+# until the list itself changes -- and when it gained the timezone, the terms,
+# payments and how balances are collected, every company already carrying a
+# plain '1' would have gone on being told it had finished a list it had never
+# been shown. A version here means they are asked once more, and then latched
+# again. Bump it whenever a required step is added.
+SETUP_VERSION = '2'
+
+
 def checklist():
     from models import BusinessSetting, Staff, Booking
     import integrations

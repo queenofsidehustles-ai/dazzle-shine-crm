@@ -366,6 +366,69 @@ def tool_offer_business(**kw):
             'Nothing is saved until they press it.'), card
 
 
+# The timezones a US cleaning business is actually in. A free-text zone name
+# from a model is a silent wrong answer waiting to happen -- ZoneInfo accepts
+# plenty of names nobody means -- so the card can only offer one of these.
+TIMEZONES = {
+    'eastern': ('America/New_York', 'Eastern'),
+    'central': ('America/Chicago', 'Central'),
+    'mountain': ('America/Denver', 'Mountain'),
+    'arizona': ('America/Phoenix', 'Arizona (no daylight saving)'),
+    'pacific': ('America/Los_Angeles', 'Pacific'),
+    'alaska': ('America/Anchorage', 'Alaska'),
+    'hawaii': ('Pacific/Honolulu', 'Hawaii'),
+}
+
+
+def tool_offer_timezone(zone=''):
+    """Show a card setting the timezone everything is scheduled against."""
+    want = (zone or '').strip().lower()
+    found = None
+    for key, (name, label) in TIMEZONES.items():
+        if want == key or want == name.lower() or want.startswith(key):
+            found = (name, label)
+            break
+    if not found:
+        return ('Not offered: ask which of these they are in — Eastern, Central, '
+                'Mountain, Arizona, Pacific, Alaska or Hawaii.'), None
+    name, label = found
+    card = _offer('setup_set_timezone', {'timezone': name},
+                  'Set your timezone', [f'Timezone: {label} ({name})'],
+                  'Set timezone')
+    return ('A card is on screen with that timezone and a button. Nothing '
+            'changes until they press it.'), card
+
+
+BALANCE_CHOICES = {
+    'auto': ('auto', 'Charge the card on file when the job is done'),
+    'ask': ('ask', 'Leave it owed, and you decide each time'),
+    'never': ('never', 'Never charge here — collected some other way'),
+}
+
+
+def tool_offer_balance_mode(choice=''):
+    """Show a card recording how balances get collected."""
+    want = (choice or '').strip().lower()
+    key = None
+    for k in BALANCE_CHOICES:
+        if want == k or want.startswith(k):
+            key = k
+            break
+    if key is None:
+        if want in ('automatic', 'automatically', 'card', 'charge'):
+            key = 'auto'
+        elif want in ('manual', 'me', 'myself', 'decide'):
+            key = 'ask'
+    if key is None:
+        return ('Not offered: ask whether the balance should come off the card '
+                'automatically, wait for them to say so, or never be taken here.'), None
+    mode, label = BALANCE_CHOICES[key]
+    card = _offer('setup_set_balance_mode', {'mode': mode},
+                  'How balances get paid', [label], 'Save this choice')
+    return ('A card is on screen with that choice and a button. Nothing '
+            'changes until they press it.'), card
+
+
 def tool_offer_prices(two_bed_two_bath_price=''):
     import pricing
     try:
@@ -480,6 +543,19 @@ TOOLS = {
         tool_offer_prices, 'Show a card that sets their whole standard price list '
         'from what they charge for a 2 bed / 2 bath standard clean.',
         {'two_bed_two_bath_price': _S}),
+    'offer_timezone': (
+        tool_offer_timezone, 'Show a card setting the business timezone, once '
+        'the owner has said where they are. Everything is scheduled against it.',
+        {'zone': {'type': 'string',
+                  'description': 'Eastern, Central, Mountain, Arizona, '
+                                 'Pacific, Alaska or Hawaii.'}}),
+    'offer_balance_mode': (
+        tool_offer_balance_mode, 'Show a card recording how the rest of a job\'s '
+        'price is collected once it is finished.',
+        {'choice': {'type': 'string',
+                    'description': "'auto' to charge the card on file, 'ask' to "
+                                   "leave it for the owner to decide, 'never' if "
+                                   "they collect it another way."}}),
     'offer_add_cleaner': (
         tool_offer_cleaner, 'Show an Add card for one cleaner the owner named.',
         {'name': _S, 'phone': _S, 'email': _S}),
@@ -810,8 +886,43 @@ def add_customer(payload):
 
 # Its own list, apart from Nana's ACTIONS: a setup card cannot be confirmed
 # through the general assistant, and a Nana proposal cannot be confirmed here.
+def set_timezone(payload):
+    """Write the timezone. Only ever one of TIMEZONES, checked again here."""
+    from extensions import db
+    from models import BusinessSetting
+    name = (payload.get('timezone') or '').strip()
+    if name not in {z for z, _l in TIMEZONES.values()}:
+        return False, 'That is not a timezone I can set.'
+    BusinessSetting.set('timezone', name)
+    db.session.commit()
+    label = next(l for z, l in TIMEZONES.values() if z == name)
+    return True, (f'Timezone set to {label}. Reminders, the day\'s plan and '
+                  f'your end-of-day numbers all follow it from now on.')
+
+
+def set_balance_mode(payload):
+    """Record how balances are collected. A choice, not a default."""
+    import automations
+    from extensions import db
+    mode = (payload.get('mode') or '').strip()
+    if mode not in {m for m, _l in BALANCE_CHOICES.values()}:
+        return False, 'That is not a choice I can save.'
+    automations.set_balance_mode(mode)
+    db.session.commit()
+    return True, {
+        'auto': 'Saved. When a job is finished the rest comes off the card on '
+                'file — you can change it any time under Automations.',
+        'ask': 'Saved. Balances will show as owed and wait for you, rather than '
+               'being charged automatically.',
+        'never': 'Saved. Nothing will be charged here; balances are yours to '
+                 'collect however you do it.',
+    }[mode]
+
+
 ACTIONS = {
     'setup_save_business': save_business,
+    'setup_set_timezone': set_timezone,
+    'setup_set_balance_mode': set_balance_mode,
     'setup_set_prices': set_prices,
     'setup_add_cleaner': add_cleaner,
     'setup_add_customer': add_customer,

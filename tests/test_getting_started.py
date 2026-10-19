@@ -234,7 +234,12 @@ check("'setup-nudge-' + new Date()" in shell,
 # The cost question: an established business must not recompute its onboarding
 # on every page load for the rest of its life.
 appsrc = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app.py')).read()
-check('if not setup_done and session.get(\'role\') == \'owner\'' in appsrc,
-      'progress is only worked out for an owner who has not finished')
+check("BusinessSetting.get('setup_complete') != _ob.SETUP_VERSION" in appsrc,
+      'progress is only worked out while the flag is not the current version')
+# And the flag is versioned, so adding a required step asks everybody again
+# rather than leaving established businesses latched on a list they never saw.
+check('SETUP_VERSION' in open(os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'onboarding.py')).read(),
+      'the flag carries the version of the list it was written for')
 
 print('\n\n✅ All getting-started tests passed.\n')
