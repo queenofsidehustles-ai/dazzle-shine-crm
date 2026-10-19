@@ -133,7 +133,7 @@
 
 {# Where to go once it is ticked. Without this the page was a dead end in
    the middle of setup: tick the box and nothing says what comes next. #}
-{% if SETUP and not SETUP.complete %}
+{% if SETUP and SETUP.next %}
 <div class="card" id="nextstep" style="max-width:760px;display:{{ 'flex' if shared else 'none' }};
      align-items:center;gap:14px;flex-wrap:wrap;border:1px solid var(--amber-line);
      background:var(--amber-soft)">

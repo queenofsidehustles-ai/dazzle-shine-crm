@@ -302,9 +302,11 @@ def create_app():
             if request.method == 'GET':
                 adoption.note_visit(request.endpoint, nav)
             # Whether Nana's setup chat is on, so the welcome pop-up and the
-            # nudge can offer her. Only asked while setup is unfinished.
+            # nudge can offer her. Asked while there is a step left -- which
+            # outlasts `complete`, because that now means able to trade and
+            # the optional steps carry on after it.
             setup_chat = False
-            if setup is not None and not setup.get('complete'):
+            if setup is not None and setup.get('next'):
                 try:
                     import setup_assistant
                     setup_chat = setup_assistant.configured()
@@ -347,7 +349,11 @@ def create_app():
                 return {'TRIAL': None}
 
             state = billing.trial_state(org)
-            if state and not state['started']:
+            # Not "has the trial started" any more -- under one clock it always
+            # has, and asking that question here stopped activation ever being
+            # recorded at all. The question is whether this company has been
+            # stamped yet.
+            if state and not org.get('activated_at'):
                 # Have they actually begun? Cheap: onboarding already knows.
                 if onboarding.progress().get('activated'):
                     if billing.mark_activated(provisioning._engine(), org['slug']):

@@ -714,8 +714,10 @@ def set_billing(engine, slug, **fields):
 
     The whitelist is the point: a caller that has not thought about which
     field it is writing cannot write one by accident. `activated_at` is on it
-    because the trial clock starts from the product being used, which is
-    something only this application knows and Stripe never will.
+    because when a company first got the software working is something only
+    this application knows and Stripe never will -- it no longer starts the
+    trial clock, which runs from signup, but it is still the most useful
+    thing there is to know about a trial.
     """
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',

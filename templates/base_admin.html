@@ -111,7 +111,7 @@
        about setup. Somebody who cannot see how much is left assumes it is a
        lot, and a job half done that looks endless is the one that gets
        abandoned. Disappears for good once the last step is ticked. #}
-    {% if SETUP and not SETUP.complete %}
+    {% if SETUP and SETUP.next %}
     <a href="{{ url_for('settings.getting_started') }}" class="setup-meter">
       <span class="setup-line">
         <span>Setting up</span>
@@ -231,7 +231,7 @@
          nudge and becomes an obstacle, and the person it annoys most is the
          one who has decided to do it later today anyway. It comes back
          tomorrow, and it stops for good when setup is finished. #}
-      {% if SETUP and not SETUP.complete and SETUP.next
+      {% if SETUP and SETUP.next
             and request.endpoint not in ('admin.dashboard', 'settings.getting_started') %}
       <div class="setup-nudge" id="setupnudge" hidden>
         <div class="setup-nudge-body">
@@ -267,20 +267,11 @@
         }
       </script>
       {% endif %}
-      {# Where they are in the trial. Always a countdown of some kind: one
-         clock says "you have not begun", the other says "you are running
-         out", and a state with neither is how a trial becomes something
-         somebody thinks they can come back to whenever.
-
-         Two different clocks live behind TRIAL.days_left depending on phase
-         -- the 14-day trial length once it starts, and a separate 30-day
-         window to start it at all -- and stating both numbers in one
-         sentence ("your 14 days... N days left") read as self-contradicting
-         since nothing told them apart. Fixed two ways: the start-by
-         countdown only appears once it is actually close (<=7 days,
-         matching the day-7 email nudge elsewhere -- see trial_nudges.py),
-         so it is not competing with "14" for most of the window; and when it
-         does appear, it says plainly what it is counting down to. #}
+      {# Where they are in the trial: one countdown, from signup. There were
+         two clocks here -- a fortnight that began when a company added a
+         cleaner and a customer, inside a month to make that start -- and two
+         numbers in one sentence read as self-contradicting however they were
+         worded. One clock needs one sentence. #}
       {# Only where somebody is deciding what to do next. On a phone these
          banners plus the Getting started card filled the whole first screen,
          so you scrolled past three blocks of nagging to reach today's jobs. #}
@@ -298,19 +289,9 @@
       {% endif %}
       {% if ON_START and TRIAL and not TRIAL.expired %}
       <a href="{{ url_for('billing.upgrade') }}" class="trialbar {{ 'urgent' if TRIAL.days_left <= 3 }}">
-        {% if TRIAL.phase == 'not_started' %}
-          {# Says exactly what starts it. This used to say "assign a job",
-             which was not the condition the code checked — so somebody could
-             do the thing they were told and watch nothing happen. #}
-          <b>Add your first cleaner and your first customer to start your 14-day trial.</b>
-          {% if TRIAL.days_left <= 7 %}
-            <span class="left">{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left before that offer closes</span>.
-          {% endif %}
-        {% else %}
-          <b>{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left</b>
-          of everything. After that you keep working on the free plan —
-          nothing is deleted.
-        {% endif %}
+        <b>{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left</b>
+        of everything. After that you keep working on the free plan —
+        nothing is deleted.
         <span class="go">See plans →</span>
       </a>
       {% elif ON_START and TRIAL and TRIAL.expired %}
@@ -399,7 +380,7 @@
   {# On every screen, deliberately. A beta tester who has to go and find
      somewhere to report a problem mostly does not. #}
   {% if session.get('logged_in') %}{% include '_feedback.html' %}{% endif %}
-{% if SETUP and not SETUP.complete and SETUP_CHAT and request.endpoint == 'admin.dashboard' %}
+{% if SETUP and SETUP.next and SETUP_CHAT and request.endpoint == 'admin.dashboard' %}
   {% include "admin/_nana_welcome.html" %}
 {% endif %}
 </body>
