@@ -24,9 +24,9 @@
   {% else %}<p class="ops-bad" style="margin:0 0 var(--s2)">No ANTHROPIC_API_KEY — Nana cannot answer</p>{% endif %}
   <span class="ops-dim">Nana uses {{ ai.smart }} · short writing uses {{ ai.fast }}</span>
   <form method="post" action="{{ url_for('console.test_ai') }}" style="margin-top:var(--s3)">
-    <button class="btn btn-outline btn-sm" type="submit" {% if not ai.key %}disabled{% endif %}>Ask Claude a test question</button>
+    <button class="btn btn-outline btn-sm" type="submit" {% if not ai.key %}disabled{% endif %}>Check that Claude answers</button>
   </form>
-  <p class="ops-dim" style="margin:var(--s2) 0 0">A model name that does not exist fails here and nowhere else: everywhere else it reads as Nana having nothing to say.</p>
+  <p class="ops-dim" style="margin:var(--s2) 0 0">Sends Nana's model one short question and shows what came back — there is nothing to type. A model name that does not exist fails here and nowhere else: everywhere else it reads as Nana having nothing to say.</p>
 </div>
 
 <h3 class="ops-h">Automations, every company</h3>
