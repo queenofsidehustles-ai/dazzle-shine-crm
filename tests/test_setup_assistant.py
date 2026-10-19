@@ -92,11 +92,10 @@ c = owner()
 r = c.get('/settings/getting-started')
 check(b'Set up with' in r.data, 'chat is on the page')
 # Signup gives the name, the ZIP and the timezone. What it cannot give is a
-# phone number, so the details check is the first open step.
-# No Google listing in a test, so nothing to confirm -- and the question
-# says what to type instead of gesturing at a card that was never built.
-check(b'What phone number should customers see' in r.data,
-      'and the opening asks about the next open step')
+# phone number -- so the first open step is the details card, with the name
+# prefilled and the phone box empty for the owner to type into.
+check(b'Your details' in r.data,
+      'and the opening shows the editable details card for the next open step')
 
 va = app.test_client()
 with va.session_transaction() as s:

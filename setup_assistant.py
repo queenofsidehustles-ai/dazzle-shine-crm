@@ -111,10 +111,9 @@ def configured():
 # and explain only if somebody hesitates. The old six ran to 217 words before
 # the owner had answered a single question.
 STEP_PROMPTS = {
-    'business': lambda has_card: (
-        'Quick check — is this right?' if has_card else
-        'What phone number should customers see? I have your name and email '
-        'already.'),
+    'business': lambda has_data: (
+        'Quick check — fix anything that’s off, then Save.' if has_data else
+        'Fill in the details your customers see, then Save.'),
     'pricing': 'What do you charge for a standard clean of a 2-bed, 2-bath?',
     'terms': 'Your customer terms are ready. Have a look and accept them.',
     'balance': 'When a job’s finished, should the rest come off the card on file?',
@@ -219,10 +218,25 @@ def next_message(done_line=''):
     # same when there is nothing on screen to point at.
     text = STEP_PROMPTS.get(step['key'], step.get('why') or '')
     if callable(text):
-        text = text(bool(cards))
+        # The business prompt reads differently with boxes already filled in
+        # than with blank ones to complete.
+        text = text(any(c.get('prefilled') for c in cards))
     link = STEP_LINKS.get(step['key'])
     if link and not cards:
         cards.append(_link_card(*link))
+    # "Step 2 of 4", from the same list the progress meter counts, so the
+    # owner can see the setup is a short, finite thing rather than an open chat.
+    try:
+        import onboarding
+        all_steps = onboarding.progress()['steps']
+        total = len(all_steps)
+        no = next((i + 1 for i, s in enumerate(all_steps)
+                   if s['key'] == step['key']), None)
+        for c in cards:
+            if c.get('kind') in ('form', 'confirm'):
+                c['step_no'], c['step_total'] = no, total
+    except Exception:
+        pass
     cards.append({'kind': 'skip', 'label': 'Skip for now', 'step': step['key']})
     return (done_line + ' ' + text).strip(), cards, step['key']
 
@@ -354,58 +368,105 @@ def _known():
     return {f: (BusinessSetting.get(f) or '').strip() for f in BUSINESS_FIELDS}
 
 
+def _validate_business(kw):
+    """Clean and check business fields. Returns (payload, lines, problems).
+
+    The same rules whether the model offered the card or the owner typed into
+    an editable one: a bad phone or half an email is refused before anything
+    is written, so the form cannot slip a wrong value past on the way in.
+    """
+    payload, lines, problems = {}, [], []
+    for f in BUSINESS_FIELDS:
+        v = _clean(kw.get(f))
+        if not v:
+            continue
+        if f == 'phone' and not _phone_ok(v):
+            problems.append(f'"{v}" does not look like a full phone number')
+            continue
+        if f == 'email':
+            v = v.lower()
+            if not _email_ok(v):
+                problems.append(f'"{v}" does not look like a complete email address')
+                continue
+        if f in ('website', 'google_review_link') and not v.startswith(('http://', 'https://')):
+            v = 'https://' + v
+        if f == 'state':
+            v = v.upper()[:2] if len(v) <= 3 else v
+        payload[f] = v
+        lines.append(f'{FIELD_LABELS[f]}: {v}')
+    return payload, lines, problems
+
+
+def _form_field(name, value='', *, label=None, kind='text', placeholder='',
+                optional=False, prefix=''):
+    """One editable box on a form card."""
+    return {'name': name,
+            'label': label or FIELD_LABELS.get(name, name.replace('_', ' ').title()),
+            'value': '' if value is None else str(value),
+            'type': kind, 'placeholder': placeholder,
+            'optional': bool(optional), 'prefix': prefix}
+
+
+def _form_card(step, title, fields, label, note='', lines=None):
+    """An editable card. Unlike a confirm card it carries no token: the owner
+    may change the boxes, so what is written is what was typed, checked again
+    on the server by save_form() -- never replayed from a fixed payload."""
+    return {'kind': 'form', 'step': step, 'title': title, 'note': note,
+            'fields': [f for f in fields if f], 'label': label,
+            'lines': lines or []}
+
+
 def prefilled_business_card():
-    """The first card, built before a word is typed. (lines, card).
+    """The first card, editable, built before a word is typed. (lines, card).
 
     Signup gave a name, an email and a ZIP; the ZIP gave the timezone; Google
-    gives the phone and address for a business old enough to be listed. None
-    of that needed a question, so none of it is asked -- it is put on a card
-    and confirmed in one tap.
+    often gives the phone and address for a business old enough to be listed.
+    All of it goes on the card as boxes the owner can confirm or correct in
+    place -- usually one tap on Save, sometimes a phone typed in.
 
-    A business too new to be listed gets the same card with the phone line
-    blank, which is why it never says "found you": that promise breaks for
-    about half of new signups, and the half it breaks for are the ones with
-    least patience for software that does not recognise them.
+    A business too new to be listed gets the same card with the boxes empty,
+    never a dead end that asks nothing and offers nowhere to answer.
     """
     import business_lookup
     import zip_zones
     from models import BusinessSetting
     have = _known()
-    payload, lines = {}, []
-
     name = have.get('business_name') or ''
-    if name:
-        lines.append(f'{FIELD_LABELS.get("business_name", "Business")}: {name}')
+    found = business_lookup.find(name, have.get('zip_code'))
 
+    def val(f):
+        return have.get(f) or found.get(f) or ''
+
+    # A short read-only summary above the boxes: the name, and the timezone
+    # the ZIP worked out (not a box, because the ZIP decides it, not a guess).
+    lines = []
+    if name:
+        lines.append(f'{FIELD_LABELS["business_name"]}: {name}')
     zone = (BusinessSetting.get('timezone') or '').strip()
     if zone:
         lines.append(f'Timezone: {zip_zones.label(zone)}')
 
-    found = business_lookup.find(name, have.get('zip_code'))
-    for f in ('phone', 'address', 'city', 'state', 'website'):
-        value = have.get(f) or found.get(f) or ''
-        if not value:
-            continue
-        payload[f] = value
-        lines.append(f'{FIELD_LABELS.get(f, f.title())}: {value}')
-
-    if not payload:
-        # Nothing of theirs to confirm: a business too new to be listed, with
-        # no phone on file yet. There is no card, and the question above asks
-        # for the phone in plain words rather than gesturing at a card that
-        # was never built.
-        return lines, None
-    card = _offer('setup_save_business', payload, 'Your details', lines,
-                  'Looks right')
+    fields = [
+        _form_field('business_name', name),
+        _form_field('phone', val('phone'), kind='tel', placeholder='(555) 123-4567'),
+        _form_field('address', val('address'), placeholder='Street address'),
+        _form_field('city', val('city')),
+        _form_field('state', val('state'), placeholder='FL'),
+        _form_field('website', val('website'), optional=True, placeholder='optional'),
+    ]
+    card = _form_card('business', 'Your details', fields, 'Save & continue',
+                      note='The details your customers see.', lines=lines)
+    card['prefilled'] = any(f['value'] for f in fields)
     return lines, card
 
 
 def price_card():
-    """The prices as they stand, offered for a yes. (lines, card).
+    """The 2-bed / 2-bath price, editable, with the rest worked out from it.
+    (lines, card).
 
-    The matrix ships with working numbers, so this is never a blank -- it is
-    somebody else's prices, already being quoted to real customers, waiting
-    to be confirmed or corrected. One tap if they are close enough.
+    The matrix ships with working numbers, so the box is never blank -- it is
+    somebody else's price, already being quoted to real customers, waiting to
+    be confirmed or corrected. One tap if it is close; type over it if not.
     """
     import pricing
     try:
@@ -414,16 +475,14 @@ def price_card():
         anchor = 0.0
     if not anchor:
         anchor = float(pricing.PRICE_MATRIX_DEFAULTS.get((2, 2), 225))
-    # The whole matrix, so pressing the button saves prices rather than only
-    # recording that somebody looked. Confirming the number that is already
-    # there is still a decision, and every other size follows from it.
-    matrix = pricing.suggest_matrix(anchor)
-    matrix[(2, 2)] = round(anchor, 2)
-    payload = {f'{b}_{ba}': round(float(v), 2) for (b, ba), v in matrix.items()}
     lines = [f'2-bed, 2-bath standard clean: ${anchor:.0f}',
              'Every other size is worked out from this one.']
-    card = _offer('setup_set_prices', payload, 'Your prices', lines,
-                  f'Yes, ${anchor:.0f}')
+    fields = [_form_field('two_bed_two_bath', f'{anchor:.0f}', kind='number',
+                          label='2-bed, 2-bath standard clean', prefix='$')]
+    card = _form_card('pricing', 'Your prices', fields, 'Save prices',
+                      note='Set this one price — every other size follows from it.',
+                      lines=lines)
+    card['prefilled'] = True
     return lines, card
 
 
@@ -452,25 +511,7 @@ def balance_cards():
 
 
 def tool_offer_business(**kw):
-    payload, lines, problems = {}, [], []
-    for f in BUSINESS_FIELDS:
-        v = _clean(kw.get(f))
-        if not v:
-            continue
-        if f == 'phone' and not _phone_ok(v):
-            problems.append(f'"{v}" does not look like a full phone number')
-            continue
-        if f == 'email':
-            v = v.lower()
-            if not _email_ok(v):
-                problems.append(f'"{v}" does not look like a complete email address')
-                continue
-        if f in ('website', 'google_review_link') and not v.startswith(('http://', 'https://')):
-            v = 'https://' + v
-        if f == 'state':
-            v = v.upper()[:2] if len(v) <= 3 else v
-        payload[f] = v
-        lines.append(f'{FIELD_LABELS[f]}: {v}')
+    payload, lines, problems = _validate_business(kw)
     if problems:
         return ('Not offered. Ask them to check: ' + '; '.join(problems) + '.'), None
     if not payload:
@@ -980,6 +1021,37 @@ def set_prices(payload):
     BusinessSetting.set('pricing_reviewed', '1')
     db.session.commit()
     return True, 'Prices saved. You can fine-tune any size on the Prices page.'
+
+
+def save_form(step, fields):
+    """Write an editable setup card. The form is only an input; every value is
+    checked again here, the same rules the model's offer card goes through, so
+    nothing is trusted just because it arrived from a box on the page."""
+    import demo_guard
+    if demo_guard.active():
+        return False, demo_guard.IDENTITY_DETAIL
+    fields = fields or {}
+    if step == 'business':
+        payload, _lines, problems = _validate_business(fields)
+        if problems:
+            return False, 'Please check: ' + '; '.join(problems) + '.'
+        if not payload:
+            return False, 'Add at least one detail before saving.'
+        return save_business(payload)
+    if step == 'pricing':
+        try:
+            anchor = float(re.sub(r'[^\d.]', '', str(fields.get('two_bed_two_bath'))) or 0)
+        except ValueError:
+            anchor = 0
+        if not 40 <= anchor <= 2000:
+            return False, ('That price looks off for a 2-bed, 2-bath standard '
+                           'clean. Try a number between $40 and $2,000.')
+        import pricing
+        matrix = pricing.suggest_matrix(anchor)
+        matrix[(2, 2)] = round(anchor, 2)
+        payload = {f'{b}_{ba}': v for (b, ba), v in matrix.items()}
+        return set_prices(payload)
+    return False, 'That is not something to save here.'
 
 
 def add_cleaner(payload):
