@@ -397,8 +397,14 @@ def apply_event(event):
         return True, f'{slug}: payment failed, marked past_due'
 
     if kind in ('invoice.paid', 'invoice.payment_succeeded'):
+        paid_fields = {}
+        if customer and not org.get('stripe_customer_id'):
+            # Matched by its subscription's metadata because it beat the
+            # checkout here. Remember the customer, or a refund that beats the
+            # mapping event too cannot find the company.
+            paid_fields['stripe_customer_id'] = customer
         control_plane.set_billing(engine, slug, subscription_status='active',
-                                  **_revenue_dates(org, 'active'))
+                                  **paid_fields, **_revenue_dates(org, 'active'))
         # If a partner brought this company, this invoice earned them a share.
         # Keyed on the invoice, so the same event twice earns it once, and
         # never allowed to fail the payment above (it cannot raise).
@@ -414,7 +420,12 @@ def apply_event(event):
             import affiliates
             result = affiliates.reverse(engine, obj['invoice'], 'refunded', slug=slug)
             return True, f'{slug}: refund, partner commission {result}'
-        return False, f'{slug}: ignored a partial refund'
+        # Held, not ignored: left alone, the full commission would still pay
+        # out once its hold ran out. Staff clear it after deciding what the
+        # part-refund undoes.
+        control_plane.hold_affiliate_commissions(
+            engine, slug, f'partial refund on {obj.get("invoice") or "an invoice"}')
+        return False, f'{slug}: partial refund, partner commissions held for review'
 
     return False, f'{slug}: ignored {kind}'
 
