@@ -8,15 +8,28 @@ definitions the console uses (funnel.py), and says what each one means.
 
   real         not marked demo or test in the console
   active       status 'active' (suspended, closing and closed are not)
-  paying       Stripe last said 'active' (subscription_status), never a guess
-  trialing     Stripe last said 'trialing', or no subscription yet
+  paying       a Stripe subscription, and Stripe last said 'active' -- as
+               funnel.py counts it, never a guess
+  active_without_stripe
+               'active' with no Stripe subscription: a free plan or a
+               founding customer set from the console; nobody is charged
+  trialing     Stripe last said 'trialing', or nothing yet
   grandfathered a founding customer (app._grandfather_established_business);
                counted as real, shown on its own line
   archived     hidden from the console's default list; nothing else changes
 
 Windows are fixed lengths back from the moment it runs, in UTC (timestamps in
 the control plane are UTC), so the same run gives the same answer whatever the
-reader's timezone. Slugs and counts only: no names, emails or amounts.
+reader's timezone. Two sources, kept apart because they mean different things:
+
+  events    a timestamp on the company's row falls in the window. Each is set
+            once and kept, except `still_canceled`: resuming clears it, so a
+            company that canceled and came back inside the window is not in it.
+  console   what an operator did, from the append-only console log: archived,
+            unarchived, suspended, reactivated, trial extended, marked test or
+            real. An undo there is a second line, never an erasure.
+
+Slugs and counts only: no names, emails or amounts.
 
 Pure: takes rows, returns numbers. certify.py does the reading.
 """
@@ -26,9 +39,12 @@ WINDOWS = (('last_24h', timedelta(hours=24)), ('last_7d', timedelta(days=7)))
 
 # Each a timestamp the product already writes when the thing happens.
 EVENTS = (('signed_up', 'created_at'), ('activated', 'activated_at'),
-          ('started_paying', 'paid_since'), ('canceled', 'canceled_at'),
-          ('suspended', 'suspended_at'), ('closed', 'closed_at'),
-          ('archived', 'archived_at'))
+          ('started_paying', 'paid_since'), ('still_canceled', 'canceled_at'),
+          ('suspended', 'suspended_at'), ('closed', 'closed_at'))
+
+# The console actions that change a company's standing (blueprints/console.py).
+CONSOLE_ACTIONS = ('archived', 'unarchived', 'suspended', 'reactivated', 'extended trial',
+                   'marked as test account', 'marked as a real company')
 
 STATUSES = ('active', 'suspended', 'closing', 'closed')
 BILLING = ('active', 'trialing', 'past_due', 'canceled')
@@ -43,13 +59,14 @@ def kind(org):
 def _billing(org):
     status = (org.get('subscription_status') or '').lower()
     if status == 'active':
-        return 'paying'
+        return 'paying' if org.get('stripe_subscription_id') else 'active_without_stripe'
     if status in ('', 'trialing'):
         return 'trialing'
     return status if status in BILLING else 'other'
 
 
-def compute(orgs, now):
+def compute(orgs, now, actions=()):
+    """`actions`: console_log rows (action, target, created_at)."""
     real = [o for o in orgs if kind(o) == 'real']
     open_ = [o for o in real if o.get('status') not in ('closing', 'closed')]
     out = {
@@ -63,7 +80,8 @@ def compute(orgs, now):
             # Billing of the companies still open: a closed company's last
             # Stripe status says nothing about today.
             'billing': {b: sorted(o['slug'] for o in open_ if _billing(o) == b)
-                        for b in ('paying', 'trialing', 'past_due', 'canceled', 'other')},
+                        for b in ('paying', 'active_without_stripe', 'trialing',
+                                  'past_due', 'canceled', 'other')},
             'grandfathered': sorted(o['slug'] for o in real if o.get('grandfathered')),
             'archived': sorted(o['slug'] for o in real if o.get('archived_at')),
         },
@@ -79,5 +97,8 @@ def compute(orgs, now):
             'events': {event: sorted(f'{o["slug"]} ({kind(o)})' for o in orgs
                                      if o.get(field) and o[field] >= since)
                        for event, field in EVENTS},
+            'console': [f'{a["created_at"].isoformat()}Z {a["target"]}: {a["action"]}'
+                        for a in sorted(actions, key=lambda a: a['created_at'])
+                        if a['action'] in CONSOLE_ACTIONS and a['created_at'] >= since],
         }
     return out

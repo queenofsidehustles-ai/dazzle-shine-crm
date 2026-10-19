@@ -814,24 +814,31 @@ def _verify_evidence(path, scratch_url, tenants, require=False):
     if os.path.exists(sidecar):
         with open(sidecar) as fh:
             written = json.load(fh).get('evidence') or {}
-    if require and tenants and not written:
-        # Without this a manifest with nothing written down passed: every
-        # per-company check below is skipped when there is nothing to hold
-        # the restore to, and a green run would prove nothing about evidence.
-        return ['the backup wrote down no contract evidence at all']
     import evidence_check
+    from sqlalchemy import text
     problems = []
     engine = _read_engine(scratch_url)
     try:
         with engine.connect() as conn, conn.begin():
             evidence_check.read_only(conn)
+            # Which restored schemas hold an audit chain, so had evidence to
+            # write down -- every company on Akye, public on a single business.
+            # A database from before 0031 has none, and nothing is required.
+            chained = set(conn.execute(text(
+                "SELECT table_schema FROM information_schema.columns "
+                "WHERE table_name = 'contract_audit_event' AND column_name = 'chain_seq'")).scalars())
+            if require and chained and not written:
+                # Without this a manifest with nothing written down passed:
+                # every check below is skipped when there is nothing to hold
+                # the restore to, and a green run proved nothing about evidence.
+                return ['the backup wrote down no contract evidence at all']
             for schema in [PUBLIC] + list(tenants):
                 if schema in written:
                     problems += [f'{schema}: {p}' for p in
                                  evidence_check.compare(conn, schema, written[schema])['problems']]
                     problems += [f'{schema}: {p}' for p in
                                  evidence_check.reconcile(conn, schema)['tampered']]
-                elif written and schema != PUBLIC:
+                elif (written or require) and (schema != PUBLIC or schema in chained):
                     problems.append(f'{schema}: the backup wrote down no evidence for it')
                 if schema != PUBLIC:
                     report = evidence_check.schema_report(conn, schema)

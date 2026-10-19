@@ -148,7 +148,12 @@ def cmd_tenants(args):
         evidence_check.read_only(conn)
         orgs = [dict(r) for r in conn.execute(text('SELECT * FROM public.organizations')).mappings()]
         now = conn.execute(text("SELECT (now() AT TIME ZONE 'UTC')")).scalar()
-    report = tenant_report.compute(orgs, now)
+        actions = []
+        if conn.execute(text("SELECT to_regclass('public.console_log')")).scalar():
+            actions = [dict(r) for r in conn.execute(text(
+                'SELECT action, target, created_at FROM public.console_log '
+                "WHERE created_at >= :since"), {'since': now - tenant_report.WINDOWS[-1][1]}).mappings()]
+    report = tenant_report.compute(orgs, now, actions)
     kinds = report['by_kind']
     print(f'  {report["registered"]} companies registered at {report["as_of"]}: '
           f'{len(kinds["real"])} real, {len(kinds["test"])} test, {len(kinds["demo"])} demo')
@@ -161,6 +166,8 @@ def cmd_tenants(args):
         happened = {e: v for e, v in window['events'].items() if v}
         print(f'  {name} (since {window["since"]}): ' + ('; '.join(
             f'{e} {", ".join(v)}' for e, v in happened.items()) or 'nothing'))
+        for line in window['console']:
+            print(f'      console: {line}')
     report['command'] = 'tenants'
     return _emit(report, args.out, 'read from the control plane')
 

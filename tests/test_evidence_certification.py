@@ -288,6 +288,21 @@ except backup.BackupFailed as e:
     check('no contract evidence' in str(e), 'a fresh backup with no evidence written down fails the nightly run')
 ok, _ = verify(bare)
 check(ok, 'while an older backup, from before evidence was recorded, still verifies by hand')
+# A single business keeps its evidence in public and has no company schemas;
+# the requirement follows the audit chain, not the schema list.
+check(backup._verify_evidence(bare, os.environ['DATABASE_URL'], [], require=True)
+      == ['the backup wrote down no contract evidence at all'],
+      'a single business with no evidence written down fails the nightly run too')
+only_tenants = bare.replace('-bare', '-notpublic')
+shutil.copy(path, only_tenants)
+m_full = json.load(open(path.replace('.json.gz', '.manifest.json')))
+if 'public' in (m_full.get('evidence') or {}):
+    m_full['evidence'].pop('public')
+    with open(only_tenants.replace('.json.gz', '.manifest.json'), 'w') as fh:
+        json.dump(m_full, fh)
+    p = backup._verify_evidence(only_tenants, os.environ['DATABASE_URL'], [], require=True)
+    check(p == ['public: the backup wrote down no evidence for it'],
+          'and so does one whose public evidence alone was left out')
 check(certify.main(['compare', path.replace('.json.gz', '.manifest.json')]) == 0,
       'compare: the live database still holds everything the manifest wrote down')
 
@@ -458,8 +473,19 @@ check(r.status_code == 503 and logged('EventNotSaved') == 1,
 print('\n8. Who is on the platform, from the control plane (certify.py tenants)')
 sql("UPDATE public.organizations SET subscription_status = 'active', paid_since = now() "
     f"WHERE slug = '{A}'")
+certify.main(['tenants', '--out', f'{out}/t.json'])
+t = json.load(open(f'{out}/t.json'))
+check(A in t['real']['billing']['active_without_stripe'] and A not in t['real']['billing']['paying'],
+      "'active' with no Stripe subscription is not paying (a free or founding plan)")
+sql(f"UPDATE public.organizations SET stripe_subscription_id = 'sub_test' WHERE slug = '{A}'")
+for action in ('archived', 'unarchived'):
+    sql("INSERT INTO public.console_log (actor, action, target, created_at) "
+        f"VALUES ('ops@test', '{action}', '{A}', now() AT TIME ZONE 'UTC')")
 check(certify.main(['tenants', '--out', f'{out}/t.json']) == 0, 'tenants: runs, read-only')
 t = json.load(open(f'{out}/t.json'))
+console = ' '.join(t['windows']['last_24h']['console'])
+check(f'{A}: archived' in console and f'{A}: unarchived' in console,
+      'an archive undone inside the window still shows, from the console log')
 check(A in t['by_kind']['real'] and DEMO in t['by_kind']['demo'] and DEMO not in t['by_kind']['real'],
       'the demo company is counted apart from the real ones')
 check(A in t['real']['billing']['paying'] and DEMO not in sum(t['real']['billing'].values(), []),
