@@ -349,7 +349,11 @@ def create_app():
                 return {'TRIAL': None}
 
             state = billing.trial_state(org)
-            if state and not state['started']:
+            # Not "has the trial started" any more -- under one clock it always
+            # has, and asking that question here stopped activation ever being
+            # recorded at all. The question is whether this company has been
+            # stamped yet.
+            if state and not org.get('activated_at'):
                 # Have they actually begun? Cheap: onboarding already knows.
                 if onboarding.progress().get('activated'):
                     if billing.mark_activated(provisioning._engine(), org['slug']):

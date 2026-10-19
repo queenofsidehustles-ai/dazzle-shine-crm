@@ -206,26 +206,28 @@ def due(org, now=None, next_step=None):
         days_in = (now - began).days
         if days_in <= ACTIVATED_WITHIN_DAYS and 'activated' not in already:
             return 'activated'
-    else:
-        # The ones who have not got it working yet. These used to be the
-        # "your days have not started" notes; the days start regardless now,
-        # which is a better reason to write, not a worse one.
-        if START_21[0] <= age <= START_21[1] and 'start_21' not in already:
-            return 'start_21'
-        if START_7[0] <= age <= START_7[1] and 'start_7' not in already:
-            return 'start_7'
+        # Everything in the first-week run is some version of "add a cleaner
+        # and a customer", which is no letter to send to somebody who has.
+        # day2 is about the booking page, which is still worth telling them.
+        if open_(DAY2, 'day2'):
+            return 'day2'
+        if next_step and open_(FEATURE, 'feature', days_in):
+            return 'feature'
+        return None
 
+    # Not got it working yet. These used to be the "your days have not
+    # started" notes; the days start regardless now, which is a better reason
+    # to write than the old one, not a worse one.
+    if START_21[0] <= age <= START_21[1] and 'start_21' not in already:
+        return 'start_21'
+    if START_7[0] <= age <= START_7[1] and 'start_7' not in already:
+        return 'start_7'
     # The first week, earliest first: a run that missed yesterday sends
     # yesterday's note today and today's tomorrow, rather than skipping one.
     for window, kind in ((DAY1, 'day1'), (DAY2, 'day2'),
                          (DAY4, 'day4'), (DAY5, 'day5')):
         if open_(window, kind):
             return kind
-
-    if next_step and activated:
-        began = org.get('activated_at') or now
-        if open_(FEATURE, 'feature', (now - began).days):
-            return 'feature'
     return None
 
 
