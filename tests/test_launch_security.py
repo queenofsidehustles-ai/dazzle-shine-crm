@@ -161,7 +161,7 @@ os.environ['SIGNUP_LIMITS'] = '1'
 def signup(c, slug, **extra):
     data = {'business': f'Biz {slug}', 'slug': slug, 'name': 'Owner',
             'email': f'{slug}@example.com', 'password': 'a-perfectly-fine-password',
-            'terms_accepted': '1'}
+            'terms_accepted': '1', 'zip_code': '32801'}
     data.update(extra)
     return c.post('/signup', data=data, headers=PRODUCT)
 

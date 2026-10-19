@@ -69,7 +69,7 @@ with app.app_context():
     p = onboarding.progress()
 check(p['complete'] is False, 'they are not finished after all')
 missing = [s['key'] for s in p['steps'] if s.get('required') and not s['done']]
-check(set(missing) == {'timezone', 'terms', 'payments', 'balance'},
+check(set(missing) == {'business', 'terms', 'balance'},
       f'and the questions they were never asked are open: {missing}')
 
 print('\n2. They are actually prompted, not silently incomplete')

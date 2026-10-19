@@ -101,10 +101,15 @@
        once, and typing into this one just reloaded the page you were
        already on. #}
     {% if session.get('role') == 'owner' and request.endpoint != 'assistant.page' %}
+    {# Clicking it opens her page, rather than sitting there looking like a
+       search box that does nothing until you type and press Enter. The page
+       has the voice input, the suggested questions and the history; this box
+       has none of them, so there is no reason to keep somebody in it. #}
     <form class="ask-nana-quick" action="{{ url_for('assistant.page') }}" method="GET">
       <span class="ask-nana-quick-icon">💬</span>
       <input type="text" name="q" placeholder="Ask Nana anything…"
-             aria-label="Ask Nana" autocomplete="off" />
+             aria-label="Ask Nana" autocomplete="off"
+             onfocus="this.form.submit()" />
     </form>
     {% endif %}
     {# How far through setup, on every screen rather than only on the page
@@ -285,6 +290,19 @@
         <b>Confirm your email.</b>
         We sent a code to {{ EMAIL_CONFIRM.email }}. Wrong address? Fix it here.
         <span class="go">Confirm →</span>
+      </a>
+      {% endif %}
+      {# Payments is tracked rather than required: a business can take
+         bookings without it and cannot be paid without it, so it stays in
+         front of somebody instead of blocking them. Amber once setup is
+         done, red after three days of being put off. #}
+      {% if ON_START and SETUP and SETUP.payments %}
+      <a href="{{ url_for('settings.connections') }}"
+         class="setupbar {{ 'urgent' if SETUP.payments == 'red' }}">
+        <b>{% if SETUP.payments == 'red' %}Still no way to take card payments.
+           {% else %}You can take bookings. You can't take payments yet.{% endif %}</b>
+        Connecting Stripe takes a few minutes and your bank details stay with you.
+        <span class="go">Connect →</span>
       </a>
       {% endif %}
       {% if ON_START and TRIAL and not TRIAL.expired %}

@@ -1256,7 +1256,7 @@ button[type="submit"]:not([class]):active {
 /* The trial countdown. Always saying something: not-started, running out,
    or finished. A state with no clock is how a trial becomes a thing somebody
    believes they can come back to whenever. */
-.trialbar {
+.setupbar, .trialbar {
   display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap;
   padding:var(--s3) var(--s4); margin-bottom:var(--s4);
   border-radius:var(--r-sm); text-decoration:none;
@@ -1264,7 +1264,9 @@ button[type="submit"]:not([class]):active {
   background:var(--info-soft); border:1px solid var(--info-line); color:var(--ink);
   transition:box-shadow var(--ease);
 }
+.setupbar:hover { box-shadow:var(--shadow); }
 .trialbar:hover { box-shadow:var(--shadow); }
+.setupbar b { font-weight:700; }
 .trialbar b { font-weight:700; }
 .trialbar .left { font-weight:650; }
 .trialbar .go { margin-left:auto; color:var(--info); font-weight:650; white-space:nowrap; }
