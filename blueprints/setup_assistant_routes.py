@@ -20,7 +20,7 @@ def _last_step(chat):
     return None
 
 
-def transcript():
+def transcript(catch_up=True):
     """The conversation so far. Each entry: role, content, cards, step?, hidden?
 
     Until the owner has said anything, the opening line is rebuilt on every
@@ -31,11 +31,18 @@ def transcript():
     chat that still asks about the booking page -- the step it asked about
     is finished, but nothing told the chat. So when the next step has moved
     on, Nana says so and asks the next question.
+
+    `catch_up=False` is for the routes that have just finished a step
+    themselves (confirm, save, skip) and add the next question on their own.
+    Catching up there as well asked the next question twice -- the doubled
+    "That's the four essentials done" after the last required step.
     """
     chat = setup_assistant.load_chat()
     if not any(m.get('role') == 'user' for m in chat):
         text, cards, key = setup_assistant.greeting()
         return [{'role': 'assistant', 'content': text, 'cards': cards, 'step': key}]
+    if not catch_up:
+        return chat
     last = _last_step(chat)
     nxt = setup_assistant._next_step()
     now = nxt['key'] if nxt else 'done'
@@ -81,12 +88,15 @@ def confirm():
     token = (data.get('token') or request.form.get('token') or '').strip()
     ok, said = setup_assistant.confirm(token)
     follow = ''
-    chat = transcript()
+    chat = transcript(catch_up=False)
     # The card remembers what happened to it, so after a reload it shows the
     # outcome instead of a button that would only say it is already done.
     for m in chat:
         for c in m.get('cards') or []:
-            if (c.get('kind') == 'confirm' and token and c.get('token') == token
+            mine = (c.get('kind') == 'confirm' and c.get('token') == token) or (
+                c.get('kind') == 'choice'
+                and any(o.get('token') == token for o in c.get('options') or []))
+            if (mine and token
                     and not (c.get('done') or '').startswith('✅')):
                 # A second press on a saved card must not overwrite "saved".
                 c['done'] = ('✅ ' if ok else '⚠️ ') + said
@@ -123,7 +133,7 @@ def save():
     ok, said = setup_assistant.save_form(step, fields)
     follow, cards = '', []
     if ok:
-        chat = transcript()
+        chat = transcript(catch_up=False)
         follow, cards, key = setup_assistant.next_message()
         chat = chat + [
             {'role': 'user', 'content': f'(I saved my {step} details.)', 'hidden': True},
@@ -148,7 +158,7 @@ def skip():
         return jsonify({'ok': False, 'say': '', 'cards': []})
     setup_assistant.skip(step)
     text, cards, key = setup_assistant.next_message('No problem, we can come back to that.')
-    chat = transcript() + [
+    chat = transcript(catch_up=False) + [
         {'role': 'user', 'content': f'(I skipped the {step} step for now.)', 'hidden': True},
         {'role': 'assistant', 'content': text, 'cards': cards, 'step': key},
     ]

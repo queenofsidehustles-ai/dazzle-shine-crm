@@ -117,7 +117,7 @@
        lot, and a job half done that looks endless is the one that gets
        abandoned. Disappears for good once the last step is ticked. #}
     {% if SETUP and SETUP.next %}
-    <a href="{{ url_for('settings.getting_started') }}" class="setup-meter">
+    <a href="{{ url_for('settings.getting_started') }}" class="setup-meter" id="setup-meter">
       <span class="setup-line">
         <span>Setting up</span>
         <span class="setup-count">{{ SETUP.done }} of {{ SETUP.total }}</span>
@@ -295,8 +295,11 @@
       {# Payments is tracked rather than required: a business can take
          bookings without it and cannot be paid without it, so it stays in
          front of somebody instead of blocking them. Amber once setup is
-         done, red after three days of being put off. #}
-      {% if ON_START and SETUP and SETUP.payments %}
+         done, red after three days of being put off. Not on the
+         getting-started page itself: that page already offers payments as its
+         next step, and the bar on top made it the same ask twice on screen. #}
+      {% if ON_START and SETUP and SETUP.payments
+            and request.endpoint != 'settings.getting_started' %}
       <a href="{{ url_for('settings.connections') }}"
          class="setupbar {{ 'urgent' if SETUP.payments == 'red' }}">
         <b>{% if SETUP.payments == 'red' %}Still no way to take card payments.
