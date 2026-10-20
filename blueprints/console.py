@@ -337,6 +337,8 @@ def company(slug):
         email_labels=__import__('communications').LABELS,
         purge_from=(closed_at + timedelta(days=tenant_data_lifecycle.RETENTION_DAYS)
                     if closed_at else None),
+        lc=_lifecycle_view(engine, org),
+        is_owner=_is_owner(),
         may_operate=_may_operate(),
         me=request.console_user, counts=_counts(engine))
 
@@ -615,15 +617,255 @@ def reactivate_company(slug):
     engine = _engine()
     org = control_plane.find(engine, slug)
     if not org or org.get('status') != 'suspended':
-        # Closed is deliberately not reversible from here: closure starts the
-        # retention clock, and reopening is an operator decision made from a
-        # terminal (tenant_lifecycle_cli.py), not a button.
-        flash('Only a suspended company can be reactivated here.', 'error')
+        # A closed company is not reactivated here: closure started a retention
+        # clock, and undoing it is the owner's decision, made with a fresh
+        # password and a reason, under Lifecycle on the company page.
+        flash('Only a suspended company can be reactivated here. A closed one is '
+              'reopened under Lifecycle, by the console owner.', 'error')
         return redirect(here)
     control_plane.set_status(engine, slug, 'active')
     control_plane.log_console(engine, request.console_user['email'],
                               'reactivated', slug)
     flash(f'{org["name"]} is active again.', 'success')
+    return redirect(here)
+
+
+# --------------------------------------------------------------------------
+# Closing, exporting and purging a company
+#
+# These used to be terminal-only (tenant_lifecycle_cli.py), on the reasoning
+# that they start and end a legal retention period and should not be a button.
+# They are here now because the terminal does not scale past one person who
+# holds the production database URL, and because the owner of a closed company
+# has no way to ask for their own data except through staff.
+#
+# So the friction moves with them. A terminal asked for the company's address;
+# the console asks for more, because a browser tab left open is easier to
+# misuse than a command somebody had to type:
+#
+#   * close, reopen and purge are the console OWNER's alone; export, which only
+#     reads, is a manager's;
+#   * every one needs the person's password again (and their authenticator code
+#     when two-factor is on), so an unattended session cannot do it. A wrong
+#     attempt counts toward the same lockout as a wrong sign-in;
+#   * every one needs a written reason, which goes in the Record;
+#   * close and purge need the company's address typed out;
+#   * purge also needs a tick saying the owner has been offered their data, and
+#     the library refuses it before the retention deadline whatever the form says.
+#
+# The rules themselves are not here. They are in tenant_data_lifecycle.py, the
+# same module the terminal uses, so the two cannot disagree about when a purge
+# is allowed.
+
+_LIVE_SUBSCRIPTION = ('active', 'trialing', 'past_due', 'unpaid', 'incomplete')
+
+
+def _is_owner():
+    role = (getattr(request, 'console_user', {}) or {}).get('role')
+    return control_plane.rank(role) >= control_plane.rank('owner')
+
+
+def _live_subscription(org):
+    """Still being billed by Stripe. Our own free trial has no Stripe id."""
+    return bool(org.get('stripe_subscription_id')) and \
+        (org.get('subscription_status') or '').lower() in _LIVE_SUBSCRIPTION
+
+
+def _lifecycle_view(engine, org):
+    """What the Lifecycle section of a company page needs to draw itself."""
+    import tenant_data_lifecycle as lifecycle
+    now = datetime.utcnow()
+    closed_at, purged_at = org.get('closed_at'), org.get('purged_at')
+    eligible_at = closed_at + timedelta(days=lifecycle.RETENTION_DAYS) if closed_at else None
+    blockers = []
+    if org.get('is_demo'):
+        blockers.append('This is the demo company. It is rebuilt from its seed, not closed.')
+    if _live_subscription(org):
+        blockers.append('They have a live Stripe subscription. Cancel it in Stripe first, '
+                        'or they will keep being billed for a workspace nobody can open.')
+    last = control_plane.console_log_for(engine, org['slug'], 'exported company data', 1)
+    return {
+        'state': ('purged' if purged_at else 'closed' if org.get('status') == 'closed'
+                  else org.get('status') or 'active'),
+        'closed_at': closed_at, 'purged_at': purged_at, 'eligible_at': eligible_at,
+        'days_left': max(0, (eligible_at - now).days) if eligible_at else None,
+        'eligible': bool(eligible_at and now >= eligible_at and not purged_at),
+        'blockers': blockers, 'retention_days': lifecycle.RETENTION_DAYS,
+        'last_export': last[0] if last else None,
+    }
+
+
+def _reauthenticate():
+    """(ok, message): fresh proof it is still the same person at the keyboard.
+
+    Reuses the sign-in checks, so a wrong password or code counts toward the
+    same lockout as signing in: this form cannot be used to guess a password
+    with an open session.
+    """
+    engine = _engine()
+    email = request.console_user['email']
+    user, why = control_plane.check_console_login(
+        engine, email, request.form.get('password') or '')
+    if not user:
+        return False, ('Too many wrong attempts. Try again later.' if why == 'locked'
+                       else 'That password was not right. Nothing was changed.')
+    if user.get('totp_enabled'):
+        user, why = control_plane.check_console_code(
+            engine, email, request.form.get('code') or '')
+        if not user:
+            return False, ('Too many wrong attempts. Try again later.' if why == 'locked'
+                           else 'That code was not right. Nothing was changed.')
+    return True, None
+
+
+def _lifecycle_preflight(slug, *, owner_only, typed):
+    """Everything every lifecycle action needs before it may begin.
+
+    Returns (org, reason, None) to go ahead, or (None, None, response) to stop.
+    Checked in order of cheapness, and the password last, so a mistyped
+    confirmation does not spend a password attempt."""
+    here = url_for('console.company', slug=slug)
+
+    def stop(message):
+        flash(message, 'error')
+        return None, None, redirect(here)
+
+    if owner_only and not _is_owner():
+        return stop('Only the console owner can close, reopen or purge a company.')
+    if not owner_only and not _may_operate():
+        return None, None, _refuse(here)
+    org = control_plane.find(_engine(), slug)
+    if not org:
+        flash(f'No company at {slug}.', 'error')
+        return None, None, redirect(url_for('console.companies'))
+    reason = (request.form.get('reason') or '').strip()
+    if len(reason) < 5:
+        return stop('Say why, in a sentence. It goes in the record.')
+    if typed and (request.form.get('confirm') or '').strip() != slug:
+        return stop(f'Type the company address ({slug}) exactly to confirm.')
+    ok, why = _reauthenticate()
+    if not ok:
+        return stop(why)
+    return org, reason, None
+
+
+@console_bp.route('/companies/<slug>/lifecycle/export', methods=['POST'])
+@console_required
+def export_company(slug):
+    """A zip of one company's customers, jobs, workers, pay and expenses."""
+    import tenant_export
+    here = url_for('console.company', slug=slug)
+    org, reason, stopped = _lifecycle_preflight(slug, owner_only=False, typed=False)
+    if stopped:
+        return stopped
+    engine = _engine()
+    who = request.console_user['email']
+    try:
+        data, counts = tenant_export.build(engine, slug, by=who)
+    except tenant_export.ExportError as exc:
+        flash(str(exc), 'error')
+        return redirect(here)
+    rows = sum(counts.values())
+    control_plane.log_console(engine, who, 'exported company data', slug,
+                              f'{rows} rows. Reason: {reason}')
+    return Response(data, mimetype='application/zip', headers={
+        'Content-Disposition': f'attachment; filename="{slug}-export-{datetime.utcnow():%Y%m%d}.zip"',
+        'Cache-Control': 'no-store'})
+
+
+@console_bp.route('/companies/<slug>/lifecycle/close', methods=['POST'])
+@console_required
+def close_company(slug):
+    """End a company's access now and start its 30-day retention."""
+    import tenant_data_lifecycle as lifecycle
+    here = url_for('console.company', slug=slug)
+    org, reason, stopped = _lifecycle_preflight(slug, owner_only=True, typed=True)
+    if stopped:
+        return stopped
+    engine = _engine()
+    who = request.console_user['email']
+    if org.get('purged_at') or org.get('status') not in ('active', 'suspended'):
+        flash('Only an active or suspended company can be closed.', 'error')
+        return redirect(here)
+    blockers = _lifecycle_view(engine, org)['blockers']
+    if blockers:
+        flash(blockers[0], 'error')
+        return redirect(here)
+    try:
+        state = lifecycle.close_tenant(engine, slug)
+    except lifecycle.LifecycleError as exc:
+        flash(f'Not closed: {exc}', 'error')
+        return redirect(here)
+    control_plane.log_console(engine, who, 'closed company', slug,
+                              f'Retained until {state["eligible_at"]:%d %b %Y}. Reason: {reason}')
+    flash(f'{org["name"]} is closed. Nobody there can sign in. Their data is kept until '
+          f'{state["eligible_at"]:%d %b %Y}; export it for them before then if they ask.',
+          'success')
+    return redirect(here)
+
+
+@console_bp.route('/companies/<slug>/lifecycle/reopen', methods=['POST'])
+@console_required
+def reopen_company(slug):
+    """Take a closure back, while the data still exists. Comes back suspended."""
+    import tenant_data_lifecycle as lifecycle
+    here = url_for('console.company', slug=slug)
+    org, reason, stopped = _lifecycle_preflight(slug, owner_only=True, typed=False)
+    if stopped:
+        return stopped
+    engine = _engine()
+    try:
+        lifecycle.reopen_tenant(engine, slug)
+    except lifecycle.LifecycleError as exc:
+        flash(f'Not reopened: {exc}.', 'error')
+        return redirect(here)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'reopened company', slug, f'Reason: {reason}')
+    flash(f'{org["name"]} is reopened, and suspended: nobody can sign in until you '
+          f'reactivate it below.', 'success')
+    return redirect(here)
+
+
+@console_bp.route('/companies/<slug>/lifecycle/purge', methods=['POST'])
+@console_required
+def purge_company(slug):
+    """Permanently delete a closed company's data, once retention has passed."""
+    import tenant_data_lifecycle as lifecycle
+    here = url_for('console.company', slug=slug)
+    org, reason, stopped = _lifecycle_preflight(slug, owner_only=True, typed=True)
+    if stopped:
+        return stopped
+    engine = _engine()
+    who = request.console_user['email']
+    if request.form.get('ack') != '1':
+        flash('Tick the box to confirm the owner has been offered their data.', 'error')
+        return redirect(here)
+    if org.get('purged_at'):
+        flash(f'{org["name"]} was already purged. Nothing more to do.', 'info')
+        return redirect(here)
+    if not lifecycle.purge_eligible(engine, slug):
+        # The library will not purge early either; this is so the person is told
+        # why in words, not by an exception.
+        state = lifecycle.lifecycle_state(engine, slug) or {}
+        when = state.get('eligible_at')
+        flash('Purge refused: ' + (f'the 30-day retention runs until {when:%d %b %Y}.'
+                                   if when else 'the company has to be closed first.'), 'error')
+        return redirect(here)
+    try:
+        result = lifecycle.purge_tenant(engine, slug)
+    except Exception as exc:  # noqa: BLE001 -- anything: the tenant stays closed
+        control_plane.log_console(engine, who, 'purge failed', slug,
+                                  f'{type(exc).__name__}: {exc}'[:300])
+        flash(f'The purge did not complete ({type(exc).__name__}: {exc}). The company '
+              f'is still closed and nothing was reactivated. It is safe to try again.',
+              'error')
+        return redirect(here)
+    media = (result or {}).get('media') or {}
+    control_plane.log_console(
+        engine, who, 'purged company', slug,
+        f'Media deleted: {media.get("deleted", 0)}. Reason: {reason}')
+    flash(f'{org["name"]} is permanently purged. Copies in encrypted backups age out '
+          f'within 30 days.', 'success')
     return redirect(here)
 
 
@@ -674,7 +916,9 @@ def health():
     preview = trial_nudges.run(engine, dry_run=True)
     names = {o['slug']: o['name'] for o in orgs}
     closed = [dict(o, purge_from=o['closed_at'] + timedelta(
-                  days=tenant_data_lifecycle.RETENTION_DAYS))
+                  days=tenant_data_lifecycle.RETENTION_DAYS),
+                   ready=datetime.utcnow() >= o['closed_at'] + timedelta(
+                       days=tenant_data_lifecycle.RETENTION_DAYS))
               for o in orgs if o.get('status') == 'closed' and o.get('closed_at')
               and not o.get('purged_at')]
     job_labels = [(key, label) for key, label, _b, _c in _automation_jobs()]

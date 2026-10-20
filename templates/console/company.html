@@ -145,7 +145,7 @@
   </form>
   {% endif %}
 </div>
-<p class="ops-dim" style="margin-top:var(--s3)">A test account is left out of the Funnel and Sales numbers and never sent trial reminders; it still works normally. Closing a company and purging its data are not done from here. They start and end a legal retention period, so they are run from a terminal (<code>tenant_lifecycle_cli.py</code>).</p>
+<p class="ops-dim" style="margin-top:var(--s3)">A test account is left out of the Funnel and Sales numbers and never sent trial reminders; it still works normally.</p>
 {% endif %}
 
 {% if may_operate %}
@@ -155,6 +155,87 @@
   <span class="ops-dim">{{ 'Archived — hidden from the main list.' if org.archived_at else 'Hides it from the main list. Nothing else changes.' }}</span>
 </form>
 {% endif %}
+
+{# ── Lifecycle ───────────────────────────────────────────────────────────── #}
+{% macro confirm_fields(slug, typed=True, ack=False) %}
+  <input type="text" name="reason" required minlength="5" maxlength="300" placeholder="Why (goes in the record)">
+  {% if typed %}<input type="text" name="confirm" required autocomplete="off" placeholder="Type {{ slug }} to confirm">{% endif %}
+  {% if ack %}<label class="ops-dim" style="grid-column:1 / -1;display:flex;gap:var(--s2);align-items:flex-start"><input type="checkbox" name="ack" value="1" required style="margin-top:3px"> The owner has been offered a copy of their data and does not need one, or already has it.</label>{% endif %}
+  <input type="password" name="password" required autocomplete="current-password" placeholder="Your console password">
+  {% if me.totp_enabled %}<input type="text" name="code" required inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator code">{% endif %}
+{% endmacro %}
+
+<h3 class="ops-h" id="lifecycle">Lifecycle</h3>
+<div class="ops-card">
+  {% if lc.state == 'purged' %}
+    <p style="margin:0"><span class="ops-badge ops-closed">purged</span>
+      Permanently purged on {{ lc.purged_at.strftime('%d %b %Y') }}. Only a minimal record is kept (address, dates, billing ids).
+      Copies in encrypted backups age out within 30 days.</p>
+  {% elif lc.state == 'closed' %}
+    <p style="margin:0 0 var(--s2)"><span class="ops-badge ops-closed">closed</span>
+      Closed {{ lc.closed_at.strftime('%d %b %Y') }}. Nobody there can sign in. Their data is kept
+      {% if lc.eligible %}and <strong>can now be purged</strong> (the {{ lc.retention_days }}-day retention ended {{ lc.eligible_at.strftime('%d %b %Y') }}).
+      {% else %}until <strong>{{ lc.eligible_at.strftime('%d %b %Y') }}</strong> ({{ lc.days_left }} more day{{ '' if lc.days_left == 1 else 's' }}); it cannot be purged before then.{% endif %}</p>
+  {% else %}
+    <p style="margin:0 0 var(--s2)"><span class="ops-badge {{ 'ops-ok' if lc.state == 'active' else 'ops-stale' }}">{{ lc.state }}</span>
+      Closing ends everyone's access now and keeps the data for {{ lc.retention_days }} days, so it can be exported or restored.</p>
+  {% endif %}
+  {% if lc.last_export %}<p class="ops-dim" style="margin:0 0 var(--s2)">Last exported {{ lc.last_export.created_at.strftime('%d %b %Y') }} by {{ lc.last_export.actor }}.</p>
+  {% elif lc.state != 'purged' %}<p class="ops-dim" style="margin:0 0 var(--s2)">No export has been made for this company.</p>{% endif %}
+
+  {% if lc.state != 'purged' %}
+    {% if not may_operate %}
+      <p class="ops-dim">Only a manager or the owner can export a company's data.</p>
+    {% else %}
+    <details style="margin-top:var(--s3)"><summary><strong>Export their data</strong> <span class="ops-dim">(customers, jobs, workers, pay, expenses)</span></summary>
+      <form method="post" action="{{ url_for('console.export_company', slug=org.slug) }}" class="ops-form" style="margin-top:var(--s3)">
+        {{ confirm_fields(org.slug, typed=False) }}
+        <div><button class="btn btn-outline btn-sm" type="submit">Download the export</button></div>
+      </form>
+      <p class="ops-dim">A zip of CSV files. It holds personal information about their customers and workers, so send it only to the owner, privately. Logins, card details and private documents are not included. The download is written to the record.</p>
+    </details>
+    {% endif %}
+
+    {% if is_owner %}
+      {% if lc.state in ('active', 'suspended') %}
+      <details style="margin-top:var(--s3)"><summary><strong>Close this company</strong></summary>
+        {% for b in lc.blockers %}<p class="ops-bad" style="margin:var(--s2) 0">{{ b }}</p>{% endfor %}
+        {% if not lc.blockers %}
+        <form method="post" action="{{ url_for('console.close_company', slug=org.slug) }}" class="ops-form" style="margin-top:var(--s3)"
+              onsubmit='return confirm({{ ("Close " ~ org.name ~ "? Nobody there will be able to sign in.")|tojson }})'>
+          {{ confirm_fields(org.slug) }}
+          <div><button class="btn btn-danger btn-sm" type="submit">Close {{ org.name }}</button></div>
+        </form>
+        <p class="ops-dim">Everyone loses access immediately and their web address stops answering. The data is kept for {{ lc.retention_days }} days. You can reopen it until it is purged.</p>
+        {% endif %}
+      </details>
+      {% elif lc.state == 'closed' %}
+      <details style="margin-top:var(--s3)"><summary><strong>Reopen</strong> <span class="ops-dim">(brings it back suspended)</span></summary>
+        <form method="post" action="{{ url_for('console.reopen_company', slug=org.slug) }}" class="ops-form" style="margin-top:var(--s3)">
+          {{ confirm_fields(org.slug, typed=False) }}
+          <div><button class="btn btn-outline btn-sm" type="submit">Reopen</button></div>
+        </form>
+        <p class="ops-dim">It comes back suspended, so nobody can sign in until you press Reactivate. A later closure starts a fresh {{ lc.retention_days }} days.</p>
+      </details>
+      <details style="margin-top:var(--s3)"><summary><strong style="color:var(--warn)">Permanently purge</strong>
+        {% if not lc.eligible %}<span class="ops-dim">(not before {{ lc.eligible_at.strftime('%d %b %Y') }})</span>{% endif %}</summary>
+        {% if not lc.eligible %}
+          <p class="ops-dim" style="margin:var(--s2) 0">Purge is refused until the {{ lc.retention_days }}-day retention has passed. There is no way around it from here.</p>
+        {% else %}
+        <p class="ops-bad" style="margin:var(--s2) 0">This deletes their data for good: customers, jobs, workers, photos. It cannot be undone. Copies in encrypted backups age out within 30 days.</p>
+        <form method="post" action="{{ url_for('console.purge_company', slug=org.slug) }}" class="ops-form" style="margin-top:var(--s3)"
+              onsubmit='return confirm({{ ("Permanently delete all data for " ~ org.name ~ "? This cannot be undone.")|tojson }})'>
+          {{ confirm_fields(org.slug, ack=True) }}
+          <div><button class="btn btn-danger btn-sm" type="submit">Purge {{ org.name }} permanently</button></div>
+        </form>
+        {% endif %}
+      </details>
+      {% endif %}
+    {% else %}
+      <p class="ops-dim" style="margin-top:var(--s3)">Only the console owner can close, reopen or purge a company.</p>
+    {% endif %}
+  {% endif %}
+</div>
 
 <h3 class="ops-h">Emails we have sent them</h3>
 {% if emails %}
