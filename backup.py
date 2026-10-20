@@ -329,6 +329,30 @@ def _chained(tables):
                for t in tables)
 
 
+def _chain_lost(conn, schema, tables):
+    """The schema's migration revision if it holds contract evidence without
+    an audit chain although that revision is 0031 or later -- the chain was
+    removed, not never added. None otherwise, including a revision this code
+    does not know."""
+    if not any(t.name == 'contract_audit_event' for t in tables):
+        return None
+    from sqlalchemy import text
+    version_table = f'"{schema}".alembic_version'
+    if not conn.execute(text('SELECT to_regclass(:t)'), {'t': version_table}).scalar():
+        return None
+    version = conn.execute(text(f'SELECT version_num FROM {version_table}')).scalar()
+    if not version:
+        return None
+    import migrate
+    from alembic.script import ScriptDirectory
+    try:
+        past = {r.revision for r in ScriptDirectory.from_config(
+            migrate._config()).iterate_revisions(version, 'base')}
+    except Exception:
+        return None
+    return version if '0031_audit_chain' in past else None
+
+
 def _evidence_digests(conn, by_schema):
     """{schema: evidence_check.digest(...)} for every schema holding the
     contract evidence tables (Postgres only). A chain that does not recompute
@@ -345,7 +369,14 @@ def _evidence_digests(conn, by_schema):
     any_chained = any(_chained(tables) for tables in by_schema.values())
     for schema, tables in by_schema.items():
         if not _chained(tables):
-            if any_chained and schema != PUBLIC:
+            lost = _chain_lost(conn, schema, tables)
+            if lost:
+                # Past 0031 with no chain is not a database from before it,
+                # and must not be written down as one ('chained' is what the
+                # restore is held to).
+                out[schema] = {'error': f'its contract evidence has no audit chain, '
+                                        f'though it is at {lost}, after migration 0031'}
+            elif any_chained and schema != PUBLIC:
                 out[schema] = {'error': 'its contract evidence has no audit chain (migration 0031 did not reach it)'}
             continue
         bad = (evidence_check.audit_chain(conn, schema)['problems']

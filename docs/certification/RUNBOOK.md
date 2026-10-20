@@ -19,7 +19,7 @@ Production commands go through Railway, so the database password never leaves Ra
 | G6 Sign-off | This table filled in, the files archived, approvals recorded | — |
 | Tenants | `certify.py tenants --out tenants.json` (read-only): companies by real/test/demo, status, billing, and what happened in the last 24 hours and 7 days | exit 0; figures reconcile with the console |
 
-**The certified commit's own CI:** every push to `main` (and `akye-stable` while it is retired) runs the full regression suite, the golden journeys, privacy lifecycle and launch certification on that exact commit (Actions → filter by branch `akye-stable`, event `push`). Record those run ids with the SHA; a search for pull-request runs finds none on a merge commit, which is not a missing run.
+**The certified commit's own CI:** every push to `main` (and `akye-stable` while it is retired) runs the full regression suite, the golden journeys, privacy lifecycle and launch certification on that exact commit (Actions → filter by branch `main`, event `push`; `akye-stable` for commits certified before the rename). Record those run ids with the SHA; a search for pull-request runs finds none on a merge commit, which is not a missing run.
 
 ## G1: schema and guards
 `certify.py schema` runs in a read-only transaction. It:

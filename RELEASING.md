@@ -13,7 +13,7 @@ became `main`.
 |---|---|
 | `main` | **Akye.** Railway deploys it to every cleaning company, Dazzle & Shine included. A pull request merged into it, with its checks green, is the release. |
 | `akye-stable` | The old name for the same line. Kept until Railway follows `main`, then retired. |
-| `dazzle-shine-single-tenant` | The last single-business CRM (`3b0cc92`, 29 Sep 2026), before Akye was first promoted onto `main`. An archive: nothing deploys it. |
+| `dazzle-shine-single-tenant` | The last single-business CRM: `main` as it was at `3b0cc92` (29 Sep 2026), before Akye was first promoted onto it, plus one commit so its `release.py` ships the CRM from this branch. An archive: nothing deploys it, and `release.py --go` from a checkout of it is the only way to move `stable`. |
 | `stable` | The single-business CRM's customer channel (`v2026.09.21`). Frozen. |
 
 The rest of this page describes the two-product setup it replaced, and is kept
