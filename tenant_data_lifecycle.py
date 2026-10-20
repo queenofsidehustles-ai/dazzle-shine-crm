@@ -72,6 +72,51 @@ def close_tenant(engine, slug, *, now=None):
     return lifecycle_state(engine, slug)
 
 
+def reopen_tenant(engine, slug, *, now=None):
+    """Undo a closure, while the data still exists. Never a purged tenant.
+
+    A closure the console can start has to be one it can take back, or one
+    mistaken click becomes an outage that only a database session can fix. The
+    company comes back **suspended**, not active: access stays denied until a
+    person deliberately reactivates it, so reopening never restores access by
+    itself. The closure timestamp is cleared, so a later closure starts a fresh
+    30-day clock rather than inheriting the old one.
+
+    Fails closed: anything other than a closed, not-yet-purged tenant is refused.
+    """
+    org = _org(engine, slug)
+    if not org:
+        raise LifecycleError(f'no tenant {slug!r}')
+    if org.get('purged_at'):
+        raise LifecycleError('a purged tenant cannot be reopened')
+    if org.get('status') != 'closed' or not org.get('closed_at'):
+        raise LifecycleError('only a closed tenant can be reopened')
+    if org.get('schema_name') != tenancy.schema_for(slug):
+        raise LifecycleError('control-plane schema assignment does not match tenant slug')
+    now = now or datetime.utcnow()
+    if now >= org['closed_at'] + timedelta(days=RETENTION_DAYS):
+        # Retention is the promise that closed data does not live on. Reopening
+        # past it, then closing again, would restart the clock for ever.
+        raise LifecycleError(
+            'the retention period has ended, so this tenant can no longer be '
+            'reopened; it is due to be purged')
+    with engine.begin() as conn:
+        # The lock purge takes, before it touches anything: a reopen and a purge
+        # of the same tenant cannot both go ahead.
+        conn.execute(text('SELECT pg_advisory_xact_lock(hashtext(:key))'),
+                     {'key': f'akye-purge:{slug}'})
+        done = conn.execute(text(
+            "UPDATE public.organizations "
+            "SET status = 'suspended', suspended_at = :now, closed_at = NULL "
+            "WHERE slug = :slug AND status = 'closed' AND purged_at IS NULL "
+            "AND closed_at > :cutoff"),
+            {'slug': slug, 'now': now,
+             'cutoff': now - timedelta(days=RETENTION_DAYS)}).rowcount
+    if not done:
+        raise LifecycleError('tenant lifecycle changed while reopening')
+    return lifecycle_state(engine, slug)
+
+
 def lifecycle_state(engine, slug):
     org = _org(engine, slug)
     if not org:
@@ -198,10 +243,16 @@ def _delete_private_media(slug):
 def purge_tenant(engine, slug, *, now=None, media_delete=None):
     """Permanently purge one eligible closed tenant, leaving a minimal tombstone.
 
-    External private media is deleted before the database transaction. A media
-    failure therefore cannot erase the only database copy while provider bytes
-    remain. If the later database transaction fails, the tenant stays closed and
-    a retry is safe.
+    The lifecycle lock and the row lock are taken, and the tenant re-checked,
+    **before** anything is deleted: a reopen or a second purge of the same
+    tenant waits for this one and then finds it purged, rather than slipping in
+    after the photos are already gone.
+
+    External private media is deleted before the schema is dropped, inside that
+    same transaction. A media failure therefore cannot erase the only database
+    copy while provider bytes remain, and rolls back with nothing changed. If the
+    drop itself fails after the media is gone, the tenant stays closed and a
+    retry is safe.
     """
     now = now or datetime.utcnow()
     state = lifecycle_state(engine, slug)
@@ -218,8 +269,6 @@ def purge_tenant(engine, slug, *, now=None, media_delete=None):
     schema = tenancy.schema_for(slug)
     if state.get('schema_name') != schema:
         raise LifecycleError('control-plane schema assignment does not match tenant slug')
-
-    media_result = (media_delete or _delete_private_media)(slug)
 
     # The slug has already passed valid_slug(), so schema is derived rather than
     # accepted from operator input. The advisory lock serializes repeated purge
@@ -241,6 +290,10 @@ def purge_tenant(engine, slug, *, now=None, media_delete=None):
             raise RetentionNotExpired('retention window no longer permits purge')
         if current['schema_name'] != schema:
             raise LifecycleError('schema assignment changed during purge')
+
+        # Only now, holding the lock and with the state confirmed, is anything
+        # irreversible done.
+        media_result = (media_delete or _delete_private_media)(slug)
 
         conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
         # Feedback is tenant-linked control-plane content, including screenshots.

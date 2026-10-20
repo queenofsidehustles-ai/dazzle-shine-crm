@@ -196,12 +196,13 @@
 <h3 class="ops-h">Closed, in retention</h3>
 {% if closed %}
 <div class="ops-scroll"><table class="con">
-  <tr><th>Company</th><th>Closed</th><th>Can be purged from</th></tr>
+  <tr><th>Company</th><th>Closed</th><th>Can be purged from</th><th></th></tr>
   {% for c in closed %}
   <tr><td><a href="{{ url_for('console.company', slug=c.slug) }}">{{ c.name }}</a></td>
-      <td>{{ c.closed_at.strftime('%d %b %Y') }}</td><td>{{ c.purge_from.strftime('%d %b %Y') }}</td></tr>
+      <td>{{ c.closed_at.strftime('%d %b %Y') }}</td><td>{{ c.purge_from.strftime('%d %b %Y') }}</td>
+      <td>{% if c.ready %}<span class="ops-badge ops-stale">ready to purge</span>{% else %}<span class="ops-dim">in retention</span>{% endif %}</td></tr>
   {% endfor %}
 </table></div>
-<p class="ops-dim" style="margin-top:var(--s2)">Purging is permanent and is run from a terminal: <code>python3 tenant_lifecycle_cli.py purge &lt;address&gt;</code>.</p>
+<p class="ops-dim" style="margin-top:var(--s2)">Export, reopen and permanent purge are under <strong>Lifecycle</strong> on each company's page, for the console owner. The terminal command still works too.</p>
 {% else %}<div class="con-empty">No closed companies.</div>{% endif %}
 {% endblock %}
