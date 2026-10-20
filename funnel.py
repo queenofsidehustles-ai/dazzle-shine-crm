@@ -235,11 +235,15 @@ def _follow_up(orgs, leads, signup_emails, now, billing):
                if not l.get('contacted_at')
                and _email(l.get('email')) not in signup_emails]
 
+    # Newest first, as the company list is: the people worth reaching are the
+    # ones who signed up or asked this week. Trials ending stay soonest first.
     return {
-        'not_started': sorted(not_started, key=lambda o: o['days_left']),
+        'not_started': sorted(not_started, key=lambda o: o.get('created_at') or now,
+                              reverse=True),
         'ending': sorted(ending, key=lambda o: o['days_left']),
         'failing': failing,
-        'leads_waiting': sorted(waiting, key=lambda l: l.get('created_at') or now),
+        'leads_waiting': sorted(waiting, key=lambda l: l.get('created_at') or now,
+                                reverse=True),
     }
 
 
