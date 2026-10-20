@@ -688,7 +688,10 @@ def _lifecycle_view(engine, org):
         'state': ('purged' if purged_at else 'closed' if org.get('status') == 'closed'
                   else org.get('status') or 'active'),
         'closed_at': closed_at, 'purged_at': purged_at, 'eligible_at': eligible_at,
-        'days_left': max(0, (eligible_at - now).days) if eligible_at else None,
+        # Rounded up: 29 days and 23 hours left is "30", and the last day is "1",
+        # never "0 days" while purge is still refused.
+        'days_left': (max(0, -(-int((eligible_at - now).total_seconds()) // 86400))
+                      if eligible_at else None),
         'eligible': bool(eligible_at and now >= eligible_at and not purged_at),
         'blockers': blockers, 'retention_days': lifecycle.RETENTION_DAYS,
         'last_export': last[0] if last else None,
@@ -705,13 +708,13 @@ def _reauthenticate():
     engine = _engine()
     email = request.console_user['email']
     user, why = control_plane.check_console_login(
-        engine, email, request.form.get('password') or '')
+        engine, email, request.form.get('password') or '', record_login=False)
     if not user:
         return False, ('Too many wrong attempts. Try again later.' if why == 'locked'
                        else 'That password was not right. Nothing was changed.')
     if user.get('totp_enabled'):
         user, why = control_plane.check_console_code(
-            engine, email, request.form.get('code') or '')
+            engine, email, request.form.get('code') or '', record_login=False)
         if not user:
             return False, ('Too many wrong attempts. Try again later.' if why == 'locked'
                            else 'That code was not right. Nothing was changed.')

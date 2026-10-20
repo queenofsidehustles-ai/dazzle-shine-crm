@@ -210,6 +210,7 @@
         {% endif %}
       </details>
       {% elif lc.state == 'closed' %}
+      {% if not lc.eligible %}
       <details style="margin-top:var(--s3)"><summary><strong>Reopen</strong> <span class="ops-dim">(brings it back suspended)</span></summary>
         <form method="post" action="{{ url_for('console.reopen_company', slug=org.slug) }}" class="ops-form" style="margin-top:var(--s3)">
           {{ confirm_fields(org.slug, typed=False) }}
@@ -217,6 +218,9 @@
         </form>
         <p class="ops-dim">It comes back suspended, so nobody can sign in until you press Reactivate. A later closure starts a fresh {{ lc.retention_days }} days.</p>
       </details>
+      {% else %}
+      <p class="ops-dim" style="margin-top:var(--s3)">The {{ lc.retention_days }}-day retention has ended, so this company can no longer be reopened. It is due to be purged.</p>
+      {% endif %}
       <details style="margin-top:var(--s3)"><summary><strong style="color:var(--warn)">Permanently purge</strong>
         {% if not lc.eligible %}<span class="ops-dim">(not before {{ lc.eligible_at.strftime('%d %b %Y') }})</span>{% endif %}</summary>
         {% if not lc.eligible %}

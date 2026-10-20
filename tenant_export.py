@@ -50,6 +50,20 @@ def safe(value):
     return value
 
 
+def _cell(value):
+    """One exported cell. Every text value is defused, whichever dataset or
+    column it came from, so a new column cannot forget to be. A number written as
+    text ('-5.00', a price) is left alone: it is not a formula, and an apostrophe
+    would turn an amount into text."""
+    if isinstance(value, str):
+        try:
+            float(value)
+            return value
+        except ValueError:
+            return safe(value)
+    return value
+
+
 def _iso(value):
     return value.isoformat() if value else ''
 
@@ -159,6 +173,29 @@ def _readme(org, counts, by, now):
     return '\n'.join(lines) + '\n'
 
 
+def _hold_schema(slug):
+    """Inside the export's transaction: take the shared side of the purge lock,
+    then confirm the company still has a schema of its own.
+
+    Checked earlier on another connection, a purge could drop the schema in the
+    gap and the unqualified table names would resolve to `public`, exporting
+    another deployment's rows under this company's name. Holding the lock until
+    the export ends means a purge waits for it; and if the purge got there first,
+    this finds nothing and refuses."""
+    from sqlalchemy import text as _t
+    from extensions import db
+    db.session.execute(_t('SELECT pg_advisory_xact_lock_shared(hashtext(:k))'),
+                       {'k': f'akye-purge:{slug}'})
+    here = db.session.execute(_t(
+        'SELECT 1 FROM information_schema.schemata WHERE schema_name = :s'),
+        {'s': tenancy.schema_for(slug)}).first()
+    purged = db.session.execute(_t(
+        'SELECT purged_at FROM public.organizations WHERE slug = :slug'),
+        {'slug': slug}).scalar()
+    if not here or purged:
+        raise ExportError('This company has been purged. There is nothing left to export.')
+
+
 def build(engine, slug, *, by=None, now=None):
     """(zip_bytes, counts). Raises ExportError with a sentence staff can act on."""
     import console_data
@@ -182,12 +219,13 @@ def build(engine, slug, *, by=None, now=None):
     db.session.remove()
     try:
         with tenancy.use_tenant(slug):
+            _hold_schema(slug)
             for filename, _label, fn in DATASETS:
                 header, rows = fn()
                 buf = io.StringIO()
                 w = csv.writer(buf)
                 w.writerow(header)
-                w.writerows(rows)
+                w.writerows([[_cell(v) for v in row] for row in rows])
                 files[filename] = buf.getvalue()
                 counts[filename] = len(rows)
     except ExportError:

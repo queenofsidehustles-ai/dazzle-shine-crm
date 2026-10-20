@@ -369,6 +369,88 @@ try:
     check('Export their data' not in page_, 'a helper sees neither')
     page_ = owner.get(f'/console/companies/{VICTIM}').data.decode()
     check('Permanently purged' in page_ and 'Export their data' not in page_, 'a purged company shows its tombstone')
+
+    print('\n13. Review findings: cells, countdown, sign-in time, retention, ordering')
+    import threading
+    LATE = f'late{TAG}'
+    signup(LATE)
+    seed(LATE, 'Late Customer')
+    from extensions import db
+    from models import Booking
+    with app.app_context(), tenancy.use_tenant(LATE):
+        db.session.add(Booking(name='Hostile', email='h@example.com', phone='4075550199',
+                               address='1 Main St', city='Orlando', service_type='standard',
+                               frequency='=1+1', status='@SUM(1)', price=-5.0,
+                               preferred_date='=cmd|calc', preferred_time='+1+2',
+                               bedrooms='-2+3'))
+        db.session.commit()
+        db.session.remove()
+    with app.app_context():
+        before = control_plane.console_user(engine, OWNER)['last_login_at']
+    r = post(owner, LATE, 'close', code=code())
+    check('30 more days' in page(r), 'right after closing, the countdown reads 30 days, not 29')
+    r = export(owner, LATE, OPW, code=code())
+    jobs = zipfile.ZipFile(io.BytesIO(r.data)).read('jobs.csv').decode('utf-8-sig')
+    check("'=cmd|calc" in jobs and "'+1+2" in jobs and "'=1+1" in jobs and "'@SUM(1)" in jobs
+          and "'-2+3" in jobs, 'every text column is defused, including ones a customer fills in')
+    check('-5.00' in jobs and "'-5.00" not in jobs, 'while a negative amount stays a number')
+    with app.app_context():
+        after = control_plane.console_user(engine, OWNER)['last_login_at']
+    check(before == after, "confirming a password for an export does not change 'Last in'")
+
+    backdate_closure(LATE, 31)
+    r = post(owner, LATE, 'reopen', code=code(), confirm=None)
+    check(status(LATE)['status'] == 'closed' and 'Not reopened' in page(r) and 'retention' in page(r),
+          'once retention has ended, reopening is refused')
+    page_ = owner.get(f'/console/companies/{LATE}').data.decode()
+    check('can no longer be reopened' in page_ and 'name="confirm"' in page_, 'and the page stops offering it')
+
+    # A reopen and a purge of the same company cannot both go ahead.
+    RACE = f'race{TAG}'
+    signup(RACE)
+    owner_post = post(owner, RACE, 'close', code=code())
+    backdate_closure(RACE, 10)
+    outcome = {}
+
+    def reopen_in_thread():
+        try:
+            lifecycle.reopen_tenant(engine, RACE)
+            outcome['reopen'] = 'reopened'
+        except lifecycle.LifecycleError as exc:
+            outcome['reopen'] = f'refused: {exc}'
+
+    seen = {}
+
+    def media(slug):
+        t = threading.Thread(target=reopen_in_thread)
+        t.start()
+        t.join(1.5)
+        seen['still_waiting'] = t.is_alive()
+        seen['thread'] = t
+        return {'configured': False}
+
+    with app.app_context():
+        done = lifecycle.purge_tenant(engine, RACE, media_delete=media,
+                                      now=datetime.utcnow() + timedelta(days=25))
+    seen['thread'].join(10)
+    check(seen['still_waiting'], 'a reopen started while a purge is deleting has to wait for it')
+    check(outcome.get('reopen', '').startswith('refused') and status(RACE)['purged_at']
+          and not schema_exists(RACE), f"and then finds the company purged ({outcome.get('reopen')})")
+    # Nothing is deleted before the state is confirmed: media is not touched for a reopened company.
+    called = []
+    SAFE = f'safe{TAG}'
+    signup(SAFE)
+    post(owner, SAFE, 'close', code=code())
+    backdate_closure(SAFE, 10)
+    lifecycle.reopen_tenant(engine, SAFE)
+    try:
+        lifecycle.purge_tenant(engine, SAFE, media_delete=lambda s: called.append(s) or {},
+                               now=datetime.utcnow() + timedelta(days=25))
+        refused = False
+    except lifecycle.LifecycleError:
+        refused = True
+    check(refused and not called and schema_exists(SAFE),
+          'a purge of a company that was reopened deletes no media and no data')
 finally:
     try:
         from extensions import db

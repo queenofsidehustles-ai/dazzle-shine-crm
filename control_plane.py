@@ -1562,7 +1562,7 @@ def set_console_active(engine, email, active):
                      .values(active=bool(active)))
 
 
-def check_console_login(engine, email, password):
+def check_console_login(engine, email, password, record_login=True):
     """(user, why-not). Never says which half was wrong.
 
     "No such account" and "wrong password" told apart is how somebody learns
@@ -1588,7 +1588,7 @@ def check_console_login(engine, email, password):
         # Right password, second step still to come. Not a completed login,
         # so neither the failure count nor last_login_at moves yet.
         return row, None
-    _console_login_succeeded(engine, row)
+    _console_login_succeeded(engine, row, record_login)
     return row, None
 
 
@@ -1606,14 +1606,19 @@ def _console_login_failed(engine, row):
     return 'locked' if 'locked_until' in values else 'no'
 
 
-def _console_login_succeeded(engine, row):
+def _console_login_succeeded(engine, row, record_login=True):
+    """Clear the failure count. `record_login=False` is for proving it is still
+    the same person (a destructive action) without claiming a new sign-in: the
+    People page's "Last in" must stay the last time anybody actually signed in."""
+    values = dict(failed=0, locked_until=None)
+    if record_login:
+        values['last_login_at'] = datetime.utcnow()
     with engine.begin() as conn:
         conn.execute(update(console_users).where(console_users.c.id == row['id'])
-                     .values(failed=0, locked_until=None,
-                             last_login_at=datetime.utcnow()))
+                     .values(**values))
 
 
-def check_console_code(engine, email, code):
+def check_console_code(engine, email, code, record_login=True):
     """Second step: a live authenticator code, or one unused backup code.
     (user, why-not), with wrong codes counting toward the same lockout as
     wrong passwords -- six digits are guessable in bulk otherwise."""
@@ -1626,14 +1631,14 @@ def check_console_code(engine, email, code):
         return None, 'locked'
     code = (code or '').strip()
     if totp.verify_totp(row.get('totp_secret') or '', code):
-        _console_login_succeeded(engine, row)
+        _console_login_succeeded(engine, row, record_login)
         return row, None
     remaining = totp.consume_backup_code(row.get('totp_backup_codes'), code)
     if remaining is not None:
         with engine.begin() as conn:
             conn.execute(update(console_users).where(console_users.c.id == row['id'])
                          .values(totp_backup_codes=remaining))
-        _console_login_succeeded(engine, row)
+        _console_login_succeeded(engine, row, record_login)
         return row, None
     return None, _console_login_failed(engine, row)
 
