@@ -123,7 +123,7 @@ check(f30['follow_up'] == f['follow_up'], 'the follow-up list is the same whatev
 print('\n4. Who to get in touch with')
 fu = f['follow_up']
 check([o['name'] for o in fu['not_started']] == ['Charlie'],
-      'signed up and nothing set up yet')
+      'signed up, no cleaner and customer yet')
 check(fu['not_started'][0]['days_left'] == 25, 'with 25 days of trial left')
 # Newest first, as the company list is: this week's signups and requests are
 # the ones worth reaching, and they sat at the bottom.
@@ -134,9 +134,17 @@ fresh = funnel.compute(ORGS + [org('Hotel', ago(1)), org('India', ago(12))],
                                  'source': 'direct', 'contacted_at': None}],
                        now=NOW, days=None)['follow_up']
 check([o['name'] for o in fresh['not_started']] == ['Hotel', 'Charlie', 'India'],
-      'nothing set up yet: newest signup first')
+      'no cleaner and customer yet: newest signup first')
 check([l['email'] for l in fresh['leads_waiting']] == ['d@w.test', 'b@y.test', 'e@v.test'],
       'early access not contacted: newest request first')
+# Asking again keeps the first row and moves last_asked_at: that lead is the
+# warmest on the list, however long ago it first asked.
+again = funnel.compute(ORGS, LEADS + [{'id': 6, 'email': 'f@u.test', 'name': 'Fi',
+                                       'created_at': ago(60), 'last_asked_at': ago(0, 2),
+                                       'source': 'direct', 'contacted_at': None}],
+                       now=NOW, days=None)['follow_up']
+check([l['email'] for l in again['leads_waiting']] == ['f@u.test', 'b@y.test'],
+      'a lead who asked again today goes to the top, not by their first ask')
 check([o['name'] for o in fu['ending']] == ['Delta'] and fu['ending'][0]['days_left'] == 2,
       'trial ending in 2 days with no plan')
 check([o['name'] for o in fu['failing']] == ['Foxtrot'], 'card failing')
@@ -256,8 +264,8 @@ with app.app_context():
         check(label in body, f'the "{label}" stage is shown')
     check(f'Funnel Ending {TAG}' in body.split('Trial ends in')[1].split('</table>')[0],
           'the company with a day of trial left is under "trial ends"')
-    check(f'Funnel Idle {TAG}' in body.split('nothing set up yet')[1].split('</table>')[0],
-          'the company that never started is under "nothing set up yet"')
+    check(f'Funnel Idle {TAG}' in body.split('no cleaner and customer yet')[1].split('</table>')[0],
+          'the company that never started is under "no cleaner and customer yet"')
     check(LEAD_EMAIL in body, 'the uncontacted lead is listed')
     check(c.get('/console/funnel?window=nonsense').status_code == 200,
           'an unknown window falls back instead of erroring')
