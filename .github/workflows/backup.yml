@@ -33,18 +33,20 @@ jobs:
       matrix:
         include:
           - key: dazzle
-            label: Dazzle & Shine — your own CRM
+            # The retired single-business database. Its data moved into Akye
+            # as a company; this keeps the original until it is archived. Run
+            # with main's code, which backs up a database from before the
+            # audit chain (a dry run checked it; the archive branch
+            # dazzle-shine-single-tenant predates the backup checks used here).
+            label: Dazzle & Shine — the retired single-business database
             ref: main
             secret: BACKUP_DATABASE_URL
           - key: akye
             label: Akye — every cleaning company on the platform
-            # akye-stable is the authoritative, live branch — Dazzle & Shine's
-            # own data now lives there as a tenant. This job was pointed at
-            # akye-launch-readiness/cohort-30 while that candidate branch was
-            # the one being verified pre-launch; now that it has shipped and
-            # akye-stable is what's actually running, the nightly drill needs
-            # to cover akye-stable's real database again.
-            ref: akye-stable
+            # main is the live branch Railway deploys (it was akye-stable until
+            # akye-stable became main) — Dazzle & Shine's own data lives there
+            # as a company. The drill restores with the code that is running.
+            ref: main
             secret: BACKUP_AKYE_DATABASE_URL
 
     name: ${{ matrix.key }}
@@ -155,7 +157,7 @@ jobs:
       - name: Tell the Akye console how it went
         # So the console's Health page can say when this last succeeded, and
         # flag it when it has not. Self-contained on purpose (no script from
-        # the checked-out branch): the backup checks out akye-stable, and this
+        # the checked-out branch): the backup checks out main, and this
         # must work whichever branch that is. Never fails the build: a backup
         # that worked and could not announce itself is still a backup.
         if: always()

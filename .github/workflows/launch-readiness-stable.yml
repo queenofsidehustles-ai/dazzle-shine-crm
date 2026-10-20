@@ -3,9 +3,11 @@ name: Akye Stable Launch Certification
 on:
   pull_request:
     branches:
+      - main
       - akye-stable
   push:
     branches:
+      - main
       - akye-stable
   workflow_dispatch:
 

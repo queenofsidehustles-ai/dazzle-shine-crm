@@ -121,6 +121,15 @@ partner_payouts.create_account = fake_create_account
 partner_payouts.onboarding_link = fake_link
 partner_payouts.account_status = fake_status
 partner_payouts.transfer = fake_transfer
+FOUND = {'answer': (True, None), 'asked': []}
+
+
+def fake_find_transfer(account_id, amount_cents, marker, since):
+    FOUND['asked'].append((account_id, amount_cents, marker))
+    return FOUND['answer']
+
+
+partner_payouts.find_transfer = fake_find_transfer
 
 try:
     app = create_app()
@@ -447,6 +456,137 @@ try:
     [t.join() for t in ts]
     check(len(made) == 1 and got_ids[0] == got_ids[1] == (True, 'acct_once_1'),
           'two overlapping setups create one Stripe account and both get it')
+
+
+    print('\n10. A retry older than Stripe remembers the key asks Stripe first')
+    def aged_pending(co, days):
+        with app.app_context():
+            seed(ready['id'], co, 6000)
+        BEHAVIOUR['transfer'] = 'drop'
+        with app.app_context():
+            ok_, msg_, p_ = affiliates.pay_via_stripe(engine, ready['id'], 'staff@x')
+        with engine.begin() as conn:
+            conn.execute(text('UPDATE affiliate_payouts SET paid_at = :t WHERE id = :i'),
+                         {'t': datetime.utcnow() - timedelta(days=days), 'i': p_['id']})
+        return p_
+
+    young = aged_pending('co11', 0)
+    FOUND['asked'].clear()
+    with app.app_context():
+        ok, msg, done = affiliates.retry_payout(engine, young['id'])
+    check(ok and not FOUND['asked'], 'a retry within a day leans on the key and does not ask Stripe')
+
+    old = aged_pending('co12', 2)
+    FOUND['asked'].clear()
+    FOUND['answer'] = (True, 'tr_already_sent')
+    before = len(CALLS['transfer'])
+    with app.app_context():
+        ok, msg, done = affiliates.retry_payout(engine, old['id'])
+    check(ok and done['status'] == 'paid' and done['stripe_transfer_id'] == 'tr_already_sent',
+          f'an old payout Stripe already sent is marked paid with its transfer ({msg!r})')
+    check(len(CALLS['transfer']) == before, 'and nothing is sent a second time')
+    check(FOUND['asked'] and f'(payout {old["id"]})' in FOUND['asked'][0][2],
+          'Stripe was asked about that payout by its own marker')
+
+    old2 = aged_pending('co13', 2)
+    FOUND['answer'] = (False, 'Stripe is down')
+    before = len(CALLS['transfer'])
+    with app.app_context():
+        ok, msg, held = affiliates.retry_payout(engine, old2['id'])
+    check(not ok and 'Nothing was sent' in msg and len(CALLS['transfer']) == before,
+          'if Stripe cannot be asked, an old payout is not retried')
+    check(held['status'] == 'pending', 'it stays pending, commissions still claimed')
+
+    FOUND['answer'] = (True, None)
+    BEHAVIOUR['transfer'] = 'ok'
+    with app.app_context():
+        ok, msg, done = affiliates.retry_payout(engine, old2['id'])
+    check(ok and done['status'] == 'paid' and len(CALLS['transfer']) == before + 1,
+          'once Stripe says no such transfer exists, the retry sends it')
+
+    print('\n11. The payout switch fails closed')
+    import platform_switches
+    partner_ok = {'name': 'Rae', 'payout_account_id': 'acct_1', 'payout_ready': True}
+    platform_switches.clear_cache()
+    check(affiliates.can_pay_by_stripe(partner_ok)[0], 'readable, never turned off: payouts are allowed')
+    real_checked = control_plane.switches_checked
+
+    def unreadable(engine_):
+        raise RuntimeError('control plane unreachable')
+
+    control_plane.switches_checked = unreadable
+    platform_switches.clear_cache()
+    allowed, why = affiliates.can_pay_by_stripe(partner_ok)
+    check(not allowed and 'switched off' in why, 'switches unreadable: nobody is paid')
+    check(platform_switches.is_on('ai') and platform_switches.is_on('sms'),
+          'while the other switches still fail open')
+    control_plane.switches_checked = real_checked
+    platform_switches.clear_cache()
+    check(affiliates.can_pay_by_stripe(partner_ok)[0], 'readable again: payouts resume')
+    os.environ['PARTNER_PAYOUTS_OPEN'] = '0'
+    platform_switches.clear_cache()
+    check(not affiliates.can_pay_by_stripe(partner_ok)[0],
+          'PARTNER_PAYOUTS_OPEN=0 stops payouts whatever the console says')
+    del os.environ['PARTNER_PAYOUTS_OPEN']
+    platform_switches.clear_cache()
+
+
+    print('\n12. Review findings on the retry and the switch')
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('partner_payouts_real',
+                                                  os.path.join(ROOT, 'partner_payouts.py'))
+    real = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(real)
+
+    class Obj:
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+
+    sent = {}
+
+    class FakeStripe:
+        class Transfer:
+            @staticmethod
+            def create(**kw):
+                sent.update(kw)
+                return Obj(id='tr_new')
+
+            @staticmethod
+            def list(**kw):
+                return Obj(has_more=False, data=[Obj(
+                    id='tr_back', amount=6000, description='x (payout 99)',
+                    reversed=BEHAVIOUR.get('reversed', False),
+                    amount_reversed=BEHAVIOUR.get('amount_reversed', 0))])
+
+    real._stripe = lambda: FakeStripe
+    real.transfer('acct_1', 6000, 'd', 'affiliate-payout-5')
+    check(set(sent) == {'api_key', 'amount', 'currency', 'destination', 'description',
+                        'idempotency_key'},
+          'a transfer sends the same parameters it always did, so a payout pending from '
+          'before this release can be retried with its old key')
+    check(real.find_transfer('acct_1', 6000, '(payout 99)', datetime.utcnow()) == (True, 'tr_back'),
+          'a matching, intact transfer is found')
+    for label, key, val in (('fully reversed', 'reversed', True),
+                            ('partly reversed', 'amount_reversed', 1500)):
+        BEHAVIOUR[key] = val
+        ok_, why_ = real.find_transfer('acct_1', 6000, '(payout 99)', datetime.utcnow())
+        check(not ok_ and 'reversed' in why_, f'a {label} transfer is not accepted as a completed payment')
+        BEHAVIOUR.pop(key)
+
+    platform_switches.clear_cache()
+    rows = {s_['key']: s_ for s_ in platform_switches.states(engine)}
+    check(rows['partner_payouts']['on'] and not rows['partner_payouts']['unreadable'],
+          'Health: readable, payouts show on')
+    real_engine_connect = engine.connect
+
+    class Broken:
+        def connect(self):
+            raise RuntimeError('db down')
+
+    rows = {s_['key']: s_ for s_ in platform_switches.states(Broken())}
+    check(not rows['partner_payouts']['on'] and rows['partner_payouts']['unreadable'],
+          'Health: unreadable, payouts show OFF with a reason, matching what is enforced')
+    check(rows['ai']['on'] and not rows['ai']['unreadable'], 'and the fail-open switches still show on')
 
     # (g) Partner emails are findable in Communications history.
     cc2 = app.test_client()

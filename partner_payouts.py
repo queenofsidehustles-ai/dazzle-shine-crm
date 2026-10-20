@@ -21,6 +21,8 @@ and give Stripe a stable idempotency key.
 
 Every function returns (ok, value_or_error) and never raises.
 """
+from datetime import timezone
+
 import billing
 
 
@@ -135,3 +137,38 @@ def transfer(account_id, amount_cents, description, idempotency_key):
             and not (unsure and isinstance(e, unsure)) \
             and not (isinstance(status, int) and status >= 500)
         return False, _message(e), not definite
+
+
+def find_transfer(account_id, amount_cents, marker, since):
+    """Look for a transfer already made to this account for this payout.
+
+    Stripe forgets an idempotency key after about 24 hours, so a retry of an
+    old, unconfirmed payout cannot lean on the key: if the first attempt did
+    go through, sending again would pay twice. This asks Stripe instead.
+
+    A transfer matches when it went to `account_id`, for `amount_cents`, and
+    its description carries `marker` (the payout's own "(payout N)").
+
+    Returns (True, transfer_id_or_None) when Stripe answered and the whole
+    window was searched; None means no such transfer. Returns (False, error)
+    when the answer cannot be trusted (an error, more transfers than one page
+    holds, or a matching transfer that was reversed): the caller must not send
+    and must not mark it paid."""
+    if not configured():
+        return False, 'Stripe is not set up on this deployment.'
+    stripe = _stripe()
+    try:
+        page = stripe.Transfer.list(
+            api_key=billing.stripe_key(), destination=account_id, limit=100,
+            created={'gte': int(since.replace(tzinfo=timezone.utc).timestamp()) - 3600})
+        for tr in page.data:
+            if int(tr.amount) == int(amount_cents) and marker in (tr.description or ''):
+                if getattr(tr, 'reversed', False) or int(getattr(tr, 'amount_reversed', 0) or 0) > 0:
+                    return False, (f'Stripe shows transfer {tr.id} for this payout was reversed '
+                                   f'(in part or whole), so it is not a completed payment')
+                return True, tr.id
+        if getattr(page, 'has_more', False):
+            return False, 'Stripe has more transfers to this partner than can be checked at once.'
+        return True, None
+    except Exception as e:  # noqa: BLE001
+        return False, _message(e)

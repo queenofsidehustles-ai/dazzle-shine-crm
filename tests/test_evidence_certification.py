@@ -293,6 +293,27 @@ check(ok, 'while an older backup, from before evidence was recorded, still verif
 check(backup._verify_evidence(bare, os.environ['DATABASE_URL'], [], require=True)
       == ['the backup wrote down no contract evidence at all'],
       'a single business with no evidence written down fails the nightly run too')
+check(set(m['chained']) >= {SA}, 'the manifest says which schemas had a chain to write down')
+# A database from before 0031 had no chain, so nothing to write down: the
+# restore, migrated to head, has one anyway and must not decide that.
+unchained = bare.replace('-bare', '-unchained')
+shutil.copy(path, unchained)
+with open(unchained.replace('.json.gz', '.manifest.json'), 'w') as fh:
+    json.dump(dict(m, chained=[]), fh)
+check(backup._verify_evidence(unchained, os.environ['DATABASE_URL'], [], require=True) == [],
+      'a backup of a database from before the audit chain passes the nightly run')
+# ...but only before it. A database past 0031 whose chain was removed is
+# refused at backup time, so it can never be written down as chained: [].
+with engine.connect() as conn:
+    trans = conn.begin()
+    conn.execute(text(f'ALTER TABLE "{SA}".contract_audit_event DROP COLUMN chain_seq CASCADE'))
+    from sqlalchemy import MetaData
+    md = MetaData()
+    md.reflect(conn, schema=SA, only=['contract_audit_event'])
+    stripped = backup._evidence_digests(conn, {SA: list(md.tables.values())})
+    trans.rollback()
+check('after migration 0031' in (stripped.get(SA) or {}).get('error', ''),
+      'and one past 0031 that lost its chain is refused, not passed as never chained')
 only_tenants = bare.replace('-bare', '-notpublic')
 shutil.copy(path, only_tenants)
 m_full = json.load(open(path.replace('.json.gz', '.manifest.json')))

@@ -33,12 +33,12 @@ already uses, and only those two kinds are accepted from outside.
 reported, and a page that cried wolf on day one would be ignored on day thirty.
 If it stays that way after a night, the reporter is not wired up: check the
 `REMINDER_API_KEY` secret on the Action, and that the deployed product has
-`/api/platform-run` (the backup job checks out `akye-stable`, so the code has to
+`/api/platform-run` (the backup job checks out `main`, so the code has to
 be promoted there first).
 
 ## Before this works in production
 
-1. **Promote this change to `akye-stable`** (and so the deployed product), so
+1. **Merge this change into `main`** (and so the deployed product), so
    `/api/platform-run` exists. Until then the backup step prints a warning and
    changes nothing.
 2. **`REMINDER_API_KEY` must be a secret on the Nightly backup workflow too.**
@@ -72,7 +72,7 @@ database blinked.
 | New signups | nobody can open an account. `SIGNUPS_OPEN=0` still wins: the console cannot reopen it |
 | AI features | Nana, the setup chat, drafted content and translation behave as if no Claude key were set |
 | Texting | every text from every company stops, **including job and reminder texts**. For a runaway bill or abuse, not routine use |
-| Partner payouts | no partner can be paid; commissions keep accruing |
+| Partner payouts | no partner can be paid; commissions keep accruing. Unlike the others this one fails closed: if the switch cannot be read, nobody is paid. `PARTNER_PAYOUTS_OPEN=0` also stops it whatever the console says. A retry of a payout over a day old first asks Stripe whether it was already sent |
 
 A switch takes effect immediately in the worker that handled the click and within
 about 8 seconds everywhere else.

@@ -8,13 +8,15 @@ straight off `feature/tenancy` on every push, untested, to businesses paying to
 use it. The product being sold had weaker deployment safety than the business
 selling it.
 
-    This business's own CRM    Akye
-    ──────────────────────    ────
-    main    → this business    feature/tenancy → nobody. The working branch.
-              (the canary)
-    stable  → its customers    akye-stable     → every company on Akye
+    The single-business CRM (retired)            Akye
+    ──────────────────────────────────            ────
+    dazzle-shine-single-tenant → its archive      main → every company on Akye
+    stable  → its customer instances
 
-Each line moves only when this script runs, and only if every test passes.
+Dazzle & Shine now runs on Akye as one of its companies, so the single-business
+line is kept only to rebuild an old instance. Akye has no separate channel any
+more: Railway follows `main`, and a pull request merged into it, with its
+checks green, is the release. So `--akye` only says so.
 
     python3 release.py                  # this CRM: what would go out
     python3 release.py --go             # this CRM: test, tag, promote
@@ -55,10 +57,12 @@ class Line:
 
 
 LINES = {
-    'dazzle': Line('dazzle', source='main', channel='stable', tag_prefix='v',
-                   product='this CRM',
+    'dazzle': Line('dazzle', source='dazzle-shine-single-tenant', channel='stable',
+                   tag_prefix='v', product='the single-business CRM',
                    audience='every customer instance'),
-    'akye': Line('akye', source='feature/tenancy', channel='akye-stable',
+    # Railway deploys `main` itself: source and channel are one branch, so
+    # there is nothing for this script to promote.
+    'akye': Line('akye', source='main', channel='main',
                  tag_prefix='akye-v', product='Akye',
                  audience='every cleaning company on Akye'),
 }
@@ -314,6 +318,10 @@ if __name__ == '__main__':
                     help='put them back on the previous release')
     args = ap.parse_args()
     chosen = LINES['akye' if args.akye else 'dazzle']
+    if chosen.source == chosen.channel:
+        sys.exit(f'{chosen.product} deploys from {chosen.channel} directly: a pull '
+                 f'request merged into it, with its checks green, is the release.\n'
+                 f'To undo one, revert it with another pull request.')
     if args.rollback:
         rollback(chosen)
     elif args.go:

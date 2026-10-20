@@ -3,14 +3,16 @@ name: Full regression suite
 # Every tests/test_*.py, not only the curated launch gates. Before this, about a
 # quarter of the suites ran in CI; the rest could break unnoticed (nine of them
 # had quietly been testing an error page for weeks). Runs on every change bound
-# for akye-stable, alongside the stable certification.
+# for main (and akye-stable while it is retired), alongside the certification.
 
 on:
   pull_request:
     branches:
+      - main
       - akye-stable
   push:
     branches:
+      - main
       - akye-stable
   workflow_dispatch:
 

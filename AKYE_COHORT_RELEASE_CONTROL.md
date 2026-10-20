@@ -4,7 +4,7 @@ Release-control contract for the first external cohort. This document closes the
 
 ## Release posture
 
-Akye ships from `akye-stable`. The working/remediation branch must never be a customer deployment source. A candidate may be promoted only after the exact candidate revision passes `.github/workflows/launch-readiness-stable.yml` and the operator records the evidence below. The stable certification runs on pull requests targeting `akye-stable` and again after a push/merge to `akye-stable`; the older `.github/workflows/launch-readiness.yml` (cohort-30 remediation evidence) has been retired; it remains in git history and was never the authoritative stable release gate.
+Akye ships from `main` (it shipped from `akye-stable` until that became `main`; see RELEASING.md). The working/remediation branch must never be a customer deployment source. A candidate may be promoted only after the exact candidate revision passes `.github/workflows/launch-readiness-stable.yml` and the operator records the evidence below. The stable certification runs on pull requests targeting `main` and again after a push/merge to `main` (runs before the rename are under `akye-stable`); the older `.github/workflows/launch-readiness.yml` (cohort-30 remediation evidence) has been retired; it remains in git history and was never the authoritative stable release gate.
 
 Expansion is staged: internal/synthetic tenants -> 3-5 design partners -> 10 tenants -> 30 tenants. Each expansion is a new release decision; success at one stage does not authorize the next.
 
@@ -49,12 +49,12 @@ If isolation, authentication, payment integrity, destructive migration, or broad
 
 ## Code rollback
 
-Akye customer deployments follow `akye-stable`. Rollback changes code, not customer data.
+Akye customer deployments follow `main` (formerly `akye-stable`). Rollback changes code, not customer data.
 
 1. Freeze cohort expansion and record the current `/version` output.
 2. Preserve incident evidence and determine whether database writes must also be paused.
-3. Use the Akye release line to return `akye-stable` to the prior Akye release. Never roll Akye onto a CRM/Dazzle release tag.
-4. Verify `/version` reports `channel: akye-stable` and the expected previous Akye release.
+3. Revert the change with a pull request into `main` (or return `main` to the prior Akye release). Never roll Akye onto a CRM/Dazzle release tag.
+4. Verify `/version` reports `channel: main` and the expected previous Akye release.
 5. Run smoke checks on an internal/synthetic tenant before restoring external traffic.
 6. Release forward after the defect is corrected; do not treat rollback as the permanent fix.
 
@@ -90,7 +90,7 @@ Required: exact-SHA Akye Stable Launch Certification GREEN; no open P0; rollback
 
 ### 3-5 design partners
 
-In addition: named support/incident owner, backup job operational for the Akye database, `/version` on `akye-stable`, known-limitations communication, and provider modes explicitly approved. Run critical owner and cleaner journeys on mobile and desktop.
+In addition: named support/incident owner, backup job operational for the Akye database, `/version` on `main`, known-limitations communication, and provider modes explicitly approved. Run critical owner and cleaner journeys on mobile and desktop.
 
 ### 10 tenants
 
@@ -115,7 +115,7 @@ A final cohort release record must answer all of the following before GO:
 - exact candidate SHA and Akye Stable Launch Certification run;
 - all P0 PASS;
 - all P1 PASS or written risk acceptance with expiry;
-- `akye-stable` is the deployment channel;
+- `main` is the deployment channel (formerly `akye-stable`);
 - latest Akye encrypted backup is successful and within RPO;
 - rollback target is known and compatible;
 - incident/support owner is available;
