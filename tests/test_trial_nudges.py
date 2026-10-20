@@ -189,6 +189,12 @@ for kind in tn.ALL:
           'www.akyehq.com/book' not in html and
           'href="https://akyehq.com' not in html,
           f'{kind}: and never to a login page where they do not exist')
+    # One clock, from signup: no email may say the trial has not started, or
+    # give it any length but billing.TRIAL_DAYS. Day 1 said "do not start".
+    words = (subj + ' ' + html).lower()
+    check(not any(p in words for p in ('not start', 'not started', "haven't started",
+                                       '14 days', '14-day', 'days to start')),
+          f'{kind}: never says the trial has yet to start, or is 14 days')
 
 # The promise the banner makes, kept in writing. Somebody whose trial has just
 # ended is frightened about their data before they are anything else.

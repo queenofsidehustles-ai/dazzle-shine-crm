@@ -29,7 +29,7 @@
   <div class="ops-card"><span class="ops-dim">Trial</span>
     {% if trial %}
       <span class="v">{% if trial.phase == 'over' %}over{% else %}{{ trial.days_left }}d{% endif %}</span>
-      <span class="ops-dim">{% if trial.phase == 'not_started' %}left to start{% elif trial.phase == 'running' %}left{% endif %}
+      <span class="ops-dim">{% if trial.phase == 'running' %}left{% endif %}
         · ends {{ trial.ends_at.strftime('%d %b') }}</span>
     {% else %}<span class="v">—</span><span class="ops-dim">not on a trial</span>{% endif %}</div>
   <div class="ops-card"><span class="ops-dim">Activated</span>
