@@ -638,13 +638,50 @@ def can_pay_by_stripe(partner):
     return True, ''
 
 
+# Stripe keeps an idempotency key for about 24 hours. A retry older than this
+# (less an hour's margin) cannot rely on it, so it asks Stripe whether the
+# first attempt went through before it sends anything.
+KEY_RETENTION = timedelta(hours=23)
+
+
+def _reconcile_aged(engine, partner, pay, now):
+    """For a payout whose key may have expired: (settled, response).
+
+    `settled` is True when the question is answered and `response` is the
+    (ok, message, payout) to return -- either the transfer was found and the
+    books now say paid, or Stripe could not be asked and nothing is sent.
+    False means Stripe confirmed no such transfer exists: sending is safe."""
+    import partner_payouts
+    claimed = pay.get('paid_at')
+    if not claimed or now - claimed < KEY_RETENTION:
+        return False, None
+    ok, found = partner_payouts.find_transfer(
+        partner['payout_account_id'], pay['amount_cents'],
+        f'(payout {pay["id"]})', claimed)
+    if not ok:
+        return True, (False, (f'This payout is over a day old, so Stripe may have forgotten '
+                              f'it was already sent, and Stripe could not be asked ({found}). '
+                              f'Nothing was sent. Try again, or check the transfers in the '
+                              f'Stripe dashboard.'), pay)
+    if found:
+        first = _finish(engine, pay['id'], found, now)
+        done = dict(payout(engine, pay['id']), finished_now=first)
+        return True, (True, f'{money(pay["amount_cents"])} to {partner["name"]} had already '
+                            f'been sent ({found}); the books now say so.', done)
+    return False, None
+
+
 def _send(engine, partner, pay, now):
     """Send the transfer for a claimed payout and settle the books on the answer."""
     import partner_payouts
+    settled, response = _reconcile_aged(engine, partner, pay, now)
+    if settled:
+        return response
     ok, value, uncertain = partner_payouts.transfer(
         partner['payout_account_id'], pay['amount_cents'],
         f'Akye partner commission {partner["code"]} (payout {pay["id"]})',
-        idempotency_key=f'affiliate-payout-{pay["id"]}')
+        idempotency_key=f'affiliate-payout-{pay["id"]}',
+        transfer_group=f'affiliate-payout-{pay["id"]}')
     if ok:
         first = _finish(engine, pay['id'], value, now)
         done = dict(payout(engine, pay['id']), finished_now=first)

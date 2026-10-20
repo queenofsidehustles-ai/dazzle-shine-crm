@@ -1262,14 +1262,19 @@ def lead_messages_for(engine, email, limit=100):
         return []
 
 
-def switches(engine):
+def switches_checked(engine):
     """{key: enabled} for every switch that has been set. Absent means on.
-    Never raises: if the table cannot be read, everything stays on, which is
-    how it behaved before switches existed."""
+    Raises if the table cannot be read, for the callers that must not guess."""
+    with engine.connect() as conn:
+        return {r['key']: bool(r['enabled']) for r in conn.execute(
+            select(product_switches)).mappings()}
+
+
+def switches(engine):
+    """switches_checked, except that if the table cannot be read everything
+    stays on, which is how it behaved before switches existed."""
     try:
-        with engine.connect() as conn:
-            return {r['key']: bool(r['enabled']) for r in conn.execute(
-                select(product_switches)).mappings()}
+        return switches_checked(engine)
     except Exception:
         return {}
 
