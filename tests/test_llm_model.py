@@ -1,9 +1,12 @@
 """The model name is real, and a wrong one is loud.
 
-Twice now a model name has been typed from memory, looked plausible, and
-reached production: 'anthropic/claude-3.5-haiku' and then 'claude-haiku-5-5'.
-Neither exists. Neither failed in a way anyone could see, because every caller
-turns an API error into an apology or into the untranslated text.
+A model name typed from memory once reached production as
+'anthropic/claude-3.5-haiku', which does not exist, and nothing showed it,
+because every caller turns an API error into an apology or into the
+untranslated text. (#111 then took 'claude-haiku-5-5' for another such name.
+It is a published model, Claude Haiku 5.5; the defaults stay on Haiku 4.5
+until a switch is measured, and Console -> Health's check is what says whether
+this account can use a given model.)
 
 What this holds:
 - Every model this deployment would send to Anthropic is a published name.
@@ -29,9 +32,9 @@ def check(cond, m):
 # (GET /v1/models), never from memory -- that is the bug this file exists for.
 KNOWN = {
     'claude-fable-5-1', 'claude-fable-5',
-    'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6',
-    'claude-sonnet-5', 'claude-sonnet-4-6',
-    'claude-haiku-4-5',
+    'claude-opus-5-5', 'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6',
+    'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6',
+    'claude-haiku-5-5', 'claude-haiku-4-5',
 }
 
 print('\n1. Every configured model is a real one')
@@ -46,13 +49,13 @@ real_post = llm.post
 
 
 def refuses(body, timeout=30):
-    raise llm.ClaudeError('model: claude-haiku-5-5')
+    raise llm.ClaudeError('model: claude-not-a-model')
 
 
 llm.post = refuses
 ok, detail = llm.check()
 check(not ok, 'check() fails when the API refuses the model')
-check('claude-haiku-5-5' in detail or llm.SMART_MODEL in detail,
+check('claude-not-a-model' in detail or llm.SMART_MODEL in detail,
       'the failure names the model that was refused')
 
 print('\n3. Unreachable is a failure too, not a shrug')

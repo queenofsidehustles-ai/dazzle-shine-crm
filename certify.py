@@ -5,12 +5,13 @@
     python3 certify.py evidence             # G1/G5: hashes, links and the audit chain
     python3 certify.py compare MANIFEST     # G5/G6: the database against a backup manifest
     python3 certify.py journey --company S  # G2: issue -> accept -> amend, on a demo company
+    python3 certify.py tenants              # who is on the platform: status, billing, last 24h/7d
 
 On production, through Railway, so the database password never leaves it:
 
     railway run python3 certify.py schema --out g1-schema.json
 
-schema, evidence and compare are read-only: they open their transaction READ
+schema, evidence, compare and tenants are read-only: they open their transaction READ
 ONLY, so the database refuses any write they could make. They print a summary
 and, with --out, write the full result as JSON -- ids, hashes and counts, no
 customer names or addresses. The exit code is 0 for a pass, 1 for a problem.
@@ -137,6 +138,40 @@ def cmd_compare(args):
                  f'everything written down at {manifest.get("taken_at")} is still there, unchanged')
 
 
+def cmd_tenants(args):
+    """The control plane's own count of companies (tenant_report.py)."""
+    import evidence_check
+    import tenant_report
+    from sqlalchemy import text
+    engine = _engine()
+    with engine.connect() as conn, conn.begin():
+        evidence_check.read_only(conn)
+        orgs = [dict(r) for r in conn.execute(text('SELECT * FROM public.organizations')).mappings()]
+        now = conn.execute(text("SELECT (now() AT TIME ZONE 'UTC')")).scalar()
+        actions = []
+        if conn.execute(text("SELECT to_regclass('public.console_log')")).scalar():
+            actions = [dict(r) for r in conn.execute(text(
+                'SELECT action, target, created_at FROM public.console_log '
+                "WHERE created_at >= :since"), {'since': now - tenant_report.WINDOWS[-1][1]}).mappings()]
+    report = tenant_report.compute(orgs, now, actions)
+    kinds = report['by_kind']
+    print(f'  {report["registered"]} companies registered at {report["as_of"]}: '
+          f'{len(kinds["real"])} real, {len(kinds["test"])} test, {len(kinds["demo"])} demo')
+    for section in ('status', 'billing'):
+        print(f'  real, by {section}: ' + ', '.join(
+            f'{len(v)} {k}' for k, v in report['real'][section].items()))
+    print(f'  real: {len(report["real"]["grandfathered"])} grandfathered, '
+          f'{len(report["real"]["archived"])} archived')
+    for name, window in report['windows'].items():
+        happened = {e: v for e, v in window['events'].items() if v}
+        print(f'  {name} (since {window["since"]}): ' + ('; '.join(
+            f'{e} {", ".join(v)}' for e, v in happened.items()) or 'nothing'))
+        for line in window['console']:
+            print(f'      console: {line}')
+    report['command'] = 'tenants'
+    return _emit(report, args.out, 'read from the control plane')
+
+
 # ---------------------------------------------------------------------------
 
 def cmd_journey(args):
@@ -155,12 +190,14 @@ def main(argv=None):
     sp = sub.add_parser('compare')
     sp.add_argument('manifest')
     sp.add_argument('--out')
+    sp = sub.add_parser('tenants')
+    sp.add_argument('--out')
     sp = sub.add_parser('journey')
     sp.add_argument('--company', required=True, help='a company marked is_demo')
     sp.add_argument('--out')
     args = ap.parse_args(argv)
     return {'schema': cmd_schema, 'evidence': cmd_evidence, 'compare': cmd_compare,
-            'journey': cmd_journey}[args.cmd](args)
+            'journey': cmd_journey, 'tenants': cmd_tenants}[args.cmd](args)
 
 
 if __name__ == '__main__':

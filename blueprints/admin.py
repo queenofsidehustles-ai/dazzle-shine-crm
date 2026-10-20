@@ -74,6 +74,21 @@ def version():
     return out
 
 
+# Browsers ask for these at fixed addresses on every host -- a customer's quote
+# link or booking page as much as the CRM -- whether or not the page names an
+# icon. Answering with the app's own icon turns a 404 on most first visits into
+# a picture, and keeps the logs' 404s for links that are actually broken.
+@admin_bp.route('/favicon.ico')
+def favicon():
+    return redirect(url_for('static', filename='icon-192.png'), code=301)
+
+
+@admin_bp.route('/apple-touch-icon.png')
+@admin_bp.route('/apple-touch-icon-precomposed.png')
+def apple_touch_icon():
+    return redirect(url_for('static', filename='icon-180.png'), code=301)
+
+
 def _daily_plan():
     """The day's list must never be the reason the dashboard fails to load."""
     try:

@@ -18,6 +18,7 @@ import gzip
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import threading
@@ -84,14 +85,14 @@ def rows(statement, schema=SA, **params):
         return conn.execute(text(statement.format(s=f'"{schema}".')), params).mappings().all()
 
 
-def verify(path):
+def verify(path, **kw):
     """backup.verify into a fresh scratch database. A restore boots the app
     against the scratch database and stubs the mailer, for the rest of the
     process -- right for the CLI, wrong for this test, so both are put back."""
     live, mailer = os.environ['DATABASE_URL'], notifications.send_email
     verify.n = getattr(verify, 'n', 0) + 1
     try:
-        return backup.verify(path, quiet=True,
+        return backup.verify(path, quiet=True, **kw,
                              scratch_url=fresh_postgres.url(f'dsm_test_evidence_cert_scratch{verify.n}'))
     finally:
         os.environ['DATABASE_URL'], notifications.send_email = live, mailer
@@ -268,6 +269,40 @@ check(SA in ev and ev[SA]['audit_head'] and ev[SA]['agreements'],
 check('Pat Private' not in json.dumps(ev), 'and nothing about any customer')
 ok, _ = verify(path)
 check(ok, 'a faithful backup restores and matches what was written down, guards on')
+ok, _ = verify(path, require_evidence=True)
+check(ok, 'and passes the nightly run, which requires evidence written down')
+# The same backup with its evidence left out of the manifest: every per-company
+# check is skipped when nothing was written down, so the nightly run, whose
+# own code always writes it, must fail rather than pass by checking nothing.
+bare = path.replace('.json.gz', '-bare.json.gz')
+shutil.copy(path, bare)
+with open(path.replace('.json.gz', '.manifest.json')) as fh:
+    m = json.load(fh)
+m.pop('evidence', None)
+with open(bare.replace('.json.gz', '.manifest.json'), 'w') as fh:
+    json.dump(m, fh)
+try:
+    verify(bare, require_evidence=True)
+    check(False, 'a fresh backup with no evidence written down fails the nightly run')
+except backup.BackupFailed as e:
+    check('no contract evidence' in str(e), 'a fresh backup with no evidence written down fails the nightly run')
+ok, _ = verify(bare)
+check(ok, 'while an older backup, from before evidence was recorded, still verifies by hand')
+# A single business keeps its evidence in public and has no company schemas;
+# the requirement follows the audit chain, not the schema list.
+check(backup._verify_evidence(bare, os.environ['DATABASE_URL'], [], require=True)
+      == ['the backup wrote down no contract evidence at all'],
+      'a single business with no evidence written down fails the nightly run too')
+only_tenants = bare.replace('-bare', '-notpublic')
+shutil.copy(path, only_tenants)
+m_full = json.load(open(path.replace('.json.gz', '.manifest.json')))
+if 'public' in (m_full.get('evidence') or {}):
+    m_full['evidence'].pop('public')
+    with open(only_tenants.replace('.json.gz', '.manifest.json'), 'w') as fh:
+        json.dump(m_full, fh)
+    p = backup._verify_evidence(only_tenants, os.environ['DATABASE_URL'], [], require=True)
+    check(p == ['public: the backup wrote down no evidence for it'],
+          'and so does one whose public evidence alone was left out')
 check(certify.main(['compare', path.replace('.json.gz', '.manifest.json')]) == 0,
       'compare: the live database still holds everything the manifest wrote down')
 
@@ -434,6 +469,33 @@ finally:
     api_bp_module._resend_signature_ok, delivery_events.record = real_ok, real_record
 check(r.status_code == 503 and logged('EventNotSaved') == 1,
       'an event that could not be saved answers 503 for a retry, and is logged separately')
+
+print('\n8. Who is on the platform, from the control plane (certify.py tenants)')
+sql("UPDATE public.organizations SET subscription_status = 'active', paid_since = now() "
+    f"WHERE slug = '{A}'")
+certify.main(['tenants', '--out', f'{out}/t.json'])
+t = json.load(open(f'{out}/t.json'))
+check(A in t['real']['billing']['active_without_stripe'] and A not in t['real']['billing']['paying'],
+      "'active' with no Stripe subscription is not paying (a free or founding plan)")
+sql(f"UPDATE public.organizations SET stripe_subscription_id = 'sub_test' WHERE slug = '{A}'")
+for action in ('archived', 'unarchived'):
+    sql("INSERT INTO public.console_log (actor, action, target, created_at) "
+        f"VALUES ('ops@test', '{action}', '{A}', now() AT TIME ZONE 'UTC')")
+check(certify.main(['tenants', '--out', f'{out}/t.json']) == 0, 'tenants: runs, read-only')
+t = json.load(open(f'{out}/t.json'))
+console = ' '.join(t['windows']['last_24h']['console'])
+check(f'{A}: archived' in console and f'{A}: unarchived' in console,
+      'an archive undone inside the window still shows, from the console log')
+check(A in t['by_kind']['real'] and DEMO in t['by_kind']['demo'] and DEMO not in t['by_kind']['real'],
+      'the demo company is counted apart from the real ones')
+check(A in t['real']['billing']['paying'] and DEMO not in sum(t['real']['billing'].values(), []),
+      'paying is what Stripe last said, of real companies only')
+check(f'{A} (real)' in t['windows']['last_24h']['events']['signed_up']
+      and f'{A} (real)' in t['windows']['last_24h']['events']['started_paying'],
+      'what happened in the last 24 hours is listed by company')
+check(t['as_of'].endswith('Z') and t['windows']['last_7d']['since'].endswith('Z'),
+      'its windows are stated in UTC')
+check('@' not in json.dumps(t), 'it names companies by slug, never by owner email')
 
 if failures:
     print(f'\n❌ {len(failures)} failed')

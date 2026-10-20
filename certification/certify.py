@@ -97,9 +97,9 @@ script([tool_use('offer_business_details',
 r = ask(s, 'my phone is 407 555 0199, email hi@certify.co')
 sent = wire()
 check(bool(sent), 'a request actually reached the Anthropic endpoint')
-PUBLISHED = {'claude-fable-5-1', 'claude-fable-5', 'claude-opus-5', 'claude-opus-4-8',
-             'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-5',
-             'claude-sonnet-4-6', 'claude-haiku-4-5'}
+PUBLISHED = {'claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5',
+             'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-5-5',
+             'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-5-5', 'claude-haiku-4-5'}
 models = {x['model'] for x in sent}
 check(models and models <= PUBLISHED, f'every model id on the wire is published: {sorted(models)}')
 check(all('x-api-key' in x['headers'] for x in sent), 'the key header is sent')
