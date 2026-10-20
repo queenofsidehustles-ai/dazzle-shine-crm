@@ -55,6 +55,12 @@ CSRF_EXEMPT_PATHS = frozenset({
     '/api/stripe/webhook',
     '/messages/incoming',
     '/messages/relay',
+    # Twilio Voice calling our TwiML app and reporting back. Signed by Twilio
+    # and carrying a ticket we signed (voice.py); no session, no CSRF token.
+    '/voice/outbound',
+    '/voice/notice',
+    '/voice/ended',
+    '/voice/recording',
     # The email service posting a prospect's reply. Arrives from somewhere
     # else by definition and carries its own proof -- a Svix signature checked
     # in the route before anything is written.
@@ -346,7 +352,8 @@ def validate_booking_payment_intent():
 # any that it does, so a new Twilio webhook has to be added here or it is
 # accepting unsigned POSTs from anybody.
 TWILIO_WEBHOOK_PATHS = ('/messages/incoming', '/messages/relay',
-                        '/api/sms-status')
+                        '/api/sms-status', '/voice/outbound', '/voice/notice',
+                        '/voice/ended', '/voice/recording')
 
 
 def validate_twilio_webhook():
