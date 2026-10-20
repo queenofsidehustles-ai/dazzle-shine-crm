@@ -163,8 +163,11 @@ PATTERNS = [
 # a terminal against the production database: the first moves the original
 # business onto its own tenant (its --help names it as the example), the second
 # writes the founder's growth plan into the console's Playbooks. Neither is
-# served to a cleaning company or rendered in anybody's CRM.
-EXEMPT = {'legacy_brands.py', 'product.py', 'adopt_tenant.py', 'seed_growth_playbook.py'}
+# served to a cleaning company or rendered in anybody's CRM. `release.py` is
+# run from a terminal too, and names git branches, one of them the archive of
+# the original business's single-business CRM.
+EXEMPT = {'legacy_brands.py', 'product.py', 'adopt_tenant.py', 'seed_growth_playbook.py',
+          'release.py'}
 ROOT = pathlib.Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
