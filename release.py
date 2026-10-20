@@ -54,10 +54,13 @@ class Line:
 
 
 LINES = {
-    'dazzle': Line('dazzle', source='main', channel='stable', tag_prefix='v',
+    # This branch is the archive of the single-business CRM: main became Akye
+    # in October 2026, so the CRM line ships from here.
+    'dazzle': Line('dazzle', source='dazzle-shine-single-tenant', channel='stable', tag_prefix='v',
                    product='this CRM',
                    audience='every customer instance'),
-    'akye': Line('akye', source='feature/tenancy', channel='akye-stable',
+    # Akye deploys main directly, and this archive has no Akye to release.
+    'akye': Line('akye', source='main', channel='main',
                  tag_prefix='akye-v', product='Akye',
                  audience='every cleaning company on Akye'),
 }
@@ -283,6 +286,10 @@ if __name__ == '__main__':
                     help='put them back on the previous release')
     args = ap.parse_args()
     chosen = LINES['akye' if args.akye else 'dazzle']
+    if chosen.source == chosen.channel:
+        sys.exit(f'{chosen.product} deploys from {chosen.channel} directly: a pull '
+                 f'request merged into it, with its checks green, is the release.\n'
+                 f'Release it from main, not from this archive.')
     if args.rollback:
         rollback(chosen)
     elif args.go:

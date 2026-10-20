@@ -139,10 +139,11 @@ _spec = _ilu.spec_from_file_location('release_mod', ROOT / 'release.py')
 rel = _ilu.module_from_spec(_spec); _spec.loader.exec_module(rel)
 
 dazzle, akye = rel.LINES['dazzle'], rel.LINES['akye']
-check(dazzle.source == 'main' and dazzle.channel == 'stable',
-      'Dazzle still ships main → stable, exactly as before')
-check(akye.source == 'feature/tenancy' and akye.channel == 'akye-stable',
-      'Akye ships feature/tenancy → akye-stable, not straight to customers')
+# main became Akye; this branch is the single-business CRM's archive.
+check(dazzle.source == 'dazzle-shine-single-tenant' and dazzle.channel == 'stable',
+      'the single-business CRM ships this archive → stable, never main')
+check(akye.source == akye.channel == 'main',
+      'Akye deploys main itself; there is nothing here to release')
 check(akye.channel != dazzle.channel, 'the two channels are separate branches')
 
 check(dazzle.tag_prefix != akye.tag_prefix,
