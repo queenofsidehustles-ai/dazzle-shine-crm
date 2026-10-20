@@ -13,7 +13,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = '0021_quote_prospect'
-down_revision = '0020_booking_cc'
+down_revision = '0021_photo_optional_wording'
 branch_labels = None
 depends_on = None
 
