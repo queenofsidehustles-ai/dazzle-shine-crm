@@ -150,7 +150,9 @@ PATTERNS = [
     (r'\bL\s*&\s*M\b', 'the original commercial brand'),
 ]
 # Files that may legitimately name the original business.
-EXEMPT = {'legacy_brands.py'}
+# `release.py` is run from a terminal and names git branches, one of them this
+# archive of the single-business CRM; nothing in it reaches a customer.
+EXEMPT = {'legacy_brands.py', 'release.py'}
 ROOT = pathlib.Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
