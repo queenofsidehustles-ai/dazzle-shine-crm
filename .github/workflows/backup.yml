@@ -35,18 +35,18 @@ jobs:
           - key: dazzle
             # The retired single-business database. Its data moved into Akye
             # as a company; this keeps the original until it is archived. Run
-            # with main's code, which backs up a database from before the
-            # audit chain (a dry run checked it; the archive branch
-            # dazzle-shine-single-tenant predates the backup checks used here).
+            # with main's code (Akye's working branch), which backs up a
+            # database from before the audit chain (a dry run checked it; the
+            # archive dazzle-shine-single-tenant predates these checks).
             label: Dazzle & Shine — the retired single-business database
             ref: main
             secret: BACKUP_DATABASE_URL
           - key: akye
             label: Akye — every cleaning company on the platform
-            # main is the live branch Railway deploys (it was akye-stable until
-            # akye-stable became main) — Dazzle & Shine's own data lives there
+            # akye-stable is the release Railway deploys; main is the working
+            # branch it is promoted from. Dazzle & Shine's own data lives there
             # as a company. The drill restores with the code that is running.
-            ref: main
+            ref: akye-stable
             secret: BACKUP_AKYE_DATABASE_URL
 
     name: ${{ matrix.key }}
@@ -157,7 +157,7 @@ jobs:
       - name: Tell the Akye console how it went
         # So the console's Health page can say when this last succeeded, and
         # flag it when it has not. Self-contained on purpose (no script from
-        # the checked-out branch): the backup checks out main, and this
+        # the checked-out branch): the backup checks out akye-stable, and this
         # must work whichever branch that is. Never fails the build: a backup
         # that worked and could not announce itself is still a backup.
         if: always()

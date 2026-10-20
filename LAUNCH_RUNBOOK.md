@@ -68,7 +68,9 @@ In the Stripe dashboard, in **test mode** first:
 A new Railway project, separate from the one your CRM lives in.
 
 1. Railway → **New Project** → **Deploy from GitHub repo** → this repository.
-2. Set the branch to **`main`**.
+2. Set the branch to **`akye-stable`**, the release channel. `main` is the
+   working branch and only reaches customers through `release.py --akye --go`
+   (see RELEASING.md).
 3. **+ New → Database → Add PostgreSQL.** Railway wires `DATABASE_URL` itself.
 4. Turn **auto-deploy off** for now (Settings → Source), so nothing goes live
    before it is configured.

@@ -63,13 +63,15 @@ jobs:
       contents: read
 
     steps:
-      # Exact-release provenance matters for a launch gate. Do not silently
-      # substitute a hard-coded branch here: checkout must use the same ref/SHA
-      # that triggered this workflow. For a scheduled run GitHub supplies the
-      # default-branch commit containing the workflow; for workflow_dispatch it
-      # uses the selected ref. That makes the code that runs auditable from the
-      # workflow run itself instead of being an implicit second release.
+      # This runs against the live database, so it runs the released code:
+      # akye-stable, what Railway deploys. A schedule fires from main's copy
+      # of this file, and main is the working branch -- checking out the
+      # triggering commit would run unreleased scheduler changes (the hourly
+      # balance charge among them) before release.py had promoted them. The
+      # step below records the exact commit that ran, for provenance.
       - uses: actions/checkout@v5
+        with:
+          ref: akye-stable
 
       - name: Record scheduler source revision
         run: |

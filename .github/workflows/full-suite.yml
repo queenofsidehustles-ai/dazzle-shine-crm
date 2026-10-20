@@ -3,7 +3,8 @@ name: Full regression suite
 # Every tests/test_*.py, not only the curated launch gates. Before this, about a
 # quarter of the suites ran in CI; the rest could break unnoticed (nine of them
 # had quietly been testing an error page for weeks). Runs on every change bound
-# for main (and akye-stable while it is retired), alongside the certification.
+# for main, and again on each release pushed to akye-stable, alongside the
+# certification.
 
 on:
   pull_request:
