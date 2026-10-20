@@ -660,7 +660,7 @@ def _reconcile_aged(engine, partner, pay, now):
         f'(payout {pay["id"]})', claimed)
     if not ok:
         return True, (False, (f'This payout is over a day old, so Stripe may have forgotten '
-                              f'it was already sent, and Stripe could not be asked ({found}). '
+                              f'it was already sent, and it could not be settled ({found}). '
                               f'Nothing was sent. Try again, or check the transfers in the '
                               f'Stripe dashboard.'), pay)
     if found:
@@ -680,8 +680,7 @@ def _send(engine, partner, pay, now):
     ok, value, uncertain = partner_payouts.transfer(
         partner['payout_account_id'], pay['amount_cents'],
         f'Akye partner commission {partner["code"]} (payout {pay["id"]})',
-        idempotency_key=f'affiliate-payout-{pay["id"]}',
-        transfer_group=f'affiliate-payout-{pay["id"]}')
+        idempotency_key=f'affiliate-payout-{pay["id"]}')
     if ok:
         first = _finish(engine, pay['id'], value, now)
         done = dict(payout(engine, pay['id']), finished_now=first)

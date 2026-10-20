@@ -80,6 +80,7 @@
       <div class="ops-dim">{{ s.blurb }}</div>
       {% if s.caution %}<div class="ops-bad">{{ s.caution }}</div>{% endif %}
       {% if s.held_by_env %}<div class="ops-bad">Closed by an environment setting ({{ 'SIGNUPS_OPEN' if s.key == 'signups' else 'PARTNER_PAYOUTS_OPEN' }}=0). The console cannot reopen it.</div>{% endif %}
+      {% if s.unreadable %}<div class="ops-bad">The switch settings could not be read, so this stays off until they can be. Check the database.</div>{% endif %}
       {% if s.by and not s.on %}<div class="ops-dim">Turned off by {{ s.by }}{{ ', ' ~ s.at.strftime('%d %b %H:%M') if s.at }}</div>{% endif %}</div>
     {% if may_operate %}
     <form method="post" action="{{ url_for('console.platform_switch') }}"

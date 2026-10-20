@@ -121,9 +121,10 @@ def set_switch(engine, key, on, by=None):
 
 
 def states(engine):
-    """[{key, label, blurb, caution, on, by, at, held_by_env}] for the console."""
+    """[{key, label, blurb, caution, on, by, at, held_by_env, unreadable}] for the console."""
     import control_plane
     rows = {}
+    unreadable = False
     try:
         with engine.connect() as conn:
             from sqlalchemy import select
@@ -131,14 +132,16 @@ def states(engine):
                 if r['key'].startswith(PREFIX):
                     rows[r['key'][len(PREFIX):]] = r
     except Exception:
-        pass
+        unreadable = True
     out = []
     for key, label, blurb, caution in SWITCHES:
         r = rows.get(key)
+        held = (key == 'signups' and os.environ.get('SIGNUPS_OPEN') == '0') \
+            or os.environ.get(FAIL_CLOSED.get(key, '')) == '0'
+        closed_blind = unreadable and key in FAIL_CLOSED   # shown off, as is_on() acts
         out.append({'key': key, 'label': label, 'blurb': blurb, 'caution': caution,
-                    'on': bool(r['enabled']) if r else True,
+                    'on': bool(r['enabled']) if r else not (closed_blind or (held and key in FAIL_CLOSED)),
                     'by': r['updated_by'] if r else None,
                     'at': r['updated_at'] if r else None,
-                    'held_by_env': (key == 'signups' and os.environ.get('SIGNUPS_OPEN') == '0')
-                                or os.environ.get(FAIL_CLOSED.get(key, '')) == '0'})
+                    'held_by_env': held, 'unreadable': closed_blind})
     return out
