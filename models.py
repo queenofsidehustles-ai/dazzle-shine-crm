@@ -1719,6 +1719,28 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
+class CallLog(db.Model):
+    """One call placed from the Find Leads call sheet.
+
+    A row is written when the caller presses Call, before anything rings, so
+    the monthly count is of calls placed rather than calls answered -- Twilio
+    bills the ones nobody picked up too. Twilio's own reports fill in the rest
+    afterwards (voice.py): how it ended, how long it ran, and the recording.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    prospect_id = db.Column(db.Integer, db.ForeignKey('prospect.id'), index=True)
+    user_id = db.Column(db.Integer)
+    agent = db.Column(db.String(100))
+    to_number = db.Column(db.String(40))
+    call_sid = db.Column(db.String(64), index=True)
+    status = db.Column(db.String(20), default='placed')  # placed / completed / no-answer / busy / failed / canceled
+    duration = db.Column(db.Integer)                       # seconds the other side was on the line
+    recording_sid = db.Column(db.String(64))
+    recording_seconds = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    ended_at = db.Column(db.DateTime)
+
+
 class OutboundLog(db.Model):
     """A record of every outbound SMS/email the system sends, from anywhere in
     the app — pay updates, work orders, confirmations, reminders, payment links,

@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 CATALOG = [
     ('welcome', 'owner', 'Welcome + your address + confirm code',
      'At signup', 'Everyone'),
+    ('welcome_sms', 'owner', 'Welcome text with your address',
+     'At signup', 'Only people who ticked the box and gave a number'),
     ('day1', 'owner', 'Get the schedule out of your head',
      'Day 1', 'Not set up yet'),
     ('day2', 'owner', 'The jobs you lose while you are cleaning',

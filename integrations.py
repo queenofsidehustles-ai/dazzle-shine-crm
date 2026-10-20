@@ -29,6 +29,12 @@ FIELDS = {
     'twilio_account_sid':     ('TWILIO_ACCOUNT_SID', 'Twilio account SID', False),
     'twilio_auth_token':      ('TWILIO_AUTH_TOKEN', 'Twilio auth token', True),
     'twilio_phone':           ('TWILIO_PHONE', 'Twilio phone number', False),
+    # Calling from the browser (voice.py). An API key pair signs the short-lived
+    # token the softphone connects with; the TwiML app is what points Twilio at
+    # our /voice/outbound. Caller ID is twilio_phone, which must be voice-capable.
+    'twilio_api_key_sid':     ('TWILIO_API_KEY_SID', 'Twilio API key SID', False),
+    'twilio_api_key_secret':  ('TWILIO_API_KEY_SECRET', 'Twilio API key secret', True),
+    'twilio_twiml_app_sid':   ('TWILIO_TWIML_APP_SID', 'Twilio TwiML app SID', False),
     'resend_api_key':         ('RESEND_API_KEY', 'Resend API key', True),
     'stripe_webhook_secret':  ('STRIPE_WEBHOOK_SECRET', 'Stripe webhook signing secret', True),
     'cloudinary_cloud_name':  ('CLOUDINARY_CLOUD_NAME', 'Cloudinary cloud name', False),
@@ -76,7 +82,8 @@ def _stored(name):
 _OUTBOUND = frozenset({'stripe_secret_key', 'stripe_publishable_key',
                        'stripe_webhook_secret', 'twilio_account_sid',
                        'twilio_auth_token', 'twilio_phone', 'resend_api_key',
-                       'google_places_api_key'})
+                       'twilio_api_key_sid', 'twilio_api_key_secret',
+                       'twilio_twiml_app_sid', 'google_places_api_key'})
 
 
 # A company's own payment keys. On hosted Akye these come only from that
@@ -107,6 +114,8 @@ def _env_allowed(name):
 # own settings, where rotating them later would break it, and every owner could
 # read the master account's SID, phone number and Cloudinary key off the page.
 _PLATFORM = frozenset({'twilio_account_sid', 'twilio_auth_token', 'twilio_phone',
+                       'twilio_api_key_sid', 'twilio_api_key_secret',
+                       'twilio_twiml_app_sid',
                        'resend_api_key', 'cloudinary_cloud_name',
                        'cloudinary_api_key', 'cloudinary_api_secret',
                        'google_places_api_key'})
@@ -192,6 +201,9 @@ def stripe_publishable_key(): return get('stripe_publishable_key')
 def twilio_account_sid():     return get('twilio_account_sid')
 def twilio_auth_token():      return get('twilio_auth_token')
 def twilio_phone():           return get('twilio_phone')
+def twilio_api_key_sid():     return get('twilio_api_key_sid')
+def twilio_api_key_secret():  return get('twilio_api_key_secret')
+def twilio_twiml_app_sid():   return get('twilio_twiml_app_sid')
 def resend_api_key():         return get('resend_api_key')
 def stripe_webhook_secret():  return get('stripe_webhook_secret')
 def cloudinary_cloud_name():  return get('cloudinary_cloud_name')
@@ -206,6 +218,11 @@ def stripe_ready():
 
 def texting_ready():
     return all((twilio_account_sid(), twilio_auth_token(), twilio_phone()))
+
+
+def voice_ready():
+    return all((twilio_account_sid(), twilio_phone(), twilio_api_key_sid(),
+                twilio_api_key_secret(), twilio_twiml_app_sid()))
 
 
 def email_ready():
@@ -234,6 +251,8 @@ def missing_for(area):
     groups = {
         'stripe': ['stripe_secret_key', 'stripe_publishable_key'],
         'texting': ['twilio_account_sid', 'twilio_auth_token', 'twilio_phone'],
+        'voice': ['twilio_account_sid', 'twilio_phone', 'twilio_api_key_sid',
+                  'twilio_api_key_secret', 'twilio_twiml_app_sid'],
         'email': ['resend_api_key'],
         'photos': ['cloudinary_cloud_name', 'cloudinary_api_key', 'cloudinary_api_secret'],
         'lead_finder': ['google_places_api_key'],
@@ -247,6 +266,7 @@ def status():
         'stripe': {'ready': stripe_ready(), 'mode': stripe_mode(),
                    'missing': missing_for('stripe')},
         'texting': {'ready': texting_ready(), 'missing': missing_for('texting')},
+        'voice': {'ready': voice_ready(), 'missing': missing_for('voice')},
         'email': {'ready': email_ready(), 'missing': missing_for('email')},
         'photos': {'ready': photos_ready(), 'missing': missing_for('photos')},
         'lead_finder': {'ready': lead_finder_ready(), 'missing': missing_for('lead_finder')},

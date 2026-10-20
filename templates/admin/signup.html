@@ -48,6 +48,16 @@
            value="{{ form.email or '' }}" autocomplete="username" />
     <p class="small">We'll send your web address and sign-in details here.</p>
 
+    <label for="phone">Mobile number <span class="small">(optional)</span></label>
+    <input id="phone" name="phone" type="tel" autocomplete="tel"
+           value="{{ form.phone or '' }}" />
+    <label for="sms_consent" class="small" style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;cursor:pointer">
+      <input type="checkbox" id="sms_consent" name="sms_consent" value="1"
+             style="margin-top:3px" />
+      <span>Text me my web address and setup help. One welcome text, no
+        marketing. Msg &amp; data rates may apply. Reply STOP to opt out.</span>
+    </label>
+
     <label for="password">Choose a password</label>
     <input id="password" name="password" type="password" required minlength="8"
            autocomplete="new-password" />

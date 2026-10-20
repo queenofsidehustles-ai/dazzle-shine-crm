@@ -428,9 +428,23 @@ def call_sheet(prospect_id=None):
         except Exception:
             can_email = False
 
+    # The softphone (voice.py). All of it is computed here so the page only
+    # ever shows what the server would also accept.
+    import integrations
+    import voice
+    from models import CallLog
+    calling = {'ready': integrations.voice_ready(), 'block': None,
+               'used': voice.calls_this_month(), 'limit': voice.MONTHLY_CALLS,
+               'recording': voice.recording_on(), 'past': []}
+    if current is not None:
+        calling['block'] = voice.refusal(current) if calling['ready'] else None
+        calling['past'] = (CallLog.query.filter_by(prospect_id=current.id)
+                           .order_by(CallLog.created_at.desc()).limit(5).all())
+
     return render_template(
         'admin/call_sheet.html',
         current=current,
+        calling=calling,
         queue_left=len(queue),
         done_today=done,
         stint_over=stint_over,
