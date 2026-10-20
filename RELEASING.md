@@ -4,6 +4,21 @@ Every instance used to deploy from `main`. A change pushed at eleven at night
 was live in a paying customer's business three minutes later, before anyone had
 used it once. This is how that stops.
 
+## The branches now (October 2026)
+
+Dazzle & Shine moved onto Akye as one of its companies, and `akye-stable`
+became `main`.
+
+| Branch | What it is |
+|---|---|
+| `main` | **Akye.** Railway deploys it to every cleaning company, Dazzle & Shine included. A pull request merged into it, with its checks green, is the release. |
+| `akye-stable` | The old name for the same line. Kept until Railway follows `main`, then retired. |
+| `dazzle-shine-single-tenant` | The last single-business CRM (`3b0cc92`, 29 Sep 2026), before Akye was first promoted onto `main`. An archive: nothing deploys it. |
+| `stable` | The single-business CRM's customer channel (`v2026.09.21`). Frozen. |
+
+The rest of this page describes the two-product setup it replaced, and is kept
+for its history.
+
 ## Two products, four branches
 
 There are two things being shipped, and each has a working branch and a channel
@@ -140,29 +155,39 @@ whole point of being the canary. If you'd rather be on the same footing as your
 customers, point your own service at `stable` too and release to everyone at
 once — but then nobody is testing anything before customers see it.
 
-## Promoting akye-stable to main
+## Renaming akye-stable to main
 
 `akye-stable` contains `main` (main was merged into it, keeping akye-stable's
-code, after checking every change main had made was already here). So `main`
-can move to `akye-stable` as a fast-forward: no reset, no force-push, nothing
-in main's history lost.
+code, after checking every change main had made was already here), so `main`
+moves to it as a fast-forward: no reset, no force-push, nothing in main's
+history lost. In order:
 
-    git fetch origin
-    git merge-base --is-ancestor origin/main origin/akye-stable && echo ok
-    git push origin origin/akye-stable:main      # refused unless it fast-forwards
+1. Merge the pull request that points CI and the nightly backup at `main`
+   (it lands on `akye-stable`, so it is in what `main` moves to).
+2. Move `main`:
 
-If the first command prints nothing, something landed on `main` since; port it
-to `akye-stable` (or merge `main` in again) before promoting.
+       git fetch origin
+       git merge-base --is-ancestor origin/main origin/akye-stable && echo ok
+       git push origin origin/akye-stable:main      # refused unless it fast-forwards
 
-Before you push, check in Railway whether any service still deploys from
-`main` (your own instance, above). `main` has carried Akye's code since the
-first promotion (81a635d), so such an instance already runs it, as a single
-business (no `BASE_DOMAIN`); promoting moves it on to akye-stable's release
-and migrates its database on the next boot. That works: main's photo-wording
-migration id is kept here as a no-op (`0021_photo_optional_wording`), so a
-database stamped with it upgrades through 0021_quote_prospect to 0033 with
-every row kept. The scheduled workflows (backup, automations, demo rebuild)
-run from `main`'s copies, which after the push are akye-stable's.
+3. Railway → the Akye service → **Settings → Source → Branch: `main`**. Check
+   `https://www.akyehq.com/version` reports `"channel":"main"` and the same
+   commit as before the switch: the code is identical, only the branch name
+   changed.
+4. From then on, open pull requests against `main`. Retire `akye-stable` once
+   nothing targets it (its open pull requests retargeted, no service on it);
+   until then its CI still runs.
+
+Until step 3, Railway still follows `akye-stable`, so anything merged into
+`main` alone does not deploy, and anything merged into `akye-stable` alone does
+not reach `main`. Keep the window short, and merge nothing in between.
+
+`main` has carried Akye's code since the first promotion (81a635d), so a
+service still deploying `main` already runs it as a single business (no
+`BASE_DOMAIN`); the rename moves it on to this release and migrates its
+database on the next boot. main's photo-wording migration id is kept as a no-op
+(`0021_photo_optional_wording`), so a database stamped with it upgrades through
+0021_quote_prospect to 0033 with every row kept.
 
 ### What a dry run of the promotion found (20 Oct 2026)
 
@@ -178,9 +203,9 @@ seed), with akye-stable's code run against it as the push would:
   to it. That database has not changed between nightly backups (every table's
   count identical, including `cron_run`), so nothing is running against it
   and it would have stayed on 0021, and failed, every night.
-- **release.py** still maps the CRM line `main → stable` and Akye
-  `feature/tenancy → akye-stable`. Once `main` is Akye, `release.py --go` would
-  put Akye on the `stable` branch (the CRM's customer channel). Do not run it
-  until the mapping is updated or that line retired.
-- **CI** runs only on pull requests to, and pushes to, `akye-stable`. Pull
-  requests opened against `main`, the default branch, get no checks.
+- **release.py** mapped the CRM line `main → stable`, so once `main` was Akye,
+  `release.py --go` would have put Akye on `stable`. It now ships the CRM from
+  `dazzle-shine-single-tenant`, and `--akye` says a merged pull request into
+  `main` is the release.
+- **CI** ran only for `akye-stable`, so pull requests against `main`, the
+  default branch, got no checks. Every workflow now runs for `main` too.

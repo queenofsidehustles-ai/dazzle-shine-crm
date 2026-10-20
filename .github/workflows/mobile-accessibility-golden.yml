@@ -3,9 +3,11 @@ name: Akye golden business journeys
 on:
   pull_request:
     branches:
+      - main
       - akye-stable
   push:
     branches:
+      - main
       - akye-stable
   workflow_dispatch:
 
