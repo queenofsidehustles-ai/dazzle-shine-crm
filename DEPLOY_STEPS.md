@@ -147,21 +147,19 @@ terminal stuck at a prompt that says `bquote>`. If that happens, press
 6. Railway will start building. Let it.
 7. When it appears, click on the service (the box with the repo name).
 8. Go to the **Settings** tab.
-9. Find **Source**. Set the branch to **`feature/tenancy`**.
+9. Find **Source**. Set the branch to **`akye-stable`**.
 
-   ⚠️ Not `main`, and not `stable`. This surprises people, so here is why:
+   ⚠️ Not `main`, and not `stable`. Here is why:
 
-   - `stable` is what **your cleaning company** runs. Never point anything new
-     at it.
-   - `main` is currently identical to `stable` — the old single-business CRM.
-     All the multi-company work, the booking page and the new design are on
-     `feature/tenancy`.
-   - If you pointed this at `main`, it would build and start fine, `/version`
-     in Step 5 would pass, DNS in Step 6 would work, and you would not find
-     out anything was wrong until `/signup` gave you a 404 in Step 8.
+   - `akye-stable` is the release channel: it moves only when
+     `release.py --akye --go` promotes `main` after every check passes.
+   - `main` is the working branch. Every merged pull request lands there
+     before anybody has released it; a service on it would take each one.
+   - `stable` is the retired single-business CRM's channel. Never point
+     anything new at it.
 
-   Once the product is proven online we will tidy the branch names. Until
-   then, watching the branch the work is actually on is the honest setting.
+   (This step once said `feature/tenancy`, the branch the multi-company work
+   started on. It is long behind; see RELEASING.md for the branches now.)
 10. Still in Settings, find **Networking**. We come back here in Step 6.
 
 Now give it a database:

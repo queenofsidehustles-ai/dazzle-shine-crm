@@ -49,13 +49,16 @@ REMOTE = 'origin'
 class Line:
     """One product's path from working branch to the people running it."""
 
-    def __init__(self, key, source, channel, tag_prefix, product, audience):
+    def __init__(self, key, source, channel, tag_prefix, product, audience,
+                 required_checks=()):
         self.key = key
         self.source = source            # where the work lands
         self.channel = channel          # what deployed instances follow
         self.tag_prefix = tag_prefix    # keeps two tag series apart
         self.product = product
         self.audience = audience
+        # GitHub checks that must have passed on the exact commit released.
+        self.required_checks = required_checks
 
 
 LINES = {
@@ -64,7 +67,14 @@ LINES = {
                    audience='every customer instance'),
     'akye': Line('akye', source='main', channel='akye-stable',
                  tag_prefix='akye-v', product='Akye',
-                 audience='every cleaning company on Akye'),
+                 audience='every cleaning company on Akye',
+                 # The four workflows that run on every push to main. The
+                 # suites here run on this machine; the browser journeys and
+                 # the Postgres-only suites run there.
+                 required_checks=('Every test suite',
+                                  'Exact-head P0 launch certification',
+                                  'Local disposable Akye business and accessibility journeys',
+                                  'Destructive lifecycle P1 falsification')),
 }
 
 
@@ -108,6 +118,88 @@ def line_tags(line):
                            '--sort=-creatordate').split('\n') if t]
     other = [l.tag_prefix for l in LINES.values() if l.key != line.key]
     return [t for t in tags if not any(t.startswith(p) for p in other)]
+
+
+def check_problems(runs, required):
+    """What stops a commit being released, from its GitHub check runs.
+
+    `runs` is the API's list ({'name', 'status', 'conclusion', 'id'}); a check
+    re-run leaves both attempts there, so the newest of each name counts."""
+    newest = {}
+    for r in runs:
+        if r.get('name') in required and r.get('id', 0) >= newest.get(r['name'], {}).get('id', -1):
+            newest[r['name']] = r
+    out = []
+    for name in required:
+        r = newest.get(name)
+        if r is None:
+            out.append(f'{name}: has not run on this commit')
+        elif r.get('status') != 'completed':
+            out.append(f'{name}: still running')
+        elif r.get('conclusion') != 'success':
+            out.append(f'{name}: {r.get("conclusion")}')
+    return out
+
+
+def _github_repo():
+    url = git('remote', 'get-url', REMOTE, check=False)
+    m = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$', url)
+    return m.group(1) if m else None
+
+
+def check_runs(sha):
+    """The commit's check runs from GitHub, or None if they cannot be read
+    (no `gh`, not logged in, no network)."""
+    import json
+    repo = _github_repo()
+    if not repo:
+        return None
+    try:
+        r = subprocess.run(['gh', 'api', f'repos/{repo}/commits/{sha}/check-runs?per_page=100'],
+                           cwd=ROOT, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    try:
+        return json.loads(r.stdout).get('check_runs') or []
+    except ValueError:
+        return None
+
+
+def require_green(line, sha):
+    """Refuse to promote a commit whose checks did not all pass.
+
+    Railway deploys the channel the moment it moves, so the checks on the
+    exact commit are the gate, before the push, not a report after it."""
+    if not line.required_checks:
+        return
+    runs = check_runs(sha)
+    if runs is None:
+        repo = _github_repo() or 'the repository'
+        say(f'Could not ask GitHub for the checks on {sha[:7]} (is `gh` installed '
+            f'and logged in?). Open https://github.com/{repo}/commit/{sha} and '
+            f'confirm these passed:')
+        for name in line.required_checks:
+            say(f'  · {name}')
+        if input(f'Type {sha[:7]} if every one is green: ').strip() != sha[:7]:
+            sys.exit('Not released — nothing changed.')
+        return
+    problems = check_problems(runs, line.required_checks)
+    if problems:
+        sys.exit(f'{line.source} at {sha[:7]} is not ready to release:\n'
+                 + '\n'.join(f'  · {p}' for p in problems)
+                 + '\nNothing was released.')
+    say(f'All {len(line.required_checks)} checks passed on {sha[:7]}.')
+
+
+def release_before(tags, current, commit_of):
+    """(the release the channel is on, the one before it), from `tags`
+    newest first; None if the channel is not on one of them."""
+    for i, tag in enumerate(tags):
+        if commit_of(tag) == current:
+            return (tag, tags[i + 1]) if i + 1 < len(tags) else (tag, None)
+    return None
 
 
 def pending(line):
@@ -260,6 +352,8 @@ def go(line):
         sys.exit(f'Nothing to release — {line.channel} already matches '
                  f'{line.source}.')
 
+    require_green(line, git('rev-parse', f'{REMOTE}/{line.source}'))
+
     say(f'Releasing {line.product} to {line.audience}:\n')
     for c in commits:
         say(f'  · {c}')
@@ -275,7 +369,8 @@ def go(line):
 
     # The running app cannot read a git tag: Railway clones the branch to run
     # the code, not the history. So the release writes its own name into a file
-    # that ships with it, and /version reads that.
+    # that ships with it, and /version reads that. It is the only change on top
+    # of the commit whose checks were required above.
     (ROOT / 'RELEASE').write_text(f'{tag}\n{date.today().isoformat()}\n')
     git('add', 'RELEASE')
     git('commit', '-m', f'Release {tag}')
@@ -295,9 +390,16 @@ def go(line):
 def rollback(line):
     preflight(line)
     tags = line_tags(line)
-    if len(tags) < 2:
-        sys.exit(f'There is no earlier {line.product} release to go back to.')
-    current, previous = tags[0], tags[1]
+    on = git('rev-parse', f'{REMOTE}/{line.channel}')
+    # From the release the channel is actually on: the newest tag is wrong
+    # after one rollback, and walks forward if it was moved back by hand.
+    found = release_before(tags, on, lambda t: git('rev-list', '-n', '1', t))
+    if found is None:
+        sys.exit(f'{line.channel} is at {on[:7]}, which is no {line.product} release. '
+                 f'Move it by hand.')
+    current, previous = found
+    if previous is None:
+        sys.exit(f'There is no {line.product} release before {current} to go back to.')
     say(f'Rolling {line.audience} back from {current} to {previous}.')
     say('Their data is untouched — this only changes which code runs.\n')
     if input(f'Type {previous} to confirm: ').strip() != previous:

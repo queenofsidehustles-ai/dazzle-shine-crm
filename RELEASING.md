@@ -23,11 +23,23 @@ and releases to `akye-stable`.
     python3 release.py --akye --go      # every suite, then tag and promote akye-stable
     python3 release.py --akye --rollback   # akye-stable back one release
 
-`--go` refuses unless every suite passes on Python 3.12, then writes
-`RELEASE`, tags `akye-vYYYY.MM.DD`, and fast-forwards `akye-stable` to `main`.
-The push to `akye-stable` runs the certification again on that exact commit,
-and Railway deploys it. A fix goes in on `main` and goes out in the next
-release; `akye-stable` never takes a commit `main` does not have.
+`--go` refuses unless the four checks that ran on the push to `main` (the
+full suite, the launch certification, the golden journeys and privacy
+lifecycle) all passed on that exact commit. It asks GitHub with `gh`; without
+it, it shows you the commit's page and asks you to confirm by typing its
+hash. Then every suite runs again here on Python 3.12, and only then does it
+write `RELEASE` (the one change on top of the checked commit), tag
+`akye-vYYYY.MM.DD`, and fast-forward `akye-stable` to `main`. Railway deploys
+it; the push to `akye-stable` certifies the exact deployed commit once more.
+A fix goes in on `main` and goes out in the next release; `akye-stable` never
+takes a commit `main` does not have.
+
+`--rollback` starts from the release `akye-stable` is on and goes back one,
+so running it twice goes back two.
+
+Everything that touches production runs the release, not `main`: Railway,
+the nightly Akye backup, and the hourly and daily automations, which check
+out `akye-stable` even though their schedule fires from `main`.
 
 The rest of this page describes the two-product setup it replaced, and is kept
 for its history.
