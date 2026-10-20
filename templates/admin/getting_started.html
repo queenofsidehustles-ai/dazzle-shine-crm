@@ -19,13 +19,15 @@
   </div>
 {% else %}
   {% if p.complete %}
-  <div class="card" style="max-width:660px;padding:18px 20px;margin-bottom:14px;
+  {# Payments is not one of the required steps, so "complete" does not mean
+     it is connected -- this used to say it was, right under a bar saying it
+     wasn't. #}
+  <div class="card" id="gs-ready" style="max-width:660px;padding:18px 20px;margin-bottom:14px;
               border-left:4px solid var(--good)">
-    <div style="font-weight:700;margin-bottom:4px">✅ You can take money</div>
+    <div style="font-weight:700;margin-bottom:4px">✅ You can take bookings</div>
     <p style="color:var(--muted);margin:0;line-height:1.55;font-size:0.92rem">
-      Business details, timezone, prices, terms, payments and balances are all
-      set. What is left below is your own world going in — do it whenever you
-      have it. Nothing is waiting on it.
+      Business details, timezone, prices, terms and balances are all set.
+      What is left below is yours to do whenever you have it.
     </p>
   </div>
   {% endif %}
@@ -54,7 +56,10 @@
 
     {# One next action, prominent. A screen of twelve equal buttons is a screen
        people close; the point of a first-run list is to answer "what now". #}
-    {% if p.next %}
+    {# Not while Nana is asking about the same step: her card is right above,
+       and the same button twice on one screen reads as two different things
+       to do. Once she has moved on (or was skipped past it), it is back. #}
+    {% if p.next and not (chat_step and chat_step == p.next.key) %}
       <div style="border:2px solid var(--gold);border-radius:12px;padding:18px;
                   background:var(--gold-soft);margin-bottom:22px">
         <div style="font-size:0.72rem;letter-spacing:.12em;text-transform:uppercase;
@@ -85,7 +90,8 @@
        was looking at a list it could not finish. The required ones are
        summarised in a line; the optional ones are offered one at a time, by
        Nana or by the card above, as they become the next thing. #}
-    {% set left = p.steps | rejectattr('done') | rejectattr('required') | list %}
+    {% set left = p.steps | rejectattr('done') | rejectattr('required')
+                          | rejectattr('key', 'equalto', p.next.key if p.next else '') | list %}
     {% if p.complete and left %}
     <p style="color:var(--softer);font-size:0.86rem;margin:18px 0 0;
               padding-top:14px;border-top:1px solid var(--border)">

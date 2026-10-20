@@ -104,11 +104,17 @@ for label, fixture in (
             break                      # required steps are what must be walkable
         text, cards, kinds, _k = offered(key)
         confirms = [c for c in cards if c.get('kind') == 'confirm']
+        # A choice card is one question with several answers; tapping the
+        # first answer is what an owner in a hurry does.
+        confirms += [dict(o, kind='confirm') for c in cards if c.get('kind') == 'choice'
+                     for o in c.get('options', [])[:1]]
         forms = [c for c in cards if c.get('kind') == 'form']
         links = [c for c in cards if c.get('kind') == 'link']
 
-        check(bool(text.strip()), f'{key}: says something')
-        check(bool(confirms or forms) or '?' in text,
+        asked = text.strip() or ' '.join(c.get('title', '') for c in cards
+                                         if c.get('kind') == 'choice')
+        check(bool(asked.strip()), f'{key}: says something')
+        check(bool(confirms or forms) or '?' in asked,
               f'{key}: offers a card, or asks a question in plain words')
         check(bool(confirms or forms or links),
               f'{key}: has a way through that is not the chat box')

@@ -95,8 +95,9 @@ with app.app_context(), app.test_request_context():
     check(terms is not None and len(terms['lines']) == 4,
           'the terms are four lines, not thirteen hundred words')
     both = setup_assistant.balance_cards()
-    check(len(both) == 2 and all(c['kind'] == 'confirm' for c in both),
-          'balances are two buttons, because it is a choice')
+    check(len(both) == 1 and both[0]['kind'] == 'choice'
+          and len(both[0]['options']) == 2,
+          'balances are one card with two answers, because it is one question')
 
 print('\n3. A business too new to be listed is not a failure')
 check(business_lookup.find('Brand New Cleaning', '') == {},

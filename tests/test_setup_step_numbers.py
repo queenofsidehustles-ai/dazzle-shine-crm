@@ -38,7 +38,7 @@ def next_card(step_key):
         session['role'] = 'owner'
         _text, cards, key = setup_assistant.next_message()
         assert key == step_key, f'expected {step_key} next, got {key}'
-        return [c for c in cards if c.get('kind') in ('form', 'confirm')]
+        return [c for c in cards if c.get('kind') in ('form', 'confirm', 'choice')]
 
 
 with app.app_context():

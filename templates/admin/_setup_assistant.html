@@ -27,6 +27,11 @@
   .sa-formcard .btn-primary{margin-top:12px}
   .sa-secondary{display:block;margin-top:10px;color:var(--gold-deep, var(--gold));font-size:0.86rem;font-weight:600;text-decoration:none}
   .sa-secondary:hover{text-decoration:underline}
+  .sa-choice .sa-q{display:block;font-weight:700;margin-bottom:10px;color:inherit;font-size:0.95rem}
+  .sa-opts{display:flex;gap:10px;flex-wrap:wrap}
+  .sa-opt{flex:1 1 200px;display:flex;flex-direction:column;gap:6px}
+  .sa-opt .btn-primary{margin-top:0;width:100%}
+  .sa-opt span{font-size:0.84rem;color:var(--muted);line-height:1.45}
   .sa-link{align-self:flex-start}
   .sa-skip{align-self:flex-start;background:none;border:0;padding:2px 4px;color:var(--muted);
            font:inherit;font-size:0.85rem;text-decoration:underline;cursor:pointer}
@@ -371,6 +376,68 @@
     log.appendChild(box);
   }
 
+  // One question, its answers side by side, each explained under its button.
+  // Each answer posts its own token, so the one tapped is the one saved.
+  function choiceCard(c) {
+    const box = document.createElement('div');
+    box.className = 'sa-box sa-choice';
+    stepLine(box, c);
+    const q = document.createElement('div');
+    q.className = 'sa-q';
+    q.textContent = c.title || '';
+    box.appendChild(q);
+    if (c.done) {
+      const note = document.createElement('div');
+      note.className = 'sa-note';
+      note.textContent = c.done;
+      box.appendChild(note);
+      log.appendChild(box);
+      return;
+    }
+    const opts = document.createElement('div');
+    opts.className = 'sa-opts';
+    const btns = [];
+    (c.options || []).forEach(function (o) {
+      const col = document.createElement('div');
+      col.className = 'sa-opt';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-primary';
+      btn.textContent = o.label || 'Choose';
+      const why = document.createElement('span');
+      why.textContent = o.line || '';
+      col.appendChild(btn);
+      col.appendChild(why);
+      opts.appendChild(col);
+      btns.push(btn);
+      btn.addEventListener('click', async function () {
+        btns.forEach(function (b) { b.disabled = true; });
+        btn.textContent = 'Saving…';
+        let data;
+        try {
+          data = await post(URLS.confirm, { token: o.token });
+        } catch (e) {
+          btns.forEach(function (b) { b.disabled = false; });
+          btn.textContent = o.label || 'Choose';
+          return;
+        }
+        opts.remove();
+        const note = document.createElement('div');
+        note.className = 'sa-note';
+        note.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
+        box.appendChild(note);
+        if (data.ok) {
+          if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
+          (data.cards || []).forEach(render);
+          updateProgress(data.progress);
+        }
+        scroll();
+      });
+    });
+    box.appendChild(opts);
+    log.appendChild(box);
+  }
+
   // "Skip for now": the chat moves to the next step. Only the newest one
   // works -- an old skip button further up would skip the wrong thing.
   function skipCard(c) {
@@ -383,9 +450,8 @@
       let data;
       try { data = await post(URLS.skip, { step: c.step }); }
       catch (e) { data = { ok: false }; }
-      if (data.ok && data.say) {
-        bubble(data.say, 'assistant');
-        speak(data.say);
+      if (data.ok) {
+        if (data.say) { bubble(data.say, 'assistant'); speak(data.say); }
         (data.cards || []).forEach(render);
       }
       scroll();
@@ -397,6 +463,7 @@
     if (!c) return;
     if (c.kind === 'form') formCard(c);
     else if (c.kind === 'confirm') confirmCard(c);
+    else if (c.kind === 'choice') choiceCard(c);
     else if (c.kind === 'link') linkCard(c);
     else if (c.kind === 'skip') skipCard(c);
   }
@@ -416,17 +483,26 @@
     return r.json();
   }
 
-  // The checklist under the chat is server-rendered. Swap in a fresh copy
-  // rather than reloading, so nothing typed or offered in the chat is lost.
+  // The checklist under the chat, the "you can take bookings" note above it
+  // and the sidebar meter are server-rendered. Swap in fresh copies rather
+  // than reloading -- including after the last required step. Reloading there
+  // closed the window mid-sentence and dropped the owner back on the page,
+  // which read as being sent somewhere else.
   async function updateProgress(p) {
     if (!p) return;
-    if (p.done >= p.total) { window.setTimeout(function () { window.location.reload(); }, 2500); return; }
     try {
-      const r = await fetch(window.location.href, { headers: { 'Accept': 'text/html' } });
+      const r = await fetch(window.location.pathname, { headers: { 'Accept': 'text/html' } });
       const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
-      const fresh = doc.getElementById('gs-list');
-      const old = document.getElementById('gs-list');
-      if (fresh && old) old.replaceWith(fresh);
+      ['gs-list', 'gs-ready', 'setup-meter'].forEach(function (id) {
+        const fresh = doc.getElementById(id);
+        const old = document.getElementById(id);
+        if (fresh && old) old.replaceWith(fresh);
+        else if (old) old.remove();
+        else if (fresh && id === 'gs-ready') {
+          const list = document.getElementById('sa') || document.getElementById('gs-list');
+          if (list) list.parentNode.insertBefore(fresh, list);
+        }
+      });
     } catch (e) {}
   }
 

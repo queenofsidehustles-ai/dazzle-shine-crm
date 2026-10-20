@@ -233,6 +233,10 @@ def next_message(done_line=''):
     # here only; later optional steps (booking page, team...) still get it.
     if step.get('key') == 'payments':
         done_line = ''
+    # A choice card asks its own question, in the card. Saying it again in a
+    # bubble above is the same words twice.
+    if any(c.get('kind') == 'choice' for c in cards):
+        text = ''
     link = STEP_LINKS.get(step['key'])
     if link and not cards:
         cards.append(_link_card(*link))
@@ -249,7 +253,7 @@ def next_message(done_line=''):
                    if s['key'] == step['key']), None)
         if no:
             for c in cards:
-                if c.get('kind') in ('form', 'confirm'):
+                if c.get('kind') in ('form', 'confirm', 'choice'):
                     c['step_no'], c['step_total'] = no, total
     except Exception:
         pass
@@ -519,16 +523,25 @@ def terms_card():
 
 
 def balance_cards():
-    """Two buttons, because it is a choice and not a form."""
-    out = []
+    """One card: the question, and its two answers side by side.
+
+    This used to be two cards, each titled "How balances get paid" with one
+    button, under a chat bubble asking the question. Owners read that as two
+    separate steps -- both said "Step 4 of 4" -- when it is one question with
+    a yes and a no. Each answer still carries its own token, so whichever is
+    tapped saves exactly what it said.
+    """
+    options = []
     for mode, label, line in (
             ('auto', 'Yes — charge the card',
              'The rest comes off the card on file when the job is done'),
             ('ask', 'No — I’ll decide each time',
              'The balance shows as owed, and waits for you')):
-        out.append(_offer('setup_set_balance_mode', {'mode': mode},
-                          'How balances get paid', [line], label))
-    return out
+        offered = _offer('setup_set_balance_mode', {'mode': mode},
+                         'How balances get paid', [line], label)
+        options.append({'token': offered['token'], 'label': label, 'line': line})
+    return [{'kind': 'choice', 'title': STEP_PROMPTS['balance'],
+             'options': options}]
 
 
 def tool_offer_business(**kw):
