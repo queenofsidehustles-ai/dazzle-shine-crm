@@ -33,12 +33,12 @@ already uses, and only those two kinds are accepted from outside.
 reported, and a page that cried wolf on day one would be ignored on day thirty.
 If it stays that way after a night, the reporter is not wired up: check the
 `REMINDER_API_KEY` secret on the Action, and that the deployed product has
-`/api/platform-run` (the backup job checks out `akye-stable`, so the code has to
+`/api/platform-run` (the backup job checks out `main`, so the code has to
 be promoted there first).
 
 ## Before this works in production
 
-1. **Promote this change to `akye-stable`** (and so the deployed product), so
+1. **Merge this change into `main`** (and so the deployed product), so
    `/api/platform-run` exists. Until then the backup step prints a warning and
    changes nothing.
 2. **`REMINDER_API_KEY` must be a secret on the Nightly backup workflow too.**

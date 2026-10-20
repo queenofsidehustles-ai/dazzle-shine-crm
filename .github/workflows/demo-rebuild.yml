@@ -12,9 +12,8 @@
 #
 #   REMINDER_API_KEY   the same value the Akye app has in Railway.
 #
-# Scheduled workflows only run from the default branch, so this file has to be
-# on main to run; it is kept on akye-stable too so main can be fast-forwarded
-# to akye-stable without losing it.
+# Scheduled workflows only run from the default branch, main, which is also
+# the branch the Akye app deploys from.
 #
 # www, not the bare akyehq.com: the apex is not the app, and answers a POST
 # with 405 Method Not Allowed (every run failed on that at first).
