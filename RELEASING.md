@@ -139,3 +139,27 @@ Stays on `main` deliberately. You want your changes immediately; that is the
 whole point of being the canary. If you'd rather be on the same footing as your
 customers, point your own service at `stable` too and release to everyone at
 once — but then nobody is testing anything before customers see it.
+
+## Promoting akye-stable to main
+
+`akye-stable` contains `main` (main was merged into it, keeping akye-stable's
+code, after checking every change main had made was already here). So `main`
+can move to `akye-stable` as a fast-forward: no reset, no force-push, nothing
+in main's history lost.
+
+    git fetch origin
+    git merge-base --is-ancestor origin/main origin/akye-stable && echo ok
+    git push origin origin/akye-stable:main      # refused unless it fast-forwards
+
+If the first command prints nothing, something landed on `main` since; port it
+to `akye-stable` (or merge `main` in again) before promoting.
+
+Before you push, check in Railway whether any service still deploys from
+`main` (your own instance, above). If one does, promoting puts Akye's code on
+it, and its database is migrated on the next boot. That works: main's
+photo-wording migration id is kept here as a no-op
+(`0021_photo_optional_wording`), so a database stamped with it upgrades
+through 0021_quote_prospect to 0033. But it is a different product on that
+instance, so repoint or retire the service first if that is not what you want.
+The scheduled workflows (backup, automations, demo rebuild) run from `main`'s
+copies, which after the push are akye-stable's.
