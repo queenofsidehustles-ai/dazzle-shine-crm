@@ -99,7 +99,7 @@ def account_status(account_id):
         return False, _message(e)
 
 
-def transfer(account_id, amount_cents, description, idempotency_key, transfer_group=None):
+def transfer(account_id, amount_cents, description, idempotency_key):
     """Move `amount_cents` from Akye's balance to the partner's account.
 
     Returns (True, transfer_id, False) on success, or (False, error, uncertain).
@@ -118,7 +118,7 @@ def transfer(account_id, amount_cents, description, idempotency_key, transfer_gr
         tr = stripe.Transfer.create(
             api_key=billing.stripe_key(), amount=int(amount_cents), currency='usd',
             destination=account_id, description=description or 'Akye partner commission',
-            transfer_group=transfer_group, idempotency_key=idempotency_key)
+            idempotency_key=idempotency_key)
         return True, tr.id, False
     except Exception as e:  # noqa: BLE001
         # A response from Stripe that says no is a definite no. Anything else
@@ -151,8 +151,9 @@ def find_transfer(account_id, amount_cents, marker, since):
 
     Returns (True, transfer_id_or_None) when Stripe answered and the whole
     window was searched; None means no such transfer. Returns (False, error)
-    when the answer cannot be trusted (an error, or more transfers than one
-    page holds): the caller must not send."""
+    when the answer cannot be trusted (an error, more transfers than one page
+    holds, or a matching transfer that was reversed): the caller must not send
+    and must not mark it paid."""
     if not configured():
         return False, 'Stripe is not set up on this deployment.'
     stripe = _stripe()
@@ -162,6 +163,9 @@ def find_transfer(account_id, amount_cents, marker, since):
             created={'gte': int(since.replace(tzinfo=timezone.utc).timestamp()) - 3600})
         for tr in page.data:
             if int(tr.amount) == int(amount_cents) and marker in (tr.description or ''):
+                if getattr(tr, 'reversed', False) or int(getattr(tr, 'amount_reversed', 0) or 0) > 0:
+                    return False, (f'Stripe shows transfer {tr.id} for this payout was reversed '
+                                   f'(in part or whole), so it is not a completed payment')
                 return True, tr.id
         if getattr(page, 'has_more', False):
             return False, 'Stripe has more transfers to this partner than can be checked at once.'

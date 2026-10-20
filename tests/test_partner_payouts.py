@@ -102,7 +102,7 @@ def fake_status(account_id):
     return True, {'payouts_enabled': BEHAVIOUR['ready'], 'details_submitted': True}
 
 
-def fake_transfer(account_id, amount_cents, description, idempotency_key, transfer_group=None):
+def fake_transfer(account_id, amount_cents, description, idempotency_key):
     CALLS['transfer'].append((account_id, amount_cents, description, idempotency_key))
     if idempotency_key in TRANSFERS:                 # Stripe's own idempotency
         return True, TRANSFERS[idempotency_key], False
@@ -529,6 +529,64 @@ try:
           'PARTNER_PAYOUTS_OPEN=0 stops payouts whatever the console says')
     del os.environ['PARTNER_PAYOUTS_OPEN']
     platform_switches.clear_cache()
+
+
+    print('\n12. Review findings on the retry and the switch')
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('partner_payouts_real',
+                                                  os.path.join(ROOT, 'partner_payouts.py'))
+    real = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(real)
+
+    class Obj:
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+
+    sent = {}
+
+    class FakeStripe:
+        class Transfer:
+            @staticmethod
+            def create(**kw):
+                sent.update(kw)
+                return Obj(id='tr_new')
+
+            @staticmethod
+            def list(**kw):
+                return Obj(has_more=False, data=[Obj(
+                    id='tr_back', amount=6000, description='x (payout 99)',
+                    reversed=BEHAVIOUR.get('reversed', False),
+                    amount_reversed=BEHAVIOUR.get('amount_reversed', 0))])
+
+    real._stripe = lambda: FakeStripe
+    real.transfer('acct_1', 6000, 'd', 'affiliate-payout-5')
+    check(set(sent) == {'api_key', 'amount', 'currency', 'destination', 'description',
+                        'idempotency_key'},
+          'a transfer sends the same parameters it always did, so a payout pending from '
+          'before this release can be retried with its old key')
+    check(real.find_transfer('acct_1', 6000, '(payout 99)', datetime.utcnow()) == (True, 'tr_back'),
+          'a matching, intact transfer is found')
+    for label, key, val in (('fully reversed', 'reversed', True),
+                            ('partly reversed', 'amount_reversed', 1500)):
+        BEHAVIOUR[key] = val
+        ok_, why_ = real.find_transfer('acct_1', 6000, '(payout 99)', datetime.utcnow())
+        check(not ok_ and 'reversed' in why_, f'a {label} transfer is not accepted as a completed payment')
+        BEHAVIOUR.pop(key)
+
+    platform_switches.clear_cache()
+    rows = {s_['key']: s_ for s_ in platform_switches.states(engine)}
+    check(rows['partner_payouts']['on'] and not rows['partner_payouts']['unreadable'],
+          'Health: readable, payouts show on')
+    real_engine_connect = engine.connect
+
+    class Broken:
+        def connect(self):
+            raise RuntimeError('db down')
+
+    rows = {s_['key']: s_ for s_ in platform_switches.states(Broken())}
+    check(not rows['partner_payouts']['on'] and rows['partner_payouts']['unreadable'],
+          'Health: unreadable, payouts show OFF with a reason, matching what is enforced')
+    check(rows['ai']['on'] and not rows['ai']['unreadable'], 'and the fail-open switches still show on')
 
     # (g) Partner emails are findable in Communications history.
     cc2 = app.test_client()
