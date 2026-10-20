@@ -202,7 +202,7 @@
         {% for b in lc.blockers %}<p class="ops-bad" style="margin:var(--s2) 0">{{ b }}</p>{% endfor %}
         {% if not lc.blockers %}
         <form method="post" action="{{ url_for('console.close_company', slug=org.slug) }}" class="ops-form" style="margin-top:var(--s3)"
-              onsubmit='return confirm({{ ("Close " ~ org.name ~ "? Nobody there will be able to sign in.")|tojson }})'>
+              onsubmit="return confirm('Close {{ org.name|js }}? Nobody there will be able to sign in.')">
           {{ confirm_fields(org.slug) }}
           <div><button class="btn btn-danger btn-sm" type="submit">Close {{ org.name }}</button></div>
         </form>
@@ -224,7 +224,7 @@
         {% else %}
         <p class="ops-bad" style="margin:var(--s2) 0">This deletes their data for good: customers, jobs, workers, photos. It cannot be undone. Copies in encrypted backups age out within 30 days.</p>
         <form method="post" action="{{ url_for('console.purge_company', slug=org.slug) }}" class="ops-form" style="margin-top:var(--s3)"
-              onsubmit='return confirm({{ ("Permanently delete all data for " ~ org.name ~ "? This cannot be undone.")|tojson }})'>
+              onsubmit="return confirm('Permanently delete all data for {{ org.name|js }}? This cannot be undone.')">
           {{ confirm_fields(org.slug, ack=True) }}
           <div><button class="btn btn-danger btn-sm" type="submit">Purge {{ org.name }} permanently</button></div>
         </form>
