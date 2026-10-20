@@ -235,7 +235,9 @@ def stripe_webhook():
 
     try:
         changed, detail = billing.apply_event(event)
+        _note_webhook(event, True, detail)
     except Exception as e:
+        _note_webhook(event, False, f'{type(e).__name__}: {e}')
         import errors
         errors.capture(e, path='/api/stripe/webhook', method='POST')
         # 500 so Stripe retries. The handlers are idempotent, so a retry is
@@ -253,3 +255,16 @@ def stripe_webhook():
         except Exception:
             pass
     return jsonify({'ok': True, 'detail': detail}), 200
+
+
+def _note_webhook(event, ok, detail):
+    """Write down that Stripe reached us, and how it went, for the console's
+    Health page. Never raises: the webhook's answer to Stripe must not depend
+    on this note."""
+    try:
+        import control_plane
+        control_plane.record_platform_run(
+            billing._engine(), 'stripe:webhook', ok=ok, items=1,
+            detail=f"{event.get('type', '?')}: {detail}"[:400])
+    except Exception:
+        pass

@@ -85,7 +85,8 @@ MONTHLY_LIMIT = int(os.environ.get('ASSISTANT_MONTHLY_LIMIT') or 300)
 def _api_key(explicit=None):
     """OpenRouter key for a real company; never spend platform AI on the demo."""
     import demo_guard
-    if demo_guard.active():
+    import llm
+    if demo_guard.active() or not llm.ai_enabled():
         return ''
     return (explicit or os.environ.get('OPENROUTER_API_KEY') or '').strip()
 
@@ -95,7 +96,7 @@ def configured():
     import llm
     # Whether a key is set, not whether this is the demo: the page has its
     # own demo sentence, and the demo used to read as configured here.
-    return bool(llm.key() or os.environ.get('OPENROUTER_API_KEY'))
+    return bool(llm.key() or (llm.ai_enabled() and os.environ.get('OPENROUTER_API_KEY')))
 
 
 # ---------------------------------------------------------------------------

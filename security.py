@@ -85,6 +85,7 @@ PRODUCT_CRON_PATHS = frozenset({
     '/api/trial-nudges',
     '/api/lead-nurture',
     '/api/rebuild-demo',
+    '/api/platform-run',        # backups and the scheduler report here
 })
 QUERY_SECRET_FORBIDDEN_PATHS = CRON_PATHS | PRODUCT_CRON_PATHS
 # Tenant-scoped provider webhooks only. Each company connects its own Twilio

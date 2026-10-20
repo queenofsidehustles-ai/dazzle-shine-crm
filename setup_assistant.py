@@ -87,6 +87,9 @@ def clear_chat():
 
 
 def api_key():
+    import llm
+    if not llm.ai_enabled():
+        return ''
     return (os.environ.get('ANTHROPIC_API_KEY') or '').strip()
 
 

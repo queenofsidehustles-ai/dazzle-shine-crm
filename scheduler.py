@@ -266,7 +266,23 @@ def main():
     if not jobs and not product:
         sys.exit('No jobs to run — automations.JOBS is empty or the cadence matched none.')
 
-    return 1 if run(jobs, only=args.only, quiet=args.quiet, product_jobs=product) else 0
+    failures = run(jobs, only=args.only, quiet=args.quiet, product_jobs=product)
+    # Tell the console how it went, so a schedule that stops is visible there
+    # and not only in this job's log. Never for a single-company test run, and
+    # never able to change the exit code.
+    if args.cadence and not args.only:
+        try:
+            import platform_report
+            n = len(failures)
+            sent, message = platform_report.report(
+                f'scheduler:{args.cadence}', ok=not n, items=len(jobs) + len(product),
+                detail=('every job ran' if not n else
+                        f'{n} failed: ' + '; '.join(f'{s}/{j}' for s, j, _d in failures[:6])))
+            if not args.quiet:
+                print(('✅ ' if sent else '⚠️  ') + message)
+        except Exception as e:  # noqa: BLE001
+            print(f'⚠️  could not report to the console: {e}')
+    return 1 if failures else 0
 
 
 if __name__ == '__main__':

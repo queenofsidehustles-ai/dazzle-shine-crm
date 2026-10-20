@@ -123,10 +123,16 @@ def signups_open():
 
     Self-service onboarding is the default. SIGNUPS_OPEN=0 is the deliberate
     off switch, for the rare stretch where companies are being onboarded by
-    hand instead; anything else, including unset, leaves the door open.
+    hand instead, and the console's Signups switch closes it the same way
+    without a redeploy; anything else, including unset, leaves the door open.
     """
-    return bool((os.environ.get('BASE_DOMAIN') or '').strip()) and \
-        os.environ.get('SIGNUPS_OPEN') != '0'
+    if not (bool((os.environ.get('BASE_DOMAIN') or '').strip())
+            and os.environ.get('SIGNUPS_OPEN') != '0'):
+        return False
+    # The console's switch can close the door too (platform_switches.py). The
+    # environment still wins: SIGNUPS_OPEN=0 stays closed whatever it says.
+    import platform_switches
+    return platform_switches.is_on('signups')
 
 
 def _require_open():

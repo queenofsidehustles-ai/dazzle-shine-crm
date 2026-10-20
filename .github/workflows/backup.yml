@@ -152,6 +152,40 @@ jobs:
           overwrite: true
           if-no-files-found: ignore
 
+      - name: Tell the Akye console how it went
+        # So the console's Health page can say when this last succeeded, and
+        # flag it when it has not. Self-contained on purpose (no script from
+        # the checked-out branch): the backup checks out akye-stable, and this
+        # must work whichever branch that is. Never fails the build: a backup
+        # that worked and could not announce itself is still a backup.
+        if: always()
+        continue-on-error: true
+        env:
+          REMINDER_API_KEY: ${{ secrets.REMINDER_API_KEY }}
+          BASE_DOMAIN: akyehq.com
+          OUTCOME: ${{ job.status }}
+          KIND: backup:${{ matrix.key }}
+          LABEL: ${{ matrix.label }}
+        run: |
+          if [ -z "$REMINDER_API_KEY" ]; then
+            echo "::warning::REMINDER_API_KEY is not set, so the console cannot show this backup's status."
+            exit 0
+          fi
+          payload=$(python3 - <<'PY'
+          import glob, json, os
+          files = sorted(glob.glob('backups/*.manifest.json'))
+          rows = json.load(open(files[-1])).get('total_rows', 0) if files else 0
+          outcome = os.environ['OUTCOME']
+          print(json.dumps({
+              'kind': os.environ['KIND'], 'ok': outcome == 'success', 'items': rows,
+              'detail': f"{os.environ['LABEL']}: {outcome}, {rows:,} rows"}))
+          PY
+          )
+          curl -fsS --max-time 20 -X POST "https://www.${BASE_DOMAIN}/api/platform-run" \
+            -H "X-Api-Key: ${REMINDER_API_KEY}" -H 'Content-Type: application/json' \
+            -d "$payload" \
+            || echo "::warning::Could not report to the console (is the new endpoint deployed yet?)"
+
       - name: Say what happened
         if: always()
         run: |

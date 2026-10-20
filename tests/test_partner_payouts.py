@@ -408,6 +408,7 @@ try:
     for exc, expect_uncertain in (
             (stripe.InvalidRequestError('Insufficient funds', param=None), False),
             (stripe.APIConnectionError('reset'), True),
+            (stripe.APIError('Internal server error', http_status=500), True),
             (RuntimeError('a bug of ours'), True)):
         def boom(*a, **k):
             raise exc

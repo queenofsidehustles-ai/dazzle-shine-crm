@@ -122,8 +122,16 @@ def transfer(account_id, amount_cents, description, idempotency_key):
         # A response from Stripe that says no is a definite no. Anything else
         # (the connection dropped, the request timed out, a bug on our side)
         # leaves the answer unknown.
+        #
+        # A server error (HTTP 5xx, Stripe's APIError) is not an answer: the
+        # transfer may have been made before the error response was sent. Left
+        # pending, the retry reuses the idempotency key and cannot pay twice;
+        # released, the next Pay would make a new payout with a new key.
         base = _error_class(stripe, 'StripeError')
-        dropped = _error_class(stripe, 'APIConnectionError')
+        unsure = tuple(c for c in (_error_class(stripe, 'APIConnectionError'),
+                                   _error_class(stripe, 'APIError')) if c)
+        status = getattr(e, 'http_status', None)
         definite = bool(base) and isinstance(e, base) \
-            and not (dropped and isinstance(e, dropped))
+            and not (unsure and isinstance(e, unsure)) \
+            and not (isinstance(status, int) and status >= 500)
         return False, _message(e), not definite
