@@ -294,6 +294,10 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                 # head and evidence hashes. certify.py compare checks a later
                 # database against it; verify() checks the restore against it.
                 'evidence': {s: d for s, d in evidence.items() if 'error' not in d},
+                # Which schemas had an audit chain in the database read, so
+                # had evidence to write down. The restore cannot say: it is
+                # migrated to this code's head, chain or no chain at source.
+                'chained': sorted(s for s, tables in by_schema.items() if _chained(tables)),
                 'evidence_problems': [f'{s}: {d["error"]}' for s, d in evidence.items() if 'error' in d]
                 + anchor}
 
@@ -810,10 +814,12 @@ def _verify_evidence(path, scratch_url, tenants, require=False):
     if not scratch_url.startswith('postgres'):
         return []
     sidecar = path.replace('.json.gz', '.manifest.json')
-    written = {}
+    written, source_chained = {}, None
     if os.path.exists(sidecar):
         with open(sidecar) as fh:
-            written = json.load(fh).get('evidence') or {}
+            meta = json.load(fh)
+        written = meta.get('evidence') or {}
+        source_chained = meta.get('chained')
     import evidence_check
     from sqlalchemy import text
     problems = []
@@ -821,12 +827,19 @@ def _verify_evidence(path, scratch_url, tenants, require=False):
     try:
         with engine.connect() as conn, conn.begin():
             evidence_check.read_only(conn)
-            # Which restored schemas hold an audit chain, so had evidence to
-            # write down -- every company on Akye, public on a single business.
-            # A database from before 0031 has none, and nothing is required.
-            chained = set(conn.execute(text(
-                "SELECT table_schema FROM information_schema.columns "
-                "WHERE table_name = 'contract_audit_event' AND column_name = 'chain_seq'")).scalars())
+            # Which schemas held an audit chain, so had evidence to write
+            # down -- every company on Akye, public on a single business. A
+            # database from before 0031 has none, and nothing is required.
+            # The manifest says, from the database the backup read; the
+            # restore cannot, being migrated to head whatever the source was
+            # (a single business still on 0021 failed every night on that).
+            # Older manifests do not say, so the restore is asked.
+            if source_chained is not None:
+                chained = set(source_chained)
+            else:
+                chained = set(conn.execute(text(
+                    "SELECT table_schema FROM information_schema.columns "
+                    "WHERE table_name = 'contract_audit_event' AND column_name = 'chain_seq'")).scalars())
             if require and chained and not written:
                 # Without this a manifest with nothing written down passed:
                 # every check below is skipped when there is nothing to hold

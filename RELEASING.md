@@ -155,11 +155,32 @@ If the first command prints nothing, something landed on `main` since; port it
 to `akye-stable` (or merge `main` in again) before promoting.
 
 Before you push, check in Railway whether any service still deploys from
-`main` (your own instance, above). If one does, promoting puts Akye's code on
-it, and its database is migrated on the next boot. That works: main's
-photo-wording migration id is kept here as a no-op
-(`0021_photo_optional_wording`), so a database stamped with it upgrades
-through 0021_quote_prospect to 0033. But it is a different product on that
-instance, so repoint or retire the service first if that is not what you want.
-The scheduled workflows (backup, automations, demo rebuild) run from `main`'s
-copies, which after the push are akye-stable's.
+`main` (your own instance, above). `main` has carried Akye's code since the
+first promotion (81a635d), so such an instance already runs it, as a single
+business (no `BASE_DOMAIN`); promoting moves it on to akye-stable's release
+and migrates its database on the next boot. That works: main's photo-wording
+migration id is kept here as a no-op (`0021_photo_optional_wording`), so a
+database stamped with it upgrades through 0021_quote_prospect to 0033 with
+every row kept. The scheduled workflows (backup, automations, demo rebuild)
+run from `main`'s copies, which after the push are akye-stable's.
+
+### What a dry run of the promotion found (20 Oct 2026)
+
+Rehearsed on a database built by main's own code (migrations, then the demo
+seed), with akye-stable's code run against it as the push would:
+
+- **Startup:** migrates 0021_photo_optional_wording → 0033, rows unchanged,
+  pages load.
+- **Nightly backup of your own database** (the `dazzle` job, which checks out
+  `main`): failed on akye-stable's backup.py while that database had not been
+  migrated, demanding contract evidence it predates. Fixed: the manifest now
+  records which schemas had an audit chain at source, and only those are held
+  to it. That database has not changed between nightly backups (every table's
+  count identical, including `cron_run`), so nothing is running against it
+  and it would have stayed on 0021, and failed, every night.
+- **release.py** still maps the CRM line `main → stable` and Akye
+  `feature/tenancy → akye-stable`. Once `main` is Akye, `release.py --go` would
+  put Akye on the `stable` branch (the CRM's customer channel). Do not run it
+  until the mapping is updated or that line retired.
+- **CI** runs only on pull requests to, and pushes to, `akye-stable`. Pull
+  requests opened against `main`, the default branch, get no checks.

@@ -293,6 +293,15 @@ check(ok, 'while an older backup, from before evidence was recorded, still verif
 check(backup._verify_evidence(bare, os.environ['DATABASE_URL'], [], require=True)
       == ['the backup wrote down no contract evidence at all'],
       'a single business with no evidence written down fails the nightly run too')
+check(set(m['chained']) >= {SA}, 'the manifest says which schemas had a chain to write down')
+# A database from before 0031 had no chain, so nothing to write down: the
+# restore, migrated to head, has one anyway and must not decide that.
+unchained = bare.replace('-bare', '-unchained')
+shutil.copy(path, unchained)
+with open(unchained.replace('.json.gz', '.manifest.json'), 'w') as fh:
+    json.dump(dict(m, chained=[]), fh)
+check(backup._verify_evidence(unchained, os.environ['DATABASE_URL'], [], require=True) == [],
+      'a backup of a database from before the audit chain passes the nightly run')
 only_tenants = bare.replace('-bare', '-notpublic')
 shutil.copy(path, only_tenants)
 m_full = json.load(open(path.replace('.json.gz', '.manifest.json')))
