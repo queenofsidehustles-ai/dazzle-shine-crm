@@ -164,18 +164,14 @@ print('\n9. Two products, two lines, and they cannot be confused')
 # than the business selling it.
 rel = load_release_py()
 dazzle, akye = rel.LINES['dazzle'], rel.LINES['akye']
-# Dazzle & Shine now runs on Akye as a company, and main is Akye. The
-# single-business line ships only from its archive, so a release can never put
-# Akye on the single-business customers' channel.
+# Dazzle & Shine now runs on Akye as a company, and main is Akye's working
+# branch. The single-business line ships only from its archive, so a release
+# can never put Akye on the single-business customers' channel.
 check(dazzle.source == 'dazzle-shine-single-tenant' and dazzle.channel == 'stable',
       'the single-business CRM ships its archive → stable, never main')
-check(akye.source == akye.channel == 'main',
-      'Akye deploys main itself, so there is nothing to promote')
+check(akye.source == 'main' and akye.channel == 'akye-stable',
+      'Akye ships main → akye-stable: merging is not releasing')
 check(akye.channel != dazzle.channel, 'the two channels are separate branches')
-r = subprocess.run([sys.executable, str(ROOT / 'release.py'), '--akye'],
-                   capture_output=True, text=True, cwd=ROOT)
-check(r.returncode != 0 and 'merged into it' in r.stderr,
-      'and release.py --akye says a merged pull request is the release')
 
 check(dazzle.tag_prefix != akye.tag_prefix,
       'each line has its own tag series, so same-day releases cannot collide')
