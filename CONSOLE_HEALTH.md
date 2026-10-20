@@ -72,7 +72,7 @@ database blinked.
 | New signups | nobody can open an account. `SIGNUPS_OPEN=0` still wins: the console cannot reopen it |
 | AI features | Nana, the setup chat, drafted content and translation behave as if no Claude key were set |
 | Texting | every text from every company stops, **including job and reminder texts**. For a runaway bill or abuse, not routine use |
-| Partner payouts | no partner can be paid; commissions keep accruing |
+| Partner payouts | no partner can be paid; commissions keep accruing. Unlike the others this one fails closed: if the switch cannot be read, nobody is paid. `PARTNER_PAYOUTS_OPEN=0` also stops it whatever the console says. A retry of a payout over a day old first asks Stripe whether it was already sent |
 
 A switch takes effect immediately in the worker that handled the click and within
 about 8 seconds everywhere else.
