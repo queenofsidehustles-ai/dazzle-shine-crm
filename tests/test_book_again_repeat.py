@@ -73,4 +73,29 @@ with app.app_context():
     c.post(f'/bookings/{done.id}/book-again', data={'repeat_date': '2026-12-07', 'repeat_price': 'abc'})
     c.post(f'/bookings/{pending.id}/book-again', data={'repeat_date': '2026-12-07'})
     check(Booking.query.count() == n, 'no date / bad price / not completed creates nothing')
+
+    print('\n4. Review fixes')
+    done.promised_checklist = 'Kitchen\nBathrooms'
+    crew_job = Booking(client_id=cl.id, service_type='deep', name=cl.name, status='completed',
+                       preferred_date='2026-08-01', crew_size=2, assigned_cleaner='Ana', price=300)
+    db.session.add(crew_job); db.session.commit()
+    c.post(f'/bookings/{done.id}/book-again', data={'repeat_date': '2026-12-08', 'same_cleaner': '1'})
+    kept = Booking.query.filter_by(repeat_of_booking_id=done.id, preferred_date='2026-12-08').one()
+    check(kept.promised_checklist == 'Kitchen\nBathrooms', 'accepted checklist carried')
+    c.post(f'/bookings/{crew_job.id}/book-again', data={'repeat_date': '2026-12-09', 'same_cleaner': '1'})
+    crew_new = Booking.query.filter_by(repeat_of_booking_id=crew_job.id).one()
+    check(crew_new.assigned_cleaner is None and crew_new.crew_size == 2, 'crew job repeats unassigned, same size')
+    import entitlements
+    orig = entitlements.check_limit
+    entitlements.check_limit = lambda name: (False, 'at limit')
+    n = Booking.query.count()
+    c.post(f'/bookings/{done.id}/book-again', data={'repeat_date': '2026-12-10'})
+    entitlements.check_limit = orig
+    check(Booking.query.count() == n, 'monthly job limit is enforced')
+    # completed_at beats booking id for "last clean"
+    from datetime import datetime
+    done.completed_at = datetime(2026, 10, 1); crew_job.completed_at = datetime(2026, 9, 1)
+    db.session.commit()
+    check(f'/bookings/{done.id}#book-again' in c.get(f'/bookings/clients/{cl.id}').get_data(as_text=True),
+          'last clean picked by completion date, not id')
 print('\nAll good')
