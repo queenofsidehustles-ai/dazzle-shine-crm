@@ -98,4 +98,15 @@ with app.app_context():
     db.session.commit()
     check(f'/bookings/{done.id}#book-again' in c.get(f'/bookings/clients/{cl.id}').get_data(as_text=True),
           'last clean picked by completion date, not id')
+
+    print('\n4. Only a login that may create bookings can book again')
+    # Unclassified routes defer to the route itself for most roles, and this
+    # one checks nothing -- so it must be in the matrix, as creating a booking.
+    import rbac
+    check(rbac.required_permission('bookings.book_again', 'POST') == 'booking.create',
+          'Book again is classified as creating a booking')
+    for role, may in (('owner', True), ('admin', True), ('dispatcher', True),
+                      ('limited', False), ('cleaner', False), ('sales', False)):
+        check(rbac.has_permission(role, 'booking.create') is may,
+              f'{role}: {"may" if may else "may not"} book again')
 print('\nAll good')

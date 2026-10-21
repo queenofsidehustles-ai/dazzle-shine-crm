@@ -75,6 +75,9 @@ ENDPOINT_PERMISSIONS = {
     ('bookings.new', 'GET'): 'booking.create',
     ('bookings.new', 'POST'): 'booking.create',
     ('bookings.price_preview', 'GET'): 'booking.create',
+    # Book again makes a new chargeable booking from a finished one, carrying
+    # its customer's saved card: creating a booking, so the same permission.
+    ('bookings.book_again', 'POST'): 'booking.create',
     ('bookings.reschedule', 'POST'): 'dispatch.manage',
     ('bookings.notify_moved', 'POST'): 'dispatch.manage',
     ('bookings.broadcast', 'POST'): 'dispatch.manage',
