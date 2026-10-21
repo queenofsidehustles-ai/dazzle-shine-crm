@@ -27,6 +27,7 @@ owner locked out of her own schedule over an expired card would rightly never
 come back, and we would have taken her data hostage over $99.
 """
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 import control_plane
@@ -48,6 +49,27 @@ def stripe_key():
     flow of money, and confusing the two would mean subscriptions billed to the
     customer's own processor."""
     return (os.environ.get('STRIPE_PLATFORM_SECRET_KEY') or '').strip()
+
+
+_STRIPE_ID = re.compile(r'^(cus|sub)_[A-Za-z0-9]{6,60}$')
+
+
+def dashboard_links(org):
+    """Where to look this company up in Stripe: {'customer': url, 'subscription': url}.
+
+    Only the ones the company actually has. The links follow the mode of the key
+    this deployment uses (a test key opens the dashboard's test mode), so staff
+    do not land on an empty page and conclude the customer is missing. An id
+    that is not shaped like a Stripe id is left out rather than put in a URL."""
+    base = 'https://dashboard.stripe.com/' + (
+        'test/' if stripe_key().startswith(('sk_test_', 'rk_test_')) else '')
+    out = {}
+    for field, path, kind in (('stripe_customer_id', 'customers', 'customer'),
+                              ('stripe_subscription_id', 'subscriptions', 'subscription')):
+        value = (org.get(field) or '').strip()
+        if _STRIPE_ID.match(value):
+            out[kind] = f'{base}{path}/{value}'
+    return out
 
 
 def webhook_secret():

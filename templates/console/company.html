@@ -25,7 +25,10 @@
 <div class="ops-grid">
   <div class="ops-card"><span class="ops-dim">Plan</span>
     <span class="v">{{ org.plan or 'solo' }}</span>
-    <span class="ops-dim">{{ org.subscription_status }}{% if org.grandfathered %} · grandfathered{% endif %}</span></div>
+    <span class="ops-dim">{{ org.subscription_status }}{% if org.grandfathered %} · grandfathered{% endif %}</span>
+    {% if stripe_links %}<span class="ops-dim">In Stripe:
+      {% if stripe_links.customer %}<a href="{{ stripe_links.customer }}" target="_blank" rel="noopener noreferrer">customer</a>{% endif %}
+      {% if stripe_links.subscription %}<a href="{{ stripe_links.subscription }}" target="_blank" rel="noopener noreferrer">subscription</a>{% endif %}</span>{% endif %}</div>
   <div class="ops-card"><span class="ops-dim">Trial</span>
     {% if trial %}
       <span class="v">{% if trial.phase == 'over' %}over{% else %}{{ trial.days_left }}d{% endif %}</span>

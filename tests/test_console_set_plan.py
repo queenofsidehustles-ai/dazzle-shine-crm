@@ -147,6 +147,28 @@ with app.app_context():
     finally:
         db.session.remove()
 
+    print('\n9. Where to find them in Stripe')
+    page = c.get(f'/console/companies/{SLUG}').data.decode()
+    check('dashboard.stripe.com' not in page, 'a company with no Stripe ids has no Stripe links')
+    control_plane.set_billing(provisioning._engine(), SLUG,
+                              stripe_customer_id='cus_Abc123XyzQ',
+                              stripe_subscription_id='sub_Def456UvwR')
+    page = c.get(f'/console/companies/{SLUG}').data.decode()
+    check('dashboard.stripe.com/customers/cus_Abc123XyzQ' in page
+          and 'dashboard.stripe.com/subscriptions/sub_Def456UvwR' in page,
+          'once it has them, the company page links to the customer and the subscription')
+    import billing
+    check(billing.dashboard_links({'stripe_customer_id': 'cus_x/../../evil'}) == {},
+          'an id that is not shaped like a Stripe id is never put in a link')
+    os.environ['STRIPE_PLATFORM_SECRET_KEY'] = 'sk_test_abc'
+    check(billing.dashboard_links({'stripe_customer_id': 'cus_Abc123XyzQ'})['customer']
+          == 'https://dashboard.stripe.com/test/customers/cus_Abc123XyzQ',
+          'a test key opens the dashboard in test mode')
+    os.environ['STRIPE_PLATFORM_SECRET_KEY'] = 'sk_live_abc'
+    check('/test/' not in billing.dashboard_links({'stripe_customer_id': 'cus_Abc123XyzQ'})['customer'],
+          'and a live key opens live mode')
+    os.environ.pop('STRIPE_PLATFORM_SECRET_KEY', None)
+
 if failures:
     print(f'\n❌ {len(failures)} failed:')
     for f in failures:

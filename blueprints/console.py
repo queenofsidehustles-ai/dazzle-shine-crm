@@ -338,6 +338,7 @@ def company(slug):
         purge_from=(closed_at + timedelta(days=tenant_data_lifecycle.RETENTION_DAYS)
                     if closed_at else None),
         lc=_lifecycle_view(engine, org),
+        stripe_links=billing.dashboard_links(org),
         is_owner=_is_owner(),
         may_operate=_may_operate(),
         me=request.console_user, counts=_counts(engine))
