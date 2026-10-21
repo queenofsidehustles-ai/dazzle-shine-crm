@@ -14,7 +14,21 @@
     {{ a.category_label }} · {{ a.frequency_label }}<br>
     {% if a.source == 'find_leads' %}📞 closed from Find Leads{% else %}✍️ added by hand{% endif %}
   </div>
+  <a href="{{ url_for('commercial.book', account_id=a.id) }}" class="btn btn-gold" style="padding:10px 20px">📅 Book a job</a>
 </div>
+
+{% if jobs %}
+<div class="card" id="accountJobs" style="margin-bottom:18px">
+  <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);margin:0 0 10px">Jobs</h3>
+  {% for j in jobs %}
+  <p style="font-size:0.88rem;margin:0 0 6px">
+    <a href="{{ url_for('bookings.detail', booking_id=j.id) }}">#{{ j.id }}</a> · {{ j.preferred_date or 'no date' }}{% if j.preferred_time %} {{ j.preferred_time }}{% endif %}
+    · ${{ '%.2f' % (j.price or 0) }} · {{ j.status_label }}{% if j.assigned_cleaner %} · {{ j.assigned_cleaner }}{% endif %}
+    {% if j.paid_at %}<span class="status status-completed">paid</span>{% elif j.invoice_number %}<span style="color:var(--softer)">· invoice {{ j.invoice_number }}</span>{% endif %}
+  </p>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="card">
   <form method="POST" action="{{ url_for('commercial.detail', account_id=a.id) }}"

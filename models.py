@@ -94,6 +94,10 @@ class Booking(db.Model):
     bathrooms = db.Column(db.String(10))
     sqft = db.Column(db.Integer)        # optional home size — drives the sqft surcharge
     extras = db.Column(db.String(200))  # comma-separated: oven, fridge, laundry
+    # A commercial job: the account it is for, and what is cleaned in place of
+    # bedrooms and bathrooms. See migration 0034.
+    commercial_account_id = db.Column(db.Integer, index=True)
+    scope_of_work = db.Column(db.Text)
 
     # Frequency
     frequency = db.Column(db.String(20), default='one_time')  # one_time, weekly, biweekly, monthly
@@ -271,6 +275,7 @@ class Booking(db.Model):
 
     SERVICE_LABELS = {
         'standard': 'Standard House Cleaning',
+        'commercial': 'Commercial Cleaning',
         'deep': 'Deep Cleaning',
         'moveout': 'Move-Out / Move-In Cleaning',
         'airbnb': 'Airbnb / Vacation Rental',
@@ -310,6 +315,39 @@ class Booking(db.Model):
     @property
     def is_held(self):
         return self.status == 'on_hold'
+
+    @property
+    def is_commercial(self):
+        return bool(self.commercial_account_id) or self.service_type == 'commercial'
+
+    def home_text(self):
+        """'3 bed / 2 bath' for a house; the size, or 'Commercial', for a business."""
+        if self.is_commercial:
+            return self.size_line() or 'Commercial'
+        return f'{self.bedrooms} bed / {self.bathrooms} bath'
+
+    def scope_items(self):
+        """The scope of work as a list of tasks -- a commercial job's
+        checklist, where a house's comes from its service."""
+        return [l.strip().lstrip('•').strip() for l in (self.scope_of_work or '').splitlines()
+                if l.strip().lstrip('•').strip()]
+
+    def commercial_carry(self):
+        """What a commercial job hands on to the next visit in its series.
+        Bedrooms and bathrooms are copied for a house; for a business these
+        are what say what the job is, and the hours are what the cleaner is
+        paid from."""
+        if not self.is_commercial:
+            return {}
+        return dict(commercial_account_id=self.commercial_account_id,
+                    scope_of_work=self.scope_of_work,
+                    estimated_hours=self.estimated_hours,
+                    labor_rate_applied=self.labor_rate_applied)
+
+    @property
+    def commercial_account(self):
+        return CommercialAccount.query.get(self.commercial_account_id) if self.commercial_account_id else None
+
 
     @property
     def days_on_hold(self):
