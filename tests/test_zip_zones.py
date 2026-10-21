@@ -56,6 +56,14 @@ check(z.resolve('49801', 'America/Denver') == ('America/New_York', 'zip'),
       'but a browser in neither of its zones does not override the ZIP')
 check(z.resolve('59101', 'America/New_York') == ('America/Denver', 'zip'),
       'and a single-zone prefix keeps the ZIP, wherever the browser is')
+for zip_code, browser, where in (
+        ('32456', 'America/New_York', 'Port St. Joe, FL (Eastern, in a Central prefix)'),
+        ('58639', 'America/Chicago', 'Glen Ullin, ND (Central, in a Mountain prefix)'),
+        ('79830', 'America/Chicago', 'Alpine, TX (Central, beside El Paso)'),
+        ('49858', 'America/Menominee', 'Menominee, MI, reporting its regional name'),
+        ('49855', 'America/Detroit', 'Marquette, MI, reporting its regional name')):
+    check(z.resolve(zip_code, browser) == (browser, 'zip+browser'),
+          f"{where}: the browser's side of the line")
 
 print('\n3. The map itself')
 prev = -1

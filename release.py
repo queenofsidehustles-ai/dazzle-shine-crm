@@ -228,7 +228,8 @@ def release_manifest(line, tag, checked_sha, evidence, commits, previous):
     out += [f'  {e}' for e in evidence] or ['  (none required)']
     out += ['', f'Migrations: every company to {migration_head()}.', '',
             'Changes:'] + [f'  {c}' for c in commits]
-    out += ['', 'Rollback: python3 release.py --akye --rollback'
+    flag = ' --akye' if line.key == 'akye' else ''
+    out += ['', f'Rollback: python3 release.py{flag} --rollback'
             + (f' (back to {previous}).' if previous else ' (no earlier release).')]
     return '\n'.join(out)
 

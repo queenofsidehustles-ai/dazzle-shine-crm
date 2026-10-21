@@ -225,6 +225,8 @@ for part, what in (('abc1234def', 'the exact commit whose checks were required')
     check(part in m, f'the manifest names {what}')
 check('(no earlier release)' in rel.release_manifest(akye, 't', 's', ev, [], None),
       'a first release says there is nothing to roll back to')
+check('release.py --rollback (back to v1)' in rel.release_manifest(dazzle, 'v2', 's', [], [], 'v1'),
+      "and the single-business line's record rolls back its own line, without --akye")
 src2 = (ROOT / 'release.py').read_text()
 go2 = src2[src2.index('def go('):src2.index('def rollback(')]
 check("'-m', manifest" in go2, 'and go() writes it as the tag message')

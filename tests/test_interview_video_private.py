@@ -135,6 +135,35 @@ with app.app_context():
     check(r.status_code == 400, f'an unverified upload is refused (got {r.status_code})')
     check(InterviewResponse.query.filter_by(cloudinary_public_id=planted).first() is None,
           "and another company's video id is not stored")
+    # The id that is checked must be the id that is stored: an in-folder
+    # public_id with somebody else's id beside it is refused, not stored.
+    r = c.post('/interview/tok-123/save', json={
+        'question_index': 2, 'question_en': 'Why now?',
+        'public_id': f'akye-private/{SLUG}/{KIND}/q2', 'version': '7',
+        'format': 'mp4', 'resource_type': 'video',
+        'cloudinary_public_id': planted,
+    })
+    check(r.status_code == 400 and
+          InterviewResponse.query.filter_by(cloudinary_public_id=planted).first() is None,
+          'a checked id with a different one alongside it is refused')
+    # Exactly what the page sends -- Cloudinary's reply, and nothing named
+    # cloudinary_* -- saves. The check is only safe if real recordings pass it.
+    r = c.post('/interview/tok-123/save', json={
+        'question_index': 3, 'question_en': 'When can you start?',
+        'public_id': f'akye-private/{SLUG}/{KIND}/q3', 'version': 1734567890,
+        'format': 'webm', 'resource_type': 'video',
+        'transcript': '', 'transcript_lang': 'en',
+    })
+    saved = InterviewResponse.query.filter_by(application_id=rec.id, question_index=3).first()
+    check(r.status_code == 200 and saved is not None
+          and saved.cloudinary_public_id == f'akye-private/{SLUG}/{KIND}/q3'
+          and private_media.is_private_ref(saved.cloudinary_url),
+          "what the page actually posts saves, with the checked id and a signed reference")
+    page_js = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                'templates', 'interview', 'interview.html')).read()
+    sent = page_js[page_js.index('/save`'):page_js.index("if (!saveRes.ok)")]
+    check(all(f'{k}: cloud.{k}' in sent for k in ('public_id', 'version', 'format', 'resource_type')),
+          "and the page sends every field of Cloudinary's reply the check needs")
 
     print('\n5. Playback is behind the office login')
     anon = app.test_client()

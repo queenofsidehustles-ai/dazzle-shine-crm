@@ -67,10 +67,18 @@ _RANGES = [
 # Prefixes that cross a zone line inside themselves, with the zones they
 # cover. The range above gives the likelier one; a browser that is in one of
 # these others is believed instead (resolve()).
+# Each lists every name a browser on either side may report, regional ones
+# included (a Menominee browser says America/Menominee, not America/Chicago).
 MIXED = {
-    498: ('America/New_York', 'America/Chicago'),    # MI: Upper Peninsula
-    499: ('America/New_York', 'America/Chicago'),
+    324: ('America/Chicago', 'America/New_York'),    # FL: Panama City / Port St. Joe
+    498: ('America/New_York', 'America/Detroit',     # MI: Upper Peninsula
+          'America/Chicago', 'America/Menominee'),
+    499: ('America/New_York', 'America/Detroit',
+          'America/Chicago', 'America/Menominee'),
+    586: ('America/Denver', 'America/Chicago',       # ND: Dickinson / Glen Ullin
+          'America/North_Dakota/Center'),
     677: ('America/Chicago', 'America/Denver'),      # KS: the far west
+    798: ('America/Denver', 'America/Chicago'),      # TX: El Paso / Alpine
     979: ('America/Los_Angeles', 'America/Boise'),   # OR: Malheur County
 }
 
