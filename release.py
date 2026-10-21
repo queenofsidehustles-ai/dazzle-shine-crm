@@ -173,7 +173,7 @@ def require_green(line, sha):
     Railway deploys the channel the moment it moves, so the checks on the
     exact commit are the gate, before the push, not a report after it."""
     if not line.required_checks:
-        return
+        return []
     runs = check_runs(sha)
     if runs is None:
         repo = _github_repo() or 'the repository'
@@ -184,13 +184,53 @@ def require_green(line, sha):
             say(f'  · {name}')
         if input(f'Type {sha[:7]} if every one is green: ').strip() != sha[:7]:
             sys.exit('Not released — nothing changed.')
-        return
+        return [f'{name}: confirmed green by hand at https://github.com/{repo}/commit/{sha}'
+                for name in line.required_checks]
     problems = check_problems(runs, line.required_checks)
     if problems:
         sys.exit(f'{line.source} at {sha[:7]} is not ready to release:\n'
                  + '\n'.join(f'  · {p}' for p in problems)
                  + '\nNothing was released.')
     say(f'All {len(line.required_checks)} checks passed on {sha[:7]}.')
+    return check_evidence(runs, line.required_checks)
+
+
+def check_evidence(runs, required):
+    """One line per required check: its result and the run it came from, so
+    the release records which runs it was let through on."""
+    newest = {}
+    for r in runs:
+        if r.get('name') in required and r.get('id', 0) >= newest.get(r['name'], {}).get('id', -1):
+            newest[r['name']] = r
+    return [f'{name}: {newest[name].get("conclusion")} ({newest[name].get("html_url") or newest[name].get("id")})'
+            for name in required if name in newest]
+
+
+def migration_head():
+    """The schema revision this release migrates every company to."""
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        cfg = Config()
+        cfg.set_main_option('script_location', str(ROOT / 'migrations'))
+        return ScriptDirectory.from_config(cfg).get_current_head()
+    except Exception as e:  # noqa: BLE001
+        return f'(could not read: {e})'
+
+
+def release_manifest(line, tag, checked_sha, evidence, commits, previous):
+    """What a release was, written into its tag: the evidence a later reader
+    needs without going back to the Actions page or the terminal."""
+    out = [f'Release {tag} — {len(commits)} change(s)', '',
+           f'Promotes {line.source} to {line.channel} ({line.audience}).',
+           f'Checked commit: {checked_sha} (the release commit adds only RELEASE).', '',
+           'Checks on the checked commit:']
+    out += [f'  {e}' for e in evidence] or ['  (none required)']
+    out += ['', f'Migrations: every company to {migration_head()}.', '',
+            'Changes:'] + [f'  {c}' for c in commits]
+    out += ['', 'Rollback: python3 release.py --akye --rollback'
+            + (f' (back to {previous}).' if previous else ' (no earlier release).')]
+    return '\n'.join(out)
 
 
 def release_before(tags, current, commit_of):
@@ -352,7 +392,8 @@ def go(line):
         sys.exit(f'Nothing to release — {line.channel} already matches '
                  f'{line.source}.')
 
-    require_green(line, git('rev-parse', f'{REMOTE}/{line.source}'))
+    checked = git('rev-parse', f'{REMOTE}/{line.source}')
+    evidence = require_green(line, checked)
 
     say(f'Releasing {line.product} to {line.audience}:\n')
     for c in commits:
@@ -376,13 +417,17 @@ def go(line):
     git('commit', '-m', f'Release {tag}')
     git('push', REMOTE, line.source)
 
-    git('tag', '-a', tag, '-m', f'Release {tag} — {len(commits)} change(s)',
-        line.source)
+    earlier = line_tags(line)
+    manifest = release_manifest(line, tag, checked, evidence, commits,
+                                earlier[0] if earlier else None)
+    git('tag', '-a', tag, '-m', manifest, line.source)
     # Fast-forward only: the channel can never contain anything the source does not.
     git('branch', '-f', line.channel, line.source)
     git('push', REMOTE, f'{line.channel}:{line.channel}')
     git('push', REMOTE, tag)
+    say(f'\n{manifest}')
     say(f'\n✅ Released {tag}. Instances will redeploy within a few minutes.')
+    say(f'   The above is kept as the tag\'s message: git show {tag}')
     say(f'   Check one at /version — it should report release {tag} '
         f'on channel {line.channel}.')
 

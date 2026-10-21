@@ -34,6 +34,11 @@ it; the push to `akye-stable` certifies the exact deployed commit once more.
 A fix goes in on `main` and goes out in the next release; `akye-stable` never
 takes a commit `main` does not have.
 
+The release's record is its tag. `git show akye-vYYYY.MM.DD` gives the
+checked commit, each required check with the run it passed in, the migration
+head every company moves to, the changes, and the rollback command; `--go`
+prints the same at the end.
+
 `--rollback` starts from the release `akye-stable` is on and goes back one,
 so running it twice goes back two.
 
