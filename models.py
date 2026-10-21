@@ -118,6 +118,10 @@ class Booking(db.Model):
     # never the customer. The payer stays in `email`; this is the passenger.
     cc_email = db.Column(db.String(120))
     cc_name = db.Column(db.String(120))
+    # Set when this job was made with "Book again" on a finished one — an
+    # on-demand repeat, not part of any recurring plan.
+    repeat_of_booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=True, index=True)
+    repeat_of = db.relationship('Booking', remote_side=[id], backref='repeats')
 
     # Payment
     stripe_payment_intent = db.Column(db.String(100))
