@@ -23,7 +23,7 @@
       </form>
       {% if waiting %}
       <form method="POST" action="{{ url_for('team.ask_availability') }}"
-            onsubmit="return confirm('Nudge only the {{ waiting|length }} who haven\'t answered?')">
+            onsubmit="return confirm('Nudge only the {{ waiting|length|js }} who haven\'t answered?')">
         <input type="hidden" name="week" value="{{ offset }}">
         <input type="hidden" name="only_waiting" value="1">
         <button type="submit" class="btn btn-outline" style="padding:8px 16px">Nudge the {{ waiting|length }} who haven't replied</button>

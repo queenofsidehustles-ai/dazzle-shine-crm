@@ -49,18 +49,39 @@ from datetime import datetime
 COOKIE = 'akye_src'
 MAX_AGE = 90 * 24 * 3600          # a quarter: long enough for a slow decision
 PARAMS = {'utm_source': 'source', 'utm_medium': 'medium',
-          'utm_campaign': 'campaign'}
-FIELDS = ('source', 'medium', 'campaign', 'ref', 'aff', 'referrer', 'landing')
+          'utm_campaign': 'campaign', 'utm_content': 'content'}
+FIELDS = ('source', 'medium', 'campaign', 'content', 'ref', 'aff', 'referrer',
+          'landing', 'fbc')
+
+# Most fields are a word or two. `fbc` is Meta's click id wrapped in their
+# required envelope and runs well past a hundred characters, so a single
+# shared cap would quietly saw the end off every one of them -- and half a
+# click id does not match anything, it just fails silently and looks fine.
+LIMITS = {'fbc': 255}
+DEFAULT_LIMIT = 120
 
 _UNSAFE = re.compile(r'[^a-z0-9 _.+\-]')
 _REF_UNSAFE = re.compile(r'[^a-z0-9\-]')
 _PATH_UNSAFE = re.compile(r'[^a-z0-9/_.\-]')
+# Case kept, which is the whole point of a separate pattern.
+_CLICK_UNSAFE = re.compile(r'[^A-Za-z0-9_.\-]')
 
 
 def clean(value, limit=80):
     """Lower-case, printable, short. '' for anything that cleans to nothing."""
     value = _UNSAFE.sub('', (value or '').strip().lower())
     return value[:limit].strip()
+
+
+def clean_click_id(value):
+    """Meta's click id, kept exactly as it arrived.
+
+    Deliberately not `clean`. That lower-cases, and a click id is
+    case-sensitive -- running one through it produces a string that still
+    looks like a click id, is still the right length, and matches nothing.
+    Nothing downstream may lower-case this either.
+    """
+    return _CLICK_UNSAFE.sub('', (value or '').strip())[:255]
 
 
 def clean_ref(value):
@@ -98,6 +119,9 @@ def from_request(args, referrer, host, path):
     ref = clean_ref(args.get('ref'))
     if ref:
         found['ref'] = ref
+    fbc = _fbc(args.get('fbclid'))
+    if fbc:
+        found['fbc'] = fbc
     aff = clean_code(args.get('aff'))
     if aff:
         found['aff'] = aff
@@ -108,6 +132,23 @@ def from_request(args, referrer, host, path):
     if found:
         found['landing'] = _PATH_UNSAFE.sub('', (path or '/').lower())[:120] or '/'
     return found
+
+
+def _fbc(fbclid):
+    """Meta's click id in the envelope their Conversions API expects.
+
+    `fb.1.<when they clicked>.<click id>`, and the timestamp is the click,
+    not the signup. Built here because here is the only place that knows: a
+    person can click an ad on Tuesday and finish signing up on Thursday, and
+    stamping Thursday onto a Tuesday click is a worse match than sending
+    nothing. First touch already wins everywhere else in this file; this is
+    the same rule, written into the value itself.
+    """
+    fbclid = clean_click_id(fbclid)
+    if not fbclid:
+        return ''
+    stamp = int(datetime.utcnow().timestamp() * 1000)
+    return f'fb.1.{stamp}.{fbclid}'[:LIMITS['fbc']]
 
 
 def read(cookies, secret):
@@ -121,7 +162,8 @@ def read(cookies, secret):
         return {}
     if not isinstance(data, dict):
         return {}
-    return {k: str(data[k])[:120] for k in FIELDS if data.get(k)}
+    return {k: str(data[k])[:LIMITS.get(k, DEFAULT_LIMIT)]
+            for k in FIELDS if data.get(k)}
 
 
 def merge(stored, found):
@@ -171,6 +213,17 @@ def label(row):
         campaign = get('campaign')
         return f'{source} · {campaign}' if campaign else source
     return get('referrer') or 'direct'
+
+
+def ad(row):
+    """Which individual ad earned this signup, or ''.
+
+    Kept out of `label` on purpose. `label` is what the Funnel groups by, and
+    folding the ad name into it would split one campaign into a row per
+    creative -- useful once, ruinous for every other question that page
+    answers. This is the same fact as its own column instead.
+    """
+    return (row.get('content') or row.get('signup_content') or '').strip()
 
 
 def _active_partner(code):

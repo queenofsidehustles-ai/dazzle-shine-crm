@@ -1,0 +1,42 @@
+{% extends "console/_shell.html" %}
+{% block title %}Help tips{% endblock %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+{% include "console/_funnel_tabs.html" %}
+
+<nav class="ops-tabs" aria-label="Time window" style="margin-bottom:var(--s3)">
+  {% for w in windows %}
+  <a href="{{ url_for('console.tips_view', window=w) }}" class="{{ 'on' if w == window }}"
+     {% if w == window %}aria-current="page"{% endif %}>{{ 'All time' if w == 'all' else 'Last ' ~ w ~ ' days' }}</a>
+  {% endfor %}
+</nav>
+
+<p class="ops-dim" style="margin:0 0 var(--s4);max-width:760px">
+  People, not clicks, across real companies (test and demo accounts left out). <b>Read</b>: opened the tip
+  (an ⓘ, or a menu tip on screen long enough to read). <b>Then opened it</b>: went to that feature for
+  the first time within {{ used_within }} days of reading its tip — the tip's job. <b>Did you know?</b>: the
+  one suggestion shown per sign-in. The features nudged first are marked ★, in the order they are nudged;
+  the wording is in <code>help_tips.py</code>.
+</p>
+
+<div class="ops-scroll"><table class="con">
+  <thead><tr>
+    <th>Feature</th><th class="num">Read</th><th class="num">Then opened it</th>
+    <th class="num">Did you know? shown</th><th class="num">Followed</th><th class="num">Not now</th>
+  </tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td>{{ '★ ' if r.discover }}{{ r.title }} <span class="ops-dim">{{ r.key }}</span></td>
+      <td class="num">{{ r.opened }}</td>
+      <td class="num">{{ r.used }}{% if r.used_pct is not none %} <span class="ops-dim">({{ r.used_pct }}%)</span>{% endif %}</td>
+      <td class="num">{{ r.suggested }}</td>
+      <td class="num">{{ r.clicked }}{% if r.clicked_pct is not none %} <span class="ops-dim">({{ r.clicked_pct }}%)</span>{% endif %}</td>
+      <td class="num">{{ r.dismissed }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="ops-dim">Nothing yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

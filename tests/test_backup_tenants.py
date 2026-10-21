@@ -133,11 +133,47 @@ try:
                 with db.engine.begin() as c:
                     c.execute(text('CREATE SCHEMA IF NOT EXISTS "%%s"' %% schema))
                 md.create_all(bind=db.engine)
+                # The guards a provisioned company has (migrations 0029-0031):
+                # with them, an audit entry is chained as it is written.
+                import quote_evidence
+                with db.engine.begin() as c:
+                    quote_evidence.install_guards(c, schema)
                 with db.engine.begin() as c:
                     c.execute(text(
                         'INSERT INTO "%%s".client (name, email, address) '
                         'VALUES (:n, :e, :a)' %% schema),
                         {'n': client, 'e': email, 'a': addr})
+            # A quote someone accepted: its frozen terms and the answer are
+            # contract evidence, and must come back -- and stay unchangeable.
+            with db.engine.begin() as c:
+                c.execute(text(
+                    "INSERT INTO tenant_acme.commercial_quote "
+                    "(id, company, contact_name, email, token, status, issued_revision_id) "
+                    "VALUES (1, 'Acme Office', 'Pat', 'pat@example.com', 'tok-acme', 'accepted', 1)"))
+                c.execute(text(
+                    "INSERT INTO tenant_acme.commercial_quote_revision "
+                    "(id, quote_id, number, terms, content_hash, origin, created_at) "
+                    "VALUES (1, 1, 1, '{}', :h, 'issued', now())"), {'h': quote_evidence.digest('{}')})
+                c.execute(text(
+                    "INSERT INTO tenant_acme.commercial_quote_response "
+                    "(id, quote_id, revision_id, content_hash, decision, signer_name, created_at) "
+                    "VALUES (1, 1, 1, :h, 'accepted', 'Pat Signer', now())"), {'h': quote_evidence.digest('{}')})
+                c.execute(text(
+                    "INSERT INTO tenant_acme.commercial_agreement "
+                    "(id, quote_id, revision_id, response_id, content_hash, effective_on, created_at) "
+                    "VALUES (1, 1, 1, 1, :h, current_date, now())"), {'h': quote_evidence.digest('{}')})
+                c.execute(text(
+                    "INSERT INTO tenant_acme.commercial_quote_delivery "
+                    "(id, quote_id, revision_id, channel, recipient, status, created_at) "
+                    "VALUES (1, 1, 1, 'email', 'pat@example.com', 'accepted_by_provider', now())"))
+                c.execute(text(
+                    "INSERT INTO tenant_acme.email_delivery_event "
+                    "(id, provider_message_id, recipient, event, provider_event_id, created_at) "
+                    "VALUES (1, 're_1', 'pat@example.com', 'delivered', 'evt_1', now())"))
+                c.execute(text(
+                    "INSERT INTO tenant_acme.contract_audit_event "
+                    "(id, created_at, event, quote_id, agreement_id, actor_kind, actor) "
+                    "VALUES (1, now(), 'agreement_executed', 1, 1, 'customer', 'Pat Signer')"))
         print('OK')
     ''' % ROOT, LIVE=LIVE_URL)
     check(True, 'two companies, each with its own schema and its own client')
@@ -228,6 +264,53 @@ try:
           'and Acme sees only its own client after the restore')
     check("BAKER ['T Hall']" in out,
           'and Baker sees only its own — no leakage across the restore')
+
+    out = run('''
+        import os, sys
+        sys.path.insert(0, %r)
+        from sqlalchemy import create_engine, text
+        e = create_engine(os.environ['SCRATCH'].replace(
+            'postgresql://', 'postgresql+psycopg2://', 1))
+        with e.connect() as c:
+            print('SIGNED', c.execute(text(
+                'SELECT signer_name FROM tenant_acme.commercial_quote_response')).scalar())
+            print('KEPT', [c.execute(text('SELECT count(*) FROM tenant_acme.%%s' %% t)).scalar()
+                           for t in ('commercial_agreement', 'email_delivery_event',
+                                     'contract_audit_event')])
+        for table, col in (('commercial_quote_revision', 'terms'),
+                           ('commercial_quote_response', 'signer_name'),
+                           ('commercial_agreement', 'content_hash'),
+                           ('contract_audit_event', 'actor')):
+            try:
+                with e.begin() as c:
+                    c.execute(text("UPDATE tenant_acme.%%s SET %%s = 'x'" %% (table, col)))
+                print('CHANGED', table)
+            except Exception as err:
+                print('REFUSED', table, 'never changed' in str(err))
+        try:
+            with e.begin() as c:
+                c.execute(text('DELETE FROM tenant_acme.contract_audit_event'))
+            print('DELETED trail')
+        except Exception as err:
+            print('KEPT trail', 'never deleted' in str(err))
+        print('OK')
+    ''' % ROOT, SCRATCH=SCRATCH_URL)
+    check('SIGNED Pat Signer' in out,
+          'a customer\'s acceptance of a quote comes back with the company')
+    check('REFUSED commercial_quote_revision True' in out
+          and 'REFUSED commercial_quote_response True' in out
+          and 'REFUSED commercial_agreement True' in out
+          and 'REFUSED contract_audit_event True' in out,
+          'and the restored evidence still refuses to be edited -- the guard is '
+          'rebuilt with the tables, not left behind with the migrations')
+    check('KEPT [1, 1, 1]' in out,
+          'the agreement, the delivery outcome and the audit trail come back too')
+    check('KEPT trail True' in out, 'and the restored trail still refuses to be deleted')
+    counts = backup.restore(path, SCRATCH_URL, quiet=True)
+    check(counts.get('tenant_acme.commercial_agreement') == 1
+          and counts.get('tenant_acme.contract_audit_event') == 1,
+          'restoring over a copy that already holds that evidence works: the restore, '
+          'and only the restore, may empty those tables to refill them')
 
     if HAS_CONTROL_PLANE:
       check(counts.get('organizations') == 2,

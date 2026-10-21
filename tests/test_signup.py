@@ -102,6 +102,7 @@ r = c.post("/signup", data={
     "business": "Sparkle Cleaning Services", "slug": "sparkle",
     "name": "Dana Reed", "email": "dana@sparkle.test",
     "password": "a-perfectly-fine-password", "terms_accepted": "1",
+    "zip_code": "32801",
 }, headers={"Host": "rollcall.test"})
 print("REDIRECT:", r.status_code, r.headers.get("Location"))
 print("OK")
@@ -185,6 +186,7 @@ c = app.test_client()
 r = c.post("/signup", data={
     "business": "Someone Else Entirely", "slug": "sparkle",
     "name": "Imposter", "email": "nope@x.test", "password": "another-password",
+    "zip_code": "32801",
 }, headers={"Host": "rollcall.test"})
 print("STATUS:", r.status_code)
 print("SAYS TAKEN:", b"already taken" in r.data)
@@ -196,19 +198,26 @@ check('SAYS TAKEN: True' in out, 'and says the address is taken')
 print('\n6. Bad input is refused, and says which bit')
 cases = [
     ({'business': '', 'slug': 'ok-one', 'name': 'A', 'email': 'a@b.test',
-      'password': 'a-good-password'}, b'business called'),
+      'password': 'a-good-password', 'zip_code': '32801'}, b'business called'),
     ({'business': 'B', 'slug': 'ok-two', 'name': '', 'email': 'a@b.test',
-      'password': 'a-good-password'}, b'your name'),
+      'password': 'a-good-password', 'zip_code': '32801'}, b'your name'),
     ({'business': 'B', 'slug': 'ok-three', 'name': 'A', 'email': 'not-an-email',
-      'password': 'a-good-password'}, b'does not look right'),
+      'password': 'a-good-password', 'zip_code': '32801'}, b'does not look right'),
     ({'business': 'B', 'slug': 'ok-four', 'name': 'A', 'email': 'a@b.test',
-      'password': 'short'}, b'at least 8'),
+      'password': 'short', 'zip_code': '32801'}, b'at least 8'),
     ({'business': 'B', 'slug': 'www', 'name': 'A', 'email': 'a@b.test',
-      'password': 'a-good-password'}, b'reserved word'),
+      'password': 'a-good-password', 'zip_code': '32801'}, b'reserved word'),
     ({'business': 'B', 'slug': 'NO CAPS', 'name': 'A', 'email': 'a@b.test',
-      'password': 'a-good-password'}, b'lower-case'),
+      'password': 'a-good-password', 'zip_code': '32801'}, b'lower-case'),
     ({'business': 'B', 'slug': 'ok-five', 'name': 'A', 'email': 'a@b.test',
-      'password': 'a-good-password'}, b'agree to the Terms'),
+      'password': 'a-good-password', 'zip_code': '32801'}, b'agree to the Terms'),
+    # The ZIP decides the timezone, which is the setting whose being wrong
+    # never announces itself. A missing or unplaceable one is refused here
+    # rather than quietly defaulting to New York.
+    ({'business': 'B', 'slug': 'ok-six', 'name': 'A', 'email': 'a@b.test',
+      'password': 'a-good-password'}, b'ZIP code'),
+    ({'business': 'B', 'slug': 'ok-seven', 'name': 'A', 'email': 'a@b.test',
+      'password': 'a-good-password', 'zip_code': '00042'}, b'US ZIP code'),
 ]
 for data, expect in cases:
     out = run(STUB + f'''

@@ -654,6 +654,11 @@ def accept_quote(lead, preferred_date, preferred_time='', address='', city='',
     # through the Google Ads lead they may have come in on.
     lead.status = 'converted'
     lead.drip_step = 9
+    # A lead from the call list that booked is won there too, or somebody
+    # rings a customer who has just booked to ask whether they are interested.
+    import prospecting
+    prospecting.quote_moved(getattr(lead, 'prospect_id', None), 'won', 'won',
+                            None, None, 'Accepted the residential quote and booked 🎉')
     db.session.commit()
     _stop_lsa_followup(lead)
     return booking

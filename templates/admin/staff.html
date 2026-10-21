@@ -42,7 +42,7 @@
               <a href="{{ url_for('staff.edit', staff_id=s.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a>
               {% if s.is_active %}
               <form method="POST" action="{{ url_for('staff.toggle_active', staff_id=s.id) }}"
-                    onsubmit="return confirm('Deactivate {{ s.name }}? They will stop getting job assignments and notifications right away. No message is sent to them, and you can reactivate anytime.')"
+                    onsubmit="return confirm('Deactivate {{ s.name|js }}? They will stop getting job assignments and notifications right away. No message is sent to them, and you can reactivate anytime.')"
                     style="margin:0">
                 <button type="submit" class="btn btn-danger" style="padding:5px 12px;font-size:0.82rem">Deactivate</button>
               </form>

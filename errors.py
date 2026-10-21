@@ -48,6 +48,7 @@ nothing here depends on an account with anybody.
 """
 import hashlib
 import os
+import re
 import traceback as tb_module
 from datetime import datetime, timedelta
 
@@ -57,6 +58,36 @@ ALERT_COOLDOWN = timedelta(hours=24)
 IGNORED_STATUS = {400, 401, 403, 404, 405, 408, 410, 429}
 
 
+# A database error's text carries the values it was writing: SQLAlchemy adds
+# the statement's parameters, Postgres the offending row or key. On a quote
+# that is a customer's name, email, address and link token -- exactly what
+# this log promises not to keep, and it is emailed. The statement and the
+# column names stay; the values go.
+_HIDDEN = '(values hidden)'
+_REDACT = (
+    (re.compile(r'^\[parameters: .*$', re.M), f'[parameters: {_HIDDEN}]'),
+    (re.compile(r'(Failing row contains ).*$', re.M), rf'\1{_HIDDEN}'),
+    (re.compile(r'(Key \([^)]*\)=)\(.*\)', re.M), rf'\1{_HIDDEN}'),
+)
+
+
+def redact(text):
+    """`text` with any values a database error quoted taken out."""
+    for pattern, replacement in _REDACT:
+        text = pattern.sub(replacement, text or '')
+    return text
+
+
+def _shape(message):
+    """A message with its particulars filed off, so near-identical ones group.
+
+    Numbers become '#': 'client 41 not found' and 'client 87 not found' are one
+    fault, which is the same reason the message is left out of a fingerprint
+    that already has a line number.
+    """
+    return re.sub(r'\d+', '#', (message or '').strip().lower())[:80]
+
+
 def fingerprint(endpoint, exc):
     """What makes two crashes the same crash.
 
@@ -64,6 +95,15 @@ def fingerprint(endpoint, exc):
     message itself is left out on purpose — 'Client 41 not found' and
     'Client 87 not found' are one bug, and grouping them by message would file
     them as two.
+
+    Unless there is no line. An exception that was built rather than raised
+    carries no traceback, and every one of those from a given caller would
+    otherwise be the same fault forever: Nana unreachable, Nana answering with
+    a model that does not exist and Nana saying nothing all filed as one row,
+    the message overwritten by whichever came last. Alerting is once per
+    fingerprint per day, so the second kind of failure that day is silent --
+    which is how a model name that did not exist ran for a day unnoticed. With
+    no line to tell them apart, the shape of the message is all there is.
     """
     frame = ''
     tb = getattr(exc, '__traceback__', None)
@@ -71,6 +111,8 @@ def fingerprint(endpoint, exc):
         frame = f'{tb.tb_frame.f_code.co_filename}:{tb.tb_lineno}'
         tb = tb.tb_next          # keep walking — we want the deepest frame
     raw = f'{endpoint}|{type(exc).__name__}|{frame}'
+    if not frame:
+        raw += f'|{_shape(str(exc))}'
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
@@ -121,12 +163,12 @@ def capture(exc, path=None, method=None):
     except Exception:
         pass
 
-    trace = ''.join(tb_module.format_exception(
-        type(exc), exc, exc.__traceback__))[-6000:]
+    trace = redact(''.join(tb_module.format_exception(
+        type(exc), exc, exc.__traceback__)))[-6000:]
 
     row, is_new = ErrorLog.record(
         kind=type(exc).__name__,
-        message=str(exc)[:400],
+        message=redact(str(exc))[:400],
         path=(path or '')[:300],
         method=(method or '')[:10],
         endpoint=endpoint[:120],

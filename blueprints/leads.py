@@ -54,17 +54,67 @@ def new_quote():
         # If they happen to be in the Google Ads list, tie the two together so
         # she isn't looking at the same person in two places.
         linked = quoting.link_lsa_caller(lead)
+        prospect = _prospect(request.form.get('prospect_id', type=int))
+        if prospect:
+            lead.prospect_id = prospect.id
+            db.session.commit()
         for msg, level in quoting.deliver_quote(
                 lead, also_text=bool(request.form.get('also_text'))):
             flash(msg, level)
         if linked:
             flash('Matched to their Google Ads call, so the follow-up texts '
                   'for people we never reached have stopped.', 'success')
+        if prospect and quoting.was_delivered(lead):
+            import prospecting
+            prospecting.quote_moved(
+                prospect.id, 'proposal', None, 'Follow up on the quote', 3,
+                f'Residential quote ${float(lead.quoted_price or 0):,.2f} sent to {lead.email}')
+            prospect.contact_name = prospect.contact_name or lead.name or None
+            prospect.email = prospect.email or lead.email or None
+            prospect.phone = prospect.phone or lead.phone or None
+            db.session.commit()
+            return redirect(url_for('places_finder.dashboard', view='everyone'))
         return redirect(url_for('leads.index') if quoting.was_delivered(lead)
-                        else url_for('leads.new_quote'))
+                        else url_for('leads.new_quote', prospect_id=prospect.id if prospect else None))
 
+    # Started from a residential lead on the call list -- a property manager
+    # buying turnovers, a realtor's listings, an Airbnb host. Fill in what the
+    # call list already knows rather than make somebody copy it across.
+    prospect = _prospect(request.args.get('prospect_id', type=int))
+    pre = {}
+    if prospect:
+        pre = {
+            'name': prospect.contact_name or prospect.business_name,
+            'email': prospect.email or '', 'phone': prospect.phone or '',
+            'address': prospect.address or '', 'city': prospect.city or '',
+            'service_type': _RESIDENTIAL_SERVICE.get(prospect.category, 'standard'),
+            'notes': f'For {prospect.business_name}' if prospect.contact_name else '',
+        }
+        import prospecting
+        walk = prospecting.walkthrough(prospect)
+        if walk.get('sqft'):
+            pre['sqft'] = walk['sqft']
+        summary = prospecting.walkthrough_summary(walk)
+        if summary:
+            pre['notes'] = (pre['notes'] + '\n' if pre['notes'] else '') + f'Walkthrough: {summary}'
     return render_template('admin/lsa_quote.html', lead=None, existing=None,
-                           **quoting.form_context())
+                           prospect=prospect, pre=pre, **quoting.form_context())
+
+
+# What a residential lead on the call list is most likely buying. A starting
+# point for the service picker, nothing more: she changes it on the form.
+_RESIDENTIAL_SERVICE = {
+    'property_manager': 'moveout',
+    'apartment': 'moveout',
+    'realtor': 'moveout',
+    'airbnb': 'standard',
+    'general_contractor': 'postcon_clean',
+}
+
+
+def _prospect(prospect_id):
+    from models import Prospect
+    return Prospect.query.get(prospect_id) if prospect_id else None
 
 
 @leads_bp.route('/checklist.json')
@@ -91,7 +141,7 @@ def detail(lead_id):
         flash('Lead updated.', 'success')
         return redirect(url_for('leads.detail', lead_id=lead_id))
     import quoting
-    vas = User.query.filter_by(role='team').order_by(User.name).all()
+    vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
     # Only a lead that was actually quoted has a link worth showing -- quote_url
     # falls back to the generic booking form, which is not this lead's quote.
     return render_template('admin/lead_detail.html', lead=lead, vas=vas,
@@ -134,6 +184,9 @@ def convert(lead_id):
     )
     db.session.add(booking)
     lead.status = 'converted'
+    import prospecting
+    prospecting.quote_moved(lead.prospect_id, 'won', 'won', None, None,
+                            'Booked from the residential quote 🎉')
     db.session.commit()
     flash('Lead converted to booking!', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking.id))

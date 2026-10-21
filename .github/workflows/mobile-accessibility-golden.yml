@@ -3,9 +3,11 @@ name: Akye golden business journeys
 on:
   pull_request:
     branches:
+      - main
       - akye-stable
   push:
     branches:
+      - main
       - akye-stable
   workflow_dispatch:
 
@@ -29,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout exact candidate revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
 
@@ -37,7 +39,7 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -46,7 +48,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 

@@ -4,6 +4,46 @@ Every instance used to deploy from `main`. A change pushed at eleven at night
 was live in a paying customer's business three minutes later, before anyone had
 used it once. This is how that stops.
 
+## The branches now (October 2026)
+
+Dazzle & Shine moved onto Akye as one of its companies. Akye works on `main`
+and releases to `akye-stable`.
+
+| Branch | What it is |
+|---|---|
+| `main` | **Akye's working branch.** Every pull request targets it, and its checks run on every pull request and push. Nothing deploys it: merging is not releasing. |
+| `akye-stable` | **Every cleaning company on Akye**, Dazzle & Shine included. Railway deploys it. It moves only when a release promotes `main` to it, fast-forward. |
+| `dazzle-shine-single-tenant` | The last single-business CRM: `main` as it was at `3b0cc92` (29 Sep 2026), before Akye was first promoted onto it, plus the commits that let its own `release.py` ship the CRM from this branch. An archive: nothing deploys it, and `release.py --go` from a checkout of it is the only way to move `stable`. |
+| `stable` | The single-business CRM's customer channel (`v2026.09.21`). Frozen. |
+
+### Releasing Akye
+
+    git checkout main && git pull
+    python3 release.py --akye           # what would go out — changes nothing
+    python3 release.py --akye --go      # every suite, then tag and promote akye-stable
+    python3 release.py --akye --rollback   # akye-stable back one release
+
+`--go` refuses unless the four checks that ran on the push to `main` (the
+full suite, the launch certification, the golden journeys and privacy
+lifecycle) all passed on that exact commit. It asks GitHub with `gh`; without
+it, it shows you the commit's page and asks you to confirm by typing its
+hash. Then every suite runs again here on Python 3.12, and only then does it
+write `RELEASE` (the one change on top of the checked commit), tag
+`akye-vYYYY.MM.DD`, and fast-forward `akye-stable` to `main`. Railway deploys
+it; the push to `akye-stable` certifies the exact deployed commit once more.
+A fix goes in on `main` and goes out in the next release; `akye-stable` never
+takes a commit `main` does not have.
+
+`--rollback` starts from the release `akye-stable` is on and goes back one,
+so running it twice goes back two.
+
+Everything that touches production runs the release, not `main`: Railway,
+the nightly Akye backup, and the hourly and daily automations, which check
+out `akye-stable` even though their schedule fires from `main`.
+
+The rest of this page describes the two-product setup it replaced, and is kept
+for its history.
+
 ## Two products, four branches
 
 There are two things being shipped, and each has a working branch and a channel
@@ -139,3 +179,49 @@ Stays on `main` deliberately. You want your changes immediately; that is the
 whole point of being the canary. If you'd rather be on the same footing as your
 customers, point your own service at `stable` too and release to everyone at
 once — but then nobody is testing anything before customers see it.
+
+## Making main the working branch
+
+`akye-stable` contains `main` (main was merged into it, keeping akye-stable's
+code, after checking every change main had made was already here), so `main`
+moves to it as a fast-forward: no reset, no force-push, nothing in main's
+history lost. Railway stays on `akye-stable`; nothing deploys.
+
+    git fetch origin
+    git merge-base --is-ancestor origin/main origin/akye-stable && echo ok
+    git push origin origin/akye-stable:main      # refused unless it fast-forwards
+
+From then on, open pull requests against `main` (retarget any still open
+against `akye-stable`), and release with `release.py --akye --go`. Protect both
+branches in GitHub: `main` to require a pull request and its four checks,
+`akye-stable` to refuse force-pushes and deletion. `--go` pushes its `RELEASE`
+commit straight to `main` and moves `akye-stable` itself, so whoever releases
+must be allowed to bypass those rules (an admin, with bypass left on); a
+`--rollback` force-pushes `akye-stable`, so it needs that bypass too.
+
+A service still deploying `main` (your old instance, above) would now take
+every merge. `main` has carried Akye's code since the first promotion
+(81a635d), so such a service already runs it as a single business (no
+`BASE_DOMAIN`); main's photo-wording migration id is kept as a no-op
+(`0021_photo_optional_wording`), so its database upgrades through
+0021_quote_prospect to 0033 with every row kept. Better to retire it.
+
+### What a dry run of the promotion found (20 Oct 2026)
+
+Rehearsed on a database built by main's own code (migrations, then the demo
+seed), with akye-stable's code run against it as the push would:
+
+- **Startup:** migrates 0021_photo_optional_wording → 0033, rows unchanged,
+  pages load.
+- **Nightly backup of your own database** (the `dazzle` job, which checks out
+  `main`): failed on akye-stable's backup.py while that database had not been
+  migrated, demanding contract evidence it predates. Fixed: the manifest now
+  records which schemas had an audit chain at source, and only those are held
+  to it. That database has not changed between nightly backups (every table's
+  count identical, including `cron_run`), so nothing is running against it
+  and it would have stayed on 0021, and failed, every night.
+- **release.py** mapped the CRM line `main → stable`, so once `main` was Akye,
+  `release.py --go` would have put Akye on `stable`. It now ships the CRM from
+  `dazzle-shine-single-tenant`, and Akye `main → akye-stable`.
+- **CI** ran only for `akye-stable`, so pull requests against `main`, the
+  default branch, got no checks. Every workflow now runs for `main` too.

@@ -12,7 +12,8 @@ import commercial_pricing as cpricing
 commercial_bp = Blueprint('commercial', __name__, url_prefix='/commercial')
 
 FREQUENCIES = ['nightly', 'weekly', 'biweekly', 'monthly', 'custom']
-CATEGORIES = ['property_manager', 'apartment', 'daycare', 'medical_office',
+CATEGORIES = ['property_manager', 'apartment', 'daycare', 'medical_office', 'restaurant',
+              'gym', 'church',
               'office', 'realtor', 'airbnb', 'other']
 
 
@@ -35,7 +36,7 @@ def _agent_from():
     a = (request.form.get('agent') or '').strip()
     if a:
         return a
-    if session.get('role') == 'team':
+    if session.get('role') in ('team', 'sales'):
         return session.get('user_name')
     return None
 
@@ -100,6 +101,7 @@ def quote_json():
         frequency=request.args.get('frequency') or 'weekly',
         extras=request.args.getlist('extras'),
         drive_mins=request.args.get('drive_minutes'),
+        hours=request.args.get('hours'),
     ))
 
 
@@ -160,9 +162,18 @@ def convert(prospect_id):
             notes=(request.form.get('notes') or p.notes or '').strip(),
             source='find_leads',
             prospect_id=p.id,
-            agent=_agent_from(),
+            # Whoever found and worked the lead, for their commission -- the
+            # owner converting it is not who earned it.
+            agent=_agent_from() or p.agent,
         )
+        # Won on the call list too, with nothing left due -- or somebody rings
+        # a new customer to ask whether they are interested.
+        import prospecting
+        prospecting.quote_moved(p.id, 'won', 'won', None, None,
+                                'Became a commercial account 🎉')
         p.status = 'won'
+        p.contact_name = p.contact_name or a.contact_name or None
+        p.email = p.email or a.email or None
         db.session.add(a)
         db.session.commit()
         flash(f'🎉 {p.business_name} is now a commercial account!', 'success')
@@ -194,8 +205,26 @@ def detail(account_id):
         db.session.commit()
         flash('Account updated.', 'success')
         return redirect(url_for('commercial.detail', account_id=a.id))
-    vas = User.query.filter_by(role='team').order_by(User.name).all()
-    return render_template('admin/commercial_detail.html', **_tmpl_args(a=a, vas=vas))
+    vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
+    return render_template('admin/commercial_detail.html',
+                           **_tmpl_args(a=a, vas=vas, agreements=_agreements(a)))
+
+
+def _agreements(a):
+    """[(agreement, its quote's frozen terms, signer, replaced by)] for an
+    account, newest first. The one nothing has replaced is in force."""
+    from models import CommercialAgreement, CommercialQuote, QuoteResponse
+    import quote_evidence
+    rows = (CommercialAgreement.query.filter_by(account_id=a.id)
+            .order_by(CommercialAgreement.effective_on.desc(), CommercialAgreement.id.desc()).all())
+    replaced = {r.amends_agreement_id: r for r in rows if r.amends_agreement_id}
+    out = []
+    for ag in rows:
+        q = CommercialQuote.query.get(ag.quote_id)
+        response = QuoteResponse.query.get(ag.response_id)
+        out.append((ag, quote_evidence.as_issued(q) if q else None,
+                    response.signer_name if response else None, replaced.get(ag.id)))
+    return out
 
 
 @commercial_bp.route('/<int:account_id>/mark-first-paid', methods=['POST'])
@@ -214,6 +243,13 @@ def mark_first_paid(account_id):
 @owner_required
 def delete(account_id):
     a = CommercialAccount.query.get_or_404(account_id)
+    from models import QuoteResponse
+    if QuoteResponse.query.filter_by(account_id=a.id, decision='accepted').first():
+        # The signed proposal names this account; deleting it would leave the
+        # agreement pointing at nothing. Paused keeps both.
+        flash('This account has a signed proposal on record, so it is kept. '
+              'Set it to Paused if the work has stopped.', 'error')
+        return redirect(url_for('commercial.detail', account_id=a.id))
     db.session.delete(a)
     db.session.commit()
     flash('Commercial account removed.', 'success')

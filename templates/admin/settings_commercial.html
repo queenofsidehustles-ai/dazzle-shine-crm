@@ -20,11 +20,18 @@
     <div><label class="lbl">Minimum per visit ($)</label>
       <input class="inp" name="comm_min_visit" value="{{ '%.0f' % cfg.min_visit }}">
       <div style="font-size:0.72rem;color:var(--softer);margin-top:2px">Covers a stop being worth
-        making at all. Travel is added on top of this, not swallowed by it.</div></div>
+        making at all. Travel is added on top of this, not swallowed by it. Only used by the
+        Estimate Helper's quick square-footage number — a work-area quote is priced at exactly
+        what its lines add up to, with no floor under it.</div></div>
     <div><label class="lbl">Default drive time (mins, round trip)</label>
       <input class="inp" name="comm_drive_minutes" value="{{ '%.0f' % cfg.drive_minutes }}">
       <div style="font-size:0.72rem;color:var(--softer);margin-top:2px">Priced like cleaning time —
         an hour in the van is an hour you can't sell. Each account can set its own.</div></div>
+    <div><label class="lbl">First-visit premium (%)</label>
+      <input class="inp" name="comm_first_visit_pct" value="{{ '%.0f' % (cfg.first_visit_pct*100) }}">
+      <div style="font-size:0.72rem;color:var(--softer);margin-top:2px">Added once, to the first visit only,
+        on a work-area quote marked "New contract" — the recurring price and the monthly total never
+        include it.</div></div>
 
     <div style="grid-column:1/-1;border-top:1px solid #eee;padding-top:12px">
       <strong style="font-size:0.9rem">Production rates — sq ft one cleaner covers per hour</strong>
@@ -43,6 +50,31 @@
     <div><label class="lbl">{{ e.label }}</label>
       <input class="inp" name="comm_extra_{{ e.key }}" value="{{ '%.0f' % (e.pct * 100) }}"></div>
     {% endfor %}
+
+    <div style="grid-column:1/-1;border-top:1px solid #eee;padding-top:12px">
+      <strong style="font-size:0.9rem">Quoting by work area — each line item</strong>
+      <div style="font-size:0.75rem;color:var(--softer)">How much one cleaner gets through in an hour, and what the chemicals and machine cost per unit.
+        A line is priced as that time at your hourly cost and labor share, plus its supplies. Stone tile on an auto-scrubber is
+        quick but the machine costs; hardwood is quick and cheap; a greasy kitchen floor is slow.</div>
+      <div style="overflow-x:auto;margin-top:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+        <thead><tr style="text-align:left;color:var(--softer);font-size:0.75rem">
+          <th style="padding:6px 4px">Work item</th><th style="padding:6px 4px;width:120px">Per hour</th>
+          <th style="padding:6px 4px;width:120px">Supplies $ / unit</th></tr></thead>
+        <tbody>
+        {% for it in cfg.work_items %}
+        <tr style="border-top:1px solid var(--line)">
+          <td style="padding:6px 4px">{{ it.label }}</td>
+          <td style="padding:6px 4px"><input class="inp" name="comm_item_{{ it.key }}_rate" value="{{ '%g' % it.rate }}" aria-label="{{ it.unit }} per hour">
+            <div style="font-size:0.7rem;color:var(--softer)">{{ it.unit }} / hour</div></td>
+          <td style="padding:6px 4px"><input class="inp" name="comm_item_{{ it.key }}_supplies" value="{{ '%g' % it.supplies }}" aria-label="supplies per {{ it.unit }}">
+            <div style="font-size:0.7rem;color:var(--softer)">per {{ it.unit }}</div></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
 
     <div style="grid-column:1/-1"><button type="submit" class="btn" style="padding:10px 24px">💾 Save pricing</button></div>
   </form>

@@ -29,7 +29,7 @@
         <pre style="font-size:0.84rem;color:var(--ink-2);margin:0;white-space:pre-wrap;font-family:inherit;line-height:1.75;background:var(--ground);border-radius:8px;padding:16px;border:1px solid var(--line)" x-show="open">{{ s.content }}</pre>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">
-        <button onclick="copyText(this, `{{ s.content | replace('`','\\`') | replace('\n','\\n') }}`)"
+        <button onclick="copyText(this, '{{ s.content|js }}')"
                 class="btn btn-gold" style="padding:5px 14px;font-size:0.78rem;white-space:nowrap">
           Copy
         </button>

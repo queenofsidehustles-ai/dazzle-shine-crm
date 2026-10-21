@@ -133,7 +133,7 @@
           <td style="font-weight:700;color:var(--warn);white-space:nowrap">−${{ '%.2f' % (e.amount or 0) }}</td>
           <td style="text-align:right">
             <form method="POST" action="{{ url_for('money.delete_expense', expense_id=e.id) }}" style="display:inline"
-                  onsubmit="return confirm('Delete this ${{ '%.2f' % (e.amount or 0) }} expense?')">
+                  onsubmit="return confirm('Delete this ${{ ('%.2f' % (e.amount or 0))|js }} expense?')">
               {{ period_fields() }}
               <button type="submit" title="Delete"
                       style="background:none;border:1px solid var(--warn-soft);color:var(--warn);border-radius:7px;padding:4px 8px;cursor:pointer">✕</button>

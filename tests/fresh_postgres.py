@@ -7,7 +7,12 @@ else. Suites that exercise company or product-site hosts use this instead.
 
 Uses TEST_POSTGRES_URL (as CI sets it) or a local default. With no server at
 all it says so and exits 0, the same convention as test_signup.py, so a
-laptop without Postgres is told what it skipped rather than failing.
+laptop without Postgres is told what it skipped rather than failing -- but
+never in CI (CI=true), where a skip would read as a pass. That is what
+happened when SQLAlchemy 2.1 arrived: it reads a bare postgresql:// as the
+psycopg 3 driver, which isn't installed, and every suite here "passed" in
+0s for want of a database. The driver is named explicitly below, the same
+way the app names it (backup.normalise), and CI now fails instead.
 """
 import os
 import sys
@@ -16,7 +21,12 @@ import sys
 def url(name):
     base = (os.environ.get('TEST_POSTGRES_URL')
             or 'postgresql://app_user:localtest@127.0.0.1:5432/postgres')
-    base = base.replace('postgresql+psycopg2://', 'postgresql://')
+    # psycopg2, named -- as create_app() and backup.normalise() do -- not
+    # left for SQLAlchemy to guess: from 2.1 its guess is psycopg 3.
+    if base.startswith('postgres://'):
+        base = base.replace('postgres://', 'postgresql://', 1)
+    if base.startswith('postgresql://'):
+        base = base.replace('postgresql://', 'postgresql+psycopg2://', 1)
     try:
         from sqlalchemy import create_engine, text
         admin = create_engine(base, isolation_level='AUTOCOMMIT')
@@ -29,7 +39,9 @@ def url(name):
         print(f'  ⚠️  SKIPPED: this suite needs PostgreSQL and found none ({type(e).__name__}).')
         print('     Set TEST_POSTGRES_URL to a server this user can create databases on.')
         print('=' * 70 + '\n')
-        sys.exit(0)
+        # In CI there is always meant to be a database: not finding one is a
+        # broken run, and exiting 0 would report it as a passing suite.
+        sys.exit(1 if os.environ.get('CI', '').lower() == 'true' else 0)
     return f'{base.rsplit("/", 1)[0]}/{name}'
 
 

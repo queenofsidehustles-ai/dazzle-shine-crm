@@ -51,8 +51,12 @@ def send():
     if raw.startswith('data:image/'):
         try:
             header, b64 = raw.split(',', 1)
+            shot_type = header.split(':', 1)[1].split(';', 1)[0].lower()
+            # Measured before decoding: base64 is four characters per three
+            # bytes, so anything longer than this is over the limit anyway.
+            if shot_type not in control_plane.SHOT_TYPES or len(b64) > (MAX_SHOT_BYTES + 2) // 3 * 4:
+                raise ValueError('not a screenshot we keep')
             shot = base64.b64decode(b64)
-            shot_type = header.split(':', 1)[1].split(';', 1)[0]
             if len(shot) > MAX_SHOT_BYTES:
                 # Keep the words, lose the picture. Refusing the whole thing
                 # over a large screenshot loses the part that matters.
@@ -140,7 +144,9 @@ def shot(feedback_id):
     """The screenshot for one piece of feedback."""
     if session.get('role') != 'owner':
         return ('', 404)
-    blob, ctype = control_plane.feedback_shot(_engine(), feedback_id)
+    # This company's own feedback only. Any owner could read any company's
+    # screenshots -- pictures of their CRM, customers and all -- by id.
+    blob, ctype = control_plane.feedback_shot(_engine(), feedback_id, org_slug=_slug())
     if not blob:
         return ('', 404)
     return Response(blob, mimetype=ctype,

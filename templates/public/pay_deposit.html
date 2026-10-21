@@ -174,7 +174,7 @@
       document.getElementById('success-card').classList.remove('hidden');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
-      showErr(e.message + ' — or call/text us at {{ BIZ_PHONE }}.');
+      showErr(e.message + ' — or call/text us at {{ BIZ_PHONE|js }}.');
       payBtn.disabled = false;
       payBtn.textContent = 'Pay Deposit & Confirm →';
     }

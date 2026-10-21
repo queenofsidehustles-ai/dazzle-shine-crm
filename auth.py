@@ -100,7 +100,11 @@ def login_required(f):
         # rbac only acts on endpoints deliberately classified in its matrix;
         # unknown roles/permissions fail closed for those protected actions.
         import rbac
-        rbac.enforce_current_request()
+        # A response here is a redirect to the role's own home page, sent
+        # instead of a refusal when it opens the dashboard it cannot see.
+        landed = rbac.enforce_current_request()
+        if landed is not None:
+            return landed
         return f(*args, **kwargs)
     return decorated
 

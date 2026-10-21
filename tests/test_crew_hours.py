@@ -7,7 +7,7 @@ they were dropped without a word and the box came back empty, still saying "no
 estimate yet". The pay summary then showed the old percentage pot, which is a
 different number from the one the hours would have produced.
 """
-import os, sys, tempfile
+import os, re, sys, tempfile
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/ch.db'
 os.environ['SECRET_KEY'] = 'test'
@@ -70,7 +70,10 @@ with app.app_context():
     check(f'${each:.2f} each' in msg, f'and quotes ${each:.2f} each — the same number')
     # The hours drive the pay but are never quoted: this work is paid per job,
     # and an hourly figure in the offer invites clock-watching.
-    check('hrs' not in msg and '/hr' not in msg, 'without putting a clock in front of them')
+    # The claim link's token is random and can spell 'hrs' or '/hr' by itself,
+    # so the words are checked without it.
+    words = re.sub(r'https?://\S+', '', msg)
+    check('hrs' not in words and '/hr' not in words, 'without putting a clock in front of them')
     check('2 spots left' in msg, 'and two spots to claim')
 
     print('\n5. Save Changes still saves them too — either button works')
