@@ -154,6 +154,26 @@ check(billing.plan_for(org(status='suspended')) == 'solo',
 print('\n9. The banner is on every page of a company CRM')
 from app import create_app
 app = create_app()
+# Billing and Business Settings read entitlements' state, not trial_state():
+# it must use the same end. A row stored before the one-clock rule can hold an
+# earlier trial_ends_at, and Billing said "not on a trial" beside a banner
+# that was still counting down.
+import entitlements
+early = {'slug': 'early', 'status': 'active', 'subscription_status': 'trialing',
+         'plan': 'scale', 'created_at': NOW - timedelta(days=10),
+         'trial_ends_at': NOW - timedelta(days=1), 'activated_at': None}
+_was = billing.current_org
+billing.current_org = lambda: early
+try:
+    with app.app_context():
+        st = entitlements._load_state()
+finally:
+    billing.current_org = _was
+check(st['on_trial'] and st['trial_ends_at'] == billing.trial_ends(early),
+      'Billing reads the same trial end as the banner: 30 days from signup, not the old column')
+check(st['trial_days_left'] == billing.trial_state(early, NOW)['days_left'],
+      f"and the same days left ({st['trial_days_left']})")
+
 c = app.test_client()
 with c.session_transaction() as sess:
     sess['logged_in'] = True

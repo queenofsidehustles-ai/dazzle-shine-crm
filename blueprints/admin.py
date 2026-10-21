@@ -330,6 +330,13 @@ def switch_city(slug):
     import city_switch
     from flask import session, redirect, flash, url_for
     from models import User
+    import auth as _auth
+    # The other city signs this person in as its owner without its password or
+    # second factor, so only an owner here may start one. A dispatcher or a
+    # read-only login that shares an owner's email elsewhere is not that owner.
+    if not _auth.is_owner_session():
+        flash('Only an owner can switch cities.', 'warning')
+        return redirect(url_for('bookings.index'))
     user = User.query.get(session.get('user_id') or 0)
     email = (user.username if user else '').strip().lower()
     if not email or not city_switch.may_switch(email, slug):

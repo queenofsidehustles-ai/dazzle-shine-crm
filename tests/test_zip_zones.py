@@ -1,0 +1,74 @@
+"""ZIP prefixes are split where a state crosses a time-zone line.
+
+The first map put every prefix from 300 to 499 in Eastern and 500 to 599 in
+Central, so Alabama (Huntsville included), the Florida panhandle, western
+Tennessee and Kentucky were an hour ahead, Montana an hour behind, and Puerto
+Rico and the Virgin Islands in New York. Signup stores what the ZIP says, so
+reminders and charges ran off for those businesses with nothing to notice.
+"""
+import os, sys
+from zoneinfo import ZoneInfo
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import zip_zones as z
+
+failures = []
+
+
+def check(cond, m):
+    print(f'  {"✅" if cond else "❌"} {m}')
+    if not cond:
+        failures.append(m)
+
+
+print('\n1. Places that straddle a line are on the right side of it')
+for zip_code, zone, where in (
+        ('35801', 'America/Chicago', 'Huntsville, AL'),
+        ('36104', 'America/Chicago', 'Montgomery, AL'),
+        ('32501', 'America/Chicago', 'Pensacola, FL (panhandle)'),
+        ('32301', 'America/New_York', 'Tallahassee, FL'),
+        ('37203', 'America/Chicago', 'Nashville, TN'),
+        ('37902', 'America/New_York', 'Knoxville, TN'),
+        ('38103', 'America/Chicago', 'Memphis, TN'),
+        ('42001', 'America/Chicago', 'Paducah, KY'),
+        ('40202', 'America/New_York', 'Louisville, KY'),
+        ('46402', 'America/Chicago', 'Gary, IN'),
+        ('46204', 'America/New_York', 'Indianapolis, IN'),
+        ('47708', 'America/Chicago', 'Evansville, IN'),
+        ('59101', 'America/Denver', 'Billings, MT'),
+        ('57701', 'America/Denver', 'Rapid City, SD'),
+        ('57104', 'America/Chicago', 'Sioux Falls, SD'),
+        ('79901', 'America/Denver', 'El Paso, TX'),
+        ('75201', 'America/Chicago', 'Dallas, TX'),
+        ('83814', 'America/Los_Angeles', "Coeur d'Alene, ID"),
+        ('83702', 'America/Boise', 'Boise, ID'),
+        ('00901', 'America/Puerto_Rico', 'San Juan, PR'),
+        ('00802', 'America/St_Thomas', 'St Thomas, VI'),
+        ('10001', 'America/New_York', 'New York, NY'),
+        ('90210', 'America/Los_Angeles', 'Beverly Hills, CA'),
+        ('85004', 'America/Phoenix', 'Phoenix, AZ')):
+    got = z.zone_for_zip(zip_code)
+    check(got == zone, f'{where} {zip_code}: {z.label(zone)} (got {got})')
+
+print('\n2. A prefix that crosses a line inside itself asks the browser')
+check(z.resolve('49801', 'America/Chicago') == ('America/Chicago', 'zip+browser'),
+      'Upper Peninsula with a Central browser: Central')
+check(z.resolve('49801', 'America/Denver') == ('America/New_York', 'zip'),
+      'but a browser in neither of its zones does not override the ZIP')
+check(z.resolve('59101', 'America/New_York') == ('America/Denver', 'zip'),
+      'and a single-zone prefix keeps the ZIP, wherever the browser is')
+
+print('\n3. The map itself')
+prev = -1
+ordered = True
+for lo, hi, _zone in z._RANGES:
+    ordered = ordered and lo > prev and lo <= hi
+    prev = hi
+check(ordered, 'ranges ascend without overlapping')
+check(all(ZoneInfo(zone) for zone in z.KNOWN), 'every zone it can store is a real one')
+check(all(zone in z.KNOWN for zones in z.MIXED.values() for zone in zones),
+      'and so is every zone a mixed prefix can resolve to')
+
+if failures:
+    print(f'\n❌ {len(failures)} failed')
+    raise SystemExit(1)
+print('\n✅ The ZIP puts a business in its own time zone.')

@@ -14,6 +14,7 @@ regressed:
 
 Against a disposable Postgres, like the rest of the multi-company suite.
 """
+import glob
 import gzip
 import json
 import os
@@ -362,6 +363,17 @@ except backup.BackupFailed as e:
     check(f'{SA}: audit chain' in str(e) and 'since the last backup' in str(e),
           'the next backup holds it to what the last one wrote down, and fails')
     check(SD not in str(e), 'a demo company, rebuilt on purpose, is not held to it')
+# The failed run's manifest is kept, and the next run reads the newest one. It
+# must not have written the rewritten chain down as the new baseline, or the
+# second night would pass with nothing fixed.
+failed = json.load(open(sorted(glob.glob(os.path.join(night, '*.manifest.json')))[-1]))
+check(SA in failed.get('evidence_carried', []),
+      'the failed run carries the last good evidence forward for that company')
+try:
+    backup.create(night, os.environ['DATABASE_URL'], quiet=True)
+    check(False, 'so the night after still fails')
+except backup.BackupFailed as e:
+    check(f'{SA}: audit chain' in str(e), 'so the night after still fails, until somebody looks')
 sql(f"UPDATE public.organizations SET is_demo = false WHERE slug = '{DEMO}'")
 
 # A company migration 0031 did not reach is an error, not a silent gap.

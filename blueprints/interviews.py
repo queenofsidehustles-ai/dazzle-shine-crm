@@ -181,14 +181,19 @@ def save_response(token):
 
     # A signed upload lands in this tenant's own folder, and what gets stored is
     # a reference this server minted rather than a URL the browser handed over.
-    # The old shape still has to be accepted: recordings made before signing
-    # existed are flat `interviews/` objects with a plain URL, and they must
-    # keep playing rather than vanishing from the review page.
+    # Recordings made before signing existed are flat `interviews/` objects with
+    # a plain URL; they are already stored and keep playing on the review page.
     import private_media
     ref = private_media.ref_from_upload(
         data, tenant_slug=_media_tenant_slug(), kind=MEDIA_KIND)
-    if ref:
-        url = ref
+    if not ref:
+        # Every upload is signed into this company's folder now, so a reply
+        # that does not prove it is refused rather than kept as if it were an
+        # old recording: the id stored here is deleted when this company is
+        # purged, and a caller-chosen one could be anybody's. Recordings made
+        # before signing are already stored, and keep playing.
+        return jsonify({'error': 'That upload could not be verified. Record the answer again.'}), 400
+    url = ref
 
     existing = InterviewResponse.query.filter_by(
         application_id=app_rec.id, question_index=q_index

@@ -253,16 +253,18 @@ def install(app):
             return original()
         plan = plan_for(org)
         status = (org.get('subscription_status') or 'trialing').lower()
-        trial_ends = org.get('trial_ends_at')
-        on_trial = status == 'trialing' and bool(trial_ends) and \
-            trial_ends > datetime.utcnow()
-        days_left = max(0, (trial_ends - datetime.utcnow()).days + 1) if on_trial else 0
+        # The same end plan_for() and the banner use, not the raw column: a
+        # row stored before the one-clock rule can hold an earlier date, and
+        # Billing would then say "not on a trial" beside a banner counting down.
+        ends = trial_ends(org)
+        on_trial = status == 'trialing' and bool(ends) and ends > datetime.utcnow()
+        days_left = max(0, (ends - datetime.utcnow()).days + 1) if on_trial else 0
         return {
             'plan': org.get('plan') or 'solo',
             'effective_plan': plan,
             'on_trial': on_trial,
             'trial_days_left': days_left,
-            'trial_ends_at': trial_ends,
+            'trial_ends_at': ends,
             'grandfathered': bool(org.get('grandfathered')),
             'status': status,
             'label': entitlements.PLANS[plan]['label'],

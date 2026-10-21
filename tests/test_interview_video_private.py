@@ -123,6 +123,18 @@ with app.app_context():
           'what is stored is a signed reference')
     check('res.cloudinary.com' not in (row.cloudinary_url or ''),
           'not the raw provider URL the browser offered')
+    # A reply that does not prove a signed upload into this company's folder
+    # is refused, not stored as an old-style recording: the stored id is what
+    # purging this company deletes, so it must not be one the caller chose.
+    planted = 'akye-private/other-company/interview/their-video'
+    r = c.post('/interview/tok-123/save', json={
+        'question_index': 1, 'question_en': 'Why us?',
+        'cloudinary_public_id': planted,
+        'cloudinary_url': 'https://res.cloudinary.com/testcloud/video/upload/theirs.mp4',
+    })
+    check(r.status_code == 400, f'an unverified upload is refused (got {r.status_code})')
+    check(InterviewResponse.query.filter_by(cloudinary_public_id=planted).first() is None,
+          "and another company's video id is not stored")
 
     print('\n5. Playback is behind the office login')
     anon = app.test_client()
