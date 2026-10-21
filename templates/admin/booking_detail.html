@@ -970,6 +970,59 @@
     </div>
 
 
+    {% if booking.status == 'completed' %}
+    <!-- Repeat this job on demand -->
+    <div class="card" id="book-again" data-card-key="book-again" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Book again</h2>
+      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
+        Repeat this clean on a date of your choosing. It's a one-off booking, not a recurring plan —
+        nothing else gets scheduled.
+      </p>
+      <form method="POST" action="{{ url_for('bookings.book_again', booking_id=booking.id) }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">Date</label>
+            <input type="date" name="repeat_date" required
+                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">Arrival time</label>
+            <input type="text" name="repeat_time" value="{{ booking.preferred_time or '' }}" placeholder="10:00 AM"
+                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label style="font-size:0.82rem">Price</label>
+          <input type="text" name="repeat_price" value="{{ '%.2f'|format(booking.price) if booking.price else '' }}"
+                 placeholder="e.g. 150"
+                 style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+        </div>
+        {% if booking.assigned_cleaner %}
+        <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;margin-bottom:12px">
+          <input type="checkbox" name="same_cleaner" value="1" checked /> Same cleaner ({{ booking.assigned_cleaner }})
+        </label>
+        {% endif %}
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">🔁 Book again</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if booking.repeat_of or booking.repeats %}
+    <div class="card" data-card-key="on-demand-repeats" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 On-demand repeats</h2>
+      {% if booking.repeat_of %}
+      <p style="margin:0 0 6px;font-size:0.9rem">Repeat of
+        <a href="{{ url_for('bookings.detail', booking_id=booking.repeat_of.id) }}">#{{ booking.repeat_of.id }}</a>
+        ({{ booking.repeat_of.preferred_date or 'no date' }}) — an on-demand client, no fixed schedule.</p>
+      {% endif %}
+      {% for r in booking.repeats %}
+      <p style="margin:0 0 6px;font-size:0.9rem">Repeated as
+        <a href="{{ url_for('bookings.detail', booking_id=r.id) }}">#{{ r.id }}</a>
+        on {{ r.preferred_date or '—' }} <span class="status status-{{ r.status }}">{{ r.status }}</span></p>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     {% if plan_suggestion %}
     <!-- Recurring cleaning after a one-off job -->
     <div class="card" data-card-key="recurring-cleaning" style="margin-top:18px">

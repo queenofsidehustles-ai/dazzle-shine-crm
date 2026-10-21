@@ -2390,6 +2390,59 @@ def start_plan(booking_id):
     return redirect(url_for('bookings.detail', booking_id=seed.id))
 
 
+@bookings_bp.route('/<int:booking_id>/book-again', methods=['POST'])
+@login_required
+def book_again(booking_id):
+    """Repeat a finished job on a date the owner picks — for clients who come
+    back now and then rather than on a schedule. The copy is a plain one-off
+    booking (no recurring plan), so confirmation, invoicing and payment work
+    exactly as they do for any other job."""
+    done = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    if done.status != 'completed':
+        flash('Only a completed job can be booked again.', 'error')
+        return back
+    # Same ceiling as every other way of creating a job — repeating a clean is
+    # still a new booking.
+    ok, why = entitlements.check_limit('jobs_per_month')
+    if not ok:
+        flash(why, 'error')
+        return back
+    try:
+        on_date = date.fromisoformat((request.form.get('repeat_date') or '').strip())
+    except ValueError:
+        flash('Pick the date for the repeat clean.', 'error')
+        return back
+
+    price = done.price
+    price_raw = (request.form.get('repeat_price') or '').strip().replace('$', '').replace(',', '')
+    if price_raw:
+        try:
+            price = round(float(price_raw), 2)
+        except ValueError:
+            flash('That price is not a number.', 'error')
+            return back
+
+    overrides = dict(
+        frequency='one_time', recurring_active=False, repeat_of_booking_id=done.id,
+        price=price, balance_due=price, cc_email=done.cc_email, cc_name=done.cc_name,
+        # The scope the customer accepted, including tasks taken off the default.
+        promised_checklist=done.promised_checklist,
+        preferred_time=(request.form.get('repeat_time') or '').strip() or done.preferred_time,
+    )
+    # A crew job's people live in BookingCrew rows, which a repeat starts without.
+    # Keeping just the lead's name would mark the job covered while every spot
+    # is still open, so a crew job comes back unassigned and gets claimed fresh.
+    if not request.form.get('same_cleaner') or (done.crew_size or 1) > 1:
+        overrides['assigned_cleaner'] = None
+    new = recurring.clone_booking(done, on_date, **overrides)
+    db.session.add(new)
+    db.session.commit()
+    _link_client(new)
+    flash(f'🔁 Booked again — #{new.id} on {on_date.isoformat()}.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=new.id))
+
+
 @bookings_bp.route('/<int:booking_id>/stop-recurring', methods=['POST'])
 @login_required
 def stop_recurring(booking_id):
@@ -2539,7 +2592,13 @@ def client_detail(client_id):
     from blueprints.portal import ensure_portal_token
     portal_url = f"{branding.crm_base()}/portal/{ensure_portal_token(client)}"
     from models import BusinessSetting
+    # Latest by when it was actually finished, not by booking id: backfilled or
+    # rescheduled jobs aren't entered in order.
+    done = [b for b in client.bookings if b.status == 'completed']
+    last_done = max(done, key=lambda b: (b.completed_at or datetime.min,
+                                         b.preferred_date or '', b.id), default=None)
     return render_template('admin/client_detail.html', client=client, portal_url=portal_url,
+                           last_done=last_done,
                            email_ok=looks_like_email(client.email),
                            invite_sent=BusinessSetting.get(f'portal_invite_sent_{client.id}'))
 
