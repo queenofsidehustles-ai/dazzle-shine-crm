@@ -7,13 +7,14 @@ as ``limited`` until an owner deliberately reassigns it.
 """
 from flask import abort, request, session
 
-CANONICAL_ROLES = frozenset({'owner', 'admin', 'dispatcher', 'cleaner', 'limited'})
+CANONICAL_ROLES = frozenset({'owner', 'admin', 'dispatcher', 'sales', 'cleaner', 'limited'})
 LEGACY_ROLE_MAP = {'team': 'limited'}
 
 ROLE_LABELS = {
     'owner': 'Owner',
     'admin': 'Admin',
     'dispatcher': 'Dispatcher',
+    'sales': 'Sales',
     'cleaner': 'Cleaner',
     'limited': 'Limited',
 }
@@ -21,6 +22,7 @@ ROLE_OPTIONS = (
     ('limited', 'Limited — booking read only'),
     ('cleaner', 'Cleaner — assigned work only'),
     ('dispatcher', 'Dispatcher — bookings and scheduling'),
+    ('sales', 'Sales — finding and working leads only'),
     ('admin', 'Admin — operations, no finance/pay'),
     ('owner', 'Owner — full access'),
 )
@@ -34,6 +36,7 @@ ROLE_PERMISSIONS = {
         'checklist.manage',
         'pay.manage', 'finance.manage', 'users.manage', 'settings.manage',
         'assigned_work.use', 'account.manage',
+        'prospect.work',
     }),
     'admin': frozenset({
         'booking.read', 'booking.create', 'booking.manage',
@@ -51,6 +54,11 @@ ROLE_PERMISSIONS = {
     # Every role gets account.manage, owner included above -- it is a login
     # managing itself, which has nothing to do with what that login is
     # otherwise allowed to touch.
+    # Somebody whose whole job is finding business: the call list, searching
+    # for businesses, calling, emailing and walking them through -- and
+    # nothing else. No bookings, no customers, no inbox (which is every
+    # customer's and cleaner's texts), no money. Quoting stays with the owner.
+    'sales': frozenset({'prospect.work', 'account.manage'}),
     'cleaner': frozenset({'assigned_work.use', 'account.manage'}),
     'limited': frozenset({'booking.read', 'account.manage'}),
 }
@@ -67,6 +75,9 @@ ENDPOINT_PERMISSIONS = {
     ('bookings.new', 'GET'): 'booking.create',
     ('bookings.new', 'POST'): 'booking.create',
     ('bookings.price_preview', 'GET'): 'booking.create',
+    # Book again makes a new chargeable booking from a finished one, carrying
+    # its customer's saved card: creating a booking, so the same permission.
+    ('bookings.book_again', 'POST'): 'booking.create',
     ('bookings.reschedule', 'POST'): 'dispatch.manage',
     ('bookings.notify_moved', 'POST'): 'dispatch.manage',
     ('bookings.broadcast', 'POST'): 'dispatch.manage',
@@ -80,6 +91,10 @@ ENDPOINT_PERMISSIONS = {
     ('bookings.correct_price', 'POST'): 'pay.manage',
     ('bookings.notify_pay', 'POST'): 'pay.manage',
     ('bookings.save_crew', 'POST'): 'pay.manage',
+    # Assigning sets what somebody is paid, so it is registered under the
+    # money permission; its "offer it to the whole team" branch checks
+    # dispatch.manage itself, because one control now does both jobs.
+    ('bookings.assign', 'POST'): 'pay.manage',
     ('bookings.send_payment_link_route', 'POST'): 'finance.manage',
     ('bookings.resend_deposit_receipt', 'POST'): 'finance.manage',
     ('bookings.log_ad_cost', 'POST'): 'finance.manage',
@@ -93,6 +108,28 @@ ENDPOINT_PERMISSIONS = {
     ('leads.checklist_json', 'GET'): 'lead.manage',
     ('leads.detail', 'POST'): 'lead.manage',
     ('leads.convert', 'POST'): 'lead.manage',
+    # Find leads -- the prospecting module, end to end. Its own permission
+    # rather than lead.read/lead.manage (website leads and quotes) so a Sales
+    # login can have all of this and none of that. Deleting a lead stays
+    # owner-only below.
+    ('places_finder.dashboard', 'GET'): 'prospect.work',
+    ('places_finder.search', 'POST'): 'prospect.work',
+    ('places_finder.import_selected', 'POST'): 'prospect.work',
+    ('places_finder.call_sheet', 'GET'): 'prospect.work',
+    ('places_finder.log_call', 'POST'): 'prospect.work',
+    ('places_finder.update_status', 'POST'): 'prospect.work',
+    ('places_finder.snooze', 'POST'): 'prospect.work',
+    ('places_finder.send_outreach', 'POST'): 'prospect.work',
+    ('places_finder.export_csv', 'GET'): 'prospect.work',
+    ('places_finder.lead_page', 'GET'): 'prospect.work',
+    ('places_finder.edit_lead', 'POST'): 'prospect.work',
+    ('places_finder.set_kind', 'POST'): 'prospect.work',
+    ('places_finder.add_by_hand', 'POST'): 'prospect.work',
+    ('places_finder.book_walkthrough', 'POST'): 'prospect.work',
+    ('places_finder.save_walkthrough', 'POST'): 'prospect.work',
+    ('places_finder.text_lead', 'POST'): 'prospect.work',
+    ('places_finder.ready_to_quote', 'POST'): 'prospect.work',
+    ('places_finder.my_numbers', 'GET'): 'prospect.work',
 
     ('messages.sent_log', 'GET'): 'messages.read',
     ('messages.inbox', 'GET'): 'messages.read',
@@ -125,6 +162,13 @@ ENDPOINT_PERMISSIONS = {
 # being no permission-based grant here at all.
 OWNER_ONLY_ENDPOINTS = frozenset({
     ('leads.delete', 'POST'),
+    ('places_finder.delete', 'POST'),
+    # Who works which lead is the owner's call: a rep cannot take a
+    # teammate's leads, or hand their own to somebody else.
+    ('places_finder.assign', 'POST'),
+    ('places_finder.assign_many', 'POST'),
+    ('places_finder.team', 'GET'),
+    ('places_finder.set_targets', 'POST'),
     ('messages.request_bgcheck', 'POST'),
     ('staff.index', 'GET'),
     ('staff.edit', 'POST'),
@@ -134,6 +178,11 @@ OWNER_ONLY_ENDPOINTS = frozenset({
     ('quotes.index', 'GET'),
     ('quotes.new', 'POST'),
     ('quotes.send_quote', 'POST'),
+    ('quotes.review', 'GET'),
+    ('quotes.review', 'POST'),
+    ('quotes.circulate', 'POST'),
+    ('quotes.document', 'GET'),
+    ('quotes.lines_json', 'POST'),
     ('invoices.index', 'GET'),
     # Contractor payouts: real money out (a Stripe transfer, or a manual
     # payment recorded as paid). Route-decorator-only here would repeat the
@@ -186,6 +235,35 @@ def required_permission(endpoint=None, method=None):
     return ENDPOINT_PERMISSIONS.get((endpoint, method))
 
 
+# Roles for which "not in the matrix" means no, not "ask the route". The older
+# roles defer to route-local checks on unclassified pages because most of the
+# app predates this matrix; a role created to reach one module only cannot
+# inherit that, or "prospecting only" would mean "prospecting, and every
+# unclassified form in the app" -- deleting bookings, hiring, discounts.
+FAIL_CLOSED_ROLES = frozenset({'sales'})
+
+# What such a role may still reach unclassified: managing its own login, and
+# the few things every back-office page offers -- feedback, the brand lens,
+# a city switch, signing out.
+UNCLASSIFIED_ALLOWED = frozenset({
+    'feedback.send', 'settings.switch_brand', 'admin.switch_city', 'admin.logout',
+})
+# tips.*: a tip read, a suggestion followed or turned down -- each writes only
+# the signed-in person's own record (adoption.py).
+UNCLASSIFIED_ALLOWED_PREFIXES = ('account.', 'tips.')
+
+
+def _unclassified_allowed(endpoint):
+    endpoint = endpoint or ''
+    return (endpoint in UNCLASSIFIED_ALLOWED
+            or endpoint.startswith(UNCLASSIFIED_ALLOWED_PREFIXES))
+
+
+# Where a role lands when it opens the back office. The dashboard is bookings
+# and money; a role that may not see it would otherwise sign in to a refusal.
+ROLE_HOME = {'sales': 'places_finder.dashboard'}
+
+
 def enforce_current_request():
     """Enforce IAM on routes deliberately classified in the central matrix.
 
@@ -213,7 +291,14 @@ def enforce_current_request():
 
     permission = required_permission()
     if permission is None:
+        if role in FAIL_CLOSED_ROLES and not _unclassified_allowed(request.endpoint):
+            abort(403, description='Your account is not permitted to perform this action.')
         return None
     if not has_permission(role, permission):
+        home = ROLE_HOME.get(role)
+        if (home and request.endpoint == 'admin.dashboard'
+                and (request.method or '').upper() == 'GET'):
+            from flask import redirect, url_for
+            return redirect(url_for(home))
         abort(403, description='Your account is not permitted to perform this action.')
     return None

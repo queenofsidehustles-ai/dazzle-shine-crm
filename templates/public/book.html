@@ -479,7 +479,7 @@
       document.querySelector('.page').innerHTML =
         // Embedded, this sits inside somebody's own page and must not suddenly
         // paint a header bar across it.
-        {% if not embed %}'<div class="masthead"><h1>{{ biz }}</h1></div>' +{% endif %}
+        {% if not embed %}'<div class="masthead"><h1>{{ biz|e|js }}</h1></div>' +{% endif %}
         '<div class="done"><div class="tick">✓</div>' +
         '<h2>Thank you — we have your request.</h2>' +
         '<p>We will confirm your booking shortly' +

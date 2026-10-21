@@ -10,12 +10,10 @@
 
   <!-- LEFT: Client & Service Info -->
   <div data-reorder-col="left">
-    <div class="card" data-card-key="customer">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
-        Client Info
-        <a href="#" onclick="document.getElementById('contactBox').open=true;this.blur();return false"
-           style="float:right;font-size:0.72rem;color:var(--amber-deep);text-transform:none;letter-spacing:0;font-weight:600">✎ edit</a>
-      </h2>
+  <div class="card" data-card-key="booking">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">The booking</h2>
+      <div style="">
+      <h3 style="font-size:0.82rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">Customer</h3>
       <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ booking.name }}</span></div>
       <div class="detail-row"><span class="dl">Email</span><span class="dv">
         {% if booking.email %}<a href="mailto:{{ booking.email }}" style="color:var(--muted)">{{ booking.email }}</a>
@@ -192,12 +190,8 @@
       {% endif %}
     </div>
 
-    <div class="card" data-card-key="service">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
-        Service Details
-        <a href="#" onclick="document.getElementById('serviceBox').open=true;this.blur();return false"
-           style="float:right;font-size:0.72rem;color:var(--amber-deep);text-transform:none;letter-spacing:0;font-weight:600">✎ edit</a>
-      </h2>
+      <div style="border-top:1px solid var(--line);padding-top:18px;margin-top:18px">
+      <h3 style="font-size:0.82rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">The job</h3>
       <div class="detail-row"><span class="dl">Service</span><span class="dv">{{ booking.service_label }}</span></div>
       <div class="detail-row"><span class="dl">Bedrooms</span><span class="dv">{{ booking.bedrooms or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Bathrooms</span><span class="dv">{{ booking.bathrooms or '—' }}</span></div>
@@ -311,11 +305,13 @@
       </details>
     </div>
   </div>
+  </div>
 
   <!-- RIGHT: Edit Status & Notes -->
   <div data-reorder-col="right">
-    <div class="card" data-card-key="manage">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Manage Booking</h2>
+  <div class="card" data-card-key="money">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">The money</h2>
+      <div style="">
       {% if booking.status not in ('completed', 'cancelled', 'on_hold') %}
       <form method="POST" action="{{ url_for('bookings.mark_complete', booking_id=booking.id) }}" style="margin-bottom:16px"
             onsubmit="return confirm('Mark this booking complete? No photos needed.')">
@@ -477,805 +473,14 @@
         <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">Delete Booking</button>
       </form>
     </div>
-
-    {# Sit outside the other forms so their buttons can post on their own #}
-    <form method="POST" id="reRateForm" action="{{ url_for('bookings.re_rate', booking_id=booking.id) }}"></form>
-    <form method="POST" id="adCostForm" action="{{ url_for('bookings.log_ad_cost', booking_id=booking.id) }}"></form>
-
-    <!-- Crew — big houses that need more than one cleaner -->
-    <div class="card" data-card-key="crew-pay" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">👥 Who's Paid For This Job</h2>
-      <form method="POST" action="{{ url_for('bookings.save_crew', booking_id=booking.id) }}">
-        {# The pot. Person-hours x the hourly rate — deliberately nothing to do
-           with what the customer was charged, so a discount can't cut their pay. #}
-        <div class="form-group">
-          <label>Work in this job
-            <span style="font-weight:400;color:var(--softer)">— person-hours, not clock time</span>
-          </label>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <input type="number" step="0.25" min="0" name="estimated_hours"
-                   value="{{ booking.estimated_hours or '' }}" placeholder="e.g. 3"
-                   style="width:90px;margin:0" />
-            <span style="color:var(--softer);font-size:0.9rem">hours × ${{ '%.0f' % booking.rate_applied }}/hr =</span>
-            <strong style="font-size:1.05rem;color:var(--amber-deep)">
-              {{ '$%.2f' % booking.labor_budget if booking.labor_budget is not none else '—' }}
-            </strong>
-          </div>
-          {% if booking.rate_is_stale %}
-          {# The job keeps the rate it was quoted at. Moving it is deliberate. #}
-          <div style="background:var(--info-soft);border:1px solid var(--info-soft);color:var(--info);border-radius:8px;padding:9px 12px;margin-top:8px;font-size:0.83rem">
-            This job was quoted at <strong>${{ '%.0f' % booking.labor_rate_applied }}/hr</strong>; your current rate is
-            <strong>${{ '%.0f' % labor_rate }}/hr</strong>. It keeps the old rate unless you move it.
-            <button type="submit" form="reRateForm" class="btn btn-outline"
-                    style="padding:4px 12px;font-size:0.78rem;margin-left:6px">Re-rate to ${{ '%.0f' % labor_rate }}</button>
-          </div>
-          {% endif %}
-          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
-            {% if booking.labor_budget is none %}
-              No estimate yet, so this job still pays the old 50%. Put the person-hours in and press <strong>Save pay</strong> at the bottom of this card to switch it over.
-            {% else %}
-              Two cleaners split this and each finish in half the time — same ${{ '%.0f' % booking.rate_applied }}/hour either way. Change the hours if this job is harder than the chart assumes.
-            {% endif %}
-          </p>
-
-          {# Working it herself takes hours out of the paid pot and earns her a
-             share of the tip — she isn't paying herself, but she is doing work. #}
-          <div style="background:var(--ground);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-top:10px">
-            <label style="font-size:0.84rem;font-weight:700;display:block;margin-bottom:5px">🧽 Are you working this job?</label>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <input type="number" step="0.25" min="0" name="owner_hours"
-                     value="{{ booking.owner_hours or '' }}" placeholder="0"
-                     style="width:80px;margin:0" />
-              <span style="font-size:0.83rem;color:var(--softer)">of the {{ '%g' % (booking.estimated_hours or 0) }} hours are yours</span>
-            </div>
-            {% if booking.owner_hours %}
-            <p style="font-size:0.78rem;color:var(--good);margin-top:6px">
-              You're doing {{ '%g' % booking.owner_hours }} hrs, so the cleaners are paid for
-              <strong>{{ '%g' % booking.payable_hours }} hrs</strong> — not the full {{ '%g' % booking.estimated_hours }}.
-
-            </p>
-            {% else %}
-            <p style="font-size:0.76rem;color:var(--softer);margin-top:5px">
-              Leave blank if a cleaner does the whole job. Put your hours in and they come out of the paid pot — and you take that share of any tip.
-            </p>
-            {% endif %}
-          </div>
-        </div>
-
-        {% if booking.below_floor_by %}
-        {# Priced under what the work costs plus overhead. Flagged, not blocked —
-           sometimes a job below the floor is still the right call. #}
-        <div style="background:var(--warn-soft);border:1px solid var(--warn-soft);color:var(--warn);border-radius:9px;padding:11px 13px;margin-bottom:14px">
-          <div style="font-weight:700;font-size:0.9rem">🚩 ${{ '%.2f' % booking.below_floor_by }} below your floor price</div>
-          <div style="font-size:0.82rem;margin-top:3px">
-            {# committed_labor, not labor_budget — a job with a crew but no hour
-               estimate has a real cost and no budget, and printing None here
-               took the whole page down. #}
-            This job needs <strong>${{ '%.2f' % booking.floor_price }}</strong> to cover
-            ${{ '%.2f' % booking.committed_labor }} of cleaner pay at your {{ '%.0f' % max_labor_pct }}% cap.
-            You're charging ${{ '%.2f' % booking.price }}.
-          </div>
-          <input type="text" name="below_floor_reason" form="jobEditForm"
-                 value="{{ booking.below_floor_reason or '' }}"
-                 placeholder="Taking it anyway? Say why — e.g. long-standing client, first job of a recurring plan"
-                 style="width:100%;margin-top:8px;padding:7px 9px;font-size:0.82rem;border:1px solid var(--warn-soft);border-radius:7px" />
-        </div>
-        {% elif booking.labor_percent is not none %}
-        {% set lp = booking.labor_percent %}
-        <div style="border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:0.86rem;font-weight:600;
-                    background:{{ 'var(--amber-soft)' if lp > 48 else 'var(--good-soft)' }};
-                    color:{{ 'var(--amber-deep)' if lp > 48 else 'var(--good)' }}">
-          {% if lp > 48 %}Labor is {{ lp }}% of this job's price. Floor is ${{ '%.2f' % booking.floor_price }}.
-          {% else %}✅ Labor is {{ lp }}% of this job's price — healthy.{% endif %}
-        </div>
-        {% endif %}
-
-        {# One company hourly rate cannot be right for a move-out and for a
-           discounted biweekly at the same time. Saying the pay outright makes
-           the hours a planning estimate and stops the floor warning arguing
-           about money that was never going to be spent. #}
-        <div class="form-group">
-          <label>Pay each cleaner
-            <span style="font-weight:400;color:var(--softer)">— set it yourself, or leave blank to use the hours</span>
-          </label>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span style="color:var(--softer)">$</span>
-            <input type="number" step="0.01" min="0" name="crew_pay_each"
-                   value="{{ '%.2f' % booking.crew_pay_each if booking.crew_pay_each else '' }}"
-                   placeholder="{{ '%.2f' % (booking.labor_budget / (booking.crew_size or 1)) if booking.labor_budget is not none else 'e.g. 75.00' }}"
-                   style="width:110px;margin:0" />
-            <span style="font-size:0.85rem;color:var(--softer)">each, flat for the job</span>
-          </div>
-          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
-            {% if booking.crew_pay_each %}
-              This is what goes out in the job offer and what payroll pays.
-              {% if booking.estimated_hours %}The {{ '%g' % booking.estimated_hours }} hours stay here as your estimate — the team never sees them.{% endif %}
-            {% else %}
-              Blank means the hours decide it{% if booking.labor_budget is not none %} — currently ${{ '%.2f' % (booking.labor_budget / (booking.crew_size or 1)) }} each{% endif %}.
-            {% endif %}
-          </p>
-        </div>
-
-        <div class="form-group">
-          <label>How many cleaners are you paying?</label>
-          <select name="crew_size">
-            {% for n in range(1, 7) %}
-            <option value="{{ n }}" {{ 'selected' if (booking.crew_size or 1) == n }}>{{ n }} paid cleaner{{ 's' if n != 1 }}</option>
-            {% endfor %}
-          </select>
-          <p style="font-size:0.8rem;color:var(--softer);margin-top:6px">
-            Don't count yourself if you're working this one. Working a big house with one cleaner? That's <strong>1 paid cleaner</strong> — add her below with the amount you want and send it straight to her.
-          </p>
-        </div>
-
-        {% if booking.crew or booking.is_crew_job %}
-        {# On an hours-based job the pot is the hours × the rate, not a slice of
-           the price. Showing the price-based pot here told her the crew was
-           splitting $245 when the hours said something quite different. #}
-        {% if booking.crew_pay_each or booking.labor_budget is not none %}
-        {% set size = booking.crew_size or 1 %}
-        {% set each = booking.crew_pay_each if booking.crew_pay_each else (booking.labor_budget / size) %}
-        {% set total = each * size %}
-        <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-weight:700">{{ size }} cleaner{{ '' if size == 1 else 's' }} ×</span>
-            <span style="font-weight:700;font-size:1.35rem;color:var(--amber)">${{ '%.2f' % each }} each</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:6px 0 2px">
-            <span>{{ 'Pay you set' if booking.crew_pay_each else 'From the hours (%g × $%.0f/hr)' % (booking.payable_hours, booking.rate_applied) }}</span>
-            <span>${{ '%.2f' % total }} total</span>
-          </div>
-          <p style="font-size:0.74rem;color:rgba(255,255,255,0.45);margin-top:7px">
-            ${{ '%.2f' % each }} is the figure in the job offer and on payroll. Of the
-            ${{ '%.2f' % booking.commissionable_price }} after the lead fee.
-            {# "You keep" lived here too, and it is the same subtraction the live
-               tile on the Manage Booking card performs. Two tiles on one screen
-               both labelled "You keep" is the thing worth removing, even now
-               they agree; this one keeps the per-cleaner split, which is what
-               only it knows. #}
-            What's left is on the price card above.
-          </p>
-        </div>
-        {% else %}
-        {% set pot = booking.commissionable_price %}
-        {% set left = pot - booking.crew_allocated %}
-        <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
-            <span>Pot to divide (job minus lead fee)</span><span>${{ '%.2f' % pot }}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
-            <span>Paying {{ 'the crew' if booking.crew|length > 1 else 'the cleaner' }}</span><span>${{ '%.2f' % booking.crew_allocated }}</span>
-          </div>
-          <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-weight:700">{{ 'Left in the pot' if left >= 0 else '⚠️ Over the pot by' }}</span>
-            <span style="font-weight:700;font-size:1.2rem;color:{{ 'var(--amber)' if left >= 0 else 'var(--warn-soft)' }}">${{ '%.2f' % (left if left >= 0 else -left) }}</span>
-          </div>
-        </div>
-        {% endif %}
-
-        {% for c in booking.crew %}
-        <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--info-soft)">
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:0.92rem">{{ c.staff.name if c.staff else 'Unknown' }}
-              {% if booking.assigned_cleaner and c.staff and c.staff.name == booking.assigned_cleaner %}<span style="font-size:0.68rem;color:var(--info);background:var(--info-soft);padding:1px 7px;border-radius:999px;font-weight:700">LEAD</span>{% endif %}
-            </div>
-            <div style="font-size:0.75rem;color:var(--softer)">
-              {% if c.paid_at %}✅ Paid {{ c.paid_at.strftime('%b %-d') }}{% elif c.claimed_at %}Claimed {{ c.claimed_at.strftime('%b %-d') }}{% else %}Assigned by you{% endif %}
-              {% if booking.hours_each() %} · {{ '%g' % booking.hours_each() }} hrs est{% endif %}
-            </div>
-            {# What the clock says, for a cleaner paid by the hour. The figure
-               is shown and offered; it is never applied on its own. Money that
-               changes itself between one look at a page and the next is how an
-               owner stops trusting the numbers. #}
-            {% if c.staff and c.staff.pay_type == 'hourly' %}
-            {% set worked = c.staff.hours_on(booking) %}
-            {% set due = c.staff.hourly_pay_for(booking) %}
-            <div class="clocked">
-              {% if worked is none %}
-                <span class="no">Not clocked in yet</span>
-              {% else %}
-                <span class="yes">🕒 {{ '%.2f'|format(worked) }} h actual</span>
-                <span class="calc">× ${{ '%.2f'|format(c.staff.pay_rate or 0) }} = <b>${{ '%.2f'|format(due or 0) }}</b></span>
-                {% if not c.paid_at and due is not none and (due - (c.pay_amount or 0))|abs > 0.005 %}
-                <button type="submit" class="useclock"
-                        formaction="{{ url_for('bookings.use_clocked_pay', booking_id=booking.id, crew_id=c.id) }}">
-                  Use this
-                </button>
-                {% endif %}
-              {% endif %}
-            </div>
-            {% endif %}
-          </div>
-          <div style="display:flex;align-items:center;gap:3px">
-            <span style="color:var(--softer)">$</span>
-            <input type="number" step="0.01" min="0" name="pay_{{ c.id }}" value="{{ '%.2f' % (c.pay_amount or 0) }}"
-                   {{ 'disabled' if c.paid_at }} style="width:84px;padding:6px 8px;margin:0" />
-          </div>
-          {% if not c.paid_at %}
-          <button type="submit" formaction="{{ url_for('bookings.remove_crew', booking_id=booking.id, crew_id=c.id) }}"
-                  onclick="return confirm('Remove {{ c.staff.name if c.staff else 'this cleaner' }} from this job? Their spot re-opens.')"
-                  title="Remove from crew"
-                  style="background:none;border:1px solid var(--warn-soft);color:var(--warn);border-radius:7px;padding:5px 9px;cursor:pointer;font-weight:700">✕</button>
-          {% endif %}
-        </div>
-        {% endfor %}
-        {% endif %}
-
-        {# Always available — this is how a job gets given to someone directly,
-           whether it needs one cleaner or a whole crew. #}
-        {% if booking.spots_left > 0 %}
-        <div style="background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:12px 13px;margin-top:14px">
-          <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:7px">
-            ➕ Give this job to a specific cleaner
-            <span style="display:block;font-weight:400;color:var(--softer);font-size:0.79rem;margin-top:3px">Skips the job board — no claim link, she just gets the work.</span>
-          </label>
-          <select name="add_staff_id" style="margin-bottom:8px">
-            <option value="">— Pick a cleaner —</option>
-            {% for s in staff %}
-              {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}
-            {% endfor %}
-          </select>
-          <div style="display:flex;align-items:center;gap:7px">
-            <span style="font-size:0.85rem;color:var(--muted);white-space:nowrap">Pay her $</span>
-            <input type="number" step="0.01" min="0" name="add_pay"
-                   placeholder="{{ '%.2f' % (booking.commissionable_price / (booking.crew_size or 1)) }}"
-                   style="width:100px;padding:7px 9px;margin:0" />
-            <span style="font-size:0.78rem;color:var(--softer)">blank = auto</span>
-          </div>
-          <p style="font-size:0.78rem;color:var(--muted);margin-top:7px">
-            {% if booking.labor_budget is not none %}
-              Suggested from the hours above: <strong>${{ '%.2f' % booking.default_crew_pay(staff[0]) if staff else '—' }}</strong> per cleaner. Type over it if this one's different.
-            {% else %}
-              This job pays out <strong>${{ '%.2f' % booking.commissionable_price }}</strong>{% if booking.lead_fee %} (${{ '%.2f' % booking.price }} minus the ${{ '%.2f' % booking.lead_fee }} lead fee){% endif %} — whatever you don't give her, you keep.
-            {% endif %}
-          </p>
-          <button type="submit" name="send_now" value="1" class="btn btn-gold"
-                  style="width:100%;justify-content:center;margin-top:10px">
-            📲 Add &amp; send the job to her now
-          </button>
-          <p style="font-size:0.76rem;color:var(--softer);margin-top:6px">She gets a text + email with the address, entry notes, her pay, and the checklist link.</p>
-        </div>
-        {% endif %}
-
-        <div style="display:flex;gap:8px;margin-top:12px">
-          <button type="submit" class="btn {{ 'btn-outline' if booking.spots_left > 0 else 'btn-gold' }}" style="flex:1;justify-content:center">Save pay</button>
-          {% if booking.crew|length > 1 %}
-          <button type="submit" name="even_split" value="1" class="btn btn-outline" style="justify-content:center"
-                  title="Reset every unpaid share to an even split">Split evenly</button>
-          {% endif %}
-        </div>
-      </form>
-
-      {% if booking.crew %}
-      <form method="POST" action="{{ url_for('bookings.send_crew', booking_id=booking.id) }}" style="margin-top:10px">
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
-          📲 Re-send the job to {{ booking.crew_label }}
-        </button>
-      </form>
-      {% endif %}
-    </div>
-
-    <!-- Offer to the team (first to claim wins) -->
-    <div class="card" data-card-key="offer-team" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">📣 Offer to the Team</h2>
-      {% if booking.open_for_claim %}
-      <div style="background:var(--info-soft);border:1px solid var(--info-soft);color:var(--info);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
-        ⏳ Open on the board — waiting for
-        {% if booking.is_crew_job %}{{ booking.spots_left }} more cleaner{{ 's' if booking.spots_left != 1 }} to claim a spot{% else %}someone to claim it{% endif %}.
-        {% if booking.broadcast_at %}Offered {{ booking.broadcast_at.strftime('%b %-d, %-I:%M %p') }}.{% endif %}
-      </div>
-      {% endif %}
-      <p style="font-size:0.85rem;color:var(--muted);margin:8px 0 12px">
-        {% if booking.is_crew_job %}
-        Text every available cleaner — the first {{ booking.spots_left }} to claim take the open spot{{ 's' if booking.spots_left != 1 }}. Anyone already on the crew keeps their spot and won't be texted again.
-        {% else %}
-        Text every available cleaner — the first to claim it gets the job (blocks anyone whose day would clash).
-        {% endif %}
-      </p>
-      {% set no_spots = booking.crew and booking.spots_left <= 0 %}
-      <form method="POST" action="{{ url_for('bookings.broadcast', booking_id=booking.id) }}"
-            onsubmit="return confirm({{ ('Offer the ' ~ booking.spots_left ~ ' open spot(s) to the team?') | tojson if booking.is_crew_job else '\'Offer this job to the whole team? First to claim it gets it.\'' }})">
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center"
-                {{ 'disabled' if no_spots }}>
-          {% if no_spots %}✅ Already assigned to {{ booking.crew_label }}
-          {% else %}{{ '🔁 Re-offer to the team' if booking.open_for_claim else '📣 Offer to the team' }}{% endif %}
-        </button>
-      </form>
-    </div>
-
-    {# ── Send to customer ─────────────────────────────────────────────────
-       Eight ways to message a customer were spread across two cards: the
-       confirmation and the confirm-request and the payment link and the invoice
-       and the re-dated invoice and the receipts and a plain email, each its own
-       button in its own place, several of them buried under the money. Same
-       messages, same forms, one card — you pick what to send, and only that
-       one's controls are on screen. Receipts for money already taken stay on
-       the money card, where the figure they receipt is. #}
-    <div class="card" data-card-key="send-customer" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">✉️ Send to customer</h2>
-
-    {# Whether they have answered is a fact about the job, so it stays in
-       plain sight rather than behind the chooser below. #}
-    {% if booking.status in ['pending', 'confirmed'] %}
-      {% if booking.confirm_response == 'yes' %}
-        <p style="color:var(--good);font-size:0.9rem;margin:0">✅ They confirmed on {{ booking.confirm_responded_at.strftime('%d %B') }}.</p>
-      {% elif booking.confirm_response == 'no' %}
-        <p style="color:var(--amber-deep);font-size:0.9rem;margin:0">❌ They declined on {{ booking.confirm_responded_at.strftime('%d %B') }}. The job was cancelled.</p>
-      {% endif %}
-    {% endif %}
-
-      {# Warn, but do not take the controls away. An invoice raised against a
-         booking with no contact details is still a real invoice — send_invoice
-         says so itself ("share the link manually") — and hiding the chooser
-         here removed the only way to raise one. #}
-      {% if not booking.email and not booking.phone %}
-      <p style="font-size:0.85rem;color:var(--warn);font-weight:600;margin:10px 0 0">
-        ⚠️ No email or phone on this booking, so nothing can be delivered. An invoice
-        can still be raised here and its link shared by hand.</p>
-      {% endif %}
-      <div class="form-group" style="margin:12px 0 14px">
-        <label for="sendKind" style="font-size:0.82rem">What do you want to send?</label>
-        <select id="sendKind" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px">
-          {% if booking.status in ['pending', 'confirmed'] and booking.confirm_response not in ['yes', 'no'] %}
-          <option value="confirm-request">Ask them to confirm — with a Yes / No button</option>
-          {% endif %}
-          {% if not settled %}
-          <option value="confirmation">The booking confirmation</option>
-          <option value="payment-link">A payment request</option>
-          <option value="invoice">{{ 'The invoice — resend ' ~ booking.invoice_number if booking.invoice_number else 'An invoice' }}</option>
-          {% endif %}
-          <option value="freeform">Something in your own words</option>
-        </select>
-      </div>
-
-      {# Every panel is rendered. The script below hides all but the chosen one,
-         so with no JavaScript the page still shows every option rather than
-         none of them. #}
-    {% if booking.status in ['pending', 'confirmed'] %}
-      <div class="send-panel" data-kind="confirm-request">
-      {% if booking.confirm_response not in ['yes', 'no'] %}
-        <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px">
-          Gone quiet on you? Send them this date and price with a Yes/No button.
-          Easier to answer than "are you still interested?" — and you hear back either way.
-          {% if booking.confirm_sent_at %}
-          <br><strong style="color:var(--amber-deep)">Sent {{ booking.confirm_sent_at.strftime('%d %B') }} — no answer yet.</strong>
-          {% endif %}
-        </p>
-        <form method="POST" action="{{ url_for('bookings.proposal_send', booking_id=booking.id) }}">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
-            <div class="form-group" style="margin-bottom:10px">
-              <label style="font-size:0.82rem">How often</label>
-              <select name="plan_frequency" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px">
-                <option value="one_time" {{ 'selected' if booking.frequency in ['one_time', None] }}>Just this once</option>
-                <option value="weekly" {{ 'selected' if booking.frequency == 'weekly' }}>Every week</option>
-                <option value="biweekly" {{ 'selected' if booking.frequency == 'biweekly' }}>Every 2 weeks (twice a month)</option>
-                <option value="monthly" {{ 'selected' if booking.frequency == 'monthly' }}>Once a month</option>
-              </select>
-            </div>
-            <div class="form-group" style="margin-bottom:10px">
-              <label style="font-size:0.82rem">Price per clean</label>
-              <input type="text" name="plan_price" value="{{ '%.2f'|format(booking.price) if booking.price else '' }}"
-                     placeholder="e.g. 165"
-                     style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-            </div>
-            <div class="form-group" style="margin-bottom:10px">
-              <label style="font-size:0.82rem">Date you're holding</label>
-              <input type="date" name="plan_date" value="{{ booking.preferred_date or '' }}"
-                     style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-            </div>
-            <div class="form-group" style="margin-bottom:10px">
-              <label style="font-size:0.82rem">Time</label>
-              <input type="text" name="plan_time" value="{{ booking.preferred_time or '' }}" placeholder="9:00 AM"
-                     style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-            </div>
-          </div>
-          <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">Say it in your own words <span style="font-weight:400;color:var(--softer)">— optional</span></label>
-            <textarea name="confirm_note" rows="4"
-                      placeholder="Hi Susan, lovely to speak the other week — I've held this slot for you…"
-                      style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:0.88rem;line-height:1.5">{{ booking.confirm_note or '' }}</textarea>
-            <span style="font-size:0.75rem;color:var(--softer)">
-              Replaces the opening line of the email. Leave it blank and a sensible default is used.
-              Goes in the email only — the text stays short.
-              <br>They can confirm, <strong>suggest a different day or time</strong>, or decline. You hear back either way.
-            </span>
-          </div>
-          <button type="submit" class="btn btn-outline"
-                  formaction="{{ url_for('bookings.proposal_preview', booking_id=booking.id) }}"
-                  formtarget="_blank"
-                  style="width:100%;justify-content:center;margin-bottom:8px">👁 Preview the email &amp; text</button>
-          <div style="display:flex;gap:7px">
-            <button type="submit" name="to" value="me" class="btn btn-outline" style="flex:1;justify-content:center">✉️ Test to me</button>
-            <button type="submit" name="to" value="customer" class="btn btn-gold" style="flex:1;justify-content:center"
-                    onclick="return confirm('Ask {{ booking.name }} to confirm this booking?');"
-                    {% if not booking.email and not booking.phone %}disabled{% endif %}>Send to {{ booking.name.split()[0] }}</button>
-          </div>
-        </form>
-      {% endif %}
-
-      </div>
-    {% endif %}
-
-      {% if not settled %}
-      <div class="send-panel" data-kind="confirmation">
-      {# The confirmation used to fire only at the moment a booking was created.
-         If it didn't go then, there was no way to send it at all. #}
-      <div style="background:var(--good-soft);border:1px solid var(--good-soft);border-radius:10px;padding:12px 13px;margin-top:12px">
-        <div style="font-weight:700;font-size:0.88rem;color:var(--good);margin-bottom:3px">📩 Send the booking confirmation</div>
-        <p style="font-size:0.79rem;color:var(--good);margin:0 0 9px">
-          The full details — service, date, time, address and price — by email and text.
-          Add a payment request to the same send if you want one.
-        </p>
-        <a href="{{ url_for('bookings.confirmation_preview', booking_id=booking.id) }}"
-           target="_blank" class="btn btn-outline"
-           style="width:100%;justify-content:center;margin-bottom:9px;background:#fff">👁 Preview the email &amp; text</a>
-        <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
-              style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
-          <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--good-soft);border-radius:8px;margin:0">
-            <option value="none" selected>Confirmation only</option>
-            <option value="deposit">+ ask for the deposit</option>
-            <option value="full">+ ask for the full amount</option>
-          </select>
-          <button type="submit" class="btn btn-gold" style="flex-shrink:0">Send</button>
-        </form>
-        <p style="font-size:0.76rem;color:var(--good);margin:8px 0 0">
-          Set to <strong>Confirmation only</strong> — no money is requested unless you change it.
-        </p>
-        {% if not booking.email and not booking.phone %}
-        <p style="font-size:0.78rem;color:var(--warn);margin:8px 0 0">⚠️ This booking has no email or phone — nothing can be sent.</p>
-        {% endif %}
-      </div>      </div>
-      <div class="send-panel" data-kind="payment-link">
-
-      <form method="POST" action="{{ url_for('bookings.send_payment_link_route', booking_id=booking.id) }}" style="margin-top:10px">
-        <input type="hidden" name="kind" value="full">
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📩 Email + text this payment link</button>
-      </form>
-      </div>
-      <div class="send-panel" data-kind="invoice">
-      <!-- Real invoice -->
-      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}" style="margin-top:10px">
-        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">🧾 {{ 'Resend invoice ' + booking.invoice_number if booking.invoice_number else 'Send invoice' }}</button>
-      </form>
-      {% if booking.invoice_number %}
-      <p style="text-align:center;font-size:0.78rem;color:var(--softer);margin-top:6px">
-        Invoice <strong>{{ booking.invoice_number }}</strong>{% if booking.invoice_due_date %} · due {{ booking.invoice_due_date }}{% endif %} ·
-        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:var(--amber-deep)">view →</a>
-      </p>
-      {# An invoice already issued keeps its dates. Re-dating one the customer
-         already has is deliberate, never a side effect of resending. #}
-      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}"
-            onsubmit="return confirm('Re-date this invoice to today and resend it? The customer will see the new due date.')"
-            style="margin-top:6px">
-        <input type="hidden" name="reissue_dates" value="1">
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:6px;font-size:0.78rem">
-          🗓️ Re-date to today &amp; resend
-        </button>
-      </form>
-      {% elif booking.pay_token %}
-      <p style="text-align:center;font-size:0.78rem;color:var(--softer);margin-top:6px">
-        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:var(--amber-deep)">
-          Preview invoice →</a> — nothing is sent to the customer
-      </p>
-      {% endif %}      </div>
-      {% endif %}
-
-      <div class="send-panel" data-kind="freeform">
-      <a href="{{ url_for('bookings.email_customer', booking_id=booking.id) }}"
-         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">✉️ Email the customer</a>
-        <p style="font-size:0.78rem;color:var(--softer);margin:6px 0 0">
-          Opens a page where you write the message yourself.</p>
-      </div>
-    </div>
-
-
-    {% if booking.status == 'completed' %}
-    <!-- Repeat this job on demand -->
-    <div class="card" id="book-again" data-card-key="book-again" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Book again</h2>
-      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
-        Repeat this clean on a date of your choosing. It's a one-off booking, not a recurring plan —
-        nothing else gets scheduled.
-      </p>
-      <form method="POST" action="{{ url_for('bookings.book_again', booking_id=booking.id) }}">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">Date</label>
-            <input type="date" name="repeat_date" required
-                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-          </div>
-          <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">Arrival time</label>
-            <input type="text" name="repeat_time" value="{{ booking.preferred_time or '' }}" placeholder="10:00 AM"
-                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-          </div>
-        </div>
-        <div class="form-group" style="margin-bottom:10px">
-          <label style="font-size:0.82rem">Price</label>
-          <input type="text" name="repeat_price" value="{{ '%.2f'|format(booking.price) if booking.price else '' }}"
-                 placeholder="e.g. 150"
-                 style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-        </div>
-        {% if booking.assigned_cleaner %}
-        <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;margin-bottom:12px">
-          <input type="checkbox" name="same_cleaner" value="1" checked /> Same cleaner ({{ booking.assigned_cleaner }})
-        </label>
-        {% endif %}
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">🔁 Book again</button>
-      </form>
-    </div>
-    {% endif %}
-
-    {% if booking.repeat_of or booking.repeats %}
-    <div class="card" data-card-key="on-demand-repeats" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 On-demand repeats</h2>
-      {% if booking.repeat_of %}
-      <p style="margin:0 0 6px;font-size:0.9rem">Repeat of
-        <a href="{{ url_for('bookings.detail', booking_id=booking.repeat_of.id) }}">#{{ booking.repeat_of.id }}</a>
-        ({{ booking.repeat_of.preferred_date or 'no date' }}) — an on-demand client, no fixed schedule.</p>
-      {% endif %}
-      {% for r in booking.repeats %}
-      <p style="margin:0 0 6px;font-size:0.9rem">Repeated as
-        <a href="{{ url_for('bookings.detail', booking_id=r.id) }}">#{{ r.id }}</a>
-        on {{ r.preferred_date or '—' }} <span class="status status-{{ r.status }}">{{ r.status }}</span></p>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if plan_suggestion %}
-    <!-- Recurring cleaning after a one-off job -->
-    <div class="card" data-card-key="recurring-cleaning" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Recurring Cleaning</h2>
-      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
-        Is this the first clean before a regular schedule? Set the recurring visits up here.
-        They get their own service and price — this job stays exactly as it is.
-      </p>
-      <form method="POST" action="{{ url_for('bookings.start_plan', booking_id=booking.id) }}">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">How often</label>
-            <select name="frequency" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px">
-              <option value="weekly">Every week</option>
-              <option value="biweekly" selected>Every 2 weeks</option>
-              <option value="monthly">Every month</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">Service</label>
-            <select name="plan_service" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px">
-              {% for key, label in plan_suggestion.services.items() %}
-              <option value="{{ key }}" {{ 'selected' if key == 'standard' }}>{{ label }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">First recurring cleaning</label>
-            <input type="date" name="start_date" value="{{ plan_suggestion.start }}"
-                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-          </div>
-          <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">Price per visit</label>
-            <input type="text" name="plan_price"
-                   value="{{ '%.2f'|format(plan_suggestion.price) if plan_suggestion.price else '' }}"
-                   placeholder="e.g. 150"
-                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-          </div>
-        </div>
-        <div class="form-group" style="margin-bottom:12px">
-          <label style="font-size:0.82rem">Arrival time</label>
-          <input type="text" name="plan_time" value="{{ booking.preferred_time or '' }}" placeholder="10:00 AM"
-                 style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-          <span style="font-size:0.75rem;color:var(--softer)">Cards are charged when this time comes round, so nobody pays before you arrive.</span>
-        </div>
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Set up recurring cleaning</button>
-      </form>
-    </div>
-    {% endif %}
-
-    {% if booking.frequency not in ['one_time', None] %}
-    <!-- Recurring plan -->
-    <div class="card" data-card-key="recurring-plan" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Recurring Plan</h2>
-      {% if booking.recurring_group and booking.recurring_active %}
-      <div style="background:var(--good-soft);border:1px solid var(--good-soft);color:var(--good);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
-        ✅ Recurring plan active — {{ recurring_upcoming|default(0) }} upcoming visit{{ 's' if (recurring_upcoming|default(0)) != 1 }} on the calendar.
-      </div>
-      <p style="font-size:0.82rem;color:var(--softer);margin:8px 0 10px">Monthly plans fill a year ahead; weekly and fortnightly plans about three months. To reschedule or skip one, open that visit on the calendar and edit or cancel it.</p>
-
-      {% if monthly_choices %}
-      <form method="POST" action="{{ url_for('bookings.schedule_recurring', booking_id=booking.id) }}"
-            style="border-top:1px solid var(--info-soft);padding-top:12px;margin-bottom:12px">
-        <label style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:5px">Repeats on</label>
-        <select name="monthly_mode" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px">
-          <option value="date" {{ 'selected' if monthly_choices.current == 'date' }}>{{ monthly_choices.date }} of each month</option>
-          <option value="weekday" {{ 'selected' if monthly_choices.current == 'weekday' }}>The {{ monthly_choices.weekday }} of each month</option>
-        </select>
-        <p style="font-size:0.78rem;color:var(--softer);margin:0 0 9px">
-          Some customers want a date, others a day of the week. Change this and future
-          visits that haven't started yet move to the new pattern — past and confirmed
-          visits stay where they are.
-        </p>
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">🔁 Apply this pattern</button>
-      </form>
-      {% endif %}
-
-      <form method="POST" action="{{ url_for('bookings.stop_recurring', booking_id=booking.id) }}"
-            onsubmit="return confirm('Stop this recurring plan? Upcoming unstarted visits will be removed.')">
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;color:var(--amber-deep)">Stop recurring plan</button>
-      </form>
-
-      {# Not the same job as the Crew card above: that one changes who shows
-         up to THIS visit. A cleaner leaving the account, or off a client for
-         good, needs every visit still to come changed at once — nobody
-         should have to open a year of future bookings by hand to move them
-         off her. #}
-      <form method="POST" action="{{ url_for('bookings.reassign_series', booking_id=booking.id) }}"
-            style="border-top:1px solid var(--info-soft);padding-top:12px;margin-top:12px"
-            onsubmit="return confirm('Reassign every upcoming visit in this plan to the selected cleaner?')">
-        <label style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:5px">Reassign this series</label>
-        <select name="staff_id" required style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px">
-          <option value="">— Pick a cleaner —</option>
-          {% for s in staff %}
-          <option value="{{ s.id }}">{{ s.name }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">🔁 Reassign this and every future visit</button>
-        <p style="font-size:0.76rem;color:var(--softer);margin-top:6px">
-          Changes every visit still to come, not just this one — for just this
-          visit while {{ booking.assigned_cleaner or 'the current cleaner' }} is
-          out, use the Crew card above instead.
-        </p>
-      </form>
-      {% else %}
-      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px">This is a <strong>{{ booking.frequency }}</strong> client. Fill their calendar in one click — no more scheduling one visit at a time.</p>
-      <form method="POST" action="{{ url_for('bookings.schedule_recurring', booking_id=booking.id) }}">
-        {% if monthly_choices %}
-        <label style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:5px">Repeat on</label>
-        <select name="monthly_mode" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px">
-          <option value="date" {{ 'selected' if monthly_choices.current == 'date' }}>{{ monthly_choices.date }} of each month</option>
-          <option value="weekday" {{ 'selected' if monthly_choices.current == 'weekday' }}>The {{ monthly_choices.weekday }} of each month</option>
-        </select>
-        <p style="font-size:0.78rem;color:var(--softer);margin:0 0 10px">
-          Pick whichever your customer asked for. Changing this after the plan is set
-          will move future visits that haven't started yet.
-        </p>
-        {% endif %}
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Schedule recurring visits</button>
-      </form>
-      {% endif %}
-    </div>
-    {% endif %}
-
-    <!-- Work Order Card -->
-    <div class="card" data-card-key="work-order" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Work Order / Checklist</h2>
-      {# The picker here offered exactly one option — "Default checklist" — because
-         nothing ever populated a template list. A select that cannot select
-         anything is a control that does nothing, so the checklist it was always
-         going to send is now just named in the button's own line. #}
-      <form method="POST" action="{{ url_for('workorders.send_workorder', booking_id=booking.id) }}">
-        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">
-          Send the {{ booking.service_label }} checklist to the cleaner
-        </button>
-      </form>
-      {% if booking.job_checklists %}
-      <div style="margin-top:12px">
-        {% for jc in booking.job_checklists|sort(attribute='sent_at', reverse=True) %}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line-soft);font-size:0.85rem">
-          <span style="color:var(--muted)">{{ jc.template_name }} — sent {{ jc.sent_at.strftime('%b %d') }}</span>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="color:{{ 'var(--good)' if jc.completion_percent == 100 else 'var(--softer)' }};font-weight:700">{{ jc.completion_percent }}%</span>
-            <a href="{{ url_for('workorders.view_checklist', token=jc.token) }}" target="_blank" style="color:var(--muted);font-weight:600">View →</a>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
-
-    <!-- Job Photos Card (before / after proof) -->
-    {% set ns = namespace(photo_jc=None) %}
-    {% for jc in booking.job_checklists %}
-      {% if jc.get_before_photos() or jc.get_after_photos() %}{% set ns.photo_jc = jc %}{% endif %}
-    {% endfor %}
-    {% set photo_jc = ns.photo_jc %}
-    {% if photo_jc %}
-    <div class="card" data-card-key="job-photos" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
-        Job Photos
-        {% if photo_jc.photos_submitted_at %}
-        <span style="background:var(--good-soft);color:var(--good);padding:2px 10px;border-radius:999px;font-size:0.7rem;margin-left:6px">Submitted {{ photo_jc.photos_submitted_at.strftime('%b %d') }}</span>
-        {% endif %}
-      </h2>
-      <p style="font-size:0.82rem;color:var(--softer);margin-bottom:14px">Before &amp; after proof from {{ booking.assigned_cleaner or 'the cleaner' }}. Review before releasing payment.</p>
-
-      {% if photo_jc.get_before_photos() %}
-      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">📸 Before ({{ photo_jc.get_before_photos()|length }})</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
-        {% for url in photo_jc.get_before_photos() %}
-        <a href="{{ url }}" target="_blank" style="aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--line-soft)">
-          <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover" />
-        </a>
-        {% endfor %}
-      </div>
-      {% endif %}
-
-      {% if photo_jc.get_after_photos() %}
-      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">✨ After ({{ photo_jc.get_after_photos()|length }})</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
-        {% for url in photo_jc.get_after_photos() %}
-        <a href="{{ url }}" target="_blank" style="aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--line-soft)">
-          <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover" />
-        </a>
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
-    {% endif %}
-
-    <!-- On hold / bring it back -->
-    {# A customer who needs to move a cleaning but has no new date in mind used
-       to leave two choices, both wrong: leave it confirmed and the morning-of
-       cron charges her card and sends a cleaner to an empty house, or cancel it
-       and sever her deposit from the work. #}
-    {% if booking.is_held %}
-    <div class="card" data-card-key="on-hold" style="margin-top:18px;border:1px solid var(--amber-line);background:var(--amber-soft)">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--amber-deep);text-transform:uppercase;letter-spacing:0.12em">⏸️ On hold</h2>
-      <p style="font-size:0.86rem;color:var(--amber-deep);margin:0 0 4px">
-        Paused {{ booking.held_at.strftime('%b %-d, %Y') if booking.held_at else '' }} —
-        <strong>{{ booking.days_on_hold }} day{{ '' if booking.days_on_hold == 1 else 's' }}</strong> waiting for a date.
-      </p>
-      {% if booking.hold_note %}
-      <p style="font-size:0.84rem;color:var(--muted);margin:0 0 4px">“{{ booking.hold_note }}”</p>
-      {% endif %}
-      <p style="font-size:0.82rem;color:var(--muted);margin:0 0 12px">
-        Nothing is charged, no reminders go out, and no cleaner is expected.
-        {% if collected > 0 %}Her <strong>${{ '%.2f' % collected }}</strong> is still held against this job.{% endif %}
-      </p>
-      <form method="POST" action="{{ url_for('bookings.resume', booking_id=booking.id) }}">
-        <label class="dl" style="display:block;margin-bottom:5px">The date she's picked</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input type="date" name="preferred_date" required
-                 style="padding:9px 11px;border:1px solid var(--amber-line);border-radius:8px;flex:1;min-width:150px" />
-          <input type="text" name="preferred_time" placeholder="Time (optional)"
-                 value="{{ booking.preferred_time or '' }}"
-                 style="padding:9px 11px;border:1px solid var(--amber-line);border-radius:8px;width:150px" />
-        </div>
-        <label style="display:flex;align-items:center;gap:7px;font-size:0.84rem;color:var(--muted);margin:10px 0;cursor:pointer">
-          <input type="checkbox" name="tell_customer" value="1" checked style="width:auto">
-          Email + text her the new confirmation
-        </label>
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">▶️ Put it back on for this date</button>
-      </form>
-    </div>
-    {% elif booking.status not in ('completed', 'cancelled') %}
-    <div class="card" data-card-key="put-on-hold" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">⏸️ Put this on hold</h2>
-      <p style="font-size:0.82rem;color:var(--muted);margin:0 0 10px">
-        For a customer who needs to move the clean but hasn't picked a day. It comes
-        off the schedule, her card is never charged, her deposit stays on the job, and
-        {% if booking.assigned_cleaner or booking.crew %}your cleaner is texted not to go{% else %}nobody is sent{% endif %}.
-        She gets an email saying her money is safe.
-      </p>
-      <form method="POST" action="{{ url_for('bookings.hold', booking_id=booking.id) }}"
-            onsubmit="return confirm('Put this job on hold? The customer and any assigned cleaner will be told.')">
-        <input type="text" name="hold_note" maxlength="200"
-               placeholder="What she said — e.g. work trip, closing delayed"
-               style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;margin-bottom:9px" />
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">⏸️ Hold it until she's ready</button>
-      </form>
-    </div>
-    {% endif %}
-
     {# ── Money ──────────────────────────────────────────────────────────────
        Payment and Balance Collection used to be two cards, one under the other,
        both answering "what is owed" and printing the same four figures twice —
        total, deposit, received, due — while the buttons that move the money were
        split between them by no rule anyone could name. One card, one set of
        figures, then the things you can do about them. #}
-    <div class="card" data-card-key="payment" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">💳 Money</h2>
+      <div style="border-top:1px solid var(--line);padding-top:18px;margin-top:18px">
+      <h3 style="font-size:0.82rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">Payment</h3>
 
       {# The figures, once, whatever state the job is in. #}
       <div class="detail-row"><span class="dl">Total price</span><span class="dv">${{ '%.2f' % (booking.price or 0) }}</span></div>
@@ -1479,7 +684,7 @@
         Balance collected ✓
       </div>
       {% elif booking.stripe_payment_method_id %}
-      <button onclick="chargeBalance({{ booking.id }}, {{ due }})"
+      <button onclick="chargeBalance({{ booking.id|int }}, {{ due|float }})"
               id="charge-btn" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px"
               {{ 'disabled' if due <= 0 }}>
         {{ 'Nothing to charge' if due <= 0 else 'Charge $%.2f Now' % due }}
@@ -1492,6 +697,815 @@
       </div>
       {% endif %}
     </div>
+  </div>
+
+    {# Sit outside the other forms so their buttons can post on their own #}
+    <form method="POST" id="reRateForm" action="{{ url_for('bookings.re_rate', booking_id=booking.id) }}"></form>
+    <form method="POST" id="adCostForm" action="{{ url_for('bookings.log_ad_cost', booking_id=booking.id) }}"></form>
+
+    <!-- Crew — big houses that need more than one cleaner -->
+    <div class="card" data-card-key="who" style="margin-top:18px">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Who's doing it</h2>
+      <form method="POST" action="{{ url_for('bookings.save_crew', booking_id=booking.id) }}">
+        <details style="margin-bottom:14px">
+          <summary style="cursor:pointer;font-size:0.82rem;color:var(--softer);font-weight:600">How this pay is worked out</summary>
+        {# The pot. Person-hours x the hourly rate — deliberately nothing to do
+           with what the customer was charged, so a discount can't cut their pay. #}
+        <div class="form-group">
+          <label>Work in this job
+            <span style="font-weight:400;color:var(--softer)">— person-hours, not clock time</span>
+          </label>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <input type="number" step="0.25" min="0" name="estimated_hours"
+                   value="{{ booking.estimated_hours or '' }}" placeholder="e.g. 3"
+                   style="width:90px;margin:0" />
+            <span style="color:var(--softer);font-size:0.9rem">hours × ${{ '%.0f' % booking.rate_applied }}/hr =</span>
+            <strong style="font-size:1.05rem;color:var(--amber-deep)">
+              {{ '$%.2f' % booking.labor_budget if booking.labor_budget is not none else '—' }}
+            </strong>
+          </div>
+          {% if booking.rate_is_stale %}
+          {# The job keeps the rate it was quoted at. Moving it is deliberate. #}
+          <div style="background:var(--info-soft);border:1px solid var(--info-soft);color:var(--info);border-radius:8px;padding:9px 12px;margin-top:8px;font-size:0.83rem">
+            This job was quoted at <strong>${{ '%.0f' % booking.labor_rate_applied }}/hr</strong>; your current rate is
+            <strong>${{ '%.0f' % labor_rate }}/hr</strong>. It keeps the old rate unless you move it.
+            <button type="submit" form="reRateForm" class="btn btn-outline"
+                    style="padding:4px 12px;font-size:0.78rem;margin-left:6px">Re-rate to ${{ '%.0f' % labor_rate }}</button>
+          </div>
+          {% endif %}
+          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
+            {% if booking.labor_budget is none %}
+              No estimate yet, so this job still pays the old 50%. Put the person-hours in and press <strong>Save pay</strong> at the bottom of this card to switch it over.
+            {% else %}
+              Two cleaners split this and each finish in half the time — same ${{ '%.0f' % booking.rate_applied }}/hour either way. Change the hours if this job is harder than the chart assumes.
+            {% endif %}
+          </p>
+
+          {# Working it herself takes hours out of the paid pot and earns her a
+             share of the tip — she isn't paying herself, but she is doing work. #}
+          <div style="background:var(--ground);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-top:10px">
+            <label style="font-size:0.84rem;font-weight:700;display:block;margin-bottom:5px">🧽 Are you working this job?</label>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <input type="number" step="0.25" min="0" name="owner_hours"
+                     value="{{ booking.owner_hours or '' }}" placeholder="0"
+                     style="width:80px;margin:0" />
+              <span style="font-size:0.83rem;color:var(--softer)">of the {{ '%g' % (booking.estimated_hours or 0) }} hours are yours</span>
+            </div>
+            {% if booking.owner_hours %}
+            <p style="font-size:0.78rem;color:var(--good);margin-top:6px">
+              You're doing {{ '%g' % booking.owner_hours }} hrs, so the cleaners are paid for
+              <strong>{{ '%g' % booking.payable_hours }} hrs</strong> — not the full {{ '%g' % booking.estimated_hours }}.
+
+            </p>
+            {% else %}
+            <p style="font-size:0.76rem;color:var(--softer);margin-top:5px">
+              Leave blank if a cleaner does the whole job. Put your hours in and they come out of the paid pot — and you take that share of any tip.
+            </p>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if booking.below_floor_by %}
+        {# Priced under what the work costs plus overhead. Flagged, not blocked —
+           sometimes a job below the floor is still the right call. #}
+        <div style="background:var(--warn-soft);border:1px solid var(--warn-soft);color:var(--warn);border-radius:9px;padding:11px 13px;margin-bottom:14px">
+          <div style="font-weight:700;font-size:0.9rem">🚩 ${{ '%.2f' % booking.below_floor_by }} below your floor price</div>
+          <div style="font-size:0.82rem;margin-top:3px">
+            {# committed_labor, not labor_budget — a job with a crew but no hour
+               estimate has a real cost and no budget, and printing None here
+               took the whole page down. #}
+            This job needs <strong>${{ '%.2f' % booking.floor_price }}</strong> to cover
+            ${{ '%.2f' % booking.committed_labor }} of cleaner pay at your {{ '%.0f' % max_labor_pct }}% cap.
+            You're charging ${{ '%.2f' % booking.price }}.
+          </div>
+          <input type="text" name="below_floor_reason" form="jobEditForm"
+                 value="{{ booking.below_floor_reason or '' }}"
+                 placeholder="Taking it anyway? Say why — e.g. long-standing client, first job of a recurring plan"
+                 style="width:100%;margin-top:8px;padding:7px 9px;font-size:0.82rem;border:1px solid var(--warn-soft);border-radius:7px" />
+        </div>
+        {% elif booking.labor_percent is not none %}
+        {% set lp = booking.labor_percent %}
+        <div style="border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:0.86rem;font-weight:600;
+                    background:{{ 'var(--amber-soft)' if lp > 48 else 'var(--good-soft)' }};
+                    color:{{ 'var(--amber-deep)' if lp > 48 else 'var(--good)' }}">
+          {% if lp > 48 %}Labor is {{ lp }}% of this job's price. Floor is ${{ '%.2f' % booking.floor_price }}.
+          {% else %}✅ Labor is {{ lp }}% of this job's price — healthy.{% endif %}
+        </div>
+        {% endif %}
+        </details>
+
+        {# One company hourly rate cannot be right for a move-out and for a
+           discounted biweekly at the same time. Saying the pay outright makes
+           the hours a planning estimate and stops the floor warning arguing
+           about money that was never going to be spent. #}
+        <div class="form-group">
+          <label>Pay each cleaner
+            <span style="font-weight:400;color:var(--softer)">— set it yourself, or leave blank to use the hours</span>
+          </label>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="color:var(--softer)">$</span>
+            <input type="number" step="0.01" min="0" name="crew_pay_each"
+                   value="{{ '%.2f' % booking.crew_pay_each if booking.crew_pay_each else '' }}"
+                   placeholder="{{ '%.2f' % (booking.labor_budget / (booking.crew_size or 1)) if booking.labor_budget is not none else 'e.g. 75.00' }}"
+                   style="width:110px;margin:0" />
+            <span style="font-size:0.85rem;color:var(--softer)">each, flat for the job</span>
+          </div>
+          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
+            {% if booking.crew_pay_each %}
+              This is what goes out in the job offer and what payroll pays.
+              {% if booking.estimated_hours %}The {{ '%g' % booking.estimated_hours }} hours stay here as your estimate — the team never sees them.{% endif %}
+            {% else %}
+              Blank means the hours decide it{% if booking.labor_budget is not none %} — currently ${{ '%.2f' % (booking.labor_budget / (booking.crew_size or 1)) }} each{% endif %}.
+            {% endif %}
+          </p>
+        </div>
+
+        {% if booking.crew or booking.is_crew_job %}
+        {# On an hours-based job the pot is the hours × the rate, not a slice of
+           the price. Showing the price-based pot here told her the crew was
+           splitting $245 when the hours said something quite different. #}
+        {% if booking.crew_pay_each or booking.labor_budget is not none %}
+        {% set size = booking.crew_size or 1 %}
+        {% set each = booking.crew_pay_each if booking.crew_pay_each else (booking.labor_budget / size) %}
+        {% set total = each * size %}
+        <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:700">{{ size }} cleaner{{ '' if size == 1 else 's' }} ×</span>
+            <span style="font-weight:700;font-size:1.35rem;color:var(--amber)">${{ '%.2f' % each }} each</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:6px 0 2px">
+            <span>{{ 'Pay you set' if booking.crew_pay_each else 'From the hours (%g × $%.0f/hr)' % (booking.payable_hours, booking.rate_applied) }}</span>
+            <span>${{ '%.2f' % total }} total</span>
+          </div>
+          <p style="font-size:0.74rem;color:rgba(255,255,255,0.45);margin-top:7px">
+            ${{ '%.2f' % each }} is the figure in the job offer and on payroll. Of the
+            ${{ '%.2f' % booking.commissionable_price }} after the lead fee.
+            {# "You keep" lived here too, and it is the same subtraction the live
+               tile on the Manage Booking card performs. Two tiles on one screen
+               both labelled "You keep" is the thing worth removing, even now
+               they agree; this one keeps the per-cleaner split, which is what
+               only it knows. #}
+            What's left is on the price card above.
+          </p>
+        </div>
+        {% else %}
+        {% set pot = booking.commissionable_price %}
+        {% set left = pot - booking.crew_allocated %}
+        <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
+            <span>Pot to divide (job minus lead fee)</span><span>${{ '%.2f' % pot }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
+            <span>Paying {{ 'the crew' if booking.crew|length > 1 else 'the cleaner' }}</span><span>${{ '%.2f' % booking.crew_allocated }}</span>
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:700">{{ 'Left in the pot' if left >= 0 else '⚠️ Over the pot by' }}</span>
+            <span style="font-weight:700;font-size:1.2rem;color:{{ 'var(--amber)' if left >= 0 else 'var(--warn-soft)' }}">${{ '%.2f' % (left if left >= 0 else -left) }}</span>
+          </div>
+        </div>
+        {% endif %}
+
+        {% for c in booking.crew %}
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--info-soft)">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:0.92rem">{{ c.staff.name if c.staff else 'Unknown' }}
+              {% if booking.assigned_cleaner and c.staff and c.staff.name == booking.assigned_cleaner %}<span style="font-size:0.68rem;color:var(--info);background:var(--info-soft);padding:1px 7px;border-radius:999px;font-weight:700">LEAD</span>{% endif %}
+            </div>
+            <div style="font-size:0.75rem;color:var(--softer)">
+              {% if c.paid_at %}✅ Paid {{ c.paid_at.strftime('%b %-d') }}{% elif c.claimed_at %}Claimed {{ c.claimed_at.strftime('%b %-d') }}{% else %}Assigned by you{% endif %}
+              {% if booking.hours_each() %} · {{ '%g' % booking.hours_each() }} hrs est{% endif %}
+            </div>
+            {# What the clock says, for a cleaner paid by the hour. The figure
+               is shown and offered; it is never applied on its own. Money that
+               changes itself between one look at a page and the next is how an
+               owner stops trusting the numbers. #}
+            {% if c.staff and c.staff.pay_type == 'hourly' %}
+            {% set worked = c.staff.hours_on(booking) %}
+            {% set due = c.staff.hourly_pay_for(booking) %}
+            <div class="clocked">
+              {% if worked is none %}
+                <span class="no">Not clocked in yet</span>
+              {% else %}
+                <span class="yes">🕒 {{ '%.2f'|format(worked) }} h actual</span>
+                <span class="calc">× ${{ '%.2f'|format(c.staff.pay_rate or 0) }} = <b>${{ '%.2f'|format(due or 0) }}</b></span>
+                {% if not c.paid_at and due is not none and (due - (c.pay_amount or 0))|abs > 0.005 %}
+                <button type="submit" class="useclock"
+                        formaction="{{ url_for('bookings.use_clocked_pay', booking_id=booking.id, crew_id=c.id) }}">
+                  Use this
+                </button>
+                {% endif %}
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+          <div style="display:flex;align-items:center;gap:3px">
+            <span style="color:var(--softer)">$</span>
+            <input type="number" step="0.01" min="0" name="pay_{{ c.id }}" value="{{ '%.2f' % (c.pay_amount or 0) }}"
+                   {{ 'disabled' if c.paid_at }} style="width:84px;padding:6px 8px;margin:0" />
+          </div>
+          {% if not c.paid_at %}
+          <button type="submit" formaction="{{ url_for('bookings.remove_crew', booking_id=booking.id, crew_id=c.id) }}"
+                  onclick="return confirm('Remove {{ (c.staff.name if c.staff else 'this cleaner')|js }} from this job? Their spot re-opens.')"
+                  title="Remove from crew"
+                  style="background:none;border:1px solid var(--warn-soft);color:var(--warn);border-radius:7px;padding:5px 9px;cursor:pointer;font-weight:700">✕</button>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+
+
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button type="submit" class="btn {{ 'btn-outline' if booking.spots_left > 0 else 'btn-gold' }}" style="flex:1;justify-content:center">Save pay</button>
+          {% if booking.crew|length > 1 %}
+          <button type="submit" name="even_split" value="1" class="btn btn-outline" style="justify-content:center"
+                  title="Reset every unpaid share to an even split">Split evenly</button>
+          {% endif %}
+        </div>
+      </form>
+
+      {# One decision, one control. Picking a named cleaner used to be buried at
+         the bottom of this card while "offer it to the whole team" — much the
+         rarer choice — was a card of its own with the bigger button, and the
+         checklist every cleaner needs was a third card further down. All three
+         are the same question: who is turning up, and does she know what to do. #}
+      {% if not settled %}
+      <form method="POST" action="{{ url_for('bookings.assign', booking_id=booking.id) }}"
+            style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
+        {# How many people this job needs is an ASSIGNMENT decision with a pay
+           consequence, not an arithmetic detail -- it decides how many spots the
+           team offer advertises and how the pot divides. It spent one release
+           folded into "How this pay is worked out", where nobody could find it,
+           and because the form below used to hide itself once the spots were
+           full, a one-cleaner job had no visible way to become a two-cleaner
+           job at all. #}
+        <div class="form-group" style="margin-bottom:10px">
+          <label for="crewSize" style="font-size:0.84rem">How many cleaners does this job need?</label>
+          <select id="crewSize" name="crew_size" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
+            {% for n in range(1, 7) %}
+            <option value="{{ n }}" {{ 'selected' if (booking.crew_size or 1) == n }}>{{ n }} paid cleaner{{ 's' if n != 1 }}</option>
+            {% endfor %}
+          </select>
+          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
+            Don't count yourself if you're working this one. Two cleaners splits the pay in
+            half each and tells the team there are two spots going.
+          </p>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label for="assignTo" style="font-size:0.84rem">{{ 'Add another cleaner' if booking.crew else 'Assign to' }}</label>
+          <select id="assignTo" name="assign_to" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
+            <option value="">— Pick a cleaner —</option>
+            {% for s in staff %}
+              {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}
+            {% endfor %}
+            <option value="team">— Offer it to the whole team —</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label for="assignPay" style="font-size:0.84rem">She gets paid</label>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="color:var(--softer)">$</span>
+            <input id="assignPay" type="number" step="0.01" min="0" name="add_pay"
+                   placeholder="{{ '%.2f' % booking.default_crew_pay(staff[0]) if staff else '' }}"
+                   style="width:120px;margin:0" />
+            <span style="font-size:0.85rem;color:var(--softer)">flat for the job</span>
+          </div>
+          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
+            {% if booking.labor_budget is not none %}
+              Leave it blank for <strong>${{ '%.2f' % (booking.labor_budget / (booking.crew_size or 1)) }}</strong> — your chart's figure for this job.
+              Type over it when the job is harder than the chart assumes.
+            {% else %}
+              Leave it blank and this job pays its usual share. Put the hours in under
+              <em>How this pay is worked out</em> to price it by the hour instead.
+            {% endif %}
+          </p>
+        </div>
+        {# The tickbox only means anything for a named cleaner. Offering the job
+           to everyone sends its own message -- date, service, size, area, pay and
+           a claim link, deliberately no address -- and whoever claims it gets the
+           full work order at that moment. Leaving the box on screen for the team
+           choice implied a decision that was never read. #}
+        <label id="woBox" style="display:flex;align-items:flex-start;gap:9px;font-size:0.84rem;margin-bottom:11px">
+          <input type="checkbox" name="send_checklist" value="1" checked style="width:16px;height:16px;margin-top:2px" />
+          <span>Send the work order now — address, entry notes, her pay and the
+            <strong>{{ booking.service_label }}</strong> checklist.
+            <span style="color:var(--softer)">Untick to put her on the job quietly and send it later.</span></span>
+        </label>
+        <p id="teamNote" style="display:none;font-size:0.82rem;line-height:1.5;color:var(--muted);
+                  background:var(--ground);border-radius:8px;padding:10px 12px;margin:0 0 11px">
+          The team sees the date, service, size, area and pay — <strong>not the address</strong>.
+          Whoever claims it gets the full work order automatically.
+        </p>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Assign &amp; send</button>
+      </form>
+      {% endif %}
+
+      {% if booking.crew %}
+      <form method="POST" action="{{ url_for('bookings.send_crew', booking_id=booking.id) }}" style="margin-top:10px">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
+          📲 Re-send the job to {{ booking.crew_label }}
+        </button>
+      </form>
+      {% elif booking.assigned_cleaner %}
+      {# A job assigned before this card kept a crew row carries a cleaner's NAME
+         and nothing else. Folding the Work Order card into the tickbox above
+         would have left those jobs with no way to send a checklist at all,
+         because the re-send button needs a crew row to aim at. #}
+      <form method="POST" action="{{ url_for('workorders.send_workorder', booking_id=booking.id) }}" style="margin-top:10px">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
+          📲 Send the {{ booking.service_label }} checklist to {{ booking.assigned_cleaner }}
+        </button>
+      </form>
+      {% endif %}
+
+      {# What the cleaner has actually ticked off, kept beside the person who
+         was sent it rather than in a card of its own further down. #}
+      {% if booking.job_checklists %}
+      <div style="margin-top:12px">
+      {% for jc in booking.job_checklists|sort(attribute='sent_at', reverse=True) %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line-soft);font-size:0.85rem">
+      <span style="color:var(--muted)">{{ jc.template_name }} — sent {{ jc.sent_at.strftime('%b %d') }}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+      <span style="color:{{ 'var(--good)' if jc.completion_percent == 100 else 'var(--softer)' }};font-weight:700">{{ jc.completion_percent }}%</span>
+      <a href="{{ url_for('workorders.view_checklist', token=jc.token) }}" target="_blank" style="color:var(--muted);font-weight:600">View →</a>
+      </div>
+      </div>
+      {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+
+    {# ── Send to customer ─────────────────────────────────────────────────
+       Eight ways to message a customer were spread across two cards: the
+       confirmation and the confirm-request and the payment link and the invoice
+       and the re-dated invoice and the receipts and a plain email, each its own
+       button in its own place, several of them buried under the money. Same
+       messages, same forms, one card — you pick what to send, and only that
+       one's controls are on screen. Receipts for money already taken stay on
+       the money card, where the figure they receipt is. #}
+    <div class="card" data-card-key="talk" style="margin-top:18px">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Talk to the customer</h2>
+
+    {# Whether they have answered is a fact about the job, so it stays in
+       plain sight rather than behind the chooser below. #}
+    {% if booking.status in ['pending', 'confirmed'] %}
+      {% if booking.confirm_response == 'yes' %}
+        <p style="color:var(--good);font-size:0.9rem;margin:0">✅ They confirmed on {{ booking.confirm_responded_at.strftime('%d %B') }}.</p>
+      {% elif booking.confirm_response == 'no' %}
+        <p style="color:var(--amber-deep);font-size:0.9rem;margin:0">❌ They declined on {{ booking.confirm_responded_at.strftime('%d %B') }}. The job was cancelled.</p>
+      {% endif %}
+    {% endif %}
+
+      {# Warn, but do not take the controls away. An invoice raised against a
+         booking with no contact details is still a real invoice — send_invoice
+         says so itself ("share the link manually") — and hiding the chooser
+         here removed the only way to raise one. #}
+      {% if not booking.email and not booking.phone %}
+      <p style="font-size:0.85rem;color:var(--warn);font-weight:600;margin:10px 0 0">
+        ⚠️ No email or phone on this booking, so nothing can be delivered. An invoice
+        can still be raised here and its link shared by hand.</p>
+      {% endif %}
+      {# Order matters: a select with nothing marked selected opens on its first
+         option, and the script below then hides every panel but that one. The
+         Yes/No request used to be first, so the booking confirmation — the only
+         send that can carry the deposit request — opened hidden, behind a
+         dropdown there was no reason to open. It leads now, and says so. #}
+      <div class="form-group" style="margin:12px 0 14px">
+        <label for="sendKind" style="font-size:0.82rem">What do you want to send?</label>
+        <select id="sendKind" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px">
+          {% if not settled %}
+          <option value="confirmation" selected>The booking confirmation — and the deposit, if you want it</option>
+          {% endif %}
+          {% if booking.status in ['pending', 'confirmed'] and booking.confirm_response not in ['yes', 'no'] %}
+          <option value="confirm-request">Ask them to confirm — with a Yes / No button</option>
+          {% endif %}
+          {% if not settled %}
+          <option value="payment-link">A payment request</option>
+          <option value="invoice">{{ 'The invoice — resend ' ~ booking.invoice_number if booking.invoice_number else 'An invoice' }}</option>
+          {% endif %}
+          <option value="freeform">Something in your own words</option>
+        </select>
+      </div>
+
+      {# Every panel is rendered. The script below hides all but the chosen one,
+         so with no JavaScript the page still shows every option rather than
+         none of them. #}
+    {% if booking.status in ['pending', 'confirmed'] %}
+      <div class="send-panel" data-kind="confirm-request">
+      {% if booking.confirm_response not in ['yes', 'no'] %}
+        <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px">
+          Gone quiet on you? Send them this date and price with a Yes/No button.
+          Easier to answer than "are you still interested?" — and you hear back either way.
+          {% if booking.confirm_sent_at %}
+          <br><strong style="color:var(--amber-deep)">Sent {{ booking.confirm_sent_at.strftime('%d %B') }} — no answer yet.</strong>
+          {% endif %}
+        </p>
+        <form method="POST" action="{{ url_for('bookings.proposal_send', booking_id=booking.id) }}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+            <div class="form-group" style="margin-bottom:10px">
+              <label style="font-size:0.82rem">How often</label>
+              <select name="plan_frequency" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px">
+                <option value="one_time" {{ 'selected' if booking.frequency in ['one_time', None] }}>Just this once</option>
+                <option value="weekly" {{ 'selected' if booking.frequency == 'weekly' }}>Every week</option>
+                <option value="biweekly" {{ 'selected' if booking.frequency == 'biweekly' }}>Every 2 weeks (twice a month)</option>
+                <option value="monthly" {{ 'selected' if booking.frequency == 'monthly' }}>Once a month</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+              <label style="font-size:0.82rem">Price per clean</label>
+              <input type="text" name="plan_price" value="{{ '%.2f'|format(booking.price) if booking.price else '' }}"
+                     placeholder="e.g. 165"
+                     style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+              <label style="font-size:0.82rem">Date you're holding</label>
+              <input type="date" name="plan_date" value="{{ booking.preferred_date or '' }}"
+                     style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+              <label style="font-size:0.82rem">Time</label>
+              <input type="text" name="plan_time" value="{{ booking.preferred_time or '' }}" placeholder="9:00 AM"
+                     style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">Say it in your own words <span style="font-weight:400;color:var(--softer)">— optional</span></label>
+            <textarea name="confirm_note" rows="4"
+                      placeholder="Hi Susan, lovely to speak the other week — I've held this slot for you…"
+                      style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:0.88rem;line-height:1.5">{{ booking.confirm_note or '' }}</textarea>
+            <span style="font-size:0.75rem;color:var(--softer)">
+              Replaces the opening line of the email. Leave it blank and a sensible default is used.
+              Goes in the email only — the text stays short.
+              <br>They can confirm, <strong>suggest a different day or time</strong>, or decline. You hear back either way.
+            </span>
+          </div>
+          <button type="submit" class="btn btn-outline"
+                  formaction="{{ url_for('bookings.proposal_preview', booking_id=booking.id) }}"
+                  formtarget="_blank"
+                  style="width:100%;justify-content:center;margin-bottom:8px">👁 Preview the email &amp; text</button>
+          <div style="display:flex;gap:7px">
+            <button type="submit" name="to" value="me" class="btn btn-outline" style="flex:1;justify-content:center">✉️ Test to me</button>
+            <button type="submit" name="to" value="customer" class="btn btn-gold" style="flex:1;justify-content:center"
+                    onclick="return confirm('Ask {{ booking.name|js }} to confirm this booking?');"
+                    {% if not booking.email and not booking.phone %}disabled{% endif %}>Send to {{ booking.name.split()[0] }}</button>
+          </div>
+        </form>
+      {% endif %}
+
+      </div>
+    {% endif %}
+
+      {% if not settled %}
+      <div class="send-panel" data-kind="confirmation">
+      {# The confirmation used to fire only at the moment a booking was created.
+         If it didn't go then, there was no way to send it at all. #}
+      <div style="background:var(--good-soft);border:1px solid var(--good-soft);border-radius:10px;padding:12px 13px;margin-top:12px">
+        <div style="font-weight:700;font-size:0.88rem;color:var(--good);margin-bottom:3px">📩 Send the booking confirmation</div>
+        <p style="font-size:0.79rem;color:var(--good);margin:0 0 9px">
+          The full details — service, date, time, address and price — by email and text.
+          Add a payment request to the same send if you want one.
+        </p>
+        <a href="{{ url_for('bookings.confirmation_preview', booking_id=booking.id) }}"
+           target="_blank" class="btn btn-outline"
+           style="width:100%;justify-content:center;margin-bottom:9px;background:#fff">👁 Preview the email &amp; text</a>
+        <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
+              style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+          <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--good-soft);border-radius:8px;margin:0">
+            <option value="none" selected>Confirmation only</option>
+            {# Name the figure. "the deposit" gave her no way to check from here
+               that the amount in Settings is still the one she means to ask for. #}
+            <option value="deposit">+ ask for the ${{ '%.0f' % deposit_amount }} deposit</option>
+            <option value="full">+ ask for the full amount</option>
+          </select>
+          <button type="submit" class="btn btn-gold" style="flex-shrink:0">Send</button>
+        </form>
+        <p style="font-size:0.76rem;color:var(--good);margin:8px 0 0">
+          Set to <strong>Confirmation only</strong> — no money is requested unless you change it.
+        </p>
+        {% if not booking.email and not booking.phone %}
+        <p style="font-size:0.78rem;color:var(--warn);margin:8px 0 0">⚠️ This booking has no email or phone — nothing can be sent.</p>
+        {% endif %}
+      </div>      </div>
+      <div class="send-panel" data-kind="payment-link">
+
+      <form method="POST" action="{{ url_for('bookings.send_payment_link_route', booking_id=booking.id) }}" style="margin-top:10px">
+        <input type="hidden" name="kind" value="full">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📩 Email + text this payment link</button>
+      </form>
+      </div>
+      <div class="send-panel" data-kind="invoice">
+      <!-- Real invoice -->
+      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}" style="margin-top:10px">
+        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">🧾 {{ 'Resend invoice ' + booking.invoice_number if booking.invoice_number else 'Send invoice' }}</button>
+      </form>
+      {% if booking.invoice_number %}
+      <p style="text-align:center;font-size:0.78rem;color:var(--softer);margin-top:6px">
+        Invoice <strong>{{ booking.invoice_number }}</strong>{% if booking.invoice_due_date %} · due {{ booking.invoice_due_date }}{% endif %} ·
+        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:var(--amber-deep)">view →</a>
+      </p>
+      {# An invoice already issued keeps its dates. Re-dating one the customer
+         already has is deliberate, never a side effect of resending. #}
+      <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}"
+            onsubmit="return confirm('Re-date this invoice to today and resend it? The customer will see the new due date.')"
+            style="margin-top:6px">
+        <input type="hidden" name="reissue_dates" value="1">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;padding:6px;font-size:0.78rem">
+          🗓️ Re-date to today &amp; resend
+        </button>
+      </form>
+      {% elif booking.pay_token %}
+      <p style="text-align:center;font-size:0.78rem;color:var(--softer);margin-top:6px">
+        <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank" style="color:var(--amber-deep)">
+          Preview invoice →</a> — nothing is sent to the customer
+      </p>
+      {% endif %}      </div>
+      {% endif %}
+
+      <div class="send-panel" data-kind="freeform">
+      <a href="{{ url_for('bookings.email_customer', booking_id=booking.id) }}"
+         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">✉️ Email the customer</a>
+        <p style="font-size:0.78rem;color:var(--softer);margin:6px 0 0">
+          Opens a page where you write the message yourself.</p>
+      </div>
+    </div>
+  <div class="card" data-card-key="extras" style="margin-top:18px">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Less often</h2>
+
+
+    {% if booking.status == 'completed' %}
+    <!-- Repeat this job on demand. A section of "Less often", like recurring
+         below; the client page's "Repeat last clean" links to #book-again, so
+         that link opens it. -->
+      <details id="book-again" style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">🔁 Book again</summary>
+      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
+        Repeat this clean on a date of your choosing. It's a one-off booking, not a recurring plan —
+        nothing else gets scheduled.
+      </p>
+      <form method="POST" action="{{ url_for('bookings.book_again', booking_id=booking.id) }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">Date</label>
+            <input type="date" name="repeat_date" required
+                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">Arrival time</label>
+            <input type="text" name="repeat_time" value="{{ booking.preferred_time or '' }}" placeholder="10:00 AM"
+                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label style="font-size:0.82rem">Price</label>
+          <input type="text" name="repeat_price" value="{{ '%.2f'|format(booking.price) if booking.price else '' }}"
+                 placeholder="e.g. 150"
+                 style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+        </div>
+        {% if booking.assigned_cleaner %}
+        <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;margin-bottom:12px">
+          <input type="checkbox" name="same_cleaner" value="1" checked /> Same cleaner ({{ booking.assigned_cleaner }})
+        </label>
+        {% endif %}
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">🔁 Book again</button>
+      </form>
+      </details>
+      <script>
+        if (location.hash === '#book-again') document.getElementById('book-again').open = true;
+      </script>
+    {% endif %}
+
+    {% if booking.repeat_of or booking.repeats %}
+      <details open style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">🔁 On-demand repeats</summary>
+      {% if booking.repeat_of %}
+      <p style="margin:0 0 6px;font-size:0.9rem">Repeat of
+        <a href="{{ url_for('bookings.detail', booking_id=booking.repeat_of.id) }}">#{{ booking.repeat_of.id }}</a>
+        ({{ booking.repeat_of.preferred_date or 'no date' }}) — an on-demand client, no fixed schedule.</p>
+      {% endif %}
+      {% for r in booking.repeats %}
+      <p style="margin:0 0 6px;font-size:0.9rem">Repeated as
+        <a href="{{ url_for('bookings.detail', booking_id=r.id) }}">#{{ r.id }}</a>
+        on {{ r.preferred_date or '—' }} <span class="status status-{{ r.status }}">{{ r.status }}</span></p>
+      {% endfor %}
+      </details>
+    {% endif %}
+
+    {% if plan_suggestion %}
+    <!-- Recurring cleaning after a one-off job -->
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">🔁 Recurring Cleaning</summary>
+      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
+        Is this the first clean before a regular schedule? Set the recurring visits up here.
+        They get their own service and price — this job stays exactly as it is.
+      </p>
+      <form method="POST" action="{{ url_for('bookings.start_plan', booking_id=booking.id) }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">How often</label>
+            <select name="frequency" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px">
+              <option value="weekly">Every week</option>
+              <option value="biweekly" selected>Every 2 weeks</option>
+              <option value="monthly">Every month</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">Service</label>
+            <select name="plan_service" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px">
+              {% for key, label in plan_suggestion.services.items() %}
+              <option value="{{ key }}" {{ 'selected' if key == 'standard' }}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">First recurring cleaning</label>
+            <input type="date" name="start_date" value="{{ plan_suggestion.start }}"
+                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label style="font-size:0.82rem">Price per visit</label>
+            <input type="text" name="plan_price"
+                   value="{{ '%.2f'|format(plan_suggestion.price) if plan_suggestion.price else '' }}"
+                   placeholder="e.g. 150"
+                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label style="font-size:0.82rem">Arrival time</label>
+          <input type="text" name="plan_time" value="{{ booking.preferred_time or '' }}" placeholder="10:00 AM"
+                 style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
+          <span style="font-size:0.75rem;color:var(--softer)">Cards are charged when this time comes round, so nobody pays before you arrive.</span>
+        </div>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Set up recurring cleaning</button>
+      </form>
+      </details>
+    {% endif %}
+
+    {% if booking.frequency not in ['one_time', None] %}
+    <!-- Recurring plan -->
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">🔁 Recurring Plan</summary>
+      {% if booking.recurring_group and booking.recurring_active %}
+      <div style="background:var(--good-soft);border:1px solid var(--good-soft);color:var(--good);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
+        ✅ Recurring plan active — {{ recurring_upcoming|default(0) }} upcoming visit{{ 's' if (recurring_upcoming|default(0)) != 1 }} on the calendar.
+      </div>
+      <p style="font-size:0.82rem;color:var(--softer);margin:8px 0 10px">Monthly plans fill a year ahead; weekly and fortnightly plans about three months. To reschedule or skip one, open that visit on the calendar and edit or cancel it.</p>
+
+      {% if monthly_choices %}
+      <form method="POST" action="{{ url_for('bookings.schedule_recurring', booking_id=booking.id) }}"
+            style="border-top:1px solid var(--info-soft);padding-top:12px;margin-bottom:12px">
+        <label style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:5px">Repeats on</label>
+        <select name="monthly_mode" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px">
+          <option value="date" {{ 'selected' if monthly_choices.current == 'date' }}>{{ monthly_choices.date }} of each month</option>
+          <option value="weekday" {{ 'selected' if monthly_choices.current == 'weekday' }}>The {{ monthly_choices.weekday }} of each month</option>
+        </select>
+        <p style="font-size:0.78rem;color:var(--softer);margin:0 0 9px">
+          Some customers want a date, others a day of the week. Change this and future
+          visits that haven't started yet move to the new pattern — past and confirmed
+          visits stay where they are.
+        </p>
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">🔁 Apply this pattern</button>
+      </form>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('bookings.stop_recurring', booking_id=booking.id) }}"
+            onsubmit="return confirm('Stop this recurring plan? Upcoming unstarted visits will be removed.')">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center;color:var(--amber-deep)">Stop recurring plan</button>
+      </form>
+
+      {# Not the same job as the Crew card above: that one changes who shows
+         up to THIS visit. A cleaner leaving the account, or off a client for
+         good, needs every visit still to come changed at once — nobody
+         should have to open a year of future bookings by hand to move them
+         off her. #}
+      <form method="POST" action="{{ url_for('bookings.reassign_series', booking_id=booking.id) }}"
+            style="border-top:1px solid var(--info-soft);padding-top:12px;margin-top:12px"
+            onsubmit="return confirm('Reassign every upcoming visit in this plan to the selected cleaner?')">
+        <label style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:5px">Reassign this series</label>
+        <select name="staff_id" required style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px">
+          <option value="">— Pick a cleaner —</option>
+          {% for s in staff %}
+          <option value="{{ s.id }}">{{ s.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">🔁 Reassign this and every future visit</button>
+        <p style="font-size:0.76rem;color:var(--softer);margin-top:6px">
+          Changes every visit still to come, not just this one — for just this
+          visit while {{ booking.assigned_cleaner or 'the current cleaner' }} is
+          out, use the Crew card above instead.
+        </p>
+      </form>
+      {% else %}
+      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px">This is a <strong>{{ booking.frequency }}</strong> client. Fill their calendar in one click — no more scheduling one visit at a time.</p>
+      <form method="POST" action="{{ url_for('bookings.schedule_recurring', booking_id=booking.id) }}">
+        {% if monthly_choices %}
+        <label style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:5px">Repeat on</label>
+        <select name="monthly_mode" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px">
+          <option value="date" {{ 'selected' if monthly_choices.current == 'date' }}>{{ monthly_choices.date }} of each month</option>
+          <option value="weekday" {{ 'selected' if monthly_choices.current == 'weekday' }}>The {{ monthly_choices.weekday }} of each month</option>
+        </select>
+        <p style="font-size:0.78rem;color:var(--softer);margin:0 0 10px">
+          Pick whichever your customer asked for. Changing this after the plan is set
+          will move future visits that haven't started yet.
+        </p>
+        {% endif %}
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Schedule recurring visits</button>
+      </form>
+      {% endif %}
+      </details>
+    {% endif %}
+
+
+    <!-- Job Photos Card (before / after proof) -->
+    {% set ns = namespace(photo_jc=None) %}
+    {% for jc in booking.job_checklists %}
+      {% if jc.get_before_photos() or jc.get_after_photos() %}{% set ns.photo_jc = jc %}{% endif %}
+    {% endfor %}
+    {% set photo_jc = ns.photo_jc %}
+    {% if photo_jc %}
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">Job Photos {% if photo_jc.photos_submitted_at %} Submitted {{ photo_jc.photos_submitted_at.strftime('%b %d') }} {% endif %}</summary>
+      <p style="font-size:0.82rem;color:var(--softer);margin-bottom:14px">Before &amp; after proof from {{ booking.assigned_cleaner or 'the cleaner' }}. Review before releasing payment.</p>
+
+      {% if photo_jc.get_before_photos() %}
+      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">📸 Before ({{ photo_jc.get_before_photos()|length }})</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+        {% for url in photo_jc.get_before_photos() %}
+        <a href="{{ url }}" target="_blank" style="aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--line-soft)">
+          <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover" />
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if photo_jc.get_after_photos() %}
+      <div style="font-size:0.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">✨ After ({{ photo_jc.get_after_photos()|length }})</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        {% for url in photo_jc.get_after_photos() %}
+        <a href="{{ url }}" target="_blank" style="aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--line-soft)">
+          <img src="{{ url }}" style="width:100%;height:100%;object-fit:cover" />
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+      </details>
+    {% endif %}
+
+    <!-- On hold / bring it back -->
+    {# A customer who needs to move a cleaning but has no new date in mind used
+       to leave two choices, both wrong: leave it confirmed and the morning-of
+       cron charges her card and sends a cleaner to an empty house, or cancel it
+       and sever her deposit from the work. #}
+    {% if booking.is_held %}
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">⏸️ On hold</summary>
+      <p style="font-size:0.86rem;color:var(--amber-deep);margin:0 0 4px">
+        Paused {{ booking.held_at.strftime('%b %-d, %Y') if booking.held_at else '' }} —
+        <strong>{{ booking.days_on_hold }} day{{ '' if booking.days_on_hold == 1 else 's' }}</strong> waiting for a date.
+      </p>
+      {% if booking.hold_note %}
+      <p style="font-size:0.84rem;color:var(--muted);margin:0 0 4px">“{{ booking.hold_note }}”</p>
+      {% endif %}
+      <p style="font-size:0.82rem;color:var(--muted);margin:0 0 12px">
+        Nothing is charged, no reminders go out, and no cleaner is expected.
+        {% if collected > 0 %}Her <strong>${{ '%.2f' % collected }}</strong> is still held against this job.{% endif %}
+      </p>
+      <form method="POST" action="{{ url_for('bookings.resume', booking_id=booking.id) }}">
+        <label class="dl" style="display:block;margin-bottom:5px">The date she's picked</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input type="date" name="preferred_date" required
+                 style="padding:9px 11px;border:1px solid var(--amber-line);border-radius:8px;flex:1;min-width:150px" />
+          <input type="text" name="preferred_time" placeholder="Time (optional)"
+                 value="{{ booking.preferred_time or '' }}"
+                 style="padding:9px 11px;border:1px solid var(--amber-line);border-radius:8px;width:150px" />
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:0.84rem;color:var(--muted);margin:10px 0;cursor:pointer">
+          <input type="checkbox" name="tell_customer" value="1" checked style="width:auto">
+          Email + text her the new confirmation
+        </label>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">▶️ Put it back on for this date</button>
+      </form>
+      </details>
+    {% elif booking.status not in ('completed', 'cancelled') %}
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">⏸️ Put this on hold</summary>
+      <p style="font-size:0.82rem;color:var(--muted);margin:0 0 10px">
+        For a customer who needs to move the clean but hasn't picked a day. It comes
+        off the schedule, her card is never charged, her deposit stays on the job, and
+        {% if booking.assigned_cleaner or booking.crew %}your cleaner is texted not to go{% else %}nobody is sent{% endif %}.
+        She gets an email saying her money is safe.
+      </p>
+      <form method="POST" action="{{ url_for('bookings.hold', booking_id=booking.id) }}"
+            onsubmit="return confirm('Put this job on hold? The customer and any assigned cleaner will be told.')">
+        <input type="text" name="hold_note" maxlength="200"
+               placeholder="What she said — e.g. work trip, closing delayed"
+               style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;margin-bottom:9px" />
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">⏸️ Hold it until she's ready</button>
+      </form>
+      </details>
+    {% endif %}
+
+  </div>
   </div>
 
 </div>
@@ -1542,10 +1556,32 @@
   if (!sel) return;
   const panels = document.querySelectorAll('.send-panel');
   function show() {
-    panels.forEach(p => { p.style.display = p.dataset.kind === sel.value ? '' : 'none'; });
+    // A chosen kind with no panel behind it hid every send on the card and left
+    // her nothing to press. Show them all rather than none in that case — the
+    // same thing the page does with no JavaScript at all.
+    const matched = [...panels].some(p => p.dataset.kind === sel.value);
+    panels.forEach(p => {
+      p.style.display = (!matched || p.dataset.kind === sel.value) ? '' : 'none';
+    });
   }
   sel.addEventListener('change', show);
   show();
+})();
+
+// The work-order tickbox belongs to a named cleaner. For "the whole team" it
+// is never read, so it is replaced by what actually happens instead.
+(function () {
+  const sel = document.getElementById('assignTo');
+  const box = document.getElementById('woBox');
+  const note = document.getElementById('teamNote');
+  if (!sel || !box || !note) return;
+  function sync() {
+    const team = sel.value === 'team';
+    box.style.display = team ? 'none' : '';
+    note.style.display = team ? '' : 'none';
+  }
+  sel.addEventListener('change', sync);
+  sync();
 })();
 
 // Live pay breakdown as you edit the total / lead fee. Ends at what she keeps

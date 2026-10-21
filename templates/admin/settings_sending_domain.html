@@ -12,7 +12,7 @@
     <form method="POST" style="margin-top:16px">
       <input type="hidden" name="action" value="forget">
       <button type="submit" class="btn btn-outline"
-              onclick="return confirm('Remove {{ domain }}? Your email will go back to the shared address, and you will not be able to email new businesses until you set a domain up again.')">
+              onclick="return confirm('Remove {{ domain|js }}? Your email will go back to the shared address, and you will not be able to email new businesses until you set a domain up again.')">
         Remove this domain
       </button>
     </form>

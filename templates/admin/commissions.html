@@ -47,7 +47,7 @@
   {% elif report.total > 0 %}
   <form method="POST" action="{{ url_for('commissions.mark_paid') }}"
         style="margin-top:12px;display:flex;gap:7px;align-items:center;justify-content:center;flex-wrap:wrap"
-        onsubmit="return confirm('Record ${{ '%.2f' % report.total }} as paid to {{ report.agent }}? It becomes an expense on your P&L.')">
+        onsubmit="return confirm('Record ${{ ('%.2f' % report.total)|js }} as paid to {{ report.agent|js }}? It becomes an expense on your P&L.')">
     <input type="hidden" name="agent" value="{{ report.agent }}">
     <input type="hidden" name="year" value="{{ year }}">
     <input type="hidden" name="month" value="{{ month }}">

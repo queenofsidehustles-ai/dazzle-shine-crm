@@ -217,7 +217,8 @@ def send_marketing_sms(to_phone, message):
 
 
 def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe_url=None,
-                         append_text=None, append_unless=None, cc=None):
+                         append_text=None, append_unless=None, cc=None,
+                         always_append=None):
     """Look up an EmailTemplate by trigger key, fill in variables, and send.
     If unsubscribe_url is given, an unsubscribe line is added to the footer
     (use for marketing emails). Returns True if sent, False otherwise.
@@ -249,11 +250,25 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
     raw_body = tmpl.body or ''
     if append_text and not (append_unless and append_unless in raw_body):
         raw_body = raw_body.rstrip() + '\n\n' + append_text
+    # append_text is skipped when the template places that block itself.
+    # always_append is not: it is for wording that has to reach the customer
+    # whatever the owner has done to her copy of the template -- the service
+    # terms, which decide a chargeback months later.
+    if always_append:
+        raw_body = raw_body.rstrip() + '\n\n' + always_append
     body_text = _sub(raw_body, v)
     html = _wrap_html(body_text, biz, unsubscribe_url=unsubscribe_url)
-    send_email(to_email=to_email, to_name=to_name, subject=subject,
-               html=html, from_name=biz, cc=cc)
-    return True
+    # Report what actually happened. send_email signals a refused send by
+    # *returning* (False, detail) rather than raising -- no email key connected,
+    # a malformed address, Resend rejecting the call -- so returning True here
+    # regardless told every caller the mail had gone. The ones that check
+    # (quoting's lead quote, lifecycle's drips, the cleaner job notice) then
+    # recorded a send that reached nobody. Still a plain bool, because that is
+    # what those callers test; a two-item tuple is truthy however false its
+    # first item is.
+    ok, _detail = send_email(to_email=to_email, to_name=to_name, subject=subject,
+                             html=html, from_name=biz, cc=cc)
+    return bool(ok)
 
 
 def _deposit_text():
@@ -298,6 +313,21 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
     <p style="font-size:0.78rem;color:#9a95ad;margin:0">{biz_name} · Questions? Reply to this email.{unsub}</p>
   </div>
 </div>"""
+
+
+def _tenant_tags():
+    """Resend tags naming the company schema a message was sent from, so what
+    the provider later reports about it (delivered, bounced -- see
+    delivery_events.py) is filed in that company's records. Read from the
+    active tenancy, not the request: a scheduled job or a command run for one
+    company sends inside use_tenant() with no request at all. None for the
+    platform's own mail, which the webhook files under public."""
+    import re
+    import tenancy
+    schema = tenancy.current_schema()
+    if not tenancy.is_tenant() or not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', schema or ''):
+        return []
+    return [{'name': 'tenant', 'value': schema}]
 
 
 def send_email(to_email, to_name, subject, html, from_name=None,
@@ -346,6 +376,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     cc = (cc or '').strip()
     if not looks_like_email(cc) or cc.lower() == (to_email or '').strip().lower():
         cc = ''
+    tags = _tenant_tags()
     try:
         resp = http_requests.post(
             'https://api.resend.com/emails',
@@ -360,6 +391,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
                 'subject': subject,
                 'html': html,
                 **({'cc': [cc]} if cc else {}),
+                **({'tags': tags} if tags else {}),
             },
             timeout=10,
         )
@@ -395,8 +427,20 @@ def send_email(to_email, to_name, subject, html, from_name=None,
 
 
 def add_to_mailerlite(email, name, group_id=None):
+    """Add a website lead to the MailerLite list in MAILERLITE_API_KEY.
+
+    That list belongs to whoever set the variable: one business, on its own
+    single-business install. On the multi-company platform every company's
+    website posts to /api/quote, and sending their customers to that one list
+    handed one business's leads to another's mailing account. So only a
+    single-business install's own leads go: never from a company's schema, and
+    never on the platform (BASE_DOMAIN set) at all.
+    """
     import demo_guard
+    import tenancy
     if demo_guard.active():
+        return
+    if (os.environ.get('BASE_DOMAIN') or '').strip() or tenancy.current_schema() != tenancy.PUBLIC:
         return
     api_key = os.environ.get('MAILERLITE_API_KEY')
     if not group_id:

@@ -200,6 +200,37 @@ with app.app_context():
     check(marks == ['marked as test account', 'marked as a real company'],
           f'both changes are in the record ({marks})')
 
+    print('\n6c. Archiving hides a company from the list, and changes nothing else')
+    # Archive is not suspend or close: a company archived by mistake must keep
+    # its sign-in, its billing and its automations, or tidying the list
+    # quietly stops a live business.
+    import scheduler
+    keep = ('status', 'plan', 'subscription_status', 'trial_ends_at', 'is_test',
+            'suspended_at', 'closed_at', 'stripe_subscription_id')
+    before = {k: control_plane.find(engine, A).get(k) for k in keep}
+    post(helper, f'/console/companies/{A}/archive', {'on': '1'})
+    check(not control_plane.find(engine, A).get('archived_at'), 'a helper cannot archive one')
+    post(manager, f'/console/companies/{A}/archive', {'on': '1'})
+    after = control_plane.find(engine, A)
+    check(after.get('archived_at') is not None, 'a manager can')
+    check({k: after.get(k) for k in keep} == before,
+          'its status, plan, billing and trial are exactly as they were')
+    check(f'Ops Alpha {TAG}' not in get(helper, '/console/companies').data.decode()
+          and f'Ops Alpha {TAG}' in get(helper, '/console/companies?show=archived').data.decode(),
+          'it leaves the default list for the Archived one')
+    check(A in [o['slug'] for o in scheduler.companies()], 'its automations still run')
+    owner_page = app.test_client().get('/login', base_url=f'https://{A}.akyehq.test')
+    check(owner_page.status_code == 200, 'its owner can still reach the sign-in page')
+    post(manager, f'/console/companies/{A}/archive', {'on': '0'})
+    check(control_plane.find(engine, A).get('archived_at') is None
+          and f'Ops Alpha {TAG}' in get(helper, '/console/companies').data.decode(),
+          'unarchiving puts it back')
+    with engine.connect() as conn:
+        marks = [r[0] for r in conn.execute(text(
+            "SELECT action FROM public.console_log WHERE actor = :a AND target = :t "
+            "AND action LIKE '%archived' ORDER BY id"), {'a': MANAGER, 't': A})]
+    check(marks == ['archived', 'unarchived'], f'both changes are in the record ({marks})')
+
     print('\n7. Suspend needs a reason, locks the company out, and reactivates')
     post(manager, f'/console/companies/{B}/suspend', {'reason': ''})
     check(control_plane.find(engine, B)['status'] == 'active', 'no reason, no suspension')
@@ -256,7 +287,7 @@ with app.app_context():
           "and the list does not show another schema's errors as Charlie's")
     comms = get(helper, '/console/communications').data.decode()
     due = comms.split('Due today')[1].split('Every automated email')[0]
-    check(f'Ops Charlie {TAG}' in due and 'Two minutes to see it work' in due,
+    check(f'Ops Charlie {TAG}' in due and 'A week in: two minutes to see it work' in due,
           'reopened, Charlie is due the day-7 email')
     check('Send owner emails now' not in due, 'a helper gets no send button')
     SENT.clear()

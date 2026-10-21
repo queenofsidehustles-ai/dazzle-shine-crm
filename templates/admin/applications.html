@@ -104,7 +104,7 @@
     <input type="text" readonly value="{{ apply_url }}"
            style="font-size:0.78rem;padding:7px 10px;border:1px solid var(--line);border-radius:6px;color:var(--muted);background:#fff;width:340px;max-width:100%"
            onclick="this.select()" />
-    <button onclick="navigator.clipboard.writeText('{{ apply_url }}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)"
+    <button onclick="navigator.clipboard.writeText('{{ apply_url|js }}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)"
             class="btn btn-gold" style="padding:7px 14px;font-size:0.82rem;flex-shrink:0">Copy</button>
   </div>
 </div>
@@ -218,7 +218,7 @@
             <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
               <a href="{{ url_for('contractors.application_detail', app_id=a.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Review</a>
               <form method="POST" action="{{ url_for('contractors.delete_application', app_id=a.id) }}"
-                    onsubmit="return confirm('Delete {{ a.name }}\'s application permanently? Use this for test entries.')">
+                    onsubmit="return confirm('Delete {{ a.name|js }}\'s application permanently? Use this for test entries.')">
                 <button type="submit" title="Delete application"
                         style="background:#fff;border:1px solid var(--warn-soft);color:var(--warn);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">🗑</button>
               </form>

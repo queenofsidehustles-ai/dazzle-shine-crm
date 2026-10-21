@@ -70,7 +70,7 @@ c = app.test_client()
 c.post('/signup', data={'business': 'Sparkle Cleaning', 'slug': 'sparkle',
                         'name': 'Dana Reed', 'email': 'dana@sparkle.test',
                         'password': 'a-perfectly-fine-password',
-                        'terms_accepted': '1'}, headers={'Host': 'rollcall.test'})
+                        'terms_accepted': '1', 'zip_code': '32801'}, headers={'Host': 'rollcall.test'})
 logged = control_plane.product_messages_for(engine, slug='sparkle')
 check([m['kind'] for m in logged] == ['welcome'] and logged[0]['ok'],
       'the welcome email is recorded against the company')

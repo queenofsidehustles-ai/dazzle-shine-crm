@@ -132,8 +132,15 @@ organizations = Table(
     Column('signup_source', String(120)),
     Column('signup_medium', String(120)),
     Column('signup_campaign', String(120)),
+    # The individual ad, not the campaign: Meta fills utm_content with the ad
+    # name, which is the only thing that says which creative earned a signup.
+    Column('signup_content', String(120)),
     Column('signup_referrer', String(120)),
     Column('signup_landing', String(120)),
+    # Meta's click id, in their envelope. Wider than the rest because it is,
+    # and `ensure_columns` only ever adds a column -- never widens one -- so
+    # getting the width wrong here is not something a later deploy repairs.
+    Column('signup_fbc', String(255)),
     Column('referred_by', String(40), index=True),
     # The affiliate partner whose link brought them (affiliates.py). A partner
     # code, not a company address, so the two never collide. Kept only when the
@@ -484,6 +491,21 @@ tenant_logins = Table(
 )
 
 
+# One switch token, once. The city switcher hands the browser a short-lived
+# signed token and redirects it to the other city, which trades the token for a
+# session there -- a session cannot simply be carried across, because sessions
+# are bound to one tenant on purpose (see auth.bind_session_to_current_tenant).
+# The signature and the ninety-second expiry are what make the token hard to
+# forge; this table is what stops a token that leaked -- into a log, a Referer,
+# somebody's shoulder -- being spent twice.
+switch_tokens = Table(
+    'switch_tokens', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('jti', String(64), nullable=False, unique=True, index=True),
+    Column('used_at', DateTime, default=datetime.utcnow),
+)
+
+
 # One row per "find my company" email lookup, purely to throttle it -- the
 # same address cannot be asked for repeatedly, the same reason the reset-
 # password form is throttled (see blueprints/account.py). Without this, the
@@ -575,6 +597,73 @@ console_docs = Table(
 )
 
 
+# Which help tips work, across every company (adoption.py). The tips' wording
+# is the product's, not any one company's, so whether "Find leads" gets opened
+# after its tip was read is a question about the product -- answered here, in
+# one place, rather than by visiting every company's schema. Nobody is named:
+# `person` is a one-way hash of company and login, there only so one person
+# counts once.
+tip_events = Table(
+    'tip_events', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('slug', String(40), index=True),
+    Column('person', String(16)),
+    Column('role', String(20)),
+    Column('tip', String(80), index=True),
+    # 'open' -- read the tip; 'used' -- opened the feature within a week of
+    # reading its tip, for the first time; 'suggested' / 'clicked' /
+    # 'dismissed' -- the once-a-sign-in "Did you know?".
+    Column('event', String(20), nullable=False),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
+)
+
+
+def record_tip_event(engine, slug, person, role, tip, event):
+    with engine.begin() as conn:
+        conn.execute(insert(tip_events).values(
+            slug=slug, person=person, role=role, tip=tip, event=event,
+            created_at=datetime.utcnow()))
+
+
+# Each outcome and the event it is the outcome of. A rate is only honest when
+# both sides come from the same people: those who read the tip (or were shown
+# the suggestion) in the window, and what those people then did -- whenever
+# they did it. Counting each event on its own window instead lets somebody who
+# read a tip the day before the window opens count as a success inside it.
+TIP_COHORTS = {'used': 'open', 'clicked': 'suggested', 'dismissed': 'suggested'}
+
+
+def tip_report(engine, since=None):
+    """{tip: {event: distinct people}} across real companies -- test and demo
+    accounts left out, as everywhere else in the console. With `since`, the
+    people are those whose read (or suggestion) falls in the window, and each
+    outcome counts only those same people."""
+    q = (select(tip_events.c.tip, tip_events.c.event,
+                tip_events.c.slug, tip_events.c.person, tip_events.c.created_at)
+         .select_from(tip_events.outerjoin(
+             organizations, organizations.c.slug == tip_events.c.slug))
+         .where((organizations.c.is_test.is_(None)) | (organizations.c.is_test.is_(False))))
+    people = {}                     # (tip, event) -> {person: first time}
+    with engine.connect() as conn:
+        for tip, event, slug, person, at in conn.execute(q):
+            seen = people.setdefault((tip, event), {})
+            who = f'{slug}:{person}'
+            if who not in seen or (at and at < seen[who]):
+                seen[who] = at
+    out = {}
+    for (tip, event), seen in people.items():
+        origin = TIP_COHORTS.get(event)
+        if origin is None:          # an originating event: the window decides
+            who = {p for p, at in seen.items() if since is None or (at and at >= since)}
+        else:                       # an outcome: only for that window's cohort
+            cohort = people.get((tip, origin), {})
+            who = {p for p in seen if p in cohort
+                   and (since is None or (cohort[p] and cohort[p] >= since))}
+        if who:
+            out.setdefault(tip, {})[event] = len(who)
+    return out
+
+
 def _ensure_table_columns(engine, table):
     """Add any column `table` declares that the live table does not have.
 
@@ -633,7 +722,9 @@ def ensure_table(engine):
         engine, tables=[organizations, product_leads, feedback,
                         console_users, support_requests, console_log,
                         tenant_logins, login_lookup_requests, console_docs,
+                        switch_tokens,
                         promo_codes, product_lead_messages, signup_attempts,
+                        tip_events,
                         product_messages, product_switches,
                         affiliates, affiliate_logins, affiliate_clicks,
                         affiliate_commissions, affiliate_payouts,
@@ -702,8 +793,11 @@ def _signup_attribution(engine, slug, attribution, owner_email=None):
     proof either way, so it is credited but held for review.
     """
     a = attribution or {}
-    out = {f'signup_{k}': (a.get(k) or None) and str(a[k])[:120]
-           for k in ('source', 'medium', 'campaign', 'referrer', 'landing')}
+    import attribution as _attr
+    out = {f'signup_{k}': (a.get(k) or None)
+           and str(a[k])[:_attr.LIMITS.get(k, _attr.DEFAULT_LIMIT)]
+           for k in ('source', 'medium', 'campaign', 'content', 'referrer',
+                     'landing', 'fbc')}
     out = {k: v for k, v in out.items() if v}
     ref = (a.get('ref') or '').strip().lower()
     if ref and ref != slug and find(engine, ref):
@@ -776,8 +870,10 @@ def set_billing(engine, slug, **fields):
 
     The whitelist is the point: a caller that has not thought about which
     field it is writing cannot write one by accident. `activated_at` is on it
-    because the trial clock starts from the product being used, which is
-    something only this application knows and Stripe never will.
+    because when a company first got the software working is something only
+    this application knows and Stripe never will -- it no longer starts the
+    trial clock, which runs from signup, but it is still the most useful
+    thing there is to know about a trial.
     """
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
@@ -1166,14 +1262,19 @@ def lead_messages_for(engine, email, limit=100):
         return []
 
 
-def switches(engine):
+def switches_checked(engine):
     """{key: enabled} for every switch that has been set. Absent means on.
-    Never raises: if the table cannot be read, everything stays on, which is
-    how it behaved before switches existed."""
+    Raises if the table cannot be read, for the callers that must not guess."""
+    with engine.connect() as conn:
+        return {r['key']: bool(r['enabled']) for r in conn.execute(
+            select(product_switches)).mappings()}
+
+
+def switches(engine):
+    """switches_checked, except that if the table cannot be read everything
+    stays on, which is how it behaved before switches existed."""
     try:
-        with engine.connect() as conn:
-            return {r['key']: bool(r['enabled']) for r in conn.execute(
-                select(product_switches)).mappings()}
+        return switches_checked(engine)
     except Exception:
         return {}
 
@@ -1331,16 +1432,29 @@ def all_feedback(engine, limit=200):
     return [dict(r) for r in rows]
 
 
-def feedback_shot(engine, feedback_id):
-    """(bytes, content-type) for one screenshot, or (None, None)."""
+# What a screenshot may be served as. The type is whatever the browser that
+# sent it claimed; an image/svg+xml "screenshot" is a page that runs script, at
+# our address, for whoever opens it.
+SHOT_TYPES = ('image/jpeg', 'image/png', 'image/webp')
+
+
+def feedback_shot(engine, feedback_id, org_slug=Ellipsis):
+    """(bytes, content-type) for one screenshot, or (None, None).
+
+    `org_slug`, when given, is the only company whose feedback may come back
+    (None for a single-business install's own); the console, which reads
+    everybody's, leaves it out.
+    """
+    q = select(feedback.c.shot, feedback.c.shot_type).where(feedback.c.id == feedback_id)
+    if org_slug is not Ellipsis:
+        q = q.where(feedback.c.org_slug.is_(None) if org_slug is None
+                    else feedback.c.org_slug == org_slug)
     with engine.connect() as conn:
-        row = conn.execute(
-            select(feedback.c.shot, feedback.c.shot_type)
-            .where(feedback.c.id == feedback_id)
-        ).first()
+        row = conn.execute(q).first()
     if not row or not row[0]:
         return None, None
-    return row[0], (row[1] or 'image/jpeg')
+    ctype = (row[1] or 'image/jpeg').lower()
+    return row[0], (ctype if ctype in SHOT_TYPES else 'application/octet-stream')
 
 
 def mark_feedback_read(engine, feedback_id):
@@ -1453,7 +1567,7 @@ def set_console_active(engine, email, active):
                      .values(active=bool(active)))
 
 
-def check_console_login(engine, email, password):
+def check_console_login(engine, email, password, record_login=True):
     """(user, why-not). Never says which half was wrong.
 
     "No such account" and "wrong password" told apart is how somebody learns
@@ -1479,7 +1593,7 @@ def check_console_login(engine, email, password):
         # Right password, second step still to come. Not a completed login,
         # so neither the failure count nor last_login_at moves yet.
         return row, None
-    _console_login_succeeded(engine, row)
+    _console_login_succeeded(engine, row, record_login)
     return row, None
 
 
@@ -1497,14 +1611,19 @@ def _console_login_failed(engine, row):
     return 'locked' if 'locked_until' in values else 'no'
 
 
-def _console_login_succeeded(engine, row):
+def _console_login_succeeded(engine, row, record_login=True):
+    """Clear the failure count. `record_login=False` is for proving it is still
+    the same person (a destructive action) without claiming a new sign-in: the
+    People page's "Last in" must stay the last time anybody actually signed in."""
+    values = dict(failed=0, locked_until=None)
+    if record_login:
+        values['last_login_at'] = datetime.utcnow()
     with engine.begin() as conn:
         conn.execute(update(console_users).where(console_users.c.id == row['id'])
-                     .values(failed=0, locked_until=None,
-                             last_login_at=datetime.utcnow()))
+                     .values(**values))
 
 
-def check_console_code(engine, email, code):
+def check_console_code(engine, email, code, record_login=True):
     """Second step: a live authenticator code, or one unused backup code.
     (user, why-not), with wrong codes counting toward the same lockout as
     wrong passwords -- six digits are guessable in bulk otherwise."""
@@ -1517,14 +1636,14 @@ def check_console_code(engine, email, code):
         return None, 'locked'
     code = (code or '').strip()
     if totp.verify_totp(row.get('totp_secret') or '', code):
-        _console_login_succeeded(engine, row)
+        _console_login_succeeded(engine, row, record_login)
         return row, None
     remaining = totp.consume_backup_code(row.get('totp_backup_codes'), code)
     if remaining is not None:
         with engine.begin() as conn:
             conn.execute(update(console_users).where(console_users.c.id == row['id'])
                          .values(totp_backup_codes=remaining))
-        _console_login_succeeded(engine, row)
+        _console_login_succeeded(engine, row, record_login)
         return row, None
     return None, _console_login_failed(engine, row)
 
@@ -1577,6 +1696,31 @@ def record_signup_attempt(engine, ip):
                 signup_attempts.c.created_at < datetime.utcnow() - timedelta(days=7)))
     except Exception:
         pass
+
+
+def signup_attempts_by_ip(engine, since, limit=20):
+    """Who has been trying to sign up, grouped by the address we recorded.
+
+    The signup cap is per address, which is only true if the address we store
+    is the visitor's. Behind a proxy it can quietly become the proxy's, and
+    then a limit meant to stop one script turns into a limit on everybody --
+    three signups anywhere and the product is shut for a day. That failure
+    looks exactly like the rule working, which is why it needs showing rather
+    than reasoning about.
+    """
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(signup_attempts.c.ip,
+                       func.count().label('n'),
+                       func.max(signup_attempts.c.created_at).label('last'))
+                .where(signup_attempts.c.created_at >= since)
+                .group_by(signup_attempts.c.ip)
+                .order_by(func.count().desc())
+                .limit(limit)).all()
+            return [{'ip': r[0], 'count': r[1], 'last': r[2]} for r in rows]
+    except Exception:
+        return []
 
 
 def signup_attempts_since(engine, ip, since):
@@ -1648,6 +1792,17 @@ def log_console(engine, actor, action, target=None, detail=None):
         pass
 
 
+def console_log_for(engine, target, action=None, limit=1):
+    """The newest log lines about one target, optionally of one kind."""
+    q = select(console_log).where(console_log.c.target == target)
+    if action:
+        q = q.where(console_log.c.action == action)
+    with engine.connect() as conn:
+        return [dict(r) for r in conn.execute(
+            q.order_by(console_log.c.created_at.desc(), console_log.c.id.desc())
+            .limit(limit)).mappings()]
+
+
 def console_log_all(engine, limit=300):
     with engine.connect() as conn:
         rows = conn.execute(select(console_log).order_by(
@@ -1690,6 +1845,38 @@ def update_console_doc(engine, doc_id, title, content):
                      .where(console_docs.c.id == doc_id)
                      .values(title=title, content=content,
                              updated_at=datetime.utcnow()))
+
+
+def claim_switch_token(engine, jti):
+    """True the first time this token id is seen, False ever after.
+
+    The uniqueness constraint does the work rather than a read-then-write: two
+    requests arriving together both find nothing, and without the constraint
+    both would proceed. Here the second insert raises and that request is
+    refused, which is the behaviour wanted from a token that may be spent once.
+    """
+    jti = (jti or '').strip()
+    if not jti:
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(switch_tokens).values(jti=jti))
+        return True
+    except Exception:
+        return False
+
+
+def hold_affiliate_commissions(engine, slug, reason):
+    """Put a partner's company under review, unless it already is.
+
+    Its commissions stop being payable until a person has looked. Does nothing
+    for a company with no partner."""
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(
+            organizations.c.slug == slug,
+            organizations.c.affiliate_code.isnot(None),
+            organizations.c.affiliate_flag.is_(None))
+            .values(affiliate_flag=(reason or '')[:120]))
 
 
 def clear_affiliate_flag(engine, slug):

@@ -237,7 +237,17 @@ def embed_js():
   f.style.cssText = 'width:100%%;border:0;display:block;min-height:620px';
   f.setAttribute('scrolling', 'no');
   box.appendChild(f);
-  (s && s.parentNode ? s.parentNode : document.body).insertBefore(box, s);
+  // Where the line was pasted, when that is in the page. Pasted into a
+  // header -- a site-wide "custom code" box, or a builder's HTML block whose
+  // whole document is this one line -- the script lands in <head>, and an
+  // iframe there is never drawn: the form silently did not appear. Then it
+  // goes at the end of the page instead, once there is a page to put it in.
+  function mount() {
+    if (s && s.parentNode && document.body.contains(s)) s.parentNode.insertBefore(box, s);
+    else document.body.appendChild(box);
+  }
+  if (document.body) mount();
+  else document.addEventListener('DOMContentLoaded', mount);
   window.addEventListener('message', function (e) {
     // Only resize for our own frame, and only for a plausible height. A page
     // is free to receive messages from anywhere; acting on them is the part

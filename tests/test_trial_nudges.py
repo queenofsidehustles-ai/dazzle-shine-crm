@@ -71,9 +71,19 @@ def org(days_old=0, **kw):
 
 
 def running(days_in, **kw):
-    """A company that set up `days_in` days ago, two days after it signed up.
-    Setting up does not move the end date: that is 30 days from signup."""
-    return org(days_old=days_in + 2, activated_at=NOW - timedelta(days=days_in), **kw)
+    """A company that got it working `days_in` days ago.
+
+    Activation no longer moves the end date -- the trial is thirty days from
+    signup whatever they do -- so this only says when they got going.
+    """
+    return org(days_old=days_in + 2,
+               activated_at=NOW - timedelta(days=days_in), **kw)
+
+
+def ending_soon(days_old=28, **kw):
+    """A company whose thirty days are nearly up, and which did get going."""
+    return org(days_old=days_old,
+               activated_at=NOW - timedelta(days=days_old - 8), **kw)
 
 
 print('\n1. The person who signed up and never came back')
@@ -95,7 +105,7 @@ print('\n2. A missed day does not lose the nudge')
 # is paused. Keyed to `== 7` the email would simply never be sent.
 check(tn.due(org(days_old=9)) == 'start_7',
       'a run two days late still sends the day-7 note')
-check(tn.due(org(days_old=25, nudges_sent='start_7')) == 'start_21',
+check(tn.due(org(days_old=24, nudges_sent='start_7')) == 'start_21',
       'and the day-21 one')
 check(tn.due(org(days_old=40)) is None,
       'but a window that has long closed does not reopen')
@@ -106,7 +116,7 @@ print('\n3. Never the same email twice')
 # for this. The second copy of "9 days left" is what gets a domain marked spam.
 for kind, o in (('start_7', org(days_old=8, nudges_sent='start_7')),
                 ('start_21', org(days_old=22, nudges_sent='start_7,start_21')),
-                ('ending', running(26, nudges_sent='ending')),
+                ('ending', ending_soon(nudges_sent='ending')),
                 ('ended', org(days_old=31,
                               trial_ends_at=NOW - timedelta(days=1),
                               nudges_sent='ended'))):
@@ -115,14 +125,14 @@ for kind, o in (('start_7', org(days_old=8, nudges_sent='start_7')),
 
 print('\n4. Somebody who is actually using it')
 check(tn.due(running(1)) == 'activated',
-      'day 1 of 30 — the "now switched on" note, if the moment was missed')
+      'day 1 of 14 — the "now switched on" note, if the moment was missed')
 check(tn.due(running(1, nudges_sent='activated,day2')) is None,
       'and after that, leave them alone')
 check(tn.due(running(9)) is None, 'day 9 — still nothing')
-check(tn.due(running(25)) == 'ending', 'with 3 days left of 30, the one about money')
-check(tn.due(running(26)) == 'ending', 'and on the last day if it was missed')
-# They set up, so they never get the "get set up" emails.
-check(tn.due(running(25))not in ('start_7', 'start_21'),
+check(tn.due(ending_soon(27)) == 'ending', 'with 3 days left, the one about money')
+check(tn.due(ending_soon(29)) == 'ending', 'and on the last day if it was missed')
+# They engaged, so they never get the "you have not started" emails.
+check(tn.due(ending_soon(27)) not in ('start_7', 'start_21'),
       'and never the ones about not having begun')
 
 
@@ -179,13 +189,19 @@ for kind in tn.ALL:
           'www.akyehq.com/book' not in html and
           'href="https://akyehq.com' not in html,
           f'{kind}: and never to a login page where they do not exist')
+    # One clock, from signup: no email may say the trial has not started, or
+    # give it any length but billing.TRIAL_DAYS. Day 1 said "do not start".
+    words = (subj + ' ' + html).lower()
+    check(not any(p in words for p in ('not start', 'not started', "haven't started",
+                                       '14 days', '14-day', 'days to start')),
+          f'{kind}: never says the trial has yet to start, or is 14 days')
 
 # The promise the banner makes, kept in writing. Somebody whose trial has just
 # ended is frightened about their data before they are anything else.
 _, ended = tn.compose(o, 'ended')
 check('nothing has been deleted' in ended.lower(), 'the lapse email says nothing was deleted')
 check('free plan' in ended.lower(), 'and names the plan they are on')
-_, ending = tn.compose(running(25), 'ending')
+_, ending = tn.compose(ending_soon(27), 'ending')
 check('Nothing is deleted' in ending or 'nothing is deleted' in ending.lower(),
       'so does the one before it')
 _, s7 = tn.compose(o, 'start_7')

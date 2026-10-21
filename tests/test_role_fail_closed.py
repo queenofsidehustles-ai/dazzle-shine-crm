@@ -186,12 +186,19 @@ def test_legacy_team_role_is_least_privileged():
 
 def test_role_options_expose_only_canonical_roles():
     option_roles = [role for role, _label in rbac.ROLE_OPTIONS]
-    assert option_roles == ["limited", "cleaner", "dispatcher", "admin", "owner"]
+    assert option_roles == ["limited", "cleaner", "dispatcher", "sales", "admin", "owner"]
     assert set(option_roles) == set(rbac.CANONICAL_ROLES)
 
 
+def test_sales_role_is_prospecting_only():
+    # Sales finds and works leads and nothing else: no bookings, customers,
+    # website leads, inbox, money or settings. A new permission granted to it
+    # by accident is exactly what this is here to catch.
+    assert rbac.ROLE_PERMISSIONS["sales"] == frozenset({"prospect.work", "account.manage"})
+
+
 @pytest.mark.parametrize(("stored", "label"), [
-    ("owner", "Owner"), ("admin", "Admin"), ("dispatcher", "Dispatcher"),
+    ("owner", "Owner"), ("admin", "Admin"), ("dispatcher", "Dispatcher"), ("sales", "Sales"),
     ("cleaner", "Cleaner"), ("limited", "Limited"), ("team", "Limited"),
     ("bogus", "Unknown role"),
 ])

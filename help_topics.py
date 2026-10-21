@@ -215,10 +215,10 @@ TOPICS = [
         'title': 'Assigning a cleaner to a job',
         'keywords': ['assign', 'assign cleaner', 'send job', 'give job', 'dispatch', 'who is cleaning',
                      'unassigned', 'work order'],
-        'answer': ('Open the job and pick the cleaner under Assigned Cleaner, then save; they are emailed and texted the job with accept and decline links, and the cleaning checklist is sent. Or, in the "Who\'s paid for '
-                   'this job" card, add a specific cleaner with their pay and send it straight away, which emails '
-                   'and texts them the address, their pay and the checklist. Your dashboard warns you about jobs '
-                   'tomorrow with nobody on them.'),
+        'answer': ('Open the job and use the "Who\'s doing it" card. Pick a cleaner under Assign to, set her '
+                   'pay (leave it blank for the usual share), keep "Send the work order now" ticked and '
+                   'press Assign & send. She is emailed and texted the address, her pay and the checklist. '
+                   'Your dashboard warns you about jobs tomorrow with nobody on them.'),
         'link': ('Bookings', '/bookings/'),
     },
     {
@@ -226,11 +226,13 @@ TOPICS = [
         'title': 'Offering a job to the team (first to claim)',
         'keywords': ['offer to team', 'job board', 'open job', 'claim', 'broadcast job', 'first to claim',
                      'release job', 'crew job', 'team job'],
-        'answer': ('On the job page, press "Offer to the team". Every active cleaner with a phone number gets a '
-                   'text with the date, area, service and their pay, plus a personal claim link. The first to '
-                   'claim gets the job and is sent the checklist, and you get a text. Anyone whose day would '
-                   'clash with another job is blocked from claiming. For a job needing 2 or more cleaners, the '
-                   'first ones to claim fill the spots. If a cleaner releases a job, it is offered to the team again.'),
+        'answer': ('On the job page, choose "Offer it to the whole team" under Assign to in the "Who\'s doing'
+                   ' it" card and press Assign & send, or press the megaphone button next to the job on '
+                   'Bookings. Every active cleaner with a phone number gets a text with the date, area, '
+                   'service and their pay, plus a personal claim link. The first to claim gets the job and '
+                   'is sent the checklist, and you get a text. Anyone whose day would clash with another job'
+                   ' is blocked from claiming. For a job needing 2 or more cleaners, the first ones to claim'
+                   ' fill the spots. If a cleaner releases a job, it is offered to the team again.'),
         'link': ('Bookings', '/bookings/'),
     },
     {
@@ -250,11 +252,12 @@ TOPICS = [
         'title': 'Team logins and roles',
         'keywords': ['login', 'logins', 'user', 'users', 'role', 'roles', 'permissions', 'access',
                      'office manager', 'va', 'dispatcher', 'admin', 'invite'],
-        'answer': ('Settings, then Team logins, is where the owner gives someone their own sign-in. Enter their '
-                   'name and email and pick a role: Limited (can read bookings), Cleaner (their assigned work '
-                   'only), Dispatcher (bookings and scheduling), Admin (operations but no finance or pay), or '
-                   'Owner (full access). They get an invite link and choose their own password. You can disable '
-                   'a login or send a password reset link from the same page.'),
+        'answer': ('Settings, then Team logins, is where the owner gives someone their own sign-in. Enter '
+                   'their name and email and pick a role: Limited (can read bookings), Cleaner (their '
+                   'assigned work only), Dispatcher (bookings and scheduling), Sales (finding and working '
+                   'leads only), Admin (operations but no finance or pay), or Owner (full access). They get '
+                   'an invite link and choose their own password. You can disable a login or send a password'
+                   ' reset link from the same page.'),
         'link': ('Team logins', '/logins/'),
     },
     {
@@ -362,11 +365,12 @@ TOPICS = [
         'title': 'How cleaner pay is worked out',
         'keywords': ['cleaner pay', 'pay rate', 'how much do cleaners make', 'labor rate', 'hourly rate',
                      'split', 'crew pay', 'pay per job'],
-        'answer': ('Set what you pay per hour on Pricing, under Cleaner Pay. A job\'s pay is its hours times that '
-                   'rate, shared between whoever is on it, so a discount never cuts your cleaner\'s pay. On the '
-                   'job page, the "Who\'s paid for this job" card lets you set the number of paid cleaners and '
-                   'type each person\'s pay by hand. Each job keeps the rate it was quoted at; unpaid jobs offer '
-                   'a Re-rate button if you change your rate.'),
+        'answer': ("Set what you pay per hour on Pricing, under Cleaner Pay. A job's pay is its hours times "
+                   "that rate, shared between whoever is on it, so a discount never cuts your cleaner's pay."
+                   ' On the job page, the "Who\'s doing it" card shows each person\'s pay, which you can type '
+                   'over and save with Save pay; the number of cleaners and the hours are under "How this '
+                   'pay is worked out". Each job keeps the rate it was quoted at; unpaid jobs offer a Re-'
+                   'rate button if you change your rate.'),
         'link': ('Pricing', '/settings/pricing'),
     },
     {
@@ -409,10 +413,12 @@ TOPICS = [
         'title': 'Taking payments, payment links and invoices',
         'keywords': ['payment', 'take payment', 'payment link', 'invoice', 'invoices', 'qr code', 'mark paid',
                      'collect', 'balance', 'receipt'],
-        'answer': ('On the job page, the Send to customer card sends a payment link by email and text, or an invoice by email. The Money card has Take Payment, which opens the card page with a QR code the customer '
-                   'can scan, and Mark paid for cash or other payments, with the date the money arrived and an '
-                   'optional receipt. You can also record a deposit paid outside Stripe. Paid jobs have a receipt '
-                   'you can print or save. Tips added on the payment page are kept separate for the cleaner.'),
+        'answer': ('On the job page, the "Talk to the customer" card is where you choose what to send: a '
+                   'payment link goes by email and text, an invoice by email. The Money card has Take '
+                   'Payment, which opens the card page with a QR code the customer can scan, and Mark paid '
+                   'for cash or other payments, with the date the money arrived and an optional receipt. You'
+                   ' can also record a deposit paid outside Stripe. Paid jobs have a receipt you can print '
+                   'or save. Tips added on the payment page are kept separate for the cleaner.'),
         'link': ('Invoices', '/invoices/'),
     },
     {
@@ -599,11 +605,14 @@ TOPICS = [
         'title': 'Your plan and free trial',
         'keywords': ['plan', 'trial', 'free trial', 'billing', 'subscription', 'upgrade', 'locked', 'padlock',
                      'cancel subscription', 'card on file for akye'],
-        'answer': ('A new account gets a 30-day free trial with every feature. Your plan and the days left are shown '
-                   'on Billing and at the top of Settings, Business. A feature your plan does not include shows a '
-                   'lock and takes you to a page comparing plans. If a trial ends without a paid plan, or a payment '
-                   'fails, you drop to the free plan and keep all your data. Billing also has a link to update your '
-                   'card, see invoices or cancel.'),
+        'answer': ('A new account gets a 30-day free trial with every feature, counted from the day you '
+                   'sign up. Adding a cleaner and a customer does not change the date; it is just the '
+                   'quickest way to see it work. '
+                   'Your plan and the days left are shown on Billing and at the top of Settings, Business. A'
+                   ' feature your plan does not include shows a lock and takes you to a page comparing '
+                   'plans. If a trial ends without a paid plan, or a payment fails, you drop to the free '
+                   'plan and keep all your data. Billing also has a link to update your card, see invoices '
+                   'or cancel.'),
         'link': ('Billing', '/billing'),
     },
     {

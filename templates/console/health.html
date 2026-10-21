@@ -79,7 +79,8 @@
       <span class="ops-badge {{ 'ops-ok' if s.on else 'ops-closed' }}" style="margin-left:var(--s2)">{{ 'on' if s.on else 'OFF' }}</span>
       <div class="ops-dim">{{ s.blurb }}</div>
       {% if s.caution %}<div class="ops-bad">{{ s.caution }}</div>{% endif %}
-      {% if s.held_by_env %}<div class="ops-bad">Closed by the SIGNUPS_OPEN=0 environment setting. The console cannot reopen it.</div>{% endif %}
+      {% if s.held_by_env %}<div class="ops-bad">Closed by an environment setting ({{ 'SIGNUPS_OPEN' if s.key == 'signups' else 'PARTNER_PAYOUTS_OPEN' }}=0). The console cannot reopen it.</div>{% endif %}
+      {% if s.unreadable %}<div class="ops-bad">The switch settings could not be read, so this stays off until they can be. Check the database.</div>{% endif %}
       {% if s.by and not s.on %}<div class="ops-dim">Turned off by {{ s.by }}{{ ', ' ~ s.at.strftime('%d %b %H:%M') if s.at }}</div>{% endif %}</div>
     {% if may_operate %}
     <form method="post" action="{{ url_for('console.platform_switch') }}"
@@ -104,6 +105,57 @@
   </form>
 </div>
 {% endif %}
+
+<h3 class="ops-h">Signups, last 24 hours</h3>
+<div class="ops-card">
+  {% if not signups.limits_on %}
+  <p class="ops-bad" style="margin:0 0 var(--s2)">Limits are switched off
+    (SIGNUP_LIMITS=0) — anyone can open any number of companies.</p>
+  {% endif %}
+  <p style="margin:0 0 var(--s2)">
+    <strong>{{ signups.total }}</strong> attempt{{ 's' if signups.total != 1 }}
+    from <strong>{{ signups.addresses }}</strong>
+    address{{ 'es' if signups.addresses != 1 }} ·
+    cap is {{ signups.per_address_cap }} per address per day
+  </p>
+  {# The cap is per address, which is only true if the address recorded is
+     the visitor's. Behind a proxy it can quietly become the proxy's, and
+     then one rule meant to stop a script shuts the product for everybody.
+     That failure looks exactly like the rule working, so it is shown. #}
+  <span class="ops-dim">You look like <strong>{{ signups.you }}</strong>{%
+    if signups.forwarded %} · forwarded-for: {{ signups.forwarded }}{% endif %}</span>
+  {% if signups.addresses == 1 and signups.total > 1 %}
+  <p class="ops-bad" style="margin:var(--s2) 0 0">
+    Every attempt came from one address. If those were different people, the
+    per-address cap is acting on everybody at once.
+  </p>
+  {% endif %}
+  {% if signups.attempts %}
+  <table class="con" style="margin-top:var(--s3)">
+    <tr><th>Address</th><th>Attempts</th><th>Last</th></tr>
+    {% for a in signups.attempts %}
+    <tr>
+      <td>{{ a.ip }}{% if a.ip == signups.you %} <span class="ops-dim">(you)</span>{% endif %}</td>
+      <td{% if a.count >= signups.per_address_cap %} class="ops-bad"{% endif %}>{{ a.count }}</td>
+      <td class="ops-dim">{{ a.last.strftime('%d %b %H:%M') if a.last else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="ops-dim" style="margin:var(--s2) 0 0">No signup attempts in the last day.</p>
+  {% endif %}
+</div>
+
+<h3 class="ops-h">Nana and Claude</h3>
+<div class="ops-card">
+  {% if ai.key %}<p class="ops-good" style="margin:0 0 var(--s2)">Key set</p>
+  {% else %}<p class="ops-bad" style="margin:0 0 var(--s2)">No ANTHROPIC_API_KEY — Nana cannot answer</p>{% endif %}
+  <span class="ops-dim">Nana uses {{ ai.smart }} · short writing uses {{ ai.fast }}</span>
+  <form method="post" action="{{ url_for('console.test_ai') }}" style="margin-top:var(--s3)">
+    <button class="btn btn-outline btn-sm" type="submit" {% if not ai.key %}disabled{% endif %}>Check that Claude answers</button>
+  </form>
+  <p class="ops-dim" style="margin:var(--s2) 0 0">Sends Nana's model one short question and shows what came back — there is nothing to type. A model name that does not exist fails here and nowhere else: everywhere else it reads as Nana having nothing to say.</p>
+</div>
 
 <h3 class="ops-h">Partner payouts</h3>
 <div class="ops-card">
@@ -145,12 +197,13 @@
 <h3 class="ops-h">Closed, in retention</h3>
 {% if closed %}
 <div class="ops-scroll"><table class="con">
-  <tr><th>Company</th><th>Closed</th><th>Can be purged from</th></tr>
+  <tr><th>Company</th><th>Closed</th><th>Can be purged from</th><th></th></tr>
   {% for c in closed %}
   <tr><td><a href="{{ url_for('console.company', slug=c.slug) }}">{{ c.name }}</a></td>
-      <td>{{ c.closed_at.strftime('%d %b %Y') }}</td><td>{{ c.purge_from.strftime('%d %b %Y') }}</td></tr>
+      <td>{{ c.closed_at.strftime('%d %b %Y') }}</td><td>{{ c.purge_from.strftime('%d %b %Y') }}</td>
+      <td>{% if c.ready %}<span class="ops-badge ops-stale">ready to purge</span>{% else %}<span class="ops-dim">in retention</span>{% endif %}</td></tr>
   {% endfor %}
 </table></div>
-<p class="ops-dim" style="margin-top:var(--s2)">Purging is permanent and is run from a terminal: <code>python3 tenant_lifecycle_cli.py purge &lt;address&gt;</code>.</p>
+<p class="ops-dim" style="margin-top:var(--s2)">Export, reopen and permanent purge are under <strong>Lifecycle</strong> on each company's page, for the console owner. The terminal command still works too.</p>
 {% else %}<div class="con-empty">No closed companies.</div>{% endif %}
 {% endblock %}

@@ -34,7 +34,7 @@ cleaning-company owners, paid only when an owner actually pays.
 | Fact about Akye | Consequence |
 |---|---|
 | Buyer is a small cleaning-company owner (3 to 10 cleaners) who trusts peers over ads | Referral beats paid ads. A recommendation from someone they follow does the vetting. |
-| Pro is **$79/mo**, Scale **$249/mo**, Solo is free, 14-day full Pro trial | Recurring revenue supports a recurring commission. Free Solo means a click is cheap to try, so affiliates can promise "no card needed" honestly. |
+| Pro is **$79/mo**, Scale **$249/mo**, Solo is free, 30-day full Pro trial from signup | Recurring revenue supports a recurring commission. Free Solo means a click is cheap to try, so affiliates can promise "no card needed" honestly. |
 | Existing channels cost real money (the home page cites about $80 per bought commercial lead; Thumbtack leads run $15 to $40) | A 12-month commission is only paid on customers who stay, so cost tracks retention instead of clicks. |
 | Founder runs a cleaning company ("the unfair advantage" in `GETTING_CUSTOMERS.md`) | Authenticity is the pitch. Affiliates are handed the founder story and the demo, not a banner. |
 | Stripe Connect is already integrated (`stripe_connect.py`, `create_transfer`) | Payouts to affiliates reuse the contractor-payout plumbing. |
@@ -119,7 +119,7 @@ The angle is the product's: *"You stopped cleaning and started managing. This is
 what keeps the Friday payout straight."*
 
 - **For owners:** the founder story, a true claim only ("built for my own
-  company"), 14-day full trial, free Solo tier, no card to start.
+  company"), 30-day full trial from signup, free Solo tier, no card to start.
 - **For affiliates:** recurring income from a product their audience already
   needs, and a founder who answers messages.
 - **Proof points to use** (all already true in the repo): per-job crew pay and
