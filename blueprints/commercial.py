@@ -206,8 +206,11 @@ def detail(account_id):
         flash('Account updated.', 'success')
         return redirect(url_for('commercial.detail', account_id=a.id))
     vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
+    from models import Booking
+    jobs = (Booking.query.filter_by(commercial_account_id=a.id)
+            .order_by(Booking.id.desc()).limit(20).all())
     return render_template('admin/commercial_detail.html',
-                           **_tmpl_args(a=a, vas=vas, agreements=_agreements(a)))
+                           **_tmpl_args(a=a, vas=vas, agreements=_agreements(a), jobs=jobs))
 
 
 def _agreements(a):
@@ -225,6 +228,130 @@ def _agreements(a):
         out.append((ag, quote_evidence.as_issued(q) if q else None,
                     response.signer_name if response else None, replaced.get(ag.id)))
     return out
+
+
+# What a commercial visit usually covers. Ticked boxes become the scope of work
+# the customer is sent and the cleaner works from -- the commercial stand-in for
+# bedrooms and bathrooms.
+SCOPE_ITEMS = [
+    'Empty trash & replace liners',
+    'Restrooms — clean, disinfect & restock',
+    'Dust & disinfect high-touch surfaces',
+    'Vacuum carpets',
+    'Sweep & mop hard floors',
+    'Break room / kitchen',
+    'Lobby & entry',
+    'Glass doors & interior windows',
+]
+SCOPE_DEFAULT = SCOPE_ITEMS[:5]
+# The residential labels carry the recurring discount ("Weekly (15% off)"); a
+# commercial price is quoted per visit and has none.
+JOB_FREQUENCIES = {'one_time': 'One time', 'weekly': 'Weekly',
+                   'biweekly': 'Every 2 weeks', 'monthly': 'Monthly'}
+# Account frequency -> the nearest job frequency the schedule can repeat.
+_JOB_FREQ_FOR = {'weekly': 'weekly', 'biweekly': 'biweekly', 'monthly': 'monthly'}
+
+
+def _scope_text(items, extra):
+    lines = [f'• {i}' for i in items if i]
+    if extra:
+        lines.append(extra)
+    return '\n'.join(lines) or None
+
+
+@commercial_bp.route('/<int:account_id>/book', methods=['GET', 'POST'])
+@owner_required
+@requires_plan('commercial')
+def book(account_id):
+    """Book a job for a commercial account -- scheduled, confirmed and paid
+    exactly like a residential booking, priced per visit and described by its
+    scope of work instead of bedrooms and bathrooms."""
+    import entitlements
+    import invoicing
+    from models import Booking
+    from blueprints.bookings import _link_client, _notify_customer, _send_invoice
+    from pricing import get_labor_rate
+    from notifications import looks_like_email
+    a = CommercialAccount.query.get_or_404(account_id)
+    if request.method == 'POST':
+        back = redirect(url_for('commercial.book', account_id=a.id))
+        ok, why = entitlements.check_limit('jobs_per_month')
+        if not ok:
+            flash(why, 'error')
+            return back
+        email = (request.form.get('email') or '').strip().lower()
+        if email and not looks_like_email(email):
+            flash(f'“{email}” doesn\'t look like a complete email address.', 'error')
+            return back
+        price = _money(request.form.get('price'))
+        if price <= 0:
+            flash('Enter the price for this visit.', 'error')
+            return back
+        try:
+            hours = float(request.form.get('estimated_hours') or 0) or None
+        except ValueError:
+            hours = None
+        frequency = request.form.get('frequency', 'one_time')
+        if frequency not in JOB_FREQUENCIES:
+            frequency = 'one_time'
+        contact = (request.form.get('contact_name') or '').strip()
+        b = Booking(
+            service_type='commercial',
+            commercial_account_id=a.id,
+            name=a.business_name,
+            email=email or None,
+            phone=(request.form.get('phone') or '').strip(),
+            address=(request.form.get('address') or '').strip(),
+            city=(request.form.get('city') or '').strip(),
+            zip_code=(request.form.get('zip_code') or '').strip(),
+            sqft=_int(request.form.get('square_footage')),
+            frequency=frequency,
+            preferred_date=(request.form.get('preferred_date') or '').strip(),
+            preferred_time=(request.form.get('preferred_time') or '').strip(),
+            scope_of_work=_scope_text(request.form.getlist('scope'),
+                                      (request.form.get('scope_notes') or '').strip()),
+            access_notes=(request.form.get('access_notes') or '').strip() or None,
+            notes='\n'.join(x for x in (f'Contact: {contact}' if contact else '',
+                                        (request.form.get('notes') or '').strip()) if x) or None,
+            status=request.form.get('status', 'confirmed'),
+            price=round(price, 2),
+            estimated_hours=hours,
+            labor_rate_applied=get_labor_rate() if hours else None,
+            source='commercial',
+            agent=a.agent,
+        )
+        db.session.add(b)
+        db.session.commit()
+        _link_client(b)
+
+        pay = request.form.get('payment_option', 'none')
+        note = _notify_customer(b, confirmation=bool(request.form.get('notify_customer')),
+                                pay_kind=pay if pay in ('deposit', 'full') else 'none')
+        if pay == 'invoice_now':
+            terms = _int(request.form.get('net_days'))
+            invoicing.issue(b, net_days=invoicing.NET_DAYS_COMMERCIAL if terms is None else terms)
+            sent = _send_invoice(b)
+            note += (f' Sent invoice {b.invoice_number} 🧾.' if sent
+                     else f' Invoice {b.invoice_number} made, but it could not be emailed.')
+        flash(f'Job booked for {a.business_name} ✅ — assign a cleaner below.{note}', 'success')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    jobs = (Booking.query.filter_by(commercial_account_id=a.id)
+            .order_by(Booking.id.desc()).limit(5).all())
+    return render_template('admin/commercial_book.html', **_tmpl_args(
+        a=a, scope_items=SCOPE_ITEMS, scope_default=SCOPE_DEFAULT,
+        job_frequencies=JOB_FREQUENCIES,
+        default_frequency=_JOB_FREQ_FOR.get(a.frequency, 'one_time'),
+        default_price=(a.billing_amount if a.billing_type == 'per_visit' else None),
+        net_days=invoicing.NET_DAYS_COMMERCIAL, deposit=_deposit(), jobs=jobs))
+
+
+def _deposit():
+    from pricing import get_deposit
+    try:
+        return float(get_deposit() or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 @commercial_bp.route('/<int:account_id>/mark-first-paid', methods=['POST'])
@@ -249,6 +376,10 @@ def delete(account_id):
         # agreement pointing at nothing. Paused keeps both.
         flash('This account has a signed proposal on record, so it is kept. '
               'Set it to Paused if the work has stopped.', 'error')
+        return redirect(url_for('commercial.detail', account_id=a.id))
+    from models import Booking
+    if Booking.query.filter_by(commercial_account_id=a.id).first():
+        flash('This account has jobs booked, so it is kept. Set it to Paused if the work has stopped.', 'error')
         return redirect(url_for('commercial.detail', account_id=a.id))
     db.session.delete(a)
     db.session.commit()

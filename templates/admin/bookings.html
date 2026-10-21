@@ -63,7 +63,7 @@
                    style="font-size:0.8rem;color:var(--amber-deep);text-decoration:none">🔁 {{ b.series_total }} visits in this plan →</a>
             {% endif %}
           </td>
-          <td style="color:var(--muted)">{{ b.bedrooms or '—' }} bd / {{ b.bathrooms or '—' }} ba</td>
+          <td style="color:var(--muted)">{% if b.is_commercial %}🏢 {{ b.size_line() or 'Commercial' }}{% else %}{{ b.bedrooms or '—' }} bd / {{ b.bathrooms or '—' }} ba{% endif %}</td>
           <td style="color:var(--muted)">{{ b.preferred_date or '—' }}</td>
           <td style="color:var(--muted)">{{ b.preferred_time or '—' }}</td>
           <td>

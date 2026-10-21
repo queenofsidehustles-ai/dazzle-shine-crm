@@ -1506,7 +1506,7 @@ def _send_confirmation(booking: Booking):
   <p><strong>Phone:</strong> {booking.phone}</p>
   <p><strong>Service:</strong> {booking.service_label}</p>
   <p><strong>Frequency:</strong> {freq_label}</p>
-  <p><strong>Bedrooms:</strong> {booking.bedrooms} &nbsp; <strong>Bathrooms:</strong> {booking.bathrooms}</p>
+  <p>{('<strong>Size:</strong> ' + booking.home_text()) if booking.is_commercial else f'<strong>Bedrooms:</strong> {booking.bedrooms} &nbsp; <strong>Bathrooms:</strong> {booking.bathrooms}'}</p>
   {extras_text}
   <p><strong>Date:</strong> {date_text} &nbsp; <strong>Time:</strong> {time_text}</p>
   <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
@@ -1568,7 +1568,7 @@ def _send_deposit_request(booking: Booking):
 
     <table style="width:100%;font-size:0.95rem;color:#1f1333;border-collapse:collapse;margin-bottom:22px">
       <tr><td style="padding:5px 0;color:#9a95ad">Service</td><td style="padding:5px 0;font-weight:600;text-align:right">{booking.service_label}</td></tr>
-      <tr><td style="padding:5px 0;color:#9a95ad">Home</td><td style="padding:5px 0;font-weight:600;text-align:right">{booking.bedrooms} bed / {booking.bathrooms} bath</td></tr>
+      <tr><td style="padding:5px 0;color:#9a95ad">Home</td><td style="padding:5px 0;font-weight:600;text-align:right">{booking.home_text()}</td></tr>
       <tr><td style="padding:5px 0;color:#9a95ad">Date</td><td style="padding:5px 0;font-weight:600;text-align:right">{date_text} {('· ' + time_text) if time_text != 'Flexible' else ''}</td></tr>
       <tr><td style="padding:5px 0;color:#9a95ad">Estimated total</td><td style="padding:5px 0;font-weight:600;text-align:right">${booking.price:.2f}</td></tr>
       <tr><td style="padding:5px 0;color:#9a95ad">Deposit to confirm</td><td style="padding:5px 0;font-weight:700;text-align:right;color:#065f46">${float(get_deposit()):.2f}</td></tr>
@@ -1615,7 +1615,7 @@ def _send_deposit_request(booking: Booking):
   <p><strong>Email:</strong> {booking.email}</p>
   <p><strong>Phone:</strong> <a href="tel:{booking.phone}">{booking.phone}</a></p>
   <p><strong>Service:</strong> {booking.service_label} ({freq_label})</p>
-  <p><strong>Home:</strong> {booking.bedrooms} bed / {booking.bathrooms} bath</p>
+  <p><strong>Home:</strong> {booking.home_text()}</p>
   <p><strong>Date:</strong> {date_text} · {time_text}</p>
   <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
   <p><strong>Total:</strong> ${booking.price:.2f} · <strong>Balance after:</strong> ${booking.balance_due:.2f}</p>
