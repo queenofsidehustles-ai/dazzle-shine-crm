@@ -94,6 +94,13 @@ with app.app_context(), app.test_request_context():
     _l, terms = setup_assistant.terms_card()
     check(terms is not None and len(terms['lines']) == 4,
           'the terms are four lines, not thirteen hundred words')
+    # Accepting the card marks the terms reviewed without showing them, so its
+    # summary must promise what the terms do: 24 hours to report a problem
+    # (it said 48, against the terms' and every confirmation's 24).
+    import customer_terms
+    window = [l for l in terms['lines'] if 'Tell us within' in l]
+    check(window and '24 hours' in window[0] and 'within 24 hours' in customer_terms.DEFAULT_TERMS,
+          f'the summary gives the same window as the terms ({window[0] if window else "-"})')
     both = setup_assistant.balance_cards()
     check(len(both) == 1 and both[0]['kind'] == 'choice'
           and len(both[0]['options']) == 2,

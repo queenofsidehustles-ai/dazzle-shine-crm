@@ -170,25 +170,33 @@ def save_response(token):
     data = request.get_json() or {}
 
     q_index = data.get('question_index')
-    public_id = data.get('cloudinary_public_id', '').strip()
-    url = data.get('cloudinary_url', '').strip()
     question_en = data.get('question_en', '')
     transcript = data.get('transcript', '').strip()
     transcript_lang = data.get('transcript_lang', 'en')
+    # Cloudinary's own reply, relayed by the page: the id it gave the upload,
+    # and the version, format and type that make a reference out of it.
+    public_id = str(data.get('public_id') or '').strip()
 
-    if q_index is None or not public_id or not url:
+    if q_index is None or not public_id:
         return jsonify({'error': 'Missing fields'}), 400
 
     # A signed upload lands in this tenant's own folder, and what gets stored is
     # a reference this server minted rather than a URL the browser handed over.
-    # The old shape still has to be accepted: recordings made before signing
-    # existed are flat `interviews/` objects with a plain URL, and they must
-    # keep playing rather than vanishing from the review page.
+    # Recordings made before signing existed are flat `interviews/` objects with
+    # a plain URL; they are already stored and keep playing on the review page.
+    #
+    # The id that is checked is the id that is stored: purging this company
+    # deletes every stored id, so it must be one the check proved is in this
+    # company's folder, never a second field the caller filled in separately.
+    legacy_id = str(data.get('cloudinary_public_id') or '').strip()
+    if legacy_id and legacy_id != public_id:
+        return jsonify({'error': 'That upload could not be verified. Record the answer again.'}), 400
     import private_media
     ref = private_media.ref_from_upload(
         data, tenant_slug=_media_tenant_slug(), kind=MEDIA_KIND)
-    if ref:
-        url = ref
+    if not ref:
+        return jsonify({'error': 'That upload could not be verified. Record the answer again.'}), 400
+    url = ref
 
     existing = InterviewResponse.query.filter_by(
         application_id=app_rec.id, question_index=q_index

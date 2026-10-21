@@ -280,7 +280,8 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                         pad = '      ' if schema != PUBLIC else '    '
                         print(f'{pad}{table.name:<28} {n:>7}')
             evidence = _evidence_digests(conn, by_schema)
-            anchor = _against_last_night(conn, evidence, _previous_manifest(out_dir))
+            last = _previous_manifest(out_dir)
+            anchor, broken = _against_last_night(conn, evidence, last)
 
     size = os.path.getsize(path)
     tenant_rows = sum(sum(t.values()) for t in tenant_counts.values())
@@ -293,7 +294,10 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                 # Written down outside the database: each company's audit chain
                 # head and evidence hashes. certify.py compare checks a later
                 # database against it; verify() checks the restore against it.
-                'evidence': {s: d for s, d in evidence.items() if 'error' not in d},
+                'evidence': _written_evidence(evidence, broken, last),
+                # Companies whose evidence no longer matched the last backup:
+                # their entry above is that backup's, carried forward.
+                'evidence_carried': sorted(broken),
                 # Which schemas had an audit chain in the database read, so
                 # had evidence to write down. The restore cannot say: it is
                 # migrated to this code's head, chain or no chain at source.
@@ -388,6 +392,23 @@ def _evidence_digests(conn, by_schema):
     return out
 
 
+def _written_evidence(evidence, broken, previous):
+    """What the manifest writes down as each company's evidence.
+
+    Tonight's digest, except for a company whose evidence did not match the
+    last backup's: that one keeps the last backup's digest. The manifest is
+    kept even when the run fails, and the next run reads the newest one, so
+    writing tonight's digest down would make a rewritten chain the baseline
+    and the second night would pass. Carried forward, it keeps failing until
+    somebody looks."""
+    out = {s: d for s, d in evidence.items() if 'error' not in d}
+    then = (previous or {}).get('evidence') or {}
+    for schema in broken:
+        if schema in then:
+            out[schema] = then[schema]
+    return out
+
+
 def _against_last_night(conn, evidence, previous):
     """Problems with tonight's evidence against what the last backup wrote down
     -- the check that makes the record outside the database worth having. A
@@ -395,10 +416,12 @@ def _against_last_night(conn, evidence, previous):
     the head written down before shows it is not the chain that was there.
 
     Skipped for demo companies, which are rebuilt from scratch on purpose,
-    and for companies no longer here (the count checks speak for those)."""
+    and for companies no longer here (the count checks speak for those).
+
+    Returns (problems, the schemas they are about)."""
     then = (previous or {}).get('evidence') or {}
     if not then or conn.dialect.name != 'postgresql':
-        return []
+        return [], set()
     import evidence_check
     from sqlalchemy import text
     demo = set()
@@ -407,13 +430,15 @@ def _against_last_night(conn, evidence, previous):
             'SELECT schema_name FROM public.organizations WHERE is_demo'))}
     except Exception:
         pass
-    problems = []
+    problems, broken = [], set()
     for schema, digest in sorted(then.items()):
         if schema in demo or schema not in evidence or 'error' in evidence[schema]:
             continue
-        problems += [f'{schema}: {p} since the last backup' for p in
-                     evidence_check.compare(conn, schema, digest)['problems']]
-    return problems
+        found = evidence_check.compare(conn, schema, digest)['problems']
+        if found:
+            broken.add(schema)
+        problems += [f'{schema}: {p} since the last backup' for p in found]
+    return problems, broken
 
 
 def _previous_manifest(out_dir):

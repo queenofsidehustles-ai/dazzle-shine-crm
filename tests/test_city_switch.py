@@ -261,6 +261,33 @@ with app.app_context():
           'somebody with no account there is sent to log in, not given a session')
     db.session.remove()
 
+    print('\n12. Only an owner may start a switch')
+    # The other city signs the arrival in as its owner without that account's
+    # password or second factor. So a lesser login here that shares an email
+    # with an owner there -- a dispatcher at Orlando who owns Huntsville --
+    # must not be able to mint the token: the low-privilege password would
+    # otherwise be enough for owner access next door.
+    disp = f'disp-{TAG}@example.com'
+    for slug, role in ((ORL, 'dispatcher'), (HSV, 'owner')):
+        with tenancy.use_tenant(slug):
+            from models import User
+            u = User(name='Dee', username=disp, role=role, active=True)
+            u.set_password('dispatch-password-123')
+            db.session.add(u); db.session.commit()
+        control_plane.record_tenant_login(engine, disp, slug)
+        db.session.remove()
+    check(city_switch.may_switch(disp, HSV), 'the email does own Huntsville')
+    c = app.test_client()
+    r0 = c.post('/login', data={'username': disp, 'password': 'dispatch-password-123'},
+                headers={'Host': f'{ORL}.akyehq.test'}, follow_redirects=False)
+    check(r0.status_code in (301, 302), 'the dispatcher logs into Orlando')
+    db.session.remove()
+    r = c.get(f'/switch-city/{HSV}', headers={'Host': f'{ORL}.akyehq.test'},
+              follow_redirects=False)
+    check('/switch-city/accept' not in (r.headers.get('Location') or ''),
+          'a dispatcher session cannot mint a switch to the city its email owns')
+    db.session.remove()
+
 if failures:
     print(f'\n❌ {len(failures)} failed:')
     for f in failures:

@@ -511,7 +511,7 @@ def terms_card():
     lines = ['Payment is due when the job is done',
              'Cancellations: 24 hours’ notice',
              'Somebody must be able to let the cleaner in',
-             'Not happy? Tell us within 48 hours and we put it right']
+             'Not happy? Tell us within 24 hours and we put it right']
     card = _offer('setup_accept_terms', {'accepted': '1'},
                   'Your customer terms', lines, 'Accept these')
     # Most owners accept the sensible draft in one tap. The few who want to

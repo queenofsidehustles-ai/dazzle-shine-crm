@@ -15,19 +15,44 @@ Where the two disagree -- somebody signing up from a hotel in another state --
 the ZIP wins, because that is where the cleaning happens.
 """
 
-# (low, high, zone) over the first three digits, inclusive.
+# (low, high, zone) over the first three digits, inclusive. Where a state
+# straddles a line, its prefixes are split along it, so a Montana or Alabama
+# or Florida-panhandle business is not put an hour or two out.
 _RANGES = [
-    (6, 6, 'America/Puerto_Rico'),       # PR / VI
-    (7, 199, 'America/New_York'),        # New England down through PA
-    (200, 299, 'America/New_York'),      # DC, VA, WV, NC, SC
-    (300, 399, 'America/New_York'),      # GA, FL, AL (eastern), TN (eastern)
-    (400, 499, 'America/New_York'),      # KY, OH, IN (mostly)
-    (500, 599, 'America/Chicago'),       # IA, MN, MT, ND, SD
-    (600, 699, 'America/Chicago'),       # IL, MO, KS
-    (700, 799, 'America/Chicago'),       # LA, AR, OK, TX
-    (800, 816, 'America/Denver'),        # CO
-    (820, 831, 'America/Denver'),        # WY, ID (east), UT
-    (832, 838, 'America/Boise'),         # ID panhandle
+    (5, 5, 'America/New_York'),          # Holtsville NY
+    (6, 7, 'America/Puerto_Rico'),       # PR
+    (8, 8, 'America/St_Thomas'),         # US Virgin Islands
+    (9, 9, 'America/Puerto_Rico'),       # PR
+    (10, 323, 'America/New_York'),       # New England to GA, FL (east)
+    (324, 325, 'America/Chicago'),       # FL panhandle, west of the Apalachicola
+    (326, 349, 'America/New_York'),      # FL
+    (350, 369, 'America/Chicago'),       # AL
+    (370, 372, 'America/Chicago'),       # TN: Nashville
+    (373, 374, 'America/New_York'),      # TN: Chattanooga
+    (375, 375, 'America/Chicago'),       # TN: Memphis
+    (376, 379, 'America/New_York'),      # TN: the east, Knoxville
+    (380, 385, 'America/Chicago'),       # TN: west and middle
+    (386, 397, 'America/Chicago'),       # MS
+    (398, 419, 'America/New_York'),      # GA (south), KY: Louisville and the east
+    (420, 424, 'America/Chicago'),       # KY: the west
+    (425, 462, 'America/New_York'),      # KY (east), OH, IN: Indianapolis
+    (463, 464, 'America/Chicago'),       # IN: the northwest, Gary
+    (465, 475, 'America/New_York'),      # IN
+    (476, 477, 'America/Chicago'),       # IN: the southwest, Evansville
+    (478, 499, 'America/New_York'),      # IN, MI
+    (500, 576, 'America/Chicago'),       # IA, WI, MN, SD (east)
+    (577, 577, 'America/Denver'),        # SD: the west, Rapid City
+    (580, 585, 'America/Chicago'),       # ND
+    (586, 586, 'America/Denver'),        # ND: the southwest, Dickinson
+    (587, 588, 'America/Chicago'),       # ND
+    (590, 599, 'America/Denver'),        # MT
+    (600, 692, 'America/Chicago'),       # IL, MO, KS, NE
+    (693, 693, 'America/Denver'),        # NE: the panhandle
+    (700, 797, 'America/Chicago'),       # LA, AR, OK, TX
+    (798, 799, 'America/Denver'),        # TX: El Paso
+    (800, 831, 'America/Denver'),        # CO, WY
+    (832, 837, 'America/Boise'),         # ID: the south
+    (838, 838, 'America/Los_Angeles'),   # ID: the panhandle
     (840, 847, 'America/Denver'),        # UT
     (850, 865, 'America/Phoenix'),       # AZ -- no daylight saving
     (870, 884, 'America/Denver'),        # NM
@@ -35,10 +60,27 @@ _RANGES = [
     (900, 961, 'America/Los_Angeles'),   # CA
     (967, 968, 'Pacific/Honolulu'),      # HI
     (969, 969, 'Pacific/Guam'),          # GU / MP
-    (970, 979, 'America/Los_Angeles'),   # OR, WA
-    (980, 994, 'America/Los_Angeles'),   # WA, ID (north)
+    (970, 994, 'America/Los_Angeles'),   # OR, WA
     (995, 999, 'America/Anchorage'),     # AK
 ]
+
+# Prefixes that cross a zone line inside themselves, with the zones they
+# cover. The range above gives the likelier one; a browser that is in one of
+# these others is believed instead (resolve()).
+# Each lists every name a browser on either side may report, regional ones
+# included (a Menominee browser says America/Menominee, not America/Chicago).
+MIXED = {
+    324: ('America/Chicago', 'America/New_York'),    # FL: Panama City / Port St. Joe
+    498: ('America/New_York', 'America/Detroit',     # MI: Upper Peninsula
+          'America/Chicago', 'America/Menominee'),
+    499: ('America/New_York', 'America/Detroit',
+          'America/Chicago', 'America/Menominee'),
+    586: ('America/Denver', 'America/Chicago',       # ND: Dickinson / Glen Ullin
+          'America/North_Dakota/Center'),
+    677: ('America/Chicago', 'America/Denver'),      # KS: the far west
+    798: ('America/Denver', 'America/Chicago'),      # TX: El Paso / Alpine
+    979: ('America/Los_Angeles', 'America/Boise'),   # OR: Malheur County
+}
 
 # Timezones we are willing to store, so a browser string we do not recognise
 # cannot become the setting everything is scheduled against.
@@ -74,9 +116,13 @@ def resolve(zip_code='', browser_zone=''):
     two that can be somewhere else entirely.
     """
     by_zip = zone_for_zip(zip_code)
+    browser = (browser_zone or '').strip()
+    five = digits(zip_code)
+    if by_zip and len(five) >= 3 and browser in MIXED.get(int(five[:3]), ()):
+        # A prefix that crosses a line: the browser picks the side.
+        return browser, 'zip+browser'
     if by_zip:
         return by_zip, 'zip'
-    browser = (browser_zone or '').strip()
     if browser in KNOWN:
         return browser, 'browser'
     return '', ''
@@ -99,6 +145,7 @@ LABELS = {
     'Pacific/Honolulu': 'Hawaii',
     'Pacific/Guam': 'Guam',
     'America/Puerto_Rico': 'Puerto Rico',
+    'America/St_Thomas': 'Atlantic',
 }
 
 
