@@ -79,4 +79,17 @@ with app.app_context():
     check('Sparkle Pros Cleaning' in page, 'the page shows the saved name')
     check('#16a34a' in page, 'and the saved accent colour')
 
+    print('\n7. Every zone a ZIP can give is on the time zone list')
+    import re
+    def selected_zone():
+        page = c.get('/settings/business').get_data(as_text=True)
+        return re.findall(r'<option value="([^"]+)" selected>', page[page.index('name="timezone"'):])[:1]
+    for zone in ('Pacific/Guam', 'America/Puerto_Rico', 'America/Anchorage', 'Pacific/Honolulu'):
+        c.post('/settings/business', data={'timezone': zone}, follow_redirects=True)
+        check(selected_zone() == [zone], f'{zone} can be chosen, and shows as chosen')
+    # A zone signup stored that the list does not name (Boise keeps Mountain
+    # time) shows as itself, so saving the card does not quietly make it Eastern.
+    BusinessSetting.set('timezone', 'America/Boise'); db.session.commit()
+    check(selected_zone() == ['America/Boise'], 'a stored zone not on the list stays selected')
+
 print('\n🎉 Each card saves independently; nothing gets wiped.')

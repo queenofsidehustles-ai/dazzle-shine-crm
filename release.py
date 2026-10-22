@@ -198,13 +198,19 @@ def _attest_by_hand(line, sha):
     say(f'Could not ask GitHub for the checks on {sha[:7]} (is `gh` installed and '
         f'logged in?). Open https://github.com/{repo}/commit/{sha}, and for each '
         f'check paste the link to the run that passed:')
-    pattern = re.compile(rf'^https://github\.com/{re.escape(repo)}/actions/runs/\d+(/job/\d+)?/?$')
-    evidence = []
+    pattern = re.compile(rf'^https://github\.com/{re.escape(repo)}/actions/runs/(\d+)(/job/\d+)?/?$')
+    evidence, seen = [], set()
     for name in line.required_checks:
         link = input(f'  {name}: ').strip()
-        if not pattern.match(link):
+        match = pattern.match(link)
+        if not match:
             sys.exit(f'That is not a run of {repo or "this repository"} '
                      f'(https://github.com/{repo}/actions/runs/...). Not released — nothing changed.')
+        # Each check is its own workflow, so one run cannot be evidence for two.
+        if match.group(1) in seen:
+            sys.exit(f'That run was already given for another check; {name} runs in a '
+                     f'workflow of its own. Not released — nothing changed.')
+        seen.add(match.group(1))
         evidence.append(f'{name}: confirmed by hand ({link})')
     me = git('config', 'user.name', check=False).strip().lower()
     second = input('Who else has checked these runs? Their name: ').strip()

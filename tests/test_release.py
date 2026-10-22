@@ -250,6 +250,9 @@ try:
           'a typed-back hash instead of a run link is refused')
     check(by_hand(['https://github.com/other/repo/actions/runs/1'] + links[1:] + ['Sam Checker']) is None,
           "a run from another repository is refused")
+    check(by_hand([links[0]] * len(links) + ['Sam Checker']) is None
+          and by_hand([links[0], links[0] + '/job/7'] + links[2:] + ['Sam Checker']) is None,
+          'one run given for two checks is refused (each runs in its own workflow)')
     check(by_hand(links + ['']) is None and by_hand(links + ['pat releaser']) is None,
           'and so is no second person, or the releaser naming themselves')
 finally:

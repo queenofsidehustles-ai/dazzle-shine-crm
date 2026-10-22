@@ -51,7 +51,9 @@ _RANGES = [
     (700, 797, 'America/Chicago'),       # LA, AR, OK, TX
     (798, 799, 'America/Denver'),        # TX: El Paso
     (800, 831, 'America/Denver'),        # CO, WY
-    (832, 837, 'America/Boise'),         # ID: the south
+    (832, 834, 'America/Boise'),         # ID: the south
+    (835, 835, 'America/Los_Angeles'),   # ID: Lewiston, the north-central
+    (836, 837, 'America/Boise'),         # ID: the south, Boise
     (838, 838, 'America/Los_Angeles'),   # ID: the panhandle
     (840, 847, 'America/Denver'),        # UT
     (850, 865, 'America/Phoenix'),       # AZ -- no daylight saving
@@ -79,6 +81,7 @@ MIXED = {
           'America/North_Dakota/Center'),
     677: ('America/Chicago', 'America/Denver'),      # KS: the far west
     798: ('America/Denver', 'America/Chicago'),      # TX: El Paso / Alpine
+    835: ('America/Los_Angeles', 'America/Boise'),   # ID: Lewiston / Idaho County south of the Salmon
     979: ('America/Los_Angeles', 'America/Boise'),   # OR: Malheur County
 }
 
@@ -88,6 +91,22 @@ KNOWN = {z for _lo, _hi, z in _RANGES} | {
     'America/Detroit', 'America/Indiana/Indianapolis', 'America/Kentucky/Louisville',
     'America/Menominee', 'America/North_Dakota/Center', 'America/Juneau',
 }
+
+
+# What an owner can pick in Business Settings: every zone zone_for_zip() can
+# give, under the name they would know it by. A zone the audit can recommend
+# but nobody can choose would leave the fix to an edit of production data.
+CHOICES = [
+    ('America/New_York', 'Eastern (New York, Miami, Atlanta)'),
+    ('America/Chicago', 'Central (Chicago, Dallas, Houston)'),
+    ('America/Denver', 'Mountain (Denver, Salt Lake City, Boise)'),
+    ('America/Phoenix', 'Arizona (no daylight saving)'),
+    ('America/Los_Angeles', 'Pacific (Los Angeles, Seattle)'),
+    ('America/Anchorage', 'Alaska'),
+    ('Pacific/Honolulu', 'Hawaii (no daylight saving)'),
+    ('America/Puerto_Rico', 'Atlantic (Puerto Rico, Virgin Islands)'),
+    ('Pacific/Guam', 'Chamorro (Guam, Northern Mariana Islands)'),
+]
 
 
 def digits(zip_code):

@@ -86,6 +86,11 @@ with app.test_request_context():
     text, card = setup_assistant.tool_offer_timezone(zone='central')
     check(card is not None and 'America/Chicago' in card['lines'][0],
           'and a real one becomes a card, not a saved value')
+    for asked, zone in (('Pacific/Honolulu', 'Pacific/Honolulu'), ('Pacific/Guam', 'Pacific/Guam'),
+                        ('Puerto Rico', 'America/Puerto_Rico'), ('pacific', 'America/Los_Angeles')):
+        text, card = setup_assistant.tool_offer_timezone(zone=asked)
+        check(card is not None and f'({zone})' in card['lines'][0],
+              f'{asked!r} is offered as {zone}, not a zone that merely starts the same')
 check(setup_assistant.set_timezone({'timezone': 'Mars/Olympus'})[0] is False,
       'the save refuses it too, not only the offer')
 

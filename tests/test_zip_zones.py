@@ -41,6 +41,9 @@ for zip_code, zone, where in (
         ('75201', 'America/Chicago', 'Dallas, TX'),
         ('83814', 'America/Los_Angeles', "Coeur d'Alene, ID"),
         ('83702', 'America/Boise', 'Boise, ID'),
+        ('83501', 'America/Los_Angeles', 'Lewiston, ID (Pacific)'),
+        ('83201', 'America/Boise', 'Pocatello, ID'),
+        ('83301', 'America/Boise', 'Twin Falls, ID'),
         ('00901', 'America/Puerto_Rico', 'San Juan, PR'),
         ('00802', 'America/St_Thomas', 'St Thomas, VI'),
         ('10001', 'America/New_York', 'New York, NY'),
@@ -85,6 +88,19 @@ check(z.audit('10001', 'America/Detroit')[0] == 'ok', 'a zone that keeps the sam
 check(z.audit('49801', 'America/Menominee')[0] == 'ok',
       'either side of a prefix that crosses a line is fine')
 check(z.audit('', 'America/Chicago') == ('no-zip', ''), 'no ZIP, nothing to compare')
+check(z.audit('83501', 'America/Los_Angeles')[0] == 'ok'
+      and z.audit('83549', 'America/Boise')[0] == 'ok',
+      'Lewiston on Pacific is fine, and so is the south of Idaho County on Mountain')
+
+print('\n5. Whatever the audit recommends, an owner can pick')
+choosable = {zone for zone, _label in z.CHOICES}
+check(all(any(z._same_clock(zone, c) for c in choosable) for _lo, _hi, zone in z._RANGES),
+      'every zone a ZIP gives keeps the clock of one in Business Settings')
+check(all(ZoneInfo(zone) for zone in choosable), 'and each of those is a real zone')
+import setup_assistant
+offered = {zone for zone, _label in setup_assistant.TIMEZONES.values()}
+check(all(any(z._same_clock(zone, c) for c in offered) for _lo, _hi, zone in z._RANGES),
+      'and the setup assistant can offer one with the same clock for every ZIP')
 
 if failures:
     print(f'\n❌ {len(failures)} failed')
