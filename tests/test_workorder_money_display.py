@@ -40,6 +40,7 @@ def test_workorder_crew_pay_preserves_cents(monkeypatch):
         service_label='Standard Cleaning',
         bedrooms=3,
         bathrooms=2,
+        is_commercial=False,
     )
     checklist = SimpleNamespace(token='exact-cents-token')
 
