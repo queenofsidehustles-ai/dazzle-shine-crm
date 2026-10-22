@@ -9,8 +9,8 @@ scope of work in place of bedrooms and bathrooms.
 from alembic import op
 import sqlalchemy as sa
 
-revision = '0034_commercial_jobs'
-down_revision = '0033_photo_optional_wording'
+revision = '0035_commercial_jobs'
+down_revision = '0034_booking_repeat_of'
 branch_labels = None
 depends_on = None
 

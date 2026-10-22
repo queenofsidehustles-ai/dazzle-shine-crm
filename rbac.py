@@ -175,6 +175,8 @@ OWNER_ONLY_ENDPOINTS = frozenset({
     ('commercial.index', 'GET'),
     ('commercial.detail', 'POST'),
     ('commercial.mark_first_paid', 'POST'),
+    ('commercial.book', 'GET'),
+    ('commercial.book', 'POST'),
     ('quotes.index', 'GET'),
     ('quotes.new', 'POST'),
     ('quotes.send_quote', 'POST'),
