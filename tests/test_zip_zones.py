@@ -76,6 +76,16 @@ check(all(ZoneInfo(zone) for zone in z.KNOWN), 'every zone it can store is a rea
 check(all(zone in z.KNOWN for zones in z.MIXED.values() for zone in zones),
       'and so is every zone a mixed prefix can resolve to')
 
+print('\n4. Auditing a stored zone against its ZIP')
+check(z.audit('35801', 'America/New_York') == ('mismatch', 'America/Chicago'),
+      'Huntsville stored as Eastern is a mismatch')
+check(z.audit('35801', '') == ('unset', 'America/Chicago'),
+      'and with nothing stored, the Eastern default is too')
+check(z.audit('10001', 'America/Detroit')[0] == 'ok', 'a zone that keeps the same clock is fine')
+check(z.audit('49801', 'America/Menominee')[0] == 'ok',
+      'either side of a prefix that crosses a line is fine')
+check(z.audit('', 'America/Chicago') == ('no-zip', ''), 'no ZIP, nothing to compare')
+
 if failures:
     print(f'\n❌ {len(failures)} failed')
     raise SystemExit(1)

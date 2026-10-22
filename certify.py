@@ -6,12 +6,13 @@
     python3 certify.py compare MANIFEST     # G5/G6: the database against a backup manifest
     python3 certify.py journey --company S  # G2: issue -> accept -> amend, on a demo company
     python3 certify.py tenants              # who is on the platform: status, billing, last 24h/7d
+    python3 certify.py zones                # whose stored timezone disagrees with its ZIP
 
 On production, through Railway, so the database password never leaves it:
 
     railway run python3 certify.py schema --out g1-schema.json
 
-schema, evidence, compare and tenants are read-only: they open their transaction READ
+schema, evidence, compare, tenants and zones are read-only: they open their transaction READ
 ONLY, so the database refuses any write they could make. They print a summary
 and, with --out, write the full result as JSON -- ids, hashes and counts, no
 customer names or addresses. The exit code is 0 for a pass, 1 for a problem.
@@ -172,6 +173,55 @@ def cmd_tenants(args):
     return _emit(report, args.out, 'read from the control plane')
 
 
+def cmd_zones(args):
+    """Companies whose stored timezone is not their ZIP's (zip_zones.audit).
+
+    Signup stored the zone the ZIP map gave, and until October 2026 that map
+    put Alabama, the Florida panhandle, west Tennessee and Kentucky in Eastern,
+    Montana in Central and Puerto Rico in New York. Fixing the map does not
+    move a setting already stored, so this lists the companies to look at --
+    slugs and zones only. It changes nothing: the owner, or support, corrects
+    the zone in Business Settings."""
+    import evidence_check
+    import scheduling
+    import zip_zones
+    from sqlalchemy import text
+    engine = _engine()
+    rows = []
+    with engine.connect() as conn, conn.begin():
+        evidence_check.read_only(conn)
+        orgs = [dict(r) for r in conn.execute(text(
+            'SELECT slug, schema_name, status, is_demo, is_test FROM public.organizations '
+            'ORDER BY slug')).mappings()]
+        for org in orgs:
+            schema = org['schema_name']
+            if not conn.execute(text('SELECT to_regclass(:t)'),
+                                {'t': f'"{schema}".business_setting'}).scalar():
+                continue
+            got = dict(conn.execute(text(
+                f'SELECT key, value FROM "{schema}".business_setting '
+                "WHERE key IN ('timezone', 'zip_code')")).all())
+            status, expected = zip_zones.audit(got.get('zip_code'), got.get('timezone'),
+                                               default=scheduling.DEFAULT_TZ)
+            rows.append({'slug': org['slug'], 'kind': 'demo' if org.get('is_demo') else
+                         'test' if org.get('is_test') else 'real', 'status': org['status'],
+                         'zip_prefix': zip_zones.digits(got.get('zip_code'))[:3],
+                         'stored': got.get('timezone') or '', 'expected': expected,
+                         'result': status})
+    off = [r for r in rows if r['result'] in ('mismatch', 'unset') and r['kind'] == 'real'
+           and r['status'] not in ('closed',)]
+    for r in off:
+        print(f"  {r['slug']} (ZIP {r['zip_prefix']}xx): "
+              f"{r['stored'] or '(none, so ' + scheduling.DEFAULT_TZ + ')'} -> {r['expected']}")
+    counts = {k: sum(1 for r in rows if r['result'] == k)
+              for k in ('ok', 'mismatch', 'unset', 'no-zip')}
+    print(f'  {len(rows)} companies: ' + ', '.join(f'{v} {k}' for k, v in counts.items()))
+    result = {'command': 'zones', 'companies': rows, 'counts': counts,
+              'problems': [f"{r['slug']}: stored {r['stored'] or 'nothing'}, "
+                           f"its ZIP says {r['expected']}" for r in off]}
+    return _emit(result, args.out, 'every real company keeps its ZIP\'s time')
+
+
 # ---------------------------------------------------------------------------
 
 def cmd_journey(args):
@@ -192,12 +242,14 @@ def main(argv=None):
     sp.add_argument('--out')
     sp = sub.add_parser('tenants')
     sp.add_argument('--out')
+    sp = sub.add_parser('zones')
+    sp.add_argument('--out')
     sp = sub.add_parser('journey')
     sp.add_argument('--company', required=True, help='a company marked is_demo')
     sp.add_argument('--out')
     args = ap.parse_args(argv)
     return {'schema': cmd_schema, 'evidence': cmd_evidence, 'compare': cmd_compare,
-            'journey': cmd_journey, 'tenants': cmd_tenants}[args.cmd](args)
+            'journey': cmd_journey, 'tenants': cmd_tenants, 'zones': cmd_zones}[args.cmd](args)
 
 
 if __name__ == '__main__':

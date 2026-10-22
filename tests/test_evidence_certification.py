@@ -528,6 +528,24 @@ check(f'{A} (real)' in t['windows']['last_24h']['events']['signed_up']
       'what happened in the last 24 hours is listed by company')
 check(t['as_of'].endswith('Z') and t['windows']['last_7d']['since'].endswith('Z'),
       'its windows are stated in UTC')
+
+print('\n8b. Whose stored timezone disagrees with its ZIP (certify.py zones)')
+# Signup stored what the old ZIP map said: Huntsville, Alabama, as Eastern.
+# Fixing the map moves nothing already stored, so this lists who to look at.
+for key, value in (('zip_code', '35801'), ('timezone', 'America/New_York')):
+    sql("DELETE FROM {s}business_setting WHERE key = :k", k=key)
+    sql("INSERT INTO {s}business_setting (key, value) VALUES (:k, :v)", k=key, v=value)
+check(certify.main(['zones', '--out', f'{out}/z.json']) == 1,
+      'zones: a Huntsville company stored as Eastern is a finding')
+z = json.load(open(f'{out}/z.json'))
+mine = next(r for r in z['companies'] if r['slug'] == A)
+check(mine['result'] == 'mismatch' and mine['expected'] == 'America/Chicago'
+      and mine['stored'] == 'America/New_York', 'named, with the zone its ZIP says')
+check('Huntsville' not in json.dumps(z) and '35801' not in json.dumps(z),
+      'by slug and ZIP prefix only, nothing that names the business or its address')
+sql("UPDATE {s}business_setting SET value = 'America/Chicago' WHERE key = 'timezone'")
+check(certify.main(['zones', '--out', f'{out}/z.json']) == 0,
+      'and once corrected in Business Settings, it is not')
 check('@' not in json.dumps(t), 'it names companies by slug, never by owner email')
 
 if failures:
