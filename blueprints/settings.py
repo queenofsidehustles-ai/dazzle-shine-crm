@@ -726,7 +726,16 @@ def business():
         import entitlements
         subscription = {'state': entitlements.state(), 'plans': entitlements.PLANS}
 
+    # Every zone an owner can pick, plus the one already stored if it is not
+    # among them (America/Boise, say, from signup) -- otherwise the page would
+    # show Eastern and the next save of this card would quietly store it.
+    import zip_zones
+    tz_choices = list(zip_zones.CHOICES)
+    stored_tz = (current.get('timezone') or '').strip()
+    if stored_tz and stored_tz not in {z for z, _l in tz_choices}:
+        tz_choices.insert(0, (stored_tz, f'{zip_zones.label(stored_tz)} ({stored_tz})'))
     return render_template('admin/settings_business.html', current=current,
+                           tz_choices=tz_choices,
                            default_agreement=_default_agreement(
                                _b.biz_name(), current['worker_model']),
                            us_states=_ct.US_STATES, us_state_names=_ct.US_STATE_NAMES,

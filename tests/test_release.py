@@ -227,6 +227,36 @@ check('(no earlier release)' in rel.release_manifest(akye, 't', 's', ev, [], Non
       'a first release says there is nothing to roll back to')
 check('release.py --rollback (back to v1)' in rel.release_manifest(dazzle, 'v2', 's', [], [], 'v1'),
       "and the single-business line's record rolls back its own line, without --akye")
+
+# When GitHub cannot be asked, a typed-back hash is no evidence. Each check
+# needs a link to its run, and a second person, both kept in the tag.
+import builtins
+_real_input, _real_git, _real_repo = builtins.input, rel.git, rel._github_repo
+rel._github_repo = lambda: 'o/r'
+rel.git = lambda *a, **k: 'Pat Releaser' if a[:2] == ('config', 'user.name') else ''
+def by_hand(answers):
+    it = iter(answers)
+    builtins.input = lambda prompt='': next(it)
+    try:
+        return rel._attest_by_hand(akye, 'abc1234def')
+    except SystemExit:
+        return None
+links = [f'https://github.com/o/r/actions/runs/{100 + i}' for i in range(len(req))]
+try:
+    ok_ev = by_hand(links + ['Sam Checker'])
+    check(ok_ev and all(l in ' '.join(ok_ev) for l in links) and 'Sam Checker' in ok_ev[-1],
+          'by hand: each run link and the second person go into the record')
+    check(by_hand(['abc1234'] + links[1:] + ['Sam Checker']) is None,
+          'a typed-back hash instead of a run link is refused')
+    check(by_hand(['https://github.com/other/repo/actions/runs/1'] + links[1:] + ['Sam Checker']) is None,
+          "a run from another repository is refused")
+    check(by_hand([links[0]] * len(links) + ['Sam Checker']) is None
+          and by_hand([links[0], links[0] + '/job/7'] + links[2:] + ['Sam Checker']) is None,
+          'one run given for two checks is refused (each runs in its own workflow)')
+    check(by_hand(links + ['']) is None and by_hand(links + ['pat releaser']) is None,
+          'and so is no second person, or the releaser naming themselves')
+finally:
+    builtins.input, rel.git, rel._github_repo = _real_input, _real_git, _real_repo
 src2 = (ROOT / 'release.py').read_text()
 go2 = src2[src2.index('def go('):src2.index('def rollback(')]
 check("'-m', manifest" in go2, 'and go() writes it as the tag message')

@@ -71,12 +71,7 @@
       <div class="form-group">
         <label>Time Zone</label>
         <select name="timezone">
-          {% for tz, tzlabel in [
-              ('America/New_York', 'Eastern (New York, Miami, Atlanta)'),
-              ('America/Chicago', 'Central (Chicago, Dallas, Houston)'),
-              ('America/Denver', 'Mountain (Denver, Salt Lake City)'),
-              ('America/Phoenix', 'Arizona (no daylight saving)'),
-              ('America/Los_Angeles', 'Pacific (Los Angeles, Seattle)')] %}
+          {% for tz, tzlabel in tz_choices %}
           <option value="{{ tz }}" {{ 'selected' if (current.timezone or 'America/New_York') == tz }}>{{ tzlabel }}</option>
           {% endfor %}
         </select>

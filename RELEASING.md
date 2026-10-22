@@ -26,8 +26,10 @@ and releases to `akye-stable`.
 `--go` refuses unless the four checks that ran on the push to `main` (the
 full suite, the launch certification, the golden journeys and privacy
 lifecycle) all passed on that exact commit. It asks GitHub with `gh`; without
-it, it shows you the commit's page and asks you to confirm by typing its
-hash. Then every suite runs again here on Python 3.12, and only then does it
+it, you paste the link to each check's run (a different run for each: they
+are four separate workflows) and name a second person who checked them, and
+both go into the release's tag (a typed-back hash is not evidence, and the
+exception needs somebody other than the releaser). Then every suite runs again here on Python 3.12, and only then does it
 write `RELEASE` (the one change on top of the checked commit), tag
 `akye-vYYYY.MM.DD`, and fast-forward `akye-stable` to `main`. Railway deploys
 it; the push to `akye-stable` certifies the exact deployed commit once more.

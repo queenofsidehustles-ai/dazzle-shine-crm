@@ -176,16 +176,7 @@ def require_green(line, sha):
         return []
     runs = check_runs(sha)
     if runs is None:
-        repo = _github_repo() or 'the repository'
-        say(f'Could not ask GitHub for the checks on {sha[:7]} (is `gh` installed '
-            f'and logged in?). Open https://github.com/{repo}/commit/{sha} and '
-            f'confirm these passed:')
-        for name in line.required_checks:
-            say(f'  · {name}')
-        if input(f'Type {sha[:7]} if every one is green: ').strip() != sha[:7]:
-            sys.exit('Not released — nothing changed.')
-        return [f'{name}: confirmed green by hand at https://github.com/{repo}/commit/{sha}'
-                for name in line.required_checks]
+        return _attest_by_hand(line, sha)
     problems = check_problems(runs, line.required_checks)
     if problems:
         sys.exit(f'{line.source} at {sha[:7]} is not ready to release:\n'
@@ -193,6 +184,41 @@ def require_green(line, sha):
                  + '\nNothing was released.')
     say(f'All {len(line.required_checks)} checks passed on {sha[:7]}.')
     return check_evidence(runs, line.required_checks)
+
+
+def _attest_by_hand(line, sha):
+    """When GitHub cannot be asked: a durable link for each check, and a second
+    person, both written into the release's tag -- never a hash typed back.
+
+    A run link is the evidence somebody can open later; a second name is the
+    exception being approved by someone who did not write the release. Neither
+    can be checked from here, which is why both are recorded rather than
+    trusted silently."""
+    repo = _github_repo() or ''
+    say(f'Could not ask GitHub for the checks on {sha[:7]} (is `gh` installed and '
+        f'logged in?). Open https://github.com/{repo}/commit/{sha}, and for each '
+        f'check paste the link to the run that passed:')
+    pattern = re.compile(rf'^https://github\.com/{re.escape(repo)}/actions/runs/(\d+)(/job/\d+)?/?$')
+    evidence, seen = [], set()
+    for name in line.required_checks:
+        link = input(f'  {name}: ').strip()
+        match = pattern.match(link)
+        if not match:
+            sys.exit(f'That is not a run of {repo or "this repository"} '
+                     f'(https://github.com/{repo}/actions/runs/...). Not released — nothing changed.')
+        # Each check is its own workflow, so one run cannot be evidence for two.
+        if match.group(1) in seen:
+            sys.exit(f'That run was already given for another check; {name} runs in a '
+                     f'workflow of its own. Not released — nothing changed.')
+        seen.add(match.group(1))
+        evidence.append(f'{name}: confirmed by hand ({link})')
+    me = git('config', 'user.name', check=False).strip().lower()
+    second = input('Who else has checked these runs? Their name: ').strip()
+    if not second or second.lower() == me:
+        sys.exit('A release without GitHub\'s own answer needs a second person who checked '
+                 'the runs. Not released — nothing changed.')
+    evidence.append(f'Released without GitHub\'s answer; runs checked by {second}')
+    return evidence
 
 
 def check_evidence(runs, required):

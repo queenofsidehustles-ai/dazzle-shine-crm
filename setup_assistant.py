@@ -567,20 +567,28 @@ TIMEZONES = {
     'pacific': ('America/Los_Angeles', 'Pacific'),
     'alaska': ('America/Anchorage', 'Alaska'),
     'hawaii': ('Pacific/Honolulu', 'Hawaii'),
+    'atlantic': ('America/Puerto_Rico', 'Atlantic (Puerto Rico, Virgin Islands)'),
+    'puerto rico': ('America/Puerto_Rico', 'Atlantic (Puerto Rico, Virgin Islands)'),
+    'virgin islands': ('America/Puerto_Rico', 'Atlantic (Puerto Rico, Virgin Islands)'),
+    'chamorro': ('Pacific/Guam', 'Chamorro (Guam)'),
+    'guam': ('Pacific/Guam', 'Chamorro (Guam)'),
 }
 
 
 def tool_offer_timezone(zone=''):
     """Show a card setting the timezone everything is scheduled against."""
     want = (zone or '').strip().lower()
-    found = None
+    # A zone's own name first: 'Pacific/Honolulu' starts with 'pacific' and
+    # would otherwise be offered Los Angeles.
+    found = next(((name, label) for name, label in TIMEZONES.values()
+                  if want == name.lower()), None)
     for key, (name, label) in TIMEZONES.items():
-        if want == key or want == name.lower() or want.startswith(key):
+        if not found and (want == key or want.startswith(key)):
             found = (name, label)
-            break
     if not found:
         return ('Not offered: ask which of these they are in — Eastern, Central, '
-                'Mountain, Arizona, Pacific, Alaska or Hawaii.'), None
+                'Mountain, Arizona, Pacific, Alaska, Hawaii, Atlantic (Puerto Rico, '
+                'Virgin Islands) or Chamorro (Guam).'), None
     name, label = found
     card = _offer('setup_set_timezone', {'timezone': name},
                   'Set your timezone', [f'Timezone: {label} ({name})'],
@@ -738,7 +746,8 @@ TOOLS = {
         'the owner has said where they are. Everything is scheduled against it.',
         {'zone': {'type': 'string',
                   'description': 'Eastern, Central, Mountain, Arizona, '
-                                 'Pacific, Alaska or Hawaii.'}}),
+                                 'Pacific, Alaska, Hawaii, Atlantic (Puerto Rico, '
+                                 'Virgin Islands) or Chamorro (Guam).'}}),
     'offer_balance_mode': (
         tool_offer_balance_mode, 'Show a card recording how the rest of a job\'s '
         'price is collected once it is finished.',
