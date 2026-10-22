@@ -38,6 +38,7 @@ import glob
 import gzip
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -441,9 +442,26 @@ def _against_last_night(conn, evidence, previous):
     return problems, broken
 
 
+_NAME = re.compile(r'^backup-(.+?Z)(?:-(\d+))?\.(?:json\.gz|manifest\.json)$')
+
+
+def _oldest_first(paths):
+    """Backups in the order they were taken.
+
+    A name is the time to the second, then -1, -2 for later runs inside that
+    second (create()). Plain name order gets those backwards: '-' sorts before
+    '.', so 'Z-1.manifest.json' comes before 'Z.manifest.json' and the later
+    run would be read as the earlier one."""
+    def key(path):
+        name = os.path.basename(path)
+        m = _NAME.match(name)
+        return (m.group(1), int(m.group(2) or 0)) if m else (name, 0)
+    return sorted(paths, key=key)
+
+
 def _previous_manifest(out_dir):
     """The manifest from the last successful run, or None on the first ever."""
-    files = sorted(glob.glob(os.path.join(out_dir, 'backup-*.manifest.json')))
+    files = _oldest_first(glob.glob(os.path.join(out_dir, 'backup-*.manifest.json')))
     if not files:
         return None
     try:
@@ -925,7 +943,7 @@ def prune(out_dir=DEFAULT_DIR, keep_days=DEFAULT_KEEP_DAYS, quiet=False):
 
     A retention rule that can empty the directory is a retention rule that will,
     the first time backups quietly stop running and the clock keeps going."""
-    files = sorted(glob.glob(os.path.join(out_dir, 'backup-*.json.gz')))
+    files = _oldest_first(glob.glob(os.path.join(out_dir, 'backup-*.json.gz')))
     if len(files) <= 1:
         return []
     cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=keep_days)
@@ -947,7 +965,7 @@ def prune(out_dir=DEFAULT_DIR, keep_days=DEFAULT_KEEP_DAYS, quiet=False):
 
 
 def listing(out_dir=DEFAULT_DIR):
-    files = sorted(glob.glob(os.path.join(out_dir, 'backup-*.json.gz')))
+    files = _oldest_first(glob.glob(os.path.join(out_dir, 'backup-*.json.gz')))
     if not files:
         print(f'No backups in {out_dir}.')
         return
