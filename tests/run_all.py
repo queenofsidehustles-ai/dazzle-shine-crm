@@ -30,14 +30,19 @@ def main():
         try:
             r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
                                timeout=PER_SUITE_SECONDS)
-            ok, out = r.returncode == 0, r.stdout + r.stderr
+            ok, out, err = r.returncode == 0, r.stdout, r.stderr
         except subprocess.TimeoutExpired as e:
-            ok, out = False, f'TIMED OUT after {PER_SUITE_SECONDS}s\n{e.stdout or ""}'
+            ok, out, err = False, f'TIMED OUT after {PER_SUITE_SECONDS}s\n{e.stdout or ""}', ''
         print(f'{"✅" if ok else "❌"} {path.name} ({time.time() - t0:.0f}s)', flush=True)
         if not ok:
             failed.append(path.name)
+            # The two streams apart: a suite's own checks report on stdout, and
+            # one that logs a lot to stderr (every alembic migration it runs)
+            # would otherwise push what failed out of the tail entirely.
             tail = '\n'.join(out.strip().splitlines()[-40:])
-            print(f'::group::{path.name} output\n{tail}\n::endgroup::', flush=True)
+            err_tail = '\n'.join(str(err or '').strip().splitlines()[-20:])
+            print(f'::group::{path.name} output\n{tail}\n'
+                  f'--- stderr ---\n{err_tail}\n::endgroup::', flush=True)
     summary = (f'{len(suites) - len(failed)}/{len(suites)} suites passed '
                f'in {(time.time() - started) / 60:.0f} min')
     print(f'\n{summary}')

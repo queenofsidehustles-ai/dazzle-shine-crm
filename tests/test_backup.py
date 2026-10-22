@@ -273,6 +273,26 @@ run(PRELUDE + seed(n_clients=2, n_staff=1, n_bookings=2) + f'''
 print('  ✅ backups past the retention window are deleted, with their manifests')
 print('  ✅ the last remaining backup is never deleted, whatever the window says')
 
+print('\n7b. Two runs inside the same second: the later one is the last run')
+# The name is the time to the second; a second run inside it is "-1". Plain
+# name order puts "…Z-1." before "…Z." ('-' sorts before '.'), so "the last
+# backup" was the earlier of the two -- and the night after compared itself
+# against the wrong one.
+run(PRELUDE + f'''
+    import backup, json, os
+    d = r'{T}/same-second'
+    os.makedirs(d)
+    for name, which in (('backup-2026-10-22T13-11-40Z', 'first'),
+                        ('backup-2026-10-22T13-11-40Z-1', 'second'),
+                        ('backup-2026-10-22T13-11-39Z-2', 'a second earlier')):
+        open(os.path.join(d, name + '.json.gz'), 'wb').close()
+        with open(os.path.join(d, name + '.manifest.json'), 'w') as fh:
+            json.dump({{'which': which}}, fh)
+    assert backup._previous_manifest(d)['which'] == 'second', backup._previous_manifest(d)
+    print('OK')
+''')
+print('  ✅ the run that took the "-1" name is read as the last one, not the one before it')
+
 print('\n8. Restoring into a database that already has data replaces it cleanly')
 T = tempfile.mkdtemp()
 os.environ['T'] = T

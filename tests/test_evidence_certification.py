@@ -366,7 +366,7 @@ except backup.BackupFailed as e:
 # The failed run's manifest is kept, and the next run reads the newest one. It
 # must not have written the rewritten chain down as the new baseline, or the
 # second night would pass with nothing fixed.
-failed = json.load(open(sorted(glob.glob(os.path.join(night, '*.manifest.json')))[-1]))
+failed = json.load(open(backup._oldest_first(glob.glob(os.path.join(night, 'backup-*.manifest.json')))[-1]))
 check(SA in failed.get('evidence_carried', []),
       'the failed run carries the last good evidence forward for that company')
 try:
@@ -564,6 +564,8 @@ sql(f"DELETE FROM public.organizations WHERE slug = '{GONE}'")
 check('@' not in json.dumps(t), 'it names companies by slug, never by owner email')
 
 if failures:
-    print(f'\n❌ {len(failures)} failed')
+    print(f'\n❌ {len(failures)} failed:')
+    for m in failures:
+        print(f'   - {m}')
     sys.exit(1)
 print('\n✅ all passed')
