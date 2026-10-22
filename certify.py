@@ -195,29 +195,36 @@ def cmd_zones(args):
             'ORDER BY slug')).mappings()]
         for org in orgs:
             schema = org['schema_name']
-            if not conn.execute(text('SELECT to_regclass(:t)'),
-                                {'t': f'"{schema}".business_setting'}).scalar():
-                continue
-            got = dict(conn.execute(text(
-                f'SELECT key, value FROM "{schema}".business_setting '
-                "WHERE key IN ('timezone', 'zip_code')")).all())
-            status, expected = zip_zones.audit(got.get('zip_code'), got.get('timezone'),
-                                               default=scheduling.DEFAULT_TZ)
+            # A company with no settings to read was not checked. That is
+            # expected of a closed one whose schema was purged; of any other it
+            # is a finding, never a quiet pass.
+            if conn.execute(text('SELECT to_regclass(:t)'),
+                            {'t': f'"{schema}".business_setting'}).scalar():
+                got = dict(conn.execute(text(
+                    f'SELECT key, value FROM "{schema}".business_setting '
+                    "WHERE key IN ('timezone', 'zip_code')")).all())
+                status, expected = zip_zones.audit(got.get('zip_code'), got.get('timezone'),
+                                                   default=scheduling.DEFAULT_TZ)
+            else:
+                got, status, expected = {}, 'unreadable', ''
             rows.append({'slug': org['slug'], 'kind': 'demo' if org.get('is_demo') else
                          'test' if org.get('is_test') else 'real', 'status': org['status'],
                          'zip_prefix': zip_zones.digits(got.get('zip_code'))[:3],
                          'stored': got.get('timezone') or '', 'expected': expected,
                          'result': status})
-    off = [r for r in rows if r['result'] in ('mismatch', 'unset') and r['kind'] == 'real'
-           and r['status'] not in ('closed',)]
+    off = [r for r in rows if r['result'] in ('mismatch', 'unset', 'unreadable')
+           and r['kind'] == 'real' and r['status'] not in ('closed',)]
     for r in off:
-        print(f"  {r['slug']} (ZIP {r['zip_prefix']}xx): "
-              f"{r['stored'] or '(none, so ' + scheduling.DEFAULT_TZ + ')'} -> {r['expected']}")
+        if r['result'] != 'unreadable':
+            print(f"  {r['slug']} (ZIP {r['zip_prefix']}xx): "
+                  f"{r['stored'] or '(none, so ' + scheduling.DEFAULT_TZ + ')'} -> {r['expected']}")
     counts = {k: sum(1 for r in rows if r['result'] == k)
-              for k in ('ok', 'mismatch', 'unset', 'no-zip')}
+              for k in ('ok', 'mismatch', 'unset', 'no-zip', 'unreadable')}
     print(f'  {len(rows)} companies: ' + ', '.join(f'{v} {k}' for k, v in counts.items()))
     result = {'command': 'zones', 'companies': rows, 'counts': counts,
-              'problems': [f"{r['slug']}: stored {r['stored'] or 'nothing'}, "
+              'problems': [f"{r['slug']}: no business settings to read, so not checked"
+                           if r['result'] == 'unreadable' else
+                           f"{r['slug']}: stored {r['stored'] or 'nothing'}, "
                            f"its ZIP says {r['expected']}" for r in off]}
     return _emit(result, args.out, 'every real company keeps its ZIP\'s time')
 

@@ -546,6 +546,21 @@ check('Huntsville' not in json.dumps(z) and '35801' not in json.dumps(z),
 sql("UPDATE {s}business_setting SET value = 'America/Chicago' WHERE key = 'timezone'")
 check(certify.main(['zones', '--out', f'{out}/z.json']) == 0,
       'and once corrected in Business Settings, it is not')
+# A live company with no settings to read was never checked: that is a finding,
+# not a pass. A closed one whose schema was purged is expected.
+GONE = 'evgone'
+with app.app_context():
+    provisioning.provision(GONE, 'Gone Cleaning', quiet=True)
+    db.session.remove()
+sql(f'DROP SCHEMA "{tenancy.schema_for(GONE)}" CASCADE')
+check(certify.main(['zones', '--out', f'{out}/z.json']) == 1
+      and any(p.startswith(f'{GONE}: no business settings')
+              for p in json.load(open(f'{out}/z.json'))['problems']),
+      'zones: a live company it cannot read is a finding, by name')
+sql(f"UPDATE public.organizations SET status = 'closed' WHERE slug = '{GONE}'")
+check(certify.main(['zones', '--out', f'{out}/z.json']) == 0,
+      'but a closed one whose schema is gone is not')
+sql(f"DELETE FROM public.organizations WHERE slug = '{GONE}'")
 check('@' not in json.dumps(t), 'it names companies by slug, never by owner email')
 
 if failures:
