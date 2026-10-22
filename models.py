@@ -95,7 +95,7 @@ class Booking(db.Model):
     sqft = db.Column(db.Integer)        # optional home size — drives the sqft surcharge
     extras = db.Column(db.String(200))  # comma-separated: oven, fridge, laundry
     # A commercial job: the account it is for, and what is cleaned in place of
-    # bedrooms and bathrooms. See migration 0034.
+    # bedrooms and bathrooms. See migration 0035.
     commercial_account_id = db.Column(db.Integer, index=True)
     scope_of_work = db.Column(db.Text)
 
