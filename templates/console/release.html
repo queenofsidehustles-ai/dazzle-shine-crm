@@ -74,6 +74,7 @@
   {% for r in ov.runs %}
   <tr><td><a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.created[:16].replace('T', ' ') }} UTC</a></td>
       <td><code>{{ r.sha }}</code></td>
+      <td>{{ 'rollback' if r.kind == 'rollback.yml' else 'release' }}</td>
       <td><span class="ops-badge {{ 'ops-stale' if r.status != 'completed' else ('ops-ok' if r.conclusion == 'success' else 'ops-closed') }}">{{ 'running' if r.status != 'completed' else r.conclusion }}</span></td></tr>
   {% endfor %}
 </table></div>
@@ -97,7 +98,27 @@
       <button class="btn btn-sm" type="submit">Release {{ ov.ahead }} commit{{ '' if ov.ahead == 1 else 's' }} to every company</button>
     </form>
   {% endif %}
-  <p class="ops-dim" style="margin:var(--s3) 0 0">To go back one release: <code>python3 release.py --akye --rollback</code>. Companies' data is untouched either way.</p>
+</div>
+
+<h3 class="ops-h">Roll back</h3>
+<div class="ops-card">
+  {% if rollback_blocked %}
+    <p style="margin:0 0 var(--s2)"><strong>Cannot roll back:</strong></p>
+    <ul style="margin:0;padding-left:var(--s5)">{% for b in rollback_blocked %}<li>{{ b }}</li>{% endfor %}</ul>
+  {% elif not is_owner %}
+    <p style="margin:0">Companies are on <code>{{ ov.current_tag }}</code>. Only the console owner can put them back on <code>{{ ov.previous_tag }}</code>.</p>
+  {% else %}
+    <p style="margin:0 0 var(--s3)">Companies are on <code>{{ ov.current_tag }}</code>. This puts them back on <code>{{ ov.previous_tag }}</code>. Only the code changes: their data is untouched. A database change in the release you leave stays in place, which is safe because releases are written to run on the schema before and after.</p>
+    <form method="post" action="{{ url_for('console.release_rollback') }}" class="ops-form">
+      <input type="hidden" name="from" value="{{ ov.current_tag }}">
+      <input type="hidden" name="to" value="{{ ov.previous_tag }}">
+      <input type="text" name="reason" required minlength="5" maxlength="300" placeholder="What went wrong (goes in the record)">
+      <input type="text" name="confirm" required autocomplete="off" placeholder="Type {{ ov.previous_tag }} to confirm">
+      <input type="password" name="password" required autocomplete="current-password" placeholder="Your console password">
+      {% if me.totp_enabled %}<input type="text" name="code" required inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator code">{% endif %}
+      <button class="btn btn-outline btn-sm" type="submit">Roll back to {{ ov.previous_tag }}</button>
+    </form>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

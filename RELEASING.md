@@ -57,6 +57,7 @@ It takes about half an hour.
 
 Set up once:
 
+- Railway variable `GITHUB_REPO`: `owner/name` of this repository.
 - Railway variable `GITHUB_RELEASE_TOKEN`: a fine-grained token on this
   repository only, with Contents: read, Checks: read and Actions: read and
   write. It cannot push.
@@ -65,9 +66,14 @@ Set up once:
   works but does not start the checks that normally run on a push to `main`.
   If `main` is protected, this token's owner must be allowed to push to it.
 
-Rolling back is still `release.py --akye --rollback` from a checkout.
+**Roll back** on the same page runs the **Roll back Akye** workflow
+(`rollback.yml`): `akye-stable` goes back to the release before the one it is
+on, with no tests, in a minute or two. It moves the branch backwards, so
+`RELEASE_PUSH_TOKEN` is required for it, and its owner must be allowed to
+force-push `akye-stable`; with the default token the push is refused and
+nothing changes. `release.py --akye --rollback` from a checkout still works.
 
-`--rollback` starts from the release `akye-stable` is on and goes back one,
+`--rollback` (or the console's Roll back button) starts from the release `akye-stable` is on and goes back one,
 so running it twice goes back two.
 
 Everything that touches production runs the release, not `main`: Railway,

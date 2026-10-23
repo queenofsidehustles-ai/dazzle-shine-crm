@@ -16,8 +16,9 @@ import re
 
 import requests
 
-DEFAULT_REPO = 'queenofsidehustles-ai/dazzle-shine-crm'
 WORKFLOW = 'release.yml'
+ROLLBACK_WORKFLOW = 'rollback.yml'
+TAG_PREFIX = 'akye-v'
 SOURCE = 'main'
 CHANNEL = 'akye-stable'
 TIMEOUT = 20
@@ -34,7 +35,7 @@ WATCH = (
 
 
 def repo():
-    return (os.environ.get('GITHUB_REPO') or DEFAULT_REPO).strip()
+    return (os.environ.get('GITHUB_REPO') or '').strip()
 
 
 def token():
@@ -42,7 +43,7 @@ def token():
 
 
 def configured():
-    return bool(token())
+    return bool(token()) and bool(repo())
 
 
 def _call(method, path, **kw):
@@ -103,10 +104,37 @@ def check_states(runs):
     return out
 
 
+def _tag_key(name):
+    nums = re.findall(r'\d+', name[len(TAG_PREFIX):])
+    return tuple(int(n) for n in nums) + (0,) * (4 - len(nums))
+
+
+def release_history(tag_rows, stable_sha):
+    """(the release akye-stable is on, the one before it), by name, or (None, None).
+
+    tag_rows is GitHub's tag list ({'name', 'commit': {'sha'}}). The release is
+    found by the commit the channel is on, the way `release.py --rollback` does,
+    not by taking the newest tag."""
+    rows = sorted((t for t in tag_rows if (t.get('name') or '').startswith(TAG_PREFIX)),
+                  key=lambda t: _tag_key(t['name']), reverse=True)
+    for i, t in enumerate(rows):
+        if t['commit']['sha'] == stable_sha:
+            return t['name'], (rows[i + 1]['name'] if i + 1 < len(rows) else None)
+    return None, None
+
+
+def _workflow_runs(workflow):
+    code, wr = _call('GET', f'actions/workflows/{workflow}/runs', params={'per_page': 5})
+    return [{'id': r['id'], 'status': r['status'], 'conclusion': r['conclusion'],
+             'url': r['html_url'], 'created': r['created_at'], 'kind': workflow,
+             'sha': (r.get('head_sha') or '')[:7]}
+            for r in (wr.get('workflow_runs', []) if code == 200 else [])]
+
+
 def overview():
     """Everything the page draws, or {'error': why}."""
     if not configured():
-        return {'error': 'GITHUB_RELEASE_TOKEN is not set, so GitHub cannot be asked.'}
+        return {'error': 'GITHUB_RELEASE_TOKEN or GITHUB_REPO (owner/name) is not set, so GitHub cannot be asked.'}
     code, cmp_ = _call('GET', f'compare/{CHANNEL}...{SOURCE}', params={'per_page': 100})
     if code != 200 or not isinstance(cmp_, dict):
         return {'error': f'GitHub would not compare {CHANNEL} with {SOURCE} (status {code}).'}
@@ -128,11 +156,10 @@ def overview():
     code, rel = _call('GET', 'contents/RELEASE', params={'ref': CHANNEL},
                       accept='application/vnd.github.raw+json')
     release_name = rel.split('\n')[0].strip() if code == 200 and isinstance(rel, str) else None
-    code, wr = _call('GET', f'actions/workflows/{WORKFLOW}/runs', params={'per_page': 5})
-    runs_now = [{'id': r['id'], 'status': r['status'], 'conclusion': r['conclusion'],
-                 'url': r['html_url'], 'created': r['created_at'],
-                 'sha': (r.get('head_sha') or '')[:7]}
-                for r in (wr.get('workflow_runs', []) if code == 200 else [])]
+    runs_now = sorted(_workflow_runs(WORKFLOW) + _workflow_runs(ROLLBACK_WORKFLOW),
+                      key=lambda r: r['created'], reverse=True)[:6]
+    code, tag_rows = _call('GET', 'tags', params={'per_page': 100})
+    current_tag, previous_tag = release_history(tag_rows if code == 200 else [], stable)
     return {
         'error': None,
         'stable_sha': stable, 'release': release_name,
@@ -142,6 +169,7 @@ def overview():
         'flags': watch_flags(files),
         'additions': sum(f.get('additions', 0) for f in files),
         'deletions': sum(f.get('deletions', 0) for f in files),
+        'current_tag': current_tag, 'previous_tag': previous_tag,
         'checks': checks, 'runs': runs_now,
         'running': any(r['status'] != 'completed' for r in runs_now),
     }
@@ -165,6 +193,34 @@ def blockers(ov):
     if ov['running']:
         out.append('A release is already running.')
     return out
+
+
+def rollback_blockers(ov):
+    """Why Rollback is off. Empty means it may start."""
+    if ov.get('error'):
+        return [ov['error']]
+    out = []
+    if not ov.get('current_tag'):
+        out.append(f'{CHANNEL} is not on a tagged release, so there is no known one to go back from.')
+    elif not ov.get('previous_tag'):
+        out.append(f'There is no release before {ov["current_tag"]} to go back to.')
+    if ov['running']:
+        out.append('A release or rollback is already running.')
+    return out
+
+
+def start_rollback(to_tag):
+    """Ask GitHub to put akye-stable back on `to_tag`. (ok, message)."""
+    if not re.fullmatch(re.escape(TAG_PREFIX) + r'\d{4}\.\d{2}\.\d{2}(\.\d+)?', to_tag or ''):
+        return False, 'That is not a release.'
+    code, _ = _call('POST', f'actions/workflows/{ROLLBACK_WORKFLOW}/dispatches',
+                    json={'ref': SOURCE, 'inputs': {'to_tag': to_tag}})
+    if code == 204:
+        return True, None
+    if code in (401, 403, 404):
+        return False, ('GitHub refused: GITHUB_RELEASE_TOKEN needs to read the repository '
+                       'and have Actions: read and write.')
+    return False, f'GitHub did not start the rollback (status {code}).'
 
 
 def start(expected_sha):

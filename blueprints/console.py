@@ -915,6 +915,7 @@ def release_view():
     ov = release_control.overview()
     return render_template(
         'console/release.html', ov=ov, blocked=release_control.blockers(ov),
+        rollback_blocked=release_control.rollback_blockers(ov),
         flags=ov.get('flags') or {}, is_owner=_is_owner(), me=request.console_user,
         repo=release_control.repo(),
         counts=_counts(_engine()))
@@ -962,6 +963,52 @@ def release_go():
                               f'{head[:7]}, {ov["ahead"]} commit(s). Reason: {reason}'[:300])
     flash(f'Release started for {head[:7]}. It runs every suite first, so allow about '
           f'half an hour; companies get it a few minutes after it finishes.', 'success')
+    return redirect(here)
+
+
+@console_bp.route('/release/rollback', methods=['POST'])
+@console_required
+def release_rollback():
+    """Put every company back on the release before the one they are on."""
+    import release_control
+    here = url_for('console.release_view')
+    if not _is_owner():
+        flash('Only the console owner can roll back.', 'error')
+        return redirect(here)
+    ov = release_control.overview()
+    why = release_control.rollback_blockers(ov)
+    if why:
+        flash('Not rolled back: ' + why[0], 'error')
+        return redirect(here)
+    target = ov['previous_tag']
+    # The page named a release; if the channel has moved since, that is not
+    # the one the owner decided on.
+    if (request.form.get('to') or '') != target or \
+            (request.form.get('from') or '') != ov['current_tag']:
+        flash('The releases changed since you opened this page. Look again.', 'error')
+        return redirect(here)
+    reason = (request.form.get('reason') or '').strip()
+    if len(reason) < 5:
+        flash('Say why, in a sentence. It goes in the record.', 'error')
+        return redirect(here)
+    if (request.form.get('confirm') or '').strip() != target:
+        flash(f'Type the release ({target}) exactly to confirm.', 'error')
+        return redirect(here)
+    ok, why_not = _reauthenticate()
+    if not ok:
+        flash(why_not, 'error')
+        return redirect(here)
+    started, message = release_control.start_rollback(target)
+    who = request.console_user['email']
+    if not started:
+        control_plane.log_console(_engine(), who, 'rollback failed to start', 'akye-stable',
+                                  f'{target}: {message}'[:300])
+        flash(message, 'error')
+        return redirect(here)
+    control_plane.log_console(_engine(), who, 'started rollback', 'akye-stable',
+                              f'{ov["current_tag"]} to {target}. Reason: {reason}'[:300])
+    flash(f'Rolling back to {target}. This takes a minute or two, and companies '
+          f'redeploy a few minutes after. Their data is untouched.', 'success')
     return redirect(here)
 
 

@@ -464,7 +464,7 @@ def go(line, expect=None):
         f'on channel {line.channel}.')
 
 
-def rollback(line):
+def rollback(line, confirm_tag=None):
     preflight(line)
     tags = line_tags(line)
     on = git('rev-parse', f'{REMOTE}/{line.channel}')
@@ -479,7 +479,10 @@ def rollback(line):
         sys.exit(f'There is no {line.product} release before {current} to go back to.')
     say(f'Rolling {line.audience} back from {current} to {previous}.')
     say('Their data is untouched — this only changes which code runs.\n')
-    if input(f'Type {previous} to confirm: ').strip() != previous:
+    # The console's Rollback button names the release it showed; if the channel
+    # has moved since, the one before it is no longer the one that was reviewed.
+    typed = confirm_tag if confirm_tag is not None else input(f'Type {previous} to confirm: ')
+    if typed.strip() != previous:
         sys.exit('Cancelled — nothing changed.')
     git('branch', '-f', line.channel, previous)
     git('push', REMOTE, '--force-with-lease', f'{line.channel}:{line.channel}')
@@ -495,12 +498,14 @@ if __name__ == '__main__':
     ap.add_argument('--go', action='store_true', help='test, tag and release')
     ap.add_argument('--expect', metavar='SHA',
                     help='release only if the source branch is at this commit')
+    ap.add_argument('--confirm-tag', metavar='TAG',
+                    help='with --rollback: the release to go back to, instead of asking')
     ap.add_argument('--rollback', action='store_true',
                     help='put them back on the previous release')
     args = ap.parse_args()
     chosen = LINES['akye' if args.akye else 'dazzle']
     if args.rollback:
-        rollback(chosen)
+        rollback(chosen, args.confirm_tag)
     elif args.go:
         if args.expect and not re.fullmatch(r'[0-9a-fA-F]{7,40}', args.expect):
             sys.exit('--expect needs a commit id.')

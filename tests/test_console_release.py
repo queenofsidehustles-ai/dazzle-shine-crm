@@ -13,6 +13,7 @@ os.environ['DATABASE_URL'] = os.environ.get(
 os.environ['SECRET_KEY'] = 'test-secret'
 os.environ['BASE_DOMAIN'] = 'akyehq.test'
 os.environ['GITHUB_RELEASE_TOKEN'] = 'test-token'
+os.environ['GITHUB_REPO'] = 'someone/their-repo'
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
@@ -69,6 +70,11 @@ def fake_call(method, path, **kw):
                                         'conclusion': None if state['running'] else 'success',
                                         'html_url': 'http://x/r', 'created_at': '2026-10-23T12:00:00Z',
                                         'head_sha': HEAD}]}
+    if path == 'tags':
+        return 200, [{'name': 'akye-v2026.10.23', 'commit': {'sha': STABLE}},
+                     {'name': 'akye-v2026.10.06', 'commit': {'sha': 'e' * 40}},
+                     {'name': 'akye-v2026.09.09.9', 'commit': {'sha': 'f' * 40}},
+                     {'name': 'v2026.09.21', 'commit': {'sha': '1' * 40}}]
     if path.endswith('/dispatches'):
         state['dispatched'].append(kw['json'])
         return 204, ''
@@ -125,7 +131,7 @@ with app.app_context():
         saved = {k: state[k] for k in change}
         state.update(change)
         body = c.get('/console/release').get_data(as_text=True)
-        check('Not ready to release' in body and 'name="confirm"' not in body,
+        check('Not ready to release' in body and 'to every company' not in body,
               f'{label}: the page offers no button')
         c.post('/console/release/go', data=good, follow_redirects=True)
         check(not state['dispatched'], f'{label}: and a direct post starts nothing')
@@ -141,11 +147,44 @@ with app.app_context():
           and any('Ship the security fixes' in (x.get('detail') or '') for x in log),
           'it is in the console log with the reason')
 
+    print('\n5b. Rollback goes to the release before the one companies are on')
+    state['dispatched'].clear()
+    body = c.get('/console/release').get_data(as_text=True)
+    check('Roll back to akye-v2026.10.06' in body, 'the page names the previous release')
+    rb = {'from': 'akye-v2026.10.23', 'to': 'akye-v2026.10.06', 'reason': 'Bookings broke',
+          'confirm': 'akye-v2026.10.06', 'password': PW}
+    for label, data in (('a wrong password', dict(rb, password='nope')),
+                        ('a wrong confirmation', dict(rb, confirm='akye-v2026.09.09.9')),
+                        ('no reason', dict(rb, reason='')),
+                        ('a page that is out of date', dict(rb, to='akye-v2026.09.09.9'))):
+        c.post('/console/release/rollback', data=data, follow_redirects=True)
+        check(not state['dispatched'], f'{label} rolls nothing back')
+    state['running'] = True
+    c.post('/console/release/rollback', data=rb, follow_redirects=True)
+    check(not state['dispatched'], 'nor does a release already running')
+    state['running'] = False
+    c.post('/console/release/rollback', data=rb, follow_redirects=True)
+    check(state['dispatched'] == [{'ref': 'main', 'inputs': {'to_tag': 'akye-v2026.10.06'}}],
+          'the right one: a single dispatch of exactly that release')
+    log = [x for x in control_plane.console_log_all(engine) if x.get('actor') == OWNER]
+    check(any('started rollback' in (x.get('action') or '') and 'Bookings broke' in (x.get('detail') or '')
+              for x in log), 'with the reason in the console log')
+    c.get('/console/logout')
+    c.post('/console/login', data={'email': HELPER, 'password': PW})
+    state['dispatched'].clear()
+    c.post('/console/release/rollback', data=rb, follow_redirects=True)
+    check(not state['dispatched'], 'a helper cannot roll back')
+    check(release_control.start_rollback('main')[0] is False and
+          release_control.start_rollback('akye-v2026.10.06; rm')[0] is False,
+          'only a release name is ever dispatched')
+    c.get('/console/logout')
+    c.post('/console/login', data={'email': OWNER, 'password': PW})
+
     print('\n6. Without a token it says so instead of failing')
     os.environ['GITHUB_RELEASE_TOKEN'] = ''
     release_control._call = lambda *a, **k: (_ for _ in ()).throw(AssertionError('no call'))
     body = c.get('/console/release').get_data(as_text=True)
-    check('GITHUB_RELEASE_TOKEN is not set' in body, 'the page explains what is missing')
+    check('is not set' in body, 'the page explains what is missing')
 
     print('\n7. The commit id is validated before it is sent anywhere')
     os.environ['GITHUB_RELEASE_TOKEN'] = 'test-token'
