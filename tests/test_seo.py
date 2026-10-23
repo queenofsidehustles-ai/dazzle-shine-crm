@@ -222,7 +222,9 @@ check(len(faq['mainEntity']) == len(_g.FAQS),
 # The shell's bare `nav` rules caught this page's table of contents, laid it
 # out as a flex row and ran the whole thing off the side of a phone.
 shell = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates', 'marketing', '_shell.html')).read()
-check('header nav {' in shell and '\n    nav {' not in shell,
+# Spacing-blind: the shell's CSS has since been minified (`header nav{`).
+check(re.search(r'header\s+nav\s*\{', shell) is not None
+      and re.search(r'(^|[;}\s])nav\s*\{', shell.replace('header nav', 'header_nav')) is None,
       'the header nav rules are scoped to the header')
 
 print('\n\n✅ The site can be found, shared and understood.\n')

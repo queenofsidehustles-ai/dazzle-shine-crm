@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
                         LargeBinary, Text, UniqueConstraint,
-                        Table, select, insert, update, text, func)
+                        Table, select, insert, update, delete, text, func)
 
 # Its own MetaData: these tables must never be created inside a tenant schema,
 # and must never be swept up by a migration that walks models.py.
@@ -58,9 +58,9 @@ organizations = Table(
     # A founding customer's price is theirs for as long as they stay. This
     # survives every future price change, which is the whole promise.
     Column('grandfathered', Boolean, default=False),
-    # When they first assigned a job to somebody. The trial's 14 days run from
-    # here rather than from signup: a fortnight that starts before anybody has
-    # used the product is a trial they never had.
+    # When they first had a cleaner and a customer in the product: the best
+    # sign they are really using it. A milestone only. The trial's 30 days run
+    # from signup and this does not move them.
     Column('activated_at', DateTime),
     # Which trial emails have gone to this company, comma-separated. The
     # countdown in the banner only reaches somebody who logs in, and the whole
@@ -78,6 +78,18 @@ organizations = Table(
     # business cannot see or control is not one. trial_nudges.due() checks
     # this before anything else a trial's state would otherwise call for.
     Column('nudges_opted_out', Boolean, default=False),
+    # When the last owner email from trial_nudges went out, cron or event.
+    # `nudges_sent` says which emails; this says when, so that a celebration
+    # sent at 3pm ("somebody booked you") and the next morning's scheduled
+    # note never land on the same day. One email a day, whatever sent it.
+    Column('nudge_last_at', DateTime),
+    # Has the owner shown the signup email reaches them? A typo here loses
+    # the only written record of their address and every email after it.
+    # `email_confirm_sent_at` is set only by the signup that asked, so
+    # companies from before this existed are never told to confirm anything.
+    # See email_confirm.py.
+    Column('email_confirm_sent_at', DateTime),
+    Column('email_confirmed_at', DateTime),
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
     # Owned by tenant_data_lifecycle.py, declared here for the same reason the
@@ -103,6 +115,10 @@ organizations = Table(
     # out of every funnel and sales count and never sent trial reminders; a
     # suspension says nothing about whether an account was real.
     Column('is_test', Boolean),
+    # Set from the console to tidy a company out of the default list (old
+    # tests, churned signups). Only hides it there: status, billing and
+    # automations are untouched, and unarchiving clears it.
+    Column('archived_at', DateTime),
     # A fictional company for showing the product (demo_company.py). Implies
     # is_test, and more: demo_guard.py stops anything it does from leaving
     # Akye -- no email, text, Stripe or subscription -- and only a demo
@@ -116,9 +132,26 @@ organizations = Table(
     Column('signup_source', String(120)),
     Column('signup_medium', String(120)),
     Column('signup_campaign', String(120)),
+    # The individual ad, not the campaign: Meta fills utm_content with the ad
+    # name, which is the only thing that says which creative earned a signup.
+    Column('signup_content', String(120)),
     Column('signup_referrer', String(120)),
     Column('signup_landing', String(120)),
+    # Meta's click id, in their envelope. Wider than the rest because it is,
+    # and `ensure_columns` only ever adds a column -- never widens one -- so
+    # getting the width wrong here is not something a later deploy repairs.
+    Column('signup_fbc', String(255)),
     Column('referred_by', String(40), index=True),
+    # The affiliate partner whose link brought them (affiliates.py). A partner
+    # code, not a company address, so the two never collide. Kept only when the
+    # partner exists, is active, and is not the person signing up.
+    Column('affiliate_code', String(40), index=True),
+    # Why this company's partner commission is held for a person to look at, or
+    # NULL. Set when the owner and the partner share a business email domain: it
+    # may be a real introduction (a partner who is a former colleague) or the
+    # partner opening a company to earn on it, and software cannot tell. The
+    # company is credited and works normally; only the partner's payout waits.
+    Column('affiliate_flag', String(120)),
     # When she agreed to the Terms of Service, at signup. Not optional: signup
     # refuses to create the account at all without it (see blueprints/signup.py
     # _validate). Kept as a timestamp rather than a boolean because "she agreed"
@@ -170,6 +203,12 @@ product_leads = Table(
     # Separate from sms_opted_out_at: that is the person's own STOP, which
     # their START undoes; this is ours, and only the console undoes it.
     Column('do_not_text_at', DateTime),
+    # The short welcome sequence (lead_nurture.py) for somebody who came to
+    # us -- started signing up, or asked for early access -- and did not open
+    # an account. Which email they are on, and when the last one went.
+    # Uploaded prospect lists are never put through it.
+    Column('nurture_step', Integer),
+    Column('nurture_last_at', DateTime),
 )
 
 
@@ -213,6 +252,132 @@ promo_codes = Table(
     Column('active', Boolean, default=True),
     Column('created_by', String(200)),
     Column('created_at', DateTime, default=datetime.utcnow),
+)
+
+
+# ── Affiliate partners ─────────────────────────────────────────────────────
+#
+# People who recommend the product to cleaning-company owners and earn a share
+# of what those owners pay. Here, in the control plane, for the same reason
+# `organizations` is: this is the product's own book, not any one company's,
+# and a tenant's session must never be able to write to it. Nothing in these
+# tables can change what a company is entitled to; a commission problem is
+# settled between Akye and the partner and never touches a customer's plan.
+affiliates = Table(
+    'affiliates', control_metadata,
+    Column('id', Integer, primary_key=True),
+    # Appears in the link (/p/<code>) and is stamped on every company they
+    # bring. Immutable once issued, like a company address.
+    Column('code', String(40), unique=True, nullable=False),
+    Column('name', String(200), nullable=False),
+    Column('email', String(200), unique=True, nullable=False),   # lower-case
+    # pending | active | paused | ended. Only 'active' links are honoured.
+    Column('status', String(20), nullable=False, default='pending'),
+    # Basis points, so 30% is 3000 and no float ever touches money.
+    Column('commission_bps', Integer, nullable=False, default=3000),
+    # How many months of a company's payments earn commission, from its first
+    # paid invoice.
+    Column('commission_months', Integer, nullable=False, default=12),
+    # Days between an invoice being paid and its commission becoming payable.
+    # Covers refunds and chargebacks.
+    Column('hold_days', Integer, nullable=False, default=30),
+    Column('terms_accepted_at', DateTime),
+    # The partner's Stripe Connect account (partner_payouts.py), and whether
+    # Stripe has said it can receive money. A copy of Stripe's answer, refreshed
+    # when they finish onboarding or staff press refresh; never a promise.
+    Column('payout_account_id', String(64)),
+    Column('payout_ready', Boolean, default=False),
+    Column('notes', String(500)),
+    Column('created_by', String(200)),
+    Column('created_at', DateTime, default=datetime.utcnow),
+    Column('last_login_at', DateTime),
+)
+
+# A single-use sign-in link. Only a hash is stored, for the same reason a
+# password reset token's is (models.LoginToken): a leaked backup hands over
+# nothing that still works.
+affiliate_logins = Table(
+    'affiliate_logins', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('affiliate_id', Integer, nullable=False, index=True),
+    Column('token_hash', String(64), unique=True, nullable=False),
+    Column('expires_at', DateTime, nullable=False),
+    Column('used_at', DateTime),
+    Column('created_at', DateTime, default=datetime.utcnow),
+)
+
+# One row per visit to a partner's link from a browser that was not already
+# carrying that partner's cookie, so a refresh is not a click.
+affiliate_clicks = Table(
+    'affiliate_clicks', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('affiliate_id', Integer, nullable=False, index=True),
+    Column('clicked_at', DateTime, default=datetime.utcnow, index=True),
+    Column('campaign', String(120)),
+    Column('landing', String(120)),
+)
+
+# What each partner has earned. One row per paid Stripe invoice, and the
+# invoice id is unique: Stripe delivers the same webhook more than once, and a
+# ledger that says "this invoice earned this much" can be told five times
+# where one that adds to a total cannot (the rule billing.py is built on).
+affiliate_commissions = Table(
+    'affiliate_commissions', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('affiliate_id', Integer, nullable=False, index=True),
+    Column('org_slug', String(40), nullable=False, index=True),
+    Column('stripe_invoice_id', String(80), unique=True, nullable=False),
+    Column('invoice_paid_at', DateTime),
+    Column('amount_cents', Integer, nullable=False),        # what commission is on
+    Column('rate_bps', Integer, nullable=False),
+    Column('commission_cents', Integer, nullable=False),
+    # accrued -> paid, or accrued -> reversed. 'Payable' is not stored: it is
+    # accrued with payable_at in the past, so nothing has to run for the
+    # hold to end.
+    Column('status', String(12), nullable=False, default='accrued'),
+    Column('payable_at', DateTime, nullable=False),
+    Column('payout_id', Integer, index=True),
+    Column('reversed_at', DateTime),
+    Column('reversal_reason', String(200)),
+    Column('created_at', DateTime, default=datetime.utcnow),
+)
+
+affiliate_payouts = Table(
+    'affiliate_payouts', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('affiliate_id', Integer, nullable=False, index=True),
+    Column('amount_cents', Integer, nullable=False),
+    Column('method', String(40)),               # transfer | paypal | check | other
+    Column('reference', String(120)),           # the transfer id, check number...
+    Column('note', String(300)),
+    Column('paid_at', DateTime, default=datetime.utcnow),
+    Column('created_by', String(200)),
+    # pending (claimed, transfer not confirmed) | paid | failed (released).
+    # NULL on a payout written before this column existed, which means paid.
+    Column('status', String(12)),
+    Column('stripe_transfer_id', String(64)),
+    Column('failure', String(300)),
+)
+
+
+# What the platform's own background work last did, one row per run.
+#
+# Backups, the central scheduler, the product's daily jobs and Stripe's webhook
+# all run somewhere a person is not looking: a GitHub Action, a cron, a request
+# from Stripe. When one stops, nothing happens, which is exactly how nobody
+# notices. Each reports in here when it finishes, success or failure, so the
+# console can say "the last backup was 31 hours ago" rather than staying quiet.
+#
+# `kind` names the thing: backup:akye, scheduler:hourly, scheduler:daily,
+# job:trial-nudges, job:lead-nurture, stripe:webhook.
+platform_runs = Table(
+    'platform_runs', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('kind', String(60), nullable=False, index=True),
+    Column('ok', Boolean, nullable=False, default=True),
+    Column('items', Integer),                  # what it did: rows, emails, events
+    Column('detail', String(400)),
+    Column('at', DateTime, default=datetime.utcnow, index=True),
 )
 
 
@@ -365,6 +530,40 @@ signup_attempts = Table(
 )
 
 
+# Every email the product sends to a company's owner -- welcome, trial
+# emails, the moments -- sent or failed. Leads have their own record
+# (product_lead_messages); between the two, the console's Communications page
+# can answer "what have we sent this person, and when" from one place.
+product_messages = Table(
+    'product_messages', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('org_slug', String(40), index=True),
+    Column('kind', String(40)),
+    Column('to_address', String(200), index=True),
+    Column('subject', String(300)),
+    Column('ok', Boolean, default=False),
+    Column('detail', String(400)),
+    # 'auto' for the daily run, 'event' for a moment, or the console user
+    # who pressed the button.
+    Column('sent_by', String(200)),
+    Column('sent_at', DateTime, default=datetime.utcnow, index=True),
+)
+
+
+# Which automated emails are switched on. One row per email (or per whole
+# sequence); a missing row means on, so a new email works the day it ships
+# and an empty table changes nothing. Set from the console's Communications
+# page by a manager or the owner, and recorded in the console log.
+product_switches = Table(
+    'product_switches', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('key', String(60), unique=True, nullable=False),
+    Column('enabled', Boolean, default=True),
+    Column('updated_by', String(200)),
+    Column('updated_at', DateTime, default=datetime.utcnow),
+)
+
+
 # Questions from the public site -- people who are not customers yet and have
 # no account to file feedback from.
 support_requests = Table(
@@ -396,6 +595,73 @@ console_docs = Table(
     Column('created_at', DateTime, default=datetime.utcnow),
     Column('updated_at', DateTime, default=datetime.utcnow, onupdate=datetime.utcnow),
 )
+
+
+# Which help tips work, across every company (adoption.py). The tips' wording
+# is the product's, not any one company's, so whether "Find leads" gets opened
+# after its tip was read is a question about the product -- answered here, in
+# one place, rather than by visiting every company's schema. Nobody is named:
+# `person` is a one-way hash of company and login, there only so one person
+# counts once.
+tip_events = Table(
+    'tip_events', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('slug', String(40), index=True),
+    Column('person', String(16)),
+    Column('role', String(20)),
+    Column('tip', String(80), index=True),
+    # 'open' -- read the tip; 'used' -- opened the feature within a week of
+    # reading its tip, for the first time; 'suggested' / 'clicked' /
+    # 'dismissed' -- the once-a-sign-in "Did you know?".
+    Column('event', String(20), nullable=False),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
+)
+
+
+def record_tip_event(engine, slug, person, role, tip, event):
+    with engine.begin() as conn:
+        conn.execute(insert(tip_events).values(
+            slug=slug, person=person, role=role, tip=tip, event=event,
+            created_at=datetime.utcnow()))
+
+
+# Each outcome and the event it is the outcome of. A rate is only honest when
+# both sides come from the same people: those who read the tip (or were shown
+# the suggestion) in the window, and what those people then did -- whenever
+# they did it. Counting each event on its own window instead lets somebody who
+# read a tip the day before the window opens count as a success inside it.
+TIP_COHORTS = {'used': 'open', 'clicked': 'suggested', 'dismissed': 'suggested'}
+
+
+def tip_report(engine, since=None):
+    """{tip: {event: distinct people}} across real companies -- test and demo
+    accounts left out, as everywhere else in the console. With `since`, the
+    people are those whose read (or suggestion) falls in the window, and each
+    outcome counts only those same people."""
+    q = (select(tip_events.c.tip, tip_events.c.event,
+                tip_events.c.slug, tip_events.c.person, tip_events.c.created_at)
+         .select_from(tip_events.outerjoin(
+             organizations, organizations.c.slug == tip_events.c.slug))
+         .where((organizations.c.is_test.is_(None)) | (organizations.c.is_test.is_(False))))
+    people = {}                     # (tip, event) -> {person: first time}
+    with engine.connect() as conn:
+        for tip, event, slug, person, at in conn.execute(q):
+            seen = people.setdefault((tip, event), {})
+            who = f'{slug}:{person}'
+            if who not in seen or (at and at < seen[who]):
+                seen[who] = at
+    out = {}
+    for (tip, event), seen in people.items():
+        origin = TIP_COHORTS.get(event)
+        if origin is None:          # an originating event: the window decides
+            who = {p for p, at in seen.items() if since is None or (at and at >= since)}
+        else:                       # an outcome: only for that window's cohort
+            cohort = people.get((tip, origin), {})
+            who = {p for p in seen if p in cohort
+                   and (since is None or (cohort[p] and cohort[p] >= since))}
+        if who:
+            out.setdefault(tip, {})[event] = len(who)
+    return out
 
 
 def _ensure_table_columns(engine, table):
@@ -446,6 +712,8 @@ def ensure_columns(engine):
     _ensure_table_columns(engine, organizations)
     _ensure_table_columns(engine, product_leads)
     _ensure_table_columns(engine, console_users)
+    _ensure_table_columns(engine, affiliates)
+    _ensure_table_columns(engine, affiliate_payouts)
 
 
 def ensure_table(engine):
@@ -455,7 +723,12 @@ def ensure_table(engine):
                         console_users, support_requests, console_log,
                         tenant_logins, login_lookup_requests, console_docs,
                         switch_tokens,
-                        promo_codes, product_lead_messages, signup_attempts])
+                        promo_codes, product_lead_messages, signup_attempts,
+                        tip_events,
+                        product_messages, product_switches,
+                        affiliates, affiliate_logins, affiliate_clicks,
+                        affiliate_commissions, affiliate_payouts,
+                        platform_runs])
     ensure_columns(engine)
 
 
@@ -482,17 +755,15 @@ def create(engine, slug, name, owner_email=None, attribution=None,
             f'hyphens, 3-40 characters, and not one of the reserved names.')
     if find(engine, slug):
         raise ValueError(f'{slug!r} is already taken.')
-    # Everything, for a fortnight — but the fortnight does not start until they
-    # assign a job. Until then they have thirty days to begin, which is what
-    # `trial_ends_at` holds; `billing.mark_activated` moves it when they do.
-    #
-    # A free plan nobody has seen the paid features from is a plan nobody
-    # upgrades out of: they cannot miss the hiring pipeline if they never had
-    # it. So the trial gives the top plan and then steps down, rather than
-    # asking somebody to imagine what they are not being shown.
+    # Everything, for thirty days from now. A free plan nobody has seen the paid
+    # features from is a plan nobody upgrades out of: they cannot miss the
+    # hiring pipeline if they never had it. So the trial gives the top plan and
+    # then steps down, rather than asking somebody to imagine what they are not
+    # being shown.
     from datetime import timedelta
+    import billing
     now = datetime.utcnow()
-    came_from = _signup_attribution(engine, slug, attribution)
+    came_from = _signup_attribution(engine, slug, attribution, owner_email)
     with engine.begin() as conn:
         conn.execute(insert(organizations).values(
             slug=slug, name=name, schema_name=tenancy.schema_for(slug),
@@ -500,27 +771,47 @@ def create(engine, slug, name, owner_email=None, attribution=None,
             created_at=now,
             plan='scale',
             subscription_status='trialing',
-            trial_ends_at=now + timedelta(days=30),
+            trial_ends_at=now + timedelta(days=billing.TRIAL_DAYS),
             activated_at=None,
             terms_accepted_at=terms_accepted_at,
             **came_from))
     return find(engine, slug)
 
 
-def _signup_attribution(engine, slug, attribution):
-    """The signup_* and referred_by values for a new company.
+def _signup_attribution(engine, slug, attribution, owner_email=None):
+    """The signup_* , referred_by and affiliate_code values for a new company.
 
     A referral is kept only when it names a company that exists and is not
     the one being created: anybody can type ?ref=, and a reward should not
     follow a name that was made up or a company referring itself.
+
+    A partner code is held to the same standard, and one more: it is kept only
+    while the partner is active, and never when the owner signing up is the
+    partner, however the address is dressed up (affiliates.self_referral).
+    Credit follows a real introduction, not the partner opening a company of
+    their own to collect commission on it. A shared business domain is not
+    proof either way, so it is credited but held for review.
     """
     a = attribution or {}
-    out = {f'signup_{k}': (a.get(k) or None) and str(a[k])[:120]
-           for k in ('source', 'medium', 'campaign', 'referrer', 'landing')}
+    import attribution as _attr
+    out = {f'signup_{k}': (a.get(k) or None)
+           and str(a[k])[:_attr.LIMITS.get(k, _attr.DEFAULT_LIMIT)]
+           for k in ('source', 'medium', 'campaign', 'content', 'referrer',
+                     'landing', 'fbc')}
     out = {k: v for k, v in out.items() if v}
     ref = (a.get('ref') or '').strip().lower()
     if ref and ref != slug and find(engine, ref):
         out['referred_by'] = ref
+    aff = (a.get('aff') or '').strip().lower()
+    if aff:
+        import affiliates as _affiliates
+        partner = _affiliates.find_by_code(engine, aff)
+        if partner and partner['status'] == 'active':
+            verdict = _affiliates.self_referral(partner['email'], owner_email)
+            if verdict != 'same':
+                out['affiliate_code'] = partner['code']
+                if verdict == 'review':
+                    out['affiliate_flag'] = 'same email domain as the partner'
     return out
 
 
@@ -559,6 +850,12 @@ def set_test_account(engine, slug, is_test):
         conn.execute(q.values(is_test=bool(is_test)))
 
 
+def set_archived(engine, slug, archived):
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(organizations.c.slug == slug)
+                     .values(archived_at=datetime.utcnow() if archived else None))
+
+
 def set_status(engine, slug, status):
     values = {'status': status}
     if status == 'suspended':
@@ -573,13 +870,15 @@ def set_billing(engine, slug, **fields):
 
     The whitelist is the point: a caller that has not thought about which
     field it is writing cannot write one by accident. `activated_at` is on it
-    because the trial clock starts from the product being used, which is
-    something only this application knows and Stripe never will.
+    because when a company first got the software working is something only
+    this application knows and Stripe never will -- it no longer starts the
+    trial clock, which runs from signup, but it is still the most useful
+    thing there is to know about a trial.
     """
     allowed = {'plan', 'subscription_status', 'stripe_customer_id',
                'stripe_subscription_id', 'trial_ends_at', 'current_period_end',
                'grandfathered', 'status', 'activated_at', 'nudges_sent',
-               'nudges_opted_out',
+               'nudges_opted_out', 'nudge_last_at',
                'mrr_cents', 'paid_since', 'canceled_at', 'discount_code'}
     bad = set(fields) - allowed
     if bad:
@@ -588,6 +887,76 @@ def set_billing(engine, slug, **fields):
         conn.execute(update(organizations)
                      .where(organizations.c.slug == slug).values(**fields))
     return find(engine, slug)
+
+
+def set_email_state(engine, slug, **fields):
+    """Record the owner's email being asked about, confirmed, or corrected.
+
+    Its own whitelist rather than set_billing's: none of this is billing, and
+    `owner_email` is not something a billing caller should ever be able to
+    change by passing the wrong keyword.
+    """
+    allowed = {'owner_email', 'email_confirm_sent_at', 'email_confirmed_at'}
+    bad = set(fields) - allowed
+    if bad:
+        raise ValueError(f'not email fields: {sorted(bad)}')
+    with engine.begin() as conn:
+        conn.execute(update(organizations)
+                     .where(organizations.c.slug == slug).values(**fields))
+    return find(engine, slug)
+
+
+def owner_emails(engine):
+    """Every address that already owns a company, lower-cased.
+
+    The nurture sequence asks this before each send: somebody who opened an
+    account after leaving the signup form is a customer now, not a lead.
+    """
+    try:
+        with engine.connect() as conn:
+            return {(r[0] or '').strip().lower() for r in conn.execute(
+                select(organizations.c.owner_email)) if r[0]}
+    except Exception:
+        return set()
+
+
+def find_or_add_abandoned_signup(engine, email, name=None, company=None,
+                                 note=None):
+    """Somebody typed their email into the signup form. Never raises.
+
+    Written before the account exists, so that leaving at the password box
+    still leaves a name to follow up. One row per address: a person tabbing
+    in and out of the field, or coming back tomorrow, is still one person.
+    """
+    return add_lead(engine, source='abandoned_signup', email=email,
+                    name=name, company=company, note=note)
+
+
+def clear_abandoned_signup(engine, email):
+    """They finished. Take the half-finished row off the leads list.
+
+    Only rows this form wrote: an early-access request or an uploaded
+    prospect at the same address is a different record with its own history.
+    """
+    email = (email or '').strip().lower()
+    if not email:
+        return 0
+    try:
+        with engine.begin() as conn:
+            return conn.execute(
+                delete(product_leads)
+                .where(func.lower(product_leads.c.email) == email,
+                       product_leads.c.source == 'abandoned_signup')).rowcount
+    except Exception:
+        return 0
+
+
+def set_lead_nurture(engine, lead_id, step, when=None):
+    with engine.begin() as conn:
+        conn.execute(update(product_leads)
+                     .where(product_leads.c.id == lead_id)
+                     .values(nurture_step=step,
+                             nurture_last_at=when or datetime.utcnow()))
 
 
 def find_by_customer(engine, stripe_customer_id):
@@ -621,6 +990,20 @@ def record_tenant_login(engine, email, tenant_slug):
             if not exists:
                 conn.execute(insert(tenant_logins).values(
                     email=email, tenant_slug=tenant_slug))
+    except Exception:
+        pass
+
+
+def forget_tenant_login(engine, email, tenant_slug):
+    """Remove one (email, tenant) pair -- the owner corrected a mistyped
+    address, and the mistyped one may belong to a stranger who should never
+    be sent this company's address by the "find my login" lookup."""
+    email = (email or '').strip().lower()
+    try:
+        with engine.begin() as conn:
+            conn.execute(tenant_logins.delete().where(
+                tenant_logins.c.email == email,
+                tenant_logins.c.tenant_slug == (tenant_slug or '').strip().lower()))
     except Exception:
         pass
 
@@ -833,6 +1216,81 @@ def lead_messages(engine, limit=100):
         return []
 
 
+def record_product_message(engine, org_slug, kind, to_address, subject, ok,
+                           detail=None, sent_by='auto'):
+    """Write down one email to an owner. Never raises: a failed write to the
+    record must never be the reason an email is treated as unsent."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(product_messages).values(
+                org_slug=(org_slug or '')[:40] or None, kind=(kind or '')[:40],
+                to_address=(to_address or '')[:200], subject=(subject or '')[:300],
+                ok=bool(ok), detail=(detail or '')[:400],
+                sent_by=(sent_by or '')[:200], sent_at=datetime.utcnow()))
+    except Exception:
+        pass
+
+
+def product_messages_for(engine, slug=None, email=None, since=None, limit=200):
+    """Owner emails, newest first, optionally for one company or address."""
+    try:
+        q = select(product_messages)
+        if slug:
+            q = q.where(product_messages.c.org_slug == slug)
+        if email:
+            q = q.where(func.lower(product_messages.c.to_address)
+                        == email.strip().lower())
+        if since:
+            q = q.where(product_messages.c.sent_at >= since)
+        q = q.order_by(product_messages.c.sent_at.desc()).limit(limit)
+        with engine.connect() as conn:
+            return [dict(r) for r in conn.execute(q).mappings()]
+    except Exception:
+        return []
+
+
+def lead_messages_for(engine, email, limit=100):
+    """Everything sent to one lead address, newest first."""
+    try:
+        with engine.connect() as conn:
+            q = (select(product_lead_messages)
+                 .where(func.lower(product_lead_messages.c.to_address)
+                        == (email or '').strip().lower())
+                 .order_by(product_lead_messages.c.sent_at.desc()).limit(limit))
+            return [dict(r) for r in conn.execute(q).mappings()]
+    except Exception:
+        return []
+
+
+def switches_checked(engine):
+    """{key: enabled} for every switch that has been set. Absent means on.
+    Raises if the table cannot be read, for the callers that must not guess."""
+    with engine.connect() as conn:
+        return {r['key']: bool(r['enabled']) for r in conn.execute(
+            select(product_switches)).mappings()}
+
+
+def switches(engine):
+    """switches_checked, except that if the table cannot be read everything
+    stays on, which is how it behaved before switches existed."""
+    try:
+        return switches_checked(engine)
+    except Exception:
+        return {}
+
+
+def set_switch(engine, key, enabled, by=None):
+    now = datetime.utcnow()
+    with engine.begin() as conn:
+        done = conn.execute(update(product_switches)
+                            .where(product_switches.c.key == key)
+                            .values(enabled=bool(enabled), updated_by=by,
+                                    updated_at=now)).rowcount
+        if not done:
+            conn.execute(insert(product_switches).values(
+                key=key, enabled=bool(enabled), updated_by=by, updated_at=now))
+
+
 def mark_leads_unsubscribed(engine, email):
     """Every lead at this address stops getting email. Returns how many."""
     email = (email or '').strip().lower()
@@ -974,16 +1432,29 @@ def all_feedback(engine, limit=200):
     return [dict(r) for r in rows]
 
 
-def feedback_shot(engine, feedback_id):
-    """(bytes, content-type) for one screenshot, or (None, None)."""
+# What a screenshot may be served as. The type is whatever the browser that
+# sent it claimed; an image/svg+xml "screenshot" is a page that runs script, at
+# our address, for whoever opens it.
+SHOT_TYPES = ('image/jpeg', 'image/png', 'image/webp')
+
+
+def feedback_shot(engine, feedback_id, org_slug=Ellipsis):
+    """(bytes, content-type) for one screenshot, or (None, None).
+
+    `org_slug`, when given, is the only company whose feedback may come back
+    (None for a single-business install's own); the console, which reads
+    everybody's, leaves it out.
+    """
+    q = select(feedback.c.shot, feedback.c.shot_type).where(feedback.c.id == feedback_id)
+    if org_slug is not Ellipsis:
+        q = q.where(feedback.c.org_slug.is_(None) if org_slug is None
+                    else feedback.c.org_slug == org_slug)
     with engine.connect() as conn:
-        row = conn.execute(
-            select(feedback.c.shot, feedback.c.shot_type)
-            .where(feedback.c.id == feedback_id)
-        ).first()
+        row = conn.execute(q).first()
     if not row or not row[0]:
         return None, None
-    return row[0], (row[1] or 'image/jpeg')
+    ctype = (row[1] or 'image/jpeg').lower()
+    return row[0], (ctype if ctype in SHOT_TYPES else 'application/octet-stream')
 
 
 def mark_feedback_read(engine, feedback_id):
@@ -1096,7 +1567,7 @@ def set_console_active(engine, email, active):
                      .values(active=bool(active)))
 
 
-def check_console_login(engine, email, password):
+def check_console_login(engine, email, password, record_login=True):
     """(user, why-not). Never says which half was wrong.
 
     "No such account" and "wrong password" told apart is how somebody learns
@@ -1122,7 +1593,7 @@ def check_console_login(engine, email, password):
         # Right password, second step still to come. Not a completed login,
         # so neither the failure count nor last_login_at moves yet.
         return row, None
-    _console_login_succeeded(engine, row)
+    _console_login_succeeded(engine, row, record_login)
     return row, None
 
 
@@ -1140,14 +1611,19 @@ def _console_login_failed(engine, row):
     return 'locked' if 'locked_until' in values else 'no'
 
 
-def _console_login_succeeded(engine, row):
+def _console_login_succeeded(engine, row, record_login=True):
+    """Clear the failure count. `record_login=False` is for proving it is still
+    the same person (a destructive action) without claiming a new sign-in: the
+    People page's "Last in" must stay the last time anybody actually signed in."""
+    values = dict(failed=0, locked_until=None)
+    if record_login:
+        values['last_login_at'] = datetime.utcnow()
     with engine.begin() as conn:
         conn.execute(update(console_users).where(console_users.c.id == row['id'])
-                     .values(failed=0, locked_until=None,
-                             last_login_at=datetime.utcnow()))
+                     .values(**values))
 
 
-def check_console_code(engine, email, code):
+def check_console_code(engine, email, code, record_login=True):
     """Second step: a live authenticator code, or one unused backup code.
     (user, why-not), with wrong codes counting toward the same lockout as
     wrong passwords -- six digits are guessable in bulk otherwise."""
@@ -1160,14 +1636,14 @@ def check_console_code(engine, email, code):
         return None, 'locked'
     code = (code or '').strip()
     if totp.verify_totp(row.get('totp_secret') or '', code):
-        _console_login_succeeded(engine, row)
+        _console_login_succeeded(engine, row, record_login)
         return row, None
     remaining = totp.consume_backup_code(row.get('totp_backup_codes'), code)
     if remaining is not None:
         with engine.begin() as conn:
             conn.execute(update(console_users).where(console_users.c.id == row['id'])
                          .values(totp_backup_codes=remaining))
-        _console_login_succeeded(engine, row)
+        _console_login_succeeded(engine, row, record_login)
         return row, None
     return None, _console_login_failed(engine, row)
 
@@ -1220,6 +1696,31 @@ def record_signup_attempt(engine, ip):
                 signup_attempts.c.created_at < datetime.utcnow() - timedelta(days=7)))
     except Exception:
         pass
+
+
+def signup_attempts_by_ip(engine, since, limit=20):
+    """Who has been trying to sign up, grouped by the address we recorded.
+
+    The signup cap is per address, which is only true if the address we store
+    is the visitor's. Behind a proxy it can quietly become the proxy's, and
+    then a limit meant to stop one script turns into a limit on everybody --
+    three signups anywhere and the product is shut for a day. That failure
+    looks exactly like the rule working, which is why it needs showing rather
+    than reasoning about.
+    """
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(signup_attempts.c.ip,
+                       func.count().label('n'),
+                       func.max(signup_attempts.c.created_at).label('last'))
+                .where(signup_attempts.c.created_at >= since)
+                .group_by(signup_attempts.c.ip)
+                .order_by(func.count().desc())
+                .limit(limit)).all()
+            return [{'ip': r[0], 'count': r[1], 'last': r[2]} for r in rows]
+    except Exception:
+        return []
 
 
 def signup_attempts_since(engine, ip, since):
@@ -1291,6 +1792,17 @@ def log_console(engine, actor, action, target=None, detail=None):
         pass
 
 
+def console_log_for(engine, target, action=None, limit=1):
+    """The newest log lines about one target, optionally of one kind."""
+    q = select(console_log).where(console_log.c.target == target)
+    if action:
+        q = q.where(console_log.c.action == action)
+    with engine.connect() as conn:
+        return [dict(r) for r in conn.execute(
+            q.order_by(console_log.c.created_at.desc(), console_log.c.id.desc())
+            .limit(limit)).mappings()]
+
+
 def console_log_all(engine, limit=300):
     with engine.connect() as conn:
         rows = conn.execute(select(console_log).order_by(
@@ -1352,3 +1864,96 @@ def claim_switch_token(engine, jti):
         return True
     except Exception:
         return False
+
+
+def hold_affiliate_commissions(engine, slug, reason):
+    """Put a partner's company under review, unless it already is.
+
+    Its commissions stop being payable until a person has looked. Does nothing
+    for a company with no partner."""
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(
+            organizations.c.slug == slug,
+            organizations.c.affiliate_code.isnot(None),
+            organizations.c.affiliate_flag.is_(None))
+            .values(affiliate_flag=(reason or '')[:120]))
+
+
+def clear_affiliate_flag(engine, slug):
+    """A person has looked and the introduction is real: release the payout."""
+    with engine.begin() as conn:
+        conn.execute(update(organizations).where(organizations.c.slug == slug)
+                     .values(affiliate_flag=None))
+
+
+# ---------------------------------------------------------------------------
+# Platform runs: what the background work last did
+# ---------------------------------------------------------------------------
+
+PLATFORM_RUN_KEEP_DAYS = 45
+
+
+def record_platform_run(engine, kind, ok=True, items=None, detail=None, now=None):
+    """Write down that something ran. Never raises: a note about a job must not
+    be the reason the job fails.
+
+    Rows older than PLATFORM_RUN_KEEP_DAYS are pruned as a side effect, so a
+    Stripe webhook that fires all day cannot grow this table without limit.
+    The newest row and newest success of each kind are always kept."""
+    try:
+        now = now or datetime.utcnow()
+        with engine.begin() as conn:
+            conn.execute(insert(platform_runs).values(
+                kind=(kind or '')[:60], ok=bool(ok),
+                items=int(items) if items is not None else None,
+                detail=(detail or '')[:400] or None, at=now))
+            if now.minute % 10 == 0:          # cheap, and often enough
+                # Never the newest row of a kind, nor its newest success: a job
+                # that stopped reporting 45 days ago must still read as stale
+                # (not as "never reported", which is quiet), and "last good"
+                # has to survive for the page to say how long it has been.
+                newest = select(func.max(platform_runs.c.id)).group_by(platform_runs.c.kind)
+                newest_ok = select(func.max(platform_runs.c.id)).where(
+                    platform_runs.c.ok.is_(True)).group_by(platform_runs.c.kind)
+                conn.execute(delete(platform_runs).where(
+                    platform_runs.c.at < now - timedelta(days=PLATFORM_RUN_KEEP_DAYS),
+                    platform_runs.c.id.notin_(newest),
+                    platform_runs.c.id.notin_(newest_ok)))
+        return True
+    except Exception as e:
+        print(f'  ⚠️  platform run not recorded: {type(e).__name__}: {e}')
+        return False
+
+
+def platform_runs_for(engine, kind, limit=1):
+    """The most recent runs of one kind, newest first. [] if unreadable."""
+    try:
+        with engine.connect() as conn:
+            return [dict(r) for r in conn.execute(
+                select(platform_runs).where(platform_runs.c.kind == kind)
+                .order_by(platform_runs.c.at.desc(), platform_runs.c.id.desc())
+                .limit(limit)).mappings()]
+    except Exception:
+        return []
+
+
+def last_ok_platform_run(engine, kind):
+    """When this kind last succeeded, or None."""
+    try:
+        with engine.connect() as conn:
+            return conn.execute(
+                select(func.max(platform_runs.c.at)).where(
+                    platform_runs.c.kind == kind, platform_runs.c.ok.is_(True))).scalar()
+    except Exception:
+        return None
+
+
+def platform_run_kinds(engine, prefix):
+    """Every kind that has ever reported, starting with `prefix`."""
+    try:
+        with engine.connect() as conn:
+            return sorted(conn.execute(
+                select(platform_runs.c.kind).where(
+                    platform_runs.c.kind.like(prefix + '%')).distinct()).scalars())
+    except Exception:
+        return []

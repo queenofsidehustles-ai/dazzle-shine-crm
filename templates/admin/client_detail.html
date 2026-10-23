@@ -5,7 +5,7 @@
   <div style="display:flex;gap:8px">
     <a href="{{ url_for('bookings.clients') }}" class="btn btn-outline" style="padding:6px 14px;font-size:0.85rem">← All Clients</a>
     <form method="POST" action="{{ url_for('bookings.delete_client', client_id=client.id) }}"
-          onsubmit="return confirm('Delete {{ client.name }} and all their bookings? This cannot be undone.')">
+          onsubmit="return confirm('Delete {{ client.name|js }} and all their bookings? This cannot be undone.')">
       <button type="submit" class="btn" style="padding:6px 14px;font-size:0.85rem;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-soft)">Delete Client</button>
     </form>
   </div>
@@ -135,7 +135,7 @@
             <button type="submit" class="btn btn-outline" style="padding:5px 13px;font-size:0.82rem">✉️ Send test to me</button>
           </form>
           <form method="POST" action="{{ url_for('bookings.portal_invite_send', client_id=client.id) }}" style="margin:0"
-                onsubmit="return confirm('Send this to {{ client.name }} at {{ client.email }}?\n\nThis goes to the customer and cannot be unsent.');">
+                onsubmit="return confirm('Send this to {{ client.name|js }} at {{ client.email|js }}?\n\nThis goes to the customer and cannot be unsent.');">
             <input type="hidden" name="kind" value="{{ kind }}" />
             <input type="hidden" name="to" value="customer" />
             <button type="submit" class="btn btn-gold" style="padding:5px 13px;font-size:0.82rem"
@@ -152,11 +152,19 @@
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
         <h2 style="font-size:1rem;font-weight:700;margin:0;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Booking History ({{ client.total_bookings }})</h2>
         <a href="{{ url_for('bookings.new', client=client.id) }}" class="btn btn-gold" style="padding:7px 16px;font-size:0.85rem">📋 Book {{ client.name.split()[0] }} again</a>
+        {% if last_done %}
+        <a href="{{ url_for('bookings.detail', booking_id=last_done.id) }}#book-again"
+           class="btn btn-outline" style="padding:7px 16px;font-size:0.85rem">🔁 Repeat last clean</a>
+        {% endif %}
         {% if client.phone %}
         <a href="{{ url_for('messages.thread', phone=client.phone, name=client.name) }}"
            class="btn btn-outline" style="padding:7px 16px;font-size:0.85rem">💬 Message {{ client.name.split()[0] }}</a>
         {% endif %}
       </div>
+      {% set repeat_count = client.bookings | selectattr('repeat_of_booking_id') | list | length %}
+      {% if repeat_count %}
+      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 12px">🔁 On-demand client — {{ repeat_count }} repeat visit{{ 's' if repeat_count != 1 }}, no fixed schedule.</p>
+      {% endif %}
       {% if client.bookings %}
       <div class="table-wrap">
         <table>

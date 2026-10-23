@@ -3,9 +3,11 @@ name: Akye Stable Launch Certification
 on:
   pull_request:
     branches:
+      - main
       - akye-stable
   push:
     branches:
+      - main
       - akye-stable
   workflow_dispatch:
 
@@ -36,7 +38,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout exact candidate revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
 
@@ -45,7 +47,7 @@ jobs:
           echo "CANDIDATE_SHA=$(git rev-parse HEAD)"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip

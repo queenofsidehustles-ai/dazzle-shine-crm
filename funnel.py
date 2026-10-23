@@ -114,7 +114,7 @@ def compute(orgs, leads, now=None, days=None):
         {'key': 'signed_up', 'label': 'Signed up', 'n': signed_up,
          'means': 'opened a company'},
         {'key': 'activated', 'label': 'Activated', 'n': len(activated),
-         'means': 'assigned their first job, which starts the 14-day trial'},
+         'means': 'added their first cleaner and customer'},
         {'key': 'chose_plan', 'label': 'Chose a plan', 'n': len(chose_plan),
          'means': 'went through Stripe checkout'},
         {'key': 'paying', 'label': 'Paying now', 'n': len(paying),
@@ -202,6 +202,10 @@ def compute(orgs, leads, now=None, days=None):
     }
 
 
+def _last_asked(lead):
+    return lead.get('last_asked_at') or lead.get('created_at')
+
+
 def _follow_up(orgs, leads, signup_emails, now, billing):
     """Who to get in touch with, and why. Windowless on purpose -- see compute."""
     not_started, ending, failing = [], [], []
@@ -223,7 +227,10 @@ def _follow_up(orgs, leads, signup_emails, now, billing):
         if not trial or trial['expired']:
             continue
         row = dict(o, days_left=trial['days_left'])
-        if trial['phase'] == 'not_started':
+        # Every trial runs from signup now, so "not started" can no longer
+        # mean the clock. It means the more useful thing it always stood in
+        # for: signed up, paying attention to nothing, nothing in there yet.
+        if not trial.get('activated'):
             not_started.append(row)
         elif trial['days_left'] <= ENDING_SOON_DAYS:
             ending.append(row)
@@ -232,11 +239,17 @@ def _follow_up(orgs, leads, signup_emails, now, billing):
                if not l.get('contacted_at')
                and _email(l.get('email')) not in signup_emails]
 
+    # Newest first, as the company list is: the people worth reaching are the
+    # ones who signed up or asked this week. Trials ending stay soonest first.
     return {
-        'not_started': sorted(not_started, key=lambda o: o['days_left']),
+        'not_started': sorted(not_started, key=lambda o: o.get('created_at') or now,
+                              reverse=True),
         'ending': sorted(ending, key=lambda o: o['days_left']),
         'failing': failing,
-        'leads_waiting': sorted(waiting, key=lambda l: l.get('created_at') or now),
+        # A repeat request keeps the first row and moves last_asked_at, so
+        # sort on that: asking again is the warmest a lead gets.
+        'leads_waiting': sorted(waiting, key=lambda l: _last_asked(l) or now,
+                                reverse=True),
     }
 
 

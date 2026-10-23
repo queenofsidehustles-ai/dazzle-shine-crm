@@ -118,6 +118,10 @@ class Booking(db.Model):
     # never the customer. The payer stays in `email`; this is the passenger.
     cc_email = db.Column(db.String(120))
     cc_name = db.Column(db.String(120))
+    # Set when this job was made with "Book again" on a finished one — an
+    # on-demand repeat, not part of any recurring plan.
+    repeat_of_booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=True, index=True)
+    repeat_of = db.relationship('Booking', remote_side=[id], backref='repeats')
 
     # Payment
     stripe_payment_intent = db.Column(db.String(100))
@@ -641,6 +645,9 @@ class Lead(db.Model):
     source = db.Column(db.String(50), default='website')
     agent = db.Column(db.String(100))                 # team member (VA) credited for commission
     notes = db.Column(db.Text)
+    # The call-list lead this residential quote was written for, if any. See
+    # migration 0021 and CommercialQuote.prospect_id.
+    prospect_id = db.Column(db.Integer, index=True)
     # Residential or commercial side of the business. NULL on anything that
     # predates the split; brands.brand_for_lead works it out from service_type.
     brand = db.Column(db.String(20), index=True)
@@ -1072,7 +1079,11 @@ class CommercialQuote(db.Model):
     price_per_visit = db.Column(Money)
     monthly_price = db.Column(Money)
     scope_notes = db.Column(db.Text)
-    status = db.Column(db.String(20), default='draft')  # draft, sent, accepted, declined
+    # draft -> sent -> accepted | declined; sent -> withdrawn. Only a draft is
+    # ever edited or deleted: once sent, these are the terms a customer was
+    # offered, and a change is a new quote (revised_from_id), not this one
+    # rewritten under the link they were given. See blueprints/quotes.py.
+    status = db.Column(db.String(20), default='draft')
     token = db.Column(db.String(64), unique=True, nullable=False)
     brand = db.Column(db.String(10), default='lm')      # 'lm' (L & M) or 'dazzle'
     drip_step = db.Column(db.Integer, default=0)        # nurture follow-ups already sent
@@ -1081,6 +1092,207 @@ class CommercialQuote(db.Model):
     sent_at = db.Column(db.DateTime)
     viewed_at = db.Column(db.DateTime)      # first time the contact opened the proposal
     responded_at = db.Column(db.DateTime)
+    # The call-list lead this was written for, if any. Sending moves the lead to
+    # Proposal; accepting wins it. See migration 0021.
+    prospect_id = db.Column(db.Integer, index=True)
+    # Priced by work area, as JSON: commercial_pricing.area_quote()'s result as
+    # it was when saved -- {"areas": [{"name", "subtotal", "lines": [{"item",
+    # "label", "qty", "unit", "price", "override", "unit_rate"}]}], "work",
+    # "travel", "per_visit", "monthly", "first_visit_charge", "price_per_sqft", ...}.
+    # unit_rate is only set on a custom line priced as qty x a rate typed on
+    # the line itself, rather than a flat price (override=true).
+    # NULL on a quote priced the old way -- one figure and a list of services.
+    # Migration 0023.
+    line_items = db.Column(db.Text)
+    # Whether the customer sees what each line costs, or only each area's total.
+    show_line_prices = db.Column(db.Boolean, default=True, server_default=db.true())
+    # A new contract's first clean is slower than every visit after it. When
+    # set, area_quote() prices a one-time first-visit premium as its own line
+    # -- never folded into price_per_visit or monthly_price, which stay the
+    # recurring figures. Migration 0026.
+    first_visit_premium = db.Column(db.Boolean, default=False)
+    # Taken back before the customer answered -- by hand, or because a
+    # revision replaced it. Its link then says so and cannot be accepted.
+    withdrawn_at = db.Column(db.DateTime)
+    # The quote this one revises: the sent offer it replaced. Migration 0028.
+    revised_from_id = db.Column(db.Integer, index=True)
+    # The frozen copy the customer's link shows and can accept: set when a
+    # send succeeds, never changed after. NULL on a draft, and on a quote sent
+    # before revisions existed (see quote_evidence.issued). Migration 0029.
+    issued_revision_id = db.Column(db.Integer, index=True)
+    # How long an offer stays open once sent, and the moment it closes. The
+    # date is part of the frozen terms; a resend does not move it.
+    valid_days = db.Column(db.Integer, default=30, server_default='30')
+    expires_at = db.Column(db.DateTime)
+    # The account this offer is for -- carried by a revision or a rebid, or
+    # set by accepting. Accepting links by this key (or the lead's), never by
+    # matching a company name or an email address.
+    account_id = db.Column(db.Integer, index=True)
+    # An amendment: the accepted quote it changes, and that quote's agreement
+    # (NULL for one accepted before agreements were recorded). Once accepted,
+    # this replaces them; they are kept exactly as they were. At most one
+    # accepted amendment per quote -- a partial unique index, below -- so an
+    # account's terms never fork. Migration 0030.
+    amends_quote_id = db.Column(db.Integer, index=True)
+    amends_agreement_id = db.Column(db.Integer, index=True)
+
+    __table_args__ = (
+        db.Index('uq_commercial_quote_one_accepted_amendment', 'amends_quote_id', unique=True,
+                 postgresql_where=sa.text("status = 'accepted'"),
+                 sqlite_where=sa.text("status = 'accepted'")),
+    )
+
+    EDITABLE = ('draft',)
+    ANSWERABLE = ('sent',)
+
+    @property
+    def locked(self):
+        """Issued: its terms are fixed. Change means a revision."""
+        return self.status not in self.EDITABLE
+
+    @property
+    def expired(self):
+        """A sent offer past its date: it says so and accepts nothing."""
+        return bool(self.status == 'sent' and self.expires_at
+                    and self.expires_at <= datetime.utcnow())
+
+
+class QuoteRevision(db.Model):
+    """The exact terms of a quote as frozen for sending -- canonical JSON and
+    its SHA-256 -- written once and never changed (an ORM guard here, and a
+    database trigger from migration 0029). The customer's link is bound to
+    one of these; what they accept is checked against its hash."""
+    __tablename__ = 'commercial_quote_revision'
+    id = db.Column(db.Integer, primary_key=True)
+    quote_id = db.Column(db.Integer, db.ForeignKey('commercial_quote.id', ondelete='CASCADE'),
+                         nullable=False, index=True)
+    number = db.Column(db.Integer, nullable=False)
+    terms = db.Column(db.Text, nullable=False)
+    content_hash = db.Column(db.String(64), nullable=False)
+    # 'issued': frozen as it was sent. 'backfill': a quote sent before
+    # revisions existed, frozen as it stood when the customer answered it.
+    origin = db.Column(db.String(20), nullable=False, default='issued')
+    created_by = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (db.UniqueConstraint('quote_id', 'content_hash', name='uq_quote_revision_hash'),)
+
+
+class QuoteDelivery(db.Model):
+    """One attempt to send a revision: to whom, how, and what the provider
+    said. 'accepted_by_provider' is the mail service taking it -- not proof it
+    arrived; the provider's message id is what lets that be traced."""
+    __tablename__ = 'commercial_quote_delivery'
+    id = db.Column(db.Integer, primary_key=True)
+    quote_id = db.Column(db.Integer, nullable=False, index=True)
+    revision_id = db.Column(db.Integer, db.ForeignKey('commercial_quote_revision.id', ondelete='CASCADE'),
+                            nullable=False, index=True)
+    channel = db.Column(db.String(10), nullable=False, default='email')
+    recipient = db.Column(db.String(200))
+    provider = db.Column(db.String(30))
+    provider_message_id = db.Column(db.String(100))
+    status = db.Column(db.String(30), nullable=False)    # accepted_by_provider | failed
+    detail = db.Column(db.String(400))
+    sent_by = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    STATUSES = ('accepted_by_provider', 'failed')
+
+
+class QuoteResponse(db.Model):
+    """The customer's answer, bound to the revision they were shown: who, when,
+    from where, and the hash of the terms. One per quote (the unique key is
+    the last word on a double accept), and never changed or deleted. With the
+    account it created or joined, this is the executed agreement's record."""
+    __tablename__ = 'commercial_quote_response'
+    id = db.Column(db.Integer, primary_key=True)
+    quote_id = db.Column(db.Integer, db.ForeignKey('commercial_quote.id'), nullable=False, unique=True)
+    revision_id = db.Column(db.Integer, db.ForeignKey('commercial_quote_revision.id'), nullable=False, index=True)
+    content_hash = db.Column(db.String(64), nullable=False)
+    decision = db.Column(db.String(20), nullable=False)  # accepted | declined
+    signer_name = db.Column(db.String(120))
+    signer_title = db.Column(db.String(120))
+    signer_email = db.Column(db.String(200))             # where the offer was sent
+    ip_address = db.Column(db.String(64))
+    user_agent = db.Column(db.String(300))
+    account_id = db.Column(db.Integer, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class CommercialAgreement(db.Model):
+    """What an acceptance made binding: the accepted revision, the customer's
+    answer, and the account it applies to, from the day it was accepted. An
+    amendment is a later agreement naming the one it replaces; nothing about
+    the replaced one changes, so "what was agreed on 3 March" always has an
+    answer. Written once (see _evidence_is_permanent)."""
+    __tablename__ = 'commercial_agreement'
+    id = db.Column(db.Integer, primary_key=True)
+    quote_id = db.Column(db.Integer, db.ForeignKey('commercial_quote.id'), nullable=False, unique=True)
+    revision_id = db.Column(db.Integer, db.ForeignKey('commercial_quote_revision.id'), nullable=False)
+    response_id = db.Column(db.Integer, db.ForeignKey('commercial_quote_response.id'), nullable=False, unique=True)
+    account_id = db.Column(db.Integer, index=True)
+    content_hash = db.Column(db.String(64), nullable=False)
+    effective_on = db.Column(db.Date, nullable=False)
+    # Unique: an agreement is replaced at most once, so terms never fork.
+    amends_agreement_id = db.Column(db.Integer, db.ForeignKey('commercial_agreement.id'), unique=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EmailDeliveryEvent(db.Model):
+    """What the mail service later said about a message we sent: delivered,
+    bounced, marked as spam, delayed -- and for which recipient. Keyed by the
+    provider's message id, not by any row of ours, so an event that arrives
+    before the send that caused it has finished saving is still kept (see
+    delivery_events.py). One row per provider event: a webhook delivered twice
+    is recorded once."""
+    __tablename__ = 'email_delivery_event'
+    id = db.Column(db.Integer, primary_key=True)
+    provider_message_id = db.Column(db.String(100), nullable=False, index=True)
+    recipient = db.Column(db.String(200))
+    event = db.Column(db.String(30), nullable=False)    # delivered | bounced | complained | delivery_delayed
+    provider_event_id = db.Column(db.String(100), unique=True)
+    occurred_at = db.Column(db.DateTime)
+    detail = db.Column(db.String(400))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    LABELS = {'delivered': 'Delivered', 'bounced': 'Bounced', 'complained': 'Marked as spam',
+              'delivery_delayed': 'Delayed'}
+
+    LABELS = {'delivered': 'Delivered', 'bounced': 'Bounced', 'complained': 'Marked as spam',
+              'delivery_delayed': 'Delayed'}
+
+
+class ContractAuditEvent(db.Model):
+    """One thing that happened to a quote or agreement: who (a login, the
+    customer, the mail service), what, when, from where, with which request.
+    Appended in the same transaction as the change it describes, so the trail
+    and the record cannot disagree; never edited (see contract_audit.py)."""
+    __tablename__ = 'contract_audit_event'
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    event = db.Column(db.String(40), nullable=False)
+    quote_id = db.Column(db.Integer, index=True)
+    revision_id = db.Column(db.Integer)
+    agreement_id = db.Column(db.Integer, index=True)
+    actor_kind = db.Column(db.String(20), nullable=False)   # staff | customer | provider | system
+    actor = db.Column(db.String(200))
+    ip_address = db.Column(db.String(64))
+    request_id = db.Column(db.String(36), index=True)
+    detail = db.Column(db.Text)                             # JSON
+    # Its place in the trail's hash chain, filled in by the database on insert
+    # (quote_evidence.audit_chain_sql, migration 0031) -- never by this code.
+    chain_seq = db.Column(db.BigInteger)   # unique: migration 0031's index
+    prev_hash = db.Column(db.String(64))
+    row_hash = db.Column(db.String(64))
+
+
+def _evidence_is_permanent(mapper, connection, target):
+    raise ValueError(f'{target.__tablename__} rows are evidence: written once, never changed or deleted.')
+
+
+for _model in (QuoteRevision, QuoteResponse, CommercialAgreement, EmailDeliveryEvent, ContractAuditEvent):
+    sa.event.listen(_model, 'before_update', _evidence_is_permanent)
+    sa.event.listen(_model, 'before_delete', _evidence_is_permanent)
+sa.event.listen(QuoteDelivery, 'before_delete', _evidence_is_permanent)
 
 
 class Staff(db.Model):
@@ -1505,7 +1717,8 @@ class EmailTemplate(db.Model):
                     '{{booking_time}}', '{{service_type}}', '{{address}}', '{{price}}',
                     '{{deposit}}', '{{balance}}', '{{cleaner_name}}', '{{phone}}'],
         'lead':    ['{{first_name}}', '{{full_name}}', '{{business_name}}', '{{service_type}}',
-                    '{{quote_amount}}', '{{phone}}', '{{booking_link}}', '{{discount_code}}'],
+                    '{{quote_amount}}', '{{deposit}}', '{{phone}}', '{{booking_link}}',
+                    '{{discount_code}}'],
         'cleaner': ['{{first_name}}', '{{full_name}}', '{{business_name}}', '{{job_date}}',
                     '{{job_address}}', '{{service_type}}', '{{earnings}}', '{{sign_link}}'],
         'owner':   ['{{applicant_name}}', '{{client_name}}', '{{business_name}}',
@@ -1579,6 +1792,9 @@ class Script(db.Model):
         'general_contractor': 'call_construction',
         'office':             'call_office',
         'daycare':            'call_office',
+        'restaurant':         'call_office',
+        'gym':                'call_office',
+        'church':             'call_office',
         'other':              'call_office',
     }
 
@@ -1817,6 +2033,16 @@ class Prospect(db.Model):
     last_drip_at = db.Column(db.DateTime)
     last_emailed_at = db.Column(db.DateTime)
 
+    # What the walkthrough found -- size, restrooms, how often, which services
+    # -- as JSON, and when it was done. Read through prospecting.walkthrough();
+    # it fills in the quote. See migration 0022.
+    walkthrough = db.Column(db.Text)
+    walkthrough_at = db.Column(db.DateTime)
+    # Handed to the owner to quote, and by whom: a rep's job ends where the
+    # pricing starts. Cleared when a quote is written. Migration 0024.
+    ready_to_quote_at = db.Column(db.DateTime)
+    ready_by = db.Column(db.String(100))
+
     # Residential or commercial side of the business. Set from the search that
     # imported them, so it is recorded rather than guessed. NULL on anything
     # that predates the split; brands.brand_for_prospect fills it from category.
@@ -1828,6 +2054,9 @@ class Prospect(db.Model):
         'airbnb': '🛏️ Airbnb / STR Host',
         'apartment': '🏘️ Apartment Complex',
         'daycare': '🧸 Daycare / Childcare',
+        'restaurant': '🍽️ Restaurant / Café',
+        'gym': '🏋️ Gym / Fitness Studio',
+        'church': '⛪ Church / Place of Worship',
         'medical_office': '🩺 Doctor / Medical Office',
         'general_contractor': '🏗️ General Contractor',
         'office': '💼 Office Space',
@@ -1915,6 +2144,19 @@ class Prospect(db.Model):
         return self.CATEGORY_LABELS.get(self.category, self.category or 'Other')
 
     @property
+    def is_commercial(self):
+        """Commercial work (an office contract) or residential (homes, units,
+        turnovers -- even when a business is buying them). Stored as the brand,
+        which also picks the scripts and the sender, and set from the category
+        until somebody flips it by hand."""
+        import brands
+        return (self.brand or brands.brand_for_prospect(self)) == brands.COMMERCIAL
+
+    @property
+    def kind_label(self):
+        return '🏢 Commercial' if self.is_commercial else '🏠 Residential'
+
+    @property
     def status_label(self):
         return self.STATUS_LABELS.get(self.status, self.status or 'New')
 
@@ -1939,6 +2181,58 @@ class Prospect(db.Model):
         return 'later'
 
 
+class FeatureSeen(db.Model):
+    """What one person has found of the product: the menu features they have
+    opened, the tips they have read, and the suggestions they were shown or
+    turned down (adoption.py).
+
+    Per person, not per company -- a new dispatcher has seen none of it,
+    whatever the owner has -- and keyed by a login, not a name. One row per
+    person per feature, written the first time anything happens to it.
+    """
+    __tablename__ = 'feature_seen'
+    id = db.Column(db.Integer, primary_key=True)
+    user_key = db.Column(db.String(40), nullable=False)   # 'u<id>', or 'owner' for the env login
+    endpoint = db.Column(db.String(80), nullable=False)   # a menu page (help_tips key)
+    first_seen_at = db.Column(db.DateTime)                # first opened the page
+    tip_opened_at = db.Column(db.DateTime)                # first read its tip
+    suggested_at = db.Column(db.DateTime)                 # last shown as "Did you know?"
+    dismissed_at = db.Column(db.DateTime)                 # said "Not now" -- never suggested again
+    __table_args__ = (db.UniqueConstraint('user_key', 'endpoint', name='uq_feature_seen_user_endpoint'),)
+
+
+class ProspectActivity(db.Model):
+    """One thing somebody did on a lead: a call, a text, an email, a
+    walkthrough booked or done, a hand-off to the owner.
+
+    A lead keeps only its latest call (called_at) and a running count
+    (attempts), which says nothing about who made them or on which day --
+    so "how many calls did Sam make this week" had no answer. This is that
+    answer, one row per act. The business name is copied in so the history
+    still reads after a lead is deleted.
+    """
+    __tablename__ = 'prospect_activity'
+    id = db.Column(db.Integer, primary_key=True)
+    prospect_id = db.Column(db.Integer, index=True)
+    business_name = db.Column(db.String(200))
+    user_id = db.Column(db.Integer)
+    user_name = db.Column(db.String(120), index=True)
+    kind = db.Column(db.String(30), nullable=False)   # see KINDS
+    outcome = db.Column(db.String(30))                # a call's Prospect status
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    KINDS = {
+        'call': 'Call',
+        'text': 'Text',
+        'email': 'Email',
+        'walkthrough_booked': 'Walkthrough booked',
+        'walkthrough': 'Walkthrough done',
+        'handoff': 'Handed over to quote',
+    }
+    # Calls that reached nobody. Everything else is a conversation.
+    NO_CONVERSATION = ('no_answer', 'voicemail', 'new', None, '')
+
+
 class User(db.Model):
     """A person who can log into the CRM.
     role 'owner'  → sees everything, money included (that's Monica).
@@ -1960,6 +2254,9 @@ class User(db.Model):
     # without granting anything, since only totp_enabled gates the login path.
     totp_secret = db.Column(db.String(64))
     totp_enabled = db.Column(db.Boolean, default=False)
+    # Calls a day the owner expects of a Sales rep. Empty: the company's
+    # default (BusinessSetting 'sales_daily_calls').
+    daily_call_target = db.Column(db.Integer)
     totp_backup_codes = db.Column(db.Text)  # JSON list of hashed one-time codes
 
     def set_password(self, pw):
@@ -2073,12 +2370,24 @@ class ErrorLog(db.Model):
     @staticmethod
     def record(kind, message, path='', method='', endpoint='', who='',
                traceback='', fingerprint=None, return_new=False):
-        """Add an occurrence. Returns the row, or (row, is_new)."""
+        """Add an occurrence. Returns the row, or (row, is_new).
+
+        Written with the request's own session. When the error was the
+        database refusing something, that session is already broken and its
+        first query fails; the work it held is lost either way, so it is
+        rolled back and the lookup tried once more. Only the lookup: a commit
+        that failed may still have landed, and doing it again would count the
+        fault twice. Without this, the most serious crashes were the ones
+        never recorded."""
         from extensions import db as _db
         fp = fingerprint or hashlib.sha256(
             f'{endpoint}|{kind}|{path}'.encode()).hexdigest()[:32]
         try:
-            row = ErrorLog.query.filter_by(fingerprint=fp).first()
+            try:
+                row = ErrorLog.query.filter_by(fingerprint=fp).first()
+            except Exception:
+                _db.session.rollback()
+                row = ErrorLog.query.filter_by(fingerprint=fp).first()
             is_new = row is None
             if row is None:
                 row = ErrorLog(fingerprint=fp, kind=kind, message=message,

@@ -236,7 +236,17 @@ def new():
             last = max(client.bookings, key=lambda b: b.created_at or datetime.min)
     return render_template('admin/booking_new.html',
                            service_labels=SERVICE_LABELS, extras=EXTRAS, frequency_labels=_FREQ,
-                           default_lead_fee=get_lead_fee(), client=client, last=last)
+                           default_lead_fee=get_lead_fee(), client=client, last=last,
+                           deposit=_pricing_deposit())
+
+
+def _pricing_deposit():
+    """The deposit set on Pricing, for the "send a deposit link" option."""
+    from pricing import get_deposit
+    try:
+        return float(get_deposit() or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 @bookings_bp.route('/calendar')
@@ -326,6 +336,37 @@ def calendar():
         prev_year=prev_year, prev_month=prev_month,
         next_year=next_year, next_month=next_month,
     )
+
+
+@bookings_bp.route('/<int:booking_id>/mark-complete', methods=['POST'])
+@login_required
+def mark_complete(booking_id):
+    """Close a booking as completed by hand, with no photos needed.
+
+    Runs the same follow-through as choosing Completed on the booking page.
+    """
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.status in ('completed', 'cancelled', 'on_hold'):
+        flash(f'This booking is {booking.status.replace("_", " ")}, so it can\'t be marked complete here.', 'info')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    from datetime import datetime as _dt
+    booking.status = 'completed'
+    booking.completed_at = _dt.utcnow()
+    db.session.commit()
+    try:
+        import contractor_pay
+        contractor_pay.queue_for_booking(booking)
+        _send_followup_email(booking)
+        if not booking.skip_review:
+            _send_rating_request(booking)
+        _create_next_recurring(booking)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        flash('Marked complete ✅ — but a follow-up step errored.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    flash('Marked complete.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
 @bookings_bp.route('/<int:booking_id>', methods=['GET', 'POST'])
@@ -574,31 +615,44 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
         return ' ⚠️ No email or phone on this booking, so the customer was told nothing.'
 
     sent, failed = [], []
+    # Both sends report by returning, not by raising. Calling them bare inside a
+    # try and then appending to `sent` on the next line was the whole bug: a
+    # confirmation and a deposit request that reached nobody still produced
+    # "Sent the confirmation and deposit request", and the only way to find out
+    # otherwise was the customer saying they never got it.
     if confirmation:
         try:
-            _send_booking_confirmation(b)
-            sent.append('confirmation 📩')
+            ok, why = _send_booking_confirmation(b)
+            if ok:
+                sent.append('confirmation 📩')
+            else:
+                failed.append(f'confirmation ({why})')
         except Exception as e:
             failed.append(f'confirmation ({e})')
 
     if pay_kind in ('deposit', 'full'):
         label = 'deposit request 💳' if pay_kind == 'deposit' else 'payment link 💳'
         try:
-            from blueprints.payments import send_payment_link
-            send_payment_link(b, kind=pay_kind)
-            sent.append(label)
+            from blueprints.payments import send_payment_link_detail
+            ok, why = send_payment_link_detail(b, kind=pay_kind)
+            if ok:
+                sent.append(label)
+            else:
+                failed.append(f'{label} ({why})')
         except Exception as e:
             failed.append(f'{label} ({e})')
 
+    # Flash only. send_email and send_sms write their own Sent Log row on every
+    # refusal they report -- the demo guard blocking it, no key connected, no
+    # address, Resend rejecting it -- naming the actual reason and the actual
+    # recipient. This loop used to add a second, vaguer row on top ("Booking
+    # confirmation / payment request", no body), which never showed because
+    # `failed` was always empty while the senders claimed success. Now that
+    # failures are real, logging here would double every entry in her Sent Log
+    # and the duplicate would be the less informative of the two.
     for f in failed:
         flash(f'⚠️ Could not send the {f} to {b.name or "the customer"}. '
               f'Check the Sent Log for details.', 'warning')
-        try:
-            from notifications import _log_outbound
-            _log_outbound('email', b.email or b.phone, b.name,
-                          'Booking confirmation / payment request', '', False, f)
-        except Exception:
-            pass
 
     return (' Sent the ' + ' and '.join(sent) + '.') if sent else ''
 
@@ -939,7 +993,8 @@ def broadcast(booking_id):
     # Offered from the list, not just the detail page (see bookings.html's row
     # actions) -- land back where the click happened rather than forcing a
     # detour through the job it was about.
-    return redirect(request.form.get('next') or request.referrer
+    import security
+    return redirect(security.local_target(request.form.get('next'), request.referrer)
                     or url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -1085,6 +1140,96 @@ def save_crew(booking_id):
         return _send_job_to(b, [added])
 
     flash('Saved — ' + ', '.join(msgs) + '.' if msgs else 'Pay saved.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/assign', methods=['POST'])
+@login_required
+def assign(booking_id):
+    """Put somebody on this job -- a named cleaner or the whole team -- set what
+    they are paid, and send them the work, in one press.
+
+    One decision used to be three cards. The cleaner dropdown was buried at the
+    bottom of the pay card; "offer it to the whole team", much the rarer choice,
+    was a card of its own with the bigger gold button; and the checklist every
+    cleaner needs to do the job was a third card further down the page. The
+    common thing to want was the hardest of the three to reach."""
+    from flask import session, abort
+    import rbac
+    b = Booking.query.get_or_404(booking_id)
+    who = (request.form.get('assign_to') or '').strip()
+
+    # How many people the job needs is set in the same breath as who does it,
+    # and it has to be applied BEFORE anything is offered: it decides how many
+    # spots the team message advertises and how the pot divides per cleaner.
+    if 'crew_size' in request.form:
+        try:
+            want = max(1, min(6, int(request.form.get('crew_size') or 1)))
+        except ValueError:
+            want = b.crew_size or 1
+        # Never below the people already on it -- that would strand somebody,
+        # and orphan an already-paid share.
+        want = max(want, len(b.crew))
+        if want != (b.crew_size or 1):
+            b.crew_size = want
+            db.session.commit()
+
+    if not who:
+        # Changing only the headcount is a real thing to want, so saying so is
+        # better than scolding her for not picking a name as well.
+        if 'crew_size' in request.form:
+            flash(f'This job is set to {b.crew_size} paid cleaner'
+                  f'{"s" if b.crew_size != 1 else ""}.', 'success')
+        else:
+            flash('Pick a cleaner, or choose to offer it to the whole team.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    # The pay is read before anybody is told anything, so the figure in the
+    # offer is the figure she just typed rather than the one it replaced.
+    raw = (request.form.get('add_pay') or '').strip().replace('$', '').replace(',', '')
+    pay = None
+    if raw:
+        try:
+            pay = max(0.0, round(float(raw), 2))
+        except ValueError:
+            flash('That pay figure is not a number.', 'error')
+            return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    if who == 'team':
+        # Offering work to everyone is a dispatch action. Folding it into a
+        # control that also sets pay must not hand dispatch to a role that only
+        # had the money half, nor the reverse -- so the half this endpoint is
+        # not registered under is checked here by hand.
+        if not rbac.has_permission(session.get('role'), 'dispatch.manage'):
+            abort(403)
+        if pay is not None:
+            b.crew_pay_each = pay
+            db.session.commit()
+        return broadcast(booking_id)
+
+    s = Staff.query.get(int(who)) if who.isdigit() else None
+    if not s:
+        flash('That cleaner is no longer on your team.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if b.crew_row_for(s):
+        flash(f'{s.name} is already on this job.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if b.spots_left <= 0:
+        # Picking somebody when every spot is taken is what wanting one more
+        # person looks like, so make room rather than refusing.
+        b.crew_size = min(6, (b.crew_size or 1) + 1)
+
+    amount = pay if pay is not None else b.default_crew_pay(s)
+    db.session.add(BookingCrew(booking_id=b.id, staff_id=s.id, pay_amount=amount))
+    if not b.assigned_cleaner:
+        b.assigned_cleaner = s.name
+    b.open_for_claim = False          # assigned by hand -- it is off the board
+    db.session.commit()
+
+    if request.form.get('send_checklist'):
+        return _send_job_to(b, [s])
+    flash(f'{s.name} is on this job at ${amount:.2f}. Nothing was sent to her yet.',
+          'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -1524,7 +1669,8 @@ def hold(booking_id):
     # Held from the list, not just the detail page (see bookings.html's row
     # actions) -- every early return below shares this, so the list-hold
     # button lands back on the list whichever branch it hits.
-    back = redirect(request.form.get('next') or request.referrer
+    import security
+    back = redirect(security.local_target(request.form.get('next'), request.referrer)
                     or url_for('bookings.detail', booking_id=booking_id))
     if b.status in ('completed', 'cancelled'):
         flash(f'That job is {b.status_label.lower()} — there is nothing to put on hold.',
@@ -2349,6 +2495,59 @@ def start_plan(booking_id):
     return redirect(url_for('bookings.detail', booking_id=seed.id))
 
 
+@bookings_bp.route('/<int:booking_id>/book-again', methods=['POST'])
+@login_required
+def book_again(booking_id):
+    """Repeat a finished job on a date the owner picks — for clients who come
+    back now and then rather than on a schedule. The copy is a plain one-off
+    booking (no recurring plan), so confirmation, invoicing and payment work
+    exactly as they do for any other job."""
+    done = Booking.query.get_or_404(booking_id)
+    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+    if done.status != 'completed':
+        flash('Only a completed job can be booked again.', 'error')
+        return back
+    # Same ceiling as every other way of creating a job — repeating a clean is
+    # still a new booking.
+    ok, why = entitlements.check_limit('jobs_per_month')
+    if not ok:
+        flash(why, 'error')
+        return back
+    try:
+        on_date = date.fromisoformat((request.form.get('repeat_date') or '').strip())
+    except ValueError:
+        flash('Pick the date for the repeat clean.', 'error')
+        return back
+
+    price = done.price
+    price_raw = (request.form.get('repeat_price') or '').strip().replace('$', '').replace(',', '')
+    if price_raw:
+        try:
+            price = round(float(price_raw), 2)
+        except ValueError:
+            flash('That price is not a number.', 'error')
+            return back
+
+    overrides = dict(
+        frequency='one_time', recurring_active=False, repeat_of_booking_id=done.id,
+        price=price, balance_due=price, cc_email=done.cc_email, cc_name=done.cc_name,
+        # The scope the customer accepted, including tasks taken off the default.
+        promised_checklist=done.promised_checklist,
+        preferred_time=(request.form.get('repeat_time') or '').strip() or done.preferred_time,
+    )
+    # A crew job's people live in BookingCrew rows, which a repeat starts without.
+    # Keeping just the lead's name would mark the job covered while every spot
+    # is still open, so a crew job comes back unassigned and gets claimed fresh.
+    if not request.form.get('same_cleaner') or (done.crew_size or 1) > 1:
+        overrides['assigned_cleaner'] = None
+    new = recurring.clone_booking(done, on_date, **overrides)
+    db.session.add(new)
+    db.session.commit()
+    _link_client(new)
+    flash(f'🔁 Booked again — #{new.id} on {on_date.isoformat()}.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=new.id))
+
+
 @bookings_bp.route('/<int:booking_id>/stop-recurring', methods=['POST'])
 @login_required
 def stop_recurring(booking_id):
@@ -2498,7 +2697,13 @@ def client_detail(client_id):
     from blueprints.portal import ensure_portal_token
     portal_url = f"{branding.crm_base()}/portal/{ensure_portal_token(client)}"
     from models import BusinessSetting
+    # Latest by when it was actually finished, not by booking id: backfilled or
+    # rescheduled jobs aren't entered in order.
+    done = [b for b in client.bookings if b.status == 'completed']
+    last_done = max(done, key=lambda b: (b.completed_at or datetime.min,
+                                         b.preferred_date or '', b.id), default=None)
     return render_template('admin/client_detail.html', client=client, portal_url=portal_url,
+                           last_done=last_done,
                            email_ok=looks_like_email(client.email),
                            invite_sent=BusinessSetting.get(f'portal_invite_sent_{client.id}'))
 
@@ -2639,32 +2844,82 @@ def delete_client(client_id):
 
 # ── Cleaner accept / decline ────────────────────────────────────────────────────
 
-@bookings_bp.route('/<int:booking_id>/cleaner-response', methods=['GET'])
+def cleaner_response_token(booking):
+    """The token on a cleaner's accept / decline links for `booking`.
+
+    Signed over the company, the job and the cleaner it was offered to. The
+    old one was sha256(booking id + secret): the same token for job #N at
+    every company on the platform, so a link one company sent opened job #N at
+    any other; and it outlived a reassignment, so whoever was first offered the
+    job could still decline it for whoever has it now.
+    """
+    import hmac
+    import os
+    import tenancy
+    secret = (os.environ.get('SECRET_KEY') or '').encode()
+    who = (booking.assigned_cleaner or '').strip().lower()
+    msg = f'cleaner-response:{tenancy.current_schema()}:{booking.id}:{who}'.encode()
+    return hmac.new(secret, msg, 'sha256').hexdigest()[:32]
+
+
+def _legacy_cleaner_token(booking_id):
+    """What links sent before cleaner_response_token() carry. Honoured on a
+    single-business install only, where there is no other company for it to
+    open; on the platform an old link asks for a fresh one."""
+    import hashlib
+    import os
+    return hashlib.sha256(f"{booking_id}{os.environ.get('SECRET_KEY', 'secret')}".encode()).hexdigest()[:16]
+
+
+def _cleaner_token_ok(booking, token):
+    import hmac
+    import os
+    token = (token or '').strip()
+    if not token or not booking.assigned_cleaner:
+        return False
+    if hmac.compare_digest(token, cleaner_response_token(booking)):
+        return True
+    return (not (os.environ.get('BASE_DOMAIN') or '').strip()
+            and hmac.compare_digest(token, _legacy_cleaner_token(booking.id)))
+
+
+@bookings_bp.route('/<int:booking_id>/cleaner-response', methods=['GET', 'POST'])
 def cleaner_response(booking_id):
-    """Public link — cleaner accepts or declines a job."""
+    """Public link -- the cleaner accepts or declines a job.
+
+    Opening the link only asks; the answer is a POST from the button on that
+    page. Email security scanners open every link in a message, and on a GET
+    they used to accept and then decline the job -- and a decline unassigns
+    the cleaner.
+    """
     booking = Booking.query.get_or_404(booking_id)
-    action = request.args.get('action', '')
-    token = request.args.get('token', '')
-    import hashlib, os
-    expected = hashlib.sha256(f"{booking_id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
-    if token != expected:
-        return 'Invalid link.', 400
+    action = (request.values.get('action') or '').strip()
+    token = request.values.get('token') or ''
+    if not _cleaner_token_ok(booking, token):
+        return ('This link is no longer valid -- the job may have been reassigned. '
+                'Please contact the office.', 400)
+    if action not in ('accept', 'decline'):
+        return 'Unknown action.', 400
+    if request.method == 'GET':
+        return render_template('public/cleaner_response.html', booking=booking, action=action,
+                               token=token, done=None, biz=branding.biz_name())
     who = booking.assigned_cleaner or 'The cleaner'
     if action == 'accept':
         booking.cleaner_response = 'accepted'
         booking.internal_notes = (booking.internal_notes or '') + f'\n[Cleaner accepted job on {datetime.utcnow().strftime("%b %d %Y")}]'
         db.session.commit()
         _alert_owner_response(booking, who, accepted=True)
-        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#065f46">✅ Job accepted! We\'ll see you on ' + (booking.preferred_date or 'the scheduled date') + '.</h2>'
-    elif action == 'decline':
+        done = 'accepted'
+    else:
         booking.cleaner_response = 'declined'
         booking.internal_notes = (booking.internal_notes or '') + f'\n[{who} declined job on {datetime.utcnow().strftime("%b %d %Y")} — needs reassignment]'
         db.session.commit()
         _alert_owner_response(booking, who, accepted=False)
         booking.assigned_cleaner = ''      # unassign after the alert so we know who declined
         db.session.commit()
-        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#991b1b">Job declined. We\'ve let the office know and will reassign. Thank you for telling us!</h2>'
-    return 'Unknown action.', 400
+        done = 'declined'
+    return render_template('public/cleaner_response.html', booking=booking, action=action,
+                           token='', done=done, biz=branding.biz_name())
 
 
 def _alert_owner_response(booking, cleaner_name, accepted):
@@ -2858,19 +3113,39 @@ def confirmation_content(booking):
 
 def _send_booking_confirmation(booking):
     """Confirm a hand-created booking to the customer via email + text.
-    No deposit language — a simple 'you're booked' note. Best-effort."""
+    No deposit language — a simple 'you're booked' note.
+
+    Returns (ok, detail): ok is True when the email or the text actually went.
+    It used to return nothing at all, and send_email reports a refusal by
+    returning (False, detail) rather than raising, so the caller's try/except
+    could only ever conclude the confirmation had been sent."""
     from notifications import send_email, send_sms
     subject, html, sms = confirmation_content(booking)
+    ok, detail = False, ''
 
     if booking.email:
-        send_email(to_email=booking.email, to_name=booking.name,
-                   subject=subject, html=html, cc=booking.cc_email)
+        try:
+            mailed, why = send_email(to_email=booking.email, to_name=booking.name,
+                                     subject=subject, html=html, cc=booking.cc_email)
+            ok = ok or bool(mailed)
+            if not mailed:
+                detail = why or 'the email was refused'
+        except Exception as e:
+            detail = str(e)
 
     if booking.phone:
         try:
-            send_sms(booking.phone, sms)
-        except Exception:
-            pass
+            texted, why = send_sms(booking.phone, sms)
+            ok = ok or bool(texted)
+            if not texted and not detail:
+                detail = why or 'the text was refused'
+        except Exception as e:
+            if not detail:
+                detail = str(e)
+
+    if not ok and not detail:
+        detail = 'no email address or phone number on this booking'
+    return ok, detail
 
 
 def _create_next_recurring(booking):
@@ -2917,7 +3192,6 @@ def _create_next_recurring(booking):
 
 def _notify_cleaner(booking):
     """Email the assigned cleaner with job details, earnings, and accept/decline links."""
-    import hashlib, os
     from models import Staff
     from notifications import send_email
     from pricing import SERVICES
@@ -2942,7 +3216,7 @@ def _notify_cleaner(booking):
     size_line = booking.size_line()
 
     base = branding.crm_base()
-    token = hashlib.sha256(f"{booking.id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
+    token = cleaner_response_token(booking)
     accept_url = f"{base}/bookings/{booking.id}/cleaner-response?action=accept&token={token}"
     decline_url = f"{base}/bookings/{booking.id}/cleaner-response?action=decline&token={token}"
     svc_label = SERVICES.get(booking.service_type, {}).get('label', booking.service_type.title())

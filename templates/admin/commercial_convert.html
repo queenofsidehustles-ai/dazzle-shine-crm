@@ -3,7 +3,7 @@
 {% block page_title %}Won! 🎉 Set up the account{% endblock %}
 
 {% block content %}
-<div style="margin-bottom:14px"><a href="{{ url_for('places_finder.dashboard') }}" style="color:var(--softer);font-size:0.9rem">← Back to Find Leads</a></div>
+<div style="margin-bottom:14px"><a href="{{ url_for('places_finder.lead_page', prospect_id=p.id) }}" style="color:var(--softer);font-size:0.9rem">← Back to {{ p.business_name }}</a></div>
 
 <div class="card" style="margin-bottom:18px;background:rgba(211,168,79,0.08)">
   <strong style="font-size:1.05rem">{{ p.business_name }}</strong>
@@ -18,8 +18,8 @@
   </p>
   <form method="POST" action="{{ url_for('commercial.convert', prospect_id=p.id) }}"
         style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
-    <div><label class="lbl">Contact person</label><input class="inp" name="contact_name" placeholder="Who you spoke to"></div>
-    <div><label class="lbl">Email</label><input class="inp" name="email" placeholder="for invoices"></div>
+    <div><label class="lbl">Contact person</label><input class="inp" name="contact_name" value="{{ p.contact_name or '' }}" placeholder="Who you spoke to"></div>
+    <div><label class="lbl">Email</label><input class="inp" name="email" value="{{ p.email or '' }}" placeholder="for invoices"></div>
     <div><label class="lbl">Phone</label><input class="inp" name="phone" value="{{ p.phone or '' }}"></div>
     <div><label class="lbl">How often</label>
       <select class="inp" name="frequency">{% for f in frequencies %}<option value="{{ f }}" {{ 'selected' if f=='weekly' }}>{{ freq_labels[f] }}</option>{% endfor %}</select></div>

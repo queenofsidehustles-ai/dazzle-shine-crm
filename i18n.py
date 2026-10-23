@@ -230,7 +230,8 @@ def auto(text, lang=None):
     code = normalise(lang if lang is not None else current())
     if code == DEFAULT or not (text or '').strip():
         return text
-    if not os.environ.get('OPENROUTER_API_KEY'):
+    import llm
+    if not os.environ.get('OPENROUTER_API_KEY') and not llm.ready():
         return text
     try:
         from translate import translate

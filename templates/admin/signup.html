@@ -1,9 +1,21 @@
 {% extends "admin/login_shell.html" %}
 {% block title %}Start your cleaning business CRM{% endblock %}
+{% block head_extra %}{% include '_meta_pixel.html' %}{% endblock %}
 {% block panel %}
   <h1>Set up your cleaning business</h1>
   <p class="lead">A minute from now you'll have your own CRM at your own web
      address, with nothing in it but your business name.</p>
+
+  {# Track 0: somebody arriving from an ad sees what they are signing up
+     for before being asked to. Appears only once the video exists
+     (funnel_videos.py) -- never an empty box. #}
+  {% if VIDEOS.overview %}
+  <div style="position:relative;padding-bottom:56.25%;height:0;margin:0 0 18px;border-radius:10px;overflow:hidden;background:var(--ink)">
+    <iframe src="{{ VIDEO_EMBEDS.overview }}" title="What it looks like once it is set up"
+            style="position:absolute;inset:0;width:100%;height:100%;border:0"
+            allowfullscreen loading="lazy"></iframe>
+  </div>
+  {% endif %}
 
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
@@ -29,12 +41,28 @@
       later.
     </div>
 
+    {# One field, and it does four jobs: the timezone everything is scheduled
+       against, the Google lookup that fills in their phone and address, the
+       local price we propose, and their own records. A city would do none of
+       them reliably -- there are thirty-odd Springfields. #}
+    <label for="zip_code">Business ZIP code</label>
+    <input id="zip_code" name="zip_code" required inputmode="numeric"
+           pattern="[0-9]{5}(-[0-9]{4})?" maxlength="10"
+           value="{{ form.zip_code or '' }}" placeholder="32801" />
+    <p class="small">So your reminders go out at the right hour, and we can fill
+       in the rest of your details for you.</p>
+
+    {# The browser already knows the timezone. Asking would be a question with
+       a right answer we could have worked out ourselves. #}
+    <input type="hidden" id="browser_tz" name="browser_tz" value="" />
+
     <label for="name">Your name</label>
     <input id="name" name="name" required value="{{ form.name or '' }}" />
 
     <label for="email">Your email</label>
     <input id="email" name="email" type="email" required
            value="{{ form.email or '' }}" autocomplete="username" />
+    <p class="small">We'll send your web address and sign-in details here.</p>
 
     <label for="password">Choose a password</label>
     <input id="password" name="password" type="password" required minlength="8"
@@ -59,10 +87,42 @@
        pressing it gets them. #}
     <button type="submit">Start my free trial</button>
   </form>
+<script>
+  // Best-effort: a browser that will not say, or says something ZoneInfo does
+  // not know, simply leaves this empty and the ZIP decides instead.
+  try {
+    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    document.getElementById('browser_tz').value = tz;
+  } catch (e) {}
+</script>
 
   <a class="back" href="/login">Already have an account? Sign in</a>
 
   <script>
+    // Note the email as soon as it is typed, before the account exists, so
+    // somebody who leaves at the password box can still be helped to finish
+    // (signup.started). Once per address; failure is silent and harmless.
+    (function () {
+      var email = document.getElementById('email');
+      var sent = {};
+      email.addEventListener('blur', function () {
+        var v = (email.value || '').trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(v) || sent[v]) return;
+        sent[v] = true;
+        try {
+          fetch('/signup/started', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              email: v,
+              name: (document.getElementById('name').value || '').trim(),
+              business: (document.getElementById('business').value || '').trim(),
+              website: (document.getElementById('website').value || '')
+            }), keepalive: true
+          }).catch(function () {});
+        } catch (e) {}
+      });
+    })();
+
     // Suggest an address from the business name, until the person edits it
     // themselves -- after which it is theirs and we stop interfering.
     (function () {

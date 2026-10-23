@@ -177,6 +177,8 @@ ALLOWED = {
     'public/my_day.html':            (2, 'theme-color meta tag'),
     'public/book.html':              (2, "fallback for a business that has set no colour"),
     'interview/interview.html':      (2, 'its own :root aliases'),
+    'console/communications_preview.html': (2, 'an email is white in a mail '
+                                               'app, so its preview is too'),
 }
 OLD = {'#d3a84f', '#1f1333', '#9a95ad', '#5f5878', '#e4dfef', '#b98a33'}
 unexplained, over, still_old = [], [], {}

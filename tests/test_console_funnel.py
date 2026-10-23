@@ -54,12 +54,13 @@ ORGS = [
     # Paying: activated a day after signup, then subscribed.
     org('Alpha', ago(10), owner_email='A@x.test', activated_at=ago(9),
         stripe_subscription_id='sub_a', subscription_status='active'),
-    # Activated, trial ran out yesterday, never chose a plan.
-    org('Bravo', ago(20), activated_at=ago(15), trial_ends_at=ago(1)),
+    # Activated, trial long run out, never chose a plan. A thirty-day trial
+    # cannot have lapsed inside thirty days, so this one has to be older.
+    org('Bravo', ago(45), activated_at=ago(40), trial_ends_at=ago(15)),
     # Signed up five days ago and has not assigned a job.
     org('Charlie', ago(5)),
     # Activated, two days of trial left, no plan: call today.
-    org('Delta', ago(13), activated_at=ago(12), trial_ends_at=NOW + timedelta(days=2, hours=1)),
+    org('Delta', ago(28), activated_at=ago(27), trial_ends_at=NOW + timedelta(days=2, hours=1)),
     # Closed, outside the 30-day window.
     org('Echo', ago(40), status='closed'),
     # Chose a plan without ever assigning a job, and the card is failing.
@@ -110,20 +111,40 @@ check(f['sources'] == [('direct', {'leads': 1, 'signed_up': 0}),
 
 print('\n3. A 30-day window narrows the funnel but not the follow-up list')
 f30 = funnel.compute(ORGS, LEADS, now=NOW, days=30)
-check(stage(f30, 'signed_up')['n'] == 5, 'Echo and Golf fall outside 30 days')
-check(stage(f30, 'chose_plan')['n'] == 2 and stage(f30, 'chose_plan')['pct'] == 40,
-      'chose a plan: 2 of 5 = 40%')
-check(stage(f30, 'paying')['pct'] == 20, 'paying: 1 of 5 = 20%')
-check(f30['lost'] == {'closed': 0, 'canceled': 0, 'trial_over': 1},
-      'only in-window companies count as lost')
+check(stage(f30, 'signed_up')['n'] == 4, 'Bravo, Echo and Golf fall outside 30 days')
+check(stage(f30, 'chose_plan')['n'] == 2 and stage(f30, 'chose_plan')['pct'] == 50,
+      'chose a plan: 2 of 4 = 50%')
+check(stage(f30, 'paying')['pct'] == 25, 'paying: 1 of 4 = 25%')
+check(f30['lost'] == {'closed': 0, 'canceled': 0, 'trial_over': 0},
+      'nothing in the window is lost yet -- thirty days cannot lapse inside thirty days')
 check(f30['leads'] == 2 and f30['leads_pct'] == 50, '2 leads in 30 days, 1 signed up')
 check(f30['follow_up'] == f['follow_up'], 'the follow-up list is the same whatever the window')
 
 print('\n4. Who to get in touch with')
 fu = f['follow_up']
 check([o['name'] for o in fu['not_started']] == ['Charlie'],
-      'signed up and never assigned a job')
-check(fu['not_started'][0]['days_left'] == 25, 'with 25 days left to start')
+      'signed up, no cleaner and customer yet')
+check(fu['not_started'][0]['days_left'] == 25, 'with 25 days of trial left')
+# Newest first, as the company list is: this week's signups and requests are
+# the ones worth reaching, and they sat at the bottom.
+fresh = funnel.compute(ORGS + [org('Hotel', ago(1)), org('India', ago(12))],
+                       LEADS + [{'id': 4, 'email': 'd@w.test', 'name': 'Di', 'created_at': ago(1),
+                                 'source': 'direct', 'contacted_at': None},
+                                {'id': 5, 'email': 'e@v.test', 'name': 'Ed', 'created_at': ago(20),
+                                 'source': 'direct', 'contacted_at': None}],
+                       now=NOW, days=None)['follow_up']
+check([o['name'] for o in fresh['not_started']] == ['Hotel', 'Charlie', 'India'],
+      'no cleaner and customer yet: newest signup first')
+check([l['email'] for l in fresh['leads_waiting']] == ['d@w.test', 'b@y.test', 'e@v.test'],
+      'early access not contacted: newest request first')
+# Asking again keeps the first row and moves last_asked_at: that lead is the
+# warmest on the list, however long ago it first asked.
+again = funnel.compute(ORGS, LEADS + [{'id': 6, 'email': 'f@u.test', 'name': 'Fi',
+                                       'created_at': ago(60), 'last_asked_at': ago(0, 2),
+                                       'source': 'direct', 'contacted_at': None}],
+                       now=NOW, days=None)['follow_up']
+check([l['email'] for l in again['leads_waiting']] == ['f@u.test', 'b@y.test'],
+      'a lead who asked again today goes to the top, not by their first ask')
 check([o['name'] for o in fu['ending']] == ['Delta'] and fu['ending'][0]['days_left'] == 2,
       'trial ending in 2 days with no plan')
 check([o['name'] for o in fu['failing']] == ['Foxtrot'], 'card failing')
@@ -210,6 +231,12 @@ with app.app_context():
     now = datetime.utcnow()
     control_plane.set_billing(engine, ending_slug, activated_at=now - timedelta(days=12),
                               trial_ends_at=now + timedelta(days=1, hours=2))
+    # The clock runs from signup, so a company with a day left has to have
+    # signed up twenty-nine days ago. create() stamps created_at as now.
+    import sqlalchemy as _sa
+    with engine.begin() as _c:
+        _c.execute(_sa.text('UPDATE organizations SET created_at = :d WHERE slug = :s'),
+                   {'d': now - timedelta(days=29), 's': ending_slug})
     control_plane.add_lead(engine, name='Lead Person', company='Lead Co', email=LEAD_EMAIL,
                            cleaners='3', source='https://www.google.com/search?q=x')
     control_plane.add_console_user(engine, CONSOLE_EMAIL, 'Console Tester',
@@ -237,8 +264,8 @@ with app.app_context():
         check(label in body, f'the "{label}" stage is shown')
     check(f'Funnel Ending {TAG}' in body.split('Trial ends in')[1].split('</table>')[0],
           'the company with a day of trial left is under "trial ends"')
-    check(f'Funnel Idle {TAG}' in body.split('never assigned a job')[1].split('</table>')[0],
-          'the company that never started is under "never assigned a job"')
+    check(f'Funnel Idle {TAG}' in body.split('no cleaner and customer yet')[1].split('</table>')[0],
+          'the company that never started is under "no cleaner and customer yet"')
     check(LEAD_EMAIL in body, 'the uncontacted lead is listed')
     check(c.get('/console/funnel?window=nonsense').status_code == 200,
           'an unknown window falls back instead of erroring')

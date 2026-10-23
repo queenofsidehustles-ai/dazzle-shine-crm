@@ -1,0 +1,133 @@
+{% extends "console/_shell.html" %}
+{% block title %}Communications{% endblock %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+<style>
+  .comms-switch { display:inline-flex; align-items:center; gap:var(--s2); }
+  .comms-switch button { font-size:var(--t-xs); padding:3px 10px; }
+  .comms-aud { font-size:var(--t-xs); text-transform:uppercase; letter-spacing:.06em;
+               color:var(--softer); font-weight:700; }
+  .comms-search { display:flex; gap:var(--s2); flex-wrap:wrap; margin:0 0 var(--s4); }
+  .comms-search input { flex:1; min-width:200px; }
+  table.con td.wrap { white-space:normal; }
+</style>
+
+<h2 style="font-size:1.05rem;margin:0 0 var(--s2)">Communications</h2>
+<p class="ops-dim" style="margin:0 0 var(--s4)">Every automated email to cleaning company owners and to
+  people who started signing up: what is due today, what went out, and a switch for each.
+  The emails each company sends its own customers are set in that company's own account.</p>
+
+<form class="comms-search" method="get" action="{{ url_for('console.communications') }}">
+  <input type="text" name="q" value="{{ q }}" placeholder="Find a person or company: email, name or web address">
+  <button class="btn btn-sm" type="submit">Show their emails</button>
+  {% if q %}<a class="btn btn-outline btn-sm" href="{{ url_for('console.communications') }}">Clear</a>{% endif %}
+</form>
+
+{% if q %}
+<h3 class="ops-h" style="margin-top:0">Everything sent to “{{ q }}”</h3>
+{% if found.orgs %}<p class="ops-dim" style="margin:0 0 var(--s2)">Companies:
+  {% for o in found.orgs %}<a href="{{ url_for('console.company', slug=o.slug) }}">{{ o.name }}</a> ({{ o.owner_email }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if found.leads %}<p class="ops-dim" style="margin:0 0 var(--s2)">Leads:
+  {% for l in found.leads %}{{ l.name or l.email }} ({{ l.email or 'no email' }}{{ ', invited' if l.invited_at }}{{ ', unsubscribed' if l.unsubscribed_at }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if found.partners %}<p class="ops-dim" style="margin:0 0 var(--s2)">Partners:
+  {% for a in found.partners %}<a href="{{ url_for('console.affiliate', affiliate_id=a.id) }}">{{ a.name }}</a> ({{ a.email }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if history %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>When</th><th>To</th><th>Email</th><th>Result</th><th>By</th></tr>
+  {% for r in history %}
+  <tr><td style="white-space:nowrap">{{ r.when.strftime('%d %b %H:%M') if r.when }}</td>
+      <td>{{ r.to }}</td><td class="wrap">{{ r.label }}</td>
+      <td>{% if r.ok %}<span class="ops-good">sent</span>{% else %}<span class="ops-bad" title="{{ r.detail }}">failed</span>{% endif %}</td>
+      <td>{{ r.by }}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="con-empty">Nothing has been sent to them yet.</div>{% endif %}
+{% endif %}
+
+<h3 class="ops-h">Due today</h3>
+<p class="ops-dim" style="margin:0 0 var(--s3)">These go out automatically at 22:00 UTC (6pm Eastern).
+  Never more than one a day to any owner, and never the same email twice.</p>
+<div class="ops-grid">
+  <div class="ops-card"><span class="v">{{ owner_due|length }}</span>
+    <span class="ops-dim">owner email{{ 's' if owner_due|length != 1 }}{% if owner_off %} · {{ owner_off }} held by a switch{% endif %}</span></div>
+  <div class="ops-card"><span class="v">{{ lead_due|length }}</span>
+    <span class="ops-dim">lead email{{ 's' if lead_due|length != 1 }}{% if lead_off %} · {{ lead_off }} held by a switch{% endif %}</span></div>
+</div>
+{% if owner_due or lead_due %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Who</th><th>Email</th><th>To</th></tr>
+  {% for slug, kind, email in owner_due %}
+  <tr><td><a href="{{ url_for('console.company', slug=slug) }}">{{ names.get(slug, slug) }}</a></td>
+      <td class="wrap">{{ labels.get(kind, kind) }}</td><td>{{ email }}</td></tr>
+  {% endfor %}
+  {% for lead_id, step, email in lead_due %}
+  <tr><td>Lead</td><td class="wrap">{{ labels.get('nurture_' ~ step) }}</td><td>{{ email }}</td></tr>
+  {% endfor %}
+</table></div>
+{% if may_operate %}
+<div class="ops-actions" style="margin-top:var(--s3)">
+  {% if owner_due %}
+  <form method="post" action="{{ url_for('console.send_trial_emails') }}"
+        onsubmit="return confirm('Send {{ owner_due|length|js }} owner email(s) now?')">
+    <button class="btn btn-sm" type="submit">Send owner emails now</button></form>
+  {% endif %}
+  {% if lead_due %}
+  <form method="post" action="{{ url_for('console.communications_send_leads') }}"
+        onsubmit="return confirm('Send {{ lead_due|length|js }} lead email(s) now?')">
+    <button class="btn btn-sm" type="submit">Send lead emails now</button></form>
+  {% endif %}
+</div>
+{% endif %}
+{% else %}<div class="con-empty">Nothing due today.</div>{% endif %}
+
+<h3 class="ops-h">Every automated email</h3>
+{% macro switch(key, on) %}
+  {% if may_operate %}
+  <form method="post" action="{{ url_for('console.communications_switch') }}" class="comms-switch">
+    <input type="hidden" name="key" value="{{ key }}"><input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="on" value="{{ '0' if on else '1' }}">
+    <span class="ops-badge {{ 'ops-ok' if on else 'ops-closed' }}">{{ 'on' if on else 'off' }}</span>
+    <button class="btn btn-outline" type="submit">{{ 'Turn off' if on else 'Turn on' }}</button>
+  </form>
+  {% else %}<span class="ops-badge {{ 'ops-ok' if on else 'ops-closed' }}">{{ 'on' if on else 'off' }}</span>{% endif %}
+{% endmacro %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>Email</th><th>When</th><th>Who gets it</th><th>Sent, 30 days</th><th>Status</th></tr>
+  <tr><td colspan="4"><span class="comms-aud">To company owners</span></td><td>{{ switch('owner_all', owner_on) }}</td></tr>
+  {% for key, aud, label, when, who in catalog if aud == 'owner' %}
+  <tr><td class="wrap"><a href="{{ url_for('console.communications_preview', key=key) }}">{{ label }}</a></td>
+      <td class="wrap">{{ when }}</td><td class="wrap">{{ who }}</td><td>{{ sent.get(key, 0) }}</td>
+      <td>{% if key in always_on %}<span class="ops-badge ops-ok" title="Carries their web address and confirm code">always on</span>
+          {% else %}{{ switch(key, switches.get(key, True)) }}{% if not owner_on %} <span class="ops-dim">(all held)</span>{% endif %}{% endif %}</td></tr>
+  {% endfor %}
+  <tr><td colspan="4"><span class="comms-aud">To people who started signing up</span></td><td>{{ switch('lead_all', lead_on) }}</td></tr>
+  {% for key, aud, label, when, who in catalog if aud == 'lead' %}
+  <tr><td class="wrap"><a href="{{ url_for('console.communications_preview', key=key) }}">{{ label }}</a></td>
+      <td class="wrap">{{ when }}</td><td class="wrap">{{ who }}</td><td>{{ sent.get(key, 0) }}</td>
+      <td>{{ switch(key, switches.get(key, True)) }}{% if not lead_on %} <span class="ops-dim">(all held)</span>{% endif %}</td></tr>
+  {% endfor %}
+  <tr><td colspan="4"><span class="comms-aud">To affiliate partners</span></td><td></td></tr>
+  {% for key, aud, label, when, who in catalog if aud == 'partner' %}
+  <tr><td class="wrap"><a href="{{ url_for('console.communications_preview', key=key) }}">{{ label }}</a></td>
+      <td class="wrap">{{ when }}</td><td class="wrap">{{ who }}</td><td>{{ sent.get(key, 0) }}</td>
+      <td><span class="ops-badge ops-ok" title="Transactional: a link they asked for, a payment notice">always on</span></td></tr>
+  {% endfor %}
+</table></div>
+<p class="ops-dim" style="margin-top:var(--s2)">Click an email to see it with sample details.
+  An email switched off is skipped, not marked as sent, so switching it back on inside its window still sends it.
+  Lead emails stop on their own when someone signs up, unsubscribes, replies, or gets an invite from the Leads page.</p>
+
+<h3 class="ops-h">Recently sent</h3>
+{% if recent %}
+<div class="ops-scroll"><table class="con">
+  <tr><th>When</th><th>Who</th><th>To</th><th>Email</th><th>Result</th><th>By</th></tr>
+  {% for r in recent %}
+  <tr><td style="white-space:nowrap">{{ r.when.strftime('%d %b %H:%M') if r.when }}</td>
+      <td>{% if r.audience == 'partner' %}Partner{% elif r.audience == 'owner' and r.who %}<a href="{{ url_for('console.company', slug=r.who) }}">{{ names.get(r.who, r.who) }}</a>{% else %}{{ r.who or 'Lead' }}{% endif %}</td>
+      <td>{{ r.to }}</td><td class="wrap">{{ r.label }}</td>
+      <td>{% if r.ok %}<span class="ops-good">sent</span>{% else %}<span class="ops-bad" title="{{ r.detail }}">failed</span>{% endif %}</td>
+      <td>{{ r.by }}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="con-empty">Nothing sent yet. Emails sent before this page existed are not listed.</div>{% endif %}
+{% endblock %}

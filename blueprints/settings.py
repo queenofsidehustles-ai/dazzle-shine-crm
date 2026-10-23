@@ -2,7 +2,7 @@ import csv
 import io
 import re
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, session
 from entitlements import requires_plan
 from auth import login_required, owner_required
 from models import PricingSetting, BusinessSetting, Prospect, Client, Booking, Staff
@@ -37,9 +37,10 @@ def switch_brand(key):
     """
     import brands
     brands.set_active(key)
-    nxt = request.form.get('next') or request.referrer or url_for('admin.dashboard')
+    import security
     # Only ever bounce back inside this app.
-    return redirect(nxt if nxt.startswith('/') else url_for('admin.dashboard'))
+    return redirect(security.local_target(request.form.get('next'), request.referrer)
+                    or url_for('admin.dashboard'))
 
 
 @settings_bp.route('/setup')
@@ -76,6 +77,7 @@ def booking_page():
         'admin/booking_page.html',
         booking_url=f'{base}/book',
         embed_snippet=f'<script src="{base}/embed.js" async></script>',
+        embed_url=f'{base}/book?embed=1',
         embed_allowed=_ent.can('booking_widget'),
         shared=BusinessSetting.get('booking_page_shared'))
 
@@ -104,7 +106,24 @@ def getting_started():
     minutes ago does not yet know what a Stripe key is for; what they need is
     one thing to do next and a sense that it ends somewhere."""
     import onboarding
-    return render_template('admin/getting_started.html', p=onboarding.progress())
+    p = onboarding.progress()
+    # The setup chat, for the owner, when a Claude API key is set. Without one
+    # (or in the demo) the page is exactly the list it always was.
+    chat, chat_step = None, None
+    import setup_assistant
+    if session.get('role') == 'owner' and setup_assistant.configured():
+        from blueprints.setup_assistant_routes import transcript
+        chat = transcript()
+        # The step Nana is on, so the list does not offer it a second time.
+        nxt = setup_assistant._next_step()
+        chat_step = nxt['key'] if nxt else None
+    # Opened as a focused window the first time, or when a pop-up sent them
+    # here to use it. After that it sits on the page with the list.
+    focus = bool(chat) and (request.args.get('focus') == '1'
+                            or not any(m.get('role') == 'user' for m in chat))
+    return render_template('admin/getting_started.html', p=p, chat=chat,
+                           chat_focus=focus, chat_step=chat_step,
+                           assistant_name=setup_assistant.NAME)
 
 
 @settings_bp.route('/automations/save', methods=['POST'])
@@ -298,31 +317,78 @@ def test_stripe():
 def commercial():
     import commercial_pricing as cp
     if request.method == 'POST':
-        PricingSetting.set('comm_hourly_cost', request.form.get('comm_hourly_cost') or 20)
-        try:
-            pct = float(request.form.get('comm_target_labor') or 40)
-        except ValueError:
-            pct = 40
-        PricingSetting.set('comm_target_labor', round(pct / 100.0, 4))
-        PricingSetting.set('comm_min_visit', request.form.get('comm_min_visit') or 125)
-        PricingSetting.set('comm_drive_minutes',
-                           request.form.get('comm_drive_minutes') or 30)
+        bad = []
+
+        def _rejected(label, value):
+            bad.append(f'{label} ("{value}")')
+
+        def _set_rate(key, label, form_key):
+            """A plain non-negative, finite number, saved as typed. Blank
+            leaves the setting as it was; a value that was typed but does not
+            read as one -- including NaN or +/-Infinity, which `float()`
+            itself happily accepts -- is rejected rather than stored as
+            something that corrupts every quote priced from it afterward."""
+            v = (request.form.get(form_key) or '').strip()
+            if not v:
+                return
+            num = cp.finite_num(v)
+            if num is None:
+                return _rejected(label, v)
+            PricingSetting.set(key, num)
+
+        def _set_pct(key, label, form_key):
+            """A whole percent typed in the box (25), stored as the decimal
+            commercial_pricing.py actually uses (0.25)."""
+            v = (request.form.get(form_key) or '').strip()
+            if not v:
+                return
+            pct = cp.finite_num(v, max_value=100)
+            if pct is None:
+                return _rejected(label, v)
+            PricingSetting.set(key, round(pct / 100.0, 4))
+
+        _set_rate('comm_hourly_cost', 'Your cleaner cost', 'comm_hourly_cost')
+        _set_pct('comm_target_labor', 'Target labor %', 'comm_target_labor')
+        _set_rate('comm_min_visit', 'Minimum per visit', 'comm_min_visit')
+        _set_rate('comm_drive_minutes', 'Default drive time', 'comm_drive_minutes')
+        _set_pct('comm_first_visit_pct', 'First-visit premium', 'comm_first_visit_pct')
         for c in cp.PROD_RATES:
-            v = request.form.get(f'comm_prod_{c}')
-            if v:
-                PricingSetting.set(f'comm_prod_{c}', v)
+            _set_rate(f'comm_prod_{c}', f'{c} production rate', f'comm_prod_{c}')
+        # Work-area line items: how fast each goes, and what it uses.
+        item_labels = {k: lbl for k, lbl, *_ in cp.WORK_ITEMS}
+        for key in cp.WORK_ITEM_KEYS:
+            label = item_labels.get(key, key)
+            v = request.form.get(f'comm_item_{key}_rate')
+            if v not in (None, ''):
+                num = cp.finite_num(v)
+                if num is None or num <= 0:
+                    _rejected(f'{label} — per hour', v)
+                else:
+                    PricingSetting.set(f'comm_item_{key}_rate', num)
+            v = request.form.get(f'comm_item_{key}_supplies')
+            if v not in (None, ''):
+                num = cp.finite_num(v)
+                if num is None:
+                    _rejected(f'{label} — supplies', v)
+                else:
+                    PricingSetting.set(f'comm_item_{key}_supplies', num)
         # Add-ons are typed as whole percents and stored as decimals, the same
         # way target labor is, so the form never asks anyone to write 0.08.
-        for key, _lbl, _pct in cp.EXTRAS:
-            v = request.form.get(f'comm_extra_{key}')
-            if v in (None, ''):
+        for key, lbl, _pct in cp.EXTRAS:
+            v = (request.form.get(f'comm_extra_{key}') or '').strip()
+            if not v:
                 continue
-            try:
-                PricingSetting.set(f'comm_extra_{key}', round(float(v) / 100.0, 4))
-            except ValueError:
-                pass
+            pct = cp.finite_num(v)
+            if pct is None:
+                _rejected(lbl, v)
+                continue
+            PricingSetting.set(f'comm_extra_{key}', round(pct / 100.0, 4))
         db.session.commit()
-        flash('Commercial pricing updated.', 'success')
+        if bad:
+            flash('Saved the rest, but could not read: ' + '; '.join(bad) +
+                  ' — enter a number and try those again.', 'error')
+        else:
+            flash('Commercial pricing updated.', 'success')
         return redirect(url_for('settings.commercial'))
     return render_template('admin/settings_commercial.html',
                            cfg=cp.get_config(), category_labels=Prospect.CATEGORY_LABELS)
@@ -660,7 +726,16 @@ def business():
         import entitlements
         subscription = {'state': entitlements.state(), 'plans': entitlements.PLANS}
 
+    # Every zone an owner can pick, plus the one already stored if it is not
+    # among them (America/Boise, say, from signup) -- otherwise the page would
+    # show Eastern and the next save of this card would quietly store it.
+    import zip_zones
+    tz_choices = list(zip_zones.CHOICES)
+    stored_tz = (current.get('timezone') or '').strip()
+    if stored_tz and stored_tz not in {z for z, _l in tz_choices}:
+        tz_choices.insert(0, (stored_tz, f'{zip_zones.label(stored_tz)} ({stored_tz})'))
     return render_template('admin/settings_business.html', current=current,
+                           tz_choices=tz_choices,
                            default_agreement=_default_agreement(
                                _b.biz_name(), current['worker_model']),
                            us_states=_ct.US_STATES, us_state_names=_ct.US_STATE_NAMES,

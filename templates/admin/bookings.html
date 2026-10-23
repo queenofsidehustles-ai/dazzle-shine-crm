@@ -87,7 +87,7 @@
                  used to mean click in, offer or hold, click back, repeat. #}
               {% if b.status in ('pending', 'confirmed') and not (b.crew and b.spots_left <= 0) %}
               <form method="POST" action="{{ url_for('bookings.broadcast', booking_id=b.id) }}"
-                    onsubmit="return confirm({{ ('Offer the ' ~ b.spots_left ~ ' open spot(s) to the team?') | tojson if b.is_crew_job else '\'Offer this job to the whole team? First to claim it gets it.\'' }})">
+                    onsubmit="return confirm('{{ (('Offer the ' ~ b.spots_left ~ ' open spot(s) to the team?') if b.is_crew_job else 'Offer this job to the whole team? First to claim it gets it.')|js }}')">
                 <input type="hidden" name="next" value="{{ request.url }}" />
                 <button type="submit" title="Offer to the team"
                         style="background:#fff;border:1px solid var(--line);color:var(--ink-2);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">📣</button>
@@ -102,7 +102,7 @@
               </form>
               {% endif %}
               <form method="POST" action="{{ url_for('bookings.delete', booking_id=b.id) }}"
-                    onsubmit="return confirm('Delete {{ b.name }}\'s booking (#{{ b.id }}) permanently? Use this for test bookings.')">
+                    onsubmit="return confirm('Delete {{ b.name|js }}\'s booking (#{{ b.id|int }}) permanently? Use this for test bookings.')">
                 <button type="submit" title="Delete booking"
                         style="background:#fff;border:1px solid var(--warn-soft);color:var(--warn);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:0.85rem;line-height:1">🗑</button>
               </form>

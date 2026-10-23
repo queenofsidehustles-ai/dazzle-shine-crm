@@ -240,6 +240,9 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
         'phone': biz_phone,
         'first_name': to_name.split()[0] if to_name else '',
         'full_name': to_name or '',
+        # The deposit set on Pricing, for any template that mentions it. A
+        # caller that knows what this booking actually paid passes its own.
+        'deposit': _deposit_text(),
     }
     if variables:
         v.update(variables)
@@ -255,9 +258,26 @@ def send_triggered_email(trigger, to_email, to_name, variables=None, unsubscribe
         raw_body = raw_body.rstrip() + '\n\n' + always_append
     body_text = _sub(raw_body, v)
     html = _wrap_html(body_text, biz, unsubscribe_url=unsubscribe_url)
-    send_email(to_email=to_email, to_name=to_name, subject=subject,
-               html=html, from_name=biz, cc=cc)
-    return True
+    # Report what actually happened. send_email signals a refused send by
+    # *returning* (False, detail) rather than raising -- no email key connected,
+    # a malformed address, Resend rejecting the call -- so returning True here
+    # regardless told every caller the mail had gone. The ones that check
+    # (quoting's lead quote, lifecycle's drips, the cleaner job notice) then
+    # recorded a send that reached nobody. Still a plain bool, because that is
+    # what those callers test; a two-item tuple is truthy however false its
+    # first item is.
+    ok, _detail = send_email(to_email=to_email, to_name=to_name, subject=subject,
+                             html=html, from_name=biz, cc=cc)
+    return bool(ok)
+
+
+def _deposit_text():
+    try:
+        from pricing import get_deposit
+        d = float(get_deposit() or 0)
+    except Exception:
+        return ''
+    return f'{d:.0f}' if d == int(d) else f'{d:.2f}'
 
 
 def _sub(text, variables):
@@ -293,6 +313,21 @@ def _wrap_html(body_text, biz_name, unsubscribe_url=None):
     <p style="font-size:0.78rem;color:#9a95ad;margin:0">{biz_name} · Questions? Reply to this email.{unsub}</p>
   </div>
 </div>"""
+
+
+def _tenant_tags():
+    """Resend tags naming the company schema a message was sent from, so what
+    the provider later reports about it (delivered, bounced -- see
+    delivery_events.py) is filed in that company's records. Read from the
+    active tenancy, not the request: a scheduled job or a command run for one
+    company sends inside use_tenant() with no request at all. None for the
+    platform's own mail, which the webhook files under public."""
+    import re
+    import tenancy
+    schema = tenancy.current_schema()
+    if not tenancy.is_tenant() or not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', schema or ''):
+        return []
+    return [{'name': 'tenant', 'value': schema}]
 
 
 def send_email(to_email, to_name, subject, html, from_name=None,
@@ -341,6 +376,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
     cc = (cc or '').strip()
     if not looks_like_email(cc) or cc.lower() == (to_email or '').strip().lower():
         cc = ''
+    tags = _tenant_tags()
     try:
         resp = http_requests.post(
             'https://api.resend.com/emails',
@@ -355,6 +391,7 @@ def send_email(to_email, to_name, subject, html, from_name=None,
                 'subject': subject,
                 'html': html,
                 **({'cc': [cc]} if cc else {}),
+                **({'tags': tags} if tags else {}),
             },
             timeout=10,
         )
@@ -390,8 +427,20 @@ def send_email(to_email, to_name, subject, html, from_name=None,
 
 
 def add_to_mailerlite(email, name, group_id=None):
+    """Add a website lead to the MailerLite list in MAILERLITE_API_KEY.
+
+    That list belongs to whoever set the variable: one business, on its own
+    single-business install. On the multi-company platform every company's
+    website posts to /api/quote, and sending their customers to that one list
+    handed one business's leads to another's mailing account. So only a
+    single-business install's own leads go: never from a company's schema, and
+    never on the platform (BASE_DOMAIN set) at all.
+    """
     import demo_guard
+    import tenancy
     if demo_guard.active():
+        return
+    if (os.environ.get('BASE_DOMAIN') or '').strip() or tenancy.current_schema() != tenancy.PUBLIC:
         return
     api_key = os.environ.get('MAILERLITE_API_KEY')
     if not group_id:
@@ -449,6 +498,17 @@ def send_sms(to_phone, message):
     blocked = _demo_blocked('sms', to_phone, None, None, message)
     if blocked:
         return blocked
+    # The console's emergency switch (platform_switches.py): every text from
+    # every company, for a runaway bill or abuse. Checked here, the one place
+    # a text leaves from, for the same reason the plan check is.
+    try:
+        import platform_switches
+        if not platform_switches.is_on('sms'):
+            detail = 'Texting is switched off for the whole product. This was not sent.'
+            _log_outbound('sms', to_phone, None, None, message, False, detail)
+            return False, detail
+    except Exception:
+        pass          # a switch lookup must never be the reason a text fails
     # The free plan sends no texts, and this is the only limit in the product
     # that is about money rather than product design: every message costs real
     # cash, every month, forever, to somebody who has never paid anything. It is

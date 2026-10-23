@@ -1,21 +1,20 @@
-"""Everything for a fortnight — but the fortnight starts when they begin.
+"""Everything for thirty days, from the day they sign up.
 
 A free plan nobody has seen the paid features from is a plan nobody upgrades
 out of. You cannot miss the hiring pipeline if you never had it. So a new
 company gets the top plan and steps down, rather than being asked to imagine
 what it is not being shown.
 
-Two clocks, because one is not honest:
+One clock: thirty days from signup. It was two -- a fortnight that began when
+a company added a cleaner and a customer, inside a month to make that start.
+The reasoning was good and the shape was not. It could not be said in a
+sentence; the rule the code ran was not the rule anything described (this file
+and billing.py both said "the first job assigned", while what actually started
+it was a cleaner and a customer); and it made a brand-new owner invent a
+customer she did not have before her trial would begin.
 
-  * **14 days from the first job assigned.** A fortnight measured from signup
-    is a trial a busy company can lose without ever having used the product —
-    and then they are owed an apology and a manual extension, which is a
-    conversation worth designing out.
-
-  * **30 days from signup to make that start.** Without it the first clock
-    never runs for somebody who signs up and does nothing, and a trial that
-    waits indefinitely gives nobody a reason to begin. This was the owner's
-    objection to the activation clock, and it was the right one.
+Nobody lost days to the change. Where an older trial already ran to a later
+date, that date stands.
 
 Nothing is deleted when it ends. They drop to the free plan and everything
 they entered is still there — including the features they can no longer use,
@@ -66,49 +65,67 @@ check(billing.plan_for(new) == 'scale',
       f'a company on day one may use the top plan ({billing.plan_for(new)})')
 
 
-print('\n2. The 14 days have not started yet')
+print('\n2. The thirty days are already running')
 st = billing.trial_state(new)
 check(st is not None, 'there is a trial in play')
-check(st['phase'] == 'not_started', f"phase is {st['phase']}")
-check(not st['started'], 'and it says so')
-check(29 <= st['days_left'] <= 30,
-      f"the countdown is the 30-day window to begin ({st['days_left']} days)")
-
-
-print('\n3. Assigning a job starts the real clock')
-started = org(activated_at=NOW, trial_ends_at=NOW + timedelta(days=14))
-st = billing.trial_state(started)
 check(st['phase'] == 'running', f"phase is {st['phase']}")
-check(13 <= st['days_left'] <= 14, f"14 days from that moment ({st['days_left']})")
-check(billing.plan_for(started) == 'scale', 'still everything while it runs')
+check(st['started'], 'there is no waiting to begin any more')
+check(29 <= st['days_left'] <= 30,
+      f"thirty days from signup ({st['days_left']} days)")
 
 
-print('\n4. Somebody who starts late still gets their full fortnight')
-# They engaged on day 29. Cutting them off on day 30 would punish exactly the
-# person the second clock exists to be fair to.
+print('\n3. Using it does not change the clock')
+# It used to start it, which is why "add a customer" was a required setup
+# step for somebody who had no customers.
+busy = org(activated_at=NOW)
+st = billing.trial_state(busy)
+check(29 <= st['days_left'] <= 30,
+      f"a company that got going has exactly the same days ({st['days_left']})")
+check(st['activated'], 'but whether they got going is still recorded')
+check(billing.trial_state(new)['activated'] is False, 'and distinguishes the two')
+check(billing.plan_for(busy) == 'scale', 'still everything while it runs')
+
+
+print('\n4. Nobody loses days they already had')
+# A trial written under the old rule can run past signup-plus-thirty, and so
+# can one somebody extended by hand. Either way the later date stands.
 late = org(created_at=NOW - timedelta(days=29),
-           activated_at=NOW,
-           trial_ends_at=NOW + timedelta(days=14))
+           activated_at=NOW - timedelta(days=1),
+           trial_ends_at=NOW + timedelta(days=13))
 st = billing.trial_state(late)
 check(st['phase'] == 'running', 'their trial is running')
-check(13 <= st['days_left'] <= 14,
-      f'with the whole fortnight, not one day ({st["days_left"]})')
+check(12 <= st['days_left'] <= 13,
+      f'keeping the later date, not cut to one day ({st["days_left"]})')
+short = org(created_at=NOW - timedelta(days=5),
+            trial_ends_at=NOW + timedelta(days=2))
+check(24 <= billing.trial_state(short)['days_left'] <= 25,
+      'and an earlier stored date never shortens the thirty')
 
 
-print('\n5. Somebody who never starts runs out anyway')
-# The owner's objection to the activation clock: without a cap it is a trial
-# that waits forever, and nobody hurries for something that waits forever.
+print('\n5. Thirty days is thirty days, used or not')
 idle = org(created_at=NOW - timedelta(days=31),
            trial_ends_at=NOW - timedelta(days=1))
 st = billing.trial_state(idle)
-check(st['expired'], 'the window to begin closed')
+check(st['expired'], 'day 31 is over')
 check(st['phase'] == 'over', f"phase is {st['phase']}")
 check(billing.plan_for(idle) == 'solo',
       f'and they are on the free plan ({billing.plan_for(idle)})')
 
 
+print('\n5b. The banner and the entitlements never disagree')
+# They read different things once -- trial_state computed a date and plan_for
+# went straight to the stored column -- so a company could be told it had
+# days left while already locked onto the free plan.
+stale = org(created_at=NOW - timedelta(days=10),
+            trial_ends_at=NOW - timedelta(days=3))
+check(billing.trial_state(stale)['expired'] is False
+      and billing.plan_for(stale) == 'scale',
+      'a stale stored date strands nobody between the two')
+
+
 print('\n6. When it ends they keep working, on Solo')
-done = org(activated_at=NOW - timedelta(days=20),
+done = org(created_at=NOW - timedelta(days=36),
+           activated_at=NOW - timedelta(days=30),
            trial_ends_at=NOW - timedelta(days=6))
 check(billing.plan_for(done) == 'solo', 'dropped to free')
 check(billing.trial_state(done)['expired'], 'and told so')
@@ -126,8 +143,9 @@ for status in ('active', 'past_due', 'canceled'):
 
 print('\n8. Missing information is never read as permission')
 # A half-written row, or one edited by hand, must not grant the top plan.
-check(billing.plan_for(org(trial_ends_at=None)) == 'solo',
-      'a trial with no end date is not a trial')
+check(billing.plan_for({'status': 'active', 'plan': 'scale',
+                        'subscription_status': 'trialing'}) == 'solo',
+      'a row with no signup date and no end date is not a trial')
 check(billing.plan_for(None) == 'solo', 'and no company at all is the free plan')
 check(billing.plan_for(org(status='suspended')) == 'solo',
       'a suspended company gets nothing regardless of what it paid')
@@ -136,6 +154,26 @@ check(billing.plan_for(org(status='suspended')) == 'solo',
 print('\n9. The banner is on every page of a company CRM')
 from app import create_app
 app = create_app()
+# Billing and Business Settings read entitlements' state, not trial_state():
+# it must use the same end. A row stored before the one-clock rule can hold an
+# earlier trial_ends_at, and Billing said "not on a trial" beside a banner
+# that was still counting down.
+import entitlements
+early = {'slug': 'early', 'status': 'active', 'subscription_status': 'trialing',
+         'plan': 'scale', 'created_at': NOW - timedelta(days=10),
+         'trial_ends_at': NOW - timedelta(days=1), 'activated_at': None}
+_was = billing.current_org
+billing.current_org = lambda: early
+try:
+    with app.app_context():
+        st = entitlements._load_state()
+finally:
+    billing.current_org = _was
+check(st['on_trial'] and st['trial_ends_at'] == billing.trial_ends(early),
+      'Billing reads the same trial end as the banner: 30 days from signup, not the old column')
+check(st['trial_days_left'] == billing.trial_state(early, NOW)['days_left'],
+      f"and the same days left ({st['trial_days_left']})")
+
 c = app.test_client()
 with c.session_transaction() as sess:
     sess['logged_in'] = True
@@ -150,4 +188,4 @@ check('trialbar' not in page,
 if failures:
     print(f'\n\n❌ {len(failures)} trial check(s) failed.\n')
     sys.exit(1)
-print('\n\n✅ Two clocks, and neither of them stops.\n')
+print('\n\n✅ One clock, thirty days, and nobody loses a day to it.\n')

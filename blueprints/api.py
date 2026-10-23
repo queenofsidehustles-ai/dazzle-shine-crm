@@ -1,3 +1,4 @@
+import hmac
 import os
 import secrets
 import stripe
@@ -99,6 +100,20 @@ def add_cors(response, origin):
     return response
 
 
+def _cron_key_ok():
+    """Whether a scheduled-job call carries REMINDER_API_KEY in X-Api-Key.
+
+    The header only: a key in the URL ends up in every proxy and access log
+    on the way (security.QUERY_SECRET_FORBIDDEN_PATHS refuses it outright).
+    Trimmed on both sides -- a key pasted into a settings box with a trailing
+    newline is not a different key, and a 403 is indistinguishable from a
+    scheduler that never ran -- and compared in constant time.
+    """
+    expected = os.environ.get('REMINDER_API_KEY', '').strip()
+    given = (request.headers.get('X-Api-Key') or '').strip()
+    return bool(expected) and hmac.compare_digest(given.encode(), expected.encode())
+
+
 # ── Public config (Stripe publishable key) ───────────────────────────────────
 
 @api_bp.route('/config', methods=['GET', 'OPTIONS'])
@@ -114,12 +129,7 @@ def get_config():
 
 @api_bp.route('/reminders', methods=['POST'])
 def send_reminders():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -201,12 +211,7 @@ def send_reminders():
 
 @api_bp.route('/charge-balances', methods=['POST'])
 def charge_balances():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -467,12 +472,7 @@ def _send_commercial_alert(lead, company, facility_label, sqft, frequency, messa
 
 @api_bp.route('/send-drips', methods=['POST'])
 def send_drips():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -509,12 +509,7 @@ def lsa_followups():
     """Advance the text sequence for people who called through Google Ads and
     never booked. Sends only what is due, and re-checks every reason to stop at
     the moment of sending rather than trusting the state it was queued in."""
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -542,12 +537,7 @@ def insurance_expiry():
     Silent when there is nothing to say. An email every morning saying
     "nothing expiring" is how the one that matters stops being read.
     """
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides, same as the others: a key pasted with a trailing
-    # newline is not a different key, and a 403 is indistinguishable from a
-    # scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # The per-business on/off switch exists on the multi-company product and
@@ -634,12 +624,7 @@ def owner_digest():
     Off unless a business turns it on (see automations.DEFAULT_OFF) — nobody
     should wake up to a new daily email they never asked for.
     """
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     if not automations.is_enabled('owner-digest'):
@@ -659,12 +644,7 @@ def owner_digest():
 
 @api_bp.route('/applicant-followups', methods=['POST'])
 def applicant_followups():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -679,9 +659,31 @@ def applicant_followups():
     cutoff = now - timedelta(days=2)   # spacing between nudges
 
     def _qualifies(a):
-        """Same rule the apply form uses: needs experience + transportation."""
+        """Who this backstop may send an interview link to.
+
+        Deliberately NOT the same rule as the apply form. That form reads
+        answers somebody gave about themselves, where a blank is a refusal to
+        answer. This runs over applicants typed in by the owner, where a blank
+        is simply a question nobody was asked -- and the old rule required a
+        non-empty `years_experience`, so the manual-add form's Experience
+        dropdown (which defaults to "Unknown", saving as "") disqualified
+        every hand-entered applicant permanently, silently, with nothing on
+        any screen saying so.
+
+        Anybody who answered "no experience" on the public form was already
+        auto-rejected at screening and never reaches this query, so an empty
+        value here means unknown, not none.
+        """
+        # A company is a vendor, not a hire. The apply form explicitly does not
+        # send these the video interview -- it asks somebody about their own
+        # cleaning, and what a company needs is its insurance read by a person.
+        # Without this, the backstop quietly did what the form refuses to.
+        if (a.applicant_kind or 'individual') == 'company':
+            return False
         exp = (a.years_experience or '').strip().lower()
-        return bool(exp) and exp not in ('no experience', 'none') and bool(a.has_transportation)
+        if exp in ('no experience', 'none'):
+            return False
+        return bool(a.has_transportation)
 
     # Include applicants who never got a link at all ('not_sent'/None), so a missed
     # timer can never leave a qualified person stuck without their interview.
@@ -746,7 +748,7 @@ def applicant_followups():
                     'moved_to_no_response': no_response})
 
 
-def _resend_signature_ok(raw):
+def _resend_signature_ok(raw, secret_env=('RESEND_WEBHOOK_SECRET',)):
     """Is this really from the email service?
 
     Resend signs with Svix: the signed payload is "<id>.<timestamp>.<body>",
@@ -756,32 +758,81 @@ def _resend_signature_ok(raw):
 
     No secret configured means we cannot tell, and something we cannot
     authenticate does not get to write into a customer's records.
+
+    Each webhook set up at the email service has its own signing secret;
+    secret_env names the environment variables that may hold the one for
+    this endpoint, and a signature from any of them is accepted.
     """
     import base64
     import hashlib
     import hmac
     import os
 
-    secret = (os.environ.get('RESEND_WEBHOOK_SECRET') or '').strip()
-    if not secret:
-        return False
     msg_id = request.headers.get('svix-id', '')
     stamp = request.headers.get('svix-timestamp', '')
     header = request.headers.get('svix-signature', '')
     if not (msg_id and stamp and header):
         return False
-    try:
-        key = base64.b64decode(secret.split('_', 1)[1] if secret.startswith('whsec_')
-                               else secret)
-    except Exception:
-        return False
-    signed = f'{msg_id}.{stamp}.'.encode() + raw
-    expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
-    for part in header.split():
-        _, _, value = part.partition(',')
-        if value and hmac.compare_digest(value, expected):
-            return True
+    for name in secret_env:
+        secret = (os.environ.get(name) or '').strip()
+        if not secret:
+            continue
+        try:
+            key = base64.b64decode(secret.split('_', 1)[1] if secret.startswith('whsec_')
+                                   else secret)
+        except Exception:
+            continue
+        signed = f'{msg_id}.{stamp}.'.encode() + raw
+        expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+        for part in header.split():
+            _, _, value = part.partition(',')
+            if value and hmac.compare_digest(value, expected):
+                return True
     return False
+
+
+@api_bp.route('/email-events', methods=['POST'])
+def email_events():
+    """The email service reporting what became of a message: delivered,
+    bounced, marked as spam, delayed.
+
+    "Sent" only ever meant the service took it. These turn that into what
+    actually happened -- on the Sent log, and, for a proposal, on its
+    delivery record (delivery_events.py). Svix-signed like /email-reply,
+    with its own secret where the webhook has one.
+
+    The company comes from the tag every message is sent with
+    (notifications._tenant_tags). An event we cannot use -- an untracked
+    type, a company that does not exist -- is acknowledged and dropped. One
+    we failed to save is answered 503, so the service sends it again; a
+    retry of one already saved is recorded once."""
+    import delivery_events
+    import errors
+    import tenancy
+    # Resend calls the platform's address. Anything at a company's address is
+    # not Resend, so it is refused without an alert: logging it there would
+    # put a false incident in that company's errors and its owner's inbox.
+    platform = tenancy.current_schema() == tenancy.PUBLIC
+    raw = request.get_data() or b''
+    if not _resend_signature_ok(raw, ('RESEND_EVENTS_WEBHOOK_SECRET', 'RESEND_WEBHOOK_SECRET')):
+        if platform:
+            errors.capture(delivery_events.SignatureRefused(
+                'Resend delivery event refused: no valid signature. If these keep coming, '
+                'RESEND_EVENTS_WEBHOOK_SECRET is not the webhook\'s signing secret.'))
+        from flask import abort
+        abort(403)
+    payload = request.get_json(silent=True) or {}
+    try:
+        outcome = delivery_events.record(payload, request.headers.get('svix-id', ''))
+    except delivery_events.Retry as e:
+        db.session.rollback()
+        import logging
+        logging.getLogger(__name__).exception('email event not saved; asking for a retry')
+        if platform:
+            errors.capture(delivery_events.EventNotSaved(
+                f'Resend delivery event not saved; Resend will retry it: {str(e)[:200]}'))
+        return jsonify({'ok': False, 'outcome': 'retry'}), 503
+    return jsonify({'ok': True, 'outcome': outcome}), 200
 
 
 @api_bp.route('/email-reply', methods=['POST'])
@@ -929,9 +980,7 @@ def rental_turnovers():
     the cleaner's schedule rewritten at 2am, and a feed read too eagerly is a
     feed that rate-limits. Anything urgent is a button on the page.
     """
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     if not automations.is_enabled('rental-turnovers'):
         return jsonify({'ok': True, 'skipped': 'turned off by this business'}), 200
@@ -947,12 +996,7 @@ def rental_turnovers():
 
 @api_bp.route('/lifecycle-emails', methods=['POST'])
 def lifecycle_emails():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
 
     # Checked here rather than by whatever woke this, so a business's decision
@@ -969,7 +1013,7 @@ def lifecycle_emails():
 
 # ── Trial nudges (cron — run once daily) ─────────────────────────────────────
 # The countdown in the banner only reaches somebody who logs in, and the whole
-# reason the trial has a start-by cap is the owner who does not. This is the
+# reason the trial has a fixed end is the owner who does not. This is the
 # half of that feature that leaves the building.
 #
 # Deliberately once a day and no more. Every nudge is recorded against the
@@ -977,14 +1021,46 @@ def lifecycle_emails():
 # hourly would still be a schedule that sends "3 days left" the moment the
 # threshold is crossed rather than in the morning.
 
+def _record_product_job(job, items, failed=0):
+    """Note that one of the product's own daily jobs ran, in the control plane
+    where the console reads it. (automations.record writes to whichever company
+    schema is current, and on the product's address there is none.)"""
+    try:
+        import control_plane
+        import provisioning
+        control_plane.record_platform_run(
+            provisioning._engine(), f'job:{job}', ok=not failed, items=items,
+            detail=(f'{failed} failed' if failed else None))
+    except Exception:
+        pass
+
+
+@api_bp.route('/platform-run', methods=['POST'])
+def platform_run():
+    """Where backups and the scheduler say how they went (platform_report.py).
+
+    Only the kinds that run somewhere the product cannot see: the jobs the
+    product runs itself write their own record. Anything else is refused, so
+    a leaked key cannot be used to fill the console with invented history."""
+    if not _cron_key_ok():
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    data = request.get_json(silent=True) or {}
+    kind = str(data.get('kind') or '').strip()
+    if not (kind.startswith('backup:') or kind.startswith('scheduler:')) or len(kind) > 60:
+        return jsonify({'ok': False, 'error': 'Unknown kind'}), 400
+    import control_plane
+    import provisioning
+    control_plane.ensure_table(provisioning._engine())
+    done = control_plane.record_platform_run(
+        provisioning._engine(), kind, ok=bool(data.get('ok', True)),
+        items=data.get('items') if isinstance(data.get('items'), int) else None,
+        detail=str(data.get('detail') or '')[:400])
+    return jsonify({'ok': done}), (200 if done else 500)
+
+
 @api_bp.route('/trial-nudges', methods=['POST'])
 def trial_nudges():
-    api_key = (request.headers.get('X-Api-Key') or request.args.get('api_key', '')).strip()
-    # Trimmed on both sides. A key pasted into a settings box with a trailing
-    # newline is not a different key, and a 403 here is indistinguishable from
-    # a scheduler that never ran.
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or api_key != expected:
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     import trial_nudges as tn
     dry = request.args.get('dry_run') in ('1', 'true', 'yes')
@@ -992,7 +1068,27 @@ def trial_nudges():
     sent = sum(counts.get(k, 0) for k in tn.ALL)
     if not dry:
         automations.record('trial-nudges', items=sent)
+        _record_product_job('trial-nudges', sent, counts.get('failed', 0))
     return jsonify({'ok': True, 'sent': sent, **counts})
+
+
+# ── Lead nurture (cron — run once daily) ─────────────────────────────────────
+# Four useful emails over two weeks for somebody who started signing up, or
+# asked for early access, and did not open an account (lead_nurture.py). The
+# product's own job, like trial nudges: called once, on the product's address.
+
+@api_bp.route('/lead-nurture', methods=['POST'])
+def lead_nurture():
+    if not _cron_key_ok():
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    import lead_nurture as ln
+    dry = request.args.get('dry_run') in ('1', 'true', 'yes')
+    counts = ln.run(dry_run=dry)
+    counts.pop('plan', None)            # addresses stay out of the scheduler log
+    if not dry:
+        automations.record('lead-nurture', items=counts.get('sent', 0))
+        _record_product_job('lead-nurture', counts.get('sent', 0), counts.get('failed', 0))
+    return jsonify({'ok': True, **counts})
 
 
 # ── Demo company rebuild (cron — hourly, product site only) ──────────────────
@@ -1005,13 +1101,10 @@ def trial_nudges():
 
 @api_bp.route('/rebuild-demo', methods=['POST'])
 def rebuild_demo():
-    import hmac
     import product
     if not product.is_product_site():
         return jsonify({'ok': False, 'error': 'Not found'}), 404
-    api_key = (request.headers.get('X-Api-Key') or '').strip()
-    expected = os.environ.get('REMINDER_API_KEY', '').strip()
-    if not expected or not hmac.compare_digest(api_key, expected):
+    if not _cron_key_ok():
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
     import subprocess
     import sys
@@ -1309,6 +1402,19 @@ def create_booking():
         # Tentative booking → ask for the deposit to confirm
         _send_deposit_request(booking)
 
+    # A stranger just booked this company through its own page. On Akye that
+    # is worth telling the owner about, once -- the first time is when the
+    # booking page stops being a setting and starts being money. Recorded
+    # against the company, so the second booking sends nothing.
+    try:
+        import billing
+        import trial_nudges
+        org = billing.current_org()
+        if org:
+            trial_nudges.send_event(org['slug'], 'first_booking')
+    except Exception:
+        pass
+
     resp = jsonify({'ok': True, 'booking_id': booking.id,
                     'deposit_paid': booking.deposit_paid,
                     'deposit_token': None if booking.deposit_paid else booking.deposit_token})
@@ -1464,7 +1570,7 @@ def _send_confirmation(booking: Booking):
         subject=f'New booking + deposit paid: {booking.name} — {booking.service_label}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2>New Booking — $50 Deposit Received</h2>
+  <h2>New Booking — {_dollars(booking.deposit_amount_paid or get_deposit())} Deposit Received</h2>
   <p><strong>Name:</strong> {booking.name}</p>
   <p><strong>Email:</strong> {booking.email}</p>
   <p><strong>Phone:</strong> {booking.phone}</p>
@@ -1480,9 +1586,24 @@ def _send_confirmation(booking: Booking):
     )
 
 
+def _dollars(amount):
+    """$50, or $49.50 -- how a person writes a deposit in a sentence."""
+    try:
+        v = float(amount or 0)
+    except (TypeError, ValueError):
+        v = 0.0
+    return f'${v:,.0f}' if v == int(v) else f'${v:,.2f}'
+
+
 def _send_deposit_request(booking: Booking):
     """Tentative booking: confirm we received it, but make clear it's NOT locked in
-    until the $50 deposit is paid. Includes a secure Pay Deposit link."""
+    until the deposit is paid. Includes a secure Pay Deposit link.
+
+    The amount is the deposit set on Pricing -- the same figure the payment
+    page will charge. It was written as "$50" in every message here, so a
+    business that changed its deposit told customers one number and charged
+    another.
+    """
     from flask import url_for
     notify_email = branding.owner_email()
     biz = branding.biz_name()
@@ -1490,6 +1611,7 @@ def _send_deposit_request(booking: Booking):
     date_text = booking.preferred_date or 'Flexible'
     time_text = booking.preferred_time or 'Flexible'
     first = (booking.name or 'there').split()[0]
+    dep = _dollars(get_deposit())
 
     try:
         pay_url = url_for('deposit.pay_deposit_page', token=booking.deposit_token, _external=True)
@@ -1508,7 +1630,7 @@ def _send_deposit_request(booking: Booking):
     <div style="background:#fff8e1;border:2px solid #f59e0b;border-radius:10px;padding:16px 18px;margin:0 0 22px">
       <p style="margin:0;color:#92400e;font-weight:700;font-size:1rem">⚠️ Your booking is NOT confirmed yet</p>
       <p style="margin:8px 0 0;color:#7c4a04;line-height:1.6;font-size:0.92rem">
-        To lock in your date and time, please pay your <strong>$50 deposit</strong> below.
+        To lock in your date and time, please pay your <strong>{dep} deposit</strong> below.
         Your spot is held only once the deposit is received. The deposit goes toward your total —
         it is not an extra charge.
       </p>
@@ -1519,14 +1641,14 @@ def _send_deposit_request(booking: Booking):
       <tr><td style="padding:5px 0;color:#9a95ad">Home</td><td style="padding:5px 0;font-weight:600;text-align:right">{booking.bedrooms} bed / {booking.bathrooms} bath</td></tr>
       <tr><td style="padding:5px 0;color:#9a95ad">Date</td><td style="padding:5px 0;font-weight:600;text-align:right">{date_text} {('· ' + time_text) if time_text != 'Flexible' else ''}</td></tr>
       <tr><td style="padding:5px 0;color:#9a95ad">Estimated total</td><td style="padding:5px 0;font-weight:600;text-align:right">${booking.price:.2f}</td></tr>
-      <tr><td style="padding:5px 0;color:#9a95ad">Deposit to confirm</td><td style="padding:5px 0;font-weight:700;text-align:right;color:#065f46">$50.00</td></tr>
+      <tr><td style="padding:5px 0;color:#9a95ad">Deposit to confirm</td><td style="padding:5px 0;font-weight:700;text-align:right;color:#065f46">${float(get_deposit()):.2f}</td></tr>
       <tr><td style="padding:5px 0;color:#9a95ad">Balance after cleaning</td><td style="padding:5px 0;font-weight:600;text-align:right">${booking.balance_due:.2f}</td></tr>
     </table>
 
     <div style="text-align:center;margin-bottom:18px">
       <a href="{pay_url}" style="background:#d3a84f;color:#1f1333;padding:16px 40px;border-radius:8px;
          text-decoration:none;font-weight:700;font-size:1.1rem;display:inline-block">
-        Pay My $50 Deposit & Confirm →
+        Pay My {dep} Deposit & Confirm →
       </a>
     </div>
 
@@ -1539,14 +1661,14 @@ def _send_deposit_request(booking: Booking):
   </div>
 </div>"""
     send_email(to_email=booking.email, to_name=booking.name,
-               subject=f"Action needed: confirm your cleaning with a $50 deposit — {biz}",
+               subject=f"Action needed: confirm your cleaning with a {dep} deposit — {biz}",
                html=html)
 
     # SMS to customer
     send_sms(
         booking.phone,
         f"Hi {first}! {biz} got your booking request for {date_text}. "
-        f"It's NOT confirmed until your $50 deposit is paid. "
+        f"It's NOT confirmed until your {dep} deposit is paid. "
         f"Pay here to lock your spot: {pay_url}  Reply STOP to opt out.",
     )
 
@@ -1557,7 +1679,7 @@ def _send_deposit_request(booking: Booking):
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
   <h2>Tentative Booking — Deposit Not Paid Yet</h2>
-  <p>This booking is held but <strong>not confirmed</strong> until the $50 deposit is paid.
+  <p>This booking is held but <strong>not confirmed</strong> until the {dep} deposit is paid.
      Consider following up if the deposit isn't paid soon.</p>
   <p><strong>Name:</strong> {booking.name}</p>
   <p><strong>Email:</strong> {booking.email}</p>

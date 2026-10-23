@@ -112,16 +112,20 @@
                failure, including the one that means it arrived. A delivery
                receipt that makes a delivered text look failed is worse than
                having no receipt at all. #}
-            {% set ok = m.status in ('sent', 'delivered', 'queued', 'sending', 'accepted') %}
+            {% set ok = m.status in ('sent', 'delivered', 'queued', 'sending', 'accepted', 'complained') %}
             {% if m.status == 'delivered' %}
               <span class="status status-confirmed" title="{{ m.detail }}">✅ Delivered</span>
+            {% elif m.status == 'complained' %}
+              <span class="status status-pending" title="{{ m.detail }}">✅ Delivered · marked as spam</span>
+            {% elif m.status == 'bounced' %}
+              <span class="status status-cancelled" title="{{ m.detail }}">⛔ Bounced</span>
             {% elif ok %}
               <span class="status status-confirmed" title="{{ m.detail }}">📨 Sent</span>
             {% else %}
               <span class="status status-cancelled" title="{{ m.detail }}">⚠️ Failed</span>
             {% endif %}
             {% if ok %}
-              {% if m.status != 'delivered' %}
+              {% if m.status not in ('delivered', 'complained') %}
               <div style="font-size:0.7rem;color:var(--softer);margin-top:4px">
                 accepted, not yet confirmed
               </div>

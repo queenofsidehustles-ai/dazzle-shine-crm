@@ -2,18 +2,40 @@
 {% block title %}Getting started · {{ BIZ }}{% endblock %}
 {% block content %}
 
-{% if p.complete %}
+{# `complete` means able to trade -- every required step done. The optional
+   ones are the business's own world going in, and they are offered rather
+   than insisted on, so finishing the required list must not make them
+   vanish off the page. Only when there is genuinely nothing left does this
+   become a card with nothing under it. #}
+{% if p.complete and p.optional_done == p.optional_total %}
   <div class="card" style="max-width:660px;text-align:center;padding:34px">
     <div style="font-size:2.2rem">🎉</div>
     <h2 style="margin:10px 0 6px">You're up and running</h2>
     <p style="color:var(--muted);line-height:1.6;margin:0 0 20px">
-      Your team, your customers, your prices and a job on the calendar. That is
+      Set up to trade, and your own cleaners, customers and jobs in it. That is
       the whole loop — everything from here is just doing it more often.
     </p>
     <a href="{{ url_for('bookings.calendar') }}" class="btn-primary">Open the calendar</a>
   </div>
 {% else %}
-  <div class="card" style="max-width:660px">
+  {% if p.complete %}
+  {# Payments is not one of the required steps, so "complete" does not mean
+     it is connected -- this used to say it was, right under a bar saying it
+     wasn't. #}
+  <div class="card" id="gs-ready" style="max-width:660px;padding:18px 20px;margin-bottom:14px;
+              border-left:4px solid var(--good)">
+    <div style="font-weight:700;margin-bottom:4px">✅ You can take bookings</div>
+    <p style="color:var(--muted);margin:0;line-height:1.55;font-size:0.92rem">
+      Business details, timezone, prices, terms and balances are all set.
+      What is left below is yours to do whenever you have it.
+    </p>
+  </div>
+  {% endif %}
+  {# The chat comes first when it is switched on: answering a question is an
+     easier first move than choosing a page. The list stays underneath for
+     anybody who would rather click. #}
+  {% if chat %}{% include "admin/_setup_assistant.html" %}{% endif %}
+  <div class="card" id="gs-list" style="max-width:660px">
     <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px">
       <h2 style="margin:0">Getting started</h2>
       <span style="margin-left:auto;color:var(--muted);font-size:0.9rem">
@@ -28,18 +50,32 @@
        percentage of an unstated total, next to a bar already showing the same
        thing, next to "1 of 6 done" showing it a third time. Say the goal. #}
     <p style="color:var(--softer);font-size:0.86rem;margin:0 0 22px">
-      You're aiming for one real job, booked and assigned to a cleaner.
+      {% if p.complete %}Set up to trade. The rest is yours to add when you have it.
+      {% else %}You're aiming to be able to take a booking and get paid for it.{% endif %}
     </p>
 
     {# One next action, prominent. A screen of twelve equal buttons is a screen
        people close; the point of a first-run list is to answer "what now". #}
-    {% if p.next %}
+    {# Not while Nana is asking about the same step: her card is right above,
+       and the same button twice on one screen reads as two different things
+       to do. Once she has moved on (or was skipped past it), it is back. #}
+    {% if p.next and not (chat_step and chat_step == p.next.key) %}
       <div style="border:2px solid var(--gold);border-radius:12px;padding:18px;
                   background:var(--gold-soft);margin-bottom:22px">
         <div style="font-size:0.72rem;letter-spacing:.12em;text-transform:uppercase;
                     color:var(--gold-deep);font-weight:700;margin-bottom:6px">Next</div>
         <h3 style="margin:0 0 6px;font-size:1.1rem">{{ p.next.title }}</h3>
         <p style="color:var(--muted);margin:0 0 14px;line-height:1.55">{{ p.next.why }}</p>
+        {# The video sits next to the step it explains, not on a help page
+           (funnel_videos.py). Absent until it is recorded. #}
+        {% if p.next.video and VIDEOS.get(p.next.video) %}
+        <div style="position:relative;padding-bottom:56.25%;height:0;margin:0 0 14px;
+                    border-radius:10px;overflow:hidden;background:var(--ink)">
+          <iframe src="{{ VIDEO_EMBEDS[p.next.video] }}" title="How to: {{ p.next.title }}"
+                  style="position:absolute;inset:0;width:100%;height:100%;border:0"
+                  allowfullscreen loading="lazy"></iframe>
+        </div>
+        {% endif %}
         <a href="{{ p.next.link }}" class="btn-primary">{{ p.next.cta }} →</a>
         {% if p.next.secondary %}
         <a href="{{ p.next.secondary.link }}" style="margin-left:14px;color:var(--gold-deep);
@@ -48,37 +84,23 @@
       </div>
     {% endif %}
 
-    {# The next step is the box above. It was ALSO listed here with a 👉, so the
-       same thing appeared twice on one card — which is what made the "Next"
-       panel read as floating loose rather than leading the list. Everything
-       else, in order, and the current one is not repeated. #}
-    {% for s in p.steps %}
-      {% if not (p.next and s.key == p.next.key) %}
-      <div style="display:flex;gap:12px;align-items:baseline;padding:9px 0;
-                  border-top:1px solid var(--border)">
-        <div style="flex:0 0 20px;font-size:0.95rem">{{ '✅' if s.done else '○' }}</div>
-        <div style="flex:1">
-          <div style="font-weight:600{{ ';text-decoration:line-through;color:var(--softer)' if s.done else '' }}">
-            {{ s.title }}</div>
-          {% if not s.done %}
-            <div style="color:var(--softer);font-size:0.86rem;margin-top:2px">{{ s.why }}
-              {% if s.secondary %}
-              · <a href="{{ s.secondary.link }}" style="color:var(--gold-deep);font-weight:600">{{ s.secondary.label }}</a>
-              {% endif %}
-            </div>
-          {% endif %}
-        </div>
-        <a href="{{ s.link }}" style="color:var(--gold-deep);font-size:0.88rem;
-                                      font-weight:600;text-decoration:none;white-space:nowrap">{{ 'Review' if s.done else 'Do it' }}</a>
-      </div>
-      {% endif %}
-    {% endfor %}
-  </div>
-
-  <p style="color:var(--softer);font-size:0.86rem;max-width:660px;margin-top:14px">
-    Connecting payments, email and texting comes after this —
-    <a href="{{ url_for('settings.setup') }}" style="color:var(--gold-deep)">the full setup list</a>
-    is there when you want it.
-  </p>
-{% endif %}
+    {# One thing at a time. This was every remaining step in a list, which is
+       what made a nearly-finished setup look like a pile of work -- and four
+       of the rows were optional anyway, so a business with no customers yet
+       was looking at a list it could not finish. The required ones are
+       summarised in a line; the optional ones are offered one at a time, by
+       Nana or by the card above, as they become the next thing. #}
+    {% set left = p.steps | rejectattr('done') | rejectattr('required')
+                          | rejectattr('key', 'equalto', p.next.key if p.next else '') | list %}
+    {% if p.complete and left %}
+    <p style="color:var(--softer);font-size:0.86rem;margin:18px 0 0;
+              padding-top:14px;border-top:1px solid var(--border)">
+      {{ left | length }} more thing{{ 's' if left | length != 1 }} you can do
+      whenever you have {{ 'them' if left | length != 1 else 'it' }} —
+      {{ left | map(attribute='title') | join(', ') | lower }}.
+    </p>
+    {% endif %}
+  {% endif %}
+{# Akye's ads: record the finished signup once (set by signup.welcome). #}
+{% if session.pop('meta_signup_complete', False) %}{% with meta_event='CompleteRegistration', meta_event_id=session.pop('meta_signup_event_id', '') %}{% include '_meta_pixel.html' %}{% endwith %}{% endif %}
 {% endblock %}

@@ -33,17 +33,19 @@ jobs:
       matrix:
         include:
           - key: dazzle
-            label: Dazzle & Shine — your own CRM
+            # The retired single-business database. Its data moved into Akye
+            # as a company; this keeps the original until it is archived. Run
+            # with main's code (Akye's working branch), which backs up a
+            # database from before the audit chain (a dry run checked it; the
+            # archive dazzle-shine-single-tenant predates these checks).
+            label: Dazzle & Shine — the retired single-business database
             ref: main
             secret: BACKUP_DATABASE_URL
           - key: akye
             label: Akye — every cleaning company on the platform
-            # akye-stable is the authoritative, live branch — Dazzle & Shine's
-            # own data now lives there as a tenant. This job was pointed at
-            # akye-launch-readiness/cohort-30 while that candidate branch was
-            # the one being verified pre-launch; now that it has shipped and
-            # akye-stable is what's actually running, the nightly drill needs
-            # to cover akye-stable's real database again.
+            # akye-stable is the release Railway deploys; main is the working
+            # branch it is promoted from. Dazzle & Shine's own data lives there
+            # as a company. The drill restores with the code that is running.
             ref: akye-stable
             secret: BACKUP_AKYE_DATABASE_URL
 
@@ -68,11 +70,11 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ matrix.ref }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
@@ -151,6 +153,40 @@ jobs:
           retention-days: 90
           overwrite: true
           if-no-files-found: ignore
+
+      - name: Tell the Akye console how it went
+        # So the console's Health page can say when this last succeeded, and
+        # flag it when it has not. Self-contained on purpose (no script from
+        # the checked-out branch): the backup checks out akye-stable, and this
+        # must work whichever branch that is. Never fails the build: a backup
+        # that worked and could not announce itself is still a backup.
+        if: always()
+        continue-on-error: true
+        env:
+          REMINDER_API_KEY: ${{ secrets.REMINDER_API_KEY }}
+          BASE_DOMAIN: akyehq.com
+          OUTCOME: ${{ job.status }}
+          KIND: backup:${{ matrix.key }}
+          LABEL: ${{ matrix.label }}
+        run: |
+          if [ -z "$REMINDER_API_KEY" ]; then
+            echo "::warning::REMINDER_API_KEY is not set, so the console cannot show this backup's status."
+            exit 0
+          fi
+          payload=$(python3 - <<'PY'
+          import glob, json, os
+          files = sorted(glob.glob('backups/*.manifest.json'))
+          rows = json.load(open(files[-1])).get('total_rows', 0) if files else 0
+          outcome = os.environ['OUTCOME']
+          print(json.dumps({
+              'kind': os.environ['KIND'], 'ok': outcome == 'success', 'items': rows,
+              'detail': f"{os.environ['LABEL']}: {outcome}, {rows:,} rows"}))
+          PY
+          )
+          curl -fsS --max-time 20 -X POST "https://www.${BASE_DOMAIN}/api/platform-run" \
+            -H "X-Api-Key: ${REMINDER_API_KEY}" -H 'Content-Type: application/json' \
+            -d "$payload" \
+            || echo "::warning::Could not report to the console (is the new endpoint deployed yet?)"
 
       - name: Say what happened
         if: always()

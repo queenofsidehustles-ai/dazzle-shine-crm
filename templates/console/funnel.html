@@ -71,7 +71,7 @@
 </div>
 <p class="fn-means" style="margin-top:var(--s2)">
   Companies that signed up {{ 'in this window' if f.since else 'ever' }}, and how far each got.
-  Every stage is a share of signups, because a company can pick a plan before it assigns a job.
+  Every stage is a share of signups, because a company can pick a plan before it sets anything up.
   {% if f.excluded %}{{ f.excluded }} grandfathered {{ 'company is' if f.excluded == 1 else 'companies are' }} left out: never acquired through the funnel.{% endif %}
   {% if f.test_excluded %}{{ f.test_excluded }} test account{{ 's are' if f.test_excluded != 1 else ' is' }} left out.{% endif %}
   Site visits are not recorded, so the funnel starts at the form.
@@ -106,9 +106,9 @@
 {% endif %}
 
 {% if fu.not_started %}
-<h3 style="font-size:var(--t-sm);margin:var(--s4) 0 var(--s2)">Signed up, never assigned a job ({{ fu.not_started|length }})</h3>
+<h3 style="font-size:var(--t-sm);margin:var(--s4) 0 var(--s2)">Signed up, no cleaner and customer yet ({{ fu.not_started|length }})</h3>
 <div class="fn-scroll"><table class="con">
-  <tr><th>Company</th><th>Owner</th><th>Signed up</th><th>Days left to start</th></tr>
+  <tr><th>Company</th><th>Owner</th><th>Signed up</th><th>Trial days left</th></tr>
   {% for o in fu.not_started %}
   <tr><td><a href="{{ url_for('console.company', slug=o.slug) }}">{{ o.name }}</a></td><td><a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a></td>
       <td>{{ o.created_at.strftime('%d %b') if o.created_at }}</td><td class="fn-num">{{ o.days_left }}</td></tr>
@@ -119,10 +119,11 @@
 {% if fu.leads_waiting %}
 <h3 style="font-size:var(--t-sm);margin:var(--s4) 0 var(--s2)">Asked for early access, not contacted, not signed up ({{ fu.leads_waiting|length }})</h3>
 <div class="fn-scroll"><table class="con">
-  <tr><th>Asked</th><th>Name</th><th>Company</th><th>Email</th><th>Cleaners</th><th></th></tr>
+  <tr><th>Last asked</th><th>Name</th><th>Company</th><th>Email</th><th>Cleaners</th><th></th></tr>
   {% for l in fu.leads_waiting %}
   <tr>
-    <td>{{ l.created_at.strftime('%d %b') if l.created_at }}</td>
+    {% set asked = l.last_asked_at or l.created_at %}
+    <td>{{ asked.strftime('%d %b') if asked }}</td>
     <td>{{ l.name }}</td><td>{{ l.company }}</td>
     <td><a href="mailto:{{ l.email }}">{{ l.email }}</a></td><td>{{ l.cleaners }}</td>
     <td>

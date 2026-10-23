@@ -27,6 +27,7 @@ owner locked out of her own schedule over an expired card would rightly never
 come back, and we would have taken her data hostage over $99.
 """
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 import control_plane
@@ -39,9 +40,6 @@ PRICE_ENV = {
     'scale': 'STRIPE_PRICE_SCALE',
 }
 
-TRIAL_DAYS = 14
-
-
 def stripe_key():
     """The product's own Stripe account — not a customer's.
 
@@ -51,6 +49,27 @@ def stripe_key():
     flow of money, and confusing the two would mean subscriptions billed to the
     customer's own processor."""
     return (os.environ.get('STRIPE_PLATFORM_SECRET_KEY') or '').strip()
+
+
+_STRIPE_ID = re.compile(r'^(cus|sub)_[A-Za-z0-9]{6,60}$')
+
+
+def dashboard_links(org):
+    """Where to look this company up in Stripe: {'customer': url, 'subscription': url}.
+
+    Only the ones the company actually has. The links follow the mode of the key
+    this deployment uses (a test key opens the dashboard's test mode), so staff
+    do not land on an empty page and conclude the customer is missing. An id
+    that is not shaped like a Stripe id is left out rather than put in a URL."""
+    base = 'https://dashboard.stripe.com/' + (
+        'test/' if stripe_key().startswith(('sk_test_', 'rk_test_')) else '')
+    out = {}
+    for field, path, kind in (('stripe_customer_id', 'customers', 'customer'),
+                              ('stripe_subscription_id', 'subscriptions', 'subscription')):
+        value = (org.get(field) or '').strip()
+        if _STRIPE_ID.match(value):
+            out[kind] = f'{base}{path}/{value}'
+    return out
 
 
 def webhook_secret():
@@ -97,31 +116,55 @@ def plan_for(org):
         # dates, which is what a half-written record or a hand-edited row looks
         # like, quietly granted the top plan to somebody who had paid nothing.
         # Missing information must never be read as permission.
-        ends = org.get('trial_ends_at')
+        # The same rule the banner reads. These two disagreeing is how a
+        # company gets told it has twelve days left while already being on
+        # the free plan.
+        ends = trial_ends(org)
         if not ends or ends < datetime.utcnow():
             return 'solo'
     return org.get('plan') or 'solo'
 
 
-# How long somebody gets, and how long they have to start.
-TRIAL_DAYS = 14
-START_WITHIN_DAYS = 30
+# How long somebody gets. One clock, from signup.
+TRIAL_DAYS = 30
+
+
+def trial_ends(org, now=None):
+    """When this company's trial runs out. One rule, one place.
+
+    Thirty days from signup, except where an older trial already ran to a
+    later date -- one written under the two-clock rule, or extended by hand.
+    Nobody loses days they already had.
+
+    A row with no signup date is a half-written record, and missing
+    information must never be read as permission: it falls back to whatever
+    was stored, which may be nothing, which means no trial.
+    """
+    if not org:
+        return None
+    created = org.get('created_at')
+    stored = org.get('trial_ends_at')
+    if not created:
+        return stored
+    ends = created + timedelta(days=TRIAL_DAYS)
+    if stored and stored > ends:
+        ends = stored
+    return ends
 
 
 def trial_state(org, now=None):
     """Where a company is in its trial, in the words the banner needs.
 
-    Two clocks, because one is not honest:
+    One clock: thirty days from signup. It used to be two — a fortnight that
+    began when a company added a cleaner and a customer, inside a month to
+    make that start. The reasoning was sound and the shape was not: it could
+    not be said in a sentence, the rule the code ran was not the rule the
+    emails described, and it made a brand-new owner invent a customer she did
+    not have before her trial would begin.
 
-      * 14 days from the moment they first assign a job to somebody. A
-        fortnight measured from signup is a trial a busy company can lose
-        without ever having used the product — and then they are owed an
-        apology and a manual extension, which is a conversation worth
-        designing out.
-
-      * 30 days from signup to make that start. Without it the first clock
-        never runs for somebody who signs up and does nothing, and a trial
-        that waits indefinitely creates no reason to begin.
+    Nobody loses days to the change. Where an older trial was already running
+    to a later date -- a company that activated in its fourth week, or a
+    support extension -- that date stands.
 
     Returns None when there is no trial in play at all — a paying customer, or
     a single-business install with no control plane.
@@ -133,46 +176,41 @@ def trial_state(org, now=None):
         return None                       # paying, cancelled, or past due
 
     now = now or datetime.utcnow()
-    started = org.get('activated_at')
-    ends = org.get('trial_ends_at')
-    created = org.get('created_at') or now
-
-    if not ends:
-        # A trial with no end date is not a trial — see plan_for. Treat it as
-        # the start-by window so it is at least bounded.
-        ends = created + timedelta(days=START_WITHIN_DAYS)
+    ends = trial_ends(org, now) or (org.get('created_at') or now)
 
     days = (ends - now).days
     over = ends <= now
 
     return {
-        'started': bool(started),
+        # Kept for callers that still ask. Under one clock every trial is
+        # running from the moment it exists, so this is always true.
+        'started': True,
         'expired': over,
         'ends_at': ends,
         'days_left': max(0, days),
-        # Distinguishing these two matters: one says "you have not begun", the
-        # other says "you are running out". They need different sentences.
-        'phase': 'over' if over else ('running' if started else 'not_started'),
+        # `activated` is no longer what starts the clock, but it is still
+        # worth knowing whether they ever got it working.
+        'activated': bool(org.get('activated_at')),
+        'phase': 'over' if over else 'running',
     }
 
 
 def mark_activated(engine, slug, when=None):
-    """Start the 14 days, now that they have actually used it.
+    """Write down the moment a company first got the software working.
 
-    Called the first time a company has a job with somebody assigned to it.
-    Moves the end date to fourteen days from that moment — which may be later
-    than the original start-by deadline, and should be: they engaged, so they
-    get their fortnight.
+    It used to start the clock. It does not any more -- the trial is thirty
+    days from signup whatever they do -- but when it happened is the most
+    useful number there is about a trial, and it is what the 'activated'
+    email answers to. So it is still recorded; it just no longer moves
+    anybody's end date.
 
     Does nothing if it has already been called.
     """
     org = control_plane.find(engine, slug)
     if not org or org.get('activated_at'):
         return False
-    when = when or datetime.utcnow()
     control_plane.set_billing(engine, slug,
-                activated_at=when,
-                trial_ends_at=when + timedelta(days=TRIAL_DAYS))
+                              activated_at=when or datetime.utcnow())
     return True
 
 
@@ -215,16 +253,18 @@ def install(app):
             return original()
         plan = plan_for(org)
         status = (org.get('subscription_status') or 'trialing').lower()
-        trial_ends = org.get('trial_ends_at')
-        on_trial = status == 'trialing' and bool(trial_ends) and \
-            trial_ends > datetime.utcnow()
-        days_left = max(0, (trial_ends - datetime.utcnow()).days + 1) if on_trial else 0
+        # The same end plan_for() and the banner use, not the raw column: a
+        # row stored before the one-clock rule can hold an earlier date, and
+        # Billing would then say "not on a trial" beside a banner counting down.
+        ends = trial_ends(org)
+        on_trial = status == 'trialing' and bool(ends) and ends > datetime.utcnow()
+        days_left = max(0, (ends - datetime.utcnow()).days + 1) if on_trial else 0
         return {
             'plan': org.get('plan') or 'solo',
             'effective_plan': plan,
             'on_trial': on_trial,
             'trial_days_left': days_left,
-            'trial_ends_at': trial_ends,
+            'trial_ends_at': ends,
             'grandfathered': bool(org.get('grandfathered')),
             'status': status,
             'label': entitlements.PLANS[plan]['label'],
@@ -314,6 +354,12 @@ def apply_event(event):
 
     slug = ((obj.get('metadata') or {}).get('slug')
             or obj.get('client_reference_id'))
+    if not slug and kind.startswith('invoice.'):
+        # Stripe may deliver an invoice before the checkout or subscription
+        # event that stores the customer id, so the customer lookup below would
+        # find nothing. The checkout puts the slug on the subscription, and an
+        # invoice carries a copy of it.
+        slug = ((obj.get('subscription_details') or {}).get('metadata') or {}).get('slug')
     customer = obj.get('customer')
 
     org = None
@@ -321,6 +367,13 @@ def apply_event(event):
         org = control_plane.find(engine, slug)
     if org is None and customer:
         org = control_plane.find_by_customer(engine, customer)
+    if org is None and kind == 'charge.refunded' and obj.get('invoice'):
+        # Not "nothing to do": the payment this refunds may simply not have
+        # been mapped yet (events can arrive out of order, or be delayed by an
+        # outage). Raising makes the webhook answer 500, so Stripe delivers it
+        # again later instead of the refund being lost for good, which would
+        # let the invoice.paid that follows pay a commission on money returned.
+        raise LookupError(f'refund for an unmapped customer ({customer}); retry later')
     if org is None:
         # An event for something we do not know about. Acknowledged so Stripe
         # stops retrying; recorded so somebody can look.
@@ -375,9 +428,35 @@ def apply_event(event):
         return True, f'{slug}: payment failed, marked past_due'
 
     if kind in ('invoice.paid', 'invoice.payment_succeeded'):
+        paid_fields = {}
+        if customer and not org.get('stripe_customer_id'):
+            # Matched by its subscription's metadata because it beat the
+            # checkout here. Remember the customer, or a refund that beats the
+            # mapping event too cannot find the company.
+            paid_fields['stripe_customer_id'] = customer
         control_plane.set_billing(engine, slug, subscription_status='active',
-                                  **_revenue_dates(org, 'active'))
+                                  **paid_fields, **_revenue_dates(org, 'active'))
+        # If a partner brought this company, this invoice earned them a share.
+        # Keyed on the invoice, so the same event twice earns it once, and
+        # never allowed to fail the payment above (it cannot raise).
+        import affiliates
+        affiliates.accrue(engine, slug, obj)
         return True, f'{slug}: payment received'
+
+    if kind == 'charge.refunded':
+        # A fully refunded invoice earns nothing. A partial refund is left for
+        # a person to look at: how much of a commission a part-refund undoes is
+        # a judgement, not arithmetic.
+        if obj.get('refunded') and obj.get('invoice'):
+            import affiliates
+            result = affiliates.reverse(engine, obj['invoice'], 'refunded', slug=slug)
+            return True, f'{slug}: refund, partner commission {result}'
+        # Held, not ignored: left alone, the full commission would still pay
+        # out once its hold ran out. Staff clear it after deciding what the
+        # part-refund undoes.
+        control_plane.hold_affiliate_commissions(
+            engine, slug, f'partial refund on {obj.get("invoice") or "an invoice"}')
+        return False, f'{slug}: partial refund, partner commissions held for review'
 
     return False, f'{slug}: ignored {kind}'
 

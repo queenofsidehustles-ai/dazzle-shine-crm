@@ -717,8 +717,12 @@
             body: JSON.stringify({
               question_index: this.currentQ,
               question_en: QUESTIONS_EN[this.currentQ],
-              cloudinary_public_id: cloud.public_id,
-              cloudinary_url: cloud.secure_url,
+              // Cloudinary's reply as it came: the server checks the id is in
+              // this company's folder and turns it into a signed reference.
+              public_id: cloud.public_id,
+              version: cloud.version,
+              format: cloud.format,
+              resource_type: cloud.resource_type,
               transcript: this.transcript.trim(),
               transcript_lang: this.lang,
             }),

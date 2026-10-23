@@ -8,6 +8,9 @@
    getting-started card is a better use of that space. Everything on it is a
    real count that disappears when it stops being true, so a quiet day looks
    quiet rather than inventing something to do. #}
+{# `complete` is able-to-trade: the day's plan is worth the space once
+   a business could actually take the work, not once it has typed in
+   every optional thing. #}
 {% if plan and ONBOARDING and ONBOARDING.complete %}
 <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber)">
   <div class="eyebrow" style="margin-bottom:10px">Today</div>
@@ -37,7 +40,7 @@
    useful thing this page can do is say what to do next. It disappears by
    itself the moment that happens -- nothing to dismiss, nothing to configure,
    and it never nags a business that is already working. #}
-{% if ONBOARDING and not ONBOARDING.complete and ONBOARDING.next %}
+{% if ONBOARDING and ONBOARDING.next %}
 <a href="{{ url_for('settings.getting_started') }}" class="onboard-card">
   <div>
     <div class="eyebrow">Getting started — {{ ONBOARDING.done }} of {{ ONBOARDING.total }}</div>

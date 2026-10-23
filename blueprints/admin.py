@@ -74,6 +74,21 @@ def version():
     return out
 
 
+# Browsers ask for these at fixed addresses on every host -- a customer's quote
+# link or booking page as much as the CRM -- whether or not the page names an
+# icon. Answering with the app's own icon turns a 404 on most first visits into
+# a picture, and keeps the logs' 404s for links that are actually broken.
+@admin_bp.route('/favicon.ico')
+def favicon():
+    return redirect(url_for('static', filename='icon-192.png'), code=301)
+
+
+@admin_bp.route('/apple-touch-icon.png')
+@admin_bp.route('/apple-touch-icon-precomposed.png')
+def apple_touch_icon():
+    return redirect(url_for('static', filename='icon-180.png'), code=301)
+
+
 def _daily_plan():
     """The day's list must never be the reason the dashboard fails to load."""
     try:
@@ -199,6 +214,16 @@ def reports():
     deposits_collected = db.session.query(func.count(Booking.id)).filter(
         Booking.deposit_paid == True,
     ).scalar() or 0
+    # What those deposits came to. Each booking records what it actually paid;
+    # older ones from before that was recorded count at today's deposit. This
+    # used to be the count times a flat $50.
+    from pricing import get_deposit
+    from sqlalchemy import case
+    _paid = db.session.query(
+        func.coalesce(func.sum(Booking.deposit_amount_paid), 0),
+        func.sum(case((Booking.deposit_amount_paid.is_(None), 1), else_=0)),
+    ).filter(Booking.deposit_paid == True).first()
+    deposits_total = float(_paid[0] or 0) + int(_paid[1] or 0) * float(get_deposit() or 0)
 
     # Top services
     service_rows = db.session.query(
@@ -238,6 +263,7 @@ def reports():
         profit_ytd=profit_ytd,
         balance_outstanding=round(float(balance_outstanding), 2),
         deposits_collected=deposits_collected,
+        deposits_total=deposits_total,
         service_data=service_data,
         leads_total=leads_total,
         leads_converted=leads_converted,
@@ -304,6 +330,13 @@ def switch_city(slug):
     import city_switch
     from flask import session, redirect, flash, url_for
     from models import User
+    import auth as _auth
+    # The other city signs this person in as its owner without its password or
+    # second factor, so only an owner here may start one. A dispatcher or a
+    # read-only login that shares an owner's email elsewhere is not that owner.
+    if not _auth.is_owner_session():
+        flash('Only an owner can switch cities.', 'warning')
+        return redirect(url_for('bookings.index'))
     user = User.query.get(session.get('user_id') or 0)
     email = (user.username if user else '').strip().lower()
     if not email or not city_switch.may_switch(email, slug):

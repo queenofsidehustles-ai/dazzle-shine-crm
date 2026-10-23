@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proposal — {{ q.company }} — {{ doc_biz }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Allura&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='akye.css') }}" />
+  <style>
+    body { margin: 0; background: var(--ground); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .bar { max-width: 680px; margin: 0 auto; padding: 14px 16px 0; display: flex; gap: 10px; justify-content: flex-end; font-family: Inter, sans-serif; }
+    .bar a, .bar button { font: 600 0.85rem Inter, sans-serif; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; text-decoration: none; }
+    @media print { .bar { display: none; } .qdoc .card, .qdoc .price-box { break-inside: avoid; box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <a href="{{ url_for('quotes.review', quote_id=q.id) }}">← Back to the review</a>
+    <button type="button" onclick="window.print()">🖨 Print or save as PDF</button>
+  </div>
+  {% include 'partials/quote_document.html' %}
+  {% if request.args.get('print') %}<script>window.addEventListener('load', function () { window.print(); });</script>{% endif %}
+</body>
+</html>

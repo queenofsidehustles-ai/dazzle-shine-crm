@@ -406,6 +406,31 @@ def test_pressing_the_buttons_sends_nothing(env):
     assert page.status_code == 200
 
 
+def test_a_quote_can_be_written_in_the_rebuilt_demo(env):
+    """The demo is built under a staging name and renamed into place. Its
+    evidence guards once named the staging schema in their bodies, so after the
+    rename every audit entry -- and so every new quote -- failed (0032)."""
+    import re
+    import evidence_check
+    import tenancy
+    from extensions import db
+    from models import ContractAuditEvent
+    c, base = _demo_client(env['app'])
+    r = c.post('/quotes/new', base_url=base, data={
+        'company': 'Rename Check', 'contact_name': 'Rae Name', 'email': 'rae@example.com',
+        'property_type': 'Office Building', 'frequency': 'weekly', 'contract_term': 'annual',
+        'services': ['Office Cleaning'], 'price_per_visit': '120', 'monthly_price': '500'})
+    m = re.search(r'/quotes/(\d+)', r.headers.get('Location', ''))
+    assert r.status_code == 302 and m, r.status_code
+    with env['app'].app_context(), tenancy.use_tenant('brightnest'):
+        events = ContractAuditEvent.query.filter_by(quote_id=int(m.group(1))).all()
+        db.session.remove()
+    assert [e.event for e in events] == ['created'] and events[0].row_hash
+    with _engine().connect() as conn:
+        problems = evidence_check.schema_report(conn, tenancy.schema_for('brightnest'))['problems']
+    assert problems == []
+
+
 def test_a_visitor_cannot_lock_out_the_next_one(env):
     import tenancy
     from extensions import db

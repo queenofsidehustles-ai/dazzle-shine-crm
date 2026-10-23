@@ -46,7 +46,7 @@ DEFAULT_PLAN = 'solo'
 # The trial is a full Pro trial, not a crippled one. A company with six cleaners
 # cannot evaluate this product inside the Solo limits — they would be testing a
 # tool built for somebody else and concluding, correctly, that it does not fit.
-TRIAL_DAYS = 14
+TRIAL_DAYS = 30
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +81,13 @@ PLANS = {
             'checklist_templates': None,
             'office_logins': None,
             'sms_per_month': 1000,     # fair use; metered past this, not cut off
+            # Unreachable on Pro today, and deliberately so: `lead_finder` is in
+            # billing_routes.SCALE_ONLY_FEATURES, the /upgrade page advertises
+            # Find Leads as a Scale feature, and test_upgrade_page.py holds that
+            # line. The number is here so the cap is already right the day Pro is
+            # given the feature -- it is not a quota Pro can spend. Read as one,
+            # it looks exactly like a paid feature that was left locked by
+            # mistake, which is a wrong turn worth signposting.
             'lead_searches_per_month': 200,   # ~4,000 businesses
         },
         'features': {

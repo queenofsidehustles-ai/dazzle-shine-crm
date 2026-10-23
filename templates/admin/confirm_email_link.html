@@ -1,0 +1,26 @@
+{% extends "admin/login_shell.html" %}
+{% block title %}Confirm your email{% endblock %}
+{% block panel %}
+  {# The emailed link lands here and nothing happens until the button is
+     pressed: mail scanners open every link, and must not confirm an address
+     nobody read (email_confirm.py). #}
+  {% if state == 'ask' %}
+    <h1>Is this you?</h1>
+    <p class="lead">Press the button to confirm that
+       <strong>{{ org.owner_email }}</strong> is the right email for
+       {{ org.name }}.</p>
+    <form method="post">
+      <button type="submit">Yes, this is me</button>
+    </form>
+  {% elif state == 'done' %}
+    <h1>You're confirmed</h1>
+    <p class="lead">Thanks. Everything we send about {{ org.name }} will reach
+       you at <strong>{{ org.owner_email }}</strong>.</p>
+    <a class="btn-link" href="/login">Go to my CRM →</a>
+  {% else %}
+    <h1>That link is out of date</h1>
+    <p class="lead">It may be from an older email, or the address on the
+       account has changed since. Sign in and you can send a fresh one.</p>
+    <a class="btn-link" href="/login">Sign in →</a>
+  {% endif %}
+{% endblock %}

@@ -147,7 +147,9 @@ with app.app_context():
           f"Alpha: its one error and its failing reminders ({row_a[-160:]!r})")
     check('2 errors' in row_b and 'automation' not in row_b,
           'Bravo: its own two errors, and none of Alpha\'s automation trouble')
-    check('>>Health</a>' not in body and '>Health</a>' in body, 'Health is in the navigation')
+    # The tab may carry a count of what needs a look, so match the link, not its end.
+    check('>>Health' not in body and 'console/health' in body and '>Health' in body,
+          'Health is in the navigation')
     check('asked 2×' in body, 'a lead who asked twice is one row, counted')
 
     print('\n4. The company page reads that company and nobody else')
@@ -198,6 +200,37 @@ with app.app_context():
     check(marks == ['marked as test account', 'marked as a real company'],
           f'both changes are in the record ({marks})')
 
+    print('\n6c. Archiving hides a company from the list, and changes nothing else')
+    # Archive is not suspend or close: a company archived by mistake must keep
+    # its sign-in, its billing and its automations, or tidying the list
+    # quietly stops a live business.
+    import scheduler
+    keep = ('status', 'plan', 'subscription_status', 'trial_ends_at', 'is_test',
+            'suspended_at', 'closed_at', 'stripe_subscription_id')
+    before = {k: control_plane.find(engine, A).get(k) for k in keep}
+    post(helper, f'/console/companies/{A}/archive', {'on': '1'})
+    check(not control_plane.find(engine, A).get('archived_at'), 'a helper cannot archive one')
+    post(manager, f'/console/companies/{A}/archive', {'on': '1'})
+    after = control_plane.find(engine, A)
+    check(after.get('archived_at') is not None, 'a manager can')
+    check({k: after.get(k) for k in keep} == before,
+          'its status, plan, billing and trial are exactly as they were')
+    check(f'Ops Alpha {TAG}' not in get(helper, '/console/companies').data.decode()
+          and f'Ops Alpha {TAG}' in get(helper, '/console/companies?show=archived').data.decode(),
+          'it leaves the default list for the Archived one')
+    check(A in [o['slug'] for o in scheduler.companies()], 'its automations still run')
+    owner_page = app.test_client().get('/login', base_url=f'https://{A}.akyehq.test')
+    check(owner_page.status_code == 200, 'its owner can still reach the sign-in page')
+    post(manager, f'/console/companies/{A}/archive', {'on': '0'})
+    check(control_plane.find(engine, A).get('archived_at') is None
+          and f'Ops Alpha {TAG}' in get(helper, '/console/companies').data.decode(),
+          'unarchiving puts it back')
+    with engine.connect() as conn:
+        marks = [r[0] for r in conn.execute(text(
+            "SELECT action FROM public.console_log WHERE actor = :a AND target = :t "
+            "AND action LIKE '%archived' ORDER BY id"), {'a': MANAGER, 't': A})]
+    check(marks == ['archived', 'unarchived'], f'both changes are in the record ({marks})')
+
     print('\n7. Suspend needs a reason, locks the company out, and reactivates')
     post(manager, f'/console/companies/{B}/suspend', {'reason': ''})
     check(control_plane.find(engine, B)['status'] == 'active', 'no reason, no suspension')
@@ -230,15 +263,16 @@ with app.app_context():
     check('\'=HYPERLINK' in csv_body and ',=HYPERLINK' not in csv_body,
           'a name starting with = is exported as text')
 
-    print('\n9. Health: every company at once, and the trial emails')
+    print('\n9. Health: every company at once; trial emails on Communications')
     body = get(helper, '/console/health').data.decode()
     alpha_row = body.split(f'Ops Alpha {TAG}')[1].split('</tr>')[0]
     check('failing' in alpha_row, "Alpha's failing reminders show in the matrix")
-    check(f'Ops Charlie {TAG}' not in body.split('Trial emails due')[1].split('Closed, in retention')[0],
+    comms = get(helper, '/console/communications').data.decode()
+    check(f'Ops Charlie {TAG}' not in comms.split('Due today')[1].split('Every automated email')[0],
           'a closed company is never sent a trial email')
     check(f'Ops Charlie {TAG}' in body.split('Closed, in retention')[1],
           'it is listed as closed, with the date it can be purged')
-    check('once a day at 22:00 UTC' in body,
+    check('22:00 UTC' in comms,
           'the page says when they go out on their own')
     with engine.begin() as conn:
         conn.execute(text("UPDATE public.organizations SET status = 'active', closed_at = NULL "
@@ -251,10 +285,11 @@ with app.app_context():
     charlie_listed = listing.split(f'Ops Charlie {TAG}')[1].split('</tr>')[0]
     check('could not read' in charlie_listed and 'error' not in charlie_listed,
           "and the list does not show another schema's errors as Charlie's")
-    due = body.split('Trial emails due')[1].split('Closed, in retention')[0]
-    check(f'Ops Charlie {TAG}' in due and 'Not started (day 7)' in due,
+    comms = get(helper, '/console/communications').data.decode()
+    due = comms.split('Due today')[1].split('Every automated email')[0]
+    check(f'Ops Charlie {TAG}' in due and 'A week in: two minutes to see it work' in due,
           'reopened, Charlie is due the day-7 email')
-    check('Send these' not in due, 'a helper gets no send button')
+    check('Send owner emails now' not in due, 'a helper gets no send button')
     SENT.clear()
     post(helper, '/console/health/trial-emails')
     check(SENT == [], 'and posting at it sends nothing')

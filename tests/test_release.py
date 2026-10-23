@@ -164,11 +164,102 @@ print('\n9. Two products, two lines, and they cannot be confused')
 # than the business selling it.
 rel = load_release_py()
 dazzle, akye = rel.LINES['dazzle'], rel.LINES['akye']
-check(dazzle.source == 'main' and dazzle.channel == 'stable',
-      'Dazzle still ships main → stable, exactly as before')
-check(akye.source == 'feature/tenancy' and akye.channel == 'akye-stable',
-      'Akye ships feature/tenancy → akye-stable, not straight to customers')
+# Dazzle & Shine now runs on Akye as a company, and main is Akye's working
+# branch. The single-business line ships only from its archive, so a release
+# can never put Akye on the single-business customers' channel.
+check(dazzle.source == 'dazzle-shine-single-tenant' and dazzle.channel == 'stable',
+      'the single-business CRM ships its archive → stable, never main')
+check(akye.source == 'main' and akye.channel == 'akye-stable',
+      'Akye ships main → akye-stable: merging is not releasing')
 check(akye.channel != dazzle.channel, 'the two channels are separate branches')
+
+# Railway deploys akye-stable the moment it moves, so the checks on the exact
+# commit are the gate, before the push -- not a report after customers have it.
+req = akye.required_checks
+check(len(req) == 4 and not dazzle.required_checks,
+      'an Akye release needs the four checks that run on every push to main')
+green = [{'id': 1, 'name': n, 'status': 'completed', 'conclusion': 'success'} for n in req]
+check(rel.check_problems(green, req) == [], 'all four passed: nothing stops it')
+rerun = green[:3] + [{'id': 2, 'name': req[3], 'status': 'completed', 'conclusion': 'failure'},
+                     {'id': 3, 'name': req[3], 'status': 'completed', 'conclusion': 'success'}]
+check(rel.check_problems(rerun, req) == [], 'a check that failed and passed on re-run counts as passed')
+check(rel.check_problems(green[:3], req) == [f'{req[3]}: has not run on this commit'],
+      'one that never ran stops the release')
+running = green[:3] + [{'id': 4, 'name': req[3], 'status': 'in_progress', 'conclusion': None}]
+check(rel.check_problems(running, req) == [f'{req[3]}: still running'], 'so does one still running')
+failed = green[:3] + [{'id': 5, 'name': req[3], 'status': 'completed', 'conclusion': 'failure'}]
+check(rel.check_problems(failed, req) == [f'{req[3]}: failure'], 'and one that failed')
+src = (ROOT / 'release.py').read_text()
+go_src = src[src.index('def go('):src.index('def rollback(')]
+check(go_src.index('require_green(') < go_src.index("f'{line.channel}:{line.channel}'"),
+      'and the checks are asked before the channel is pushed')
+
+# A rollback goes back from the release the channel is on, not from the newest
+# tag: after one rollback the newest tag is no longer what customers run.
+on = {'akye-v3': 'c3', 'akye-v2': 'c2', 'akye-v1': 'c1'}
+tags_ = ['akye-v3', 'akye-v2', 'akye-v1']
+check(rel.release_before(tags_, 'c3', on.get) == ('akye-v3', 'akye-v2'), 'rollback from v3 goes to v2')
+check(rel.release_before(tags_, 'c2', on.get) == ('akye-v2', 'akye-v1'),
+      'and a second rollback, from v2, goes to v1 rather than to v2 again')
+check(rel.release_before(tags_, 'c1', on.get) == ('akye-v1', None), 'with nothing before the first')
+check(rel.release_before(tags_, 'cx', on.get) is None,
+      'and a channel on no release is left for a person to move')
+
+# What a release was is kept in its tag, not only in a terminal that closes:
+# the runs it was let through on, the schema it moves to, and the way back.
+runs_ = [{'id': 7, 'name': n, 'status': 'completed', 'conclusion': 'success',
+          'html_url': f'https://github.com/o/r/actions/runs/1/job/{i}'} for i, n in enumerate(req)]
+ev = rel.check_evidence(runs_, req)
+check(len(ev) == 4 and all('success (https://github.com/o/r/actions/runs/1/job/' in e for e in ev),
+      'the release records each required check and the run it came from')
+head = rel.migration_head()
+import migrate as _mig
+check(head == _mig.ScriptDirectory.from_config(_mig._config()).get_current_head(),
+      f'and the migration head it takes every company to ({head})')
+m = rel.release_manifest(akye, 'akye-v2026.10.21', 'abc1234def', ev,
+                         ['aaa111 One change', 'bbb222 Another'], 'akye-v2026.10.06')
+for part, what in (('abc1234def', 'the exact commit whose checks were required'),
+                   (ev[0], 'each check run'), (head, 'the migration head'),
+                   ('aaa111 One change', 'every change'),
+                   ('--rollback (back to akye-v2026.10.06)', 'the way back')):
+    check(part in m, f'the manifest names {what}')
+check('(no earlier release)' in rel.release_manifest(akye, 't', 's', ev, [], None),
+      'a first release says there is nothing to roll back to')
+check('release.py --rollback (back to v1)' in rel.release_manifest(dazzle, 'v2', 's', [], [], 'v1'),
+      "and the single-business line's record rolls back its own line, without --akye")
+
+# When GitHub cannot be asked, a typed-back hash is no evidence. Each check
+# needs a link to its run, and a second person, both kept in the tag.
+import builtins
+_real_input, _real_git, _real_repo = builtins.input, rel.git, rel._github_repo
+rel._github_repo = lambda: 'o/r'
+rel.git = lambda *a, **k: 'Pat Releaser' if a[:2] == ('config', 'user.name') else ''
+def by_hand(answers):
+    it = iter(answers)
+    builtins.input = lambda prompt='': next(it)
+    try:
+        return rel._attest_by_hand(akye, 'abc1234def')
+    except SystemExit:
+        return None
+links = [f'https://github.com/o/r/actions/runs/{100 + i}' for i in range(len(req))]
+try:
+    ok_ev = by_hand(links + ['Sam Checker'])
+    check(ok_ev and all(l in ' '.join(ok_ev) for l in links) and 'Sam Checker' in ok_ev[-1],
+          'by hand: each run link and the second person go into the record')
+    check(by_hand(['abc1234'] + links[1:] + ['Sam Checker']) is None,
+          'a typed-back hash instead of a run link is refused')
+    check(by_hand(['https://github.com/other/repo/actions/runs/1'] + links[1:] + ['Sam Checker']) is None,
+          "a run from another repository is refused")
+    check(by_hand([links[0]] * len(links) + ['Sam Checker']) is None
+          and by_hand([links[0], links[0] + '/job/7'] + links[2:] + ['Sam Checker']) is None,
+          'one run given for two checks is refused (each runs in its own workflow)')
+    check(by_hand(links + ['']) is None and by_hand(links + ['pat releaser']) is None,
+          'and so is no second person, or the releaser naming themselves')
+finally:
+    builtins.input, rel.git, rel._github_repo = _real_input, _real_git, _real_repo
+src2 = (ROOT / 'release.py').read_text()
+go2 = src2[src2.index('def go('):src2.index('def rollback(')]
+check("'-m', manifest" in go2, 'and go() writes it as the tag message')
 
 check(dazzle.tag_prefix != akye.tag_prefix,
       'each line has its own tag series, so same-day releases cannot collide')

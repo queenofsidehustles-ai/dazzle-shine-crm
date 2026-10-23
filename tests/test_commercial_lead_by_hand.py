@@ -1,0 +1,1553 @@
+"""A lead you found yourself: on the call list, quoted the right way, and talked to.
+
+Search was the only way onto the call list, so the leads a cleaning company
+values most -- the office manager met at a networking breakfast, the property
+manager a customer passed on -- had nowhere to go. And a quote never knew which
+lead it was for, so what would go wrong without each of these:
+  * a referral kept on somebody's phone instead of the list, and never called;
+  * the same business typed in twice, and rung by two people;
+  * a quote copied out by hand from the lead's details;
+  * a proposal sent while the call list still said "book the walkthrough";
+  * a business that accepted still due a follow-up call -- ringing a customer
+    who has just signed;
+  * a lead texting back and showing in the inbox as an Unknown number, with
+    Thursday's follow-up still set for somebody who answered on Tuesday;
+  * the Send button on a quote quietly saving instead of sending, because it
+    sat in a form nested inside another;
+  * a property manager buying unit turnovers quoted as an office contract --
+    or an office quoted per bedroom -- because the call list could not say
+    which kind of work a lead was.
+
+Against a disposable Postgres, like the rest of the multi-company suite.
+"""
+import math
+import os
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / 'tests'))
+import fresh_postgres  # a multi-company app needs PostgreSQL schemas
+from quote_answer import answer
+os.environ['DATABASE_URL'] = fresh_postgres.url('dsm_test_commercial_lead_by_hand')
+os.environ['SECRET_KEY'] = 'test'
+os.environ['BASE_DOMAIN'] = 'akye.test'
+os.environ['FLASK_ENV'] = 'development'
+
+import notifications
+SENT = []
+notifications.send_email = lambda *a, **k: (SENT.append((a, k)) or (True, 'stub'))
+notifications.send_sms = lambda *a, **k: (True, 'stub')
+
+from app import create_app
+from extensions import db
+from models import CommercialAccount, CommercialQuote, Message, Prospect
+from scheduling import local_today
+import provisioning
+import tenancy
+
+app = create_app()
+failures = []
+
+
+def check(cond, m):
+    print(f'  {"✅" if cond else "❌"} {m}')
+    if not cond:
+        failures.append(m)
+
+
+SLUG = 'gleam'
+HOST = f'http://{SLUG}.akye.test'
+with app.app_context():
+    provisioning.provision(SLUG, 'Gleam Cleaning', quiet=True)
+    db.session.remove()
+# The starter templates a real signup gets -- the residential quote email is one.
+provisioning.seed(app, SLUG)
+fresh_postgres.set_company_plan(SLUG, 'scale')
+c = fresh_postgres.owner_client(app, SLUG, 'akye.test')
+TODAY = local_today().isoformat()
+
+
+def lead(name):
+    with app.app_context(), tenancy.use_tenant(SLUG):
+        p = Prospect.query.filter_by(business_name=name).first()
+        out = None if p is None else {k: getattr(p, k) for k in (
+            'id', 'stage', 'status', 'source', 'next_action', 'next_action_date',
+            'notes', 'contact_name', 'email', 'brand', 'phone', 'website')}
+        db.session.remove()
+        return out
+
+
+print('\n1. A business you met goes onto the call list by hand')
+page = c.get('/find-leads/?view=add', base_url=HOST).get_data(as_text=True)
+check('Add a business yourself' in page and 'action="/find-leads/add"' in page,
+      'there is an "Add one" form on Find leads')
+r = c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Sunrise Pediatrics', 'category': 'medical_office',
+    'contact_name': 'Dana Ruiz', 'phone': '(301) 555-0142',
+    'email': 'dana@sunrisepeds.example', 'website': 'sunrisepeds.example',
+    'address': '12 Elm St', 'city': 'Rockville', 'brand': 'all',
+    'notes': 'Met at the chamber breakfast — nightly cleaning, 3 restrooms'})
+p = lead('Sunrise Pediatrics')
+check(r.status_code == 302 and p is not None, 'it is saved')
+check(p and p['source'] == 'manual' and p['stage'] == 'new'
+      and p['next_action'] == 'First call' and p['next_action_date'] == TODAY,
+      'as a first call due today, like anything search found')
+check(p and p['brand'] == 'commercial', 'a medical office is worked as the commercial brand')
+check(p and p['website'] == 'https://sunrisepeds.example', 'a bare website gets its https://')
+check(p and 'chamber breakfast' in (p['notes'] or '') and 'Added by hand' in p['notes'],
+      'and what you knew about them is on its notes')
+today = c.get('/find-leads/?view=today', base_url=HOST).get_data(as_text=True)
+check('Sunrise Pediatrics' in today, 'it is on Today\'s calls straight away')
+
+print('\n2. The same business is not added twice')
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Sunrise Peds (Dana)', 'phone': '301.555.0142', 'city': 'Bethesda'})
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'sunrise pediatrics', 'city': 'ROCKVILLE'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    n = Prospect.query.count()
+    db.session.remove()
+check(n == 1, f'not by the same number, nor the same name in the same town ({n} on the list)')
+r = c.post('/find-leads/add', base_url=HOST, data={'business_name': '  '})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    n = Prospect.query.count()
+    db.session.remove()
+check(n == 1, 'and a blank name adds nothing')
+
+c.post('/find-leads/add', base_url=HOST, data={'business_name': 'Bright Smiles Dental'})
+c.post('/find-leads/add', base_url=HOST, data={'business_name': 'Bright Smiles Dental'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    n = Prospect.query.filter_by(business_name='Bright Smiles Dental').count()
+    db.session.remove()
+check(n == 2, 'but a name alone, with no town, is not a duplicate — franchises share names')
+
+print('\n3. From the lead: text them and quote them')
+everyone = c.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
+check('id="cdText"' in everyone and 'id="cdQuote"' in everyone,
+      'the lead\'s drawer has Text and Quote next to Call')
+check('/messages/thread/0000000000' in everyone and 'prospect_id=0' in everyone,
+      'pointing at the inbox and a new quote for that lead')
+sheet = c.get(f'/find-leads/call/{p["id"]}', base_url=HOST).get_data(as_text=True)
+check('/messages/thread/3015550142' in sheet and f'/quotes/new?prospect_id={p["id"]}' in sheet,
+      'and so does the one-at-a-time call sheet')
+
+form = c.get(f'/quotes/new?prospect_id={p["id"]}', base_url=HOST).get_data(as_text=True)
+check('value="Sunrise Pediatrics"' in form and 'value="Dana Ruiz"' in form
+      and 'value="dana@sunrisepeds.example"' in form and 'value="(301) 555-0142"' in form,
+      'the quote opens already filled in with what the lead knows')
+check('value="12 Elm St, Rockville"' in form and re.search(
+          r'<option value="Office Building"\s+selected', form),
+      'address and property type too')
+check(f'name="prospect_id" value="{p["id"]}"' in form and 'on your call list' in form,
+      'and it says which lead it is for')
+
+r = c.post('/quotes/new', base_url=HOST, data={
+    'prospect_id': p['id'], 'company': 'Sunrise Pediatrics', 'contact_name': 'Dana Ruiz',
+    'email': 'dana@sunrisepeds.example', 'phone': '(301) 555-0142',
+    'property_type': 'Office Building', 'frequency': 'daily', 'contract_term': 'annual',
+    'monthly_price': '1850', 'services': ['Office Cleaning', 'Restroom Sanitation']})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    q = CommercialQuote.query.filter_by(company='Sunrise Pediatrics').first()
+    qid, token, linked = q.id, q.token, q.prospect_id
+    db.session.remove()
+check(linked == p['id'], 'the saved quote remembers its lead')
+
+detail = c.get(f'/quotes/{qid}', base_url=HOST).get_data(as_text=True)
+review_page = c.get(f'/quotes/{qid}/review', base_url=HOST).get_data(as_text=True)
+check(f'formaction="/quotes/{qid}/review"' in detail
+      and f'action="/quotes/{qid}/send"' not in detail.replace('formaction', '')
+      and f'action="/quotes/{qid}/send"' in review_page,
+      'the edit form goes to the review with a button of its own, not a form nested inside it '
+      '(which a browser ignores); Send is on the review page')
+
+print('\n4. Sending moves the lead to Proposal')
+SENT.clear()
+r = c.post(f'/quotes/{qid}/send', base_url=HOST)
+p = lead('Sunrise Pediatrics')
+check(any(k.get('to_email') == 'dana@sunrisepeds.example' for _, k in SENT),
+      'the proposal is emailed to them')
+check(p['stage'] == 'proposal' and p['next_action'] == 'Follow up on the quote'
+      and p['next_action_date'] > TODAY,
+      f'the lead is in Proposal with a follow-up a few days out ({p["stage"]}, {p["next_action_date"]})')
+check('Quote emailed' in (p['notes'] or ''), 'and the notes say a quote went')
+
+print('\n5. Accepting wins it; declining rests it')
+anon = app.test_client()
+answer(anon, token, HOST, 'accept', name='Dana Ruiz')
+p = lead('Sunrise Pediatrics')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    acc = CommercialAccount.query.filter_by(business_name='Sunrise Pediatrics').first()
+    acc_lead = acc.prospect_id if acc else None
+    db.session.remove()
+check(p['stage'] == 'won' and p['status'] == 'won' and not p['next_action_date'],
+      'an accepted quote marks the lead won, with no call left due')
+check(acc_lead == p['id'], 'and the new account knows which lead it came from')
+today = c.get('/find-leads/?view=today', base_url=HOST).get_data(as_text=True)
+check('Sunrise Pediatrics' not in today.split('Today\'s calls', 1)[-1].split('callDrawer')[0],
+      'so nobody rings a business that has just signed')
+c.post(f'/quotes/{qid}/send', base_url=HOST)
+check(lead('Sunrise Pediatrics')['stage'] == 'won',
+      'resending the accepted quote leaves them won, not back in Proposal')
+
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Maple Office Park', 'category': 'office', 'phone': '3015550199'})
+m = lead('Maple Office Park')
+c.post('/quotes/new', base_url=HOST, data={
+    'prospect_id': m['id'], 'company': 'Maple Office Park', 'contact_name': 'Lee',
+    'email': 'lee@maple.example', 'property_type': 'Office Building', 'monthly_price': '900',
+    'frequency': 'weekly', 'contract_term': 'month_to_month', 'services': ['Office Cleaning']})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    q2 = CommercialQuote.query.filter_by(company='Maple Office Park').first()
+    t2 = q2.token
+    db.session.remove()
+check(lead('Maple Office Park')['email'] == 'lee@maple.example'
+      and lead('Maple Office Park')['contact_name'] == 'Lee',
+      'who the quote went to is kept on the lead for the next call')
+c.post('/find-leads/add', base_url=HOST, data={'business_name': 'Quiet Office Co', 'city': 'Laurel'})
+qo = lead('Quiet Office Co')
+c.post('/quotes/new', base_url=HOST, data={
+    'prospect_id': qo['id'], 'company': 'Quiet Office Co', 'contact_name': 'Sam',
+    'email': 'sam@quiet.example', 'phone': '(301) 555-0400', 'property_type': 'Office Building'})
+check(lead('Quiet Office Co')['phone'] == '(301) 555-0400',
+      'a phone number first given on the quote is kept on the lead too')
+c.post(f'/quotes/{q2.id}/send', base_url=HOST)
+answer(anon, t2, HOST, 'decline', name='')
+m = lead('Maple Office Park')
+check(m['stage'] == 'nurture' and m['next_action'] == 'Quarterly check-in'
+      and m['next_action_date'] > TODAY,
+      'a declined quote rests the lead in nurture for a quarter, not lost')
+
+print('\n6. When a lead texts back, the inbox and the call list both know')
+import blueprints.messages as M
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Harbor Daycare', 'category': 'daycare',
+    'contact_name': 'Pat', 'phone': '+1 (240) 555-0177'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    who = M.resolve_contact('2405550177')
+    check(M.contact_kind(who) == 'prospect' and who['name'] == 'Pat (Harbor Daycare)',
+          f'the number reads as the business lead, not Unknown ({who["name"]})')
+    with app.test_request_context('/messages/incoming', method='POST',
+                                  data={'From': '+12405550177',
+                                        'Body': 'Yes — can you come Tuesday to look?'}):
+        M.incoming()
+    db.session.remove()
+# Leaving a request clears the current company, so look again from inside it.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    msg = Message.query.filter_by(phone='2405550177', direction='in').first()
+    check(msg is not None and msg.contact_name == 'Pat (Harbor Daycare)',
+          'the reply is in the inbox under their name')
+    db.session.remove()
+h = lead('Harbor Daycare')
+check('Texted back' in (h['notes'] or '') and 'come Tuesday' in h['notes'],
+      'and on the lead\'s notes')
+check(h['next_action'] == 'They texted back — reply' and h['next_action_date'] == TODAY
+      and h['stage'] == 'interested',
+      'replying is what is due today, and the lead is now Interested')
+inbox = c.get('/messages/', base_url=HOST).get_data(as_text=True)
+check('Business lead' in inbox, 'the inbox can filter to business leads')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    with app.test_request_context('/messages/incoming', method='POST',
+                                  data={'From': '+12405550177', 'Body': 'STOP'}):
+        M.incoming()
+    db.session.remove()
+check('Texted STOP' in (lead('Harbor Daycare')['notes'] or ''),
+      'a STOP is written on the lead, so nobody texts them again by hand')
+
+# Twilio refuses a STOPped number anyway, but the CRM must not offer or try.
+everyone = c.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
+harbor_row = everyone.split('data-name="Harbor Daycare"', 1)[1].split('>', 1)[0]
+check('data-smsstop="1"' in harbor_row, 'after STOP the drawer stops offering Text')
+sheet = c.get(f'/find-leads/call/{h["id"]}', base_url=HOST).get_data(as_text=True)
+check('/messages/thread/2405550177' not in sheet, 'and so does the call sheet')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    before = Message.query.filter_by(phone='2405550177', direction='out').count()
+    db.session.remove()
+c.post('/messages/thread/2405550177/send', base_url=HOST, data={'body': 'Just checking in!'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after = Message.query.filter_by(phone='2405550177', direction='out').count()
+    db.session.remove()
+check(after == before, 'and a text typed into their conversation is refused, not sent')
+
+print('\n7. Only the owner is offered a quote')
+from blueprints import places_finder as PF
+with app.test_request_context('/', base_url=HOST):
+    from flask import session
+    session['role'] = 'team'
+    check(PF._can_quote() is False, 'a team member\'s drawer has no Quote button')
+
+print('\n8. Residential or commercial: a toggle, and the quote follows it')
+page = c.get('/find-leads/?view=add', base_url=HOST).get_data(as_text=True)
+check('name="kind" value="residential"' in page and 'name="kind" value="commercial"' in page,
+      'the add form asks what they are buying')
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Oakline Property Management', 'category': 'property_manager',
+    'contact_name': 'Jo Park', 'phone': '3015550311', 'email': 'jo@oakline.example',
+    'address': '9 Main St', 'city': 'Gaithersburg'})
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Ridge Realty Offices', 'category': 'realtor', 'kind': 'commercial'})
+oak, ridge = lead('Oakline Property Management'), lead('Ridge Realty Offices')
+check(oak['brand'] == 'primary', 'left alone, a property manager is residential — turnovers are home cleaning')
+check(ridge['brand'] == 'commercial', 'but picking Commercial overrides the guess')
+everyone = c.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
+check('🏠 Residential' in everyone and '🏢 Commercial' in everyone,
+      'every lead shows which it is')
+check('data-kind="residential"' in everyone and '/leads/quote/new?prospect_id=0' in everyone,
+      'and the drawer knows, with the home quote to hand')
+
+sheet = c.get(f'/find-leads/call/{oak["id"]}', base_url=HOST).get_data(as_text=True)
+check(f'/leads/quote/new?prospect_id={oak["id"]}' in sheet and 'Home quote' in sheet
+      and f'/quotes/new?prospect_id={oak["id"]}' not in sheet,
+      'a residential lead\'s call sheet offers the per-home quote, not a contract')
+
+form = c.get(f'/leads/quote/new?prospect_id={oak["id"]}', base_url=HOST).get_data(as_text=True)
+check('value="Jo Park"' in form and 'value="jo@oakline.example"' in form
+      and 'value="3015550311"' in form and 'value="9 Main St"' in form,
+      'the home quote opens filled in from the lead')
+check(re.search(r'<option value="moveout"\s+selected', form)
+      and f'name="prospect_id" value="{oak["id"]}"' in form
+      and 'Residential quote for' in form,
+      'as a move-out/turnover, saying which lead it is for')
+SENT.clear()
+c.post('/leads/quote/new', base_url=HOST, data={
+    'prospect_id': oak['id'], 'name': 'Jo Park', 'email': 'jo@oakline.example',
+    'phone': '3015550311', 'service_type': 'moveout', 'bedrooms': '2', 'bathrooms': '1',
+    'frequency': 'one_time', 'address': '9 Main St', 'city': 'Gaithersburg'})
+oak = lead('Oakline Property Management')
+from models import Lead
+with app.app_context(), tenancy.use_tenant(SLUG):
+    res = Lead.query.filter_by(email='jo@oakline.example').first()
+    res_link, res_id = (res.prospect_id, res.id) if res else (None, None)
+    db.session.remove()
+check(res_link == oak['id'], 'the residential quote remembers its lead')
+check(any(k.get('to_email') == 'jo@oakline.example' or (a and a[0] == 'jo@oakline.example')
+          for a, k in SENT), 'and is emailed to them')
+check(oak['stage'] == 'proposal' and oak['next_action'] == 'Follow up on the quote'
+      and 'Residential quote' in (oak['notes'] or ''),
+      'sending it moves the lead to Proposal, like a contract quote')
+
+import quoting
+with app.app_context(), tenancy.use_tenant(SLUG):
+    quoting.accept_quote(db.session.get(Lead, res_id), '2026-11-02')
+    db.session.remove()
+oak = lead('Oakline Property Management')
+check(oak['stage'] == 'won' and not oak['next_action_date'],
+      'and when they book from it, the lead is won')
+
+r = c.post(f'/find-leads/{ridge["id"]}/kind', base_url=HOST,
+           data={'kind': 'residential', 'next': 'https://evil.example/'})
+check(lead('Ridge Realty Offices')['brand'] == 'primary', 'one tap flips a lead to residential')
+check(r.headers.get('Location', '').startswith('/find-leads'),
+      'and sends you back to the call list, never off-site')
+c.post(f'/find-leads/{ridge["id"]}/kind', base_url=HOST, data={'kind': 'nonsense'})
+check(lead('Ridge Realty Offices')['brand'] == 'primary', 'anything else changes nothing')
+form = c.get(f'/quotes/new?prospect_id={ridge["id"]}', base_url=HOST).get_data(as_text=True)
+check(f'/leads/quote/new?prospect_id={ridge["id"]}' in form,
+      'and a contract quote started by mistake links across to the home quote')
+
+print('\n9. Restaurants are a kind of business of their own')
+import brands
+import commercial_pricing
+import places_finder as finder
+page = c.get('/find-leads/?view=add', base_url=HOST).get_data(as_text=True)
+check('<option value="restaurant"' in page and 'Restaurant / Café' in page,
+      'Restaurant is in the list when adding one by hand')
+find = c.get('/find-leads/?view=find', base_url=HOST).get_data(as_text=True)
+check('<option value="restaurant"' in find and finder.CATEGORY_QUERIES.get('restaurant'),
+      'and can be searched for under Find new')
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Sunshine Grill', 'category': 'restaurant', 'city': 'Silver Spring'})
+grill = lead('Sunshine Grill')
+check(grill['brand'] == 'commercial', 'a restaurant is commercial work unless you say otherwise')
+form = c.get(f'/quotes/new?prospect_id={grill["id"]}', base_url=HOST).get_data(as_text=True)
+check(re.search(r'<option value="Restaurant / Food Service"\s+selected', form),
+      'its contract quote opens as a restaurant')
+check(brands.brand_for_property('Restaurant / Food Service') == brands.COMMERCIAL,
+      'and goes out under the commercial name')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    check(commercial_pricing.prod_rate('restaurant') < commercial_pricing.prod_rate('office'),
+          'kitchens are priced as slower work than an office')
+    db.session.remove()
+with app.app_context(), tenancy.use_tenant(SLUG):
+    ticked = set(commercial_pricing.get_config()['default_extras']['restaurant'])
+    bare = commercial_pricing.quote(4000, 'restaurant', 'weekly', [])['monthly']
+    full = commercial_pricing.quote(4000, 'restaurant', 'weekly', sorted(ticked))['monthly']
+    no_line = commercial_pricing.quote(4000, 'restaurant', 'weekly',
+                                       sorted(ticked - {'floor_degrease', 'kitchen_equipment'}))['monthly']
+    med_bare = commercial_pricing.quote(4000, 'medical_office', 'weekly', [])['monthly']
+    med_full = commercial_pricing.quote(4000, 'medical_office', 'weekly', ['disinfection'])['monthly']
+    db.session.remove()
+check(ticked == {'restrooms', 'breakroom', 'floor_degrease', 'kitchen_equipment'},
+      'the kitchen, restrooms, floor degreasing and the line (fryers, grills, cooktops) start ticked')
+check(bare < no_line < full, f'but unticking them takes them off the price ({bare} < {no_line} < {full})')
+check(med_bare == med_full, 'while a medical office still always carries its disinfection')
+
+# Find new under "All brands" used to file every search as residential.
+find = c.get('/find-leads/?view=find', base_url=HOST).get_data(as_text=True)
+check(re.search(r'<option value="all"\s+selected>Work it out', find),
+      'Find new files results by their kind of business unless you pick a brand')
+import json as _json
+c.post('/find-leads/import', base_url=HOST, data={
+    'brand': 'all', 'selected': ['demo-restaurant-1'],
+    'payload_demo-restaurant-1': _json.dumps({
+        'business_name': 'Lakeside Bistro', 'category': 'restaurant',
+        'place_id': 'demo-restaurant-1', 'city': 'Rockville', 'phone': '(407) 555-0413'})})
+check(lead('Lakeside Bistro')['brand'] == 'commercial',
+      'so a restaurant found by search lands as commercial')
+
+# The call sheet's script follows the toggle, like its quote button does.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from models import BusinessSetting
+    BusinessSetting.set('commercial_name', 'Gleam Commercial Co')
+    db.session.commit()
+    db.session.remove()
+sheet_com = c.get(f'/find-leads/call/{grill["id"]}', base_url=HOST).get_data(as_text=True)
+c.post(f'/find-leads/{grill["id"]}/kind', base_url=HOST, data={'kind': 'residential'})
+sheet_res = c.get(f'/find-leads/call/{grill["id"]}', base_url=HOST).get_data(as_text=True)
+# The brand switcher at the top of every page names both companies once, so
+# compare against that: the commercial name only shows in the script itself.
+check(sheet_com.count('Gleam Commercial Co') > 1 and sheet_res.count('Gleam Commercial Co') == 1
+      and 'Home quote' in sheet_res,
+      'flipped to residential, the call sheet reads the residential company, not the commercial one')
+
+print('\n10. Gyms and churches too')
+page = c.get('/find-leads/?view=add', base_url=HOST).get_data(as_text=True)
+find = c.get('/find-leads/?view=find', base_url=HOST).get_data(as_text=True)
+for key, name, ptype, extras in (
+        ('gym', 'Harbor Point CrossFit', 'Gym / Fitness Center', {'restrooms', 'disinfection'}),
+        ('church', 'Lakeside Baptist Church', 'Church / House of Worship', {'restrooms'})):
+    check(f'<option value="{key}"' in page and f'<option value="{key}"' in find
+          and finder.CATEGORY_QUERIES.get(key),
+          f'{key}: in the add list, and searchable under Find new')
+    c.post('/find-leads/add', base_url=HOST, data={
+        'business_name': name, 'category': key, 'city': 'Bowie'})
+    row = lead(name)
+    check(row['brand'] == 'commercial', f'{key}: commercial work by default')
+    form = c.get(f'/quotes/new?prospect_id={row["id"]}', base_url=HOST).get_data(as_text=True)
+    check(re.search(rf'<option value="{re.escape(ptype)}"\s+selected', form)
+          and brands.brand_for_property(ptype) == brands.COMMERCIAL,
+          f'{key}: its contract quote opens as "{ptype}", under the commercial name')
+    with app.app_context(), tenancy.use_tenant(SLUG):
+        cfg = commercial_pricing.get_config()
+        rate = commercial_pricing.prod_rate(key)
+        # Big enough to be past the minimum-visit floor, which would hide an add-on.
+        bare = commercial_pricing.quote(12000, key, 'weekly', [])['monthly']
+        full = commercial_pricing.quote(12000, key, 'weekly', sorted(extras))['monthly']
+        db.session.remove()
+    check(key in commercial_pricing.PROD_RATES and rate == commercial_pricing.PROD_RATES[key]
+          and set(cfg['default_extras'][key]) == extras and bare < full,
+          f'{key}: its own cleaning rate, with {sorted(extras)} pre-ticked and removable')
+check(commercial_pricing.prod_rate('gym') < commercial_pricing.prod_rate('office')
+      < commercial_pricing.prod_rate('church'),
+      'a gym is slower work than an office, a church faster')
+
+print('\n11. One page per lead: correct it, qualify it, talk to it, quote it, sign it')
+r = c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Chang Chang', 'category': 'office', 'phone': '2025700946', 'city': 'Washington'})
+chang = lead('Chang Chang')
+check(r.headers.get('Location', '').endswith(f'/find-leads/{chang["id"]}'),
+      'adding a lead by hand lands on its own page')
+page = c.get(f'/find-leads/{chang["id"]}', base_url=HOST).get_data(as_text=True)
+check(page.count('Log a call') and 'name="category"' in page and 'Contract quote' in page
+      and 'Make them an account' in page and '2025700946' in page,
+      'the page has the details, the call log, the quote and the account step in one place')
+
+c.post(f'/find-leads/{chang["id"]}/edit', base_url=HOST, data={
+    'business_name': 'Chang Chang', 'category': 'restaurant', 'contact_name': 'Mei Chang',
+    'phone': '2025700946', 'email': 'mei@changchang.example', 'city': 'Washington'})
+chang = lead('Chang Chang')
+check(chang['brand'] == 'commercial' and chang['contact_name'] == 'Mei Chang'
+      and chang['email'] == 'mei@changchang.example',
+      'an office typed in by mistake is corrected to a restaurant, with who to ask for')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    check(db.session.get(Prospect, chang['id']).category == 'restaurant', 'and saved as one')
+    db.session.remove()
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'office'})
+check(lead('Oakline Property Management')['brand'] == 'commercial',
+      'changing the kind of business, without picking a side, follows the new kind')
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'office', 'kind': 'residential'})
+check(lead('Oakline Property Management')['brand'] == 'primary', 'but a side picked by hand wins')
+
+r = c.post(f'/find-leads/{chang["id"]}/status', base_url=HOST, data={
+    'mode': 'log', 'status': 'interested', 'log_note': 'Wants nightly cleaning, 3,200 sq ft, kitchen too',
+    'next': f'/find-leads/{chang["id"]}'})
+chang = lead('Chang Chang')
+check(r.headers.get('Location', '').endswith(f'/find-leads/{chang["id"]}')
+      and chang['stage'] == 'interested' and 'nightly cleaning' in (chang['notes'] or ''),
+      'a call logged from the page qualifies the lead and comes back to the page')
+r = c.post(f'/find-leads/{chang["id"]}/snooze', base_url=HOST,
+           data={'days': '3', 'next': 'https://evil.example/'})
+check('evil.example' not in r.headers.get('Location', ''), 'and never sends anybody off-site')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    import blueprints.places_finder as PF2
+    with app.test_request_context('/', base_url=HOST):
+        openers = PF2._openers()
+    db.session.remove()
+check(all(openers[b].get(cat) for b in openers for cat in ('office', 'restaurant', 'gym')),
+      'the drawer has an opening script for every kind of business (it said "No script loaded yet")')
+
+conv = c.get(f'/commercial/convert/{chang["id"]}', base_url=HOST).get_data(as_text=True)
+check('value="Mei Chang"' in conv and 'value="mei@changchang.example"' in conv,
+      'making them an account starts filled in from the lead')
+c.post(f'/commercial/convert/{chang["id"]}', base_url=HOST, data={
+    'contact_name': 'Mei Chang', 'email': 'mei@changchang.example', 'phone': '2025700946',
+    'frequency': 'nightly', 'billing_type': 'monthly', 'billing_amount': '2400'})
+chang = lead('Chang Chang')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    acct = CommercialAccount.query.filter_by(prospect_id=chang['id']).first()
+    acct_cat = acct.category if acct else None
+    db.session.remove()
+check(acct is not None and acct_cat == 'restaurant', 'they become a restaurant account')
+check(chang['stage'] == 'won' and not chang['next_action_date'],
+      'and the lead is won, with no call left due')
+page = c.get(f'/find-leads/{chang["id"]}', base_url=HOST).get_data(as_text=True)
+check('Their account' in page and 'Make them an account' not in page,
+      'the page now points at their account instead')
+
+print('\n12. The lead page is a lead surface, and gets the details right')
+import rbac
+check(all(rbac.required_permission(ep, m) == 'prospect.work' for ep, m in (
+          ('places_finder.lead_page', 'GET'), ('places_finder.edit_lead', 'POST'),
+          ('places_finder.set_kind', 'POST'), ('places_finder.add_by_hand', 'POST'))),
+      'the lead page and its forms are the prospecting module (prospect.work)')
+def role_client(role):
+    """Signed in as a real user with this role, bound like a real login --
+    a role changed inside the session alone is (rightly) signed out."""
+    from auth import _auth_fingerprint
+    from models import User
+    with app.app_context(), tenancy.use_tenant(SLUG):
+        u = User(name=role.title(), username=f'{role}@{SLUG}.test', role=role, active=True)
+        u.set_password('a-perfectly-fine-password')
+        db.session.add(u)
+        db.session.commit()
+        uid, fp = u.id, _auth_fingerprint(u.password_hash)
+        db.session.remove()
+    client = app.test_client()
+    with client.session_transaction(base_url=HOST) as sess:
+        sess.update(logged_in=True, role=role, user_id=uid, user_name=role.title(),
+                    auth_fingerprint=fp, tenant_slug=SLUG)
+    return client
+
+
+cl = role_client('cleaner')
+r1 = cl.get(f'/find-leads/{chang["id"]}', base_url=HOST)
+r2 = cl.post(f'/find-leads/{chang["id"]}/edit', base_url=HOST, data={'business_name': 'Hijacked'})
+check(r1.status_code == 403 and r2.status_code == 403 and lead('Chang Chang') is not None,
+      f'a cleaner can neither open a lead page nor rename the lead ({r1.status_code}, {r2.status_code})')
+dc = role_client('dispatcher')
+check(dc.get(f'/find-leads/{chang["id"]}', base_url=HOST).status_code == 403,
+      'nor can a dispatcher -- prospecting is the owner\'s and the Sales role\'s')
+
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'property_manager'})
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={'category': 'property_manager', 'kind': 'commercial'})
+check(lead('Oakline Property Management')['brand'] == 'commercial', '(set up: flipped to commercial by hand)')
+c.post(f'/find-leads/{oak["id"]}/edit', base_url=HOST, data={
+    'category': 'apartment', 'kind': 'commercial', 'kind_was': 'commercial'})
+check(lead('Oakline Property Management')['brand'] == 'primary',
+      'changing only the kind of business moves the side, though the form sends the side it showed')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from models import Script
+    db.session.add(Script(category='call_office', title='Opening — offices (starter pack)',
+                          content='Hi, quick question about your office cleaning', sort_order=1))
+    old_lead = Prospect(business_name='Old Won Bakery', category='restaurant', status='won',
+                        stage=None, phone='3015550999')
+    db.session.add(old_lead)
+    db.session.commit()
+    old_id = old_lead.id
+    # What a lead from before stages existed looks like: no stage, nothing due.
+    db.session.execute(db.text('UPDATE prospect SET stage = NULL, next_action = NULL, '
+                               'next_action_date = NULL, attempts = NULL WHERE id = :i'), {'i': old_id})
+    db.session.commit()
+    with app.test_request_context('/', base_url=HOST):
+        office = PF2._openers()['commercial']['office']
+    db.session.remove()
+check(office and office[0]['title'].startswith('Opening — offices (starter pack)'),
+      'loaded starter-pack openings for a kind of business are the ones the drawer reads')
+c.get(f'/find-leads/{old_id}', base_url=HOST)
+check(lead('Old Won Bakery')['stage'] == 'won',
+      'an old lead opened straight from a link is brought up to date, not shown as New')
+
+print('\n13. The walkthrough: booked, filled in on site, and written into the quote')
+import commercial_pricing as cp
+c.post('/find-leads/add', base_url=HOST, data={
+    'business_name': 'Golden Wok', 'category': 'restaurant', 'phone': '2025550101', 'city': 'Washington'})
+wok = lead('Golden Wok')
+page = c.get(f'/find-leads/{wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('Book walkthrough' in page and 'Fill in the checklist on site' in page,
+      'a lead can have its walkthrough booked, and the checklist filled in')
+c.post(f'/find-leads/{wok["id"]}/walkthrough/book', base_url=HOST,
+       data={'date': '2026-11-03', 'time': '10:30am'})
+wok = lead('Golden Wok')
+check(wok['next_action'] == 'Walkthrough at 10:30am' and wok['next_action_date'] == '2026-11-03'
+      and wok['stage'] == 'interested',
+      'booking it makes it the next step, on the day, so it shows on the calendar')
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'sqft': '3,200', 'restrooms': '2', 'frequency': 'weekly', 'hours': '',
+    'services': ['floors', 'restrooms', 'nonsense'], 'days': 'Mondays after close',
+    'access': 'Back door, code 4412', 'notes': 'Tile in the dining room'})
+wok = lead('Golden Wok')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    w = prospecting_walk = __import__('prospecting').walkthrough(db.session.get(Prospect, wok['id']))
+    db.session.remove()
+check(w.get('sqft') == 3200 and w.get('services') == ['floors', 'restrooms'] and w.get('frequency') == 'weekly',
+      'the checklist is saved: 3,200 sq ft, weekly, floors and restrooms (unknown boxes ignored)')
+check(wok['next_action'] == 'Write and send the quote' and wok['next_action_date'] == TODAY
+      and 'Walkthrough done — 3,200 sq ft · 2 restrooms · weekly' in (wok['notes'] or ''),
+      'and the next step is writing the quote, today, with the walkthrough in the history')
+page = c.get(f'/find-leads/{wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('Write the quote from this walkthrough' in page and 'Starting price' in page,
+      'the page shows what was found, a starting price, and the way to the quote')
+
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('value="3200"' in form and re.search(r'<option value="weekly"\s+selected', form)
+      and re.search(r'value="Floor Care \(Sweep &amp; Mop\)"[^>]*checked', form)
+      and re.search(r'value="Restroom Sanitation"[^>]*checked', form)
+      and not re.search(r'value="Window Cleaning"[^>]*checked', form)
+      and 'Mondays after close' in form and 'Filled in from the walkthrough' in form,
+      'the contract quote opens with the size, how often, the services ticked and the scope')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    full = cp.quote(3200, 'restaurant', 'weekly', ['restrooms'])
+    db.session.remove()
+check(f'value="{full["per_visit"]}"' in form and f'value="{full["monthly"]}"' in form,
+      f'with a starting price from the calculator (${full["per_visit"]} a visit, ${full["monthly"]}/mo)')
+
+# Floors only, an hour and a half: priced from the hours judged on site, not
+# as a full clean of every square foot.
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'sqft': '3200', 'frequency': 'weekly', 'hours': '1.5', 'services': ['floors']})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    by_hours = cp.quote(3200, 'restaurant', 'weekly', [], hours=1.5)
+    db.session.remove()
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check(by_hours['per_visit'] < full['per_visit'] and f'value="{by_hours["per_visit"]}"' in form,
+      f'floors only, 1.5 hours a visit, starts at ${by_hours["per_visit"]} -- not the full-clean ${full["per_visit"]}')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    check(cp.quote(3200, 'restaurant', 'weekly', []) == cp.quote(3200, 'restaurant', 'weekly', [], hours=None),
+          'and without judged hours the calculator prices exactly as before')
+    db.session.remove()
+
+# A restaurant's kitchen: the floor degreased and the line cleaned, on the
+# checklist, in the price and on the quote.
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'sqft': '3200', 'frequency': 'weekly',
+    'services': ['floors', 'floor_degrease', 'kitchen_equipment']})
+page = c.get(f'/find-leads/{wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('Kitchen floor — degrease' in page and 'fryers, grills, cooktops' in page,
+      'the checklist offers kitchen floor degreasing and the fryers, grills and cooktops')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    kitchen = cp.quote(3200, 'restaurant', 'weekly', ['floor_degrease', 'kitchen_equipment'])
+    plain = cp.quote(3200, 'restaurant', 'weekly', [])
+    db.session.remove()
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check(kitchen['per_visit'] > plain['per_visit'] and f'value="{kitchen["per_visit"]}"' in form,
+      f'and are priced: ${kitchen["per_visit"]} a visit against ${plain["per_visit"]} for the floors alone')
+check(re.search(r'value="Kitchen Floor Degreasing"[^>]*checked', form)
+      and re.search(r'value="Kitchen Equipment Degreasing \(Fryers, Grills, Cooktops\)"[^>]*checked', form),
+      'the quote lists them ticked')
+import html as _html
+svc = [_html.unescape(v) for v in re.findall(r'name="services" value="([^"]+)"', form)]
+check(svc[:3] == ['Floor Care (Sweep & Mop)', 'Kitchen Floor Degreasing',
+                  'Kitchen Equipment Degreasing (Fryers, Grills, Cooktops)'],
+      f'and a restaurant quote shows kitchen services first, not apartment lines ({svc[:3]})')
+
+# Deep cleaning is more time in every room, so it is priced as a premium --
+# on the quote form's estimate as much as on the walkthrough.
+def est(**kw):
+    import urllib.parse
+    return c.get('/commercial/quote.json?' + urllib.parse.urlencode(kw, doseq=True), base_url=HOST).get_json()
+base = est(sqft=1400, category='restaurant', frequency='weekly')
+deep = est(sqft=1400, category='restaurant', frequency='weekly', extras=['deep'])
+post = est(sqft=1400, category='restaurant', frequency='weekly', extras=['post_construction'])
+check(deep['per_visit'] > base['per_visit'] and post['per_visit'] > deep['per_visit'],
+      f'a deep clean costs more than a regular one, post-construction more again '
+      f'(${base["per_visit"]} < ${deep["per_visit"]} < ${post["per_visit"]} a visit)')
+check(est(sqft=3200, category='restaurant', frequency='weekly', hours=1.5)['per_visit']
+      < est(sqft=3200, category='restaurant', frequency='weekly')['per_visit'],
+      'and the estimate takes the hours judged on site, as the walkthrough does')
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('"Deep Cleaning": "deep"' in form and '"Restroom Sanitation": "restrooms"' in form
+      and '"Kitchen Floor Degreasing": "floor_degrease"' in form
+      and '/commercial/quote.json' in form and 'est-intensity' not in form,
+      'the quote form\'s Estimate Helper prices the ticked services through that calculator, '
+      'not a flat rate per square foot')
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'sqft': '3200', 'frequency': 'weekly', 'services': ['floors', 'deep']})
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    deep_wok = cp.quote(3200, 'restaurant', 'weekly', ['deep'])
+    db.session.remove()
+check(re.search(r'value="Deep Cleaning"[^>]*checked', form) and f'value="{deep_wok["per_visit"]}"' in form,
+      f'a deep clean ticked on the walkthrough is on the quote, at the deep price (${deep_wok["per_visit"]})')
+
+print('\n13b. A quote can be saved half-done, and Send sends what is on the screen')
+form = c.get('/quotes/new', base_url=HOST).get_data(as_text=True)
+check('Save draft' in form and 'Nothing is sent when you save' in form and "quote-draft:" in form
+      and not re.search(r'name="email"[^>]*required', form)
+      and not re.search(r'name="contact_name"[^>]*required', form),
+      'the form says it saves a draft, keeps what is typed on the phone, and needs no email to save')
+n_sent = len(SENT)
+r = c.post('/quotes/new', base_url=HOST, data={
+    'company': 'Half Known Diner', 'property_type': 'Restaurant / Food Service',
+    'sqft': '2400', 'frequency': 'weekly', 'services': ['Floor Care (Sweep & Mop)'],
+    'price_per_visit': '180', 'monthly_price': '774'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    hq = CommercialQuote.query.filter_by(company='Half Known Diner').first()
+    hq_id, hq_status = (hq.id, hq.status) if hq else (None, None)
+    db.session.remove()
+check(hq_id and hq_status == 'draft' and len(SENT) == n_sent,
+      'a draft with only the business and the numbers saves, and sends nothing')
+r = c.post(f'/quotes/{hq_id}/send', base_url=HOST, data={})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    hq_status = db.session.get(CommercialQuote, hq_id).status
+    db.session.remove()
+check(hq_status == 'draft' and len(SENT) == n_sent, 'and it cannot be sent until it says who it is for')
+page = c.get(f'/quotes/{hq_id}', base_url=HOST).get_data(as_text=True)
+check('Save draft' in page and 'value="2400"' in page, 'reopened, it is still a draft with everything kept')
+c.post(f'/quotes/{hq_id}/send', base_url=HOST, data={
+    'company': 'Half Known Diner', 'contact_name': 'Rosa Diaz', 'email': 'rosa@diner.example',
+    'property_type': 'Restaurant / Food Service', 'sqft': '2400', 'frequency': 'weekly',
+    'contract_term': 'month_to_month',
+    'services': ['Floor Care (Sweep & Mop)'], 'price_per_visit': '195', 'monthly_price': '839'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    hq = db.session.get(CommercialQuote, hq_id)
+    hq_state = (hq.status, hq.email, float(hq.monthly_price or 0))
+    db.session.remove()
+sent_html = ' '.join(str(k.get('html', '')) for _a, k in SENT[n_sent:])
+check(hq_state == ('sent', 'rosa@diner.example', 839.0) and '839.00' in sent_html,
+      f'Send saves what was typed and emails that -- the new $839/mo, not the old $774 ({hq_state})')
+
+print('\n13c. Review the proposal as a document, circulate it, then send')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    rq = CommercialQuote(company='Review & <Co>', contact_name='', email='', property_type='Restaurant / Food Service',
+                         services='Floor Care (Sweep & Mop), Kitchen Floor Degreasing', frequency='weekly',
+                         contract_term='month_to_month', price_per_visit=200, monthly_price=500,
+                         scope_notes='Mondays after close', token='tok-review-co', status='draft',
+                         prospect_id=wok['id'])
+    db.session.add(rq)
+    db.session.commit()
+    rq_id = rq.id
+    db.session.remove()
+n_sent = len(SENT)
+page = c.get(f'/quotes/{rq_id}/review', base_url=HOST).get_data(as_text=True)
+check('Commercial Cleaning Proposal' in page and 'Kitchen Floor Degreasing' in page and 'DRAFT' in page
+      and 'Review &amp; &lt;Co&gt;' in page and '<Co>' not in page.replace('&lt;Co&gt;', ''),
+      'the review shows the proposal as the customer will read it, marked DRAFT, with what was typed escaped')
+check('The email they will get' in page and 'srcdoc=' in page and 'sandbox="allow-same-origin"' in page
+      and 'allow-scripts' not in page,
+      'and the exact email that will go out, in a sandboxed frame')
+check('No contact name' in page and 'No email address' in page and 'does not match' in page
+      and re.search(r'<button type="submit" class="btn btn-gold"[^>]*disabled', page),
+      'it lists what is missing or off (no contact, no email, $500/mo vs $200 x 4.33 visits) and holds Send back')
+check('/quotes/view/tok-review-co/accept' not in page,
+      'and the review page has no live Accept button for the owner to press by mistake')
+c.post(f'/quotes/{rq_id}/send', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    still = db.session.get(CommercialQuote, rq_id).status
+    db.session.remove()
+check(still == 'draft' and len(SENT) == n_sent, 'Send itself refuses while the review says it cannot go')
+
+r = c.post(f'/quotes/{rq_id}/circulate', base_url=HOST,
+           data={'to': 'partner@gleam.example, walker@gleam.example', 'note': 'Is $200 right?'})
+copies = SENT[n_sent:]
+to_list = sorted((a[0] if a else k.get('to_email')) for a, k in copies)
+html0 = str(copies[0][1].get('html', '')) if copies else ''
+check(to_list == ['partner@gleam.example', 'walker@gleam.example']
+      and 'DRAFT for review' in html0 and 'Is $200 right?' in html0
+      and 'tok-review-co' not in html0 and 'Review &amp; Accept Quote' not in html0,
+      'Send for review emails a DRAFT copy to each reviewer, with the note and no way to accept it')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    st = db.session.get(CommercialQuote, rq_id).status
+    wok_notes = db.session.get(Prospect, wok['id']).notes or ''
+    db.session.remove()
+check(st == 'draft' and 'Draft quote sent for review to partner@gleam.example' in wok_notes,
+      'the quote is still an unsent draft, and the lead\'s history says who was asked to review it')
+n2 = len(SENT)
+c.post(f'/quotes/{rq_id}/circulate', base_url=HOST, data={'to': 'not-an-email'})
+check(len(SENT) == n2, 'a reviewer address that is not an email sends nothing')
+
+c.post(f'/quotes/{rq_id}/review', base_url=HOST, data={
+    'company': 'Review & <Co>', 'contact_name': 'Mei Chang', 'email': 'mei@review.example',
+    'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St',
+    'services': ['Floor Care (Sweep & Mop)'], 'frequency': 'weekly', 'contract_term': 'month_to_month',
+    'price_per_visit': '200', 'monthly_price': '866', 'scope_notes': 'Mondays after close'})
+page = c.get(f'/quotes/{rq_id}/review', base_url=HOST).get_data(as_text=True)
+check('Nothing missing' in page and not re.search(r'<button type="submit" class="btn btn-gold"[^>]*disabled', page),
+      'Review before sending saves the form first; filled in, the checks clear and Send is offered')
+n3 = len(SENT)
+c.post(f'/quotes/{rq_id}/send', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    st = db.session.get(CommercialQuote, rq_id).status
+    db.session.remove()
+sent_html = ' '.join(str(k.get('html', '')) for _a, k in SENT[n3:])
+check(st == 'sent' and 'Review &amp; Accept Quote' in sent_html and 'Review &amp; &lt;Co&gt;' in sent_html,
+      'then it sends, the email matching what was reviewed (with its Accept link this time)')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    db.session.get(CommercialQuote, rq_id).status = 'declined'
+    db.session.commit()
+    db.session.remove()
+page = c.get(f'/quotes/{rq_id}/review', base_url=HOST).get_data(as_text=True)
+n4 = len(SENT)
+c.post(f'/quotes/{rq_id}/send', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    st = db.session.get(CommercialQuote, rq_id).status
+    db.session.get(CommercialQuote, rq_id).status = 'accepted'
+    db.session.commit()
+    db.session.remove()
+check('Revise and send a new version' in page and 'Send the revised proposal' not in page
+      and st == 'declined' and len(SENT) == n4,
+      'a declined quote is not re-sent under the link they declined -- the review offers a revision instead')
+page = c.get(f'/quotes/{rq_id}/review', base_url=HOST).get_data(as_text=True)
+n5 = len(SENT)
+c.post(f'/quotes/{rq_id}/send', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    st = db.session.get(CommercialQuote, rq_id).status
+    db.session.remove()
+check('This quote was accepted' in page and st == 'accepted' and len(SENT) == n5,
+      'but an accepted one is not sent again, or it would go back to "sent" with follow-ups restarting')
+
+# Integrity review: once accepted, the terms are locked against every edit route --
+# not just against being re-sent -- so an operator (or a mistake) can't quietly
+# rewrite what a customer actually agreed to.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    accepted_q = db.session.get(CommercialQuote, rq_id)
+    accepted_state = (accepted_q.company, float(accepted_q.price_per_visit or 0), float(accepted_q.monthly_price or 0))
+    db.session.remove()
+tamper = {'company': 'Hijacked Co', 'contact_name': 'Someone Else', 'email': 'nobody@example.com',
+          'property_type': 'Restaurant / Food Service', 'frequency': 'weekly',
+          'contract_term': 'month_to_month', 'price_per_visit': '1', 'monthly_price': '1'}
+r_tamper = c.post(f'/quotes/{rq_id}', base_url=HOST, data=tamper)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after_tamper = db.session.get(CommercialQuote, rq_id)
+    tamper_state = (after_tamper.company, float(after_tamper.price_per_visit or 0), float(after_tamper.monthly_price or 0))
+    db.session.remove()
+flash_page = c.get(f'/quotes/{rq_id}', base_url=HOST).get_data(as_text=True)
+check(r_tamper.status_code == 302 and tamper_state == accepted_state
+      and 'terms are locked' in flash_page,
+      "an accepted quote's own edit form cannot change it -- price and company stay exactly what was accepted")
+c.post(f'/quotes/{rq_id}/review', base_url=HOST, data=tamper)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after_tamper2 = db.session.get(CommercialQuote, rq_id)
+    tamper_state2 = (after_tamper2.company, float(after_tamper2.price_per_visit or 0), float(after_tamper2.monthly_price or 0))
+    db.session.remove()
+check(tamper_state2 == accepted_state, 'nor does posting the same form from the review page')
+n_tamper = len(SENT)
+c.post(f'/quotes/{rq_id}/send', base_url=HOST, data=tamper)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after_tamper3 = db.session.get(CommercialQuote, rq_id)
+    tamper_state3 = (after_tamper3.company, float(after_tamper3.price_per_visit or 0), float(after_tamper3.monthly_price or 0))
+    db.session.remove()
+check(tamper_state3 == accepted_state and len(SENT) == n_tamper,
+      "nor does pressing Send with edited fields in the form -- it used to apply the edit, commit it, "
+      "and only then refuse to actually send")
+
+doc = c.get(f'/quotes/{rq_id}/document', base_url=HOST)
+dtext = doc.get_data(as_text=True)
+check(doc.status_code == 200 and 'Commercial Cleaning Proposal' in dtext and 'Mondays after close' in dtext
+      and '/accept' not in dtext and 'base_admin' not in dtext and 'Ask Nana' not in dtext,
+      'the proposal on a page of its own, to print or save as a PDF, with no Accept button and no back office around it')
+form = c.get('/quotes/new', base_url=HOST).get_data(as_text=True)
+lst = c.get('/quotes/', base_url=HOST).get_data(as_text=True)
+check('Save &amp; review before sending' in form and f'/quotes/{hq_id}/send' not in lst,
+      'a new quote can go straight to review, and the quote list no longer has a send-without-looking button')
+
+print('\n13d. Quoted by work area, line by line')
+import json as _json
+with app.app_context(), tenancy.use_tenant(SLUG):
+    floors = cp.area_quote([{'name': 'Service floor / entry', 'lines': [
+        {'item': 'floor_stone', 'qty': 800}, {'item': 'floor_ceramic', 'qty': 1000},
+        {'item': 'floor_hardwood', 'qty': 600}]}], 'weekly')
+    small = cp.area_quote([{'name': 'Entry', 'lines': [{'item': 'floor_hardwood', 'qty': 200}]}], 'weekly')
+    db.session.remove()
+ln = {l['item']: l for l in floors['areas'][0]['lines']}
+per_sqft = {k: ln[k]['price'] / ln[k]['qty'] for k in ln}
+check(len({round(v, 4) for v in per_sqft.values()}) == 3 and per_sqft['floor_ceramic'] > per_sqft['floor_hardwood'],
+      f'each floor is priced on its own rate: stone ${ln["floor_stone"]["price"]}, ceramic ${ln["floor_ceramic"]["price"]}, '
+      f'hardwood ${ln["floor_hardwood"]["price"]}')
+check(floors['areas'][0]['subtotal'] == sum(l['price'] for l in floors['areas'][0]['lines'])
+      and floors['per_visit'] == floors['work'] + floors['travel']
+      and floors['monthly'] == round(floors['per_visit'] * cp.VISITS_PER_MONTH['weekly']),
+      f'areas add up to the work, and work + travel to the visit (${floors["per_visit"]}, ${floors["monthly"]}/mo)')
+check(small['per_visit'] == small['work'] + small['travel'] and 'minimum' not in small,
+      'an itemized quote has no minimum-visit floor -- a small job is priced at exactly what its lines add up to')
+check(all(ln[k]['rate_per_sqft'] == round(ln[k]['price'] / ln[k]['qty'], 4) for k in ln)
+      and floors['areas'][0]['rate_per_sqft'] == round(floors['areas'][0]['subtotal'] / 2400, 4)
+      and floors['price_per_sqft'] == round(floors['per_visit'] / 2400, 4)
+      and floors['sqft'] == 2400,
+      f'the quote also reads as $/sq ft -- per line, per area, and for the whole visit (${floors["price_per_sqft"]}/sq ft)')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    fixtures = cp.area_quote([{'name': 'Restrooms', 'lines': [{'item': 'rr_toilet', 'qty': 3}]}], 'weekly')
+    db.session.remove()
+check(fixtures['areas'][0]['lines'][0]['rate_per_sqft'] is None and fixtures['areas'][0]['rate_per_sqft'] is None
+      and fixtures['price_per_sqft'] is None and fixtures['sqft'] == 0,
+      'a line, area or quote with nothing priced by the square foot has no $/sq ft to show')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    first = cp.area_quote([{'name': 'Service floor / entry', 'lines': [
+        {'item': 'floor_stone', 'qty': 800}, {'item': 'floor_ceramic', 'qty': 1000},
+        {'item': 'floor_hardwood', 'qty': 600}]}], 'weekly', first_visit=True)
+    db.session.remove()
+check(first['per_visit'] == floors['per_visit'] and first['monthly'] == floors['monthly'],
+      'a first-visit premium never touches the recurring per-visit or monthly price')
+check(first['first_visit_charge'] == round(first['work'] * first['first_visit_pct'])
+      and first['first_visit_charge'] > 0
+      and first['first_visit_total'] == round(first['per_visit'] + first['first_visit_charge'], 2),
+      f'it shows as its own one-time line instead (+${first["first_visit_charge"]}, '
+      f'first visit total ${first["first_visit_total"]})')
+check(floors['first_visit_charge'] == 0 and floors['first_visit_total'] == floors['per_visit'],
+      'and without the toggle, there is no premium to show at all')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    locked_fv = cp.area_quote([{'name': 'Service floor / entry', 'lines': [{'item': 'floor_stone', 'qty': 800}]}],
+                              'weekly', first_visit=True, fixed={'first_visit_pct': 0.10})
+    db.session.remove()
+check(locked_fv['first_visit_pct'] == 0.10 and locked_fv['first_visit_charge'] == round(locked_fv['work'] * 0.10),
+      "a saved quote's first-visit premium is locked the same way its lines and travel are -- "
+      "a changed comm_first_visit_pct setting doesn't reach it (see quotes._lock_saved)")
+
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30', 'comm_item_floor_hardwood_rate': '900'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    slower = cp.line_price('floor_hardwood', 600)[0]
+    db.session.remove()
+check(slower > ln['floor_hardwood']['price'],
+      f'the owner sets how fast each surface goes in Settings (hardwood at 900 sq ft/h: ${slower})')
+
+r = c.post('/quotes/lines.json', base_url=HOST, json={'areas': [{'name': 'Kitchen', 'lines': [
+    {'item': 'k_fryer', 'qty': 2}, {'item': 'floor_kitchen', 'qty': ''}]}], 'frequency': 'weekly'})
+d = r.get_json() or {}
+check(r.status_code == 200 and len(d['areas'][0]['lines']) == 2 and d['areas'][0]['lines'][0]['price'] > 0,
+      'the editor is priced on the server as it is typed, half-typed rows kept in place')
+
+areas_in = [
+    {'name': 'Service floor / entry', 'lines': [
+        {'item': 'floor_stone', 'qty': 800}, {'item': 'floor_ceramic', 'qty': 1000},
+        {'item': 'floor_hardwood', 'qty': 600, 'price': 40, 'override': True}]},
+    {'name': 'Restrooms', 'lines': [{'item': 'rr_toilet', 'qty': 3}, {'item': 'custom', 'label': 'Replace air fresheners', 'price': 6},
+                                    {'item': 'custom', 'label': 'Replace window screens', 'qty': 4, 'rate': 7.5}]},
+]
+r = c.post('/quotes/new', base_url=HOST, data={
+    'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',
+    'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St', 'frequency': 'weekly',
+    'contract_term': 'month_to_month', 'price_per_visit': '1', 'monthly_price': '1', 'show_line_prices': '1',
+    'first_visit_premium': '1',
+    'line_items_json': _json.dumps(areas_in), 'prospect_id': str(wok['id'])})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    aq = CommercialQuote.query.filter_by(company='Areas & Co').first()
+    aq_id = aq.id
+    snap = _json.loads(aq.line_items)
+    aq_ppv, aq_mon = float(aq.price_per_visit), float(aq.monthly_price)
+    db.session.remove()
+hw = snap['areas'][0]['lines'][2]
+cust = snap['areas'][1]['lines'][1]
+by_unit = snap['areas'][1]['lines'][2]
+check(aq_ppv == snap['per_visit'] and aq_mon == snap['monthly'] and aq_ppv != 1,
+      f'the lines set the price a visit and a month (${aq_ppv}, ${aq_mon}) -- not what was typed in the boxes')
+check(hw['price'] == 40 and hw['override'] and cust['label'] == 'Replace air fresheners' and cust['price'] == 6,
+      'a price typed over is kept, and a line for something else is described and priced by hand')
+check(by_unit['price'] == 30 and not by_unit['override'] and by_unit['unit_rate'] == 7.5,
+      "or priced as its own qty times a rate, like a catalog line, instead of typed as one flat number (4 x $7.50 = $30)")
+check(snap['first_visit_charge'] > 0 and aq_ppv == snap['per_visit'],
+      f'"New contract" on the form saves a first-visit premium without touching the recurring price (+${snap["first_visit_charge"]})')
+
+edit = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+check('id="firstVisitPremium"' in edit and 'checked' in edit.split('firstVisitPremium')[1].split('>')[0],
+      'and the editor remembers the toggle was on when the quote is reopened')
+page = c.get(f'/quotes/{aq_id}/review', base_url=HOST).get_data(as_text=True)
+check('First Visit' in page and 'first-visit premium' in page
+      and f'${snap["first_visit_total"]:,.2f}' in page,
+      'and the proposal shows the one-time premium and the first-visit total, separately from the recurring price')
+
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '40', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30', 'comm_item_floor_hardwood_rate': '1800'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    still = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+check(still == snap, 'a quote keeps the prices it was written with when the rates change later')
+edit_stale = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+check('rates in Settings have changed' in edit_stale,
+      'reopening a quote after a rate changes flags that it was priced at different rates')
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+edit_fresh = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+check('rates in Settings have changed' not in edit_fresh,
+      'and the flag clears once rates are back to what the quote was priced at')
+
+# Codex review: the first-visit percentage is locked the same way lines and travel are.
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30', 'comm_first_visit_pct': '50'})
+edit_fv_stale = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+check('rates in Settings have changed' in edit_fv_stale,
+      'changing just the first-visit percentage flags it too, even though per_visit alone would not have moved')
+c.post(f'/quotes/{aq_id}', base_url=HOST, data={
+    'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',
+    'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St', 'frequency': 'weekly',
+    'contract_term': 'month_to_month', 'show_line_prices': '1', 'first_visit_premium': '1',
+    'line_items_json': _json.dumps(areas_in)})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    relocked = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+check(relocked['first_visit_pct'] == snap['first_visit_pct'] and relocked['first_visit_charge'] == snap['first_visit_charge'],
+      "saving the quote again (fixing a typo, say) keeps the first-visit premium it was written with -- not today's 50%")
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30', 'comm_first_visit_pct': '25'})
+
+page = c.get(f'/quotes/{aq_id}/review', base_url=HOST).get_data(as_text=True)
+check('Scope of Work by Area' in page and 'Service floor / entry' in page and 'Restrooms' in page
+      and 'Ceramic tile floor' in page and '$40.00' in page and 'Travel to and from your site' in page
+      and 'Services Included' not in page.split('The email they will get')[0],
+      'the proposal lists each area and its lines with their prices, then the visit charges')
+sent_n = len(SENT)
+c.post(f'/quotes/{aq_id}/send', base_url=HOST)
+mail = ' '.join(str(k.get('html', '')) for _a, k in SENT[sent_n:])
+check('Scope of Work by Area' in mail and 'Hardwood floor' in mail and '$40.00' in mail and 'Restrooms total' in mail,
+      'and the email carries the same table')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    tok = db.session.get(CommercialQuote, aq_id).token
+    db.session.remove()
+pub = app.test_client().get(f'/quotes/view/{tok}', base_url=HOST).get_data(as_text=True)
+check('Scope of Work by Area' in pub and 'Stone / concrete tile' in pub, 'as does the page they accept it on')
+
+# Duplicating a sent quote starts a fresh, re-priced draft -- not a copy of the locked snapshot.
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '50', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    orig = db.session.get(CommercialQuote, aq_id)
+    orig_status, orig_token = orig.status, orig.token
+    fresh_ceramic = cp.line_price('floor_ceramic', 1000)[0]
+    db.session.remove()
+r = c.post(f'/quotes/{aq_id}/duplicate', base_url=HOST)
+with app.app_context(), tenancy.use_tenant(SLUG):
+    dup = CommercialQuote.query.filter_by(company='Areas & Co').order_by(CommercialQuote.id.desc()).first()
+    dup_id, dup_status, dup_token = dup.id, dup.status, dup.token
+    dup_snap = _json.loads(dup.line_items)
+    db.session.remove()
+check(r.status_code == 302 and orig_status == 'sent' and dup_id != aq_id and dup_status == 'draft'
+      and dup_token != orig_token,
+      'duplicating a sent quote makes a fresh draft with its own token, not a copy of the sent one')
+check(dup_snap['areas'][0]['lines'][1]['price'] == fresh_ceramic
+      and dup_snap['areas'][0]['lines'][1]['price'] != snap['areas'][0]['lines'][1]['price']
+      and dup_snap['first_visit_charge'] > 0,
+      "re-priced at today's rates rather than the original's locked snapshot, with the first-visit toggle carried over")
+dup_by_unit = dup_snap['areas'][1]['lines'][2]
+check(dup_by_unit['price'] == 30 and not dup_by_unit['override'] and dup_by_unit['unit_rate'] == 7.5,
+      "a custom qty x rate line keeps pricing itself after duplicating -- not silently flattened to a typed-over price")
+dup_edit = c.get(f'/quotes/{dup_id}', base_url=HOST).get_data(as_text=True)
+check('Other quotes for this account' in dup_edit and f'/quotes/{aq_id}' in dup_edit and 'sent' in dup_edit,
+      'and opening the duplicate shows the other quote for the same account, with a link to it')
+orig_edit = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+check('Other quotes for this account' in orig_edit and f'/quotes/{dup_id}' in orig_edit,
+      'and the original shows its duplicate right back, by the lead they share -- not by company name alone')
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+
+# Codex review: a quote saved before the minimum-visit floor was dropped from
+# this editor still carries one in its line_items snapshot -- its stored
+# per_visit already includes it, so the proposal has to keep showing it, or
+# the lines stop adding up to the price. Travel is zero, too, which used to
+# hide the whole-visit $/sq ft figure along with it.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    legacy_items = {
+        'areas': [{'name': 'Lobby', 'lines': [{'item': 'g_dusting', 'label': 'Dusting & high-touch disinfection',
+                   'qty': 500, 'unit': 'sq ft', 'price': 50.0, 'override': False, 'rate_per_sqft': 0.1}],
+                  'subtotal': 50.0, 'sqft': 500, 'rate_per_sqft': 0.1}],
+        'work': 50.0, 'minimum': 75.0, 'min_visit': 125.0, 'travel': 0.0, 'drive_minutes': 0,
+        'per_visit': 125.0, 'monthly': 542.0, 'hours': 1.0, 'sqft': 500, 'price_per_sqft': 0.25,
+        'first_visit': False, 'first_visit_pct': 0.0, 'first_visit_charge': 0, 'first_visit_total': 125.0,
+    }
+    legacy = CommercialQuote(company='Legacy Lobby Co', contact_name='Lee Gacy', email='lee@legacy.example',
+                             property_type='Office Building', frequency='weekly', contract_term='month_to_month',
+                             price_per_visit=125.0, monthly_price=542.0, status='draft',
+                             token='legacy-test-token-001', show_line_prices=True,
+                             line_items=_json.dumps(legacy_items))
+    db.session.add(legacy)
+    db.session.commit()
+    legacy_id = legacy.id
+    db.session.remove()
+legacy_page = c.get(f'/quotes/{legacy_id}/review', base_url=HOST).get_data(as_text=True)
+legacy_doc = legacy_page.split('The email they will get')[0]
+check('Minimum visit charge' in legacy_doc and '$75.00' in legacy_doc and '$0.25/sq ft' in legacy_doc,
+      'a pre-existing minimum-visit charge still shows on the proposal page, so travel plus the lines '
+      'still add up to the displayed per-visit price, and the whole-visit rate shows even with no travel')
+sent_n2 = len(SENT)
+c.post(f'/quotes/{legacy_id}/send', base_url=HOST)
+legacy_mail = ' '.join(str(k.get('html', '')) for _a, k in SENT[sent_n2:])
+check('Minimum visit charge' in legacy_mail and '$75.00' in legacy_mail and '$0.25/sq ft' in legacy_mail,
+      'and the emailed copy carries the same minimum-visit line and whole-visit rate')
+
+# aq_id has been sent, so its terms are fixed under the customer's link. The
+# edits below are made the way they now have to be: on a revision of it.
+r = c.post(f'/quotes/{aq_id}/revise', base_url=HOST)
+aq_id = int(r.headers['Location'].rstrip('/').split('/')[-1])
+edit = c.get(f'/quotes/{aq_id}', base_url=HOST).get_data(as_text=True)
+form_data = {'company': 'Areas & Co', 'contact_name': 'Mei Chang', 'email': 'mei@areas.example',
+             'property_type': 'Restaurant / Food Service', 'property_address': '1 Main St', 'frequency': 'weekly',
+             'contract_term': 'month_to_month', 'line_items_json': _json.dumps(areas_in)}
+c.post(f'/quotes/{aq_id}', base_url=HOST, data=form_data)   # show_line_prices unticked
+page = c.get(f'/quotes/{aq_id}/review', base_url=HOST).get_data(as_text=True)
+doc = page.split('The email they will get')[0]
+area_total = f'${snap["areas"][0]["subtotal"]:,.2f}'
+check('id="waJson"' in edit and 'floor_stone' in edit and '$40.00' not in doc and area_total in doc
+      and 'Ceramic tile floor' in doc,
+      'switched to area totals only, the lines are listed without their prices and each area shows its total')
+
+# Codex review: editing a saved quote after the rates move must not re-price it.
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '40', 'comm_target_labor': '40',
+       'comm_min_visit': '200', 'comm_drive_minutes': '30'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    before = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+c.post(f'/quotes/{aq_id}/review', base_url=HOST, data=dict(form_data, show_line_prices='1',
+       line_items_json=_json.dumps(areas_in), scope_notes='fixed a typo'))
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    db.session.remove()
+check([l['price'] for a in after['areas'] for l in a['lines']] == [l['price'] for a in before['areas'] for l in a['lines']]
+      and after['travel'] == before['travel']
+      and after['per_visit'] == before['per_visit'],
+      'saving or reviewing a quote after the rates went up keeps every unchanged line at the price it was quoted')
+live = c.post('/quotes/lines.json', base_url=HOST, json={'areas': areas_in, 'frequency': 'weekly', 'quote_id': aq_id}).get_json()
+check(live['per_visit'] == before['per_visit'], 'and the editor shows those kept prices, not today\'s')
+changed = _json.loads(_json.dumps(areas_in))
+changed[0]['lines'][1]['qty'] = 1200
+c.post(f'/quotes/{aq_id}', base_url=HOST, data=dict(form_data, show_line_prices='1', line_items_json=_json.dumps(changed)))
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after2 = _json.loads(db.session.get(CommercialQuote, aq_id).line_items)
+    new_ceramic = cp.line_price('floor_ceramic', 1200)[0]
+    db.session.remove()
+check(after2['areas'][0]['lines'][0]['price'] == before['areas'][0]['lines'][0]['price']
+      and after2['areas'][0]['lines'][1]['price'] == new_ceramic,
+      'a line somebody changes is priced at today\'s rates; the rest keep theirs')
+c.post('/settings/commercial', base_url=HOST, data={'comm_hourly_cost': '25', 'comm_target_labor': '40',
+       'comm_min_visit': '125', 'comm_drive_minutes': '30'})
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    tiny = cp.area_quote([{'name': 'Lobby', 'lines': [{'item': 'g_dusting', 'qty': 10}]}], 'weekly')
+    freebie = cp.area_quote([{'name': 'Lobby', 'lines': [{'item': 'g_dusting', 'qty': 400},
+                                                         {'item': 'custom', 'label': 'Complimentary mat swap', 'price': 0}]}], 'weekly')
+    from sqlalchemy import event as _ev
+    seen = []
+    _hook = lambda *a, **k: seen.append(1)
+    _ev.listen(db.engine, 'before_cursor_execute', _hook)
+    cp.area_quote([{'name': 'A', 'lines': [{'item': k, 'qty': 100} for k in cp.WORK_ITEM_KEYS[:15]]}], 'weekly')
+    _ev.remove(db.engine, 'before_cursor_execute', _hook)
+    db.session.remove()
+check(tiny['work'] == 0 and tiny['travel'] > 0 and tiny['per_visit'] == tiny['travel'],
+      f'a line too small to cost a dollar still means a visit -- priced at just the travel, no floor under it (${tiny["per_visit"]})')
+check([l['label'] for l in freebie['areas'][0]['lines']][-1] == 'Complimentary mat swap',
+      'a described $0 line is kept on the quote, not dropped')
+check(len(seen) <= 3, f'a 15-line quote is priced with the settings read once ({len(seen)} queries, was 60+)')
+form = c.get('/quotes/new', base_url=HOST).get_data(as_text=True)
+check("else if (el.type === 'checkbox') out[el.name] = el.checked;" in form,
+      'the phone-side draft keeps the show-every-line-price switch as switched, not as its value')
+
+bad = _json.dumps([{'name': 'Patio', 'lines': []}, {'name': 'Office', 'lines': [{'item': 'custom', 'label': 'Free extra', 'price': 0},
+                                                                               {'item': 'g_dusting', 'qty': 500}]}])
+c.post(f'/quotes/{aq_id}', base_url=HOST, data=dict(form_data, line_items_json=bad))
+page = c.get(f'/quotes/{aq_id}/review', base_url=HOST).get_data(as_text=True)
+check('&#34;Patio&#34; has no lines' in page, 'the review flags an area with nothing in it')
+
+c.post(f'/find-leads/{wok["id"]}/walkthrough', base_url=HOST, data={
+    'frequency': 'weekly', 'wa_area': ['Service floor', 'Service floor', 'Service floor', 'Kitchen'],
+    'wa_item': ['floor_stone', 'floor_ceramic', 'floor_hardwood', 'floor_kitchen'],
+    'wa_qty': ['800', '1000', '600', '0']})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    w = __import__('prospecting').walkthrough(db.session.get(Prospect, wok['id']))
+    db.session.remove()
+check([a['name'] for a in w.get('areas', [])] == ['Service floor'] and len(w['areas'][0]['lines']) == 3,
+      'the walkthrough records the service floor as three surfaces (an unmeasured kitchen row is left out)')
+lp = c.get(f'/find-leads/{wok["id"]}', base_url=HOST).get_data(as_text=True)
+form = c.get(f'/quotes/new?prospect_id={wok["id"]}', base_url=HOST).get_data(as_text=True)
+check('Priced area by area' in lp and 'name="wa_area"' in lp,
+      'the lead page measures by area on site and prices the walkthrough the same way')
+waj = re.search(r'id="waJson" value="([^"]*)"', form)
+check(bool(waj) and 'floor_ceramic' in waj.group(1),
+      'and the quote opens with those areas and lines filled in')
+
+print('\n13e. Integrity review: NaN, Infinity and other bad numbers never reach a price')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    before_cfg = cp.get_config()
+    db.session.remove()
+bad_page = c.post('/settings/commercial', base_url=HOST, data={
+    'comm_hourly_cost': 'Infinity', 'comm_target_labor': 'NaN', 'comm_min_visit': '125',
+    'comm_drive_minutes': '30'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after_cfg = cp.get_config()
+    db.session.remove()
+settings_flash = c.get('/settings/commercial', base_url=HOST).get_data(as_text=True)
+check(after_cfg['hourly'] == before_cfg['hourly'] and after_cfg['target'] == before_cfg['target'],
+      "float() itself accepts \"Infinity\" and \"NaN\" as valid numbers -- Settings keeps the rates "
+      "they were rather than storing either and corrupting every quote priced from them after")
+check('could not read' in settings_flash and 'cleaner cost' in settings_flash and 'Target labor' in settings_flash,
+      'and says so, instead of silently keeping the old value with no explanation')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    inf_line = cp.area_quote([{'name': 'Odd', 'lines': [
+        {'item': 'custom', 'label': 'Bad qty x rate', 'qty': 'Infinity', 'rate': 5}]}], 'weekly')
+    nan_line = cp.area_quote([{'name': 'Odd', 'lines': [
+        {'item': 'floor_stone', 'qty': 'NaN'}]}], 'weekly')
+    db.session.remove()
+check(math.isfinite(inf_line['per_visit']) and math.isfinite(inf_line['monthly'] or 0)
+      and math.isfinite(nan_line['per_visit']),
+      'a quantity or rate typed (or posted) as Infinity or NaN prices as if it were blank, not as $inf/mo')
+
+print('\n14. A Sales login: the call list and nothing else')
+check(('sales', 'Sales — finding and working leads only') in rbac.ROLE_OPTIONS
+      and rbac.has_permission('sales', 'prospect.work')
+      and not any(rbac.has_permission('sales', perm) for perm in (
+          'booking.read', 'lead.read', 'messages.read', 'messages.send', 'finance.manage', 'settings.manage')),
+      'Sales holds prospecting and nothing else: no bookings, website leads, inbox or money')
+team_page = c.get('/logins/', base_url=HOST).get_data(as_text=True)
+check('value="sales"' in team_page, 'the owner can give a login the Sales role')
+sc = role_client('sales')
+r = sc.get('/', base_url=HOST)
+check(r.status_code == 302 and r.headers.get('Location', '').endswith('/find-leads/'),
+      f'signing in lands on Find leads, not a refusal ({r.status_code} {r.headers.get("Location")})')
+calls = sc.get('/find-leads/', base_url=HOST)
+body = calls.get_data(as_text=True)
+check(calls.status_code == 200 and '📞 Calls' in body and 'Add one' in body, 'Find leads opens')
+check('href="/bookings' not in body and 'href="/messages' not in body and 'href="/money' not in body
+      and 'href="/settings/business' not in body,
+      'and the menu offers nothing else: no bookings, messages, money or settings')
+for path in ('/bookings/', '/messages/', '/quotes/', '/commercial/', '/leads/', '/money/pnl',
+             f'/quotes/{rq_id}/review', f'/quotes/{rq_id}/document'):
+    st = sc.get(path, base_url=HOST).status_code
+    check(st in (302, 403), f'{path} is closed to Sales ({st})')
+r = sc.post('/find-leads/add', base_url=HOST, data={'business_name': 'Sales Found Deli', 'category': 'restaurant'})
+deli = lead('Sales Found Deli')
+check(deli is not None, 'Sales adds a lead by hand')
+page = sc.get(f'/find-leads/{deli["id"]}', base_url=HOST).get_data(as_text=True)
+check('Book walkthrough' in page and 'Log a call' in page and 'Email them' in page,
+      'works it: logs calls, emails, books and records the walkthrough')
+check('Contract quote' not in page and 'Home quote' not in page and '/messages/thread' not in page,
+      'and is not offered the quote or the inbox, which are the owner\'s')
+sc.post(f'/find-leads/{deli["id"]}/walkthrough', base_url=HOST, data={'sqft': '1800', 'frequency': 'weekly', 'services': ['floors']})
+check(lead('Sales Found Deli')['next_action'] == 'Write and send the quote', 'the walkthrough Sales did is ready for the owner to quote')
+check(sc.post(f'/find-leads/{deli["id"]}/delete', base_url=HOST).status_code == 403
+      and lead('Sales Found Deli') is not None, 'but cannot delete leads')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    agent = db.session.get(Prospect, deli['id']).agent
+    db.session.remove()
+check(agent == 'Sales', 'and a lead Sales adds is credited to them, for commission')
+
+print('\n15. Sales is held to the module, and the work it does stays credited to it')
+# Not in the permission matrix used to mean "let the route decide" -- and many
+# older routes only ask whether somebody is signed in.
+for path in ('/bookings/999999/delete', '/contractors/applications/999999/hire',
+             '/bookings/clients/999999/delete'):
+    st = sc.post(path, base_url=HOST).status_code
+    check(st == 403, f'an unclassified back-office form is closed to Sales: {path} ({st})')
+check(sc.get('/account', base_url=HOST).status_code in (200, 302)
+      and sc.get('/account', base_url=HOST).status_code != 403,
+      'while Sales can still manage its own login')
+body = sc.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
+check('/delete' not in body and '/delete' in c.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True),
+      'and is not shown the delete button the owner gets')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    p = db.session.get(Prospect, deli['id'])
+    p.walkthrough = None
+    db.session.commit()
+    db.session.remove()
+sc.post(f'/find-leads/{deli["id"]}/walkthrough', base_url=HOST,
+        data={'sqft': '1800', 'frequency': '', 'services': ['floors']})
+form = c.get(f'/quotes/new?prospect_id={deli["id"]}', base_url=HOST).get_data(as_text=True)
+check(re.search(r'<option value="weekly"\s+selected', form),
+      'a walkthrough with no frequency quotes weekly, the way it was priced -- not daily')
+
+payload = '{"business_name": "Imported Taqueria", "category": "restaurant", "city": "Washington", "place_id": "pid-taq-1"}'
+sc.post('/find-leads/import', base_url=HOST, data={'selected': ['pid-taq-1'], 'payload_pid-taq-1': payload})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    taq = Prospect.query.filter_by(business_name='Imported Taqueria').first()
+    taq_agent = taq.agent if taq else None
+    db.session.remove()
+check(taq is not None and taq_agent == 'Sales', f'a lead Sales imports from search is credited to them ({taq_agent})')
+
+c.post(f'/commercial/convert/{deli["id"]}', base_url=HOST, data={
+    'contact_name': 'Deli Owner', 'email': 'owner@deli.example', 'phone': '2025550188',
+    'frequency': 'weekly', 'billing_type': 'monthly', 'billing_amount': '600'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    acct = CommercialAccount.query.filter_by(prospect_id=deli['id']).first()
+    deli_agent = acct.agent if acct else None
+    db.session.remove()
+check(deli_agent == 'Sales', f'the owner making their lead an account keeps it credited to Sales ({deli_agent})')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    tp = Prospect(business_name='Quoted Cafe', category='restaurant', status='interested',
+                  stage='proposal', agent='Sales', phone='2025550177')
+    db.session.add(tp)
+    db.session.commit()
+    q = CommercialQuote(company='Quoted Cafe', contact_name='Cafe Owner', email='cafe@quoted.example',
+                        property_type='Restaurant / Food Service', frequency='weekly',
+                        contract_term='month_to_month', services='Kitchen / Break Room',
+                        monthly_price=500, status='sent', token='tok-quoted-cafe', prospect_id=tp.id)
+    db.session.add(q)
+    db.session.commit()
+    db.session.remove()
+answer(app.test_client(), 'tok-quoted-cafe', HOST, 'accept', name='Cafe Owner')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    acct = CommercialAccount.query.filter_by(business_name='Quoted Cafe').first()
+    cafe_agent = acct.agent if acct else None
+    db.session.remove()
+check(acct is not None and cafe_agent == 'Sales', f'and so does the quote being accepted ({cafe_agent})')
+
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from models import Lead
+    db.session.add(Lead(name='Deli Owner', email='owner@deli.example', quoted_price=987.65,
+                        status='contacted', prospect_id=deli['id']))
+    db.session.commit()
+    db.session.remove()
+page = sc.get(f'/find-leads/{deli["id"]}', base_url=HOST).get_data(as_text=True)
+check('987.65' not in page and '1 home quote' in page,
+      'Sales sees that a home quote exists, not what it was priced at')
+check('987.65' in c.get(f'/find-leads/{deli["id"]}', base_url=HOST).get_data(as_text=True),
+      'the owner still sees the price')
+comm = c.get('/commissions/', base_url=HOST).get_data(as_text=True)
+check('<option value="Sales"' in comm,
+      'the commissions page offers Sales logins, not only the old "team" role')
+
+print('\n16. A rep works their own leads; the owner assigns them and gets the hand-off')
+from models import User as _User, Message as _Msg, SmsOptOut as _Opt
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from auth import _auth_fingerprint
+    riley = _User(name='Riley Rep', username=f'riley@{SLUG}.test', role='sales', active=True)
+    riley.set_password('a-perfectly-fine-password')
+    db.session.add(riley)
+    db.session.commit()
+    riley_id, riley_fp = riley.id, _auth_fingerprint(riley.password_hash)
+    # An old "team" login: it cannot open the call list, so it is nobody to
+    # give a lead to.
+    terry = _User(name='Terry Legacy', username=f'terry@{SLUG}.test', role='team', active=True)
+    terry.set_password('a-perfectly-fine-password')
+    db.session.add(terry)
+    db.session.commit()
+    db.session.remove()
+rc = app.test_client()
+with rc.session_transaction(base_url=HOST) as sess:
+    sess.update(logged_in=True, role='sales', user_id=riley_id, user_name='Riley Rep',
+                auth_fingerprint=riley_fp, tenant_slug=SLUG)
+for name, phone in (('Assign A Cafe', '2025550301'), ('Assign B Bakery', '2025550302'), ('Assign C Diner', '2025550303')):
+    c.post('/find-leads/add', base_url=HOST, data={'business_name': name, 'category': 'restaurant',
+                                                   'phone': phone, 'city': 'Washington'})
+la, lb, lc = lead('Assign A Cafe'), lead('Assign B Bakery'), lead('Assign C Diner')
+page = c.get(f'/find-leads/{la["id"]}', base_url=HOST).get_data(as_text=True)
+check('Worked by' in page and '<option value="Riley Rep"' in page, 'the owner picks who works a lead from its page')
+check('Terry Legacy' not in page, 'and only Sales logins are offered -- not an old "team" login that cannot open the list')
+c.post(f'/find-leads/{la["id"]}/assign', base_url=HOST, data={'agent': 'Sales'})
+c.post('/find-leads/assign', base_url=HOST, data={'ids': [str(lb['id'])], 'agent': 'Riley Rep'})
+c.post('/find-leads/assign', base_url=HOST, data={'ids': [str(lc['id'])], 'agent': 'Riley Rep'})
+def agent_of(i):
+    with app.app_context(), tenancy.use_tenant(SLUG):
+        a = db.session.get(Prospect, i).agent
+        db.session.remove()
+        return a
+check(agent_of(la['id']) == 'Sales' and agent_of(lb['id']) == 'Riley Rep' and agent_of(lc['id']) == 'Riley Rep',
+      'one at a time or ticked in bulk')
+c.post('/find-leads/assign', base_url=HOST, data={'ids': [str(lc['id'])], 'agent': 'Nobody Real'})
+c.post(f'/find-leads/{lc["id"]}/assign', base_url=HOST, data={'agent': 'Terry Legacy'})
+check(agent_of(lc['id']) == 'Riley Rep',
+      'a name that is not an active Sales login changes nothing -- it does not empty the lead into the pool')
+c.get('/find-leads/', base_url=HOST)   # (the refusals' messages)
+c.post(f'/find-leads/{lc["id"]}/assign', base_url=HOST, data={'agent': ''})
+check(agent_of(lc['id']) is None, '"Unassigned" puts it back in the pool')
+
+# Leads are filed under a rep's name, so two logins may not share one.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    logins_before = _User.query.count()
+    db.session.remove()
+c.post('/logins/add', base_url=HOST, data={'name': 'riley rep', 'email': f'riley2@{SLUG}.test', 'role': 'sales'})
+c.post('/logins/add', base_url=HOST, data={'name': 'Riley Rep', 'email': f'riley3@{SLUG}.test', 'role': 'dispatcher'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    logins_after = _User.query.count()
+    db.session.remove()
+check(logins_after == logins_before,
+      'a second login with a Sales rep\'s name is refused, so two reps never share a call list or credit')
+c.get('/logins/', base_url=HOST)   # (the refusals' messages)
+
+mine = sc.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True)
+check('Assign A Cafe' in mine and 'Assign C Diner' in mine and 'Assign B Bakery' not in mine,
+      "a rep's list is their own leads and the unassigned pool -- never a teammate's")
+csv_out = sc.get('/find-leads/export.csv', base_url=HOST).get_data(as_text=True)
+check('Assign B Bakery' not in csv_out and 'Assign A Cafe' in csv_out, 'nor in their spreadsheet download')
+codes = [sc.get(f'/find-leads/{lb["id"]}', base_url=HOST).status_code,
+         sc.post(f'/find-leads/{lb["id"]}/status', base_url=HOST, data={'mode': 'log', 'status': 'called'}).status_code,
+         sc.post(f'/find-leads/{lb["id"]}/text', base_url=HOST, data={'body': 'hi'}).status_code,
+         sc.get(f'/find-leads/call/{lb["id"]}', base_url=HOST).status_code]
+check(codes == [404, 404, 404, 404] and agent_of(lb['id']) == 'Riley Rep',
+      f"a teammate's lead cannot be opened, logged, texted or claimed ({codes})")
+check(sc.post(f'/find-leads/{lc["id"]}/assign', base_url=HOST, data={'agent': 'Sales'}).status_code == 403
+      and sc.post('/find-leads/assign', base_url=HOST, data={'ids': [str(lb['id'])], 'agent': 'Sales'}).status_code == 403
+      and agent_of(lb['id']) == 'Riley Rep',
+      'and a rep cannot hand leads around -- assigning is the owner\'s')
+sc.post(f'/find-leads/{lc["id"]}/status', base_url=HOST, data={'mode': 'log', 'status': 'called', 'log_note': 'No answer'})
+check(agent_of(lc['id']) == 'Sales', 'working an unassigned lead makes it theirs')
+check('Assign C Diner' not in rc.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True),
+      '-- and it leaves the other reps\' pool')
+own = c.get('/find-leads/?view=everyone&rep=Riley+Rep', base_url=HOST).get_data(as_text=True)
+own = own.split('id="contactTable"')[1]   # the rows, not a message left from an earlier step
+check('Assign B Bakery' in own and 'Assign A Cafe' not in own, 'the owner can look at one rep\'s leads')
+
+# Texting the lead, without the inbox
+with app.app_context(), tenancy.use_tenant(SLUG):
+    before = _Msg.query.filter_by(phone='2025550301').count()
+    db.session.remove()
+page = sc.get(f'/find-leads/{la["id"]}', base_url=HOST).get_data(as_text=True)
+check('Send text' in page and '/messages/thread' not in page, 'a rep texts a lead from its page, with no way into the inbox')
+sc.post(f'/find-leads/{la["id"]}/text', base_url=HOST, data={'body': 'Hi! Following up on our call about your floors.'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    after = _Msg.query.filter_by(phone='2025550301').count()
+    notes_a = db.session.get(Prospect, la['id']).notes or ''
+    db.session.add(_Opt(phone='2025550303'))
+    db.session.commit()
+    db.session.remove()
+check(after == before + 1 and 'Texted: Hi! Following up' in notes_a,
+      'the text goes out through the inbox\'s own sending, and is in the lead\'s history')
+import blueprints.messages as _msgs
+_real_sms = _msgs.send_sms
+_msgs.send_sms = lambda *a, **k: (False, 'carrier refused')
+sc.post(f'/find-leads/{la["id"]}/text', base_url=HOST, data={'body': 'This one bounces'})
+_msgs.send_sms = _real_sms
+notes_a = lead('Assign A Cafe')['notes']
+check('Texted: This one bounces' not in notes_a and 'Text failed (carrier refused): This one bounces' in notes_a,
+      'a text that did not go is written down as a failure, not as a touch')
+sc.get('/find-leads/', base_url=HOST)   # (the failure's message)
+
+# What a rep sees of the conversation: this lead's, and only while the
+# number is the lead's and nobody else's.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    db.session.add(_Msg(phone='2025550301', direction='in', body='Lead reply about Tuesday'))
+    db.session.commit()
+    db.session.remove()
+check('Lead reply about Tuesday' in sc.get(f'/find-leads/{la["id"]}', base_url=HOST).get_data(as_text=True),
+      'a rep sees the lead\'s own replies on its page')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    from models import Client as _Client
+    db.session.add(_Client(name='Pat Customer', email='pat@example.test', phone='(202) 555-0301'))
+    db.session.add(_Msg(phone='2025550301', direction='in', body='Customer gate code 4411'))
+    db.session.commit()
+    db.session.remove()
+rep_view = sc.get(f'/find-leads/{la["id"]}', base_url=HOST).get_data(as_text=True)
+owner_view = c.get(f'/find-leads/{la["id"]}', base_url=HOST).get_data(as_text=True)
+check('Customer gate code 4411' not in rep_view and 'Lead reply about Tuesday' not in rep_view
+      and 'Customer gate code 4411' in owner_view,
+      'but once the number is also a customer\'s, their thread is not shown to a rep (the owner still sees it)')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    _Client.query.filter_by(email='pat@example.test').delete()
+    db.session.commit()
+    db.session.remove()
+sc.post(f'/find-leads/{lc["id"]}/text', base_url=HOST, data={'body': 'Hello again'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    stopped = _Msg.query.filter_by(phone='2025550303').count()
+    db.session.remove()
+check(stopped == 0, 'a number that replied STOP is not texted')
+check(sc.get('/messages/', base_url=HOST).status_code in (302, 403), 'and the inbox itself stays closed to the rep')
+
+# The hand-off
+n = len(SENT)
+sc.post(f'/find-leads/{la["id"]}/walkthrough/book', base_url=HOST, data={'date': '2026-11-10', 'time': '3pm'})
+booked = [k for _a, k in SENT[n:] if 'Walkthrough booked: Assign A Cafe' in str(k.get('subject', ''))]
+check(len(booked) == 1, 'a walkthrough a rep books is emailed to the owner, who may need to be there')
+n = len(SENT)
+sc.post(f'/find-leads/{la["id"]}/ready', base_url=HOST, data={'note': 'Wants Monday nights'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    pa = db.session.get(Prospect, la['id'])
+    ready = (pa.ready_to_quote_at is not None, pa.ready_by, pa.next_action)
+    db.session.remove()
+mail = [k for _a, k in SENT[n:] if 'Ready to quote: Assign A Cafe' in str(k.get('subject', ''))]
+check(ready == (True, 'Sales', 'Write and send the quote') and mail and 'Wants Monday nights' in str(mail[0].get('html')),
+      'a rep hands a qualified lead to the owner to quote, and the owner is emailed with their note')
+q = c.get('/find-leads/?view=ready', base_url=HOST).get_data(as_text=True)
+check('Ready to quote' in q and 'Assign A Cafe' in q and 'Assign B Bakery' not in q,
+      'the owner has a Ready to quote list of what the reps handed over')
+check('view=ready' not in sc.get('/find-leads/', base_url=HOST).get_data(as_text=True),
+      'which is the owner\'s, not on the rep\'s screen')
+check('Assign A Cafe' not in sc.get('/find-leads/', base_url=HOST).get_data(as_text=True).split('</h1>', 1)[-1]
+      and f'/find-leads/call/{la["id"]}/log' not in sc.get('/find-leads/call?more=1', base_url=HOST).get_data(as_text=True)
+      and 'Assign A Cafe' in sc.get('/find-leads/?view=everyone', base_url=HOST).get_data(as_text=True),
+      'once handed over it leaves the rep\'s Today and call sheet -- the quote is the owner\'s to write -- '
+      'but stays in their Everyone')
+check('Assign A Cafe' in c.get('/find-leads/', base_url=HOST).get_data(as_text=True),
+      'and it is on the owner\'s Today, due now')
+filtered = c.get('/find-leads/?view=everyone&rep=unassigned', base_url=HOST).get_data(as_text=True)
+check('view=ready' in filtered,
+      'the Ready to quote tab stays while the owner looks at one rep\'s list, or the pool')
+n = len(SENT)
+again = sc.post(f'/find-leads/{la["id"]}/ready', base_url=HOST, data={'note': 'double tap'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    pa = db.session.get(Prospect, la['id'])
+    once = (pa.notes or '').count('Handed over for a quote')
+    db.session.remove()
+check(again.status_code == 302 and once == 1 and not any('Ready to quote' in str(k.get('subject', '')) for _a, k in SENT[n:]),
+      'handing over twice -- a double tap, a second tab -- does nothing the second time')
+sc.get('/find-leads/', base_url=HOST)   # (its message)
+n = len(SENT)
+rc.post(f'/find-leads/{lb["id"]}/walkthrough', base_url=HOST, data={'sqft': '1500', 'frequency': 'weekly',
+                                                                     'services': ['floors']})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    pb_ready = db.session.get(Prospect, lb['id']).ready_by
+    db.session.remove()
+check(pb_ready == 'Riley Rep' and any('walkthrough by Riley Rep' in str(k.get('subject', '')) for _a, k in SENT[n:]),
+      'a rep\'s saved walkthrough hands the lead over by itself')
+n = len(SENT)
+c.post(f'/find-leads/{lc["id"]}/walkthrough/book', base_url=HOST, data={'date': '2026-11-11'})
+check(not any('Walkthrough booked' in str(k.get('subject', '')) for _a, k in SENT[n:]),
+      'the owner is not emailed about what the owner did')
+with app.app_context(), tenancy.use_tenant(SLUG):
+    import prospecting as _pr
+    _pr.quote_moved(la['id'], 'proposal', None, 'Follow up on the quote', 3, 'Quote emailed')
+    db.session.commit()
+    cleared = db.session.get(Prospect, la['id']).ready_to_quote_at is None
+    db.session.remove()
+check(cleared and 'Assign A Cafe' not in c.get('/find-leads/?view=ready', base_url=HOST).get_data(as_text=True),
+      'and it leaves the list once its quote is sent')
+n = len(SENT)
+sc.post(f'/find-leads/{la["id"]}/ready', base_url=HOST, data={'note': 'from an old page'})
+with app.app_context(), tenancy.use_tenant(SLUG):
+    pa = db.session.get(Prospect, la['id'])
+    stale = (pa.stage, pa.ready_to_quote_at)
+    db.session.remove()
+check(stale == ('proposal', None) and not any('Ready to quote' in str(k.get('subject', '')) for _a, k in SENT[n:]),
+      f'nor can an old page drag a quoted lead back to Interested ({stale})')
+sc.get('/find-leads/', base_url=HOST)   # (its message)
+
+# Two reps opening the call sheet at once must not both be handed the same
+# unassigned business.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    for nm, due in (('Race One Gym', '2001-01-01'), ('Race Two Gym', '2001-01-02')):
+        db.session.add(Prospect(business_name=nm, category='gym', status='new', stage='new',
+                                phone=None, next_action='Call', next_action_date=due))
+    db.session.commit()
+    race1, race2 = (Prospect.query.filter_by(business_name=nm).first().id for nm in ('Race One Gym', 'Race Two Gym'))
+    db.session.remove()
+first = sc.get('/find-leads/call?more=1', base_url=HOST).get_data(as_text=True)
+second = rc.get('/find-leads/call?more=1', base_url=HOST).get_data(as_text=True)
+check(f'/find-leads/call/{race1}/log' in first and agent_of(race1) == 'Sales'
+      and f'/find-leads/call/{race1}/log' not in second
+      and f'/find-leads/call/{race2}/log' in second and agent_of(race2) == 'Riley Rep',
+      'the call sheet reserves the business it puts in front of a rep, so the next rep gets the next one')
+# And the reservation holds against a rep whose copy of the lead is stale:
+# read as unassigned, taken by a teammate before the claim lands.
+with app.app_context(), tenancy.use_tenant(SLUG):
+    import blueprints.places_finder as _pf
+    db.session.add(Prospect(business_name='Race Three Gym', category='gym', status='new', stage='new'))
+    db.session.commit()
+    p3 = Prospect.query.filter_by(business_name='Race Three Gym').first()
+    p3_id = p3.id
+    with app.test_request_context('/', base_url=HOST):
+        from flask import session as _s
+        _s['role'], _s['user_name'] = 'sales', 'Sales'
+        db.session.execute(db.text("UPDATE prospect SET agent = 'Riley Rep' WHERE id = :i"), {'i': p3_id})
+        stale_read = p3.agent
+        took = _pf._take(p3)
+        db.session.commit()
+    db.session.remove()
+holder = agent_of(p3_id)
+check(stale_read is None and took is False and holder == 'Riley Rep',
+      'claiming is one conditional write: a lead a teammate took a moment ago stays theirs')
+
+if failures:
+    print(f'\n❌ {len(failures)} check(s) failed')
+    sys.exit(1)
+print('\n✅ Add a lead by hand, quote it from the lead, and talk to it — the call list keeps up.')
