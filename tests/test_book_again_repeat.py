@@ -48,6 +48,10 @@ with app.app_context():
     check(f'/bookings/{done.id}#book-again' in c.get(f'/bookings/clients/{cl.id}').get_data(as_text=True),
           'client page links to the last completed job')
 
+    html = c.get(f'/bookings/{done.id}').get_data(as_text=True)
+    check(html.count('id="book-again"') == 1, 'offered once')
+    check(html.index('id="book-again"') < html.index('>Customer</h3>'), 'at the top of the booking, before the customer details')
+
     print('\n2. Repeating it')
     r = c.post(f'/bookings/{done.id}/book-again',
                data={'repeat_date': '2026-12-05', 'repeat_price': '175', 'same_cleaner': '1'})

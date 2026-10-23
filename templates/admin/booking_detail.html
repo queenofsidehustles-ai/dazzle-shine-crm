@@ -12,6 +12,50 @@
   <div data-reorder-col="left">
   <div class="card" data-card-key="booking">
     <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">The booking</h2>
+    {% if booking.status == 'completed' %}
+    {# Repeat this job on demand. Sits at the top of the booking, where the owner
+       is looking when a client asks for another clean; the client page's
+       "Repeat last clean" links to #book-again, so that link opens it. #}
+    <details id="book-again" style="margin:6px 0 14px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
+      <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">
+        🔁 Book again — repeat this clean on a new date
+      </summary>
+      <form method="POST" action="{{ url_for('bookings.book_again', booking_id=booking.id) }}"
+            style="padding:0 13px 14px">
+        <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px">
+          A one-off booking, not a recurring plan — nothing else gets scheduled.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Date</label>
+            <input type="date" name="repeat_date" required
+                   style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
+          </div>
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Arrival time</label>
+            <input type="text" name="repeat_time" value="{{ booking.preferred_time or '' }}" placeholder="10:00 AM"
+                   style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:9px">
+          <label style="font-size:0.78rem">Price</label>
+          <input type="text" name="repeat_price" value="{{ '%.2f'|format(booking.price) if booking.price else '' }}"
+                 placeholder="e.g. 150"
+                 style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
+        </div>
+        {% if booking.assigned_cleaner and (booking.crew_size or 1) == 1 %}
+        <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;margin-bottom:12px">
+          <input type="checkbox" name="same_cleaner" value="1" checked> Same cleaner ({{ booking.assigned_cleaner }})
+        </label>
+        {% endif %}
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">🔁 Book again</button>
+      </form>
+    </details>
+    <script>
+      if (location.hash === '#book-again') document.getElementById('book-again').open = true;
+    </script>
+    {% endif %}
+
       <div style="">
       <h3 style="font-size:0.82rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">Customer</h3>
       <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ booking.name }}</span></div>
@@ -1231,49 +1275,6 @@
     </div>
   <div class="card" data-card-key="extras" style="margin-top:18px">
     <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Less often</h2>
-
-
-    {% if booking.status == 'completed' %}
-    <!-- Repeat this job on demand. A section of "Less often", like recurring
-         below; the client page's "Repeat last clean" links to #book-again, so
-         that link opens it. -->
-      <details id="book-again" style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
-        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">🔁 Book again</summary>
-      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
-        Repeat this clean on a date of your choosing. It's a one-off booking, not a recurring plan —
-        nothing else gets scheduled.
-      </p>
-      <form method="POST" action="{{ url_for('bookings.book_again', booking_id=booking.id) }}">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">Date</label>
-            <input type="date" name="repeat_date" required
-                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-          </div>
-          <div class="form-group" style="margin-bottom:10px">
-            <label style="font-size:0.82rem">Arrival time</label>
-            <input type="text" name="repeat_time" value="{{ booking.preferred_time or '' }}" placeholder="10:00 AM"
-                   style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-          </div>
-        </div>
-        <div class="form-group" style="margin-bottom:10px">
-          <label style="font-size:0.82rem">Price</label>
-          <input type="text" name="repeat_price" value="{{ '%.2f'|format(booking.price) if booking.price else '' }}"
-                 placeholder="e.g. 150"
-                 style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
-        </div>
-        {% if booking.assigned_cleaner %}
-        <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;margin-bottom:12px">
-          <input type="checkbox" name="same_cleaner" value="1" checked /> Same cleaner ({{ booking.assigned_cleaner }})
-        </label>
-        {% endif %}
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">🔁 Book again</button>
-      </form>
-      </details>
-      <script>
-        if (location.hash === '#book-again') document.getElementById('book-again').open = true;
-      </script>
-    {% endif %}
 
     {% if booking.repeat_of or booking.repeats %}
       <details open style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
