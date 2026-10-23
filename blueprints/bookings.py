@@ -233,7 +233,10 @@ def new():
             address=request.form.get('address', '').strip(),
             city=request.form.get('city', '').strip(),
             zip_code=request.form.get('zip_code', '').strip(),
-            notes=(request.form.get('notes', '').strip() or None),
+            # What she types on the phone is hers, so it lands in the field the
+            # booking page shows as private. `notes` is what a customer wrote on
+            # the website form, and showed as "Customer Notes".
+            internal_notes=((request.form.get('internal_notes') or request.form.get('notes') or '').strip() or None),
             access_notes=(request.form.get('access_notes', '').strip() or None),
             status=request.form.get('status', 'confirmed'),
             price=price,
@@ -423,14 +426,22 @@ def detail(booking_id):
         # Parse it. This used to assign the raw form string straight onto a Float
         # column — SQLAlchemy coerced it on write, but anything doing arithmetic
         # with booking.price in the same request hit 'str' - 'int' and blew up.
-        price_raw = (request.form.get('price') or '').strip().replace('$', '').replace(',', '')
-        if price_raw:
-            try:
-                booking.price = round(float(price_raw), 2)
-            except ValueError:
-                flash('That price is not a number — leaving it as it was.', 'warning')
-        else:
-            booking.price = None
+        #
+        # This one route saves several small forms on the page -- status and
+        # notes, the price and the owner's numbers, taking a cleaner off -- and
+        # each sends only its own fields. So a field that is ABSENT is left
+        # alone; only one that is present and blank is a deliberate clear.
+        # Blanking whatever a form didn't carry is how saving a note would wipe
+        # the price.
+        if 'price' in request.form:
+            price_raw = (request.form.get('price') or '').strip().replace('$', '').replace(',', '')
+            if price_raw:
+                try:
+                    booking.price = round(float(price_raw), 2)
+                except ValueError:
+                    flash('That price is not a number — leaving it as it was.', 'warning')
+            else:
+                booking.price = None
         _fee = request.form.get('lead_fee', '').strip()
         if _fee != '':
             try:
@@ -441,13 +452,15 @@ def detail(booking_id):
         booking.preferred_time = request.form.get('preferred_time', booking.preferred_time)
         booking.internal_notes = request.form.get('internal_notes', booking.internal_notes)
         booking.access_notes = request.form.get('access_notes', booking.access_notes)
-        booking.skip_review = 'skip_review' in request.form
+        if 'skip_review' in request.form or 'skip_review_shown' in request.form:
+            booking.skip_review = 'skip_review' in request.form
         booking.assigned_cleaner = request.form.get('assigned_cleaner', booking.assigned_cleaner)
         hours_raw = request.form.get('hours_worked', '').strip()
         booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
         # Person-hours of work — the basis for cleaner pay on this job.
         _apply_hours(booking, request.form)
-        booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
+        if 'below_floor_reason' in request.form:
+            booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
         # Keep the balance in step with the price. It used to be written only by
         # the price-correction route, so editing the price here left the
         # Balance Collection card — and its charge button — showing a stale $0.

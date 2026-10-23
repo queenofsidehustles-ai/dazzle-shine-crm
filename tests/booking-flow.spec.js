@@ -62,10 +62,11 @@ test.describe.serial('Booking → assign cleaner → notify (email + text)', () 
     test.skip(!ADMIN_PASS, 'Set ADMIN_PASS to run the assign + notify flow.');
     await login(page);
     await page.goto(CRM + '/bookings/' + shared.bookingId);
-    await page.selectOption('select[name="assigned_cleaner"]', CLEANER);
-    await Promise.all([page.waitForLoadState('networkidle'), page.click('button:has-text("Save Changes")')]);
-    // The flash confirms the assignment email + checklist (+ text if phone) fired
-    await expect(page.locator('body')).toContainText(/notification.*(sent|checklist)|checklist sent/i, { timeout: 8000 });
+    // "Next: who's cleaning this one?" sits on top of a job nobody is on yet.
+    await page.selectOption('#nextAssignTo', { label: CLEANER });
+    await Promise.all([page.waitForLoadState('networkidle'), page.click('#nextCleaner button[type="submit"]')]);
+    // The flash confirms the work order (+ text if phone) went out
+    await expect(page.locator('body')).toContainText(/Job sent to/i, { timeout: 8000 });
     console.log('  ✓ Cleaner assigned — assignment email + checklist sent' + (CLEANER_PHONE ? ' + TEXT to your phone 📲' : ''));
   });
 
