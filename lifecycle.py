@@ -382,7 +382,13 @@ def run_lifecycle_emails():
         if not scheduling.due_for_charge(b, now_local):
             continue
         try:
-            send_payment_link(b, kind='full')
+            if b.is_commercial:
+                # A business is promised an invoice on its terms (net 14), on
+                # the Invoices page, not a request to pay now.
+                from blueprints.bookings import _send_invoice
+                _send_invoice(b)
+            else:
+                send_payment_link(b, kind='full')
             c['invoice'] += 1
         except Exception:
             pass

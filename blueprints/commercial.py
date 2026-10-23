@@ -338,12 +338,54 @@ def book(account_id):
 
     jobs = (Booking.query.filter_by(commercial_account_id=a.id)
             .order_by(Booking.id.desc()).limit(5).all())
+    agreed = _agreed_terms(a, first_job=not jobs)
     return render_template('admin/commercial_book.html', **_tmpl_args(
-        a=a, scope_items=SCOPE_ITEMS, scope_default=SCOPE_DEFAULT,
+        a=a, scope_items=SCOPE_ITEMS,
+        scope_default=[] if agreed and agreed['scope'] else SCOPE_DEFAULT,
         job_frequencies=JOB_FREQUENCIES,
         default_frequency=_JOB_FREQ_FOR.get(a.frequency, 'one_time'),
-        default_price=(a.billing_amount if a.billing_type == 'per_visit' else None),
+        default_price=(agreed['price'] if agreed and agreed['price'] else
+                       a.billing_amount if a.billing_type == 'per_visit' else None),
+        agreed=agreed,
         net_days=invoicing.NET_DAYS_COMMERCIAL, deposit=_deposit(), jobs=jobs))
+
+
+def _agreed_terms(a, first_job=False):
+    """What the agreement in force says a visit is, to start the booking form
+    from: {price, first_visit, scope, sqft, effective_on}, or None.
+
+    The account keeps only a billing figure -- the monthly total, for a
+    proposal that had one -- while the signed terms keep the per-visit price,
+    the first-visit charge and the work itself. Booking from the account alone
+    meant retyping a contract, and getting it wrong."""
+    import json
+    try:
+        current = next(((ag, terms) for ag, terms, _, replaced in _agreements(a)
+                        if terms is not None and replaced is None), None)
+    except Exception:
+        return None
+    if not current:
+        return None
+    ag, terms = current
+    lines = [s.strip() for s in (terms.services or '').split(',') if s.strip()]
+    try:
+        priced = json.loads(terms.line_items) if terms.line_items else {}
+    except (TypeError, ValueError):
+        priced = {}
+    for area in priced.get('areas') or []:
+        for line in area.get('lines') or []:
+            label = (line.get('label') or line.get('item') or '').strip()
+            if label:
+                lines.append(f"{area.get('name')}: {label}" if area.get('name') else label)
+    if terms.scope_notes:
+        lines.append(terms.scope_notes.strip())
+    first = float(priced.get('first_visit_charge') or 0) if first_job else 0.0
+    price = float(terms.price_per_visit) if terms.price_per_visit else None
+    return {'price': round(price + first, 2) if price else None,
+            'first_visit': first if price else 0.0,
+            'scope': '\n'.join(lines),
+            'sqft': _int(terms.sqft),
+            'effective_on': ag.effective_on}
 
 
 def _deposit():

@@ -136,4 +136,99 @@ with app.app_context():
     c.post(f'/commercial/{a.id}/delete')
     check(CommercialAccount.query.get(a.id) is not None, 'the account with jobs is kept')
 
+    print('\n7. A repeat made when a visit is finished keeps the whole job')
+    from blueprints.bookings import _create_next_recurring
+    b.frequency = 'weekly'; b.recurring_group = None; b.crew_size = 2
+    b.stripe_customer_id = 'cus_test'; b.stripe_payment_method_id = 'pm_test'
+    b.agent = 'Vee'; db.session.commit()
+    _create_next_recurring(b); db.session.commit()
+    nxt = Booking.query.filter_by(commercial_account_id=a.id,
+                                  preferred_date='2026-11-09').one()
+    check(nxt.sqft == 3200 and nxt.crew_size == 2, 'the building size and the crew')
+    check(nxt.stripe_payment_method_id == 'pm_test', 'the card on file')
+    check(nxt.source == 'commercial' and nxt.agent == 'Vee', 'and who it is credited to')
+    check(nxt.scope_of_work == b.scope_of_work and nxt.status == 'pending', 'unstarted, same scope')
+
+    print('\n8. A paid commercial visit is not also a residential commission')
+    import va_commission
+    from datetime import datetime
+    b2.agent = 'Vee'; b2.paid_at = datetime.utcnow(); db.session.commit()
+    now = datetime.utcnow()
+    out = va_commission.commission_for_month('Vee', now.year, now.month)
+    check(not [l for l in out['lines'] if l['type'].startswith('residential')]
+          and out['new_closes'] == 0,
+          f'no residential close or recurring line for it ({out["lines"]})')
+
+    print('\n9. "Invoice the morning of the job" sends a real invoice')
+    import scheduling, lifecycle
+    today = scheduling.local_now().date().isoformat()
+    c.post(f'/commercial/{a.id}/book', data={
+        'email': 'dana@sunrise.example', 'price': '275', 'frequency': 'one_time',
+        'preferred_date': today, 'preferred_time': '12:00 AM', 'payment_option': 'none'})
+    b3 = Booking.query.filter_by(commercial_account_id=a.id).order_by(Booking.id.desc()).first()
+    check(b3.preferred_date == today and not b3.invoice_number, 'booked for today, not invoiced yet')
+    SENT.clear()
+    lifecycle.run_lifecycle_emails()
+    b3 = Booking.query.get(b3.id)
+    check(b3.invoice_number and b3.invoice_due_date ==
+          (date.today() + timedelta(days=14)).isoformat(),
+          f'the morning run issued invoice {b3.invoice_number}, due in 14 days')
+    check(any(m['subject'].startswith(f'Invoice {b3.invoice_number}') for m in SENT),
+          'and emailed it')
+
+    print('\n10. The cleaner sees the scope before claiming, and the owner can correct it')
+    from models import Staff
+    st = Staff(name='Maria Alvarez', email='m@example.com', phone='4075550111',
+               is_active=True, pay_type='percent', pay_rate=50.0, worker_model='contractor',
+               agreement_token='maria-token')
+    db.session.add(st); b.claim_token = 'claim-token'; b.open_for_claim = True
+    db.session.commit()
+    page = c.get('/claim/claim-token/maria-token').data.decode()
+    check('Vacuum carpets' in page and '2 classrooms' in page, 'the claim page lists the scope')
+    page = c.get(f'/bookings/{b.id}').data.decode()
+    check('Correct the scope of work' in page, 'the booking page has a scope correction')
+    c.post(f'/bookings/{b.id}/scope', data={'scope_of_work': '• Vacuum carpets\n• Restrooms', 'sqft': '3400'})
+    b = Booking.query.get(b.id)
+    check(b.scope_items() == ['Vacuum carpets', 'Restrooms'] and b.sqft == 3400 and b.price == 275,
+          'the scope and size change, the price does not')
+    house = Booking(name='Pat', service_type='standard', bedrooms='3', bathrooms='2', price=150)
+    db.session.add(house); db.session.commit()
+    c.post(f'/bookings/{house.id}/scope', data={'scope_of_work': 'x', 'sqft': '9'})
+    check(Booking.query.get(house.id).scope_of_work is None, 'and a house is not given one')
+
+    print('\n11. A monthly account books from the agreement it signed')
+    import json
+    from decimal import Decimal
+    from types import SimpleNamespace
+    import blueprints.commercial as commercial
+    m = CommercialAccount(business_name='Oak Offices', email='ops@oak.example', city='Orlando',
+                          category='office', frequency='weekly', billing_type='monthly',
+                          billing_amount=516, square_footage=1000, source='manual')
+    db.session.add(m); db.session.commit()
+    signed = SimpleNamespace(
+        services='Office Cleaning, Restroom sanitation', price_per_visit=Decimal('120'),
+        scope_notes='No kitchen', sqft='4,000',
+        line_items=json.dumps({'first_visit_charge': 80,
+                               'areas': [{'name': 'Lobby', 'lines': [{'label': 'Mop floors'}]}]}))
+    old_terms = SimpleNamespace(services='Old work', price_per_visit=Decimal('99'),
+                                scope_notes='', sqft='', line_items=None)
+    real = commercial._agreements
+    commercial._agreements = lambda acct: (
+        [(SimpleNamespace(effective_on=date(2026, 10, 1)), signed, 'Ann', None),
+         (SimpleNamespace(effective_on=date(2026, 9, 1)), old_terms, 'Ann', object())]
+        if acct.id == m.id else [])
+    try:
+        page = c.get(f'/commercial/{m.id}/book').data.decode()
+    finally:
+        commercial._agreements = real
+    check('200.00' in page and 'first-visit charge' in page,
+          'the first job starts at the agreed $120 a visit plus the $80 first-visit charge')
+    check('Restroom sanitation' in page and 'Lobby: Mop floors' in page and 'No kitchen' in page,
+          'the scope is the work it signed for')
+    check('Old work' not in page, 'not the terms an amendment replaced')
+    check('value="4000"' in page, 'and the size it was quoted at')
+    page = c.get(f'/commercial/{m.id}/book').data.decode()
+    check('From the signed agreement' not in page and 'first-visit' not in page,
+          'with no agreement, the account is all it has')
+
 print('\nAll commercial booking checks passed.')

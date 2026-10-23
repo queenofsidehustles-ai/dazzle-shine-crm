@@ -28,7 +28,7 @@
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">🧹 The Job</h2>
     <div class="detail-grid" style="gap:14px">
       <div class="form-group"><label>Square footage</label>
-        <input type="number" name="square_footage" id="cb-sqft" step="50" value="{{ a.square_footage or '' }}"></div>
+        <input type="number" name="square_footage" id="cb-sqft" step="50" value="{{ (agreed.sqft if agreed and agreed.sqft) or a.square_footage or '' }}"></div>
       <div class="form-group"><label>How often</label>
         <select name="frequency" id="cb-freq">
           {% for k, lbl in job_frequencies.items() %}<option value="{{ k }}" {{ 'selected' if k == default_frequency }}>{{ lbl }}</option>{% endfor %}
@@ -44,12 +44,14 @@
         </label>
         {% endfor %}
       </div>
-      <textarea name="scope_notes" rows="2" placeholder="Anything else — e.g. 2 restrooms, 6 offices, conference room, no kitchen" style="margin-top:8px"></textarea>
+      <textarea name="scope_notes" rows="{{ 6 if agreed and agreed.scope else 2 }}" placeholder="Anything else — e.g. 2 restrooms, 6 offices, conference room, no kitchen" style="margin-top:8px">{{ agreed.scope if agreed else '' }}</textarea>
+      {% if agreed and agreed.scope %}<p style="font-size:0.8rem;color:var(--softer);margin:4px 0 0">From the signed agreement{% if agreed.effective_on %} in force since {{ agreed.effective_on }}{% endif %}. Change it here for this job only.</p>{% endif %}
     </div>
 
     <div class="detail-grid" style="gap:14px">
       <div class="form-group"><label>Price per visit ($) *</label>
-        <input type="text" name="price" id="cb-price" required value="{{ '%.2f' % default_price if default_price else '' }}"></div>
+        <input type="text" name="price" id="cb-price" required value="{{ '%.2f' % default_price if default_price else '' }}">
+        {% if agreed and agreed.price %}<span style="font-size:0.78rem;color:var(--softer)">The agreed price per visit{% if agreed.first_visit %}, plus the ${{ '%.2f' % agreed.first_visit }} first-visit charge{% endif %}.</span>{% endif %}</div>
       <div class="form-group"><label>Estimated hours <span style="font-weight:400;color:var(--softer)">— cleaner pay is built from this</span></label>
         <input type="text" name="estimated_hours" id="cb-hours" placeholder="e.g. 3"></div>
     </div>

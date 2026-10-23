@@ -1,6 +1,6 @@
 import calendar as cal_module
 from datetime import date, timedelta, datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, has_request_context
 from auth import login_required
 from models import Booking, BookingCrew, Client, Staff
 from extensions import db
@@ -1868,7 +1868,9 @@ def _send_invoice(booking):
     invoicing.issue(booking)
     payment_link_url(booking, 'full')  # ensure pay_token exists
     biz = branding.biz_name()
-    inv_url = request.host_url.rstrip('/') + url_for('invoices.view', token=booking.pay_token)
+    # The morning run has no request; the button does.
+    base = request.host_url.rstrip('/') if has_request_context() else branding.crm_base()
+    inv_url = f'{base}/invoice/{booking.pay_token}'
     due = amount_due(booking)
     sent = False
     if booking.email:
@@ -1906,6 +1908,27 @@ def send_invoice(booking_id):
         flash(f'🧾 Invoice {booking.invoice_number} sent to {booking.email}.', 'success')
     else:
         flash(f'Invoice {booking.invoice_number} created — share the link manually (no email on file, or send failed).', 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/scope', methods=['POST'])
+@login_required
+def update_scope(booking_id):
+    """Correct a commercial job's scope of work and size -- its stand-in for
+    the service details. The price is left alone (Correct price changes it),
+    and visits already made from this one keep the scope they were sent."""
+    booking = Booking.query.get_or_404(booking_id)
+    if not booking.is_commercial:
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    scope = (request.form.get('scope_of_work') or '').strip()
+    booking.scope_of_work = scope or None
+    try:
+        sqft = int(float(request.form.get('sqft') or 0))
+    except ValueError:
+        sqft = 0
+    booking.sqft = sqft if sqft > 0 else None
+    db.session.commit()
+    flash('Scope of work updated. Resend the confirmation or work order if they need the change.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -3185,6 +3208,12 @@ def _create_next_recurring(booking):
         return
 
     next_date = last_date + timedelta(days=delta)
+    if booking.is_commercial:
+        # Everything a business visit is described and paid by -- building
+        # size, crew, card on file, account -- is what clone_booking carries.
+        import recurring
+        db.session.add(recurring.clone_booking(booking, next_date))
+        return
     next_booking = Booking(
         client_id=booking.client_id,
         service_type=booking.service_type,

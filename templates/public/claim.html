@@ -43,6 +43,7 @@
       {% endif %}
       <div class="row"><span class="k">{{ t('When') }}</span><span class="v">{{ when_label }}{% if b.preferred_time %} · {{ b.preferred_time }}{% endif %}</span></div>
       <div class="row"><span class="k">{{ t('Service') }}</span><span class="v">{{ b.service_label }}{% if b.size_line() %} · {{ b.size_line() }}{% endif %}</span></div>
+      {% if b.scope_of_work %}<div class="row"><span class="k">{{ t('Scope') }}</span><span class="v" style="white-space:pre-line">{{ b.scope_of_work }}</span></div>{% endif %}
       <div class="row"><span class="k">{{ t('Area') }}</span><span class="v">{{ b.city or b.zip_code or '—' }}</span></div>
       <div class="pay"><div class="l">{{ 'Your share' if b.is_crew_job else "You'd earn" }}</div><div class="a">${{ '%.2f'|format(pay) }}</div>
         <div class="l" style="margin-top:5px;letter-spacing:0.04em;text-transform:none;font-size:0.8rem">{{ t('flat for the job') }}</div>
