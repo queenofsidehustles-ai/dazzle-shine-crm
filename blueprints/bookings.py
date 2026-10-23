@@ -2328,6 +2328,12 @@ def proposal_send(booking_id):
               if ok else f"Couldn't send: {detail}", 'success' if ok else 'error')
         return redirect(url_for('bookings.detail', booking_id=b.id))
 
+    # The background button can be pressed twice, or retried after a lost
+    # response. A confirmation that went out a moment ago is not sent again.
+    if (_wants_json() and b.confirm_sent_at
+            and datetime.utcnow() - b.confirm_sent_at < REPEAT_DEDUPE_WINDOW):
+        return jsonify({'ok': True, 'sent': [], 'already': True})
+
     sent = []
     if b.email:
         ok, _ = send_email(to_email=b.email, to_name=b.name, subject=subject, html=html)
@@ -2500,6 +2506,34 @@ def start_plan(booking_id):
     return redirect(url_for('bookings.detail', booking_id=seed.id))
 
 
+# What a repeat's confirmation opens with. The default opening is written for a
+# lead who asked about regular cleaning and went quiet; a customer being offered
+# another one-off clean has said nothing of the kind.
+REPEAT_CONFIRM_NOTE = ("Here's the date and price I have pencilled in for your next clean. "
+                       "Nothing is booked until you say so.")
+
+# A repeat made again within this window, for the same job, date and price, is
+# the same request arriving twice (a double tap, or a retry after a lost
+# response), so the first booking is returned instead of making another.
+REPEAT_DEDUPE_WINDOW = timedelta(minutes=2)
+
+
+def _repeat_payload(new):
+    """What the page needs to show a booked repeat and offer to confirm it."""
+    on_date = date.fromisoformat(new.preferred_date)
+    when = on_date.strftime('%a %-d %b')
+    if new.preferred_time:
+        when += f' at {new.preferred_time}'
+    return {
+        'ok': True, 'id': new.id, 'when': when, 'price': new.price, 'name': new.name,
+        'url': url_for('bookings.detail', booking_id=new.id),
+        'can_confirm': bool(new.email or new.phone),
+        'confirm_url': url_for('bookings.proposal_send', booking_id=new.id),
+        'preview_url': url_for('bookings.proposal_preview', booking_id=new.id),
+        'plan_date': new.preferred_date, 'plan_time': new.preferred_time or '',
+    }
+
+
 def _wants_json():
     """The page posted this in the background (fetch) rather than as a form
     submit, so it wants a JSON answer to draw in place, not a redirect."""
@@ -2541,7 +2575,19 @@ def book_again(booking_id):
         except ValueError:
             return refuse('That price is not a number.')
 
+    twin = Booking.query.filter(
+        Booking.repeat_of_booking_id == done.id,
+        Booking.preferred_date == on_date.isoformat(),
+        Booking.price == price,
+        Booking.created_at >= datetime.utcnow() - REPEAT_DEDUPE_WINDOW,
+    ).first()
+    if twin:
+        if _wants_json():
+            return jsonify(_repeat_payload(twin))
+        return redirect(url_for('bookings.detail', booking_id=twin.id))
+
     overrides = dict(
+        confirm_note=REPEAT_CONFIRM_NOTE,
         frequency='one_time', recurring_active=False, repeat_of_booking_id=done.id,
         price=price, balance_due=price, cc_email=done.cc_email, cc_name=done.cc_name,
         # The scope the customer accepted, including tasks taken off the default.
@@ -2558,18 +2604,7 @@ def book_again(booking_id):
     db.session.commit()
     _link_client(new)
     if _wants_json():
-        when = on_date.strftime('%a %-d %b')
-        if new.preferred_time:
-            when += f' at {new.preferred_time}'
-        return jsonify({
-            'ok': True, 'id': new.id, 'when': when, 'price': new.price,
-            'name': new.name,
-            'url': url_for('bookings.detail', booking_id=new.id),
-            'can_confirm': bool(new.email or new.phone),
-            'confirm_url': url_for('bookings.proposal_send', booking_id=new.id),
-            'preview_url': url_for('bookings.proposal_preview', booking_id=new.id),
-            'plan_date': new.preferred_date, 'plan_time': new.preferred_time or '',
-        })
+        return jsonify(_repeat_payload(new))
     flash(f'🔁 Booked again — #{new.id} on {on_date.isoformat()}.', 'success')
     return redirect(url_for('bookings.detail', booking_id=new.id))
 

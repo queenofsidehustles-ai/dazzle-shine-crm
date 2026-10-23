@@ -84,8 +84,13 @@
           const res = await fetch(url, { method: 'POST', body, headers: { 'X-Requested-With': 'fetch' } });
           let data = null;
           try { data = await res.json(); } catch (e) {}
-          if (!res.ok || !data || !data.ok) {
-            throw new Error((data && data.error) || 'Something went wrong — nothing was changed.');
+          if (!data) {
+            // No answer we can read, so it may have gone through. Asking again
+            // is safe: a repeat made twice in a row is only booked once.
+            throw new Error("Couldn't confirm that it went through — try again; it won't be done twice.");
+          }
+          if (!res.ok || !data.ok) {
+            throw new Error(data.error || 'Something went wrong — nothing was changed.');
           }
           return data;
         };
@@ -121,7 +126,9 @@
               if (r.price) body.set('plan_price', r.price);
               try {
                 const sent = await post(r.confirm_url, body);
-                $('bookAgainSent').textContent = 'Sent by ' + sent.sent.join(' and ') + " — you'll be told either way.";
+                $('bookAgainSent').textContent = sent.already
+                  ? 'Already sent a moment ago — you\'ll be told either way.'
+                  : 'Sent by ' + sent.sent.join(' and ') + " — you'll be told either way.";
                 $('bookAgainSent').hidden = false;
                 cta.hidden = true;
               } catch (e) {

@@ -144,6 +144,31 @@ with app.app_context():
     r = c.post(f'/bookings/{nobody.id}/proposal/send', headers=J, data={'to': 'customer'})
     check(r.status_code == 502 and r.get_json()['ok'] is False, 'nothing to send to is an error, not a silent success')
 
+    print('\n6b. Review fixes: no double-booking, no double-sending, one-off wording')
+    n = Booking.query.count()
+    r1 = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': '2026-12-14', 'repeat_price': '150'}).get_json()
+    r2 = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': '2026-12-14', 'repeat_price': '150'}).get_json()
+    check(r1['id'] == r2['id'] and Booking.query.count() == n + 1, 'the same repeat sent twice is booked once')
+    r3 = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': '2026-12-14', 'repeat_price': '160'}).get_json()
+    check(r3['id'] != r1['id'], 'a different price is a deliberate new booking')
+    sent_mail = []
+    import blueprints.bookings as bb
+    real = notifications.send_email
+    notifications.send_email = lambda **k: (sent_mail.append(k) or (True, 'ok'))
+    try:
+        body = {'to': 'customer', 'plan_frequency': 'one_time', 'plan_date': r1['plan_date'],
+                'plan_time': r1['plan_time'], 'plan_price': '150'}
+        a1 = c.post(r1['confirm_url'], headers=J, data=body).get_json()
+        a2 = c.post(r1['confirm_url'], headers=J, data=body).get_json()
+    finally:
+        notifications.send_email = real
+    check(a1['sent'] and a2.get('already') and len(sent_mail) == 1, 'a confirmation is not sent twice in a row')
+    html = sent_mail[0]['html']
+    check('regular cleaning' not in html and 'chasing' not in html, 'no regular-cleaning / chasing wording')
+    check('Nothing is booked until you say so' in html, 'the one-off note is what the customer reads')
+    prev = c.get(f"/bookings/{r1['id']}/proposal/preview").get_data(as_text=True)
+    check('chasing' not in prev and 'pencilled in for your next clean' in prev, 'and the preview shows the same')
+
     print('\n7. Without JavaScript the form still redirects')
     r = c.post(f'/bookings/{done.id}/book-again', data={'repeat_date': '2026-12-13'})
     check(r.status_code == 302, 'plain form post redirects as before')
