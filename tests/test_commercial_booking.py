@@ -87,6 +87,11 @@ with app.app_context():
     check(b.labor_rate_applied == commercial_pricing.cleaner_rate() == 25,
           f'the cleaner is paid the commercial cost, $25/hr (not ${get_labor_rate():.0f})')
     check(b.labor_budget == 100, '4 hours x $25 = $100 of cleaner pay on a $275 visit')
+    # The $100 is the job's pot, not one person's pay: it splits across the crew.
+    check(b.default_crew_pay(None, size=1) == 100 and b.hours_each(size=1) == 4,
+          'one cleaner: $100 for 4 hours')
+    check(b.default_crew_pay(None, size=2) == 50 and b.hours_each(size=2) == 2,
+          'two cleaners: $50 each for 2 hours each, still $100 in all')
     check(not b.rate_is_stale, 'and it is not offered a "re-rate" to the residential rate')
     b.labor_rate_applied = 0
     check(b.rate_applied == 0 and b.labor_budget == 0,
