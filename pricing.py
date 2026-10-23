@@ -115,7 +115,10 @@ FREQUENCY_LABELS = {
 
 DEPOSIT_AMOUNT       = 50   # dollars
 CONTRACTOR_SPLIT_PCT = 50   # percent — LEGACY, only used by jobs with no estimated hours
-LABOR_RATE_DEFAULT   = 43   # dollars per person-hour paid to cleaners (the new model)
+# Dollars per person-hour paid to cleaners -- a cost, not a price. A new
+# company starts here; one that existed before October 2026 kept $43
+# (migration 0036). The price a customer pays is revenue and moves with the job.
+LABOR_RATE_DEFAULT   = 25
 MAX_LABOR_PCT_DEFAULT = 60  # labor may not exceed this share of a job's price — sets the floor
 TIP_FEE_PCT_DEFAULT  = 2.9  # card processing taken off a tip before it's handed on
 LEAD_FEE_DEFAULT     = 25   # dollars — ad cost added to customer price, not shared with contractor

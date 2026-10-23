@@ -2,17 +2,19 @@
 
 ## The model: a flat rate per hour of work
 
-Contractors are paid **$43 for every person-hour of work in a job**, paid after the
+Contractors are paid **$25 for every person-hour of work in a job**, paid after the
 clean. Same rate for every cleaner, every job type. They provide their own
 supplies and transportation and pay their own taxes (1099).
 
 ```
-job pay = person-hours of work × $43
+job pay = person-hours of work × $25
 ```
 
-A 3-bed/2-bath standard clean contains about 3 hours of work, so it pays **$129**.
+A 3-bed/2-bath standard clean contains about 3 hours of work, so it pays **$75**.
 
-The rate lives in **Settings → Pricing → Cleaner Pay**, not in the code.
+The rate lives in **Settings → Pricing → Cleaner Pay**, not in the code. It is a
+cost, not a price: what the customer pays is revenue and moves with the job, the
+client and the market, and the difference is the gross profit.
 
 > ⚠️ This is the internal costing basis. **Don't quote the hourly rate to a
 > contractor** — they're told the flat amount for the job. See
@@ -40,14 +42,14 @@ of the owner's margin, where it belongs.
 The job's hours are the pot. One cleaner takes it all; two split it and each
 finish in about half the time.
 
-| 3bd/2ba · 3.0 hours · $129 pot | Each earns | Each works | Hourly |
+| 3bd/2ba · 3.0 hours · $75 pot | Each earns | Each works | Hourly |
 |---|---|---|---|
-| One cleaner | $129 | 3.0 hrs | $43 |
-| Two cleaners | $64.50 | 1.5 hrs | $43 |
+| One cleaner | $75 | 3.0 hrs | $25 |
+| Two cleaners | $37.50 | 1.5 hrs | $25 |
 
 ## When a job is harder than the chart says
 
-**Raise the hours, never the rate.** The rate stays $43 for everyone — that's what
+**Raise the hours, never the rate.** The rate stays $25 for everyone — that's what
 makes it simple to explain and impossible to argue about. If a house genuinely
 takes longer, that job's estimate should say so, and the pay follows automatically.
 

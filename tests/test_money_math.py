@@ -12,7 +12,8 @@ Either the change was intended, in which case say so in the commit, or a
 cleaner's pay just moved without anybody deciding it should.
 
 Figures assume the shipped defaults (pricing.py):
-    labor rate            $43 per person-hour
+    labor rate            $25 per person-hour (was $43 until October 2026; see
+                          migration 0036 -- a cost, not a price)
     contractor split      50% (legacy, only for jobs with no estimated hours)
     tip card fee          2.9%
     lead fee              $25
@@ -100,7 +101,7 @@ with app.app_context():
     eq(full['hours'], cut['hours'], 'a discounted job is the same amount of work')
     eq(full['contractor_earnings'], cut['contractor_earnings'],
        'so the cleaner earns the same on it')
-    eq(full['contractor_earnings'], 129.0, '3 hours × $43 = $129')
+    eq(full['contractor_earnings'], 75.0, '3 hours × $25 = $75')
 
     print('\n5. Add-ons pay for the extra time they take')
     # 'Inside oven' is $35 and half an hour.
@@ -109,13 +110,13 @@ with app.app_context():
     eq(j['client_price'], 295.0, 'so the job is $295')
     eq(j['extras_hours'], 0.5, 'and half an hour of work')
     eq(j['hours'], 3.5, 'taking the job to 3.5 hours')
-    eq(j['contractor_earnings'], 150.5, '3.5 × $43 = $150.50 — the cleaner is paid for it')
+    eq(j['contractor_earnings'], 87.5, '3.5 × $25 = $87.50 — the cleaner is paid for it')
 
     # Two add-ons: oven $35 / 0.5h and cabinets $30 / 1.0h.
     j = pricing.calculate_job('standard', 3, 2, extras='Inside oven, Inside cabinets')
     eq(j['extras_total'], 65, 'two add-ons total $65')
     eq(j['hours'], 4.5, 'and 1.5 extra hours')
-    eq(j['contractor_earnings'], 193.5, '4.5 × $43 = $193.50')
+    eq(j['contractor_earnings'], 112.5, '4.5 × $25 = $112.50')
 
     print('\n6. An add-on nobody recognises is silently free')
     # Worth knowing rather than assuming: a name that is not in the price list
