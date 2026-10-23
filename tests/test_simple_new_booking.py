@@ -111,6 +111,8 @@ with app.app_context():
     check('id="nextCleaner"' in html, 'a new job shows "Next: who\'s cleaning this one?"')
     check(html.index('id="nextCleaner"') < html.index('data-card-key="booking"'),
           'above everything else on the page')
+    check(html.count('name="assign_to"') == 1,
+          'and it points at the one picker rather than being a second one')
     s = Staff.query.filter_by(name='Rosa Cleaner').first()
     c.post(f'/bookings/{g.id}/assign', data={'assign_to': str(s.id)})
     html = c.get(f'/bookings/{g.id}').get_data(as_text=True)

@@ -6,31 +6,21 @@
 {% endblock %}
 
 {% block content %}
-{# The next thing a new booking needs, on top of the page rather than inside
-   the pay card halfway down it. Same endpoint and same picker values as
-   "Who's doing it" -- staff ids, the default pay, the work order sent -- so the
-   two can't disagree; crew size, a pay override and the quiet assign stay
-   down there for the jobs that need them. Gone once anyone is on the job. #}
-{% if booking.needs_cleaner and not booking.crew and staff %}
-<form method="POST" action="{{ url_for('bookings.assign', booking_id=booking.id) }}" id="nextCleaner"
-      style="background:var(--warn-soft);border:1px solid var(--warn);border-radius:12px;padding:14px 16px;margin-bottom:18px">
-  <label for="nextAssignTo" style="display:block;font-weight:700;margin-bottom:8px">
-    Next: who's cleaning this one?
-  </label>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-    <select id="nextAssignTo" name="assign_to" required
-            style="flex:1 1 220px;padding:10px 11px;border:1px solid var(--line);border-radius:8px;margin:0">
-      <option value="">— Pick a cleaner —</option>
-      {% for s in staff %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-      <option value="team">— Offer it to the whole team —</option>
-    </select>
-    <input type="hidden" name="send_checklist" value="1" />
-    <button type="submit" class="btn btn-gold" style="justify-content:center">Assign &amp; text them</button>
+{# The next thing a new booking needs, said on top of the page rather than
+   left to be found in the pay card halfway down it. It points at the picker
+   in "Who's doing it" instead of being a second one: two dropdowns answering
+   the same question is the kind of thing this page was cleaned up to remove.
+   Gone once anyone is on the job, and on a settled job, which has no picker. #}
+{% if booking.needs_cleaner and not booking.crew and staff and not settled %}
+<div id="nextCleaner"
+     style="background:var(--warn-soft);border:1px solid var(--warn);border-radius:12px;padding:14px 16px;margin-bottom:18px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+  <div>
+    <div style="font-weight:700">Next: who's cleaning this one?</div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-top:3px">Nobody is on this job yet. They'll get the address, entry notes, their pay and the checklist.</div>
   </div>
-  <p style="font-size:0.8rem;color:var(--muted);margin:8px 0 0">
-    They get the address, entry notes, their pay and the checklist. To change their pay or add a second cleaner, use <em>Who's doing it</em> below.
-  </p>
-</form>
+  <a href="#assignTo" class="btn btn-gold" style="justify-content:center"
+     onclick="var s=document.getElementById('assignTo');if(s){s.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(function(){s.focus()},400);}return false">Pick a cleaner ↓</a>
+</div>
 {% endif %}
 <div class="detail-grid" data-reorder="bookingDetailCardOrder">
 
