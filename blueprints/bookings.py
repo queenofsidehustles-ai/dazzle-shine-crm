@@ -2368,6 +2368,12 @@ def proposal_send(booking_id):
               if ok else f"Couldn't send: {detail}", 'success' if ok else 'error')
         return redirect(url_for('bookings.detail', booking_id=b.id))
 
+    # The background button can be pressed twice, or retried after a lost
+    # response. A confirmation that went out a moment ago is not sent again.
+    if (_wants_json() and b.confirm_sent_at
+            and datetime.utcnow() - b.confirm_sent_at < REPEAT_DEDUPE_WINDOW):
+        return jsonify({'ok': True, 'sent': [], 'already': True})
+
     sent = []
     if b.email:
         ok, _ = send_email(to_email=b.email, to_name=b.name, subject=subject, html=html)
@@ -2383,9 +2389,14 @@ def proposal_send(booking_id):
     if sent:
         b.confirm_sent_at = datetime.utcnow()
         db.session.commit()
+        if _wants_json():
+            return jsonify({'ok': True, 'sent': sent})
         flash(f"Asked {b.name} to confirm — sent by {' and '.join(sent)}. "
               f"You'll be told either way.", 'success')
     else:
+        if _wants_json():
+            return jsonify({'ok': False,
+                            'error': 'Nothing could be sent — check the Sent Log for why.'}), 502
         flash('Nothing could be sent — check the Sent Log for why.', 'warning')
     return redirect(url_for('bookings.detail', booking_id=b.id))
 
@@ -2536,6 +2547,40 @@ def start_plan(booking_id):
     return redirect(url_for('bookings.detail', booking_id=seed.id))
 
 
+# What a repeat's confirmation opens with. The default opening is written for a
+# lead who asked about regular cleaning and went quiet; a customer being offered
+# another one-off clean has said nothing of the kind.
+REPEAT_CONFIRM_NOTE = ("Here's the date and price I have pencilled in for your next clean. "
+                       "Nothing is booked until you say so.")
+
+# A repeat made again within this window, for the same job, date and price, is
+# the same request arriving twice (a double tap, or a retry after a lost
+# response), so the first booking is returned instead of making another.
+REPEAT_DEDUPE_WINDOW = timedelta(minutes=2)
+
+
+def _repeat_payload(new):
+    """What the page needs to show a booked repeat and offer to confirm it."""
+    on_date = date.fromisoformat(new.preferred_date)
+    when = on_date.strftime('%a %-d %b')
+    if new.preferred_time:
+        when += f' at {new.preferred_time}'
+    return {
+        'ok': True, 'id': new.id, 'when': when, 'price': new.price, 'name': new.name,
+        'url': url_for('bookings.detail', booking_id=new.id),
+        'can_confirm': bool(new.email or new.phone),
+        'confirm_url': url_for('bookings.proposal_send', booking_id=new.id),
+        'preview_url': url_for('bookings.proposal_preview', booking_id=new.id),
+        'plan_date': new.preferred_date, 'plan_time': new.preferred_time or '',
+    }
+
+
+def _wants_json():
+    """The page posted this in the background (fetch) rather than as a form
+    submit, so it wants a JSON answer to draw in place, not a redirect."""
+    return request.headers.get('X-Requested-With') == 'fetch'
+
+
 @bookings_bp.route('/<int:booking_id>/book-again', methods=['POST'])
 @login_required
 def book_again(booking_id):
@@ -2544,21 +2589,24 @@ def book_again(booking_id):
     booking (no recurring plan), so confirmation, invoicing and payment work
     exactly as they do for any other job."""
     done = Booking.query.get_or_404(booking_id)
-    back = redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    def refuse(message, status=400):
+        if _wants_json():
+            return jsonify({'ok': False, 'error': message}), status
+        flash(message, 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
     if done.status != 'completed':
-        flash('Only a completed job can be booked again.', 'error')
-        return back
+        return refuse('Only a completed job can be booked again.')
     # Same ceiling as every other way of creating a job — repeating a clean is
     # still a new booking.
     ok, why = entitlements.check_limit('jobs_per_month')
     if not ok:
-        flash(why, 'error')
-        return back
+        return refuse(why)
     try:
         on_date = date.fromisoformat((request.form.get('repeat_date') or '').strip())
     except ValueError:
-        flash('Pick the date for the repeat clean.', 'error')
-        return back
+        return refuse('Pick the date for the repeat clean.')
 
     price = done.price
     price_raw = (request.form.get('repeat_price') or '').strip().replace('$', '').replace(',', '')
@@ -2566,10 +2614,21 @@ def book_again(booking_id):
         try:
             price = round(float(price_raw), 2)
         except ValueError:
-            flash('That price is not a number.', 'error')
-            return back
+            return refuse('That price is not a number.')
+
+    twin = Booking.query.filter(
+        Booking.repeat_of_booking_id == done.id,
+        Booking.preferred_date == on_date.isoformat(),
+        Booking.price == price,
+        Booking.created_at >= datetime.utcnow() - REPEAT_DEDUPE_WINDOW,
+    ).first()
+    if twin:
+        if _wants_json():
+            return jsonify(_repeat_payload(twin))
+        return redirect(url_for('bookings.detail', booking_id=twin.id))
 
     overrides = dict(
+        confirm_note=REPEAT_CONFIRM_NOTE,
         frequency='one_time', recurring_active=False, repeat_of_booking_id=done.id,
         price=price, balance_due=price, cc_email=done.cc_email, cc_name=done.cc_name,
         # The scope the customer accepted, including tasks taken off the default.
@@ -2585,6 +2644,8 @@ def book_again(booking_id):
     db.session.add(new)
     db.session.commit()
     _link_client(new)
+    if _wants_json():
+        return jsonify(_repeat_payload(new))
     flash(f'🔁 Booked again — #{new.id} on {on_date.isoformat()}.', 'success')
     return redirect(url_for('bookings.detail', booking_id=new.id))
 
