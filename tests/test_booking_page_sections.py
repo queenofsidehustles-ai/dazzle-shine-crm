@@ -62,7 +62,9 @@ with app.app_context():
 
     print('\n1. Five sections, not eleven cards')
     keys = re.findall(r'data-card-key="([^"]+)"', SRC)
-    check(keys == ['booking', 'money', 'who', 'talk', 'extras'],
+    # Who's doing it before the money: assigning is the next thing a new
+    # booking needs, and being paid comes after the work.
+    check(keys == ['booking', 'who', 'money', 'talk', 'extras'],
           f'the page is {" · ".join(keys)}')
     check(len(keys) == len(set(keys)), 'every key is distinct, so a saved order cannot collide')
     for gone in ('customer', 'service', 'manage', 'crew-pay', 'send-customer',
@@ -117,10 +119,10 @@ with app.app_context():
     # It spent one release folded in with the hours, on the theory that it was
     # arithmetic. It is not: it sets how many spots the team offer advertises
     # and how the pot divides. test_crew_size_visible holds the full contract.
-    details = SRC[SRC.index('How this pay is worked out'):]
+    details = SRC[SRC.index('Pay details — hours, rate'):]
     cut = details.index('</details>')
     check('name="crew_size"' not in details[:cut],
-          'it is NOT buried in "How this pay is worked out"')
+          'it is NOT buried in the pay details fold')
     # The pay card's assign form, not the "Next: who's cleaning" bar on top,
     # which posts to the same endpoint but leaves the headcount down here.
     who = SRC[SRC.index('data-card-key="who"'):]
