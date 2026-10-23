@@ -113,4 +113,38 @@ with app.app_context():
                       ('limited', False), ('cleaner', False), ('sales', False)):
         check(rbac.has_permission(role, 'booking.create') is may,
               f'{role}: {"may" if may else "may not"} book again')
+
+    print('\n5. Posting in the background')
+    J = {'X-Requested-With': 'fetch'}
+    r = c.post(f'/bookings/{done.id}/book-again', headers=J,
+               data={'repeat_date': '2026-12-11', 'repeat_price': '180'})
+    d = r.get_json()
+    check(r.status_code == 200 and d['ok'] and not r.headers.get('Location'), 'JSON answer, no redirect')
+    nb = Booking.query.get(d['id'])
+    check(nb.repeat_of_booking_id == done.id and nb.price == 180, 'the booking is created')
+    check(d['can_confirm'] and d['confirm_url'].endswith(f"/{d['id']}/proposal/send")
+          and d['url'].endswith(f"/bookings/{d['id']}"), 'carries what the page needs for the confirm step')
+    n = Booking.query.count()
+    r = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': ''})
+    check(r.status_code == 400 and r.get_json()['ok'] is False and Booking.query.count() == n,
+          'a bad date is a JSON error, nothing created')
+    r = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': '2026-12-12', 'repeat_price': 'abc'})
+    check(r.status_code == 400 and 'not a number' in r.get_json()['error'], 'a bad price says so')
+
+    print('\n6. The confirm step')
+    r = c.post(d['confirm_url'], headers=J, data={
+        'to': 'customer', 'plan_frequency': 'one_time', 'plan_date': d['plan_date'],
+        'plan_time': d['plan_time'], 'plan_price': '180'})
+    j = r.get_json()
+    check(r.status_code == 200 and j['ok'] and 'email' in j['sent'], 'asks the customer, answered in JSON')
+    check(Booking.query.get(d['id']).confirm_sent_at is not None, 'and records that it was sent')
+    nobody = Booking(client_id=cl.id, service_type='standard', name='No Contact', status='pending',
+                     preferred_date='2026-12-20', price=100)
+    db.session.add(nobody); db.session.commit()
+    r = c.post(f'/bookings/{nobody.id}/proposal/send', headers=J, data={'to': 'customer'})
+    check(r.status_code == 502 and r.get_json()['ok'] is False, 'nothing to send to is an error, not a silent success')
+
+    print('\n7. Without JavaScript the form still redirects')
+    r = c.post(f'/bookings/{done.id}/book-again', data={'repeat_date': '2026-12-13'})
+    check(r.status_code == 302, 'plain form post redirects as before')
 print('\nAll good')

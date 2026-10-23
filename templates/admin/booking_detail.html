@@ -20,7 +20,7 @@
       <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">
         🔁 Book again — repeat this clean on a new date
       </summary>
-      <form method="POST" action="{{ url_for('bookings.book_again', booking_id=booking.id) }}"
+      <form id="bookAgainForm" method="POST" action="{{ url_for('bookings.book_again', booking_id=booking.id) }}"
             style="padding:0 13px 14px">
         <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px">
           A one-off booking, not a recurring plan — nothing else gets scheduled.
@@ -48,11 +48,105 @@
           <input type="checkbox" name="same_cleaner" value="1" checked> Same cleaner ({{ booking.assigned_cleaner }})
         </label>
         {% endif %}
+        <p id="bookAgainError" role="alert" hidden
+           style="font-size:0.82rem;color:var(--warn);font-weight:600;margin:0 0 10px"></p>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">🔁 Book again</button>
       </form>
+      {# Drawn in place of the form once the repeat is booked — no page change. #}
+      <div id="bookAgainDone" hidden style="padding:0 13px 14px" aria-live="polite">
+        <div style="background:var(--good-soft);color:var(--good);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
+          ✅ <span id="bookAgainSummary"></span>
+        </div>
+        <p id="bookAgainSent" hidden style="font-size:0.85rem;color:var(--good);font-weight:600;margin:10px 0 0"></p>
+        <p id="bookAgainConfirmError" role="alert" hidden
+           style="font-size:0.82rem;color:var(--warn);font-weight:600;margin:10px 0 0"></p>
+        <button type="button" id="bookAgainConfirm" class="btn btn-gold"
+                style="width:100%;justify-content:center;margin-top:10px"></button>
+        <p id="bookAgainNoContact" hidden style="font-size:0.8rem;color:var(--softer);margin:10px 0 0">
+          No email or phone on file, so there's nobody to ask — add one on the new booking.</p>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:0.85rem;font-weight:600">
+          <a id="bookAgainPreview" href="#" target="_blank" rel="noopener" style="color:var(--amber-deep)">Preview what they'd get</a>
+          <a id="bookAgainOpen" href="#" style="color:var(--amber-deep)">Open the new booking →</a>
+          <a id="bookAgainAnother" href="#" style="color:var(--muted)">Book another</a>
+        </div>
+      </div>
     </details>
     <script>
       if (location.hash === '#book-again') document.getElementById('book-again').open = true;
+
+      // Post the repeat in the background and draw the result in place. Without
+      // JavaScript the form still submits normally and redirects.
+      (function () {
+        const form = document.getElementById('bookAgainForm');
+        if (!form) return;
+        const $ = (id) => document.getElementById(id);
+        const post = async (url, body) => {
+          const res = await fetch(url, { method: 'POST', body, headers: { 'X-Requested-With': 'fetch' } });
+          let data = null;
+          try { data = await res.json(); } catch (e) {}
+          if (!res.ok || !data || !data.ok) {
+            throw new Error((data && data.error) || 'Something went wrong — nothing was changed.');
+          }
+          return data;
+        };
+
+        form.addEventListener('submit', async (ev) => {
+          ev.preventDefault();
+          const btn = form.querySelector('button[type=submit]');
+          const err = $('bookAgainError');
+          err.hidden = true;
+          btn.disabled = true;
+          try {
+            const r = await post(form.action, new FormData(form));
+            const price = r.price ? ' · $' + Number(r.price).toFixed(2) : '';
+            $('bookAgainSummary').textContent = 'Booked again for ' + r.when + price + ' — booking #' + r.id;
+            $('bookAgainOpen').href = r.url;
+            $('bookAgainPreview').href = r.preview_url;
+            $('bookAgainSent').hidden = true;
+            $('bookAgainConfirmError').hidden = true;
+            const cta = $('bookAgainConfirm');
+            cta.hidden = !r.can_confirm;
+            $('bookAgainNoContact').hidden = r.can_confirm;
+            $('bookAgainPreview').hidden = !r.can_confirm;
+            cta.disabled = false;
+            cta.textContent = '📨 Ask ' + ((r.name || 'them').split(' ')[0]) + ' to confirm';
+            cta.onclick = async () => {
+              cta.disabled = true;
+              $('bookAgainConfirmError').hidden = true;
+              const body = new FormData();
+              body.set('to', 'customer');
+              body.set('plan_frequency', 'one_time');
+              body.set('plan_date', r.plan_date);
+              body.set('plan_time', r.plan_time);
+              if (r.price) body.set('plan_price', r.price);
+              try {
+                const sent = await post(r.confirm_url, body);
+                $('bookAgainSent').textContent = 'Sent by ' + sent.sent.join(' and ') + " — you'll be told either way.";
+                $('bookAgainSent').hidden = false;
+                cta.hidden = true;
+              } catch (e) {
+                $('bookAgainConfirmError').textContent = e.message;
+                $('bookAgainConfirmError').hidden = false;
+                cta.disabled = false;
+              }
+            };
+            form.hidden = true;
+            $('bookAgainDone').hidden = false;
+          } catch (e) {
+            err.textContent = e.message;
+            err.hidden = false;
+          } finally {
+            btn.disabled = false;
+          }
+        });
+
+        $('bookAgainAnother').addEventListener('click', (ev) => {
+          ev.preventDefault();
+          $('bookAgainDone').hidden = true;
+          form.reset();
+          form.hidden = false;
+        });
+      })();
     </script>
     {% endif %}
 
