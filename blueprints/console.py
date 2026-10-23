@@ -907,6 +907,64 @@ def _csv_safe(value):
     return "'" + text if text[:1] in ('=', '+', '-', '@', '\t', '\r') else text
 
 
+@console_bp.route('/release')
+@console_required
+def release_view():
+    """What is on main that the companies do not have yet, and the way to ship it."""
+    import release_control
+    ov = release_control.overview()
+    return render_template(
+        'console/release.html', ov=ov, blocked=release_control.blockers(ov),
+        flags=ov.get('flags') or {}, is_owner=_is_owner(), me=request.console_user,
+        repo=release_control.repo(),
+        counts=_counts(_engine()))
+
+
+@console_bp.route('/release/go', methods=['POST'])
+@console_required
+def release_go():
+    """Start the release of exactly the commit the page showed."""
+    import release_control
+    here = url_for('console.release_view')
+    if not _is_owner():
+        flash('Only the console owner can release.', 'error')
+        return redirect(here)
+    ov = release_control.overview()
+    head = ov.get('main_sha') or ''
+    # The page was drawn from one commit; the release must be of that commit.
+    if (request.form.get('sha') or '') != head:
+        flash('main has moved since you opened this page. Look at the new changes '
+              'and release again.', 'error')
+        return redirect(here)
+    why = release_control.blockers(ov)
+    if why:
+        flash('Not released: ' + why[0], 'error')
+        return redirect(here)
+    reason = (request.form.get('reason') or '').strip()
+    if len(reason) < 5:
+        flash('Say why, in a sentence. It goes in the record.', 'error')
+        return redirect(here)
+    if (request.form.get('confirm') or '').strip().lower() != head[:7]:
+        flash(f'Type the commit ({head[:7]}) exactly to confirm.', 'error')
+        return redirect(here)
+    ok, why_not = _reauthenticate()
+    if not ok:
+        flash(why_not, 'error')
+        return redirect(here)
+    started, message = release_control.start(head)
+    who = request.console_user['email']
+    if not started:
+        control_plane.log_console(_engine(), who, 'release failed to start', 'akye-stable',
+                                  f'{head[:7]}: {message}'[:300])
+        flash(message, 'error')
+        return redirect(here)
+    control_plane.log_console(_engine(), who, 'started release', 'akye-stable',
+                              f'{head[:7]}, {ov["ahead"]} commit(s). Reason: {reason}'[:300])
+    flash(f'Release started for {head[:7]}. It runs every suite first, so allow about '
+          f'half an hour; companies get it a few minutes after it finishes.', 'success')
+    return redirect(here)
+
+
 @console_bp.route('/health')
 @console_required
 def health():

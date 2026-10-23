@@ -411,7 +411,7 @@ def show(line):
     say('\nNothing has changed. Run with --go to release.')
 
 
-def go(line):
+def go(line, expect=None):
     preflight(line)
     first = not remote_has(line.channel)
     commits = pending(line)
@@ -420,6 +420,11 @@ def go(line):
                  f'{line.source}.')
 
     checked = git('rev-parse', f'{REMOTE}/{line.source}')
+    # The console's Release page shows a diff and asks for exactly that commit.
+    # If anything has landed since, what was reviewed is not what would ship.
+    if expect and not checked.startswith(expect.lower()):
+        sys.exit(f'{line.source} is now at {checked[:7]}, not the {expect[:7]} that '
+                 f'was reviewed. Nothing was released; look at the page again.')
     evidence = require_green(line, checked)
 
     say(f'Releasing {line.product} to {line.audience}:\n')
@@ -488,6 +493,8 @@ if __name__ == '__main__':
     ap.add_argument('--akye', action='store_true',
                     help="release Akye rather than this business's own CRM")
     ap.add_argument('--go', action='store_true', help='test, tag and release')
+    ap.add_argument('--expect', metavar='SHA',
+                    help='release only if the source branch is at this commit')
     ap.add_argument('--rollback', action='store_true',
                     help='put them back on the previous release')
     args = ap.parse_args()
@@ -495,6 +502,8 @@ if __name__ == '__main__':
     if args.rollback:
         rollback(chosen)
     elif args.go:
-        go(chosen)
+        if args.expect and not re.fullmatch(r'[0-9a-fA-F]{7,40}', args.expect):
+            sys.exit('--expect needs a commit id.')
+        go(chosen, args.expect)
     else:
         show(chosen)

@@ -1,0 +1,103 @@
+{% extends "console/_shell.html" %}
+{% block title %}Release{% endblock %}
+{% block body %}
+{% include "console/_ops_style.html" %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Release</h2>
+<p class="ops-dim" style="margin:0 0 var(--s4)">What is on <code>main</code> that every company does not have yet. Releasing moves <code>akye-stable</code> up to <code>main</code>, and companies get it a few minutes later.</p>
+
+{% if ov.error %}
+<div class="ops-card" style="border-color:var(--warn);background:var(--warn-soft)">
+  <strong style="color:var(--warn)">Cannot read GitHub</strong>
+  <p style="margin:var(--s2) 0 0">{{ ov.error }}</p>
+</div>
+{% else %}
+
+<div class="ops-grid">
+  <div class="ops-card"><span class="ops-dim">Companies are on</span>
+    <span class="v">{{ ov.release or 'unknown' }}</span>
+    <span class="ops-dim"><code>{{ (ov.stable_sha or '')[:7] }}</code> · akye-stable</span></div>
+  <div class="ops-card"><span class="ops-dim">Main is at</span>
+    <span class="v"><code>{{ (ov.main_sha or '')[:7] }}</code></span>
+    <span class="ops-dim">{{ ov.ahead }} commit{{ '' if ov.ahead == 1 else 's' }} ahead · {{ ov.files|length }} file{{ '' if ov.files|length == 1 else 's' }}</span></div>
+  <div class="ops-card"><span class="ops-dim">Lines changed</span>
+    <span class="v"><span class="ops-good">+{{ '{:,}'.format(ov.additions) }}</span> <span class="ops-bad">−{{ '{:,}'.format(ov.deletions) }}</span></span></div>
+</div>
+
+{% if ov.truncated %}<p class="ops-dim">GitHub lists at most 100 commits and 300 files here, so this is part of a larger change. Read the full comparison on GitHub before releasing.</p>{% endif %}
+
+<h3 class="ops-h" style="margin-top:0">Checks on {{ (ov.main_sha or '')[:7] }}</h3>
+<div class="ops-scroll"><table class="con">
+  {% for name, state, url in ov.checks %}
+  <tr><td>{{ name }}</td>
+      <td><span class="ops-badge {{ {'passed': 'ops-ok', 'running': 'ops-stale', 'failed': 'ops-closed', 'missing': 'ops-never'}[state] }}">{{ state }}</span></td>
+      <td>{% if url %}<a href="{{ url }}" target="_blank" rel="noopener">run</a>{% endif %}</td></tr>
+  {% else %}
+  <tr><td class="ops-dim">The required checks could not be read.</td></tr>
+  {% endfor %}
+</table></div>
+
+{% if flags %}
+<h3 class="ops-h">Look closer at these</h3>
+<div class="ops-card" style="border-color:var(--amber-deep);background:var(--amber-soft)">
+  {% for label, paths in flags.items() %}
+  <p style="margin:0 0 var(--s2)"><strong>{{ label }}</strong>
+    <span class="ops-dim">{% for p in paths %}<br><code>{{ p }}</code>{% endfor %}</span></p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h3 class="ops-h">Commits ({{ ov.ahead }})</h3>
+<div class="ops-scroll"><table class="con">
+  <tr><th>Commit</th><th>What</th><th>By</th></tr>
+  {% for c in ov.commits|reverse %}
+  <tr><td><a href="{{ c.url }}" target="_blank" rel="noopener"><code>{{ c.short }}</code></a></td>
+      <td>{{ c.message }}</td><td class="ops-dim">{{ c.author }}</td></tr>
+  {% else %}
+  <tr><td class="ops-dim" colspan="3">Nothing. Companies already have everything on main.</td></tr>
+  {% endfor %}
+</table></div>
+
+<h3 class="ops-h">Files ({{ ov.files|length }})</h3>
+<div class="ops-scroll"><table class="con">
+  <tr><th>File</th><th>Change</th><th>Lines</th></tr>
+  {% for f in ov.files %}
+  <tr><td><code>{{ f.filename }}</code></td>
+      <td class="ops-dim">{{ f.status }}</td>
+      <td><span class="ops-good">+{{ f.additions }}</span> <span class="ops-bad">−{{ f.deletions }}</span></td></tr>
+  {% endfor %}
+</table></div>
+<p class="ops-dim"><a href="https://github.com/{{ repo }}/compare/akye-stable...main" target="_blank" rel="noopener">Read the full diff on GitHub</a></p>
+
+{% if ov.runs %}
+<h3 class="ops-h">Recent releases</h3>
+<div class="ops-scroll"><table class="con">
+  {% for r in ov.runs %}
+  <tr><td><a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.created[:16].replace('T', ' ') }} UTC</a></td>
+      <td><code>{{ r.sha }}</code></td>
+      <td><span class="ops-badge {{ 'ops-stale' if r.status != 'completed' else ('ops-ok' if r.conclusion == 'success' else 'ops-closed') }}">{{ 'running' if r.status != 'completed' else r.conclusion }}</span></td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h3 class="ops-h">Release</h3>
+<div class="ops-card">
+  {% if blocked %}
+    <p style="margin:0 0 var(--s2)"><strong>Not ready to release:</strong></p>
+    <ul style="margin:0;padding-left:var(--s5)">{% for b in blocked %}<li>{{ b }}</li>{% endfor %}</ul>
+  {% elif not is_owner %}
+    <p style="margin:0">Only the console owner can release. Everything above is ready for them.</p>
+  {% else %}
+    <p style="margin:0 0 var(--s3)">This releases exactly <code>{{ ov.main_sha[:7] }}</code>. It runs every test suite first, so it takes about half an hour. If <code>main</code> moves before it starts, nothing is released.</p>
+    <form method="post" action="{{ url_for('console.release_go') }}" class="ops-form">
+      <input type="hidden" name="sha" value="{{ ov.main_sha }}">
+      <input type="text" name="reason" required minlength="5" maxlength="300" placeholder="Why now (goes in the record)">
+      <input type="text" name="confirm" required autocomplete="off" placeholder="Type {{ ov.main_sha[:7] }} to confirm">
+      <input type="password" name="password" required autocomplete="current-password" placeholder="Your console password">
+      {% if me.totp_enabled %}<input type="text" name="code" required inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator code">{% endif %}
+      <button class="btn btn-sm" type="submit">Release {{ ov.ahead }} commit{{ '' if ov.ahead == 1 else 's' }} to every company</button>
+    </form>
+  {% endif %}
+  <p class="ops-dim" style="margin:var(--s3) 0 0">To go back one release: <code>python3 release.py --akye --rollback</code>. Companies' data is untouched either way.</p>
+</div>
+{% endif %}
+{% endblock %}
