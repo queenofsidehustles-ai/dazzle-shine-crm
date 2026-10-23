@@ -87,6 +87,37 @@ def _reject_wrong_tenant_session():
     return redirect(url_for('admin.login'))
 
 
+# How often a signed-in person's use is written to the control plane. An hour
+# is plenty for "when did they last use it", and keeps it to one small UPDATE
+# per person per hour rather than one per page.
+ACTIVE_MARK_SECONDS = 3600
+
+
+def note_activity():
+    """Record that this company's CRM is in use (control_plane.mark_active),
+    for the console's support meter and the "gone quiet" emails.
+
+    Throttled through the session, so most requests do no database work at
+    all. Hosted companies only: a single-business install has no control
+    plane. Never raises -- a page must not fail because a timestamp did not
+    write."""
+    try:
+        import time
+        slug = getattr(g, 'tenant_slug', None)
+        if not slug:
+            return
+        now = int(time.time())
+        if now - int(session.get('active_mark') or 0) < ACTIVE_MARK_SECONDS:
+            return
+        session['active_mark'] = now
+        import control_plane
+        import provisioning
+        control_plane.mark_active(provisioning._engine(), slug,
+                                  owner=session.get('role') == 'owner')
+    except Exception:
+        pass
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -96,6 +127,7 @@ def login_required(f):
             return _reject_wrong_tenant_session()
         if not session_matches_current_user():
             return _reject_wrong_tenant_session()
+        note_activity()
         # Route authentication and route authorization are separate boundaries.
         # rbac only acts on endpoints deliberately classified in its matrix;
         # unknown roles/permissions fail closed for those protected actions.
@@ -134,6 +166,7 @@ def owner_required(f):
         if not is_owner_session():
             flash('That area is owner-only.', 'error')
             return redirect(url_for('admin.dashboard'))
+        note_activity()
         return f(*args, **kwargs)
     return decorated
 
