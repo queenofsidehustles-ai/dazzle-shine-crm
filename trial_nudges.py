@@ -361,7 +361,7 @@ def compose(org, kind, next_step=None):
               <li>Automatic reminders and follow-ups</li>
               <li>Card payments and invoices</li>
               <li>The hiring pipeline</li>
-              <li>More than 2 cleaners, or 20 jobs a month</li>
+              <li>More than 3 cleaners, or 20 jobs a month</li>
             </ul>'''
 
     if kind == 'ending':
@@ -563,7 +563,7 @@ def compose(org, kind, next_step=None):
             '''<p>Your account is still open on the free plan. It never got
             its first customer and job, so you have not seen it do
             anything yet.</p>
-            <p>The free plan is enough to try it properly: up to 2 cleaners,
+            <p>The free plan is enough to try it properly: up to 3 cleaners,
             every customer you have, and 20 jobs a month. Two things, about two
             minutes: add <strong>one customer</strong> you already clean for,
             and give their next clean to yourself. You are already the first

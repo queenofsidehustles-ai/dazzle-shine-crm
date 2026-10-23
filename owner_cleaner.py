@@ -11,7 +11,7 @@ What makes it different from every other Staff row:
     skip it. Nobody pays the owner through the CRM for their own work.
   * pay_rate is 0, and no agreement or payout paperwork is asked of them.
   * It counts as one of the plan's field workers, which is what the Solo plan
-    always meant by "them, plus one helper" (entitlements.py).
+    always meant by "them, plus helpers" (entitlements.py).
 
 `hired_team_count` is the number of people who are not the owner: what "has a
 team" means for setup and activation now that every new company starts with one

@@ -60,7 +60,7 @@ PLANS = {
         'blurb': 'For the owner who is still doing the work.',
         # None means unlimited. A number is a hard ceiling.
         'limits': {
-            'field_workers': 2,        # them, plus one helper
+            'field_workers': 3,        # them (the owner counts), plus two helpers
             'jobs_per_month': 20,
             'clients': None,           # never capped — this is their business, not ours
             'checklist_templates': 1,
