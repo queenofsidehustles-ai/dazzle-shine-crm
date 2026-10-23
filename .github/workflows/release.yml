@@ -5,8 +5,9 @@ name: Release Akye
 # every suite on Python 3.12, writes RELEASE, tags, and fast-forwards
 # akye-stable. Railway deploys that branch.
 #
-# It only ever releases the commit the page showed: expected_sha is compared to
-# main before anything runs, so a merge after the page was drawn stops it.
+# It only ever releases what the page showed: expected_sha is compared to main,
+# and expected_stable to akye-stable, before anything runs, so a merge or a
+# rollback after the page was drawn stops it.
 #
 # Pushes made with the default token do not start other workflows. Set the
 # RELEASE_PUSH_TOKEN secret (a token that can push to main and akye-stable) if
@@ -17,6 +18,9 @@ on:
     inputs:
       expected_sha:
         description: Full commit id of main that was reviewed
+        required: true
+      expected_stable:
+        description: Full commit id akye-stable was at when it was reviewed
         required: true
 
 concurrency:
@@ -53,6 +57,7 @@ jobs:
       PGOPTIONS: "-c log_min_messages=fatal -c log_min_error_statement=panic"
       GH_TOKEN: ${{ github.token }}
       EXPECTED_SHA: ${{ inputs.expected_sha }}
+      EXPECTED_STABLE: ${{ inputs.expected_stable }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -69,4 +74,4 @@ jobs:
           git config user.name "Akye release"
           git config user.email "release@akyehq.com"
       - name: Release
-        run: python release.py --akye --go --expect "$EXPECTED_SHA"
+        run: python release.py --akye --go --expect "$EXPECTED_SHA" --expect-stable "$EXPECTED_STABLE"

@@ -26,11 +26,20 @@ TIMEOUT = 20
 # Paths worth a second look before they reach every company. Not a verdict --
 # a reviewer's eye is pointed at them first.
 WATCH = (
-    ('Database migration', re.compile(r'^migrations/versions/')),
-    ('Dependencies', re.compile(r'^requirements.*\.txt$')),
-    ('Deploy and release machinery', re.compile(r'^(\.github/workflows/|release\.py$|Dockerfile|docker/|railway)')),
-    ('Sign-in, roles and tenancy', re.compile(r'^(security|rbac|tenancy|auth|city_switch|private_media)\.py$')),
-    ('Money', re.compile(r'^(billing|affiliates|partner_payouts|payments|invoices)\.py$|^blueprints/(payments|billing)\.py$')),
+    ('Database migration', re.compile(r'^migrations/')),
+    ('Dependencies', re.compile(
+        r'(^|/)(requirements[^/]*\.txt|package(-lock)?\.json|yarn\.lock|pnpm-lock\.yaml'
+        r'|pyproject\.toml|poetry\.lock|Pipfile(\.lock)?)$')),
+    ('Deploy and release machinery', re.compile(
+        r'^(\.github/|docker/|release\.py$|release_control\.py$)|(^|/)(Dockerfile|railway[^/]*|Procfile)$')),
+    # Matched on the file's own name, so a new module with one of these words
+    # in it is covered without anyone remembering to add it here.
+    ('Sign-in, roles and tenancy', re.compile(
+        r'(^|/)[^/]*(login|auth|rbac|secur|tenan|session|permission|password|totp|city_switch'
+        r'|private_media|team|staff)[^/]*\.py$')),
+    ('Money', re.compile(
+        r'(^|/)[^/]*(bill|invoic|payment|payout|stripe|pricing|charge|commission|affiliate'
+        r'|money|deposit|refund|fees|contractor_pay|quote)[^/]*\.py$')),
 )
 
 
@@ -131,11 +140,40 @@ def _workflow_runs(workflow):
             for r in (wr.get('workflow_runs', []) if code == 200 else [])]
 
 
+def _heads():
+    """(main sha, akye-stable sha), or (None, None) if either cannot be read."""
+    out = []
+    for branch in (SOURCE, CHANNEL):
+        code, b = _call('GET', f'branches/{branch}')
+        if code != 200 or not isinstance(b, dict):
+            return None, None
+        out.append(b['commit']['sha'])
+    return tuple(out)
+
+
 def overview():
-    """Everything the page draws, or {'error': why}."""
+    """Everything the page draws, or {'error': why}.
+
+    Built from two commit ids fixed up front, never from branch names, so every
+    part describes the same pair. If either branch moves while the page is
+    assembled it is built again; a page that mixes two moments is worse than
+    one that says it could not settle."""
     if not configured():
         return {'error': 'GITHUB_RELEASE_TOKEN or GITHUB_REPO (owner/name) is not set, so GitHub cannot be asked.'}
-    code, cmp_ = _call('GET', f'compare/{CHANNEL}...{SOURCE}', params={'per_page': 100})
+    for _attempt in range(3):
+        head, stable = _heads()
+        if not head:
+            return {'error': f'GitHub would not give the heads of {SOURCE} and {CHANNEL}.'}
+        ov = _snapshot(head, stable)
+        if ov.get('error'):
+            return ov
+        if _heads() == (head, stable):
+            return ov
+    return {'error': f'{SOURCE} or {CHANNEL} kept changing while the page was built. Reload it.'}
+
+
+def _snapshot(head, stable):
+    code, cmp_ = _call('GET', f'compare/{stable}...{head}', params={'per_page': 100})
     if code != 200 or not isinstance(cmp_, dict):
         return {'error': f'GitHub would not compare {CHANNEL} with {SOURCE} (status {code}).'}
     commits = [{'sha': c['sha'], 'short': c['sha'][:7],
@@ -144,16 +182,9 @@ def overview():
                           or c['commit']['author']['name'],
                 'url': c.get('html_url')} for c in cmp_.get('commits', [])]
     files = cmp_.get('files') or []
-    # The compare list is capped and oldest-first, so main's head comes from the branch.
-    code, b = _call('GET', f'branches/{SOURCE}')
-    head = b['commit']['sha'] if code == 200 and isinstance(b, dict) else None
-    checks = []
-    if head:
-        code, runs = _call('GET', f'commits/{head}/check-runs', params={'per_page': 100})
-        checks = check_states(runs.get('check_runs', [])) if code == 200 else []
-    code, st = _call('GET', f'branches/{CHANNEL}')
-    stable = st['commit']['sha'] if code == 200 else None
-    code, rel = _call('GET', 'contents/RELEASE', params={'ref': CHANNEL},
+    code, runs = _call('GET', f'commits/{head}/check-runs', params={'per_page': 100})
+    checks = check_states(runs.get('check_runs', [])) if code == 200 else []
+    code, rel = _call('GET', 'contents/RELEASE', params={'ref': stable},
                       accept='application/vnd.github.raw+json')
     release_name = rel.split('\n')[0].strip() if code == 200 and isinstance(rel, str) else None
     runs_now = sorted(_workflow_runs(WORKFLOW) + _workflow_runs(ROLLBACK_WORKFLOW),
@@ -223,12 +254,15 @@ def start_rollback(to_tag):
     return False, f'GitHub did not start the rollback (status {code}).'
 
 
-def start(expected_sha):
-    """Ask GitHub to run the release for exactly this commit. (ok, message)."""
-    if not re.fullmatch(r'[0-9a-f]{40}', expected_sha or ''):
+def start(expected_sha, expected_stable):
+    """Ask GitHub to run the release of exactly `expected_sha` onto exactly
+    `expected_stable`. (ok, message)."""
+    if not (re.fullmatch(r'[0-9a-f]{40}', expected_sha or '')
+            and re.fullmatch(r'[0-9a-f]{40}', expected_stable or '')):
         return False, 'That is not a commit.'
     code, body = _call('POST', f'actions/workflows/{WORKFLOW}/dispatches',
-                       json={'ref': SOURCE, 'inputs': {'expected_sha': expected_sha}})
+                       json={'ref': SOURCE, 'inputs': {'expected_sha': expected_sha,
+                                                  'expected_stable': expected_stable}})
     if code == 204:
         return True, None
     if code in (401, 403, 404):

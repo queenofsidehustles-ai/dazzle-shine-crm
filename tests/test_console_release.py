@@ -45,7 +45,14 @@ state = {'checks': 'success', 'head': HEAD, 'running': False, 'ahead': 2, 'dispa
 NAMES = release_control.required_checks()
 
 
+seen = []
+
+
 def fake_call(method, path, **kw):
+    seen.append(path)
+    if state.get('wobble') and path == 'branches/main':
+        state['wobble'] -= 1
+        state['head'] = chr(ord(state['head'][0]) + 1) * 40
     if path.startswith('compare/'):
         commits = [{'sha': 'c' * 40, 'html_url': 'http://x/c',
                     'commit': {'message': 'Add the thing\n\nbody', 'author': {'name': 'A'}},
@@ -53,6 +60,12 @@ def fake_call(method, path, **kw):
         return 200, {'ahead_by': state['ahead'], 'behind_by': 0, 'commits': commits,
                      'files': [{'filename': 'migrations/versions/0035_x.py', 'status': 'added',
                                 'additions': 10, 'deletions': 0},
+                               {'filename': 'blueprints/team_logins.py', 'status': 'modified',
+                                'additions': 2, 'deletions': 2},
+                               {'filename': 'blueprints/billing_routes.py', 'status': 'modified',
+                                'additions': 2, 'deletions': 2},
+                               {'filename': 'package-lock.json', 'status': 'modified',
+                                'additions': 2, 'deletions': 2},
                                {'filename': 'app.py', 'status': 'modified',
                                 'additions': 3, 'deletions': 1}]}
     if path == 'branches/main':
@@ -92,7 +105,7 @@ with app.app_context():
     db.session.remove()
 
     c = app.test_client()
-    good = {'sha': HEAD, 'reason': 'Ship the security fixes', 'confirm': HEAD[:7], 'password': PW}
+    good = {'sha': HEAD, 'stable': STABLE, 'reason': 'Ship the security fixes', 'confirm': HEAD[:7], 'password': PW}
 
     print('\n1. The page shows the difference')
     c.post('/console/login', data={'email': HELPER, 'password': PW})
@@ -104,6 +117,10 @@ with app.app_context():
     check('Database migration' in body and '0035_x.py' in body,
           'a migration is called out for a closer look')
     check('Only the console owner can release' in body, 'a helper sees no button')
+
+    check('Sign-in, roles and tenancy' in body and 'Money' in body and 'Dependencies' in body,
+          'sign-in, billing and lock-file changes are called out too')
+    check('compare/' + STABLE + '...' + HEAD in ' '.join(seen), 'the diff is of two fixed commits, not branch names')
 
     print('\n2. Only the owner may press it')
     r = c.post('/console/release/go', data=good, follow_redirects=True)
@@ -120,7 +137,8 @@ with app.app_context():
             ('a wrong password', dict(good, password='nope')),
             ('a wrong confirmation', dict(good, confirm='zzzzzzz')),
             ('no reason', dict(good, reason='')),
-            ('a stale commit', dict(good, sha='d' * 40))):
+            ('a stale commit', dict(good, sha='d' * 40)),
+            ('a stale akye-stable (rolled back since)', dict(good, stable='d' * 40))):
         c.post('/console/release/go', data=data, follow_redirects=True)
         check(not state['dispatched'], f'{label} starts nothing')
 
@@ -139,7 +157,7 @@ with app.app_context():
 
     print('\n5. All good: it asks GitHub for exactly the reviewed commit')
     r = c.post('/console/release/go', data=good, follow_redirects=True)
-    check(state['dispatched'] == [{'ref': 'main', 'inputs': {'expected_sha': HEAD}}],
+    check(state['dispatched'] == [{'ref': 'main', 'inputs': {'expected_sha': HEAD, 'expected_stable': STABLE}}],
           'one dispatch, of main, for the commit on screen')
     check('Release started' in r.get_data(as_text=True), 'and the owner is told')
     log = [x for x in control_plane.console_log_all(engine) if x.get('actor') == OWNER]
@@ -180,6 +198,18 @@ with app.app_context():
     c.get('/console/logout')
     c.post('/console/login', data={'email': OWNER, 'password': PW})
 
+    print('\n5c. A branch moving while the page is built does not mix two moments')
+    state['head'] = HEAD
+    state['wobble'] = 1
+    body = c.get('/console/release').get_data(as_text=True)
+    check(state['head'] != HEAD and state['head'][:7] in body,
+          'the page is rebuilt for the new head and shows only that one')
+    state['wobble'] = 99
+    body = c.get('/console/release').get_data(as_text=True)
+    check('kept changing' in body, 'if it never settles it says so')
+    state['wobble'] = 0
+    state['head'] = HEAD
+
     print('\n6. Without a token it says so instead of failing')
     os.environ['GITHUB_RELEASE_TOKEN'] = ''
     release_control._call = lambda *a, **k: (_ for _ in ()).throw(AssertionError('no call'))
@@ -188,7 +218,7 @@ with app.app_context():
 
     print('\n7. The commit id is validated before it is sent anywhere')
     os.environ['GITHUB_RELEASE_TOKEN'] = 'test-token'
-    check(release_control.start('not-a-sha')[0] is False, 'junk is not dispatched')
+    check(release_control.start('not-a-sha', STABLE)[0] is False and release_control.start(HEAD, 'x')[0] is False, 'junk is not dispatched')
 
 if failures:
     print(f'\n❌ {len(failures)} failed:')

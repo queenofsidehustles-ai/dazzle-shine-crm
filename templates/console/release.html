@@ -91,6 +91,7 @@
     <p style="margin:0 0 var(--s3)">This releases exactly <code>{{ ov.main_sha[:7] }}</code>. It runs every test suite first, so it takes about half an hour. If <code>main</code> moves before it starts, nothing is released.</p>
     <form method="post" action="{{ url_for('console.release_go') }}" class="ops-form">
       <input type="hidden" name="sha" value="{{ ov.main_sha }}">
+      <input type="hidden" name="stable" value="{{ ov.stable_sha }}">
       <input type="text" name="reason" required minlength="5" maxlength="300" placeholder="Why now (goes in the record)">
       <input type="text" name="confirm" required autocomplete="off" placeholder="Type {{ ov.main_sha[:7] }} to confirm">
       <input type="password" name="password" required autocomplete="current-password" placeholder="Your console password">

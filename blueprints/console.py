@@ -933,8 +933,9 @@ def release_go():
     ov = release_control.overview()
     head = ov.get('main_sha') or ''
     # The page was drawn from one commit; the release must be of that commit.
-    if (request.form.get('sha') or '') != head:
-        flash('main has moved since you opened this page. Look at the new changes '
+    if (request.form.get('sha') or '') != head or \
+            (request.form.get('stable') or '') != ov.get('stable_sha'):
+        flash('main or akye-stable has moved since you opened this page. Look at the new changes '
               'and release again.', 'error')
         return redirect(here)
     why = release_control.blockers(ov)
@@ -952,7 +953,7 @@ def release_go():
     if not ok:
         flash(why_not, 'error')
         return redirect(here)
-    started, message = release_control.start(head)
+    started, message = release_control.start(head, ov['stable_sha'])
     who = request.console_user['email']
     if not started:
         control_plane.log_console(_engine(), who, 'release failed to start', 'akye-stable',
