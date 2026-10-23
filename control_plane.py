@@ -83,6 +83,15 @@ organizations = Table(
     # sent at 3pm ("somebody booked you") and the next morning's scheduled
     # note never land on the same day. One email a day, whatever sent it.
     Column('nudge_last_at', DateTime),
+    # When somebody last used the company's CRM, and when its owner did. Not
+    # the tenant's own User.last_login: that moves only on a password sign-in,
+    # and a session renews itself for as long as they keep coming back, so an
+    # owner who uses it every day can show no sign-in for months. Written by
+    # auth.note_activity at most once an hour per person; read by the
+    # console's support meter and the "gone quiet" emails without opening
+    # each company's schema. NULL means not seen since this was added.
+    Column('active_at', DateTime),
+    Column('owner_active_at', DateTime),
     # Has the owner shown the signup email reaches them? A typo here loses
     # the only written record of their address and every email after it.
     # `email_confirm_sent_at` is set only by the signup that asked, so
@@ -887,6 +896,18 @@ def set_billing(engine, slug, **fields):
         conn.execute(update(organizations)
                      .where(organizations.c.slug == slug).values(**fields))
     return find(engine, slug)
+
+
+def mark_active(engine, slug, owner=False, now=None):
+    """Somebody is using this company's CRM right now; the owner, if `owner`.
+    One small UPDATE, throttled by the caller (auth.note_activity)."""
+    now = now or datetime.utcnow()
+    values = {'active_at': now}
+    if owner:
+        values['owner_active_at'] = now
+    with engine.begin() as conn:
+        conn.execute(update(organizations)
+                     .where(organizations.c.slug == slug).values(**values))
 
 
 def set_email_state(engine, slug, **fields):

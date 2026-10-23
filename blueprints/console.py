@@ -300,11 +300,25 @@ def companies():
     # Most recent sign-ups first.
     orgs.sort(key=lambda o: o.get('created_at') or datetime.min, reverse=True)
     snaps = console_data.snapshots(orgs)
-    rows = [dict(o, trial=billing.trial_state(o), snap=snaps.get(o['slug']))
-            for o in orgs]
+    rows = []
+    for o in orgs:
+        trial = billing.trial_state(o)
+        snap = snaps.get(o['slug'])
+        rows.append(dict(o, trial=trial, snap=snap,
+                         seen=console_data.owner_last_seen(o, snap),
+                         meter=console_data.support_meter(o, snap, trial)))
+    support = {level: sum(1 for r in rows if r['meter']['level'] == level)
+               for level in ('help', 'watch')}
+    needs = request.args.get('needs') == '1'
+    if needs:
+        # Who needs somebody to reach out: "needs help" first, then "watch",
+        # newest sign-ups first within each, as the full list is.
+        rows = [r for r in rows if r['meter']['level'] in ('help', 'watch')]
+        rows.sort(key=lambda r: r['meter']['level'] != 'help')
     return render_template('console/companies.html', rows=rows, q=q,
                            show_archived=show_archived,
                            archived_count=archived_count,
+                           needs=needs, support=support,
                            leads=console_data.dedupe_leads(control_plane.all_leads(engine)),
                            me=request.console_user, counts=_counts(engine))
 
@@ -324,11 +338,15 @@ def company(slug):
     import attribution
     readable = (org.get('status') or 'active') in console_data.READABLE
     closed_at = org.get('closed_at')
+    trial = billing.trial_state(org)
+    snap = console_data.snapshot(slug) if readable else None
     return render_template(
-        'console/company.html', org=org, trial=billing.trial_state(org),
+        'console/company.html', org=org, trial=trial,
         came_from=attribution.label(org),
         referred=control_plane.referred_by(engine, slug),
-        snap=console_data.snapshot(slug) if readable else None,
+        snap=snap,
+        meter=console_data.support_meter(org, snap, trial),
+        owner_seen=console_data.owner_last_seen(org, snap),
         reports=[f for f in control_plane.all_feedback(engine)
                  if f.get('org_slug') == slug][:20],
         history=[r for r in control_plane.console_log_all(engine)
@@ -2145,7 +2163,8 @@ def communications():
     return render_template(
         'console/communications.html',
         catalog=comms.CATALOG, labels=comms.LABELS,
-        always_on=comms.ALWAYS_ON, switches=smap,
+        always_on=comms.ALWAYS_ON,
+        switches={k: comms.state(k, smap) for k, *_ in comms.CATALOG},
         owner_on=smap.get(comms.ALL_OWNER, True),
         lead_on=smap.get(comms.ALL_LEAD, True),
         sent=comms.sent_counts(engine),

@@ -144,9 +144,55 @@ for label, o in (('paying', org(days_old=1, subscription_status='active')),
                  ('suspended', org(days_old=1, status='suspended'))):
     check(tn.due(o) is None, f'{label}: nothing')
 
+print('\n6b. Gone quiet: set up and stopped coming back, or never started')
+away = lambda d: NOW - timedelta(days=d)          # noqa: E731
+quiet = running(10, nudges_sent='activated,day2,feature', owner_active_at=away(8))
+check(tn.due(quiet) == 'quiet', 'on a trial, set up, away 8 days: did the week get away?')
+check(tn.due(dict(quiet, owner_active_at=away(3))) is None, 'not after a few days away')
+check(tn.due(dict(quiet, owner_active_at=away(20))) is None,
+      'not once they are long gone: the window ends')
+check(tn.due(dict(quiet, owner_active_at=None)) is None,
+      'never on a guess: no recorded activity is not "away"')
+check(tn.due(dict(quiet, nudges_sent='activated,day2,feature,quiet')) is None, 'and only once')
+check(tn.due(dict(quiet, activated_at=None, created_at=NOW - timedelta(days=12),
+                  nudges_sent='day1,day2,day4,day5,start_7')) != 'quiet',
+      'never to somebody who never set up (they get the getting-started notes)')
+check(tn.due(dict(quiet, subscription_status='active')) is None, 'never to a paying customer')
+both = dict(quiet, nudges_sent='activated,day2')
+step = {'key': 'job', 'title': 'Book a job'}
+check(tn.due(both, next_step=step) == 'quiet', 'quiet and feature both due: quiet first')
+check(tn.due(both, next_step=step, skip={'quiet'}) == 'feature',
+      'but with quiet switched off, feature still goes (it is not swallowed)')
+check(tn.due(both, next_step=step, skip=set(tn.ALL)) is None,
+      'and with everything switched off, nothing')
+
+free = dict(running(30), created_at=NOW - timedelta(days=60),
+            trial_ends_at=NOW - timedelta(days=30),
+            nudges_sent='activated,day2,ending,ended,winback', owner_active_at=away(20))
+check(tn.due(free) == 'free_quiet', 'free plan, set up, away 20 days: need a hand?')
+check(tn.due(dict(free, owner_active_at=away(10))) is None, 'not after 10 days away')
+check(tn.due(dict(free, owner_active_at=away(45))) is None, 'not after a month and a half')
+check(tn.due(dict(free, owner_active_at=None)) is None, 'and not without recorded activity')
+check(tn.due(dict(free, nudges_sent=free['nudges_sent'] + ',free_quiet')) is None, 'only once')
+
+never = org(days_old=46, trial_ends_at=NOW - timedelta(days=16),
+            nudges_sent='day1,day2,day4,day5,start_7,start_21,ending,ended')
+check(tn.due(never) == 'free_start', 'free plan, never set up, 16 days on: still here')
+check(tn.due(dict(never, created_at=NOW - timedelta(days=120),
+                  trial_ends_at=NOW - timedelta(days=90))) is None,
+      'never to a trial that ended months ago')
+check(tn.due(dict(never, trial_ends_at=NOW - timedelta(days=5))) is None, 'nor in its first week')
+check(tn.due(dict(never, nudges_sent=never['nudges_sent'] + ',free_start')) is None, 'only once')
+for label, o in (('test account', dict(free, is_test=True)), ('demo', dict(free, is_demo=True)),
+                 ('opted out', dict(free, nudges_opted_out=True)),
+                 ('suspended', dict(free, status='suspended'))):
+    check(tn.due(o) is None, f'{label}: no gone-quiet note either')
+check(tn.due(dict(free, nudge_last_at=NOW - timedelta(hours=2))) is None,
+      'and still one email a day')
+
 print('\n7. Every new email reads right')
 for kind in ('day1', 'day2', 'day4', 'day5', 'activated', 'feature',
-             'first_booking', 'winback'):
+             'first_booking', 'winback', 'quiet', 'free_quiet', 'free_start'):
     subj, html = tn.compose(running(1), kind, step)
     check('Brightside' in subj and 'brightside.rollcall.test' in html
           and '/billing' in html,
