@@ -121,7 +121,10 @@ with app.app_context():
     cut = details.index('</details>')
     check('name="crew_size"' not in details[:cut],
           'it is NOT buried in "How this pay is worked out"')
-    assign = SRC[SRC.index("url_for('bookings.assign'"):]
+    # The pay card's assign form, not the "Next: who's cleaning" bar on top,
+    # which posts to the same endpoint but leaves the headcount down here.
+    who = SRC[SRC.index('data-card-key="who"'):]
+    assign = who[who.index("url_for('bookings.assign'"):]
     check('name="crew_size"' in assign[:assign.index('</form>')],
           'it sits with "Assign to", where who-and-how-many is decided together')
 

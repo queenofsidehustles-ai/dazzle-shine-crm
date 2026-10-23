@@ -79,14 +79,51 @@ def price_preview():
         except Exception:
             cleaning = 0.0
 
-    fee_raw = request.args.get('lead_fee', '').strip().replace('$', '')
-    try:
-        fee = float(fee_raw) if fee_raw != '' else 0.0   # blank = no lead fee (optional)
-    except ValueError:
-        fee = 0.0
+    fee = _lead_fee_for(request.args.get('lead_fee', ''), request.args.get('source', ''))
 
     return jsonify({'cleaning': round(cleaning or 0, 2), 'lead_fee': round(fee, 2),
                     'total': round((cleaning or 0) + fee, 2)})
+
+
+# Where a phone booking came from. The two ads carry the lead fee; the rest
+# don't. Asking "how did they find you?" replaced a box asking whoever took
+# the call to type the company's ad cost, which is not something the person
+# answering the phone should have to know -- and it fixes the source, which
+# every hand-made booking used to record as 'website'.
+BOOKING_SOURCES = (('google', 'Google'), ('facebook', 'Facebook / Instagram'),
+                   ('referral', 'A friend sent them'), ('repeat', 'Booked with us before'),
+                   ('other', 'Other'))
+AD_SOURCES = ('google', 'facebook')
+
+
+def _lead_fee_for(typed, source):
+    """The lead fee for a hand-made booking. A typed figure wins, 0 included;
+    otherwise a customer from an ad gets the fee set on Pricing, and nobody
+    else gets one."""
+    typed = (typed or '').strip().replace('$', '')
+    if typed != '':
+        try:
+            return float(typed)
+        except ValueError:
+            return 0.0
+    if (source or '').strip().lower() in AD_SOURCES:
+        from pricing import get_lead_fee
+        try:
+            return float(get_lead_fee() or 0)
+        except (TypeError, ValueError):
+            return 0.0
+    return 0.0
+
+
+def _ask_deposit_on_phone_bookings():
+    """The Pricing switch that decides whether a phone booking's confirmation
+    carries a deposit link. One decision for the business, made once, instead
+    of three radio buttons in front of whoever is on the call."""
+    try:
+        from models import PricingSetting
+        return str(PricingSetting.get('phone_booking_deposit', 0)) in ('1', '1.0')
+    except Exception:
+        return False
 
 
 @bookings_bp.route('/new', methods=['GET', 'POST'])
@@ -157,13 +194,11 @@ def new():
         # and that is the number the discount report is asking about.
         discount_amount = round(quote.get('discount_amount') or 0, 2)
 
-        # Lead fee — optional ad cost. Blank means none (added to the customer
-        # total when present, always excluded from contractor pay).
-        fee_raw = request.form.get('lead_fee', '').strip().replace('$', '')
-        try:
-            lead_fee = float(fee_raw) if fee_raw != '' else 0.0
-        except ValueError:
-            lead_fee = 0.0
+        # Lead fee — the ad cost, set on Pricing and carried by a customer who
+        # came from an ad (added to the customer total, always excluded from
+        # contractor pay). A typed figure still wins, for anything posting one.
+        source = (request.form.get('source') or '').strip().lower()[:50]
+        lead_fee = _lead_fee_for(request.form.get('lead_fee', ''), source)
         price = round((cleaning or 0) + lead_fee, 2)   # what the customer pays
 
         # Person-hours of work in this job — what the cleaner's pay is built
@@ -198,12 +233,18 @@ def new():
             address=request.form.get('address', '').strip(),
             city=request.form.get('city', '').strip(),
             zip_code=request.form.get('zip_code', '').strip(),
-            notes=(request.form.get('notes', '').strip() or None),
+            # What she types on the phone is hers, so it lands in the field the
+            # booking page shows as private. `notes` is what a customer wrote on
+            # the website form, and showed as "Customer Notes".
+            internal_notes=((request.form.get('internal_notes') or request.form.get('notes') or '').strip() or None),
             access_notes=(request.form.get('access_notes', '').strip() or None),
             status=request.form.get('status', 'confirmed'),
             price=price,
             lead_fee=lead_fee,
             discount_amount=discount_amount,
+            # Typed in by hand, so never 'website' -- the column's default,
+            # which every phone booking used to inherit.
+            source=source or 'manual',
         )
         db.session.add(b)
         db.session.commit()
@@ -213,12 +254,16 @@ def new():
         # matter how much work went through the CRM.
         _link_client(b)
 
-        extra = _notify_customer(
-            b,
-            confirmation=bool(request.form.get('notify_customer')),
-            pay_kind=request.form.get('payment_option', 'none'),
-        )
-        flash(f'Booking created ✅ — now assign a cleaner below to text + email them the job.{extra}', 'success')
+        # The form no longer asks what to collect up front: Pricing decides,
+        # once, whether a phone booking's confirmation carries a deposit link.
+        # A posted payment_option still wins, for anything that sends one.
+        confirm = bool(request.form.get('notify_customer'))
+        pay_kind = request.form.get('payment_option')
+        if pay_kind is None:
+            pay_kind = ('deposit' if confirm and _ask_deposit_on_phone_bookings()
+                        and _pricing_deposit() > 0 else 'none')
+        extra = _notify_customer(b, confirmation=confirm, pay_kind=pay_kind)
+        flash(f'Booking created ✅{extra}', 'success')
         return redirect(url_for('bookings.detail', booking_id=b.id))
 
     from pricing import FREQUENCY_LABELS as _FREQ
@@ -237,7 +282,8 @@ def new():
     return render_template('admin/booking_new.html',
                            service_labels=SERVICE_LABELS, extras=EXTRAS, frequency_labels=_FREQ,
                            default_lead_fee=get_lead_fee(), client=client, last=last,
-                           deposit=_pricing_deposit())
+                           deposit=_pricing_deposit(), sources=BOOKING_SOURCES,
+                           ask_deposit=_ask_deposit_on_phone_bookings())
 
 
 def _pricing_deposit():
@@ -380,14 +426,22 @@ def detail(booking_id):
         # Parse it. This used to assign the raw form string straight onto a Float
         # column — SQLAlchemy coerced it on write, but anything doing arithmetic
         # with booking.price in the same request hit 'str' - 'int' and blew up.
-        price_raw = (request.form.get('price') or '').strip().replace('$', '').replace(',', '')
-        if price_raw:
-            try:
-                booking.price = round(float(price_raw), 2)
-            except ValueError:
-                flash('That price is not a number — leaving it as it was.', 'warning')
-        else:
-            booking.price = None
+        #
+        # This one route saves several small forms on the page -- status and
+        # notes, the price and the owner's numbers, taking a cleaner off -- and
+        # each sends only its own fields. So a field that is ABSENT is left
+        # alone; only one that is present and blank is a deliberate clear.
+        # Blanking whatever a form didn't carry is how saving a note would wipe
+        # the price.
+        if 'price' in request.form:
+            price_raw = (request.form.get('price') or '').strip().replace('$', '').replace(',', '')
+            if price_raw:
+                try:
+                    booking.price = round(float(price_raw), 2)
+                except ValueError:
+                    flash('That price is not a number — leaving it as it was.', 'warning')
+            else:
+                booking.price = None
         _fee = request.form.get('lead_fee', '').strip()
         if _fee != '':
             try:
@@ -398,13 +452,15 @@ def detail(booking_id):
         booking.preferred_time = request.form.get('preferred_time', booking.preferred_time)
         booking.internal_notes = request.form.get('internal_notes', booking.internal_notes)
         booking.access_notes = request.form.get('access_notes', booking.access_notes)
-        booking.skip_review = 'skip_review' in request.form
+        if 'skip_review' in request.form or 'skip_review_shown' in request.form:
+            booking.skip_review = 'skip_review' in request.form
         booking.assigned_cleaner = request.form.get('assigned_cleaner', booking.assigned_cleaner)
         hours_raw = request.form.get('hours_worked', '').strip()
         booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
         # Person-hours of work — the basis for cleaner pay on this job.
         _apply_hours(booking, request.form)
-        booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
+        if 'below_floor_reason' in request.form:
+            booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
         # Keep the balance in step with the price. It used to be written only by
         # the price-correction route, so editing the price here left the
         # Balance Collection card — and its charge button — showing a stale $0.

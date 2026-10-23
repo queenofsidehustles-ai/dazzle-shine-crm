@@ -452,6 +452,20 @@ def pricing():
         # Save deposit
         PricingSetting.set('deposit_amount', request.form.get('deposit_amount', DEPOSIT_AMOUNT))
 
+        # Phone bookings: the lead fee an ad customer carries, and whether their
+        # confirmation asks for the deposit. The form a call is taken on no
+        # longer asks either question. The hidden marker keeps an unticked box
+        # meaning "no" rather than "this form didn't have the box".
+        fee = (request.form.get('lead_fee') or '').strip().replace('$', '')
+        if fee:
+            try:
+                PricingSetting.set('lead_fee', round(max(0.0, float(fee)), 2))
+            except ValueError:
+                pass
+        if request.form.get('phone_booking_deposit_shown'):
+            PricingSetting.set('phone_booking_deposit',
+                               '1' if request.form.get('phone_booking_deposit') else '0')
+
         # What a cleaner earns per person-hour — the basis for all job pay.
         rate = (request.form.get('labor_rate') or '').strip()
         if rate:
@@ -514,6 +528,9 @@ def pricing():
     # Build current values (DB overrides defaults)
     current = {}
     current['deposit_amount'] = PricingSetting.get('deposit_amount', DEPOSIT_AMOUNT)
+    from pricing import get_lead_fee
+    current['lead_fee'] = get_lead_fee()
+    current['phone_booking_deposit'] = str(PricingSetting.get('phone_booking_deposit', 0)) in ('1', '1.0')
     current['labor_rate'] = get_labor_rate()
     from pricing import get_sqft_surcharge_rate, get_sqft_hours_rate
     current['sqft_surcharge'] = get_sqft_surcharge_rate()

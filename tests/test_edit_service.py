@@ -51,7 +51,7 @@ with app.app_context():
 
     print('\n1. The card offers a way to correct what was booked')
     page = c.get(f'/bookings/{bid}').get_data(as_text=True)
-    check('Correct what was booked' in page, 'the edit form is on the page')
+    check('Change the job, date or time' in page, 'the edit form is on the page')
     check('Inside oven' in page, 'with this business\'s add-ons listed')
 
     print('\n2. A corrected bedroom count saves — and the price does NOT move')
