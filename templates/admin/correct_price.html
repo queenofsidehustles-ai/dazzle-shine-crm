@@ -21,7 +21,7 @@
       <span style="color:var(--good);font-weight:800;font-size:1.9rem">${{ '%.2f' % suggested_total }}</span>
       <div style="font-size:0.78rem;color:var(--softer);margin-top:8px">
         Suggested from current pricing: {{ booking.service_label }},
-        {{ booking.bedrooms or '?' }}bd/{{ booking.bathrooms or '?' }}ba
+        {{ booking.home_text() if booking.is_commercial else ((booking.bedrooms or '?') ~ 'bd/' ~ (booking.bathrooms or '?') ~ 'ba') }}
         (cleaning ${{ '%.2f' % cleaning }}{% if booking.lead_fee %} + ${{ '%.2f' % booking.lead_fee }} lead fee{% endif %})
       </div>
     </div>

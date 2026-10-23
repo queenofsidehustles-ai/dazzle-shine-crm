@@ -108,6 +108,7 @@ def clone_booking(seed, on_date, group=None, **overrides):
         stripe_payment_method_id=seed.stripe_payment_method_id,
         monthly_mode=getattr(seed, 'monthly_mode', None),
         recurring_group=group, recurring_active=True,
+        **seed.commercial_carry(),
     )
     fields.update(overrides)
     return Booking(**fields)

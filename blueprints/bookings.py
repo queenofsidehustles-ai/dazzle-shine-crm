@@ -1,6 +1,6 @@
 import calendar as cal_module
 from datetime import date, timedelta, datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, has_request_context
 from auth import login_required
 from models import Booking, BookingCrew, Client, Staff
 from extensions import db
@@ -485,6 +485,10 @@ def detail(booking_id):
             first_day = date.today() + timedelta(days=14)
         plan_suggestion = {'price': suggested, 'start': first_day.isoformat(),
                            'services': SERVICE_LABELS}
+        if booking.is_commercial:
+            # Priced per visit, not from the bedroom matrix.
+            plan_suggestion.update(price=booking.price,
+                                   services={'commercial': Booking.SERVICE_LABELS['commercial']})
 
     monthly_choices = None
     if booking.frequency == 'monthly' and booking.preferred_date:
@@ -832,6 +836,9 @@ def correct_price(booking_id):
         )
     except Exception:
         cleaning = 0.0
+    if booking.is_commercial:
+        # No matrix price for a business: start from what it is at now.
+        cleaning = (booking.price or 0) - (booking.lead_fee or 0)
     suggested_total = round((cleaning or 0) + (booking.lead_fee or 0), 2)
     old_price = round(booking.price or 0, 2)
 
@@ -1852,22 +1859,18 @@ def charge_balance(booking_id):
     return jsonify({'ok': ok, 'error': error})
 
 
-@bookings_bp.route('/<int:booking_id>/send-invoice', methods=['POST'])
-@login_required
-def send_invoice(booking_id):
-    booking = Booking.query.get_or_404(booking_id)
+def _send_invoice(booking):
+    """Issue the invoice if it isn't yet, and email it. True when it went.
+    Shared by the button on the booking and by booking a commercial job."""
     import invoicing
     from blueprints.payments import payment_link_url, amount_due
     from notifications import send_email
-    # An invoice already issued keeps its dates unless she asks for new ones —
-    # a document the customer already has shouldn't change under them silently.
-    if request.form.get('reissue_dates'):
-        booking.invoice_issued_at = None
-        booking.invoice_due_date = None
     invoicing.issue(booking)
     payment_link_url(booking, 'full')  # ensure pay_token exists
     biz = branding.biz_name()
-    inv_url = request.host_url.rstrip('/') + url_for('invoices.view', token=booking.pay_token)
+    # The morning run has no request; the button does.
+    base = request.host_url.rstrip('/') if has_request_context() else branding.crm_base()
+    inv_url = f'{base}/invoice/{booking.pay_token}'
     due = amount_due(booking)
     sent = False
     if booking.email:
@@ -1889,10 +1892,43 @@ def send_invoice(booking_id):
         sent = ok
     booking.invoice_sent_at = datetime.utcnow()
     db.session.commit()
-    if sent:
+    return sent
+
+
+@bookings_bp.route('/<int:booking_id>/send-invoice', methods=['POST'])
+@login_required
+def send_invoice(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    # An invoice already issued keeps its dates unless she asks for new ones —
+    # a document the customer already has shouldn't change under them silently.
+    if request.form.get('reissue_dates'):
+        booking.invoice_issued_at = None
+        booking.invoice_due_date = None
+    if _send_invoice(booking):
         flash(f'🧾 Invoice {booking.invoice_number} sent to {booking.email}.', 'success')
     else:
         flash(f'Invoice {booking.invoice_number} created — share the link manually (no email on file, or send failed).', 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/scope', methods=['POST'])
+@login_required
+def update_scope(booking_id):
+    """Correct a commercial job's scope of work and size -- its stand-in for
+    the service details. The price is left alone (Correct price changes it),
+    and visits already made from this one keep the scope they were sent."""
+    booking = Booking.query.get_or_404(booking_id)
+    if not booking.is_commercial:
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    scope = (request.form.get('scope_of_work') or '').strip()
+    booking.scope_of_work = scope or None
+    try:
+        sqft = int(float(request.form.get('sqft') or 0))
+    except ValueError:
+        sqft = 0
+    booking.sqft = sqft if sqft > 0 else None
+    db.session.commit()
+    flash('Scope of work updated. Resend the confirmation or work order if they need the change.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -1916,6 +1952,10 @@ def update_service(booking_id):
     notifies them."""
     from pricing import calculate_price, SERVICE_LABELS, EXTRAS
     booking = Booking.query.get_or_404(booking_id)
+    if booking.is_commercial:
+        # Bedrooms and the residential matrix would overwrite a per-visit price.
+        flash('A commercial job is priced per visit — change its price with Correct price.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     service_type = (request.form.get('service_type') or '').strip()
     if service_type not in SERVICE_LABELS:
@@ -2484,6 +2524,7 @@ def start_plan(booking_id):
         # Carry any card on file so the plan can bill itself from visit one.
         stripe_customer_id=first.stripe_customer_id,
         stripe_payment_method_id=first.stripe_payment_method_id,
+        **first.commercial_carry(),
     )
     db.session.add(seed)
     db.session.commit()
@@ -3038,7 +3079,8 @@ def confirmation_content(booking):
     words before they reach a customer. A preview built from a separate copy of
     the wording would drift from the real thing and be worth less than nothing."""
     biz = branding.biz_name()
-    first = (booking.name or 'there').split()[0]
+    # A business is greeted by its name, not the first word of it.
+    first = booking.name if booking.is_commercial and booking.name else (booking.name or 'there').split()[0]
     date_text = booking.preferred_date or 'the scheduled date'
     time_text = booking.preferred_time or ''
     when = f"{date_text}{(' at ' + time_text) if time_text else ''}"
@@ -3096,7 +3138,7 @@ def confirmation_content(booking):
     {f'<p style="margin:4px 0"><strong>Address:</strong> {addr}</p>' if addr else ''}
     {f'<p style="margin:4px 0"><strong>Total:</strong> {price_text}</p>' if price_text else ''}
   </div>
-  <p style="font-size:0.82rem;color:#9a95ad;background:#f6f5fb;border-radius:8px;padding:10px 12px">💡 Your price is based on an average-size home for this many bedrooms. Larger homes may have a small size adjustment — always confirmed with you first. No surprises!</p>
+{'' if booking.is_commercial else '''  <p style="font-size:0.82rem;color:#9a95ad;background:#f6f5fb;border-radius:8px;padding:10px 12px">💡 Your price is based on an average-size home for this many bedrooms. Larger homes may have a small size adjustment — always confirmed with you first. No surprises!</p>'''}
 {included}
   <p>If anything changes or you have questions, just reply to this email or text us — we're happy to help.</p>
 {terms_block}
@@ -3166,6 +3208,12 @@ def _create_next_recurring(booking):
         return
 
     next_date = last_date + timedelta(days=delta)
+    if booking.is_commercial:
+        # Everything a business visit is described and paid by -- building
+        # size, crew, card on file, account -- is what clone_booking carries.
+        import recurring
+        db.session.add(recurring.clone_booking(booking, next_date))
+        return
     next_booking = Booking(
         client_id=booking.client_id,
         service_type=booking.service_type,
@@ -3186,6 +3234,7 @@ def _create_next_recurring(booking):
         status='pending',
         price=booking.price,
         balance_due=booking.balance_due,
+        **booking.commercial_carry(),
     )
     db.session.add(next_booking)
 

@@ -11,7 +11,7 @@ from datetime import datetime, date, timedelta
 # makes sense when a business is paying on an AP cycle, so they're a per-call
 # option rather than the default. Editable in Settings → Business.
 NET_DAYS_DEFAULT = 0        # residential: due the day it's issued
-NET_DAYS_COMMERCIAL = 14    # for a future commercial invoice caller
+NET_DAYS_COMMERCIAL = 14    # a business pays on its AP cycle -- see issue()
 
 
 def default_net_days():
@@ -36,11 +36,12 @@ def next_invoice_number():
 def issue(booking, net_days=None):
     """Assign an invoice number + dates if this booking hasn't been invoiced yet.
 
-    net_days=None uses the business default (0 — due on issue). A commercial
-    caller can pass NET_DAYS_COMMERCIAL to get terms instead."""
+    net_days=None uses the business default (0 — due on issue), or
+    NET_DAYS_COMMERCIAL for a commercial job, wherever it is invoiced from."""
     from extensions import db
     if net_days is None:
-        net_days = default_net_days()
+        net_days = (NET_DAYS_COMMERCIAL if getattr(booking, 'is_commercial', False)
+                    else default_net_days())
     if not booking.invoice_number:
         booking.invoice_number = next_invoice_number()
     if not booking.invoice_issued_at:

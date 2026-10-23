@@ -193,9 +193,16 @@
       <div style="border-top:1px solid var(--line);padding-top:18px;margin-top:18px">
       <h3 style="font-size:0.82rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">The job</h3>
       <div class="detail-row"><span class="dl">Service</span><span class="dv">{{ booking.service_label }}</span></div>
+      {% if booking.is_commercial %}
+      {% set acct = booking.commercial_account %}
+      {% if acct %}<div class="detail-row"><span class="dl">Account</span><span class="dv"><a href="{{ url_for('commercial.detail', account_id=acct.id) }}">🏢 {{ acct.business_name }}</a></span></div>{% endif %}
+      <div class="detail-row"><span class="dl">Square feet</span><span class="dv">{{ '{:,}'.format(booking.sqft) if booking.sqft else '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Scope of work</span><span class="dv" style="white-space:pre-line;text-align:left">{{ booking.scope_of_work or '—' }}</span></div>
+      {% else %}
       <div class="detail-row"><span class="dl">Bedrooms</span><span class="dv">{{ booking.bedrooms or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Bathrooms</span><span class="dv">{{ booking.bathrooms or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Add-ons</span><span class="dv">{{ booking.extras or '—' }}</span></div>
+      {% endif %}
       <div class="detail-row"><span class="dl">Repeats</span><span class="dv">{{ FREQUENCY_LABELS.get(booking.frequency, '—') }}</span></div>
       <div class="detail-row"><span class="dl">Requested Date</span><span class="dv">{{ booking.preferred_date or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Requested Time</span><span class="dv">{{ booking.preferred_time or '—' }}</span></div>
@@ -203,6 +210,21 @@
 
       {# What was booked could not be corrected at all: the only way to change a
          bedroom count was to cancel and re-key the job, losing its history. #}
+      {% if booking.is_commercial %}
+      <details id="scopeBox" style="margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">
+          ✎ Correct the scope of work
+        </summary>
+        <form method="POST" action="{{ url_for('bookings.update_scope', booking_id=booking.id) }}" style="padding:0 13px 13px">
+          <div class="form-group"><label>Scope of work <span style="font-weight:400;color:var(--softer)">— one task a line; the customer and the cleaner both see this</span></label>
+            <textarea name="scope_of_work" rows="6">{{ booking.scope_of_work or '' }}</textarea></div>
+          <div class="form-group"><label>Square feet</label>
+            <input type="number" name="sqft" step="50" value="{{ booking.sqft or '' }}"></div>
+          <p style="font-size:0.8rem;color:var(--softer);margin:0 0 10px">The price stays as it is — change it with Correct price.</p>
+          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save scope of work</button>
+        </form>
+      </details>
+      {% else %}
       <details id="serviceBox" style="margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
         <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">
           ✎ Correct what was booked
@@ -303,6 +325,7 @@
           <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save service details</button>
         </form>
       </details>
+      {% endif %}
     </div>
   </div>
   </div>
