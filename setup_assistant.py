@@ -125,9 +125,9 @@ STEP_PROMPTS = {
                  'payments so customers can pay by card. Your bank details stay '
                  'with you.'),
     'booking_page': 'Want to put your booking page where customers can find it?',
-    'team': 'Add a cleaner? Yourself counts, if you’re still cleaning.',
+    'team': 'You’re already on the team, so you can give jobs to yourself. Add someone else whenever you hire.',
     'client': 'Add a customer you already clean for?',
-    'job': 'Book a job and send it to a cleaner — that’s the whole loop.',
+    'job': 'Book a job and give it to yourself or a cleaner — that’s the whole loop.',
 }
 
 STEP_LINKS = {

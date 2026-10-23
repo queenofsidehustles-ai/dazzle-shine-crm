@@ -524,6 +524,8 @@ class Booking(db.Model):
 
         Jobs with no estimated hours fall back to the old percentage split, so
         anything booked before this existed keeps paying what it always did."""
+        if getattr(staff, 'is_owner', False):
+            return 0.0      # the owner's own time is not a payout (owner_cleaner.py)
         if self.crew_pay_each:
             return round(self.crew_pay_each, 2)
         size = max(1, size or self.crew_size or 1)
@@ -1356,6 +1358,10 @@ class Staff(db.Model):
     has_transportation = db.Column(db.Boolean, default=True)
     has_supplies = db.Column(db.Boolean, default=False)
     worker_model = db.Column(db.String(20), default='contractor')  # contractor, employee
+    # The owner, as their own first cleaner (owner_cleaner.py). Created at
+    # signup so a company with nobody else yet can still assign a job. Not a
+    # contractor: no agreement, no W-9, no payout, no insurance reminder.
+    is_owner = db.Column(db.Boolean, default=False)
     onboarding_steps = db.Column(db.Text, default='[]')  # JSON list of completed step keys
     agreement_token = db.Column(db.String(64), unique=True)
     agreement_signature = db.Column(db.String(100))

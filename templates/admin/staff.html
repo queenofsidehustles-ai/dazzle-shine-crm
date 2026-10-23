@@ -25,7 +25,7 @@
           <td>
             <span style="display:inline-flex;align-items:center;gap:8px">
               <span style="width:11px;height:11px;border-radius:50%;background:{{ s.color }};flex-shrink:0"></span>
-              <strong>{{ s.name }}</strong>
+              <strong>{{ s.name }}</strong>{% if s.is_owner %} <span class="status status-confirmed" title="You, as the first cleaner. Not paid through the CRM.">You</span>{% endif %}
             </span>
           </td>
           <td>{{ s.phone or '—' }}</td>

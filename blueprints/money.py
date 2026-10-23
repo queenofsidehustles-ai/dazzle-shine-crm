@@ -366,7 +366,7 @@ def tax_forms():
     year = request.args.get('year', type=int) or date.today().year
 
     rows = []
-    for s in Staff.query.order_by(Staff.name).all():
+    for s in Staff.query.filter(Staff.is_owner.isnot(True)).order_by(Staff.name).all():
         paid = s.paid_in_year(year)
         if paid <= 0 and not s.is_active:
             continue          # long-gone and paid nothing this year

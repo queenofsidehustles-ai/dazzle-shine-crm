@@ -329,21 +329,21 @@ def compose(org, kind, next_step=None):
             'A week in, and nothing has run through it yet',
             f'''<p>You have everything — scheduling, the team, quotes, hiring,
             the lot — and so far none of it has had a real job to do.</p>
-            <p><strong>Two things, about two minutes:</strong> add one cleaner
-            (yourself counts, if you are still cleaning) and one customer you
-            already clean for. That is enough to see the whole thing work
-            end to end.</p>
+            <p><strong>About two minutes:</strong> add one customer you already
+            clean for, then book their next clean and give it to yourself. You
+            are already on the team as the first cleaner, so that is enough to
+            see the whole thing work end to end.</p>
             <p style="color:#7a8499;font-size:14px">You have
             <strong>{left} day{plural}</strong> left of your
             {billing.TRIAL_DAYS} days.</p>''',
-            'Add a cleaner', f'{url}/staff/new'))
+            'Add a customer', f'{url}/bookings/clients/new'))
 
     if kind == 'start_21':
         return (f'{name}: {left} day{plural} left on your trial',
                 wrap(
             f'{left} day{plural} left, and it has not been used yet',
             f'''<p>Your account still has everything on it, and nothing has
-            run through it — no cleaner, no customer, no job.</p>
+            run through it — no customer, no job.</p>
             <p>After <strong>{left} day{plural}</strong> the account drops to
             the free plan. Nothing is deleted and you can keep working, but the
             hiring pipeline, the automations and the rest go quiet, and you
@@ -405,15 +405,14 @@ def compose(org, kind, next_step=None):
             f'''<p>Addresses screenshotted into a group chat. A cleaner texting
             &ldquo;which house again?&rdquo; at 8am. The whole week living in
             your head and your phone.</p>
-            <p>That ends with two things: add <strong>one cleaner</strong>
-            (you count, if you are still cleaning) and <strong>one
-            customer</strong> you already clean for. Then you can watch a job
-            go straight to their phone with the address, the time and the
-            checklist.</p>
+            <p>That ends with two things: add <strong>one customer</strong>
+            you already clean for, and book their next clean. You are already
+            on the team as the first cleaner, so give it to yourself and watch
+            it show up with the address, the time and the checklist.</p>
             <p>About two minutes. Your {billing.TRIAL_DAYS} days are already
             running, so the sooner you see it work the better.</p>
             {funnel_videos.email_block('team_and_customer')}''',
-            'Add my first cleaner', f'{url}/staff/new'))
+            'Add my first customer', f'{url}/bookings/clients/new'))
 
     if kind == 'day2':
         return (f'{name}: the jobs you lose while you are cleaning',
@@ -439,13 +438,14 @@ def compose(org, kind, next_step=None):
             the week gets away from them, which is the exact problem this is
             meant to fix. A few things we hear a lot:</p>
             <p><strong>&ldquo;I need to set everything up first.&rdquo;</strong><br>
-            You do not. One cleaner and one customer is enough to see it work.
+            You do not. One customer and one job is enough to see it work.
             Do the rest when you have a quiet evening.</p>
             <p><strong>&ldquo;My prices are different.&rdquo;</strong><br>
             Change them under Settings, Prices. Your booking page and quotes
             follow, so the price you say is the price they book.</p>
             <p><strong>&ldquo;I do not have cleaners yet.&rdquo;</strong><br>
-            Add yourself. That is how most cleaning businesses start.</p>
+            You are already on the team. Give the job to yourself. That is how
+            most cleaning businesses start.</p>
             <p>Stuck on something else? Reply and tell us what. A real person
             reads every one.</p>''',
             'Pick up where I left off'))
@@ -470,14 +470,16 @@ def compose(org, kind, next_step=None):
         return (f'{name}: that is it working',
                 wrap(
             'That is it working',
-            f'''<p>You added a cleaner and a customer, so there is a real
+            f'''<p>You added your first customer, so there is a real
             business in there now. Everything stays switched on until
             <strong>{until}</strong>.</p>
-            <p>Picture next week: jobs land on your cleaners&rsquo; phones,
+            <p>Picture next week: jobs land on your phone and your
+            cleaners&rsquo;,
             customers get their reminders without you, and you are not
             rebuilding the schedule from texts at night.</p>
-            <p>To see it for real, <strong>book one real job and assign
-            it.</strong> That is the moment it clicks.</p>
+            <p>To see it for real, <strong>book one real clean and assign
+            it,</strong> to yourself if you are still cleaning. That is the
+            moment it clicks.</p>
             {funnel_videos.email_block('book_job')}''',
             'Book my first job', f'{url}/bookings/new'))
 
@@ -487,7 +489,7 @@ def compose(org, kind, next_step=None):
             'Somebody booked you through your own page',
             '''<p>A customer just booked you, and you did not have to answer a
             call, play phone tag or send a quote. It is in your calendar now,
-            ready for a cleaner.</p>
+            ready to assign.</p>
             <p>That is a job that could easily have gone to someone else.
             Every place your link lives is another chance for this to happen
             again. Add it somewhere new today.</p>''',
@@ -559,16 +561,16 @@ def compose(org, kind, next_step=None):
                 wrap(
             'Still here when you are ready',
             '''<p>Your account is still open on the free plan. It never got
-            its first cleaner and customer, so you have not seen it do
+            its first customer and job, so you have not seen it do
             anything yet.</p>
             <p>The free plan is enough to try it properly: up to 2 cleaners,
             every customer you have, and 20 jobs a month. Two things, about two
-            minutes: add <strong>one cleaner</strong> (you count, if you are
-            still cleaning) and <strong>one customer</strong> you already clean
-            for.</p>
+            minutes: add <strong>one customer</strong> you already clean for,
+            and give their next clean to yourself. You are already the first
+            cleaner.</p>
             <p>If something put you off, reply and tell us. This is the last
             note about getting started.</p>''',
-            'Add a cleaner', f'{url}/staff/new'))
+            'Add a customer', f'{url}/bookings/clients/new'))
 
     raise ValueError(f'unknown nudge: {kind}')
 

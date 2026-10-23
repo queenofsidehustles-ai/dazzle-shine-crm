@@ -1670,6 +1670,8 @@ def payroll():
         if pay_ids else {}
 
     def add_row(s, job, earned, paid, crew=None):
+        if s.is_owner:
+            return          # the owner is not on their own payroll
         row = payroll_data.setdefault(s.name, {'staff': s, 'jobs': [], 'total': 0, 'paid_total': 0})
         pid = crew.payment_id if crew else job.cleaner_payment_id
         row['jobs'].append({'booking': job, 'earned': earned, 'paid': paid, 'crew': crew,

@@ -23,8 +23,9 @@ SETUP_VERSION = '2'
 
 
 def checklist():
-    from models import BusinessSetting, Staff, Booking
+    from models import BusinessSetting, Booking
     import integrations
+    from owner_cleaner import hired_team_count
 
     def setting(key):
         return bool((BusinessSetting.get(key) or '').strip())
@@ -87,9 +88,10 @@ def checklist():
         },
         {
             'key': 'team',
-            'title': 'Add your cleaners',
-            'why': 'You need at least one person to send a job to.',
-            'done': Staff.query.count() > 0,
+            'title': 'Add a team member when you hire',
+            'why': ('You are already on the team, so you can assign jobs to yourself. '
+                    'Add people here when you are ready to send work to someone else.'),
+            'done': hired_team_count() > 0,
             'link': '/contractors/team',
             'critical': False,
         },
@@ -160,12 +162,15 @@ def journey():
     """
     import automations
     import integrations
-    from models import BusinessSetting, Staff, Booking, BookingCrew
+    from models import BusinessSetting, Booking, BookingCrew
 
     def setting(key):
         return bool((BusinessSetting.get(key) or '').strip())
 
-    has_staff = Staff.query.filter_by(is_active=True).count() > 0
+    # The owner is the first cleaner (owner_cleaner.py), so having staff says
+    # nothing; what says something is having hired somebody else.
+    from owner_cleaner import hired_team_count
+    has_team = hired_team_count() > 0
     has_client = False
     try:
         from models import Client
@@ -251,13 +256,6 @@ def journey():
                 'price and book themselves. It just needs to be somewhere they '
                 'will see it.',
          'cta': 'Show me my page', 'link': '/settings/booking-page'},
-        {'key': 'team', 'video': 'team_and_customer', 'required': False,
-         'done': has_staff,
-         'title': 'Add a cleaner',
-         'why': 'Somebody to send a job to. Add yourself if you are still cleaning.',
-         'cta': 'Add a cleaner', 'link': '/staff/new',
-         'secondary': {'label': 'Already have a team? Import them all at once',
-                       'link': '/migration'}},
         {'key': 'client', 'video': 'team_and_customer', 'required': False,
          'done': has_client,
          'title': 'Add a customer',
@@ -265,12 +263,22 @@ def journey():
          'cta': 'Add a customer', 'link': '/bookings/clients/new',
          'secondary': {'label': 'Already have a customer list? Import it instead',
                        'link': '/migration'}},
+        # You are already the first cleaner (owner_cleaner.py), so a job can be
+        # assigned to you the moment it exists. Nobody has to be hired first.
         {'key': 'job', 'video': 'book_job', 'required': False,
          'done': bookings > 0 and assigned,
          'title': 'Schedule a job and assign it',
-         'why': 'The cleaner gets a text with the address, the price and the '
-                'checklist.',
+         'why': 'Give it to yourself to start. When you add a cleaner, they get '
+                'a text with the address, the price and the checklist.',
          'cta': 'Book a job', 'link': '/bookings/new'},
+        {'key': 'team', 'video': 'team_and_customer', 'required': False,
+         'done': has_team,
+         'title': 'Add a team member when you hire',
+         'why': 'You are on the team already. Add people when you are ready to '
+                'send work to someone else.',
+         'cta': 'Add a team member', 'link': '/staff/new',
+         'secondary': {'label': 'Already have a team? Import them all at once',
+                       'link': '/migration'}},
     ]
     if demo:
         steps = [s for s in steps if s['key'] != 'payments']
@@ -362,10 +370,12 @@ def progress():
         'optional_total': len(optional),
         'next': nxt,
         'next_required': next((s for s in required if not s['done']), None),
-        # The trial trigger. Both, not either: a cleaner with nobody to clean
-        # for, or a customer with nobody to send, is half a setup and shows
-        # nothing working end to end.
-        'activated': by_key.get('team', False) and by_key.get('client', False),
+        # The activation milestone: a customer, and a job on the calendar with
+        # somebody assigned -- the owner counts, as the first cleaner. A company
+        # that hired a team and added a customer before scheduling anything is
+        # activated too, as it always was.
+        'activated': by_key.get('client', False) and (
+            by_key.get('job', False) or by_key.get('team', False)),
         # How hard to push about payments, which is tracked rather than
         # required. '' once it is connected.
         'payments': payments_state(),

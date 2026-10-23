@@ -65,7 +65,7 @@ check(req == ['business', 'pricing', 'terms', 'balance'],
 # Not on it because nobody is asked: the ZIP decides the timezone at signup,
 # before the owner sees a screen.
 check('timezone' not in req, 'the timezone is worked out, not asked')
-check(keys(required=False) == ['payments', 'booking_page', 'team', 'client', 'job'],
+check(keys(required=False) == ['payments', 'booking_page', 'client', 'job', 'team'],
       'payments is tracked rather than required; the rest are offered')
 
 print('\n2. None of them need a customer, a cleaner or a job')

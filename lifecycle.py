@@ -458,7 +458,7 @@ def run_lifecycle_emails():
     INSURANCE_AFTER_JOBS = 3
     for s in Staff.query.filter(Staff.is_active.is_(True),
                                 Staff.insurance_reminder_sent_at.is_(None)).all():
-        if not s.email or (s.worker_model or 'contractor') == 'employee':
+        if not s.email or s.is_owner or (s.worker_model or 'contractor') == 'employee':
             continue
         done = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
             db.or_(db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
@@ -474,7 +474,7 @@ def run_lifecycle_emails():
     # ── Onboarding reminders — nudge recent new hires who haven't finished setup ──
     ONBOARD_MAX = 3
     for s in Staff.query.filter(Staff.is_active.is_(True)).all():
-        if not s.email or not s.agreement_token:
+        if not s.email or not s.agreement_token or s.is_owner:
             continue
         if not s.created_at or s.created_at < now - timedelta(days=30):
             continue                                  # only recent onboarders

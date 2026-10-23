@@ -40,7 +40,8 @@ BODY = """
      email — it is your own address, and nobody else can use it.</p>
 
   <p style="margin-top:22px"><strong>What to do first</strong><br>
-     Add one cleaner, one customer and one job. That is the whole loop, and the
+     Add one customer and one job, and give it to yourself. You are already on
+     the team as the first cleaner. That is the whole loop, and the
      <em>Getting started</em> list on your dashboard walks you through it. Everything
      else — taking card payments, texting your crew, sending invoices — comes after,
      and only when you want it.</p>
