@@ -25,6 +25,7 @@ customer looking at a stack trace on their first morning.
 import argparse
 import os
 import sys
+import threading
 
 from sqlalchemy import text
 
@@ -32,10 +33,59 @@ import control_plane
 import tenancy
 
 
+_engines = {}
+_engines_lock = threading.Lock()
+
+
 def _engine():
-    from sqlalchemy import create_engine
+    """The control-plane engine for DATABASE_URL: one per process, reused.
+
+    This is called all over -- the console, signup, billing, the nightly jobs --
+    often once per company in a loop. A new engine each call is a new pool each
+    call, and every pool keeps its connection open until the garbage collector
+    gets to it: with a few dozen companies one console page could hold more
+    connections than Postgres allows ("too many clients already").
+
+    Keyed by process as well as URL: gunicorn forks its workers, and a pooled
+    connection carried across a fork is shared by two processes at once.
+    pool_pre_ping replaces a connection the server has dropped (a restart, or a
+    test's database recreated) instead of handing it out dead."""
+    from sqlalchemy import create_engine, event
     import backup
-    return create_engine(backup.normalise(os.environ.get('DATABASE_URL', '')))
+    url = backup.normalise(os.environ.get('DATABASE_URL', ''))
+    key = (os.getpid(), url)
+    engine = _engines.get(key)
+    if engine is None:
+        with _engines_lock:
+            engine = _engines.get(key)
+            if engine is None:
+                engine = create_engine(url, pool_pre_ping=True)
+                event.listen(engine, 'checkin', _leave_connection_clean)
+                _engines[key] = engine
+    return engine
+
+
+def _leave_connection_clean(dbapi_conn, _record):
+    """A pooled connection goes back as it came: default search_path, no
+    session advisory lock. A caller that set the path for one company (the
+    audit commands do) or died holding a lock must not hand either to the next
+    caller. In the app, tenancy's checkout guard sets the path again anyway."""
+    if dbapi_conn is None or not hasattr(dbapi_conn, 'get_dsn_parameters'):
+        return                                  # not psycopg2 / Postgres
+    try:
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute('RESET search_path; SELECT pg_advisory_unlock_all()')
+        finally:
+            cur.close()
+        dbapi_conn.commit()
+    except Exception:
+        # A connection that cannot be reset is not reused: pre_ping or the next
+        # checkout replaces it.
+        try:
+            dbapi_conn.close()
+        except Exception:
+            pass
 
 
 def schema_exists(engine, schema):
