@@ -67,9 +67,9 @@ with app.app_context():
     b = a_booking()
     page = c.get(f'/bookings/{b.id}').get_data(as_text=True)
     check('id="crewSize"' in page, 'the headcount control is on the page')
-    disclosure = SRC[SRC.index('How this pay is worked out'):]
+    disclosure = SRC[SRC.index('Pay details — hours, rate'):]
     check('name="crew_size"' not in disclosure[:disclosure.index('</details>')],
-          'and it is NOT buried in "How this pay is worked out"')
+          'and it is NOT buried in the pay details fold')
     # The pay card's assign form, not the "Next: who's cleaning" bar on top.
     who = SRC[SRC.index('data-card-key="who"'):]
     assign_form = who[who.index("url_for('bookings.assign'"):]
