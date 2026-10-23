@@ -386,7 +386,7 @@ class Booking(db.Model):
         """The $/hour this job was quoted at. Locked at quote time, so changing
         the company rate tomorrow can never restate what a job from last month
         was worth."""
-        if self.labor_rate_applied:
+        if self.labor_rate_applied is not None:
             return self.labor_rate_applied
         return self.company_rate
 
@@ -418,7 +418,7 @@ class Booking(db.Model):
     def rate_is_stale(self):
         """True when the company rate has moved since this job was quoted and
         the job hasn't been paid — the only case where re-rating is safe."""
-        if not self.labor_rate_applied or self.cleaner_paid_at:
+        if self.labor_rate_applied is None or self.cleaner_paid_at:
             return False
         if any(c.paid_at for c in self.crew):
             return False

@@ -12,32 +12,20 @@ provisioned runs every migration on empty tables -- its owner is added after
 -- so it is left alone and starts at the new default. A rate somebody saved
 is never touched.
 """
-from datetime import datetime
-
 from alembic import op
-import sqlalchemy as sa
 
 revision = '0036_keep_cleaner_rate'
 down_revision = '0035_commercial_jobs'
 branch_labels = None
 depends_on = None
 
-OLD_DEFAULT = '43'
-
 
 def upgrade():
-    bind = op.get_bind()
-    in_use = bind.execute(sa.text(
-        'SELECT EXISTS (SELECT 1 FROM "user") OR EXISTS (SELECT 1 FROM booking)')).scalar()
-    if not in_use:
-        return
-    saved = bind.execute(sa.text(
-        "SELECT 1 FROM pricing_setting WHERE key = 'labor_rate'")).first()
-    if saved:
-        return
-    bind.execute(sa.text(
-        "INSERT INTO pricing_setting (key, value, updated_at) VALUES ('labor_rate', :v, :t)"),
-        {'v': OLD_DEFAULT, 't': datetime.utcnow()})
+    # The rule lives with the rate (pricing.keep_old_rate) because restoring a
+    # backup taken before this migration has to apply it too: a restore builds
+    # today's tables and is stamped at head, so this never runs on that data.
+    import pricing
+    pricing.keep_old_rate(op.get_bind())
 
 
 def downgrade():

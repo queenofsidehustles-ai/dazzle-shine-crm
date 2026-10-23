@@ -1027,7 +1027,7 @@ def _apply_hours(booking, form):
                 booking.estimated_hours = float(raw)
                 # First time a job gets hours, lock in today's rate. Never
                 # re-stamp after — that's what "Re-rate" is for.
-                if booking.estimated_hours and not booking.labor_rate_applied:
+                if booking.estimated_hours and booking.labor_rate_applied is None:
                     booking.labor_rate_applied = booking.company_rate
                 changed = True
             except ValueError:

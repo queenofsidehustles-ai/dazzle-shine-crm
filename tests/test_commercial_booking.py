@@ -88,6 +88,11 @@ with app.app_context():
           f'the cleaner is paid the commercial cost, $25/hr (not ${get_labor_rate():.0f})')
     check(b.labor_budget == 100, '4 hours x $25 = $100 of cleaner pay on a $275 visit')
     check(not b.rate_is_stale, 'and it is not offered a "re-rate" to the residential rate')
+    b.labor_rate_applied = 0
+    check(b.rate_applied == 0 and b.labor_budget == 0,
+          'a rate locked at $0 stays $0, not "unset" and read from today\'s setting')
+    check(b.rate_is_stale, 'and moving it is offered, not done silently')
+    b.labor_rate_applied = 25; db.session.commit()
     check(b.scope_items() == ['Empty trash & replace liners', 'Vacuum carpets', '2 classrooms, 1 office'],
           'the scope is kept as a list')
     check(b.invoice_number and b.invoice_due_date == (date.today() + timedelta(days=14)).isoformat(),

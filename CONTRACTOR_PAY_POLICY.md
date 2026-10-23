@@ -3,8 +3,8 @@
 ## The model: a flat rate per hour of work
 
 Contractors are paid **$25 for every person-hour of work in a job**, paid after the
-clean. Same rate for every cleaner, every job type. They provide their own
-supplies and transportation and pay their own taxes (1099).
+clean. Same rate for every cleaner. They provide their own supplies and
+transportation and pay their own taxes (1099).
 
 ```
 job pay = person-hours of work × $25
@@ -12,9 +12,22 @@ job pay = person-hours of work × $25
 
 A 3-bed/2-bath standard clean contains about 3 hours of work, so it pays **$75**.
 
-The rate lives in **Settings → Pricing → Cleaner Pay**, not in the code. It is a
-cost, not a price: what the customer pays is revenue and moves with the job, the
-client and the market, and the difference is the gross profit.
+The rate is a cost, not a price: what the customer pays is revenue and moves with
+the job, the client and the market, and the difference is the gross profit. It
+lives in two settings, not in the code, and each job locks in the one it was
+booked under:
+
+| Jobs | Rate comes from | Dazzle & Shine |
+|---|---|---|
+| Houses (residential) | **Settings → Pricing → Cleaner Pay** | $25 |
+| Businesses (commercial) | **Settings → Commercial Pricing → Your cleaner cost ($/hour)** — the cost every commercial price is built from | $25 |
+
+Keep the two the same unless commercial work genuinely pays differently.
+
+On Akye, a company created from October 2026 starts at $25 for both. A company
+that existed before then and never saved its own Cleaner Pay keeps the **$43** it
+was already paying for residential work (migration 0036), until it changes the
+setting.
 
 > ⚠️ This is the internal costing basis. **Don't quote the hourly rate to a
 > contractor** — they're told the flat amount for the job. See
