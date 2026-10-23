@@ -171,7 +171,7 @@ def emailed_today(org, now=None):
     return bool(last) and (now - last).total_seconds() < ONE_A_DAY_HOURS * 3600
 
 
-def due(org, now=None, next_step=None):
+def due(org, now=None, next_step=None, skip=()):
     """Which nudge this company should get today, or None.
 
     Pure: no database, no mail, no clock of its own. Every rule above is
@@ -181,6 +181,10 @@ def due(org, now=None, next_step=None):
     `next_step` is the one tenant-side fact the "feature" note needs -- the
     first Getting Started step still undone, or None. The caller reads it;
     without it, that note is simply not due.
+
+    `skip` is the kinds switched off in the console. They are passed over as
+    though already sent, so one switched-off email never holds back the next
+    one that is due (a "quiet" note that is off must not swallow "feature").
     """
     if not org:
         return None
@@ -202,7 +206,7 @@ def due(org, now=None, next_step=None):
         return None
     if emailed_today(org, now):
         return None                     # one a day, whatever sent the last one
-    already = _sent(org)
+    already = _sent(org) | set(skip or ())
     created = org.get('created_at') or now
     age = (now - created).days
     seen = org.get('owner_active_at')
@@ -624,6 +628,7 @@ def run(engine=None, now=None, dry_run=False, sent_by='auto'):
 
     import communications
     switch_map = control_plane.switches(engine)
+    off = {k for k in ALL if not communications.is_on(k, switch_map)}
     now = now or datetime.utcnow()
     for org in orgs:
         counts['considered'] += 1
@@ -633,9 +638,12 @@ def run(engine=None, now=None, dry_run=False, sent_by='auto'):
             continue
         if not communications.is_on(kind, switch_map):
             # Switched off in the console. Not recorded as sent, so turning
-            # it back on inside the window still sends it.
+            # it back on inside the window still sends it. Whatever else is
+            # due today and switched on goes instead.
             counts['switched_off'] += 1
-            continue
+            kind = due(org, now, next_step=step, skip=off)
+            if not kind:
+                continue
         if not (org.get('owner_email') or '').strip():
             counts['skipped_no_email'] += 1
             continue

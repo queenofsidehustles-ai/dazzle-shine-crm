@@ -238,8 +238,11 @@ def support_meter(org, snap, trial=None, now=None):
                      f'has not been in for {away} days')
     elif away >= AWAY_WATCH_DAYS:
         watch.append(f'The owner has not been in for {away} days')
-    if activated and age >= 14 and not snap.get('bookings_30d'):
-        watch.append('Set up, but no jobs booked in 30 days')
+    # Booked or done: a recurring schedule made two months ago creates no new
+    # bookings, but its visits are still being completed.
+    if activated and age >= 14 and not snap.get('bookings_30d') \
+            and not snap.get('completed_30d'):
+        watch.append('Set up, but no jobs booked or done in 30 days')
     if snap.get('open_errors'):
         n = snap['open_errors']
         watch.append(f"{n} open error{'' if n == 1 else 's'}")

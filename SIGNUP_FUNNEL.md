@@ -51,7 +51,9 @@ demo, opted-out or closed companies.
 CRM (at most hourly), not their last password sign-in, which a self-renewing
 session can leave months old. A company with no `owner_active_at` yet is not
 due. The three "gone quiet" emails **ship switched off**: they send only once
-somebody turns them on under Console → Communications.
+somebody turns them on under Console → Communications. An email that is
+switched off is passed over, not waited on: whatever else is due that day and
+switched on goes instead.
 
 ## Who needs support: Console → Companies
 
@@ -61,7 +63,7 @@ already reads (`console_data.support_meter`):
 - **Needs help**: not set up after the first 3 days, the owner not in for 14
   days or more (paying customers included), never seen using it, or a trial
   ending within a week with nothing set up.
-- **Watch**: the owner not in for 7–13 days, set up but no jobs in 30 days,
+- **Watch**: the owner not in for 7–13 days, set up but no jobs booked or done in 30 days,
   open errors, automations not running, a payment past due.
 - **Healthy**, **New** (first 3 days), or **—** for test, demo and inactive
   accounts.

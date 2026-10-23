@@ -158,6 +158,13 @@ check(tn.due(dict(quiet, activated_at=None, created_at=NOW - timedelta(days=12),
                   nudges_sent='day1,day2,day4,day5,start_7')) != 'quiet',
       'never to somebody who never set up (they get the getting-started notes)')
 check(tn.due(dict(quiet, subscription_status='active')) is None, 'never to a paying customer')
+both = dict(quiet, nudges_sent='activated,day2')
+step = {'key': 'job', 'title': 'Book a job'}
+check(tn.due(both, next_step=step) == 'quiet', 'quiet and feature both due: quiet first')
+check(tn.due(both, next_step=step, skip={'quiet'}) == 'feature',
+      'but with quiet switched off, feature still goes (it is not swallowed)')
+check(tn.due(both, next_step=step, skip=set(tn.ALL)) is None,
+      'and with everything switched off, nothing')
 
 free = dict(running(30), created_at=NOW - timedelta(days=60),
             trial_ends_at=NOW - timedelta(days=30),

@@ -79,8 +79,10 @@ m = meter(company(owner_active_at=None, created_at=ago(20)), {'owner_last_login'
 check(m['level'] == 'help' and 'not been seen' in ' '.join(m['reasons']),
       'never seen using it: needs help')
 m = meter(company(), {'bookings_30d': 0})
-check(m['level'] == 'watch' and 'no jobs booked in 30 days' in m['reasons'][0],
+check(m['level'] == 'watch' and 'no jobs booked or done in 30 days' in m['reasons'][0],
       'set up but no jobs in a month: watch')
+check(meter(company(), {'bookings_30d': 0, 'completed_30d': 6})['level'] == 'ok',
+      'a recurring schedule made months ago, visits still being done: healthy')
 m = meter(company(), {'open_errors': 3, 'jobs_broken': 1})
 check(m['level'] == 'watch' and m['reasons'] == ['3 open errors', '1 automation not running'],
       'errors and a stalled automation: watch, each named')
@@ -222,6 +224,21 @@ check('Needs help' in detail and 'has not been in for 21 days' in detail,
       "the company's own page says why")
 
 print('\n6. The daily run holds them until they are switched on')
+with engine.begin() as conn:
+    conn.execute(update(control_plane.organizations)
+                 .where(control_plane.organizations.c.slug == 'meterone')
+                 .values(subscription_status='trialing', created_at=ago(11),
+                         trial_ends_at=NOW + timedelta(days=19), activated_at=ago(9),
+                         owner_active_at=ago(8), nudges_sent='activated'))
+with app.app_context():                 # as the /api/trial-nudges request has
+    step = tn.next_step('meterone')
+    out = tn.run(engine, dry_run=True)
+    db.session.remove()
+check(step and tn.due(control_plane.find(engine, 'meterone'), NOW, next_step=step) == 'quiet',
+      f'Meter One, set up 9 days ago and away 8: quiet is first in line ({step and step["title"]})')
+check(('meterone', 'feature', 'one@meter.test') in out['plan'],
+      f'quiet is switched off, so the feature note still goes instead '
+      f'({[p for p in out["plan"] if p[0] == "meterone"]})')
 with engine.begin() as conn:
     conn.execute(update(control_plane.organizations)
                  .where(control_plane.organizations.c.slug == 'metertwo')
