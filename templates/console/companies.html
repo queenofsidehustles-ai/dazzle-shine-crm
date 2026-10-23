@@ -24,19 +24,19 @@
 </form>
 {% if rows %}
 <div class="ops-scroll"><table class="con">
-  <tr><th>Support</th><th>Company</th><th>Status</th><th>Trial / plan</th><th>Owner last in</th>
+  <tr><th>Company</th><th>Support</th><th>Status</th><th>Trial / plan</th><th>Owner last in</th>
       <th>Last 30 days</th></tr>
   {% for r in rows %}
   {% set s = r.snap %}
   <tr>
+    <td><a href="{{ url_for('console.company', slug=r.slug) }}"><strong>{{ r.name }}</strong></a>
+        <br><span class="ops-dim">{{ r.slug }}{% if r.owner_email %} · {{ r.owner_email }}{% endif %}</span></td>
     <td class="wrap" style="min-width:12rem">
       <span class="ops-badge {{ meter_class.get(r.meter.level, '') }}">{{ r.meter.label }}</span>
       {% if r.meter.level in ('help', 'watch') %}
         {% for why in r.meter.reasons %}<br><span class="{{ 'ops-bad' if r.meter.level == 'help' and loop.first else 'ops-dim' }}">{{ why }}</span>{% endfor %}
       {% elif r.meter.level == 'none' and r.meter.reasons %}<br><span class="ops-dim">{{ r.meter.reasons[0] }}</span>{% endif %}
     </td>
-    <td><a href="{{ url_for('console.company', slug=r.slug) }}"><strong>{{ r.name }}</strong></a>
-        <br><span class="ops-dim">{{ r.slug }}{% if r.owner_email %} · {{ r.owner_email }}{% endif %}</span></td>
     <td><span class="ops-badge ops-{{ r.status }}">{{ r.status }}</span>
         {% if r.grandfathered %}<br><span class="ops-dim">grandfathered</span>{% endif %}
         {% if r.is_test %}<br><span class="ops-dim">test account</span>{% endif %}</td>

@@ -84,7 +84,7 @@ check(m['level'] == 'watch' and 'no jobs booked or done in 30 days' in m['reason
 check(meter(company(), {'bookings_30d': 0, 'completed_30d': 6})['level'] == 'ok',
       'a recurring schedule made months ago, visits still being done: healthy')
 m = meter(company(), {'open_errors': 3, 'jobs_broken': 1})
-check(m['level'] == 'watch' and m['reasons'] == ['3 open errors', '1 automation not running'],
+check(m['level'] == 'watch' and m['reasons'] == ['3 errors open', '1 automation not running'],
       'errors and a stalled automation: watch, each named')
 fresh = [{'state': 'never'}] * 7
 check(meter(company(created_at=ago(0), activated_at=None, owner_active_at=NOW,

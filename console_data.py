@@ -245,7 +245,7 @@ def support_meter(org, snap, trial=None, now=None):
         watch.append('Set up, but no jobs booked or done in 30 days')
     if snap.get('open_errors'):
         n = snap['open_errors']
-        watch.append(f"{n} open error{'' if n == 1 else 's'}")
+        watch.append(f"{n} error{'' if n == 1 else 's'} open")
     # "never" is every automation on a company's first day, before the daily
     # run has reached it, so it only counts once there has been a day to run.
     jobs = snap.get('jobs')
