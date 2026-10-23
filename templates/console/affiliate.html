@@ -2,7 +2,6 @@
 {% block title %}{{ partner.name }}{% endblock %}
 {% block body %}
 {% include "console/_ops_style.html" %}
-{% include "console/_funnel_tabs.html" %}
 <p style="margin:0 0 var(--s3)"><a href="{{ url_for('console.affiliates_view') }}">&larr; All partners</a></p>
 <h2 style="margin:0 0 var(--s1)">{{ partner.name }} <span class="ops-badge {{ 'ops-ok' if partner.status == 'active' else ('ops-stale' if partner.status in ('pending', 'paused') else 'ops-closed') }}">{{ partner.status }}</span></h2>
 <p class="ops-dim" style="margin:0 0 var(--s4)">{{ partner.email }} · <code>{{ link }}</code> · {{ partner.commission_bps / 100 }}% for {{ partner.commission_months }} months, held {{ partner.hold_days }} days{% if partner.last_login_at %} · last signed in {{ partner.last_login_at.strftime('%d %b %Y') }}{% endif %}{% if partner.notes %}<br>{{ partner.notes }}{% endif %}</p>

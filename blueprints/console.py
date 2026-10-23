@@ -1595,9 +1595,16 @@ def leads_upload():
         flash('Could not read that file as text.', 'error')
         return redirect(url_for('console.leads_view'))
 
-    reader = csv.DictReader(io.StringIO(text))
-    if not reader.fieldnames:
-        flash('That file has no header row.', 'error')
+    # newline='' lets the csv module read \r, \n and \r\n endings alike;
+    # without it a file saved with old-Mac \r endings raises "new-line
+    # character seen in unquoted field".
+    reader = csv.DictReader(io.StringIO(text, newline=''))
+    try:
+        if not reader.fieldnames:
+            flash('That file has no header row.', 'error')
+            return redirect(url_for('console.leads_view'))
+    except csv.Error:
+        flash('Could not read that file as a CSV. Save it as "CSV (comma delimited)" and try again.', 'error')
         return redirect(url_for('console.leads_view'))
     # Case-insensitive, so "Email" and "email" both find the column.
     by_lower = {(h or '').strip().lower(): h for h in reader.fieldnames}
@@ -1608,7 +1615,12 @@ def leads_upload():
 
     import notifications
     added = skipped = already = flagged = failed = 0
-    for row in reader:
+    try:
+        rows = list(reader)
+    except csv.Error:
+        flash('Could not read that file as a CSV. Save it as "CSV (comma delimited)" and try again.', 'error')
+        return redirect(url_for('console.leads_view'))
+    for row in rows:
         email = (row.get(by_lower.get('email', ''), '') or '').strip().lower()
         phone = (row.get(by_lower.get('phone', ''), '') or '').strip()
         # notifications.looks_like_email, not just "has an @": "person@example"
