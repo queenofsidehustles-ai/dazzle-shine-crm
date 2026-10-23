@@ -542,7 +542,7 @@ def detail(booking_id):
                            recurring_upcoming=recurring_upcoming,
                            monthly_choices=monthly_choices,
                            plan_suggestion=plan_suggestion,
-                           labor_rate=get_labor_rate(),
+                           labor_rate=booking.company_rate,
                            max_labor_pct=get_max_labor_percent(),
                            ad_expense=Expense.query.filter_by(booking_id=booking.id).first(),
                            ad_categories=[(k, l) for k, l, g, _s in EXPENSE_CATEGORIES
@@ -1028,8 +1028,7 @@ def _apply_hours(booking, form):
                 # First time a job gets hours, lock in today's rate. Never
                 # re-stamp after — that's what "Re-rate" is for.
                 if booking.estimated_hours and not booking.labor_rate_applied:
-                    from pricing import get_labor_rate as _rate
-                    booking.labor_rate_applied = _rate()
+                    booking.labor_rate_applied = booking.company_rate
                 changed = True
             except ValueError:
                 pass
@@ -1382,13 +1381,12 @@ def re_rate(booking_id):
     quoted at so raising the company rate can't quietly restate work already
     agreed — but an unpaid job sometimes should move, and this is the only way
     it does."""
-    from pricing import get_labor_rate
     b = Booking.query.get_or_404(booking_id)
     back = redirect(url_for('bookings.detail', booking_id=booking_id))
     if b.cleaner_paid_at or any(c.paid_at for c in b.crew):
         flash('Someone has already been paid for this job — its rate stays as it was.', 'error')
         return back
-    was, now = b.labor_rate_applied, get_labor_rate()
+    was, now = b.labor_rate_applied, b.company_rate
     b.labor_rate_applied = now
     db.session.commit()
     flash(f'Re-rated from ${was:.0f} to ${now:.0f} per hour — this job now pays '

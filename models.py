@@ -370,14 +370,25 @@ class Booking(db.Model):
 
     # ── Labor budget: what the WORK is worth, not what the customer paid ─────
     @property
+    def company_rate(self):
+        """The company's cleaner rate today for this kind of job. A business is
+        paid at the cleaner cost its price was built from (Commercial Pricing),
+        a house at Settings -> Pricing. The price is revenue and can move with
+        the job; the cost a commercial quote assumes is what the cleaner gets."""
+        if self.is_commercial:
+            import commercial_pricing
+            return commercial_pricing.cleaner_rate()
+        from pricing import get_labor_rate
+        return get_labor_rate()
+
+    @property
     def rate_applied(self):
         """The $/hour this job was quoted at. Locked at quote time, so changing
         the company rate tomorrow can never restate what a job from last month
         was worth."""
         if self.labor_rate_applied:
             return self.labor_rate_applied
-        from pricing import get_labor_rate
-        return get_labor_rate()
+        return self.company_rate
 
     @property
     def payable_hours(self):
@@ -407,12 +418,11 @@ class Booking(db.Model):
     def rate_is_stale(self):
         """True when the company rate has moved since this job was quoted and
         the job hasn't been paid — the only case where re-rating is safe."""
-        from pricing import get_labor_rate
         if not self.labor_rate_applied or self.cleaner_paid_at:
             return False
         if any(c.paid_at for c in self.crew):
             return False
-        return abs(self.labor_rate_applied - get_labor_rate()) > 0.001
+        return abs(self.labor_rate_applied - self.company_rate) > 0.001
 
     @property
     def committed_labor(self):

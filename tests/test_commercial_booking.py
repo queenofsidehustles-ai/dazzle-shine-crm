@@ -79,6 +79,15 @@ with app.app_context():
     check(b.is_commercial and b.service_type == 'commercial', 'a commercial booking')
     check(b.name == 'Sunrise Daycare' and b.bedrooms is None, 'named for the business, no bedrooms')
     check(b.price == 275 and b.estimated_hours == 4, 'priced per visit, hours for the cleaner')
+    # $25/hr is what a cleaner costs (Commercial Pricing); the $43 in Settings
+    # -> Pricing is the residential rate. The price is revenue and moves with
+    # the job; the cost does not.
+    import commercial_pricing
+    from pricing import get_labor_rate
+    check(b.labor_rate_applied == commercial_pricing.cleaner_rate() == 25,
+          f'the cleaner is paid the commercial cost, $25/hr (not ${get_labor_rate():.0f})')
+    check(b.labor_budget == 100, '4 hours x $25 = $100 of cleaner pay on a $275 visit')
+    check(not b.rate_is_stale, 'and it is not offered a "re-rate" to the residential rate')
     check(b.scope_items() == ['Empty trash & replace liners', 'Vacuum carpets', '2 classrooms, 1 office'],
           'the scope is kept as a list')
     check(b.invoice_number and b.invoice_due_date == (date.today() + timedelta(days=14)).isoformat(),

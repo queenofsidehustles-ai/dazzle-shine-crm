@@ -270,7 +270,6 @@ def book(account_id):
     import invoicing
     from models import Booking
     from blueprints.bookings import _link_client, _notify_customer, _send_invoice
-    from pricing import get_labor_rate
     from notifications import looks_like_email
     a = CommercialAccount.query.get_or_404(account_id)
     if request.method == 'POST':
@@ -316,7 +315,9 @@ def book(account_id):
             status=request.form.get('status', 'confirmed'),
             price=round(price, 2),
             estimated_hours=hours,
-            labor_rate_applied=get_labor_rate() if hours else None,
+            # The cleaner cost the commercial price is built from. The price
+            # is revenue and moves with the job; this does not.
+            labor_rate_applied=cpricing.cleaner_rate() if hours else None,
             source='commercial',
             agent=a.agent,
         )
