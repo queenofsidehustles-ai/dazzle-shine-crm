@@ -97,16 +97,21 @@ def commit_jobs(sha):
     A required check is a job's name, and the check-runs API that lists them
     needs the Checks permission, which a fine-grained personal access token
     cannot be given. The same jobs are readable with Actions: read."""
-    code, wr = _call('GET', 'actions/runs', params={'head_sha': sha, 'per_page': 30})
-    if code != 200 or not isinstance(wr, dict):
-        return None
     out = []
-    for run in wr.get('workflow_runs', [])[:12]:
-        code, js = _call('GET', f'actions/runs/{run["id"]}/jobs',
-                         params={'per_page': 100, 'filter': 'latest'})
-        if code != 200 or not isinstance(js, dict):
+    # Only the runs a push or a manual dispatch started. Hourly scheduled
+    # workflows (automations, the demo rebuild) also run on main's head and, left
+    # in, would crowd the four required runs out of the first page.
+    for event in ('push', 'workflow_dispatch'):
+        code, wr = _call('GET', 'actions/runs',
+                         params={'head_sha': sha, 'event': event, 'per_page': 100})
+        if code != 200 or not isinstance(wr, dict):
             return None
-        out.extend(js.get('jobs', []))
+        for run in wr.get('workflow_runs', []):
+            code, js = _call('GET', f'actions/runs/{run["id"]}/jobs',
+                             params={'per_page': 100, 'filter': 'latest'})
+            if code != 200 or not isinstance(js, dict):
+                return None
+            out.extend(js.get('jobs', []))
     return out
 
 
