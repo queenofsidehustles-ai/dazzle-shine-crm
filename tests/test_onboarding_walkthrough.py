@@ -18,9 +18,10 @@ of this was built:
 - tapping what is offered advances the step, every time;
 - setup reaches the end rather than looping.
 
-Since 2026-10-24 the required walk is details, team, prices, payments, and the
+Since 2026-10-24 the required walk is details, prices, payments, and the
 go-live checks -- terms, then balances -- follow in the same chat, so the walk
-carries on through those two as well. Payments is the one step the chat
+carries on through those two as well. The team is not on the walk: the owner is
+already the first cleaner, and adding people is optional, for when she hires. Payments is the one step the chat
 cannot finish: it is a link to Connections (bank details never go in the
 chat), so the walk does what the owner does there and connects Stripe.
 """
@@ -80,15 +81,6 @@ def fill_and_save(step, card):
     fields = {f['name']: f['value'] for f in card.get('fields', [])}
     if step == 'business' and not fields.get('phone'):
         fields['phone'] = '(407) 555-0100'
-    if step == 'team':
-        # The owner's row arrives ticked as cleaning; she types her name if
-        # the login did not have one, and presses Save.
-        me = card.get('me') or {}
-        fields = {'me_cleans': '1' if me.get('cleans') else '',
-                  'me_name': me.get('name') or 'Olivia Owner',
-                  'me_email': me.get('email') or '', 'me_phone': me.get('phone') or '',
-                  'me_pay_type': 'hourly', 'me_pay_rate': '25',
-                  'others': [], 'paste': ''}
     with app.app_context(), app.test_request_context():
         from flask import session
         session['role'] = 'owner'
@@ -169,10 +161,12 @@ for label, fixture in (
     p = progress()
     check(p['complete'] is True,
           f'reaches the end: {p["done"]}/{p["total"]} after {seen}')
-    check(seen[:4] == ['business', 'team', 'pricing', 'payments'],
-          f'in the agreed order: details, team, prices, payments ({seen[:4]})')
-    check(seen[4:6] == ['terms', 'balance'],
-          f'then the go-live checks, terms and balances ({seen[4:6]})')
+    check(seen[:3] == ['business', 'pricing', 'payments'],
+          f'in the agreed order: details, prices, payments ({seen[:3]})')
+    check(seen[3:5] == ['terms', 'balance'],
+          f'then the go-live checks, terms and balances ({seen[3:5]})')
+    check('team' not in seen,
+          'and the team is not on the walk: the owner is the first cleaner')
 
 print('\n=== and the timezone was never a question ===')
 check('timezone' not in [s['key'] for s in onboarding.journey()]

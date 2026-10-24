@@ -25,7 +25,7 @@
           <td>
             <span style="display:inline-flex;align-items:center;gap:8px">
               <span style="width:11px;height:11px;border-radius:50%;background:{{ s.color }};flex-shrink:0"></span>
-              <strong>{{ s.name }}</strong>
+              <strong>{{ s.name }}</strong>{% if s.is_owner %} <span class="status status-confirmed" title="You, as the first cleaner. Not paid through the CRM.">You</span>{% endif %}
             </span>
           </td>
           <td>{{ s.phone or '—' }}</td>
@@ -39,6 +39,7 @@
           </td>
           <td>
             <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+              {% if s.is_owner and s.agreement_token %}<a href="{{ url_for('contractors.my_day', token=s.agreement_token) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">My day</a>{% endif %}
               <a href="{{ url_for('staff.edit', staff_id=s.id) }}" class="btn btn-outline" style="padding:5px 12px;font-size:0.82rem">Edit</a>
               {% if s.is_active %}
               <form method="POST" action="{{ url_for('staff.toggle_active', staff_id=s.id) }}"

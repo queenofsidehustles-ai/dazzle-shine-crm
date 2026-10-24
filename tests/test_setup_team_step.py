@@ -1,16 +1,17 @@
-"""Step 2 of setup: the team -- the owner first, then anyone she already has.
+"""The team step of setup: the people she hires, optional, after the first job.
 
-Agreed 2026-10-24 (Monica and William): the first thing setup gives back is a
-team on screen, because most owners have no customer in their first five
-minutes but everybody has themselves.
+The owner is already the first cleaner (owner_cleaner.py), created with the
+account and given no pay, so a job can be given to herself before anybody is
+added and the team is not something setup makes her do first. This step is
+for the day she hires.
 
 What this holds:
-- Team is the second required step, and arrives as one 'team' card with the
-  owner's own row filled in and "I clean jobs myself" ticked.
-- One Save writes the owner and every other cleaner, typed or pasted.
+- Team is an optional step, last on the list, and arrives as one 'team' card
+  with no row for the owner.
+- One Save writes every cleaner on the card, typed or pasted.
 - One bad row saves nobody, so fixing it and pressing Save again works.
 - Names must be distinct -- a solo job pays the cleaner it names.
-- The owner's row is linked to her own login and never invited.
+- Pay is what the owner typed, never a default.
 - Saving emails nobody, and setup offers no invite card: inviting is done
   from each cleaner's page on the Team tab.
 - An uploaded Excel or CSV file fills in rows to check and saves nothing.
@@ -74,44 +75,49 @@ def save(client, fields):
                        json={'step': 'team', 'fields': fields}, headers=H)
 
 
-print('\n1. Team is required, and second')
+print('\n1. Team is optional, and last')
 with app.app_context():
-    keys = [s['key'] for s in onboarding.journey() if s.get('required')]
-check(keys[:2] == ['business', 'team'], f'business then team: {keys}')
+    steps = onboarding.journey()
+    keys = [s['key'] for s in steps if s.get('required')]
+    team_step = next(s for s in steps if s['key'] == 'team')
+check(keys == ['business', 'pricing', 'payments'], f'the required steps have no team: {keys}')
+check(team_step.get('required') is False and steps[-1]['key'] == 'team',
+      'the team step is optional and comes last')
+check(team_step['done'] is False, 'and nobody hired yet means it is not done')
 
-print('\n2. It arrives as one team card, the owner already on it')
+print('\n2. It arrives as one team card, with no row for the owner')
 with app.app_context(), app.test_request_context():
     from flask import session
     session['user_id'] = OWNER_ID
-    _text, cards, key = setup_assistant.next_message()
-team = next((c for c in cards if c.get('kind') == 'team'), None)
-check(key == 'team', f'the chat is on the team step ({key})')
-check(team is not None, 'there is a team card')
-check(team and team['me']['name'] == 'Mo Lewis', 'her name is filled in')
-check(team and team['me']['email'] == 'mo@sparkle.test', 'her email is filled in')
-check(team and team['me']['cleans'] is True, '"I clean jobs myself" is ticked')
-check(team and team.get('step_no') == 2, 'it says step 2')
+    cards = setup_assistant.team_card()
+team = cards[0]
+check(len(cards) == 1 and team['kind'] == 'team' and team['step'] == 'team',
+      'one team card, not one per cleaner')
+check('me' not in team, 'there is no owner row: she is already the first cleaner')
+check('already on the team' in team['note'] and 'emailed' in team['note'],
+      'it says she is on the team, and that nobody is emailed')
 
 print('\n3. One bad row saves nobody')
 c = owner()
-r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_email': 'mo@sparkle.test',
-             'me_pay_type': 'percent', 'me_pay_rate': '0',
-             'others': [{'name': 'Ana Ruiz', 'email': 'ana@x', 'pay_type': 'percent', 'pay_rate': '45'}]})
+with app.app_context():
+    base = Staff.query.count()
+r = save(c, {'others': [{'name': 'Zed Fine', 'email': 'zed@sparkle.test', 'pay_type': 'percent', 'pay_rate': '45'},
+                        {'name': 'Ana Ruiz', 'email': 'ana@x', 'pay_type': 'percent', 'pay_rate': '45'}]})
 j = r.get_json()
 check(not j['ok'], 'refused')
 check('Ana Ruiz' in j['say'], f'and says which row: {j["say"]}')
 with app.app_context():
-    check(Staff.query.count() == 0, 'nobody was written, Mo included')
+    check(Staff.query.count() == base, 'nobody was written, the good row included')
 
 print('\n4. The same name twice is refused')
-r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_pay_type': 'percent', 'me_pay_rate': '0',
-             'others': [{'name': 'mo lewis', 'pay_type': 'percent', 'pay_rate': '45'}]})
+r = save(c, {'others': [{'name': 'Ana Ruiz', 'pay_type': 'percent', 'pay_rate': '45'},
+                        {'name': 'ana ruiz', 'pay_type': 'percent', 'pay_rate': '45'}]})
 check(not r.get_json()['ok'], 'refused')
 with app.app_context():
-    check(Staff.query.count() == 0, 'still nobody written')
+    check(Staff.query.count() == base, 'still nobody written')
 
-print('\n5. Unticked and empty is not a team')
-r = save(c, {'me_cleans': '', 'others': [{'name': '', 'email': ''}]})
+print('\n5. An empty card is not a team')
+r = save(c, {'others': [{'name': '', 'email': ''}]})
 check(not r.get_json()['ok'], 'refused, with a reason')
 
 print('\n6. A good card writes everyone, typed and pasted, and emails nobody')
@@ -119,30 +125,26 @@ sent = []
 import blueprints.migration as mig
 real_send = mig.send_join_invite
 mig.send_join_invite = lambda s: (sent.append(s.name) or (True, 'ok'))
-r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_email': 'mo@sparkle.test',
-             'me_phone': '(407) 555-0100', 'me_pay_type': 'percent', 'me_pay_rate': '0',
-             'others': [{'name': 'Ana Ruiz', 'email': 'ana@sparkle.test', 'phone': '',
+r = save(c, {'others': [{'name': 'Ana Ruiz', 'email': 'ana@sparkle.test', 'phone': '',
                          'pay_type': 'hourly', 'pay_rate': '$22.50'},
                         {'name': '', 'email': '', 'phone': ''}],
              'paste': 'Bea Cole, bea@sparkle.test, 407-555-0101\n\nCruz Diaz\t407 555 0102\n',
              'paste_pay_type': 'percent', 'paste_pay_rate': '40%'})
 j = r.get_json()
 check(j['ok'], f'saved: {j["say"]}')
-check('Mo Lewis (you)' in j['say'], 'the roster names her as "you"')
+check('you, and Ana Ruiz' in j['say'], 'the roster names her as "you", then the new people')
 with app.app_context():
     staff = {s.name: s for s in Staff.query.all()}
-check(set(staff) == {'Mo Lewis', 'Ana Ruiz', 'Bea Cole', 'Cruz Diaz'},
-      f'four cleaners, the empty row ignored: {sorted(staff)}')
+check({'Ana Ruiz', 'Bea Cole', 'Cruz Diaz'} <= set(staff) and len(staff) == base + 3,
+      f'three cleaners, the empty row ignored: {sorted(staff)}')
 check(staff.get('Bea Cole') and staff['Bea Cole'].phone == '407-555-0101',
       'a pasted line keeps its phone')
 check(staff.get('Cruz Diaz') and not staff['Cruz Diaz'].email,
       'a pasted line without an email is still a person')
-check(staff.get('Mo Lewis') and staff['Mo Lewis'].user_id == OWNER_ID,
-      'her row is linked to her own login')
 check(sent == [], 'saving emailed nobody')
 with app.app_context():
     check(next(s for s in onboarding.journey() if s['key'] == 'team')['done'],
-          'the team step is done')
+          'the team step is done, now somebody has been hired')
 
 print('\n6b. Pay is what the owner typed, never a default')
 with app.app_context():
@@ -151,12 +153,10 @@ check(staff['Ana Ruiz'].pay_type == 'hourly' and float(staff['Ana Ruiz'].pay_rat
       'Ana: $22.50 an hour, as typed')
 check(staff['Bea Cole'].pay_type == 'percent' and float(staff['Bea Cole'].pay_rate) == 40,
       'Bea: 40% of the job')
-check(float(staff['Mo Lewis'].pay_rate) == 0, 'the owner chose 0 for herself, and 0 it is')
-r = save(c, {'me_cleans': '', 'others': [{'name': 'Pat NoPay'}]})
+r = save(c, {'others': [{'name': 'Pat NoPay'}]})
 check(not r.get_json()['ok'] and 'pay' in r.get_json()['say'],
       f'a row with no pay is refused: {r.get_json()["say"]}')
-r = save(c, {'me_cleans': '', 'others': [{'name': 'Pat TooMuch', 'pay_type': 'percent',
-                                          'pay_rate': '150'}]})
+r = save(c, {'others': [{'name': 'Pat TooMuch', 'pay_type': 'percent', 'pay_rate': '150'}]})
 check(not r.get_json()['ok'], '150% of a job is refused')
 with app.app_context():
     check(not Staff.query.filter(Staff.name.like('Pat %')).count(), 'neither was written')
@@ -210,7 +210,7 @@ print('\n9. The plan limit is checked before anything is written')
 import entitlements
 real_remaining = entitlements.remaining
 entitlements.remaining = lambda name: 1
-r = save(c, {'me_cleans': '', 'others': [{'name': 'Eve One', 'pay_type': 'percent', 'pay_rate': '45'}, {'name': 'Fay Two', 'pay_type': 'percent', 'pay_rate': '45'}]})
+r = save(c, {'others': [{'name': 'Eve One', 'pay_type': 'percent', 'pay_rate': '45'}, {'name': 'Fay Two', 'pay_type': 'percent', 'pay_rate': '45'}]})
 check(not r.get_json()['ok'], f'refused: {r.get_json()["say"]}')
 with app.app_context():
     check(not Staff.query.filter(Staff.name.in_(['Eve One', 'Fay Two'])).count(),
@@ -222,7 +222,7 @@ t = app.test_client()
 with t.session_transaction() as s:
     s['logged_in'] = True
     s['role'] = 'team'
-r = save(t, {'me_cleans': '', 'others': [{'name': 'Gus Sneak', 'pay_type': 'percent', 'pay_rate': '45'}]})
+r = save(t, {'others': [{'name': 'Gus Sneak', 'pay_type': 'percent', 'pay_rate': '45'}]})
 with app.app_context():
     check(not Staff.query.filter_by(name='Gus Sneak').count(), 'a team login cannot add one')
 
@@ -245,8 +245,9 @@ with app.app_context(), app.test_request_context():
     session['user_id'] = OWNER_ID
     stored = setup_assistant.load_chat()
     shown = routes.for_display(stored)
-team_cards = sum(1 for m in shown for x in (m.get('cards') or []) if x.get('kind') == 'team')
-check(team_cards == 1, f'the team card is on screen once ({team_cards})')
+price_cards = sum(1 for m in shown for x in (m.get('cards') or [])
+                  if x.get('kind') == 'form' and x.get('step') == 'pricing')
+check(price_cards == 1, f'the next card, prices, is on screen once ({price_cards})')
 check(any(m.get('tick') == '✓ Check your details' for m in shown),
       'the finished details step is one ✓ line')
 check(not any(x.get('kind') == 'form' and x.get('step') == 'business'

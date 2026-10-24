@@ -986,6 +986,7 @@ def _migrate_db():
         # Staff Stripe Connect (payouts)
         ('staff', 'stripe_account_id',        'VARCHAR(64)'),
         ('staff', 'stripe_payouts_enabled',   'BOOLEAN DEFAULT FALSE'),
+        ('staff', 'is_owner',                 'BOOLEAN DEFAULT FALSE'),
         ('staff', 'stripe_details_submitted', 'BOOLEAN DEFAULT FALSE'),
         ('staff', 'stripe_disabled_reason',   'VARCHAR(120)'),
         ('staff', 'pay_schedule',             "VARCHAR(10) DEFAULT 'daily'"),

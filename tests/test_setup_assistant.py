@@ -129,14 +129,16 @@ check(res['ok'] is True, 'pressing Save works')
 with app.app_context():
     check(BusinessSetting.get('phone') == '(407) 555-0100', 'phone saved as shown')
     check(BusinessSetting.get('email') == 'hello@sparkle.co', 'email saved as shown')
-    # Details, then team, then prices: the team is step two since 2026-10-24.
-    check(onboarding.progress()['next']['key'] == 'team',
-          'setup moved on to the team')
-    check(Staff.query.count() == 0, 'and nobody was added to it by moving on')
-check('who cleans for you' in (res.get('follow') or '').lower(),
-      'and the follow-up asks who cleans for them')
-check(any(x.get('kind') == 'team' for x in res.get('cards') or []),
-      'with the team card, not yet saved')
+    # Details, then prices: the owner is already the first cleaner, so there is
+    # no team step to do before the first win.
+    check(onboarding.progress()['next']['key'] == 'pricing',
+          'setup moved on to prices')
+    import owner_cleaner
+    check(owner_cleaner.hired_team_count() == 0, 'and nobody was hired by moving on')
+check('what do you charge' in (res.get('follow') or '').lower(),
+      'and the follow-up asks what they charge')
+check(any(x.get('step') == 'pricing' for x in res.get('cards') or []),
+      'with the prices card, not yet saved')
 r = c.post('/settings/getting-started/assistant/confirm',
            json={'token': cards[0]['token']}, headers=H)
 check(r.get_json()['ok'] is False and 'already' in r.get_json()['say'],

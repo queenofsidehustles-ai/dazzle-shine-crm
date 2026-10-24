@@ -14,8 +14,11 @@ Akye, and every email along the way.
    address **and** a 6-digit confirm code with a "Yes, this is me" link.
 4. **Soft banner** on the dashboard until the email is confirmed, with a way
    to fix a mistyped address (`/confirm-email`).
-5. **First week emails** push them to add one cleaner and one customer.
-6. **Activated** (one cleaner + one customer) is a milestone inside the trial,
+5. **First week emails** push them to add one customer and book one job. The
+   owner is already the first cleaner (`owner_cleaner.py`, a team row made at
+   signup), so there is nobody to add first.
+6. **Activated** (one customer + one job assigned; a hired team and a customer
+   counts too) is a milestone inside the trial,
    not what starts it: the 30 days run from signup. It sends a "you are set up"
    note at that moment.
 7. **First online booking** sends a note at that moment.
