@@ -116,6 +116,7 @@ def _import_team_rows(rows):
 
         s = Staff(name=name, email=email, phone=phone or None,
                   agreement_token=secrets.token_urlsafe(32))
+        s.mark_existing_team()   # an import is a team they already have
         db.session.add(s)
         db.session.flush()  # need s.id/token before the email goes out
         ok, detail = send_join_invite(s)
@@ -134,6 +135,14 @@ def send_join_invite(s):
         s.agreement_token = secrets.token_urlsafe(32)
     biz = branding.biz_name()
     link = url_for('contractors.join_team', token=s.agreement_token, _external=True)
+    todo = paperwork_links(s)
+    paperwork = ''
+    if todo:
+        items = ''.join(
+            f'<li style="margin:6px 0"><a href="{href}" style="color:#b98a33;'
+            f'font-weight:700">{label}</a></li>' for label, href in todo)
+        paperwork = (f'<p>Then a few minutes of paperwork, so {biz} can pay you '
+                     f'through Akye:</p><ul style="padding-left:18px">{items}</ul>')
     return notifications.send_email(
         to_email=s.email, to_name=s.name,
         subject=f"You're invited to {biz}",
@@ -145,8 +154,36 @@ def send_join_invite(s):
   <p style="margin:22px 0"><a href="{link}"
      style="background:#d3a84f;color:#1a1225;padding:13px 26px;border-radius:999px;
             text-decoration:none;font-weight:700">Set up my account →</a></p>
+  {paperwork}
   <p style="color:#9a95ad;font-size:0.88rem">If this wasn't meant for you, you can ignore it.</p>
 </div>''')
+
+
+def paperwork_links(s):
+    """What an existing cleaner still has to send, as (label, link) pairs.
+
+    Only for somebody brought over rather than hired (Staff.is_existing_team):
+    a new hire is walked through all of this by the hiring flow, in order,
+    and a list of links in a welcome email would skip them ahead of it. Each
+    one is left out once it is on file, so a cleaner whose W-9 the owner
+    uploaded herself is never asked for it again."""
+    if not s.is_existing_team or not s.agreement_token:
+        return []
+    t = s.agreement_token
+    out = []
+    if not s.agreement_signed_at:
+        out.append(('Sign your work agreement',
+                    url_for('contractors.sign_agreement', token=t, _external=True)))
+    if not s.welcome_forms_at:
+        out.append(('Fill in your onboarding form',
+                    url_for('contractors.onboarding_forms', token=t, _external=True)))
+    if not s.document('w9'):
+        out.append(('Send your W-9',
+                    url_for('contractors.upload_document', token=t, kind='w9', _external=True)))
+    if not s.document('id'):
+        out.append(('Send a photo ID',
+                    url_for('contractors.upload_document', token=t, kind='id', _external=True)))
+    return out
 
 
 # ── Client import ─────────────────────────────────────────────────────────
