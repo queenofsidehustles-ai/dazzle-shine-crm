@@ -34,6 +34,8 @@
   .sa-opt span{font-size:0.84rem;color:var(--muted);line-height:1.45}
   .sa-person{display:grid;grid-template-columns:1.2fr 1.4fr 1fr;gap:6px;margin:8px 0}
   .sa-person[hidden]{display:none}
+  .sa-pay{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1.6fr;gap:6px}
+  .sa-pay select{border:1px solid var(--line, var(--border));border-radius:10px;padding:0 10px;font:inherit;font-size:16px;background:var(--surface,#fff);color:inherit;min-height:44px}
   .sa-person input{width:100%;border:0;outline:0;padding:10px 11px;font:inherit;font-size:16px;background:transparent;color:inherit}
   .sa-check{display:flex;align-items:center;gap:6px;margin:6px 0 2px;font-size:0.92rem;color:inherit}
   /* Not .sa-skip: the page prunes old skip buttons, and these are not skips. */
@@ -426,6 +428,27 @@
           wrap.appendChild(pair[0]);
           parts[f[0]] = pair[1];
         });
+      // Pay, on every row, the owner's too: no default is assumed for
+      // anybody, because every owner pays differently.
+      const pay = document.createElement('div');
+      pay.className = 'sa-pay';
+      const rate = input('pay_rate', p.pay_rate, 'Pay', 'text');
+      rate[1].inputMode = 'decimal';
+      const kind = document.createElement('select');
+      kind.setAttribute('aria-label', 'How they are paid');
+      [['', 'How are they paid?'], ['percent', '% of the job'], ['hourly', '$ per hour']]
+        .forEach(function (o) {
+          const opt = document.createElement('option');
+          opt.value = o[0];
+          opt.textContent = o[1];
+          kind.appendChild(opt);
+        });
+      kind.value = p.pay_type || '';
+      pay.appendChild(rate[0]);
+      pay.appendChild(kind);
+      wrap.appendChild(pay);
+      parts.pay_rate = rate[1];
+      parts.pay_type = kind;
       return [wrap, parts];
     }
     const me = c.me || {};
@@ -495,7 +518,8 @@
             return !o.name.value && !o.email.value && !o.phone.value;
           });
           if (blank) { blank.name.value = p.name || ''; blank.email.value = p.email || '';
-                       blank.phone.value = p.phone || ''; }
+                       blank.phone.value = p.phone || '';
+                       blank.pay_rate.value = p.pay_rate || ''; blank.pay_type.value = p.pay_type || ''; }
           else addRow(p, true);
         });
       }
@@ -506,6 +530,22 @@
     up.appendChild(file);
     up.appendChild(upNote);
     box.appendChild(up);
+
+    // Ten uploaded cleaners on one rate should not mean typing it ten times:
+    // the first cleaner's pay, copied into every row still left blank.
+    const same = document.createElement('button');
+    same.type = 'button';
+    same.className = 'sa-textbtn';
+    same.textContent = 'Same pay for everyone? Copy the first cleaner’s pay down';
+    same.addEventListener('click', function () {
+      const first = others.find(function (o) { return o.pay_rate.value && o.pay_type.value; });
+      if (!first) { upNote.textContent = '⚠️ Fill in one cleaner’s pay first.'; return; }
+      others.forEach(function (o) {
+        if (!o.pay_rate.value) o.pay_rate.value = first.pay_rate.value;
+        if (!o.pay_type.value) o.pay_type.value = first.pay_type.value;
+      });
+    });
+    box.appendChild(same);
 
     const note = document.createElement('div');
     note.className = 'sa-note';
@@ -521,9 +561,12 @@
         me_name: mine[1].name.value.trim(),
         me_email: mine[1].email.value.trim(),
         me_phone: mine[1].phone.value.trim(),
+        me_pay_rate: mine[1].pay_rate.value.trim(),
+        me_pay_type: mine[1].pay_type.value,
         others: others.map(function (o) {
           return { name: o.name.value.trim(), email: o.email.value.trim(),
-                   phone: o.phone.value.trim() };
+                   phone: o.phone.value.trim(), pay_rate: o.pay_rate.value.trim(),
+                   pay_type: o.pay_type.value };
         }),
       };
       let data;

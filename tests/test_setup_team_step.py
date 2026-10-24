@@ -95,7 +95,8 @@ check(team and team.get('step_no') == 2, 'it says step 2')
 print('\n3. One bad row saves nobody')
 c = owner()
 r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_email': 'mo@sparkle.test',
-             'others': [{'name': 'Ana Ruiz', 'email': 'ana@x'}]})
+             'me_pay_type': 'percent', 'me_pay_rate': '0',
+             'others': [{'name': 'Ana Ruiz', 'email': 'ana@x', 'pay_type': 'percent', 'pay_rate': '45'}]})
 j = r.get_json()
 check(not j['ok'], 'refused')
 check('Ana Ruiz' in j['say'], f'and says which row: {j["say"]}')
@@ -103,8 +104,8 @@ with app.app_context():
     check(Staff.query.count() == 0, 'nobody was written, Mo included')
 
 print('\n4. The same name twice is refused')
-r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis',
-             'others': [{'name': 'mo lewis'}]})
+r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_pay_type': 'percent', 'me_pay_rate': '0',
+             'others': [{'name': 'mo lewis', 'pay_type': 'percent', 'pay_rate': '45'}]})
 check(not r.get_json()['ok'], 'refused')
 with app.app_context():
     check(Staff.query.count() == 0, 'still nobody written')
@@ -119,10 +120,12 @@ import blueprints.migration as mig
 real_send = mig.send_join_invite
 mig.send_join_invite = lambda s: (sent.append(s.name) or (True, 'ok'))
 r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_email': 'mo@sparkle.test',
-             'me_phone': '(407) 555-0100',
-             'others': [{'name': 'Ana Ruiz', 'email': 'ana@sparkle.test', 'phone': ''},
+             'me_phone': '(407) 555-0100', 'me_pay_type': 'percent', 'me_pay_rate': '0',
+             'others': [{'name': 'Ana Ruiz', 'email': 'ana@sparkle.test', 'phone': '',
+                         'pay_type': 'hourly', 'pay_rate': '$22.50'},
                         {'name': '', 'email': '', 'phone': ''}],
-             'paste': 'Bea Cole, bea@sparkle.test, 407-555-0101\n\nCruz Diaz\t407 555 0102\n'})
+             'paste': 'Bea Cole, bea@sparkle.test, 407-555-0101\n\nCruz Diaz\t407 555 0102\n',
+             'paste_pay_type': 'percent', 'paste_pay_rate': '40%'})
 j = r.get_json()
 check(j['ok'], f'saved: {j["say"]}')
 check('Mo Lewis (you)' in j['say'], 'the roster names her as "you"')
@@ -141,6 +144,23 @@ with app.app_context():
     check(next(s for s in onboarding.journey() if s['key'] == 'team')['done'],
           'the team step is done')
 
+print('\n6b. Pay is what the owner typed, never a default')
+with app.app_context():
+    staff = {s.name: s for s in Staff.query.all()}
+check(staff['Ana Ruiz'].pay_type == 'hourly' and float(staff['Ana Ruiz'].pay_rate) == 22.5,
+      'Ana: $22.50 an hour, as typed')
+check(staff['Bea Cole'].pay_type == 'percent' and float(staff['Bea Cole'].pay_rate) == 40,
+      'Bea: 40% of the job')
+check(float(staff['Mo Lewis'].pay_rate) == 0, 'the owner chose 0 for herself, and 0 it is')
+r = save(c, {'me_cleans': '', 'others': [{'name': 'Pat NoPay'}]})
+check(not r.get_json()['ok'] and 'pay' in r.get_json()['say'],
+      f'a row with no pay is refused: {r.get_json()["say"]}')
+r = save(c, {'me_cleans': '', 'others': [{'name': 'Pat TooMuch', 'pay_type': 'percent',
+                                          'pay_rate': '150'}]})
+check(not r.get_json()['ok'], '150% of a job is refused')
+with app.app_context():
+    check(not Staff.query.filter(Staff.name.like('Pat %')).count(), 'neither was written')
+
 print('\n7. No invite card in setup')
 check(not any(x.get('kind') == 'confirm' and 'nvite' in (x.get('title') or '')
               for x in j['cards']), 'the next thing shown is not an invite card')
@@ -151,10 +171,10 @@ print('\n8. A spreadsheet fills rows in and saves nothing')
 import io, openpyxl
 wb = openpyxl.Workbook()
 ws = wb.active
-ws.append(['First Name', 'Last Name', 'Email Address', 'Cell Phone'])
-ws.append(['Hana', 'Ito', 'hana@sparkle.test', '407-555-0110'])
-ws.append(['Ivy', 'Jones', '', ''])
-ws.append([None, None, None, None])
+ws.append(['First Name', 'Last Name', 'Email Address', 'Cell Phone', 'Hourly Rate'])
+ws.append(['Hana', 'Ito', 'hana@sparkle.test', '407-555-0110', '$21'])
+ws.append(['Ivy', 'Jones', '', '', ''])
+ws.append([None, None, None, None, None])
 buf = io.BytesIO(); wb.save(buf)
 before = None
 with app.app_context():
@@ -168,13 +188,17 @@ check([w['name'] for w in x['rows']] == ['Hana Ito', 'Ivy Jones'],
       f'first + last make the name, blank rows dropped: {x["rows"]}')
 check(x['rows'][0]['email'] == 'hana@sparkle.test' and x['rows'][0]['phone'] == '407-555-0110',
       'email and cell found by their headings')
+check(x['rows'][0]['pay_type'] == 'hourly' and x['rows'][0]['pay_rate'] == '21',
+      'an hourly rate column comes over as hourly')
+check(x['rows'][1]['pay_rate'] == '' and x['rows'][1]['pay_type'] == '',
+      'a blank pay is left blank for the owner, not guessed')
 with app.app_context():
     check(Staff.query.count() == before, 'nothing was saved by the upload')
 r = c.post('/settings/getting-started/assistant/team-file', headers=H,
            data={'file': (io.BytesIO(b'Name,Email\nJo Kay,jo@sparkle.test\n'), 'team.csv')},
            content_type='multipart/form-data')
 x = r.get_json()
-check(x['ok'] and x['rows'] == [{'name': 'Jo Kay', 'email': 'jo@sparkle.test', 'phone': ''}],
+check(x['ok'] and [(w['name'], w['email']) for w in x['rows']] == [('Jo Kay', 'jo@sparkle.test')],
       f'a CSV is read the same way: {x["rows"]}')
 r = c.post('/settings/getting-started/assistant/team-file', headers=H,
            data={'file': (io.BytesIO(b'xx'), 'team.xls')},
@@ -186,7 +210,7 @@ print('\n9. The plan limit is checked before anything is written')
 import entitlements
 real_remaining = entitlements.remaining
 entitlements.remaining = lambda name: 1
-r = save(c, {'me_cleans': '', 'others': [{'name': 'Eve One'}, {'name': 'Fay Two'}]})
+r = save(c, {'me_cleans': '', 'others': [{'name': 'Eve One', 'pay_type': 'percent', 'pay_rate': '45'}, {'name': 'Fay Two', 'pay_type': 'percent', 'pay_rate': '45'}]})
 check(not r.get_json()['ok'], f'refused: {r.get_json()["say"]}')
 with app.app_context():
     check(not Staff.query.filter(Staff.name.in_(['Eve One', 'Fay Two'])).count(),
@@ -198,7 +222,7 @@ t = app.test_client()
 with t.session_transaction() as s:
     s['logged_in'] = True
     s['role'] = 'team'
-r = save(t, {'me_cleans': '', 'others': [{'name': 'Gus Sneak'}]})
+r = save(t, {'me_cleans': '', 'others': [{'name': 'Gus Sneak', 'pay_type': 'percent', 'pay_rate': '45'}]})
 with app.app_context():
     check(not Staff.query.filter_by(name='Gus Sneak').count(), 'a team login cannot add one')
 

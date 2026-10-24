@@ -574,6 +574,8 @@ _TEAM_COLUMNS = {
     'email': ('email', 'e-mail', 'emailaddress', 'mail'),
     'phone': ('phone', 'cell', 'mobile', 'phonenumber', 'cellphone', 'cellnumber',
               'mobilenumber', 'tel', 'telephone'),
+    'pay': ('pay', 'payrate', 'rate', 'wage', 'hourlyrate', 'hourlypay', 'payperhour',
+            'percent', 'commission', 'split', 'pay%', 'percentofjob'),
 }
 TEAM_FILE_MAX_ROWS = 50
 
@@ -629,6 +631,18 @@ def read_team_file(filename, data):
             nm = cell(r, 'name') or ' '.join(x for x in (cell(r, 'first'), cell(r, 'last')) if x)
             row = {'name': nm, 'email': cell(r, 'email'), 'phone': cell(r, 'phone')}
             if any(row.values()):
+                # Pay comes over only when the sheet says it plainly: a "%"
+                # or a percent-style heading is a share of the job, a "$" or
+                # an hourly heading is hourly. Anything else is left for the
+                # owner to fill in, never guessed.
+                raw = cell(r, 'pay')
+                h = head[cols['pay']] if 'pay' in cols else ''
+                row['pay_rate'] = re.sub(r'[^\d.]', '', raw)
+                row['pay_type'] = ('percent' if '%' in raw or h in ('percent', 'commission', 'split', 'pay%', 'percentofjob')
+                                   else 'hourly' if '$' in raw or 'hour' in h or h == 'wage'
+                                   else '')
+                if not row['pay_type'] or not row['pay_rate']:
+                    row['pay_type'], row['pay_rate'] = '', ''
                 rows.append(row)
     else:
         rows = _parse_team_paste('\n'.join(', '.join(c for c in r if c) for r in table))
@@ -639,6 +653,35 @@ def read_team_file(filename, data):
                       f'{TEAM_FILE_MAX_ROWS} here, or use the full importer on '
                       f'the Team page for more.')
     return rows, None
+
+
+PAY_TYPES = {'percent': '% of the job', 'hourly': '$ per hour'}
+
+
+def _pay(row):
+    """(pay_type, rate, problem) for one row of the team card.
+
+    Required on every row, the owner's included. A blank box used to become
+    the model's default -- half of every job -- which is somebody else's pay
+    scale, quietly written into payroll. Owners pay differently, so the owner
+    says what it is. 0 is allowed: an owner may not pay herself through here."""
+    kind = (row.get('pay_type') or '').strip().lower()
+    text = str(row.get('pay_rate') or '').strip().replace('%', '').replace('$', '').replace(',', '')
+    who = row.get('name') or 'Someone'
+    if kind not in PAY_TYPES:
+        return None, None, f'{who} needs a pay type (% of the job or $ per hour)'
+    if not text:
+        return None, None, f'{who} needs a pay rate'
+    try:
+        rate = round(float(text), 2)
+    except ValueError:
+        return None, None, f'{who}’s pay "{text}" is not a number'
+    cap = 100 if kind == 'percent' else 500
+    if not 0 <= rate <= cap:
+        return None, None, (f'{who}’s pay looks off — use 0 to 100 for % of the job'
+                            if kind == 'percent' else
+                            f'{who}’s pay looks off — use $0 to $500 an hour')
+    return kind, rate, ''
 
 
 def _team_rows(fields):
@@ -652,15 +695,21 @@ def _team_rows(fields):
     if str(fields.get('me_cleans') or '') in ('1', 'true', 'on', 'yes'):
         rows.append({'name': _clean(fields.get('me_name')),
                      'phone': _clean(fields.get('me_phone')),
-                     'email': _clean(fields.get('me_email')).lower(), 'me': True})
+                     'email': _clean(fields.get('me_email')).lower(), 'me': True,
+                     'pay_type': _clean(fields.get('me_pay_type'), 20),
+                     'pay_rate': _clean(fields.get('me_pay_rate'), 20)})
     others = fields.get('others')
     for o in (others if isinstance(others, list) else [])[:50]:
         if isinstance(o, dict):
             rows.append({'name': _clean(o.get('name')), 'phone': _clean(o.get('phone')),
-                         'email': _clean(o.get('email')).lower()})
+                         'email': _clean(o.get('email')).lower(),
+                         'pay_type': _clean(o.get('pay_type'), 20),
+                         'pay_rate': _clean(o.get('pay_rate'), 20)})
     for o in _parse_team_paste(str(fields.get('paste') or '')[:5000]):
         rows.append({'name': _clean(o['name']), 'phone': _clean(o['phone']),
-                     'email': _clean(o['email']).lower()})
+                     'email': _clean(o['email']).lower(),
+                     'pay_type': _clean(fields.get('paste_pay_type'), 20),
+                     'pay_rate': _clean(fields.get('paste_pay_rate'), 20)})
     # A row with nothing in it is an empty box, not a person.
     rows = [r for r in rows if r['name'] or r['phone'] or r['email']]
     seen = set()
@@ -676,6 +725,9 @@ def _team_rows(fields):
             problems.append(f'{r["name"]}’s phone "{r["phone"]}" is not a full number')
         if r['email'] and not _email_ok(r['email']):
             problems.append(f'{r["name"]}’s email "{r["email"]}" is not complete')
+        r['pay_type'], r['pay_rate'], pay_problem = _pay(r)
+        if pay_problem:
+            problems.append(pay_problem)
         # Names must be distinct: a solo job pays the cleaner it names, and
         # two Marias share one pay history (blueprints/staff._name_taken).
         key = r['name'].lower()
@@ -707,7 +759,8 @@ def save_team(fields):
             f' This card has {len(rows)}.')
     added = []
     for r in rows:
-        s = Staff(name=r['name'], phone=r['phone'], email=r['email'], is_active=True)
+        s = Staff(name=r['name'], phone=r['phone'], email=r['email'], is_active=True,
+                  pay_type=r['pay_type'], pay_rate=r['pay_rate'])
         if r.get('me'):
             # Her own login, linked from the start, so she never gets a
             # "join the team" email from her own business.
