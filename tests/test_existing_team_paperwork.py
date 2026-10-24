@@ -67,7 +67,9 @@ PAPERWORK = ['ic_agreement', 'welcome_forms', 'payment_info']
 print('\n1. Setup marks the team it brings as existing')
 r = c.post('/settings/getting-started/assistant/save', headers=H, json={
     'step': 'team', 'fields': {'me_cleans': '1', 'me_name': 'Mo Lewis',
-                               'others': [{'name': 'Ana Ruiz', 'email': 'ana@sparkle.test'}]}})
+                               'me_pay_type': 'percent', 'me_pay_rate': '0',
+                               'others': [{'name': 'Ana Ruiz', 'email': 'ana@sparkle.test',
+                                           'pay_type': 'percent', 'pay_rate': '45'}]}})
 check(r.get_json()['ok'], 'team saved')
 with app.app_context():
     ana = Staff.query.filter_by(name='Ana Ruiz').one()
