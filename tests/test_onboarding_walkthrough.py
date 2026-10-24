@@ -17,6 +17,12 @@ of this was built:
   names what to type, and always a page to go to if the model is down;
 - tapping what is offered advances the step, every time;
 - setup reaches the end rather than looping.
+
+Since 2026-10-24 the required walk is details, team, prices, payments, and the
+go-live checks -- terms, then balances -- follow in the same chat, so the walk
+carries on through those two as well. Payments is the one step the chat
+cannot finish: it is a link to Connections (bank details never go in the
+chat), so the walk does what the owner does there and connects Stripe.
 """
 import os, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -74,6 +80,14 @@ def fill_and_save(step, card):
     fields = {f['name']: f['value'] for f in card.get('fields', [])}
     if step == 'business' and not fields.get('phone'):
         fields['phone'] = '(407) 555-0100'
+    if step == 'team':
+        # The owner's row arrives ticked as cleaning; she types her name if
+        # the login did not have one, and presses Save.
+        me = card.get('me') or {}
+        fields = {'me_cleans': '1' if me.get('cleans') else '',
+                  'me_name': me.get('name') or 'Olivia Owner',
+                  'me_email': me.get('email') or '', 'me_phone': me.get('phone') or '',
+                  'others': [], 'paste': ''}
     with app.app_context(), app.test_request_context():
         from flask import session
         session['role'] = 'owner'
@@ -97,18 +111,18 @@ for label, fixture in (
     seen = []
     for _round in range(12):
         p = progress()
-        if p['next'] is None or p['complete']:
+        if p['next'] is None:
             break
         key = p['next']['key']
-        if not p['next'].get('required'):
-            break                      # required steps are what must be walkable
+        if not p['next'].get('required') and key not in ('terms', 'balance'):
+            break      # the required steps and the go-live checks must be walkable
         text, cards, kinds, _k = offered(key)
         confirms = [c for c in cards if c.get('kind') == 'confirm']
         # A choice card is one question with several answers; tapping the
         # first answer is what an owner in a hurry does.
         confirms += [dict(o, kind='confirm') for c in cards if c.get('kind') == 'choice'
                      for o in c.get('options', [])[:1]]
-        forms = [c for c in cards if c.get('kind') == 'form']
+        forms = [c for c in cards if c.get('kind') in ('form', 'team')]
         links = [c for c in cards if c.get('kind') == 'link']
 
         asked = text.strip() or ' '.join(c.get('title', '') for c in cards
@@ -119,7 +133,20 @@ for label, fixture in (
         check(bool(confirms or forms or links),
               f'{key}: has a way through that is not the chat box')
 
-        if forms:
+        if key == 'payments':
+            # Bank details never go in the chat: no form, no confirm, just
+            # the way to Connections, where the owner connects Stripe.
+            check(not forms and not confirms,
+                  'payments: no card in the chat asks for bank details')
+            check(any(l.get('href') == '/settings/connections' for l in links),
+                  'payments: the way through is the Connections page')
+            check(any(c.get('kind') == 'skip' for c in cards),
+                  'payments: and it can be skipped for tonight')
+            import integrations
+            with app.app_context():
+                integrations.set('stripe_secret_key', 'sk_live_walkthrough')
+                db.session.commit()
+        elif forms:
             ok, said = fill_and_save(key, forms[0])
             check(ok, f'{key}: filling it in and saving works — {said[:48]}')
         elif confirms:
@@ -141,6 +168,10 @@ for label, fixture in (
     p = progress()
     check(p['complete'] is True,
           f'reaches the end: {p["done"]}/{p["total"]} after {seen}')
+    check(seen[:4] == ['business', 'team', 'pricing', 'payments'],
+          f'in the agreed order: details, team, prices, payments ({seen[:4]})')
+    check(seen[4:6] == ['terms', 'balance'],
+          f'then the go-live checks, terms and balances ({seen[4:6]})')
 
 print('\n=== and the timezone was never a question ===')
 check('timezone' not in [s['key'] for s in onboarding.journey()]

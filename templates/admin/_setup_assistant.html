@@ -32,6 +32,14 @@
   .sa-opt{flex:1 1 200px;display:flex;flex-direction:column;gap:6px}
   .sa-opt .btn-primary{margin-top:0;width:100%}
   .sa-opt span{font-size:0.84rem;color:var(--muted);line-height:1.45}
+  .sa-person{display:grid;grid-template-columns:1.2fr 1.4fr 1fr;gap:6px;margin:8px 0}
+  .sa-person[hidden]{display:none}
+  .sa-person input{width:100%;border:0;outline:0;padding:10px 11px;font:inherit;font-size:16px;background:transparent;color:inherit}
+  .sa-check{display:flex;align-items:center;gap:6px;margin:6px 0 2px;font-size:0.92rem;color:inherit}
+  .sa-paste{margin-top:8px;font-size:0.88rem;color:var(--muted)}
+  .sa-paste summary{cursor:pointer;color:var(--gold-deep, var(--gold));font-weight:600}
+  .sa-paste textarea{width:100%;margin-top:6px;padding:10px 11px;border:1px solid var(--line, var(--border));border-radius:10px;font:inherit;font-size:16px;box-sizing:border-box}
+  @media (max-width:520px){.sa-person{grid-template-columns:1fr}}
   .sa-link{align-self:flex-start}
   .sa-skip{align-self:flex-start;background:none;border:0;padding:2px 4px;color:var(--muted);
            font:inherit;font-size:0.85rem;text-decoration:underline;cursor:pointer}
@@ -373,6 +381,151 @@
     });
     box.appendChild(btn);
     if (sec) box.appendChild(sec);
+    // "Not yet": a card that is fine to leave. Nothing is posted -- the token
+    // simply goes unused, and the card says so.
+    if (c.later) {
+      const later = document.createElement('button');
+      later.type = 'button';
+      later.className = 'sa-skip';
+      later.textContent = c.later;
+      later.addEventListener('click', function () {
+        btn.remove();
+        later.remove();
+        const note = document.createElement('div');
+        note.className = 'sa-note';
+        note.textContent = 'Nobody was emailed. You can invite them any time from your team list.';
+        box.appendChild(note);
+      });
+      box.appendChild(later);
+    }
+    log.appendChild(box);
+  }
+
+  // Step 2, the team: the owner's own row already filled in, then a row per
+  // cleaner, then a box to paste a whole list. One Save writes everyone, or
+  // nobody if a box is wrong -- the server checks every row first.
+  function teamCard(c) {
+    const box = document.createElement('div');
+    box.className = 'sa-box sa-formcard sa-team';
+    stepLine(box, c);
+    const t = document.createElement('b');
+    t.textContent = c.title || 'Your team';
+    box.appendChild(t);
+    if (c.note) {
+      const n = document.createElement('div');
+      n.className = 'sa-sub';
+      n.textContent = c.note;
+      box.appendChild(n);
+    }
+    function input(name, value, ph, type) {
+      const row = document.createElement('span');
+      row.className = 'sa-inwrap';
+      const inp = document.createElement('input');
+      inp.type = type || 'text';
+      inp.value = value || '';
+      inp.placeholder = ph || '';
+      inp.setAttribute('aria-label', ph || name);
+      row.appendChild(inp);
+      return [row, inp];
+    }
+    function personRow(p, ph) {
+      const wrap = document.createElement('div');
+      wrap.className = 'sa-person';
+      const parts = {};
+      [['name', 'Name', 'text'], ['email', 'Email', 'email'], ['phone', 'Cell (optional)', 'tel']]
+        .forEach(function (f) {
+          const pair = input(f[0], p[f[0]], (ph || '') + f[1], f[2]);
+          wrap.appendChild(pair[0]);
+          parts[f[0]] = pair[1];
+        });
+      return [wrap, parts];
+    }
+    const me = c.me || {};
+    const cleans = document.createElement('label');
+    cleans.className = 'sa-check';
+    const tick = document.createElement('input');
+    tick.type = 'checkbox';
+    tick.checked = me.cleans !== false;
+    cleans.appendChild(tick);
+    cleans.appendChild(document.createTextNode(' I clean jobs myself'));
+    box.appendChild(cleans);
+    const mine = personRow(me, 'Your ');
+    box.appendChild(mine[0]);
+    tick.addEventListener('change', function () { mine[0].hidden = !tick.checked; });
+
+    const others = [];
+    const list = document.createElement('div');
+    box.appendChild(list);
+    function addRow() {
+      const r = personRow({}, '');
+      list.appendChild(r[0]);
+      others.push(r[1]);
+      r[1].name.focus();
+    }
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'sa-skip';
+    more.textContent = '+ Add a cleaner';
+    more.addEventListener('click', addRow);
+    box.appendChild(more);
+
+    const pasteWrap = document.createElement('details');
+    pasteWrap.className = 'sa-paste';
+    const sum = document.createElement('summary');
+    sum.textContent = 'Have a list? Paste it';
+    pasteWrap.appendChild(sum);
+    const paste = document.createElement('textarea');
+    paste.rows = 4;
+    paste.placeholder = c.paste_hint || 'One per line: name, email, phone';
+    pasteWrap.appendChild(paste);
+    box.appendChild(pasteWrap);
+
+    const note = document.createElement('div');
+    note.className = 'sa-note';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-primary';
+    btn.textContent = c.label || 'Save my team';
+    btn.addEventListener('click', async function () {
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      const fields = {
+        me_cleans: tick.checked ? '1' : '',
+        me_name: mine[1].name.value.trim(),
+        me_email: mine[1].email.value.trim(),
+        me_phone: mine[1].phone.value.trim(),
+        others: others.map(function (o) {
+          return { name: o.name.value.trim(), email: o.email.value.trim(),
+                   phone: o.phone.value.trim() };
+        }),
+        paste: paste.value,
+      };
+      let data;
+      try {
+        data = await post(URLS.save, { step: 'team', fields: fields });
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = c.label || 'Save my team';
+        return;
+      }
+      if (!data.ok) {
+        btn.disabled = false;
+        btn.textContent = c.label || 'Save my team';
+        note.textContent = '⚠️ ' + (data.say || 'Could not save that.');
+        if (!note.parentNode) box.appendChild(note);
+        scroll();
+        return;
+      }
+      // The win: the boxes give way to the roster itself.
+      while (box.children.length > 1) box.removeChild(box.lastChild);
+      note.textContent = '✅ ' + (data.say || 'Saved.');
+      box.appendChild(note);
+      if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
+      (data.cards || []).forEach(render);
+      updateProgress(data.progress);
+      scroll();
+    });
+    box.appendChild(btn);
     log.appendChild(box);
   }
 
@@ -463,6 +616,7 @@
     if (!c) return;
     if (c.kind === 'form') formCard(c);
     else if (c.kind === 'confirm') confirmCard(c);
+    else if (c.kind === 'team') teamCard(c);
     else if (c.kind === 'choice') choiceCard(c);
     else if (c.kind === 'link') linkCard(c);
     else if (c.kind === 'skip') skipCard(c);
