@@ -87,6 +87,7 @@ def fill_and_save(step, card):
         fields = {'me_cleans': '1' if me.get('cleans') else '',
                   'me_name': me.get('name') or 'Olivia Owner',
                   'me_email': me.get('email') or '', 'me_phone': me.get('phone') or '',
+                  'me_pay_type': 'hourly', 'me_pay_rate': '25',
                   'others': [], 'paste': ''}
     with app.app_context(), app.test_request_context():
         from flask import session

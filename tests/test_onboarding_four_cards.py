@@ -186,7 +186,8 @@ with app.app_context(), app.test_request_context():
     db.session.commit()
     ok, _said = setup_assistant.save_team({'me_cleans': '1', 'me_name': 'Dana Owner',
                                            'me_email': 'dana@sparkle.test',
-                                           'me_phone': '(512) 555-0133'})
+                                           'me_phone': '(512) 555-0133',
+                                           'me_pay_type': 'percent', 'me_pay_rate': '0'})
     check(ok, f'the team card saves the owner as a cleaner ({_said})')
     p = onboarding.progress()
     check(p['done'] == 3 and p['complete'] is False

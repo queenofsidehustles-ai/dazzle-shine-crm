@@ -520,17 +520,17 @@ def team_card():
     One card, not one per cleaner. The owner's own row arrives filled in from
     her login and the details she just saved, with "I clean jobs myself"
     ticked -- a solo owner taps Save and is done. Unticked, the same card is
-    a company adding the team it already has. Nothing here emails anybody:
-    adding a person and inviting her are two decisions, and owners often
-    add people before they have told them.
+    a company adding the team it already has, typed or uploaded. Nothing
+    here emails anybody: inviting is done from each cleaner's page on the
+    Team tab, when the owner has told them (decided 2026-10-24 -- an invite
+    card in the middle of setup read as out of place).
     """
     me = {'name': _owner_name(), 'phone': _setting('phone'),
           'email': _setting('email'), 'cleans': True}
     card = {'kind': 'team', 'step': 'team', 'title': 'Your team',
-            'note': 'Add everyone who cleans for you. Nobody is emailed until '
-                    'you choose to invite them.',
-            'me': me, 'label': 'Save my team',
-            'paste_hint': 'One per line: name, email, phone'}
+            'note': 'Add everyone who cleans for you — type them in, or upload '
+                    'a spreadsheet. Nobody is emailed.',
+            'me': me, 'label': 'Save my team'}
     card['prefilled'] = bool(me['name'])
     return [card]
 
@@ -565,6 +565,125 @@ def _parse_team_paste(text):
     return rows
 
 
+# Column headings people actually use, lowercased with the spaces taken out.
+_TEAM_COLUMNS = {
+    'name': ('name', 'fullname', 'cleaner', 'cleanername', 'employee',
+             'employeename', 'teammember', 'staff', 'contractor'),
+    'first': ('first', 'firstname', 'givenname'),
+    'last': ('last', 'lastname', 'surname', 'familyname'),
+    'email': ('email', 'e-mail', 'emailaddress', 'mail'),
+    'phone': ('phone', 'cell', 'mobile', 'phonenumber', 'cellphone', 'cellnumber',
+              'mobilenumber', 'tel', 'telephone'),
+    'pay': ('pay', 'payrate', 'rate', 'wage', 'hourlyrate', 'hourlypay', 'payperhour',
+            'percent', 'commission', 'split', 'pay%', 'percentofjob'),
+}
+TEAM_FILE_MAX_ROWS = 50
+
+
+def read_team_file(filename, data):
+    """Cleaners out of an uploaded CSV or Excel file. (rows, error).
+
+    Saves nothing: the rows go back onto the team card for the owner to see,
+    and the card's Save checks them like any typed row. With a heading row
+    the columns are matched by name (Name, or First + Last; Email; Phone,
+    Cell or Mobile). Without one, each row is read the way a pasted line is.
+    """
+    import csv
+    import io
+    name = (filename or '').lower()
+    if len(data or b'') > 2_000_000:
+        return None, 'That file is too big. Keep it under 2 MB.'
+    if name.endswith('.xls'):
+        return None, ('That is an old Excel file. Open it and save it as .xlsx '
+                      'or CSV, then upload it again.')
+    table = []
+    try:
+        if name.endswith(('.xlsx', '.xlsm')):
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            for row in wb.worksheets[0].iter_rows(values_only=True):
+                table.append(['' if v is None else str(v).strip() for v in row])
+                if len(table) > 1000:
+                    break
+        elif name.endswith(('.csv', '.txt')):
+            text = data.decode('utf-8-sig', errors='replace')
+            table = [[c.strip() for c in r] for r in csv.reader(io.StringIO(text))][:1001]
+        else:
+            return None, 'Upload an Excel (.xlsx) or CSV file.'
+    except Exception:
+        return None, ('That file could not be read. Save it as .xlsx or CSV and '
+                      'try again.')
+    table = [r for r in table if any(r)]
+    if not table:
+        return None, 'That file is empty.'
+    head = [re.sub(r'[\s_]+', '', c.lower()) for c in table[0]]
+    cols = {}
+    for key, names in _TEAM_COLUMNS.items():
+        for i, h in enumerate(head):
+            if h in names and key not in cols:
+                cols[key] = i
+    rows = []
+    if 'email' in cols or 'name' in cols or 'first' in cols:
+        def cell(r, k):
+            i = cols.get(k)
+            return r[i].strip() if i is not None and i < len(r) else ''
+        for r in table[1:]:
+            nm = cell(r, 'name') or ' '.join(x for x in (cell(r, 'first'), cell(r, 'last')) if x)
+            row = {'name': nm, 'email': cell(r, 'email'), 'phone': cell(r, 'phone')}
+            if any(row.values()):
+                # Pay comes over only when the sheet says it plainly: a "%"
+                # or a percent-style heading is a share of the job, a "$" or
+                # an hourly heading is hourly. Anything else is left for the
+                # owner to fill in, never guessed.
+                raw = cell(r, 'pay')
+                h = head[cols['pay']] if 'pay' in cols else ''
+                row['pay_rate'] = re.sub(r'[^\d.]', '', raw)
+                row['pay_type'] = ('percent' if '%' in raw or h in ('percent', 'commission', 'split', 'pay%', 'percentofjob')
+                                   else 'hourly' if '$' in raw or 'hour' in h or h == 'wage'
+                                   else '')
+                if not row['pay_type'] or not row['pay_rate']:
+                    row['pay_type'], row['pay_rate'] = '', ''
+                rows.append(row)
+    else:
+        rows = _parse_team_paste('\n'.join(', '.join(c for c in r if c) for r in table))
+    if not rows:
+        return None, 'No cleaners found in that file — it needs a name on each row.'
+    if len(rows) > TEAM_FILE_MAX_ROWS:
+        return None, (f'That file has {len(rows)} people. Upload up to '
+                      f'{TEAM_FILE_MAX_ROWS} here, or use the full importer on '
+                      f'the Team page for more.')
+    return rows, None
+
+
+PAY_TYPES = {'percent': '% of the job', 'hourly': '$ per hour'}
+
+
+def _pay(row):
+    """(pay_type, rate, problem) for one row of the team card.
+
+    Required on every row, the owner's included. A blank box used to become
+    the model's default -- half of every job -- which is somebody else's pay
+    scale, quietly written into payroll. Owners pay differently, so the owner
+    says what it is. 0 is allowed: an owner may not pay herself through here."""
+    kind = (row.get('pay_type') or '').strip().lower()
+    text = str(row.get('pay_rate') or '').strip().replace('%', '').replace('$', '').replace(',', '')
+    who = row.get('name') or 'Someone'
+    if kind not in PAY_TYPES:
+        return None, None, f'{who} needs a pay type (% of the job or $ per hour)'
+    if not text:
+        return None, None, f'{who} needs a pay rate'
+    try:
+        rate = round(float(text), 2)
+    except ValueError:
+        return None, None, f'{who}’s pay "{text}" is not a number'
+    cap = 100 if kind == 'percent' else 500
+    if not 0 <= rate <= cap:
+        return None, None, (f'{who}’s pay looks off — use 0 to 100 for % of the job'
+                            if kind == 'percent' else
+                            f'{who}’s pay looks off — use $0 to $500 an hour')
+    return kind, rate, ''
+
+
 def _team_rows(fields):
     """The people on a submitted team card, owner first. (rows, problems).
 
@@ -576,15 +695,21 @@ def _team_rows(fields):
     if str(fields.get('me_cleans') or '') in ('1', 'true', 'on', 'yes'):
         rows.append({'name': _clean(fields.get('me_name')),
                      'phone': _clean(fields.get('me_phone')),
-                     'email': _clean(fields.get('me_email')).lower(), 'me': True})
+                     'email': _clean(fields.get('me_email')).lower(), 'me': True,
+                     'pay_type': _clean(fields.get('me_pay_type'), 20),
+                     'pay_rate': _clean(fields.get('me_pay_rate'), 20)})
     others = fields.get('others')
     for o in (others if isinstance(others, list) else [])[:50]:
         if isinstance(o, dict):
             rows.append({'name': _clean(o.get('name')), 'phone': _clean(o.get('phone')),
-                         'email': _clean(o.get('email')).lower()})
+                         'email': _clean(o.get('email')).lower(),
+                         'pay_type': _clean(o.get('pay_type'), 20),
+                         'pay_rate': _clean(o.get('pay_rate'), 20)})
     for o in _parse_team_paste(str(fields.get('paste') or '')[:5000]):
         rows.append({'name': _clean(o['name']), 'phone': _clean(o['phone']),
-                     'email': _clean(o['email']).lower()})
+                     'email': _clean(o['email']).lower(),
+                     'pay_type': _clean(fields.get('paste_pay_type'), 20),
+                     'pay_rate': _clean(fields.get('paste_pay_rate'), 20)})
     # A row with nothing in it is an empty box, not a person.
     rows = [r for r in rows if r['name'] or r['phone'] or r['email']]
     seen = set()
@@ -600,6 +725,9 @@ def _team_rows(fields):
             problems.append(f'{r["name"]}’s phone "{r["phone"]}" is not a full number')
         if r['email'] and not _email_ok(r['email']):
             problems.append(f'{r["name"]}’s email "{r["email"]}" is not complete')
+        r['pay_type'], r['pay_rate'], pay_problem = _pay(r)
+        if pay_problem:
+            problems.append(pay_problem)
         # Names must be distinct: a solo job pays the cleaner it names, and
         # two Marias share one pay history (blueprints/staff._name_taken).
         key = r['name'].lower()
@@ -631,7 +759,8 @@ def save_team(fields):
             f' This card has {len(rows)}.')
     added = []
     for r in rows:
-        s = Staff(name=r['name'], phone=r['phone'], email=r['email'], is_active=True)
+        s = Staff(name=r['name'], phone=r['phone'], email=r['email'], is_active=True,
+                  pay_type=r['pay_type'], pay_rate=r['pay_rate'])
         if r.get('me'):
             # Her own login, linked from the start, so she never gets a
             # "join the team" email from her own business.
@@ -641,53 +770,10 @@ def save_team(fields):
         db.session.add(s)
         added.append(r['name'] + (' (you)' if r.get('me') else ''))
     db.session.commit()
-    return True, f'Your team: {", ".join(added)}.'
-
-
-def invite_card():
-    """After the team is saved: invite the people who can be invited.
-
-    A separate card with its own token, so emailing is a decision the owner
-    makes on purpose -- and the token carries the exact list, so pressing it
-    invites the people it named and nobody added later."""
-    from models import Staff
-    people = (Staff.query.filter(Staff.is_active.is_(True), Staff.user_id.is_(None),
-                                 Staff.agreement_token.is_(None))
-              .order_by(Staff.id).all())
-    people = [p for p in people if (p.email or '').strip()]
-    if not people:
-        return None
-    names = [p.name for p in people]
-    card = _offer('setup_send_invites', {'ids': [p.id for p in people]},
-                  'Invite them to sign in?',
-                  ['Each gets an email to set up a sign-in and see their jobs:',
-                   ', '.join(names)],
-                  'Send invites now')
-    card['later'] = 'Not yet — I’ll tell them first'
-    return card
-
-
-def send_invites(payload):
-    from blueprints.migration import send_join_invite
-    from extensions import db
-    from models import Staff
-    ids = [i for i in (payload.get('ids') or []) if isinstance(i, int)]
-    sent, failed = [], []
-    for s in Staff.query.filter(Staff.id.in_(ids)).all() if ids else []:
-        # Re-checked: somebody may have joined, or been invited, since.
-        if s.user_id or not (s.email or '').strip() or s.agreement_token:
-            continue
-        ok, _detail = send_join_invite(s)
-        (sent if ok else failed).append(s.name)
-    db.session.commit()
-    if not sent and not failed:
-        return True, 'Everyone on that list has already been invited.'
-    said = f'Invites sent to {", ".join(sent)}.' if sent else ''
-    if failed:
-        said += (' ' if said else '') + (
-            f'Could not email {", ".join(failed)} just now — you can resend '
-            f'from their page on your team list.')
-    return bool(sent), said
+    said = f'Your team: {", ".join(added)}.'
+    if any(not r.get('me') for r in rows):
+        said += ' Nobody was emailed — invite them from the Team tab when you’re ready.'
+    return True, said
 
 
 def terms_card():
@@ -1386,7 +1472,6 @@ ACTIONS = {
     'setup_set_prices': set_prices,
     'setup_add_cleaner': add_cleaner,
     'setup_add_customer': add_customer,
-    'setup_send_invites': send_invites,
 }
 
 

@@ -243,8 +243,8 @@ check(done_cards and all(x['done'].startswith('✅') for x in done_cards),
       'a saved card remembers it was saved, even after a second press')
 check(any(m.get('hidden') for m in chat), 'the button press is noted as hidden context')
 r = c.get('/settings/getting-started')
-check(b'pressed the button' in r.data and b'm.hidden' in r.data,
-      'hidden turns are in the data but the page skips them')
+check(b'pressed the button' not in r.data,
+      'hidden turns stay in the stored chat but never reach the page')
 
 print('\n12. Replies the API really sends')
 # Text alongside the tool call, then an empty turn afterwards.

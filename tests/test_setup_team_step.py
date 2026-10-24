@@ -11,8 +11,11 @@ What this holds:
 - One bad row saves nobody, so fixing it and pressing Save again works.
 - Names must be distinct -- a solo job pays the cleaner it names.
 - The owner's row is linked to her own login and never invited.
-- Saving emails nobody. Inviting is a separate card, and "send" invites only
-  the people that card named.
+- Saving emails nobody, and setup offers no invite card: inviting is done
+  from each cleaner's page on the Team tab.
+- An uploaded Excel or CSV file fills in rows to check and saves nothing.
+- Saving a card shows the next step's card once, not twice, and on reload a
+  finished step is a single ✓ line rather than its old card.
 - The plan's cleaner limit is checked before anything is written.
 """
 import os, sys, tempfile
@@ -92,7 +95,8 @@ check(team and team.get('step_no') == 2, 'it says step 2')
 print('\n3. One bad row saves nobody')
 c = owner()
 r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_email': 'mo@sparkle.test',
-             'others': [{'name': 'Ana Ruiz', 'email': 'ana@x'}]})
+             'me_pay_type': 'percent', 'me_pay_rate': '0',
+             'others': [{'name': 'Ana Ruiz', 'email': 'ana@x', 'pay_type': 'percent', 'pay_rate': '45'}]})
 j = r.get_json()
 check(not j['ok'], 'refused')
 check('Ana Ruiz' in j['say'], f'and says which row: {j["say"]}')
@@ -100,8 +104,8 @@ with app.app_context():
     check(Staff.query.count() == 0, 'nobody was written, Mo included')
 
 print('\n4. The same name twice is refused')
-r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis',
-             'others': [{'name': 'mo lewis'}]})
+r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_pay_type': 'percent', 'me_pay_rate': '0',
+             'others': [{'name': 'mo lewis', 'pay_type': 'percent', 'pay_rate': '45'}]})
 check(not r.get_json()['ok'], 'refused')
 with app.app_context():
     check(Staff.query.count() == 0, 'still nobody written')
@@ -116,10 +120,12 @@ import blueprints.migration as mig
 real_send = mig.send_join_invite
 mig.send_join_invite = lambda s: (sent.append(s.name) or (True, 'ok'))
 r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_email': 'mo@sparkle.test',
-             'me_phone': '(407) 555-0100',
-             'others': [{'name': 'Ana Ruiz', 'email': 'ana@sparkle.test', 'phone': ''},
+             'me_phone': '(407) 555-0100', 'me_pay_type': 'percent', 'me_pay_rate': '0',
+             'others': [{'name': 'Ana Ruiz', 'email': 'ana@sparkle.test', 'phone': '',
+                         'pay_type': 'hourly', 'pay_rate': '$22.50'},
                         {'name': '', 'email': '', 'phone': ''}],
-             'paste': 'Bea Cole, bea@sparkle.test, 407-555-0101\n\nCruz Diaz\t407 555 0102\n'})
+             'paste': 'Bea Cole, bea@sparkle.test, 407-555-0101\n\nCruz Diaz\t407 555 0102\n',
+             'paste_pay_type': 'percent', 'paste_pay_rate': '40%'})
 j = r.get_json()
 check(j['ok'], f'saved: {j["say"]}')
 check('Mo Lewis (you)' in j['say'], 'the roster names her as "you"')
@@ -138,36 +144,73 @@ with app.app_context():
     check(next(s for s in onboarding.journey() if s['key'] == 'team')['done'],
           'the team step is done')
 
-print('\n7. The invite card names the people it can invite, and not her')
-invite = next((x for x in j['cards'] if x.get('kind') == 'confirm'
-               and x.get('title', '').startswith('Invite')), None)
-check(invite is not None, 'an invite card follows the save')
-check(invite and invite.get('later'), 'with a "not yet" way out')
-listed = ' '.join(invite['lines']) if invite else ''
-check('Ana Ruiz' in listed and 'Bea Cole' in listed, 'Ana and Bea are on it')
-check('Mo Lewis' not in listed, 'she is not invited to her own business')
-check('Cruz Diaz' not in listed, 'nobody without an email is on it')
-
-print('\n8. Somebody added after the card is not invited by it')
+print('\n6b. Pay is what the owner typed, never a default')
 with app.app_context():
-    db.session.add(Staff(name='Dee Late', email='dee@sparkle.test', is_active=True))
-    db.session.commit()
-r = c.post('/settings/getting-started/assistant/confirm',
-           json={'token': invite['token']}, headers=H)
-j = r.get_json()
-check(j['ok'], f'sent: {j["say"]}')
-check(sorted(sent) == ['Ana Ruiz', 'Bea Cole'], f'exactly the two it named: {sent}')
-r = c.post('/settings/getting-started/assistant/confirm',
-           json={'token': invite['token']}, headers=H)
-check(not r.get_json()['ok'] and sorted(sent) == ['Ana Ruiz', 'Bea Cole'],
-      'pressing it again sends nothing twice')
+    staff = {s.name: s for s in Staff.query.all()}
+check(staff['Ana Ruiz'].pay_type == 'hourly' and float(staff['Ana Ruiz'].pay_rate) == 22.5,
+      'Ana: $22.50 an hour, as typed')
+check(staff['Bea Cole'].pay_type == 'percent' and float(staff['Bea Cole'].pay_rate) == 40,
+      'Bea: 40% of the job')
+check(float(staff['Mo Lewis'].pay_rate) == 0, 'the owner chose 0 for herself, and 0 it is')
+r = save(c, {'me_cleans': '', 'others': [{'name': 'Pat NoPay'}]})
+check(not r.get_json()['ok'] and 'pay' in r.get_json()['say'],
+      f'a row with no pay is refused: {r.get_json()["say"]}')
+r = save(c, {'me_cleans': '', 'others': [{'name': 'Pat TooMuch', 'pay_type': 'percent',
+                                          'pay_rate': '150'}]})
+check(not r.get_json()['ok'], '150% of a job is refused')
+with app.app_context():
+    check(not Staff.query.filter(Staff.name.like('Pat %')).count(), 'neither was written')
+
+print('\n7. No invite card in setup')
+check(not any(x.get('kind') == 'confirm' and 'nvite' in (x.get('title') or '')
+              for x in j['cards']), 'the next thing shown is not an invite card')
+check('Team tab' in j['say'], 'it says where invites are sent from')
 mig.send_join_invite = real_send
+
+print('\n8. A spreadsheet fills rows in and saves nothing')
+import io, openpyxl
+wb = openpyxl.Workbook()
+ws = wb.active
+ws.append(['First Name', 'Last Name', 'Email Address', 'Cell Phone', 'Hourly Rate'])
+ws.append(['Hana', 'Ito', 'hana@sparkle.test', '407-555-0110', '$21'])
+ws.append(['Ivy', 'Jones', '', '', ''])
+ws.append([None, None, None, None, None])
+buf = io.BytesIO(); wb.save(buf)
+before = None
+with app.app_context():
+    before = Staff.query.count()
+r = c.post('/settings/getting-started/assistant/team-file', headers=H,
+           data={'file': (io.BytesIO(buf.getvalue()), 'team.xlsx')},
+           content_type='multipart/form-data')
+x = r.get_json()
+check(x['ok'], f'the Excel file is read: {x["say"]}')
+check([w['name'] for w in x['rows']] == ['Hana Ito', 'Ivy Jones'],
+      f'first + last make the name, blank rows dropped: {x["rows"]}')
+check(x['rows'][0]['email'] == 'hana@sparkle.test' and x['rows'][0]['phone'] == '407-555-0110',
+      'email and cell found by their headings')
+check(x['rows'][0]['pay_type'] == 'hourly' and x['rows'][0]['pay_rate'] == '21',
+      'an hourly rate column comes over as hourly')
+check(x['rows'][1]['pay_rate'] == '' and x['rows'][1]['pay_type'] == '',
+      'a blank pay is left blank for the owner, not guessed')
+with app.app_context():
+    check(Staff.query.count() == before, 'nothing was saved by the upload')
+r = c.post('/settings/getting-started/assistant/team-file', headers=H,
+           data={'file': (io.BytesIO(b'Name,Email\nJo Kay,jo@sparkle.test\n'), 'team.csv')},
+           content_type='multipart/form-data')
+x = r.get_json()
+check(x['ok'] and [(w['name'], w['email']) for w in x['rows']] == [('Jo Kay', 'jo@sparkle.test')],
+      f'a CSV is read the same way: {x["rows"]}')
+r = c.post('/settings/getting-started/assistant/team-file', headers=H,
+           data={'file': (io.BytesIO(b'xx'), 'team.xls')},
+           content_type='multipart/form-data')
+check(not r.get_json()['ok'] and '.xlsx' in r.get_json()['say'],
+      'an old .xls is refused with what to do instead')
 
 print('\n9. The plan limit is checked before anything is written')
 import entitlements
 real_remaining = entitlements.remaining
 entitlements.remaining = lambda name: 1
-r = save(c, {'me_cleans': '', 'others': [{'name': 'Eve One'}, {'name': 'Fay Two'}]})
+r = save(c, {'me_cleans': '', 'others': [{'name': 'Eve One', 'pay_type': 'percent', 'pay_rate': '45'}, {'name': 'Fay Two', 'pay_type': 'percent', 'pay_rate': '45'}]})
 check(not r.get_json()['ok'], f'refused: {r.get_json()["say"]}')
 with app.app_context():
     check(not Staff.query.filter(Staff.name.in_(['Eve One', 'Fay Two'])).count(),
@@ -179,9 +222,39 @@ t = app.test_client()
 with t.session_transaction() as s:
     s['logged_in'] = True
     s['role'] = 'team'
-r = save(t, {'me_cleans': '', 'others': [{'name': 'Gus Sneak'}]})
+r = save(t, {'me_cleans': '', 'others': [{'name': 'Gus Sneak', 'pay_type': 'percent', 'pay_rate': '45'}]})
 with app.app_context():
     check(not Staff.query.filter_by(name='Gus Sneak').count(), 'a team login cannot add one')
+
+print('\n11. Saving shows the next card once, and finished steps collapse')
+import blueprints.setup_assistant_routes as routes
+with app.app_context():
+    # A fresh company, chat untouched, nothing typed into it yet.
+    for st in Staff.query.all():
+        db.session.delete(st)
+    BusinessSetting.set(f'setup_chat_{OWNER_ID}', '')
+    BusinessSetting.set('phone', '')
+    db.session.commit()
+c2 = owner()
+r = c2.post('/settings/getting-started/assistant/save', headers=H,
+            json={'step': 'business', 'fields': {'business_name': 'Sparkle Co',
+                                                 'phone': '(407) 555-0100'}})
+check(r.get_json()['ok'], 'details saved')
+with app.app_context(), app.test_request_context():
+    from flask import session
+    session['user_id'] = OWNER_ID
+    stored = setup_assistant.load_chat()
+    shown = routes.for_display(stored)
+team_cards = sum(1 for m in shown for x in (m.get('cards') or []) if x.get('kind') == 'team')
+check(team_cards == 1, f'the team card is on screen once ({team_cards})')
+check(any(m.get('tick') == '✓ Check your details' for m in shown),
+      'the finished details step is one ✓ line')
+check(not any(x.get('kind') == 'form' and x.get('step') == 'business'
+              for m in shown for x in (m.get('cards') or [])),
+      'and its old card is not back on screen')
+html = c2.get('/settings/getting-started').get_data(as_text=True)
+check('sa-card sa-focus' not in html,
+      'the chat does not pop up again as if it were the first visit')
 
 print()
 if failures:
