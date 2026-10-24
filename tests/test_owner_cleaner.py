@@ -96,7 +96,7 @@ with app.app_context():
         print("IS OWNER:", s.is_owner, "ACTIVE:", s.is_active)
         print("LINKED:", s.user_id == owner.id)
         print("PAY:", float(s.pay_rate))
-        print("NO PAPERWORK:", s.agreement_token is None)
+        print("MY DAY LINK:", bool(s.agreement_token), "NO AGREEMENT:", s.agreement_signed_at is None)
 print("OK")
 ''', 'signup')
 check('REDIRECT: 302' in out, 'signup still works')
@@ -104,7 +104,8 @@ check('ROWS: 1' in out and 'NAME: Dana Reed' in out, 'one team row, named for th
 check('IS OWNER: True ACTIVE: True' in out, 'marked as the owner and active')
 check('LINKED: True' in out, 'linked to their login')
 check('PAY: 0.0' in out, 'and not paid')
-check('NO PAPERWORK: True' in out, 'with no contractor agreement to chase')
+check('MY DAY LINK: True NO AGREEMENT: True' in out,
+      'with a My day link, and no contractor agreement to chase')
 
 print('\n2. Setup asks for a customer and a job, not a cleaner')
 out = run(STUB + '''
@@ -184,5 +185,38 @@ src = open(os.path.join(ROOT, 'blueprints', 'contractors.py')).read()
 check('the owner is not on their own payroll' in src, 'and so does payroll')
 src = open(os.path.join(ROOT, 'lifecycle.py')).read()
 check(src.count('s.is_owner') >= 2, 'and the insurance and onboarding reminders')
+
+print('\n5. The owner gets the day-before reminder and a My day page')
+out = run(STUB + '''
+from app import create_app
+app = create_app()
+import tenancy
+from datetime import timedelta
+with app.app_context():
+    with tenancy.use_tenant("sparkle"):
+        from extensions import db
+        from models import Staff, Booking, BusinessSetting
+        import lifecycle, scheduling, notifications
+        me = Staff.query.filter_by(is_owner=True).first()
+        tomorrow = (scheduling.local_today() + timedelta(days=1)).isoformat()
+        db.session.add(Booking(service_type="standard", name="Sam Ortiz", email="sam@example.test",
+                               preferred_date=tomorrow, assigned_cleaner=me.name, status="confirmed"))
+        BusinessSetting.set("phone", "5553334444")
+        db.session.commit()
+        sent = []
+        lifecycle._send_transactional = lambda key, to, name, ctx: sent.append(("email", key, to))
+        notifications.send_sms = lambda to, body, *a, **k: (sent.append(("sms", to)) or (True, "s"))
+        n = lifecycle.send_cleaner_schedule_reminders()
+        print("REMINDERS:", n, sent)
+        token = me.agreement_token
+c = app.test_client()
+r = c.get("/contractors/my-day/" + token, headers={"Host": "sparkle.rollcall.test"})
+print("MY DAY:", r.status_code, "Sam Ortiz" in r.get_data(as_text=True))
+print("OK")
+''', 'reminder')
+check("REMINDERS: 1" in out and "('email', 'cleaner_schedule_reminder', 'dana@sparkle.test')" in out,
+      'the owner gets the day-before email for their own job')
+check("('sms', '5553334444')" in out, 'and a text, to the business phone they gave')
+check('MY DAY: 200 True' in out, 'and My day shows them their jobs')
 
 print('\n✅ The owner starts as their own first cleaner, and nothing treats them as a contractor.')

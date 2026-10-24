@@ -542,9 +542,15 @@ def send_cleaner_schedule_reminders():
         myday = f"{branding.crm_base()}/contractors/my-day/{s.agreement_token}"
         _send_transactional('cleaner_schedule_reminder', s.email, s.name,
                             {'job_count': n, 'tomorrow_date': tomorrow, 'myday_link': myday})
-        if s.phone:
+        # The owner's team row has no phone of its own (signup does not ask);
+        # their business phone is the number they gave for this.
+        phone = s.phone
+        if not phone and s.is_owner:
+            from models import BusinessSetting
+            phone = (BusinessSetting.get('phone') or '').strip()
+        if phone:
             try:
-                send_sms(s.phone, f"Reminder: you have {n} job(s) tomorrow ({tomorrow}). "
+                send_sms(phone, f"Reminder: you have {n} job(s) tomorrow ({tomorrow}). "
                                   f"See your day: {myday}")
             except Exception:
                 pass
