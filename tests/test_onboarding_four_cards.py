@@ -103,8 +103,10 @@ with app.app_context(), app.test_request_context():
           'the team comes up as one card, not one per cleaner')
     check(team[0]['me']['cleans'] is True and team[0]['me']['name'] == 'Dana Owner',
           'with the owner already on it, ticked as cleaning, so a solo owner just taps Save')
-    check('emailed' in team[0]['note'],
-          'and it says nobody is emailed until the owner chooses')
+    check('Team page' in team[0]['note'],
+          'and it says the rest of the team is added on the Team page')
+    check(team[0].get('team_link', {}).get('href') == '/migration/team',
+          'with a way there for an owner who does not clean herself')
     pay_link = setup_assistant.STEP_LINKS.get('payments')
     check(pay_link and pay_link[1] == '/settings/connections',
           'payments is a link to Connections, never a card asking for bank details')

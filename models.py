@@ -1461,6 +1461,11 @@ class Staff(db.Model):
         return [(k, v) for k, v in self.ONBOARDING_STEPS if k not in skip]
 
     def pay_label(self):
+        # No rate is a real state, not an error: cleaners added in setup or
+        # by import are saved without one rather than with somebody else's
+        # 50%, and the owner sets it when she is ready (decided 2026-10-24).
+        if self.pay_rate is None:
+            return 'Pay not set'
         if self.pay_type == 'hourly':
             return f'${self.pay_rate:.2f}/hr'
         return f'{self.pay_rate:.0f}% of job'

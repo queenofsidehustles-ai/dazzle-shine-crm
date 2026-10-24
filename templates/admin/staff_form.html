@@ -43,7 +43,7 @@
             <option value="hourly" {{ 'selected' if staff and staff.pay_type == 'hourly' }}>Per hour</option>
           </select>
           <input type="number" name="pay_rate" step="0.01" min="0" style="flex:1"
-                 value="{{ staff.pay_rate if staff else 50 }}" />
+                 value="{{ staff.pay_rate if staff and staff.pay_rate is not none else '' }}" placeholder="Not set yet" />
         </div>
         <span style="font-size:0.82rem;color:var(--softer)">
           Percent of the cleaning price, or dollars per hour. Change it later on

@@ -108,7 +108,6 @@
     save: '{{ url_for("setup_assistant.save") }}',
     reset: '{{ url_for("setup_assistant.reset") }}',
     skip: '{{ url_for("setup_assistant.skip") }}',
-    teamFile: '{{ url_for("setup_assistant.team_file") }}',
   };
   const past = {{ chat | tojson }};
 
@@ -244,6 +243,21 @@
     box.appendChild(s);
   }
 
+  // A finished step gets out of the way: its card, the question above it and
+  // its Skip button become one ✓ line, so by the last step the screen is a
+  // short column of ticks and the one card still waiting (2026-10-24 -- a
+  // saved card left on screen read as a step still to do).
+  function collapse(box, title, said) {
+    const q = box.previousElementSibling;
+    if (q && q.classList.contains('sa-bot')) q.remove();
+    document.querySelectorAll('.sa-skip').forEach(function (x) { x.remove(); });
+    const d = document.createElement('div');
+    d.className = 'sa-tick';
+    d.textContent = '✓ ' + (title || 'Done');
+    if (said) d.title = said;
+    box.replaceWith(d);
+  }
+
   // An editable card: boxes prefilled, usually just tap Save, but every value
   // can be typed over. The server validates and saves what was typed.
   function formCard(c) {
@@ -313,10 +327,7 @@
         scroll();
         return;
       }
-      Object.keys(inputs).forEach(function (k) { inputs[k].disabled = true; });
-      btn.remove();
-      note.textContent = '✅ ' + (data.say || 'Saved.');
-      box.appendChild(note);
+      collapse(box, c.title, data.say);
       if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
       (data.cards || []).forEach(render);
       updateProgress(data.progress);
@@ -372,13 +383,15 @@
         btn.textContent = c.label || 'Save';
         return;
       }
-      btn.remove();
-      if (sec) sec.remove();
-      const note = document.createElement('div');
-      note.className = 'sa-note';
-      note.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
-      box.appendChild(note);
-      if (data.ok) {
+      if (!data.ok) {
+        btn.remove();
+        if (sec) sec.remove();
+        const note = document.createElement('div');
+        note.className = 'sa-note';
+        note.textContent = '⚠️ ' + (data.say || '');
+        box.appendChild(note);
+      } else {
+        collapse(box, c.title, data.say);
         if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
         (data.cards || []).forEach(render);
         updateProgress(data.progress);
@@ -390,10 +403,10 @@
     log.appendChild(box);
   }
 
-  // Step 2, the team: the owner's own row already filled in, then a row per
-  // cleaner, typed or read in from an uploaded spreadsheet. Uploading only
-  // fills in rows to check; one Save writes everyone, or nobody if a box is
-  // wrong -- the server checks every row first.
+  // Step 2, the team: just the owner, already filled in. Pay, other
+  // cleaners and spreadsheets live on the Team page (2026-10-24) -- each one
+  // was a question a brand-new owner may not be able to answer yet. If she
+  // does not clean herself, the card points her to where her cleaners go.
   function teamCard(c) {
     const box = document.createElement('div');
     box.className = 'sa-box sa-formcard sa-team';
@@ -407,50 +420,6 @@
       n.textContent = c.note;
       box.appendChild(n);
     }
-    function input(name, value, ph, type) {
-      const row = document.createElement('span');
-      row.className = 'sa-inwrap';
-      const inp = document.createElement('input');
-      inp.type = type || 'text';
-      inp.value = value || '';
-      inp.placeholder = ph || '';
-      inp.setAttribute('aria-label', ph || name);
-      row.appendChild(inp);
-      return [row, inp];
-    }
-    function personRow(p, ph) {
-      const wrap = document.createElement('div');
-      wrap.className = 'sa-person';
-      const parts = {};
-      [['name', 'Name', 'text'], ['email', 'Email', 'email'], ['phone', 'Cell (optional)', 'tel']]
-        .forEach(function (f) {
-          const pair = input(f[0], p[f[0]], (ph || '') + f[1], f[2]);
-          wrap.appendChild(pair[0]);
-          parts[f[0]] = pair[1];
-        });
-      // Pay, on every row, the owner's too: no default is assumed for
-      // anybody, because every owner pays differently.
-      const pay = document.createElement('div');
-      pay.className = 'sa-pay';
-      const rate = input('pay_rate', p.pay_rate, 'Pay', 'text');
-      rate[1].inputMode = 'decimal';
-      const kind = document.createElement('select');
-      kind.setAttribute('aria-label', 'How they are paid');
-      [['', 'How are they paid?'], ['percent', '% of the job'], ['hourly', '$ per hour']]
-        .forEach(function (o) {
-          const opt = document.createElement('option');
-          opt.value = o[0];
-          opt.textContent = o[1];
-          kind.appendChild(opt);
-        });
-      kind.value = p.pay_type || '';
-      pay.appendChild(rate[0]);
-      pay.appendChild(kind);
-      wrap.appendChild(pay);
-      parts.pay_rate = rate[1];
-      parts.pay_type = kind;
-      return [wrap, parts];
-    }
     const me = c.me || {};
     const cleans = document.createElement('label');
     cleans.className = 'sa-check';
@@ -460,143 +429,75 @@
     cleans.appendChild(tick);
     cleans.appendChild(document.createTextNode(' I clean jobs myself'));
     box.appendChild(cleans);
-    const mine = personRow(me, 'Your ');
-    box.appendChild(mine[0]);
-    tick.addEventListener('change', function () { mine[0].hidden = !tick.checked; });
-
-    const others = [];
-    const list = document.createElement('div');
-    box.appendChild(list);
-    function addRow(p, quiet) {
-      const r = personRow(p || {}, '');
-      list.appendChild(r[0]);
-      others.push(r[1]);
-      if (!quiet) r[1].name.focus();
-    }
-    const more = document.createElement('button');
-    more.type = 'button';
-    more.className = 'sa-textbtn';
-    more.textContent = '+ Add a cleaner';
-    more.addEventListener('click', function () { addRow(); });
-    box.appendChild(more);
-
-    // A spreadsheet they already have -- Excel or CSV, columns like Name,
-    // Email, Phone. Read on the server, put back here as rows to check.
-    const up = document.createElement('div');
-    up.className = 'sa-upload';
-    const file = document.createElement('input');
-    file.type = 'file';
-    file.accept = '.xlsx,.xlsm,.csv';
-    file.hidden = true;
-    const pick = document.createElement('button');
-    pick.type = 'button';
-    pick.className = 'sa-textbtn';
-    pick.textContent = '⬆ Upload a spreadsheet (Excel or CSV)';
-    pick.addEventListener('click', function () { file.click(); });
-    const upNote = document.createElement('span');
-    upNote.className = 'sa-upnote';
-    file.addEventListener('change', async function () {
-      if (!file.files.length) return;
-      upNote.textContent = 'Reading ' + file.files[0].name + '…';
-      const fd = new FormData();
-      fd.append('file', file.files[0]);
-      let data;
-      try {
-        const r = await fetch(URLS.teamFile, { method: 'POST', body: fd });
-        data = (r.headers.get('Content-Type') || '').indexOf('application/json') !== -1
-          ? await r.json()
-          : { ok: false, say: 'Your login may have timed out. Refresh the page and sign in again.' };
-      } catch (e) {
-        data = { ok: false, say: 'Could not upload that just now. Try again.' };
-      }
-      file.value = '';
-      if (data.ok) {
-        // Fill empty rows first, then add more -- an upload after typing one
-        // name must not leave a blank row sitting in the middle.
-        (data.rows || []).forEach(function (p) {
-          const blank = others.find(function (o) {
-            return !o.name.value && !o.email.value && !o.phone.value;
-          });
-          if (blank) { blank.name.value = p.name || ''; blank.email.value = p.email || '';
-                       blank.phone.value = p.phone || '';
-                       blank.pay_rate.value = p.pay_rate || ''; blank.pay_type.value = p.pay_type || ''; }
-          else addRow(p, true);
-        });
-      }
-      upNote.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
-      scroll();
-    });
-    up.appendChild(pick);
-    up.appendChild(file);
-    up.appendChild(upNote);
-    box.appendChild(up);
-
-    // Ten uploaded cleaners on one rate should not mean typing it ten times:
-    // the first cleaner's pay, copied into every row still left blank.
-    const same = document.createElement('button');
-    same.type = 'button';
-    same.className = 'sa-textbtn';
-    same.textContent = 'Same pay for everyone? Copy the first cleaner’s pay down';
-    same.addEventListener('click', function () {
-      const first = others.find(function (o) { return o.pay_rate.value && o.pay_type.value; });
-      if (!first) { upNote.textContent = '⚠️ Fill in one cleaner’s pay first.'; return; }
-      others.forEach(function (o) {
-        if (!o.pay_rate.value) o.pay_rate.value = first.pay_rate.value;
-        if (!o.pay_type.value) o.pay_type.value = first.pay_type.value;
+    const row = document.createElement('div');
+    row.className = 'sa-person';
+    const parts = {};
+    [['name', 'Your name', 'text'], ['email', 'Your email', 'email'], ['phone', 'Your cell (optional)', 'tel']]
+      .forEach(function (f) {
+        const w = document.createElement('span');
+        w.className = 'sa-inwrap';
+        const inp = document.createElement('input');
+        inp.type = f[2];
+        inp.value = me[f[0]] || '';
+        inp.placeholder = f[1];
+        inp.setAttribute('aria-label', f[1]);
+        w.appendChild(inp);
+        row.appendChild(w);
+        parts[f[0]] = inp;
       });
-    });
-    box.appendChild(same);
+    box.appendChild(row);
 
     const note = document.createElement('div');
     note.className = 'sa-note';
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn-primary';
-    btn.textContent = c.label || 'Save my team';
+    btn.textContent = c.label || 'Save';
+    // Not cleaning herself: nothing to save here, so the button becomes the
+    // way to the page where her cleaners are added.
+    const away = document.createElement('a');
+    away.className = 'btn-primary';
+    const th = (c.team_link && c.team_link.href) || '';
+    away.href = (th.charAt(0) === '/' && th.charAt(1) !== '/') ? th : '/migration/team';
+    away.textContent = ((c.team_link && c.team_link.label) || 'Add my cleaners') + ' →';
+    away.hidden = true;
+    tick.addEventListener('change', function () {
+      row.hidden = !tick.checked;
+      btn.hidden = !tick.checked;
+      away.hidden = tick.checked;
+    });
     btn.addEventListener('click', async function () {
       btn.disabled = true;
       btn.textContent = 'Saving…';
-      const fields = {
-        me_cleans: tick.checked ? '1' : '',
-        me_name: mine[1].name.value.trim(),
-        me_email: mine[1].email.value.trim(),
-        me_phone: mine[1].phone.value.trim(),
-        me_pay_rate: mine[1].pay_rate.value.trim(),
-        me_pay_type: mine[1].pay_type.value,
-        others: others.map(function (o) {
-          return { name: o.name.value.trim(), email: o.email.value.trim(),
-                   phone: o.phone.value.trim(), pay_rate: o.pay_rate.value.trim(),
-                   pay_type: o.pay_type.value };
-        }),
-      };
       let data;
       try {
-        data = await post(URLS.save, { step: 'team', fields: fields });
+        data = await post(URLS.save, { step: 'team', fields: {
+          me_cleans: '1', me_name: parts.name.value.trim(),
+          me_email: parts.email.value.trim(), me_phone: parts.phone.value.trim() } });
       } catch (e) {
         btn.disabled = false;
-        btn.textContent = c.label || 'Save my team';
+        btn.textContent = c.label || 'Save';
         return;
       }
       if (!data.ok) {
         btn.disabled = false;
-        btn.textContent = c.label || 'Save my team';
+        btn.textContent = c.label || 'Save';
         note.textContent = '⚠️ ' + (data.say || 'Could not save that.');
         if (!note.parentNode) box.appendChild(note);
         scroll();
         return;
       }
-      // The win: the boxes give way to the roster itself.
-      while (box.children.length > 1) box.removeChild(box.lastChild);
-      note.textContent = '✅ ' + (data.say || 'Saved.');
-      box.appendChild(note);
+      collapse(box, c.title, data.say);
       if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
       (data.cards || []).forEach(render);
       updateProgress(data.progress);
       scroll();
     });
     box.appendChild(btn);
+    box.appendChild(away);
     log.appendChild(box);
   }
+
 
   // One question, its answers side by side, each explained under its button.
   // Each answer posts its own token, so the one tapped is the one saved.
@@ -643,12 +544,14 @@
           btn.textContent = o.label || 'Choose';
           return;
         }
-        opts.remove();
-        const note = document.createElement('div');
-        note.className = 'sa-note';
-        note.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
-        box.appendChild(note);
-        if (data.ok) {
+        if (!data.ok) {
+          opts.remove();
+          const note = document.createElement('div');
+          note.className = 'sa-note';
+          note.textContent = '⚠️ ' + (data.say || '');
+          box.appendChild(note);
+        } else {
+          collapse(box, 'How balances get paid', data.say);
           if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
           (data.cards || []).forEach(render);
           updateProgress(data.progress);

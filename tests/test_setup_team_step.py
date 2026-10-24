@@ -92,6 +92,19 @@ check(team and team['me']['email'] == 'mo@sparkle.test', 'her email is filled in
 check(team and team['me']['cleans'] is True, '"I clean jobs myself" is ticked')
 check(team and team.get('step_no') == 2, 'it says step 2')
 
+print('\n2b. The card asks only about her: no pay, no spreadsheet, no extra rows')
+import json as _json
+blob = _json.dumps(team)
+check('pay' not in blob.lower(), 'nothing about pay on it')
+check('paste_hint' not in team and not team.get('upload'), 'no spreadsheet upload on it')
+check(team.get('team_link', {}).get('href') == '/migration/team',
+      'and a way to the Team import for an owner who does not clean')
+with app.app_context(), app.test_request_context():
+    _l, pc = setup_assistant.price_card()
+check('starting price' in pc['note'] and 'zip' not in pc['note'].lower(),
+      'the price card calls it a starting price and never claims it is from her ZIP')
+check('Pricing' in pc['note'], 'and says where to change the other sizes')
+
 print('\n3. One bad row saves nobody')
 c = owner()
 r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_email': 'mo@sparkle.test',
@@ -153,13 +166,18 @@ check(staff['Bea Cole'].pay_type == 'percent' and float(staff['Bea Cole'].pay_ra
       'Bea: 40% of the job')
 check(float(staff['Mo Lewis'].pay_rate) == 0, 'the owner chose 0 for herself, and 0 it is')
 r = save(c, {'me_cleans': '', 'others': [{'name': 'Pat NoPay'}]})
-check(not r.get_json()['ok'] and 'pay' in r.get_json()['say'],
-      f'a row with no pay is refused: {r.get_json()["say"]}')
+check(r.get_json()['ok'], f'a person with no pay is saved: {r.get_json()["say"]}')
+with app.app_context():
+    pat = Staff.query.filter_by(name='Pat NoPay').one()
+    check(pat.pay_rate is None, 'with pay left unset, not 50%')
+    check(pat.pay_label() == 'Pay not set', 'and it reads "Pay not set"')
+    db.session.delete(pat)
+    db.session.commit()
 r = save(c, {'me_cleans': '', 'others': [{'name': 'Pat TooMuch', 'pay_type': 'percent',
                                           'pay_rate': '150'}]})
 check(not r.get_json()['ok'], '150% of a job is refused')
 with app.app_context():
-    check(not Staff.query.filter(Staff.name.like('Pat %')).count(), 'neither was written')
+    check(not Staff.query.filter(Staff.name.like('Pat %')).count(), 'it was not written')
 
 print('\n7. No invite card in setup')
 check(not any(x.get('kind') == 'confirm' and 'nvite' in (x.get('title') or '')
@@ -217,6 +235,26 @@ with app.app_context():
           'neither was written')
 entitlements.remaining = real_remaining
 
+print('\n9b. The Team page import takes Excel, and pay only when it is plain')
+wb = openpyxl.Workbook(); ws = wb.active
+ws.append(['Name', 'Email', 'Pay'])
+ws.append(['Kim Lee', 'kim@sparkle.test', '$19'])
+ws.append(['Lou Ma', 'lou@sparkle.test', ''])
+buf = io.BytesIO(); wb.save(buf)
+real_send = mig.send_join_invite
+mig.send_join_invite = lambda s: (True, 'ok')
+r = c.post('/migration/team', headers=H,
+           data={'csv_file': (io.BytesIO(buf.getvalue()), 'crew.xlsx')},
+           content_type='multipart/form-data')
+mig.send_join_invite = real_send
+with app.app_context():
+    kim = Staff.query.filter_by(name='Kim Lee').first()
+    lou = Staff.query.filter_by(name='Lou Ma').first()
+check(kim is not None and lou is not None, f'both imported from Excel ({r.status_code})')
+check(kim and kim.pay_type == 'hourly' and float(kim.pay_rate) == 19, 'Kim: $19 an hour, from the sheet')
+check(lou and lou.pay_rate is None, 'Lou: no pay on the sheet, so not set — not 50%')
+check(kim and kim.is_existing_team, 'and they are existing team')
+
 print('\n10. Only the owner can save a team')
 t = app.test_client()
 with t.session_transaction() as s:
@@ -247,7 +285,7 @@ with app.app_context(), app.test_request_context():
     shown = routes.for_display(stored)
 team_cards = sum(1 for m in shown for x in (m.get('cards') or []) if x.get('kind') == 'team')
 check(team_cards == 1, f'the team card is on screen once ({team_cards})')
-check(any(m.get('tick') == '✓ Check your details' for m in shown),
+check(any(m.get('tick') == '✓ Your details' for m in shown),
       'the finished details step is one ✓ line')
 check(not any(x.get('kind') == 'form' and x.get('step') == 'business'
               for m in shown for x in (m.get('cards') or [])),

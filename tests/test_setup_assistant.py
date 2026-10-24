@@ -133,8 +133,8 @@ with app.app_context():
     check(onboarding.progress()['next']['key'] == 'team',
           'setup moved on to the team')
     check(Staff.query.count() == 0, 'and nobody was added to it by moving on')
-check('who cleans for you' in (res.get('follow') or '').lower(),
-      'and the follow-up asks who cleans for them')
+check('next, you' in (res.get('follow') or '').lower(),
+      'and the follow-up starts with the owner herself')
 check(any(x.get('kind') == 'team' for x in res.get('cards') or []),
       'with the team card, not yet saved')
 r = c.post('/settings/getting-started/assistant/confirm',

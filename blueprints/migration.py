@@ -30,6 +30,7 @@ import re
 import secrets
 from datetime import date
 
+import sqlalchemy as sa
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 import recurring
@@ -79,9 +80,13 @@ def team():
     if request.method == 'POST':
         f = request.files.get('csv_file')
         if not f or not f.filename:
-            flash('Choose a CSV file first.', 'error')
+            flash('Choose a file first.', 'error')
             return redirect(url_for('migration.team'))
-        rows, err = _read_csv_rows(f)
+        # Excel or CSV, read by the same code as setup's reader so the two
+        # understand the same headings (Name or First + Last, Email,
+        # Phone/Cell/Mobile, and pay when it is written plainly).
+        import setup_assistant
+        rows, err = setup_assistant.read_team_file(f.filename, f.read(2_000_001), max_rows=500)
         if err:
             flash(err, 'error')
             return redirect(url_for('migration.team'))
@@ -114,7 +119,16 @@ def _import_team_rows(rows):
             continue
         seen_in_file.add(email)
 
+        # Pay only if the sheet said so plainly; otherwise "not set", never
+        # the model's 50% default (decided 2026-10-24).
+        try:
+            rate = float(row.get('pay_rate')) if row.get('pay_type') and row.get('pay_rate') else None
+        except (TypeError, ValueError):
+            rate = None
         s = Staff(name=name, email=email, phone=phone or None,
+                  pay_type=row.get('pay_type') or 'percent',
+                  # sa.null(): None would fall back to the 50% column default.
+                  pay_rate=sa.null() if rate is None else rate,
                   agreement_token=secrets.token_urlsafe(32))
         s.mark_existing_team()   # an import is a team they already have
         db.session.add(s)
