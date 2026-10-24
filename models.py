@@ -535,6 +535,17 @@ class Booking(db.Model):
         each person's share when she pays them."""
         return round(max(0.0, (self.tip_amount or 0) - self.tip_fee), 2)
 
+    def pay_unset_for(self, staff):
+        """Would this cleaner be offered $0 only because their pay is not set?
+
+        Cleaners can be saved with "Pay not set" (decided 2026-10-24: never a
+        default). Most jobs do not care -- the pay comes from the labor budget
+        or a typed amount -- but a job with no estimated hours falls back to
+        the cleaner's own rate, and with none that is $0. That must stop the
+        offer, not reach somebody's phone."""
+        return (staff is not None and staff.pay_rate is None
+                and (self.default_crew_pay(staff) or 0) <= 0)
+
     def pay_for(self, staff):
         """What this one cleaner earns on this job — the single answer every
         screen should use, so the offer, My Day, payroll and the payout can

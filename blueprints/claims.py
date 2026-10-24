@@ -103,7 +103,7 @@ def uses_crew(booking):
     return bool(booking.crew) or booking.is_crew_job
 
 
-def broadcast_job(booking):
+def broadcast_job(booking, skipped=None):
     """Open the job and text every available cleaner a personal claim link.
 
     Plain job: clears the assignment, first to claim wins.
@@ -133,6 +133,12 @@ def broadcast_job(booking):
     for s in Staff.query.filter(Staff.is_active.is_(True), Staff.phone.isnot(None)).all():
         if s.id in already:
             continue                      # already holds a spot on this job
+        if booking.pay_unset_for(s):
+            # Their pay is not set and this job has no budget to pay from, so
+            # the text would say $0. Left out, and the owner is told who.
+            if skipped is not None:
+                skipped.append(s.name)
+            continue
         if not s.agreement_token:
             s.agreement_token = secrets.token_urlsafe(32)
             db.session.commit()

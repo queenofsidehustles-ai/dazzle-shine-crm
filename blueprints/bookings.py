@@ -980,7 +980,11 @@ def notify_pay(booking_id):
 def broadcast(booking_id):
     booking = Booking.query.get_or_404(booking_id)
     from blueprints.claims import broadcast_job
-    n = broadcast_job(booking)
+    skipped = []
+    n = broadcast_job(booking, skipped=skipped)
+    if skipped:
+        flash(f'Not offered to {", ".join(skipped)}: their pay isn’t set, so they '
+              f'would have seen $0. Set it on their page, then offer it again.', 'warning')
     if booking.crew or booking.is_crew_job:
         left = booking.spots_left
         if not left:
@@ -1101,6 +1105,11 @@ def save_crew(booking_id):
             return redirect(url_for('bookings.detail', booking_id=booking_id))
         else:
             raw = (request.form.get('add_pay') or '').strip()
+            if not raw and b.pay_unset_for(s):
+                flash(f'{s.name}’s pay isn’t set, so this job would go to them at $0. '
+                      f'Type what this job pays them, or set their pay on their page first.',
+                      'error')
+                return redirect(url_for('bookings.detail', booking_id=booking_id))
             try:
                 amount = round(float(raw), 2) if raw else b.default_crew_pay(s)
             except ValueError:
@@ -1219,6 +1228,13 @@ def assign(booking_id):
         # person looks like, so make room rather than refusing.
         b.crew_size = min(6, (b.crew_size or 1) + 1)
 
+    if pay is None and b.pay_unset_for(s):
+        # Stopped before anything is written or sent: a $0 offer is worse
+        # than none (see Booking.pay_unset_for).
+        flash(f'{s.name}’s pay isn’t set, so this job would go to them at $0. '
+              f'Type what this job pays them, or set their pay on their page first.',
+              'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
     amount = pay if pay is not None else b.default_crew_pay(s)
     db.session.add(BookingCrew(booking_id=b.id, staff_id=s.id, pay_amount=amount))
     if not b.assigned_cleaner:
