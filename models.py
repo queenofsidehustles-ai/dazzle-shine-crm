@@ -534,6 +534,8 @@ class Booking(db.Model):
 
         Jobs with no estimated hours fall back to the old percentage split, so
         anything booked before this existed keeps paying what it always did."""
+        if getattr(staff, 'is_owner', False):
+            return 0.0      # the owner's own time is not a payout (owner_cleaner.py)
         if self.crew_pay_each:
             return round(self.crew_pay_each, 2)
         size = max(1, size or self.crew_size or 1)
@@ -601,6 +603,8 @@ class Booking(db.Model):
         owed IS what she would be offered, so this calls the same function the
         offer does and the two cannot drift apart again.
         """
+        if getattr(staff, 'is_owner', False):
+            return 0.0      # whatever a crew split says (owner_cleaner.py)
         if self.crew:
             row = self.crew_row_for(staff)
             return round(row.pay_amount or 0, 2) if row else 0.0
@@ -1366,6 +1370,10 @@ class Staff(db.Model):
     has_transportation = db.Column(db.Boolean, default=True)
     has_supplies = db.Column(db.Boolean, default=False)
     worker_model = db.Column(db.String(20), default='contractor')  # contractor, employee
+    # The owner, as their own first cleaner (owner_cleaner.py). Created at
+    # signup so a company with nobody else yet can still assign a job. Not a
+    # contractor: no agreement, no W-9, no payout, no insurance reminder.
+    is_owner = db.Column(db.Boolean, default=False)
     onboarding_steps = db.Column(db.Text, default='[]')  # JSON list of completed step keys
     agreement_token = db.Column(db.String(64), unique=True)
     agreement_signature = db.Column(db.String(100))
@@ -1980,6 +1988,28 @@ class Message(db.Model):
     twilio_sid = db.Column(db.String(64))
     read_at = db.Column(db.DateTime)                     # inbound: when the owner viewed it
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class CallLog(db.Model):
+    """One call placed from the Find Leads call sheet.
+
+    A row is written when the caller presses Call, before anything rings, so
+    the monthly count is of calls placed rather than calls answered -- Twilio
+    bills the ones nobody picked up too. Twilio's own reports fill in the rest
+    afterwards (voice.py): how it ended, how long it ran, and the recording.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    prospect_id = db.Column(db.Integer, db.ForeignKey('prospect.id', ondelete='SET NULL'), index=True)
+    user_id = db.Column(db.Integer)
+    agent = db.Column(db.String(100))
+    to_number = db.Column(db.String(40))
+    call_sid = db.Column(db.String(64), index=True)
+    status = db.Column(db.String(20), default='placed')  # placed / completed / no-answer / busy / failed / canceled
+    duration = db.Column(db.Integer)                       # seconds the other side was on the line
+    recording_sid = db.Column(db.String(64))
+    recording_seconds = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    ended_at = db.Column(db.DateTime)
 
 
 class OutboundLog(db.Model):

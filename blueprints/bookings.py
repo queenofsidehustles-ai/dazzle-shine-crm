@@ -85,32 +85,23 @@ def price_preview():
                     'total': round((cleaning or 0) + fee, 2)})
 
 
-# Where a phone booking came from. The two ads carry the lead fee; the rest
-# don't. Asking "how did they find you?" replaced a box asking whoever took
-# the call to type the company's ad cost, which is not something the person
-# answering the phone should have to know -- and it fixes the source, which
-# every hand-made booking used to record as 'website'.
+# Where a phone booking came from -- recorded, because every hand-made booking
+# used to be tagged 'website' and the lead-source report believed it.
 BOOKING_SOURCES = (('google', 'Google'), ('facebook', 'Facebook / Instagram'),
                    ('referral', 'A friend sent them'), ('repeat', 'Booked with us before'),
                    ('other', 'Other'))
-AD_SOURCES = ('google', 'facebook')
 
 
-def _lead_fee_for(typed, source):
-    """The lead fee for a hand-made booking. A typed figure wins, 0 included;
-    otherwise a customer from an ad gets the fee set on Pricing, and nobody
-    else gets one."""
+def _lead_fee_for(typed, source=''):
+    """The lead fee for a hand-made booking: none. The owner retired it -- an
+    ad cost folded invisibly into the customer's price was one more thing on
+    the form and nothing she used. A figure still posted by something older is
+    honoured, so a caller that sends one is not silently overruled."""
     typed = (typed or '').strip().replace('$', '')
     if typed != '':
         try:
             return float(typed)
         except ValueError:
-            return 0.0
-    if (source or '').strip().lower() in AD_SOURCES:
-        from pricing import get_lead_fee
-        try:
-            return float(get_lead_fee() or 0)
-        except (TypeError, ValueError):
             return 0.0
     return 0.0
 
@@ -130,7 +121,7 @@ def _ask_deposit_on_phone_bookings():
 @login_required
 def new():
     """Create a booking by hand — for customers who book by phone/text/in person."""
-    from pricing import calculate_job, SERVICE_LABELS, EXTRAS, get_lead_fee
+    from pricing import calculate_job, SERVICE_LABELS, EXTRAS
     if request.method == 'POST':
         # The plan's monthly job ceiling. Checked before anything is built, so a
         # refused job leaves no half-written client or booking behind — and it is
@@ -194,9 +185,7 @@ def new():
         # and that is the number the discount report is asking about.
         discount_amount = round(quote.get('discount_amount') or 0, 2)
 
-        # Lead fee — the ad cost, set on Pricing and carried by a customer who
-        # came from an ad (added to the customer total, always excluded from
-        # contractor pay). A typed figure still wins, for anything posting one.
+        # No lead fee on a new booking (see _lead_fee_for).
         source = (request.form.get('source') or '').strip().lower()[:50]
         lead_fee = _lead_fee_for(request.form.get('lead_fee', ''), source)
         price = round((cleaning or 0) + lead_fee, 2)   # what the customer pays
@@ -281,7 +270,7 @@ def new():
             last = max(client.bookings, key=lambda b: b.created_at or datetime.min)
     return render_template('admin/booking_new.html',
                            service_labels=SERVICE_LABELS, extras=EXTRAS, frequency_labels=_FREQ,
-                           default_lead_fee=get_lead_fee(), client=client, last=last,
+                           client=client, last=last,
                            deposit=_pricing_deposit(), sources=BOOKING_SOURCES,
                            ask_deposit=_ask_deposit_on_phone_bookings())
 

@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 CATALOG = [
     ('welcome', 'owner', 'Welcome + your address + confirm code',
      'At signup', 'Everyone'),
+    ('welcome_sms', 'owner', 'Welcome text with your address',
+     'At signup', 'Only people who ticked the box and gave a number'),
     ('day1', 'owner', 'Get the schedule out of your head',
      'Day 1', 'Not set up yet'),
     ('day2', 'owner', 'The jobs you lose while you are cleaning',
@@ -32,7 +34,7 @@ CATALOG = [
     ('start_21', 'owner', 'Days left, and nothing set up yet',
      'Day 21', 'Not set up yet'),
     ('activated', 'owner', 'That is it working',
-     'The moment they add a cleaner and a customer', 'Just set up'),
+     'The moment they add a customer and a job (or a team)', 'Just set up'),
     ('first_booking', 'owner', 'Somebody booked you through your own page',
      'The first online booking', 'On a trial'),
     ('feature', 'owner', 'Before your trial ends, try this',
@@ -238,6 +240,16 @@ def sample_preview(key):
         return ('Sparkle Cleaning is set up — here is your address',
                 welcome_email.build('Sparkle Cleaning', 'owner@example.com', host,
                                     'Dana', '123456', f'https://{host}/confirm-email/…'))
+    if key == 'welcome_sms':
+        # A text, not an email, so the preview is the message as the phone shows
+        # it: who it is from and how to stop included, set in a plain block.
+        import html as _html
+        host = 'sparkle.' + (__import__('product').domain() or 'akyehq.com')
+        body = lead_outreach.sms_text(lead_outreach.welcome_text_body('Dana', host))
+        return ('Text message: welcome',
+                '<div style="font-family:system-ui,sans-serif;max-width:360px;'
+                'padding:12px 14px;border-radius:14px;background:#e9f7ef;'
+                'white-space:pre-wrap">' + _html.escape(body) + '</div>')
     if key in PARTNER_KEYS:
         import partner_mail
         sample = {'name': 'Dana Lee', 'email': 'dana@example.com'}

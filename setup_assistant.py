@@ -120,14 +120,14 @@ STEP_PROMPTS = {
     'pricing': 'What do you charge for a standard clean of a 2-bed, 2-bath?',
     'terms': 'Your customer terms are ready. Have a look and accept them.',
     'balance': 'When a job’s finished, should the rest come off the card on file?',
-    'team': 'Who cleans for you? Start with yourself if you still clean.',
     'payments': ('Last step: connect payments, so you’re ready to be paid before '
                  'your first customer books. It takes a few minutes and your bank '
                  'details stay with you. No bank details to hand? Skip it for '
                  'tonight and it will be first on your list tomorrow.'),
     'booking_page': 'Want to put your booking page where customers can find it?',
+    'team': 'You’re already on the team, so you can give jobs to yourself. Add someone else whenever you hire.',
     'client': 'Add a customer you already clean for?',
-    'job': 'Book a job and send it to a cleaner — that’s the whole loop.',
+    'job': 'Book a job and give it to yourself or a cleaner — that’s the whole loop.',
 }
 
 STEP_LINKS = {
@@ -515,24 +515,21 @@ def _owner_name():
 
 
 def team_card():
-    """Step 2: the owner, already filled in, and room for anyone she has.
+    """The people she hires: a row per cleaner, typed or uploaded.
 
-    One card, not one per cleaner. The owner's own row arrives filled in from
-    her login and the details she just saved, with "I clean jobs myself"
-    ticked -- a solo owner taps Save and is done. Unticked, the same card is
-    a company adding the team it already has, typed or uploaded. Nothing
-    here emails anybody: inviting is done from each cleaner's page on the
-    Team tab, when the owner has told them (decided 2026-10-24 -- an invite
-    card in the middle of setup read as out of place).
+    One card, not one per cleaner. The owner is already the first cleaner
+    (owner_cleaner.py), created with the account and given no pay, so there is
+    no row for her here: jobs can be given to herself without anybody being
+    added. This card is for the day she hires. Nothing here emails anybody:
+    inviting is done from each cleaner's page on the Team tab, when the owner
+    has told them (decided 2026-10-24 -- an invite card in the middle of setup
+    read as out of place).
     """
-    me = {'name': _owner_name(), 'phone': _setting('phone'),
-          'email': _setting('email'), 'cleans': True}
-    card = {'kind': 'team', 'step': 'team', 'title': 'Your team',
-            'note': 'Add everyone who cleans for you — type them in, or upload '
-                    'a spreadsheet. Nobody is emailed.',
-            'me': me, 'label': 'Save my team'}
-    card['prefilled'] = bool(me['name'])
-    return [card]
+    return [{'kind': 'team', 'step': 'team', 'title': 'Your team',
+             'note': 'You’re already on the team. Add the people who clean for '
+                     'you — type them in, or upload a spreadsheet. Nobody is '
+                     'emailed.',
+             'label': 'Save my team'}]
 
 
 _EMAIL_IN = re.compile(r'[^\s,;<>]+@[^\s,;<>]+\.[^\s,;<>]+')
@@ -680,10 +677,10 @@ PAY_TYPES = {'percent': '% of the job', 'hourly': '$ per hour'}
 def _pay(row):
     """(pay_type, rate, problem) for one row of the team card.
 
-    Required on every row, the owner's included. A blank box used to become
-    the model's default -- half of every job -- which is somebody else's pay
-    scale, quietly written into payroll. Owners pay differently, so the owner
-    says what it is. 0 is allowed: an owner may not pay herself through here."""
+    Required on every row. A blank box used to become the model's default --
+    half of every job -- which is somebody else's pay scale, quietly written
+    into payroll. Owners pay differently, so the owner says what it is. (The
+    owner herself is not a row here: she is the first cleaner, with no pay.)"""
     kind = (row.get('pay_type') or '').strip().lower()
     text = str(row.get('pay_rate') or '').strip().replace('%', '').replace('$', '').replace(',', '')
     who = row.get('name') or 'Someone'
@@ -704,19 +701,13 @@ def _pay(row):
 
 
 def _team_rows(fields):
-    """The people on a submitted team card, owner first. (rows, problems).
+    """The people on a submitted team card. (rows, problems).
 
     Every row is checked before any is written, so a card with one bad email
     saves nobody rather than half a team -- fixing the one box and pressing
     Save again must not then trip over the people the first press added."""
     from blueprints.staff import _name_taken
     rows, problems = [], []
-    if str(fields.get('me_cleans') or '') in ('1', 'true', 'on', 'yes'):
-        rows.append({'name': _clean(fields.get('me_name')),
-                     'phone': _clean(fields.get('me_phone')),
-                     'email': _clean(fields.get('me_email')).lower(), 'me': True,
-                     'pay_type': _clean(fields.get('me_pay_type'), 20),
-                     'pay_rate': _clean(fields.get('me_pay_rate'), 20)})
     others = fields.get('others')
     for o in (others if isinstance(others, list) else [])[:50]:
         if isinstance(o, dict):
@@ -761,15 +752,13 @@ def _team_rows(fields):
 def save_team(fields):
     """Write the team card: every row, or none of them."""
     import entitlements
-    from flask import session
     from extensions import db
-    from models import Staff, User
+    from models import Staff
     rows, problems = _team_rows(fields or {})
     if problems:
         return False, 'Please check: ' + '; '.join(problems) + '.'
     if not rows:
-        return False, ('Add at least one cleaner, or tick “I clean jobs myself” '
-                       'if it’s you for now.')
+        return False, 'Add at least one cleaner, or skip this for now.'
     left = entitlements.remaining('field_workers')
     if left is not None and len(rows) > left:
         _ok, why = entitlements.check_limit('field_workers')
@@ -780,18 +769,11 @@ def save_team(fields):
     for r in rows:
         s = Staff(name=r['name'], phone=r['phone'], email=r['email'], is_active=True,
                   pay_type=r['pay_type'], pay_rate=r['pay_rate'])
-        if r.get('me'):
-            # Her own login, linked from the start, so she never gets a
-            # "join the team" email from her own business.
-            uid = session.get('user_id')
-            if uid and User.query.get(uid) and not Staff.query.filter_by(user_id=uid).first():
-                s.user_id = uid
         db.session.add(s)
-        added.append(r['name'] + (' (you)' if r.get('me') else ''))
+        added.append(r['name'])
     db.session.commit()
-    said = f'Your team: {", ".join(added)}.'
-    if any(not r.get('me') for r in rows):
-        said += ' Nobody was emailed — invite them from the Team tab when you’re ready.'
+    said = (f'Your team: you, and {", ".join(added)}. Nobody was emailed — '
+            'invite them from the Team tab when you’re ready.')
     return True, said
 
 
@@ -1097,15 +1079,16 @@ def system_prompt(opening):
 
         'THE SETUP STEPS, IN ORDER\n'
         'Required, in this order: business (contact details customers see), '
-        'team (the owner herself if she cleans, plus anyone who already cleans '
-        'for her; the card on screen takes them all at once), pricing (one '
+        'pricing (one '
         'price for a 2 bed / 2 bath standard clean sets the whole list), '
         'payments (the owner connects Stripe herself on the Connections page, '
         'so she is ready to be paid before her first booking). Then, before '
         'going live: terms (accept the customer terms), balance (charge the '
         'rest automatically or not). Then optional: booking_page (share the '
         'self-booking link), client (add one real customer), job (book and '
-        'assign a job).\n'
+        'assign a job; the owner is already the first cleaner, so she can give '
+        'it to herself), team (add people when she hires; the card on screen '
+        'takes them all at once).\n'
         'Work on the next unfinished step unless they ask about something else. '
         'Ask for one step at a time. If they want to skip, move on.\n\n'
 

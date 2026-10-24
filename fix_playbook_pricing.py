@@ -37,7 +37,7 @@ The product's real, already-implemented pricing (`entitlements.py`), enforced by
 
 | Tier | Price | Field workers | Key features | Best for |
 | --- | --- | --- | --- | --- |
-| Solo | $0, forever | Up to 2 | Bookings & CRM, up to 20 jobs/month, 1 checklist template, 1 office login, email only (no texting), no automations, no card payments | The owner still doing the work themselves |
+| Solo | $0, forever | Up to 3 | Bookings & CRM, up to 20 jobs/month, 1 checklist template, 1 office login, email only (no texting), no automations, no card payments | The owner still doing the work themselves |
 | Pro | $79/mo | Up to 10 | Everything in Solo, plus unlimited jobs/checklist templates/office logins, 1,000 texts/month, card payments, automations, recurring jobs, hiring & video interviews, payroll & 1099s, SOP library, reporting, and asking Nana | The owner who has stopped cleaning and started managing |
 | Scale | $249/mo | Unlimited | Everything in Pro, unlimited team size, 5,000 texts/month, every feature with no ceiling | Multi-crew operations and commercial contracts |
 

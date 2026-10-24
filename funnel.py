@@ -114,7 +114,7 @@ def compute(orgs, leads, now=None, days=None):
         {'key': 'signed_up', 'label': 'Signed up', 'n': signed_up,
          'means': 'opened a company'},
         {'key': 'activated', 'label': 'Activated', 'n': len(activated),
-         'means': 'added their first cleaner and customer'},
+         'means': 'added their first customer, and a job or a team'},
         {'key': 'chose_plan', 'label': 'Chose a plan', 'n': len(chose_plan),
          'means': 'went through Stripe checkout'},
         {'key': 'paying', 'label': 'Paying now', 'n': len(paying),

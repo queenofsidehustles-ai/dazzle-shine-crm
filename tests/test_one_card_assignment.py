@@ -69,7 +69,7 @@ with app.app_context():
     check('value="team"' in chooser, 'and so is offering it to the whole team')
     check('data-card-key="offer-team"' not in page, 'the separate Offer card is gone')
     check('data-card-key="work-order"' not in page, 'and so is the separate Checklist card')
-    check('How this pay is worked out' in page,
+    check('Pay details — hours, rate' in page,
           'the hours-times-rate arithmetic is folded away, not deleted')
 
     print('\n2. Assigning sends her the job and the checklist in one press')

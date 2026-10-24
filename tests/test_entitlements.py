@@ -91,31 +91,31 @@ with app.app_context():
 
     print('\n6. Limits count real records, and block the next one — not the last one')
     set_plan('solo')
-    for i in range(2):
+    for i in range(3):
         db.session.add(Staff(name=f'Cleaner {i}', is_active=True))
     db.session.commit()
-    check(ent.usage('field_workers') == 2, 'two active cleaners are counted')
-    check(ent.at_limit('field_workers'), 'Solo is at its 2-cleaner limit')
+    check(ent.usage('field_workers') == 3, 'three active cleaners are counted')
+    check(ent.at_limit('field_workers'), 'Solo is at its 3-cleaner limit')
     ok, msg = ent.check_limit('field_workers')
     _price = str(ent.PLANS['pro']['price'])
     check(not ok and 'Pro' in msg and _price in msg,
           f'the refusal names the plan and the price: {msg!r}')
 
     set_plan('pro')
-    check(not ent.at_limit('field_workers'), 'Pro is not at the limit with 2 cleaners')
+    check(not ent.at_limit('field_workers'), 'Pro is not at the limit with 3 cleaners')
     ok, _ = ent.check_limit('field_workers')
-    check(ok, 'Pro may add a third cleaner')
+    check(ok, 'Pro may add a fourth cleaner')
 
     print('\n7. Downgrading never destroys what they already entered')
     set_plan('solo')
-    check(Staff.query.filter_by(is_active=True).count() == 2,
-          'both cleaners survive the downgrade to a 2-cleaner plan')
+    check(Staff.query.filter_by(is_active=True).count() == 3,
+          'all three cleaners survive the downgrade to a 3-cleaner plan')
     for i in range(3):
         db.session.add(Staff(name=f'Extra {i}', is_active=True))
     db.session.commit()
-    check(Staff.query.filter_by(is_active=True).count() == 5,
-          'five cleaners exist after a downgrade from a bigger plan')
-    check(ent.at_limit('field_workers'), 'the sixth is blocked')
+    check(Staff.query.filter_by(is_active=True).count() == 6,
+          'six cleaners exist after a downgrade from a bigger plan')
+    check(ent.at_limit('field_workers'), 'the seventh is blocked')
     check(ent.remaining('field_workers') == 0, 'remaining bottoms out at zero, never negative')
 
     print('\n8. Jobs are counted per calendar month')

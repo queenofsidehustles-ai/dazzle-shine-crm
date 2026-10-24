@@ -275,6 +275,68 @@ def send_text(engine, lead, body_template, sent_by, now_utc=None):
     return ok, detail
 
 
+def us_number(phone):
+    """+1XXXXXXXXXX for anything that is plainly a US number, else None.
+    A signup form is open to the internet, so a text only goes to a number
+    that is exactly what it looks like: ten digits, optionally led by 1."""
+    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())
+    if len(digits) == 11 and digits[0] == '1':
+        digits = digits[1:]
+    if len(digits) != 10 or digits[0] in '01' or digits[3] in '01':
+        return None
+    return '+1' + digits
+
+
+def welcome_text_body(first, host):
+    who = f'Welcome, {first}! ' if first else 'Welcome! '
+    link = host if host.startswith('http') else f'https://{host}'
+    return (f'{who}Your CRM is ready at {link} -- sign in with the email you '
+            f'signed up with. Reply here if you get stuck.')
+
+
+def send_welcome_text(engine, slug, phone, first, host):
+    """(ok, detail). One text to a new owner who ticked the box asking for it.
+
+    It goes straight away -- the person is looking at the sign-up screen and
+    asked for it a moment ago -- so unlike send_text() it does not wait for
+    11am-8pm Eastern. Everything else that protects a number still applies:
+    the Texting switch, the welcome-text switch, a STOP already on file, and
+    the same who-it-is-from and how-to-stop wording. Written to the product
+    message log either way, and never raises: a text that cannot go must not
+    be the reason a signup fails."""
+    import communications
+    import control_plane
+    import platform_switches
+    try:
+        to = us_number(phone)
+        if not to:
+            return False, 'no usable US phone number'
+        if not communications.is_on('welcome_sms'):
+            return False, 'the welcome text is switched off'
+        if not platform_switches.is_on('sms'):
+            return False, 'Texting is switched off for the whole product'
+        block = control_plane.number_text_block(engine, to)
+        if block:
+            return False, block
+        creds = sms_credentials()
+        if not creds:
+            return False, 'texting is not set up for the console'
+        body = sms_text(welcome_text_body(first, host))
+        sid, token, from_phone = creds
+        try:
+            from twilio.rest import Client
+            msg = Client(sid, token).messages.create(
+                body=body, from_=from_phone, to=to)
+            ok, detail = True, f'accepted by Twilio (id {msg.sid})'
+        except Exception as e:
+            ok, detail = False, f'Twilio error: {e}'
+        control_plane.record_product_message(
+            engine, slug, 'welcome_sms', to, body[:300], ok, detail, 'auto')
+        return ok, detail
+    except Exception as e:
+        return False, f'welcome text failed: {e}'
+
+
 def send_many(engine, leads, channel, subject, body_template, sent_by, now_utc=None):
     """Send to a list, skipping whoever cannot be reached. Returns
     {'sent': n, 'failed': n, 'skipped': {reason: n}}."""
