@@ -90,6 +90,26 @@ def watch_flags(files):
     return out
 
 
+def commit_jobs(sha):
+    """The jobs of every workflow run on `sha`, shaped like GitHub's check runs,
+    or None if they cannot be read.
+
+    A required check is a job's name, and the check-runs API that lists them
+    needs the Checks permission, which a fine-grained personal access token
+    cannot be given. The same jobs are readable with Actions: read."""
+    code, wr = _call('GET', 'actions/runs', params={'head_sha': sha, 'per_page': 30})
+    if code != 200 or not isinstance(wr, dict):
+        return None
+    out = []
+    for run in wr.get('workflow_runs', [])[:12]:
+        code, js = _call('GET', f'actions/runs/{run["id"]}/jobs',
+                         params={'per_page': 100, 'filter': 'latest'})
+        if code != 200 or not isinstance(js, dict):
+            return None
+        out.extend(js.get('jobs', []))
+    return out
+
+
 def check_states(runs):
     """[(name, state, url)] for each required check, newest attempt of each.
 
@@ -182,8 +202,8 @@ def _snapshot(head, stable):
                           or c['commit']['author']['name'],
                 'url': c.get('html_url')} for c in cmp_.get('commits', [])]
     files = cmp_.get('files') or []
-    code, runs = _call('GET', f'commits/{head}/check-runs', params={'per_page': 100})
-    checks = check_states(runs.get('check_runs', [])) if code == 200 else []
+    jobs = commit_jobs(head)
+    checks = check_states(jobs) if jobs is not None else []
     code, rel = _call('GET', 'contents/RELEASE', params={'ref': stable},
                       accept='application/vnd.github.raw+json')
     release_name = rel.split('\n')[0].strip() if code == 200 and isinstance(rel, str) else None

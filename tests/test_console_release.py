@@ -74,10 +74,14 @@ def fake_call(method, path, **kw):
         return 200, {'commit': {'sha': STABLE}}
     if path == 'contents/RELEASE':
         return 200, 'akye-v2026.10.23\n2026-10-23\n'
-    if path.endswith('/check-runs'):
-        return 200, {'check_runs': [
-            {'id': i, 'name': n, 'status': 'completed', 'conclusion': state['checks'],
-             'html_url': 'http://x/run'} for i, n in enumerate(NAMES)]}
+    if path == 'actions/runs':
+        return 200, {'workflow_runs': [{'id': 900 + i} for i in range(2)]}
+    if path.startswith('actions/runs/') and path.endswith('/jobs'):
+        run = int(path.split('/')[2]) - 900
+        mine = NAMES[run * 2:run * 2 + 2]
+        return 200, {'jobs': [
+            {'id': i + 10 * run, 'name': n, 'status': 'completed', 'conclusion': state['checks'],
+             'html_url': 'http://x/run'} for i, n in enumerate(mine)]}
     if path.startswith('actions/workflows/') and path.endswith('/runs'):
         return 200, {'workflow_runs': [{'id': 1, 'status': 'in_progress' if state['running'] else 'completed',
                                         'conclusion': None if state['running'] else 'success',

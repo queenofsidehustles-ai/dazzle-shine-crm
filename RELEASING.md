@@ -59,7 +59,7 @@ Set up once:
 
 - Railway variable `GITHUB_REPO`: `owner/name` of this repository.
 - Railway variable `GITHUB_RELEASE_TOKEN`: a fine-grained token on this
-  repository only, with Contents: read, Checks: read and Actions: read and
+  repository only, with Contents: read and Actions: read and
   write. It cannot push.
 - Optional GitHub secret `RELEASE_PUSH_TOKEN`: a token that can push to `main`
   and `akye-stable`. Without it the workflow pushes as `GITHUB_TOKEN`, which
