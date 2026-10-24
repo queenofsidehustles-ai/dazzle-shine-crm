@@ -304,11 +304,15 @@ def signup():
     if request.method == 'POST':
         form = {k: (request.form.get(k) or '').strip()
                 for k in ('business', 'slug', 'name', 'email', 'zip_code',
-                          'browser_tz')}
+                          'browser_tz', 'phone')}
         form['email'] = form['email'].lower()
         password = request.form.get('password') or ''
         slug = form['slug'].lower() or suggest_slug(form['business'])
         terms_accepted = bool(request.form.get('terms_accepted'))
+        # Asked for separately from the terms and never pre-ticked: a text to
+        # somebody who gave a number and said yes to it is the only kind worth
+        # sending (TCPA, Florida's FTSA).
+        sms_consent = bool(request.form.get('sms_consent'))
 
         try:
             error = _validate(form, slug, password, terms_accepted)
@@ -393,6 +397,18 @@ def signup():
                 print(f'  ⚠️  welcome email not sent for {slug!r}: {detail}')
         except Exception as _e:
             print(f'  ⚠️  welcome email not sent for {slug!r}: {_e}')
+        # The text, if they asked for one. After the email, and after the
+        # account exists, so it can only ever add to a signup.
+        if sms_consent and form.get('phone'):
+            try:
+                import lead_outreach
+                ok, detail = lead_outreach.send_welcome_text(
+                    _engine(), slug, form['phone'],
+                    (form.get('name') or '').split(' ')[0], f'{slug}.{base}')
+                if not ok:
+                    print(f'  ⚠️  welcome text not sent for {slug!r}: {detail}')
+            except Exception as _e:
+                print(f'  ⚠️  welcome text not sent for {slug!r}: {_e}')
         # They finished, so they are not a half-finished signup any more.
         control_plane.clear_abandoned_signup(_engine(), form.get('email'))
 
@@ -506,6 +522,10 @@ def _create_everything(slug, form, password, attribution=None, terms_accepted=Fa
                 owner.set_password(password)
                 db.session.add(owner)
                 db.session.commit()
+                # The owner is the first cleaner, so a job can be assigned
+                # before anyone is hired (owner_cleaner.py).
+                import owner_cleaner
+                owner_cleaner.ensure(owner, form['email'])
                 from models import BusinessSetting
                 BusinessSetting.set('business_name', form['business'])
                 BusinessSetting.set('email', form['email'])

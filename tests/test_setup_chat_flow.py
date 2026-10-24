@@ -96,6 +96,7 @@ with app.app_context():
     keys = {s['key']: s['done'] for s in onboarding.progress()['steps']}
 check(keys['client'] is False, 'the getting-started list still has the customer step')
 r = c.post('/settings/getting-started/assistant/skip', json={'step': 'job'}, headers=H).get_json()
+r = c.post('/settings/getting-started/assistant/skip', json={'step': 'team'}, headers=H).get_json()
 check(r['ok'] and 'customer' in r['say'].lower(), 'skipping everything comes back round, not to a dead end')
 bad = c.post('/settings/getting-started/assistant/skip', json={'step': 'nope'}, headers=H).get_json()
 check(bad['ok'] is False, 'an unknown step cannot be skipped')

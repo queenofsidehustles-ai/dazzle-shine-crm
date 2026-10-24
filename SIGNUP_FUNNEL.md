@@ -14,8 +14,11 @@ Akye, and every email along the way.
    address **and** a 6-digit confirm code with a "Yes, this is me" link.
 4. **Soft banner** on the dashboard until the email is confirmed, with a way
    to fix a mistyped address (`/confirm-email`).
-5. **First week emails** push them to add one cleaner and one customer.
-6. **Activated** (one cleaner + one customer) is a milestone inside the trial,
+5. **First week emails** push them to add one customer and book one job. The
+   owner is already the first cleaner (`owner_cleaner.py`, a team row made at
+   signup), so there is nobody to add first.
+6. **Activated** (one customer + one job assigned; a hired team and a customer
+   counts too) is a milestone inside the trial,
    not what starts it: the 30 days run from signup. It sends a "you are set up"
    note at that moment.
 7. **First online booking** sends a note at that moment.
@@ -40,9 +43,37 @@ Akye, and every email along the way.
 | `ending` | 3 days left | everyone on a trial | X days left of everything |
 | `ended` | 0–3 days after | lapsed | finished, everything is still here |
 | `winback` | 7–10 days after | lapsed after using it | still doing it the hard way? |
+| `quiet` | owner away 7–13 days | on a trial, set up | did the week get away from you? |
+| `free_quiet` | owner away 14–30 days | free plan, set up | need a hand with anything? |
+| `free_start` | 14–21 days after it ends | free plan, never set up | still here when you are ready |
 
 Never more than one a day. Never the same one twice. Never to paying, test,
 demo, opted-out or closed companies.
+
+"Owner away" is `organizations.owner_active_at`, written as the owner uses the
+CRM (at most hourly), not their last password sign-in, which a self-renewing
+session can leave months old. A company with no `owner_active_at` yet is not
+due. The three "gone quiet" emails **ship switched off**: they send only once
+somebody turns them on under Console → Communications. An email that is
+switched off is passed over, not waited on: whatever else is due that day and
+switched on goes instead.
+
+## Who needs support: Console → Companies
+
+Every company row has a **Support** label, worked out from what the console
+already reads (`console_data.support_meter`):
+
+- **Needs help**: not set up after the first 3 days, the owner not in for 14
+  days or more (paying customers included), never seen using it, or a trial
+  ending within a week with nothing set up.
+- **Watch**: the owner not in for 7–13 days, set up but no jobs booked or done in 30 days,
+  open errors, automations not running, a payment past due.
+- **Healthy**, **New** (first 3 days), or **—** for test, demo and inactive
+  accounts.
+
+**Needs support** at the top filters to those two, worst first. Paying
+customers never get the automated notes, so the label is the prompt for a
+personal email.
 
 ### To leads who didn't sign up (lead_nurture.py)
 

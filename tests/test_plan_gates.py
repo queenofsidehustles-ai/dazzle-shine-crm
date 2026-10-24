@@ -124,45 +124,45 @@ c = owner_client()
 # is_active matters: the limit counts cleaners who are actually on the roster,
 # not everybody who ever was. Somebody who left should not cost their old
 # employer a plan tier.
-for i in range(2):
+for i in range(3):
     c.post('/staff/new', data={'name': f'Cleaner {i}', 'pay_rate': '50',
                                'is_active': 'on'}, follow_redirects=True)
 with app.app_context():
-    check(Staff.query.filter_by(is_active=True).count() == 2,
-          'two active cleaners are allowed on the free plan')
+    check(Staff.query.filter_by(is_active=True).count() == 3,
+          'three active cleaners are allowed on the free plan')
 
 r = c.post('/staff/new', data={'name': 'One Too Many', 'pay_rate': '50',
                                'is_active': 'on'}, follow_redirects=False)
 with app.app_context():
     check(Staff.query.filter_by(name='One Too Many').count() == 0,
-          'the third is refused')
+          'the fourth is refused')
 check(r.status_code in (302, 303) and '/upgrade' in (r.headers.get('Location') or ''),
       'and the person is sent somewhere that explains why')
 
-print('\n6. Upgrading lets the third one through, with the first two untouched')
+print('\n6. Upgrading lets the fourth one through, with the first three untouched')
 set_plan('pro')
 c = owner_client()
-c.post('/staff/new', data={'name': 'Third Cleaner', 'pay_rate': '50',
+c.post('/staff/new', data={'name': 'Fourth Cleaner', 'pay_rate': '50',
                            'is_active': 'on'}, follow_redirects=True)
 with app.app_context():
-    check(Staff.query.filter_by(is_active=True).count() == 3,
-          'Pro allows the third cleaner')
+    check(Staff.query.filter_by(is_active=True).count() == 4,
+          'Pro allows the fourth cleaner')
     names = {s.name for s in Staff.query.all()}
-    check('Cleaner 0' in names and 'Cleaner 1' in names,
-          'and the two from before are still there')
+    check({'Cleaner 0', 'Cleaner 1', 'Cleaner 2'} <= names,
+          'and the three from before are still there')
 
 print('\n7. Dropping back does not delete anybody')
 # A limit must block the next thing, never eat what is already there.
 set_plan('solo')
 with app.app_context():
-    check(Staff.query.filter_by(is_active=True).count() == 3,
-          'three cleaners survive a downgrade to a 2-cleaner plan')
+    check(Staff.query.filter_by(is_active=True).count() == 4,
+          'four cleaners survive a downgrade to a 3-cleaner plan')
 with app.app_context():
     # Inside a context on purpose: usage() deliberately returns 0 when it
     # cannot count, so that a database hiccup lets an owner carry on working
     # rather than blocking her. Asking outside a context therefore answers
     # "no limit" -- correct behaviour, wrong question.
-    check(entitlements.at_limit('field_workers'), 'a fourth is blocked')
+    check(entitlements.at_limit('field_workers'), 'a fifth is blocked')
     check(entitlements.remaining('field_workers') == 0,
           'and remaining bottoms out at zero')
 

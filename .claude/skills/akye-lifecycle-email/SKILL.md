@@ -28,10 +28,11 @@ start a new module or a new cron for it.
 
 - The trial is **30 days from signup** (`billing.TRIAL_DAYS`), one clock. It
   never "starts" or "has not started", and no email may say it does.
-- Setting up means **one active cleaner and one customer**
-  (`onboarding.progress()['activated']`), recorded as `activated_at`. It is a
-  milestone inside the trial, not what starts it. Not "your first job", not
-  "assign a job".
+- Setting up means **one customer and one job assigned** (`onboarding.progress()
+  ['activated']`), recorded as `activated_at`; hiring a team and adding a
+  customer counts too. The owner is already the first cleaner (a Staff row made
+  at signup, `owner_cleaner.py`), so no email asks them to "add a cleaner"
+  first: it is a milestone inside the trial, not what starts it.
 - When the trial ends they drop to the **free plan and keep everything**.
   Nothing is deleted. No card is on file during the trial.
 - Every owner link goes to **their own address** (`company_url(org)`, e.g.
@@ -61,6 +62,15 @@ start a new module or a new cron for it.
    key. See `_send()`.
 8. **Footer** says reply to reach a person, and how to turn the emails off
    (Billing page). `wrap()` already does this, so always use `wrap()`.
+9. **"Away" means recorded use, never last sign-in.** Use
+   `organizations.owner_active_at` (written by `auth.note_activity` as the
+   owner uses the CRM). The tenant's `User.last_login` only moves on a
+   password sign-in, and a session renews itself, so it can be months old for
+   somebody in every day. No `owner_active_at` means not due, not "away".
+10. **A new email ships switched off.** Add its key to
+   `communications.DEFAULT_OFF`. A switch nobody has set means *on*, so
+   without this it would start sending on the first run after a deploy,
+   before anybody has read the preview.
 
 Lead (nurture) emails follow `lead_nurture.py`'s own rules: never uploaded
 lists (`source == 'console upload'`), never anybody who owns a company,
@@ -128,7 +138,8 @@ scripts are in `LOOM_SCRIPTS.md`.
    `compose()` loop in `tests/test_trial_nudges.py` still passes for every
    kind (names them, links to their own address).
 7. Add it to `communications.CATALOG` so it appears on the console's
-   Communications page with its own switch and preview.
+   Communications page with its own switch and preview, and to
+   `communications.DEFAULT_OFF` so it waits there until somebody turns it on.
 8. Update the table in `SIGNUP_FUNNEL.md`.
 
 ## Before you finish

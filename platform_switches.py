@@ -6,6 +6,7 @@ stop any of them was to change an environment variable and redeploy:
     signups          new companies signing themselves up
     ai               everything that calls Claude on Akye's credits
     sms              every text, from every company, through Akye's Twilio
+    voice            every call placed from the Find Leads call sheet
     partner_payouts  sending money to affiliate partners
 
 The console flips them in the `product_switches` table that the email switches
@@ -57,6 +58,10 @@ SWITCHES = [
      'Stops every text from every company, including job and reminder texts a '
      'cleaner is waiting on. Use it for a runaway bill or abuse, not routinely.',
      'This stops operational texts too.'),
+    ('voice', 'Calling',
+     'Stops every call placed from the Find Leads call sheet, for every '
+     'company. Calls already in progress are not cut off.',
+     None),
     ('partner_payouts', 'Partner payouts',
      'Stops sending money to affiliate partners. Commissions keep accruing and '
      'nothing is lost; paying resumes when it is turned back on.',

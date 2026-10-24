@@ -98,6 +98,17 @@
     <p style="font-size:0.85rem;color:var(--softer);margin-top:-8px">This amount is charged at booking and goes toward the total.</p>
   </div>
 
+  {# A question the New Booking form used to put to whoever took the call. It
+     is the owner's, and it has the same answer every time. #}
+  <div class="card" style="margin-bottom:20px">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Phone bookings</h2>
+    <input type="hidden" name="phone_booking_deposit_shown" value="1" />
+    <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500">
+      <input type="checkbox" name="phone_booking_deposit" value="1" style="width:auto" {{ 'checked' if current.phone_booking_deposit }} />
+      Ask for the ${{ '%.0f' % current.deposit_amount|float }} deposit in the booking confirmation
+    </label>
+  </div>
+
   <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Cleaner Pay</h2>
     {# Four paragraphs of explanation for one number, in front of somebody who

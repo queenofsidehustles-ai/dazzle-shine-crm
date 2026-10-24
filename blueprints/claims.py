@@ -60,6 +60,9 @@ def _window(b):
         hrs = calculate_job(b.service_type, b.bedrooms or 1, b.bathrooms or 1).get('hours') or 2.5
     except Exception:
         pass
+    if getattr(b, 'is_commercial', False) and b.estimated_hours:
+        # No bedrooms to size it from: the hours it was booked at, per cleaner.
+        hrs = b.estimated_hours / max(1, b.crew_size or 1)
     return (start, start + int(hrs * 60) + 60)
 
 

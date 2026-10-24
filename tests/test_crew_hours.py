@@ -29,6 +29,10 @@ def check(cond, m):
 
 with app.app_context():
     db.create_all()
+    # A company paying $43 an hour -- as every company from before the $25
+    # starting rate still does (migration 0036). The figures below are its.
+    from models import PricingSetting
+    db.session.add(PricingSetting(key='labor_rate', value='43')); db.session.commit()
     c = app.test_client()
     with c.session_transaction() as s:
         s['logged_in'] = True; s['role'] = 'owner'

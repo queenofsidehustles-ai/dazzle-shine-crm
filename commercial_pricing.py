@@ -545,6 +545,12 @@ def area_quote(areas, frequency='weekly', drive_mins=None, keep_empty=False, fix
             'first_visit_total': round(per_visit + first_visit_charge, 2)}
 
 
+def cleaner_rate():
+    """What a cleaner costs per hour on commercial work -- the cost every
+    commercial price is built up from, and what a commercial job pays."""
+    return _get('comm_hourly_cost')
+
+
 def get_config():
     """JSON-serializable config for the in-browser live calculator."""
     return {

@@ -23,8 +23,9 @@ SETUP_VERSION = '3'
 
 
 def checklist():
-    from models import BusinessSetting, Staff, Booking
+    from models import BusinessSetting, Booking
     import integrations
+    from owner_cleaner import hired_team_count
 
     def setting(key):
         return bool((BusinessSetting.get(key) or '').strip())
@@ -87,9 +88,10 @@ def checklist():
         },
         {
             'key': 'team',
-            'title': 'Add your cleaners',
-            'why': 'You need at least one person to send a job to.',
-            'done': Staff.query.count() > 0,
+            'title': 'Add a team member when you hire',
+            'why': ('You are already on the team, so you can assign jobs to yourself. '
+                    'Add people here when you are ready to send work to someone else.'),
+            'done': hired_team_count() > 0,
             'link': '/contractors/team',
             'critical': False,
         },
@@ -153,12 +155,14 @@ def journey():
     chooses a collection mode never charges a balance. Nothing errors. The
     money simply does not arrive.
 
-    Since 2026-10-24 the required four are details, team, prices and
-    payments. The team is required because everybody has one -- herself, if
-    she still cleans -- and seeing it on screen is the first thing setup
-    gives back. Terms and balances moved out of the required list: both
-    already have a safe default, so they follow straight after as go-live
-    checks rather than standing between a new owner and her first win.
+    Since 2026-10-24 the required steps are details, prices and payments.
+    The team is not one of them: the owner is the first cleaner
+    (owner_cleaner.py), created with the account, so a job can be given to
+    her before anyone is hired, and seeing her own name on the roster is
+    already the first thing setup gives back. Adding people is an optional
+    step for when she hires. Terms and balances moved out of the required
+    list: both already have a safe default, so they follow straight after as
+    go-live checks rather than standing between a new owner and her first win.
 
     Optional steps are the business's own world -- a customer, a job. They
     used to be required, which asked somebody on their first evening to
@@ -167,12 +171,15 @@ def journey():
     """
     import automations
     import integrations
-    from models import BusinessSetting, Staff, Booking, BookingCrew
+    from models import BusinessSetting, Booking, BookingCrew
 
     def setting(key):
         return bool((BusinessSetting.get(key) or '').strip())
 
-    has_staff = Staff.query.filter_by(is_active=True).count() > 0
+    # The owner is the first cleaner (owner_cleaner.py), so having staff says
+    # nothing; what says something is having hired somebody else.
+    from owner_cleaner import hired_team_count
+    has_team = hired_team_count() > 0
     has_client = False
     try:
         from models import Client
@@ -183,7 +190,8 @@ def journey():
     # Assigned means a named cleaner, by either route -- a crew row, or the
     # single-cleaner field older jobs use.
     assigned = (BookingCrew.query.count() > 0
-                or Booking.query.filter(Booking.assigned_cleaner.isnot(None)).count() > 0)
+                or Booking.query.filter(Booking.assigned_cleaner.isnot(None),
+                                   Booking.assigned_cleaner != '').count() > 0)
 
     # The demo has no real keys and cannot be given any -- demo_guard blanks
     # every outbound credential on purpose -- so "connect payments" is a step
@@ -197,14 +205,13 @@ def journey():
         pass
 
     steps = [
-        # ── Required: four, in the order an owner can actually do them ────
+        # ── Required: three, in the order an owner can actually do them ───
         #
-        # Agreed 2026-10-24: details, team, prices, payments. The team comes
-        # second on purpose -- it is the first thing an owner gets to SEE
-        # (her own name on a roster, and anyone she already works with),
-        # which is what makes somebody come back on day two. A job would be
-        # a better first win, but most owners have no customer in their first
-        # five minutes; everybody has themselves.
+        # Agreed 2026-10-24: details, prices, payments. The owner is already
+        # the first cleaner, so there is no team step to do first: a job can be
+        # given to herself the moment it exists, and adding people comes after,
+        # when she hires. Most owners have no customer in their first five
+        # minutes, which is why neither the customer nor the job is required.
         #
         # The phone, and only the phone. The timezone is derived -- from the
         # ZIP at signup, or from the ZIP whenever one arrives -- so requiring
@@ -218,14 +225,6 @@ def journey():
          'title': 'Check your details',
          'why': 'What customers see on every quote, invoice and reminder.',
          'cta': 'Check them', 'link': '/settings/business'},
-        {'key': 'team', 'video': 'team_and_customer', 'required': True,
-         'done': has_staff,
-         'title': 'Set up your team',
-         'why': 'You first, if you clean jobs yourself, then anyone who already '
-                'cleans for you. Nobody is emailed until you say so.',
-         'cta': 'Set up my team', 'link': '/staff/new',
-         'secondary': {'label': 'Already have a big team? Import them all at once',
-                       'link': '/migration'}},
         {'key': 'pricing', 'required': True, 'done': setting('pricing_reviewed'),
          'title': 'Confirm your prices',
          'why': 'Until you look, Akye is quoting somebody else’s numbers.',
@@ -281,9 +280,17 @@ def journey():
         {'key': 'job', 'video': 'book_job', 'required': False,
          'done': bookings > 0 and assigned,
          'title': 'Schedule a job and assign it',
-         'why': 'The cleaner gets a text with the address, the price and the '
-                'checklist.',
+         'why': 'Give it to yourself to start. When you add a cleaner, they get '
+                'a text with the address, the price and the checklist.',
          'cta': 'Book a job', 'link': '/bookings/new'},
+        {'key': 'team', 'video': 'team_and_customer', 'required': False,
+         'done': has_team,
+         'title': 'Add a team member when you hire',
+         'why': 'You are on the team already. Add people when you are ready to '
+                'send work to someone else.',
+         'cta': 'Add a team member', 'link': '/staff/new',
+         'secondary': {'label': 'Already have a team? Import them all at once',
+                       'link': '/migration'}},
     ]
     if demo:
         steps = [s for s in steps if s['key'] != 'payments']
@@ -338,10 +345,11 @@ def progress():
     question:
 
     `activated` — has this business put its real world into the software? A
-    cleaner they employ and a customer they clean for. That is the moment it
-    stops being a demo: somebody who has entered a person and a customer has
-    enough in front of them to judge the product, and somebody who has not,
-    has not. It is a milestone, and what the setup emails and the Funnel
+    customer they clean for, and a job on the calendar with somebody assigned
+    (the owner counts, as the first cleaner) -- or a hired team and a customer,
+    as it always was. That is the moment it stops being a demo: somebody who has
+    entered a customer and had a job given to someone has enough in front of
+    them to judge the product, and somebody who has not, has not. It is a milestone, and what the setup emails and the Funnel
     watch for. It does not start or move the trial, which runs 30 days from
     signup.
 
@@ -382,7 +390,8 @@ def progress():
         # The trial trigger. Both, not either: a cleaner with nobody to clean
         # for, or a customer with nobody to send, is half a setup and shows
         # nothing working end to end.
-        'activated': by_key.get('team', False) and by_key.get('client', False),
+        'activated': by_key.get('client', False) and (
+            by_key.get('job', False) or by_key.get('team', False)),
         # How hard to push about payments: required, but skippable on the
         # first evening, so it is kept in front of her. '' once connected.
         'payments': payments_state(),

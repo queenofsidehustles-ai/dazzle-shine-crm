@@ -42,6 +42,14 @@
     <span class="v" style="font-size:var(--t-sm)">{{ (org.nudges_sent or 'none')|replace(',', ', ') }}</span></div>
 </div>
 
+{% set meter_class = {'help': 'ops-failing', 'watch': 'ops-stale', 'ok': 'ops-ok'} %}
+<div class="ops-card" style="margin:var(--s3) 0">
+  <span class="ops-dim">Support</span>
+  <span><span class="ops-badge {{ meter_class.get(meter.level, '') }}">{{ meter.label }}</span></span>
+  {% for why in meter.reasons %}<span class="{{ 'ops-bad' if meter.level == 'help' and loop.first else 'ops-dim' }}">{{ why }}</span>{% endfor %}
+  {% if meter.level == 'ok' %}<span class="ops-dim">Set up and in use.</span>{% elif meter.level == 'new' %}<span class="ops-dim">Signed up in the last few days; the first-week emails are with them.</span>{% endif %}
+</div>
+
 {% if snap is none %}
   <p class="ops-dim">This company is {{ org.status }}, so its data is not read from here.
   {% if purge_from %}Its data is retained until {{ purge_from.strftime('%d %b %Y') }}; permanent purge is run from a terminal with <code>tenant_lifecycle_cli.py</code>, never from this page.{% endif %}</p>
@@ -49,9 +57,10 @@
   <p class="ops-bad">Could not read this company's data ({{ snap.why }}). Its schema may be missing or mid-migration.</p>
 {% else %}
 <div class="ops-grid">
-  <div class="ops-card"><span class="ops-dim">Owner last signed in</span>
-    <span class="v">{{ snap.owner_last_login.strftime('%d %b') if snap.owner_last_login else 'never' }}</span>
-    <span class="ops-dim">anyone: {{ snap.last_login.strftime('%d %b %H:%M') if snap.last_login else 'never' }}</span></div>
+  <div class="ops-card"><span class="ops-dim">Owner last in</span>
+    <span class="v">{{ owner_seen.strftime('%d %b') if owner_seen else 'not seen' }}</span>
+    <span class="ops-dim">anyone: {{ org.active_at.strftime('%d %b %H:%M') if org.active_at else (snap.last_login.strftime('%d %b %H:%M') if snap.last_login else 'not seen') }}
+      · last password sign-in {{ snap.owner_last_login.strftime('%d %b') if snap.owner_last_login else 'never' }}</span></div>
   <div class="ops-card"><span class="ops-dim">People</span><span class="v">{{ snap.users }}</span>
     <span class="ops-dim">active logins</span></div>
   <div class="ops-card"><span class="ops-dim">Clients</span><span class="v">{{ snap.clients }}</span></div>

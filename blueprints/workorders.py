@@ -184,6 +184,10 @@ def create_and_send_workorder(booking, template_id=None, recipient=None):
         tmpl = ChecklistTemplate.query.get(template_id)
         items = tmpl.get_items() if tmpl else DEFAULT_ITEMS.get(booking.service_type, DEFAULT_ITEMS['standard'])
         template_name = tmpl.name if tmpl else booking.service_label
+    elif booking.is_commercial and booking.scope_items():
+        # A business has no house checklist: the scope agreed for it is the list.
+        items = booking.scope_items()
+        template_name = booking.service_label
     else:
         items = DEFAULT_ITEMS.get(booking.service_type, DEFAULT_ITEMS['standard'])
         template_name = booking.service_label
@@ -262,7 +266,7 @@ def _send_workorder_to(booking, checklist, cleaner):
   <p><strong>Address:</strong> {booking.address}, {booking.city} {booking.zip_code}</p>
   <p><a href="{nav_url}" style="color:#1f1333;font-weight:700">🧭 Navigate there →</a></p>
   <p><strong>Service:</strong> {booking.service_label} &nbsp; <strong>Time:</strong> {time_text}</p>
-  <p><strong>Bedrooms:</strong> {booking.bedrooms} &nbsp; <strong>Bathrooms:</strong> {booking.bathrooms}</p>
+  <p>{('<strong>Size:</strong> ' + booking.home_text()) if booking.is_commercial else f'<strong>Bedrooms:</strong> {booking.bedrooms} &nbsp; <strong>Bathrooms:</strong> {booking.bathrooms}'}</p>
   {teammates_html}{crew_pay_html}{access_html}{extras_html}{notes_html}
   <hr style="border:none;border-top:1px solid #e4dfef;margin:20px 0"/>
   <p><a href="{checklist_url}" style="background:#d3a84f;color:#1a1225;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:700">Open Job Checklist →</a></p>

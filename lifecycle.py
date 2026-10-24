@@ -382,7 +382,13 @@ def run_lifecycle_emails():
         if not scheduling.due_for_charge(b, now_local):
             continue
         try:
-            send_payment_link(b, kind='full')
+            if b.is_commercial:
+                # A business is promised an invoice on its terms (net 14), on
+                # the Invoices page, not a request to pay now.
+                from blueprints.bookings import _send_invoice
+                _send_invoice(b)
+            else:
+                send_payment_link(b, kind='full')
             c['invoice'] += 1
         except Exception:
             pass
@@ -452,7 +458,7 @@ def run_lifecycle_emails():
     INSURANCE_AFTER_JOBS = 3
     for s in Staff.query.filter(Staff.is_active.is_(True),
                                 Staff.insurance_reminder_sent_at.is_(None)).all():
-        if not s.email or (s.worker_model or 'contractor') == 'employee':
+        if not s.email or s.is_owner or (s.worker_model or 'contractor') == 'employee':
             continue
         done = Booking.query.outerjoin(BookingCrew, BookingCrew.booking_id == Booking.id).filter(
             db.or_(db.func.lower(Booking.assigned_cleaner) == (s.name or '').lower(),
@@ -468,7 +474,7 @@ def run_lifecycle_emails():
     # ── Onboarding reminders — nudge recent new hires who haven't finished setup ──
     ONBOARD_MAX = 3
     for s in Staff.query.filter(Staff.is_active.is_(True)).all():
-        if not s.email or not s.agreement_token:
+        if not s.email or not s.agreement_token or s.is_owner:
             continue
         if not s.created_at or s.created_at < now - timedelta(days=30):
             continue                                  # only recent onboarders
@@ -536,9 +542,15 @@ def send_cleaner_schedule_reminders():
         myday = f"{branding.crm_base()}/contractors/my-day/{s.agreement_token}"
         _send_transactional('cleaner_schedule_reminder', s.email, s.name,
                             {'job_count': n, 'tomorrow_date': tomorrow, 'myday_link': myday})
-        if s.phone:
+        # The owner's team row has no phone of its own (signup does not ask);
+        # their business phone is the number they gave for this.
+        phone = s.phone
+        if not phone and s.is_owner:
+            from models import BusinessSetting
+            phone = (BusinessSetting.get('phone') or '').strip()
+        if phone:
             try:
-                send_sms(s.phone, f"Reminder: you have {n} job(s) tomorrow ({tomorrow}). "
+                send_sms(phone, f"Reminder: you have {n} job(s) tomorrow ({tomorrow}). "
                                   f"See your day: {myday}")
             except Exception:
                 pass

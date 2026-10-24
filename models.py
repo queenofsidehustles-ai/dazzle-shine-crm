@@ -94,6 +94,10 @@ class Booking(db.Model):
     bathrooms = db.Column(db.String(10))
     sqft = db.Column(db.Integer)        # optional home size — drives the sqft surcharge
     extras = db.Column(db.String(200))  # comma-separated: oven, fridge, laundry
+    # A commercial job: the account it is for, and what is cleaned in place of
+    # bedrooms and bathrooms. See migration 0035.
+    commercial_account_id = db.Column(db.Integer, index=True)
+    scope_of_work = db.Column(db.Text)
 
     # Frequency
     frequency = db.Column(db.String(20), default='one_time')  # one_time, weekly, biweekly, monthly
@@ -275,6 +279,7 @@ class Booking(db.Model):
 
     SERVICE_LABELS = {
         'standard': 'Standard House Cleaning',
+        'commercial': 'Commercial Cleaning',
         'deep': 'Deep Cleaning',
         'moveout': 'Move-Out / Move-In Cleaning',
         'airbnb': 'Airbnb / Vacation Rental',
@@ -316,6 +321,39 @@ class Booking(db.Model):
         return self.status == 'on_hold'
 
     @property
+    def is_commercial(self):
+        return bool(self.commercial_account_id) or self.service_type == 'commercial'
+
+    def home_text(self):
+        """'3 bed / 2 bath' for a house; the size, or 'Commercial', for a business."""
+        if self.is_commercial:
+            return self.size_line() or 'Commercial'
+        return f'{self.bedrooms} bed / {self.bathrooms} bath'
+
+    def scope_items(self):
+        """The scope of work as a list of tasks -- a commercial job's
+        checklist, where a house's comes from its service."""
+        return [l.strip().lstrip('•').strip() for l in (self.scope_of_work or '').splitlines()
+                if l.strip().lstrip('•').strip()]
+
+    def commercial_carry(self):
+        """What a commercial job hands on to the next visit in its series.
+        Bedrooms and bathrooms are copied for a house; for a business these
+        are what say what the job is, and the hours are what the cleaner is
+        paid from."""
+        if not self.is_commercial:
+            return {}
+        return dict(commercial_account_id=self.commercial_account_id,
+                    scope_of_work=self.scope_of_work,
+                    estimated_hours=self.estimated_hours,
+                    labor_rate_applied=self.labor_rate_applied)
+
+    @property
+    def commercial_account(self):
+        return CommercialAccount.query.get(self.commercial_account_id) if self.commercial_account_id else None
+
+
+    @property
     def days_on_hold(self):
         """How long this has been sitting. A deposit taken for work nobody has
         scheduled is somebody's money in limbo, and the only thing that stops it
@@ -332,14 +370,25 @@ class Booking(db.Model):
 
     # ── Labor budget: what the WORK is worth, not what the customer paid ─────
     @property
+    def company_rate(self):
+        """The company's cleaner rate today for this kind of job. A business is
+        paid at the cleaner cost its price was built from (Commercial Pricing),
+        a house at Settings -> Pricing. The price is revenue and can move with
+        the job; the cost a commercial quote assumes is what the cleaner gets."""
+        if self.is_commercial:
+            import commercial_pricing
+            return commercial_pricing.cleaner_rate()
+        from pricing import get_labor_rate
+        return get_labor_rate()
+
+    @property
     def rate_applied(self):
         """The $/hour this job was quoted at. Locked at quote time, so changing
         the company rate tomorrow can never restate what a job from last month
         was worth."""
-        if self.labor_rate_applied:
+        if self.labor_rate_applied is not None:
             return self.labor_rate_applied
-        from pricing import get_labor_rate
-        return get_labor_rate()
+        return self.company_rate
 
     @property
     def payable_hours(self):
@@ -369,12 +418,11 @@ class Booking(db.Model):
     def rate_is_stale(self):
         """True when the company rate has moved since this job was quoted and
         the job hasn't been paid — the only case where re-rating is safe."""
-        from pricing import get_labor_rate
-        if not self.labor_rate_applied or self.cleaner_paid_at:
+        if self.labor_rate_applied is None or self.cleaner_paid_at:
             return False
         if any(c.paid_at for c in self.crew):
             return False
-        return abs(self.labor_rate_applied - get_labor_rate()) > 0.001
+        return abs(self.labor_rate_applied - self.company_rate) > 0.001
 
     @property
     def committed_labor(self):
@@ -486,6 +534,8 @@ class Booking(db.Model):
 
         Jobs with no estimated hours fall back to the old percentage split, so
         anything booked before this existed keeps paying what it always did."""
+        if getattr(staff, 'is_owner', False):
+            return 0.0      # the owner's own time is not a payout (owner_cleaner.py)
         if self.crew_pay_each:
             return round(self.crew_pay_each, 2)
         size = max(1, size or self.crew_size or 1)
@@ -564,6 +614,8 @@ class Booking(db.Model):
         owed IS what she would be offered, so this calls the same function the
         offer does and the two cannot drift apart again.
         """
+        if getattr(staff, 'is_owner', False):
+            return 0.0      # whatever a crew split says (owner_cleaner.py)
         if self.crew:
             row = self.crew_row_for(staff)
             return round(row.pay_amount or 0, 2) if row else 0.0
@@ -1329,6 +1381,10 @@ class Staff(db.Model):
     has_transportation = db.Column(db.Boolean, default=True)
     has_supplies = db.Column(db.Boolean, default=False)
     worker_model = db.Column(db.String(20), default='contractor')  # contractor, employee
+    # The owner, as their own first cleaner (owner_cleaner.py). Created at
+    # signup so a company with nobody else yet can still assign a job. Not a
+    # contractor: no agreement, no W-9, no payout, no insurance reminder.
+    is_owner = db.Column(db.Boolean, default=False)
     onboarding_steps = db.Column(db.Text, default='[]')  # JSON list of completed step keys
     agreement_token = db.Column(db.String(64), unique=True)
     agreement_signature = db.Column(db.String(100))
@@ -1975,6 +2031,28 @@ class Message(db.Model):
     twilio_sid = db.Column(db.String(64))
     read_at = db.Column(db.DateTime)                     # inbound: when the owner viewed it
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+class CallLog(db.Model):
+    """One call placed from the Find Leads call sheet.
+
+    A row is written when the caller presses Call, before anything rings, so
+    the monthly count is of calls placed rather than calls answered -- Twilio
+    bills the ones nobody picked up too. Twilio's own reports fill in the rest
+    afterwards (voice.py): how it ended, how long it ran, and the recording.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    prospect_id = db.Column(db.Integer, db.ForeignKey('prospect.id', ondelete='SET NULL'), index=True)
+    user_id = db.Column(db.Integer)
+    agent = db.Column(db.String(100))
+    to_number = db.Column(db.String(40))
+    call_sid = db.Column(db.String(64), index=True)
+    status = db.Column(db.String(20), default='placed')  # placed / completed / no-answer / busy / failed / canceled
+    duration = db.Column(db.Integer)                       # seconds the other side was on the line
+    recording_sid = db.Column(db.String(64))
+    recording_seconds = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    ended_at = db.Column(db.DateTime)
 
 
 class OutboundLog(db.Model):

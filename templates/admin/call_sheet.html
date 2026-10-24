@@ -44,14 +44,106 @@
   </p>
 
   {% if current.phone %}
-  <p style="margin:0 0 14px">
+  <div style="margin:0 0 14px">
+    {% if calling.ready %}
+    {# In-browser calling (voice.py). The number never comes from this page:
+       the server dials the one on the prospect's record. #}
+    <button type="button" id="dialBtn" class="btn btn-gold"
+            style="font-size:1.05rem;padding:12px 26px"
+            {{ 'disabled' if calling.block }}>📞 Call {{ current.phone }}</button>
+    <button type="button" id="hangBtn" class="btn btn-outline"
+            style="display:none;padding:12px 20px">Hang up</button>
+    <button type="button" id="muteBtn" class="btn btn-outline"
+            style="display:none;padding:12px 20px">Mute</button>
+    {% if current.website %}
+    <a href="{{ current.website }}" target="_blank" rel="noopener" class="btn btn-outline">Their website</a>
+    {% endif %}
+    <p id="dialStatus" style="margin:8px 0 0;font-size:0.86rem;color:var(--softer)">
+      {% if calling.block %}{{ calling.block }}{% else %}
+      {{ calling.used }} of {{ calling.limit }} calls used this month.
+      {% if calling.recording %}Calls are recorded, and the person who answers is told.{% endif %}
+      {% endif %}
+    </p>
+    {% if is_owner %}
+    <form method="POST" action="{{ url_for('voice.recording_setting') }}" style="margin:6px 0 0">
+      <input type="hidden" name="recording" value="{{ '0' if calling.recording else '1' }}">
+      <button type="submit" class="btn btn-outline" style="font-size:0.8rem;padding:4px 10px">
+        {{ 'Stop recording calls' if calling.recording else 'Record calls' }}</button>
+    </form>
+    {% endif %}
+    {% else %}
     <a href="tel:{{ current.phone }}" class="btn btn-gold" style="font-size:1.05rem;padding:12px 26px">
       📞 {{ current.phone }}
     </a>
     {% if current.website %}
     <a href="{{ current.website }}" target="_blank" rel="noopener" class="btn btn-outline">Their website</a>
     {% endif %}
-  </p>
+    {% endif %}
+  </div>
+
+  {% if calling.past %}
+  <details style="margin:0 0 14px">
+    <summary style="cursor:pointer;font-size:0.84rem;color:var(--softer)">Earlier calls to this business</summary>
+    {% for c in calling.past %}
+    <div style="margin-top:8px;font-size:0.84rem">
+      {{ c.created_at.strftime('%b %-d, %-I:%M %p') }} UTC
+      · {{ c.status }}{% if c.duration %} · {{ c.duration // 60 }}:{{ '%02d' % (c.duration % 60) }}{% endif %}
+      {% if c.agent %} · {{ c.agent }}{% endif %}
+      {% if c.recording_sid %}
+      <audio controls preload="none" style="display:block;margin-top:4px;max-width:100%"
+             src="{{ url_for('voice.recording', call_id=c.id) }}"></audio>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+
+  {% if calling.ready and not calling.block %}
+  <script src="https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.12.0/dist/twilio.min.js"></script>
+  <script>
+    (function () {
+      var dial = document.getElementById('dialBtn'),
+          hang = document.getElementById('hangBtn'),
+          mute = document.getElementById('muteBtn'),
+          status = document.getElementById('dialStatus');
+      var device = null, active = null;
+      function say(t) { status.textContent = t; }
+      function idle() {
+        dial.style.display = ''; dial.disabled = false;
+        hang.style.display = 'none'; mute.style.display = 'none';
+        mute.textContent = 'Mute'; active = null;
+      }
+      dial.addEventListener('click', async function () {
+        dial.disabled = true; say('Starting the phone…');
+        try {
+          var r = await fetch({{ url_for('voice.start', prospect_id=current.id) | tojson }},
+                              {method: 'POST', credentials: 'same-origin'});
+          var d = await r.json();
+          if (!r.ok) { say(d.error || 'Could not place the call.'); dial.disabled = false; return; }
+          if (device) { device.destroy(); }
+          device = new Twilio.Device(d.token, {closeProtection: true});
+          device.on('error', function (e) { say('Phone error: ' + (e.message || e)); idle(); });
+          active = await device.connect({params: {ticket: d.ticket}});
+          dial.style.display = 'none'; hang.style.display = ''; mute.style.display = '';
+          say('Calling… (' + d.used + ' of ' + d.limit + ' this month)');
+          active.on('accept', function () { say('Connected.'); });
+          active.on('disconnect', function () { say('Call ended. How did it go?'); idle(); });
+          active.on('cancel', function () { say('Call ended. How did it go?'); idle(); });
+          active.on('error', function (e) { say('Call error: ' + (e.message || e)); idle(); });
+        } catch (e) {
+          say('Could not place the call: ' + (e.message || e));
+          idle();
+        }
+      });
+      hang.addEventListener('click', function () { if (active) active.disconnect(); });
+      mute.addEventListener('click', function () {
+        if (!active) return;
+        var m = !active.isMuted(); active.mute(m);
+        mute.textContent = m ? 'Unmute' : 'Mute';
+      });
+    })();
+  </script>
+  {% endif %}
   {% endif %}
   <p style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     {% if text_phone %}

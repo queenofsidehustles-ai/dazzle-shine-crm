@@ -69,9 +69,13 @@ print('\n2. Whole and part dollars read naturally')
 check(api._dollars(75) == '$75' and api._dollars(49.5) == '$49.50', '$75 and $49.50')
 
 print('\n3. The new booking form offers a $75 link')
+# Pricing decides whether a phone booking asks for the deposit; once it does,
+# the confirmation tickbox names the amount.
+with app.app_context():
+    PricingSetting.set('phone_booking_deposit', '1'); db.session.commit()
 c = owner()
 r = c.get('/bookings/new')
-check(b'Send a $75 deposit link now' in r.data, 'radio option shows $75')
+check(b'and the $75 deposit link' in r.data, 'the confirmation tickbox shows $75')
 
 print('\n4. Lead emails use the setting, including copies already saved')
 with app.app_context():

@@ -300,11 +300,25 @@ def companies():
     # Most recent sign-ups first.
     orgs.sort(key=lambda o: o.get('created_at') or datetime.min, reverse=True)
     snaps = console_data.snapshots(orgs)
-    rows = [dict(o, trial=billing.trial_state(o), snap=snaps.get(o['slug']))
-            for o in orgs]
+    rows = []
+    for o in orgs:
+        trial = billing.trial_state(o)
+        snap = snaps.get(o['slug'])
+        rows.append(dict(o, trial=trial, snap=snap,
+                         seen=console_data.owner_last_seen(o, snap),
+                         meter=console_data.support_meter(o, snap, trial)))
+    support = {level: sum(1 for r in rows if r['meter']['level'] == level)
+               for level in ('help', 'watch')}
+    needs = request.args.get('needs') == '1'
+    if needs:
+        # Who needs somebody to reach out: "needs help" first, then "watch",
+        # newest sign-ups first within each, as the full list is.
+        rows = [r for r in rows if r['meter']['level'] in ('help', 'watch')]
+        rows.sort(key=lambda r: r['meter']['level'] != 'help')
     return render_template('console/companies.html', rows=rows, q=q,
                            show_archived=show_archived,
                            archived_count=archived_count,
+                           needs=needs, support=support,
                            leads=console_data.dedupe_leads(control_plane.all_leads(engine)),
                            me=request.console_user, counts=_counts(engine))
 
@@ -324,11 +338,15 @@ def company(slug):
     import attribution
     readable = (org.get('status') or 'active') in console_data.READABLE
     closed_at = org.get('closed_at')
+    trial = billing.trial_state(org)
+    snap = console_data.snapshot(slug) if readable else None
     return render_template(
-        'console/company.html', org=org, trial=billing.trial_state(org),
+        'console/company.html', org=org, trial=trial,
         came_from=attribution.label(org),
         referred=control_plane.referred_by(engine, slug),
-        snap=console_data.snapshot(slug) if readable else None,
+        snap=snap,
+        meter=console_data.support_meter(org, snap, trial),
+        owner_seen=console_data.owner_last_seen(org, snap),
         reports=[f for f in control_plane.all_feedback(engine)
                  if f.get('org_slug') == slug][:20],
         history=[r for r in control_plane.console_log_all(engine)
@@ -905,6 +923,112 @@ def _csv_safe(value):
     """
     text = '' if value is None else str(value)
     return "'" + text if text[:1] in ('=', '+', '-', '@', '\t', '\r') else text
+
+
+@console_bp.route('/release')
+@console_required
+def release_view():
+    """What is on main that the companies do not have yet, and the way to ship it."""
+    import release_control
+    ov = release_control.overview()
+    return render_template(
+        'console/release.html', ov=ov, blocked=release_control.blockers(ov),
+        rollback_blocked=release_control.rollback_blockers(ov),
+        flags=ov.get('flags') or {}, is_owner=_is_owner(), me=request.console_user,
+        repo=release_control.repo(),
+        counts=_counts(_engine()))
+
+
+@console_bp.route('/release/go', methods=['POST'])
+@console_required
+def release_go():
+    """Start the release of exactly the commit the page showed."""
+    import release_control
+    here = url_for('console.release_view')
+    if not _is_owner():
+        flash('Only the console owner can release.', 'error')
+        return redirect(here)
+    ov = release_control.overview()
+    head = ov.get('main_sha') or ''
+    # The page was drawn from one commit; the release must be of that commit.
+    if (request.form.get('sha') or '') != head or \
+            (request.form.get('stable') or '') != ov.get('stable_sha'):
+        flash('main or akye-stable has moved since you opened this page. Look at the new changes '
+              'and release again.', 'error')
+        return redirect(here)
+    why = release_control.blockers(ov)
+    if why:
+        flash('Not released: ' + why[0], 'error')
+        return redirect(here)
+    reason = (request.form.get('reason') or '').strip()
+    if len(reason) < 5:
+        flash('Say why, in a sentence. It goes in the record.', 'error')
+        return redirect(here)
+    if (request.form.get('confirm') or '').strip().lower() != head[:7]:
+        flash(f'Type the commit ({head[:7]}) exactly to confirm.', 'error')
+        return redirect(here)
+    ok, why_not = _reauthenticate()
+    if not ok:
+        flash(why_not, 'error')
+        return redirect(here)
+    started, message = release_control.start(head, ov['stable_sha'])
+    who = request.console_user['email']
+    if not started:
+        control_plane.log_console(_engine(), who, 'release failed to start', 'akye-stable',
+                                  f'{head[:7]}: {message}'[:300])
+        flash(message, 'error')
+        return redirect(here)
+    control_plane.log_console(_engine(), who, 'started release', 'akye-stable',
+                              f'{head[:7]}, {ov["ahead"]} commit(s). Reason: {reason}'[:300])
+    flash(f'Release started for {head[:7]}. It runs every suite first, so allow about '
+          f'half an hour; companies get it a few minutes after it finishes.', 'success')
+    return redirect(here)
+
+
+@console_bp.route('/release/rollback', methods=['POST'])
+@console_required
+def release_rollback():
+    """Put every company back on the release before the one they are on."""
+    import release_control
+    here = url_for('console.release_view')
+    if not _is_owner():
+        flash('Only the console owner can roll back.', 'error')
+        return redirect(here)
+    ov = release_control.overview()
+    why = release_control.rollback_blockers(ov)
+    if why:
+        flash('Not rolled back: ' + why[0], 'error')
+        return redirect(here)
+    target = ov['previous_tag']
+    # The page named a release; if the channel has moved since, that is not
+    # the one the owner decided on.
+    if (request.form.get('to') or '') != target or \
+            (request.form.get('from') or '') != ov['current_tag']:
+        flash('The releases changed since you opened this page. Look again.', 'error')
+        return redirect(here)
+    reason = (request.form.get('reason') or '').strip()
+    if len(reason) < 5:
+        flash('Say why, in a sentence. It goes in the record.', 'error')
+        return redirect(here)
+    if (request.form.get('confirm') or '').strip() != target:
+        flash(f'Type the release ({target}) exactly to confirm.', 'error')
+        return redirect(here)
+    ok, why_not = _reauthenticate()
+    if not ok:
+        flash(why_not, 'error')
+        return redirect(here)
+    started, message = release_control.start_rollback(target)
+    who = request.console_user['email']
+    if not started:
+        control_plane.log_console(_engine(), who, 'rollback failed to start', 'akye-stable',
+                                  f'{target}: {message}'[:300])
+        flash(message, 'error')
+        return redirect(here)
+    control_plane.log_console(_engine(), who, 'started rollback', 'akye-stable',
+                              f'{ov["current_tag"]} to {target}. Reason: {reason}'[:300])
+    flash(f'Rolling back to {target}. This takes a minute or two, and companies '
+          f'redeploy a few minutes after. Their data is untouched.', 'success')
+    return redirect(here)
 
 
 @console_bp.route('/health')
@@ -1595,9 +1719,16 @@ def leads_upload():
         flash('Could not read that file as text.', 'error')
         return redirect(url_for('console.leads_view'))
 
-    reader = csv.DictReader(io.StringIO(text))
-    if not reader.fieldnames:
-        flash('That file has no header row.', 'error')
+    # newline='' lets the csv module read \r, \n and \r\n endings alike;
+    # without it a file saved with old-Mac \r endings raises "new-line
+    # character seen in unquoted field".
+    reader = csv.DictReader(io.StringIO(text, newline=''))
+    try:
+        if not reader.fieldnames:
+            flash('That file has no header row.', 'error')
+            return redirect(url_for('console.leads_view'))
+    except csv.Error:
+        flash('Could not read that file as a CSV. Save it as "CSV (comma delimited)" and try again.', 'error')
         return redirect(url_for('console.leads_view'))
     # Case-insensitive, so "Email" and "email" both find the column.
     by_lower = {(h or '').strip().lower(): h for h in reader.fieldnames}
@@ -1608,7 +1739,12 @@ def leads_upload():
 
     import notifications
     added = skipped = already = flagged = failed = 0
-    for row in reader:
+    try:
+        rows = list(reader)
+    except csv.Error:
+        flash('Could not read that file as a CSV. Save it as "CSV (comma delimited)" and try again.', 'error')
+        return redirect(url_for('console.leads_view'))
+    for row in rows:
         email = (row.get(by_lower.get('email', ''), '') or '').strip().lower()
         phone = (row.get(by_lower.get('phone', ''), '') or '').strip()
         # notifications.looks_like_email, not just "has an @": "person@example"
@@ -2133,7 +2269,8 @@ def communications():
     return render_template(
         'console/communications.html',
         catalog=comms.CATALOG, labels=comms.LABELS,
-        always_on=comms.ALWAYS_ON, switches=smap,
+        always_on=comms.ALWAYS_ON,
+        switches={k: comms.state(k, smap) for k, *_ in comms.CATALOG},
         owner_on=smap.get(comms.ALL_OWNER, True),
         lead_on=smap.get(comms.ALL_LEAD, True),
         sent=comms.sent_counts(engine),

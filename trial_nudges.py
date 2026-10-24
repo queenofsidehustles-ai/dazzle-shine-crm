@@ -70,6 +70,25 @@ day's mail. Each not-activated email stops the moment they activate.
 `activated` and `first_booking` are sent the moment they happen
 (`send_event`), because that is when they mean something; the daily run also
 sends `activated` if the moment passed without it, for three days and no more.
+
+## Gone quiet (added October 2026)
+
+Every note above is about getting started, or about the trial ending. Nothing
+spoke to the owner who got it working and then stopped coming back, or to the
+one who reached the free plan without ever starting. Three more, each once:
+
+    quiet         trial running, set up, owner away 7-13 days
+    free_quiet    free plan, set up, owner away 14-30 days
+    free_start    free plan, never set up, 14-21 days after the trial ended
+
+"Away" is organizations.owner_active_at, which the app writes as the owner
+uses it (auth.note_activity). Never the tenant's last password sign-in: a
+session renews itself, so somebody using it every day can show no sign-in for
+months, and "we have not seen you" to them would be worse than silence. A
+company with no owner_active_at yet is simply not due.
+
+These three ship switched off (communications.DEFAULT_OFF): they send only
+once somebody turns them on in the console's Communications page.
 """
 from datetime import datetime
 
@@ -111,13 +130,20 @@ ACTIVATED_WITHIN_DAYS = 3
 FEATURE = (8, 10)
 # Days after a lapse for the single "here is what you would get back".
 WINBACK = (7, 10)
+# Gone quiet. Days since the owner last used it (organizations.owner_active_at),
+# except FREE_START, which is days since the trial ended. Each starts after the
+# week the console's support meter calls "watch", so a busy week is not an
+# email, and ends before it would be about somebody long gone.
+QUIET = (7, 13)
+FREE_QUIET = (14, 30)
+FREE_START = (14, 21)
 # Fewer hours than a day, so a cron that runs at 9:05 one morning and 8:55
 # the next is still "the next day".
 ONE_A_DAY_HOURS = 20
 
 ALL = ('start_7', 'start_21', 'ending', 'ended',
        'day1', 'day2', 'day4', 'day5', 'activated', 'feature',
-       'first_booking', 'winback')
+       'first_booking', 'winback', 'quiet', 'free_quiet', 'free_start')
 # Sent when something happens, not on a timetable.
 EVENTS = ('activated', 'first_booking')
 
@@ -145,7 +171,7 @@ def emailed_today(org, now=None):
     return bool(last) and (now - last).total_seconds() < ONE_A_DAY_HOURS * 3600
 
 
-def due(org, now=None, next_step=None):
+def due(org, now=None, next_step=None, skip=()):
     """Which nudge this company should get today, or None.
 
     Pure: no database, no mail, no clock of its own. Every rule above is
@@ -155,6 +181,10 @@ def due(org, now=None, next_step=None):
     `next_step` is the one tenant-side fact the "feature" note needs -- the
     first Getting Started step still undone, or None. The caller reads it;
     without it, that note is simply not due.
+
+    `skip` is the kinds switched off in the console. They are passed over as
+    though already sent, so one switched-off email never holds back the next
+    one that is due (a "quiet" note that is off must not swallow "feature").
     """
     if not org:
         return None
@@ -176,9 +206,11 @@ def due(org, now=None, next_step=None):
         return None
     if emailed_today(org, now):
         return None                     # one a day, whatever sent the last one
-    already = _sent(org)
+    already = _sent(org) | set(skip or ())
     created = org.get('created_at') or now
     age = (now - created).days
+    seen = org.get('owner_active_at')
+    away = (now - seen).days if seen else None
 
     def open_(window, kind, days=age):
         return window[0] <= days <= window[1] and kind not in already
@@ -193,6 +225,16 @@ def due(org, now=None, next_step=None):
         # trial that lapsed unused has nothing to "get back".
         if org.get('activated_at') and open_(WINBACK, 'winback', lapsed):
             return 'winback'
+        # On the free plan and drifting away. Only once we have seen them use
+        # it at all (`away` is None until then), so this never reaches somebody
+        # who is in every day and simply never signs out.
+        if org.get('activated_at') and away is not None \
+                and open_(FREE_QUIET, 'free_quiet', away):
+            return 'free_quiet'
+        # Reached the free plan without ever getting going. Keyed to the lapse,
+        # with an end, so the first run does not write to every old account.
+        if not org.get('activated_at') and open_(FREE_START, 'free_start', lapsed):
+            return 'free_start'
         return None
 
     # Every trial is running now, so there is one sequence rather than two.
@@ -206,6 +248,9 @@ def due(org, now=None, next_step=None):
         days_in = (now - began).days
         if days_in <= ACTIVATED_WITHIN_DAYS and 'activated' not in already:
             return 'activated'
+        # Got it working, then stopped coming back.
+        if away is not None and open_(QUIET, 'quiet', away):
+            return 'quiet'
         # Everything in the first-week run is some version of "add a cleaner
         # and a customer", which is no letter to send to somebody who has.
         # day2 is about the booking page, which is still worth telling them.
@@ -284,21 +329,21 @@ def compose(org, kind, next_step=None):
             'A week in, and nothing has run through it yet',
             f'''<p>You have everything — scheduling, the team, quotes, hiring,
             the lot — and so far none of it has had a real job to do.</p>
-            <p><strong>Two things, about two minutes:</strong> add one cleaner
-            (yourself counts, if you are still cleaning) and one customer you
-            already clean for. That is enough to see the whole thing work
-            end to end.</p>
+            <p><strong>About two minutes:</strong> add one customer you already
+            clean for, then book their next clean and give it to yourself. You
+            are already on the team as the first cleaner, so that is enough to
+            see the whole thing work end to end.</p>
             <p style="color:#7a8499;font-size:14px">You have
             <strong>{left} day{plural}</strong> left of your
             {billing.TRIAL_DAYS} days.</p>''',
-            'Add a cleaner', f'{url}/staff/new'))
+            'Add a customer', f'{url}/bookings/clients/new'))
 
     if kind == 'start_21':
         return (f'{name}: {left} day{plural} left on your trial',
                 wrap(
             f'{left} day{plural} left, and it has not been used yet',
             f'''<p>Your account still has everything on it, and nothing has
-            run through it — no cleaner, no customer, no job.</p>
+            run through it — no customer, no job.</p>
             <p>After <strong>{left} day{plural}</strong> the account drops to
             the free plan. Nothing is deleted and you can keep working, but the
             hiring pipeline, the automations and the rest go quiet, and you
@@ -316,7 +361,7 @@ def compose(org, kind, next_step=None):
               <li>Automatic reminders and follow-ups</li>
               <li>Card payments and invoices</li>
               <li>The hiring pipeline</li>
-              <li>More than 2 cleaners, or 20 jobs a month</li>
+              <li>More than 3 cleaners, or 20 jobs a month</li>
             </ul>'''
 
     if kind == 'ending':
@@ -360,15 +405,14 @@ def compose(org, kind, next_step=None):
             f'''<p>Addresses screenshotted into a group chat. A cleaner texting
             &ldquo;which house again?&rdquo; at 8am. The whole week living in
             your head and your phone.</p>
-            <p>That ends with two things: add <strong>one cleaner</strong>
-            (you count, if you are still cleaning) and <strong>one
-            customer</strong> you already clean for. Then you can watch a job
-            go straight to their phone with the address, the time and the
-            checklist.</p>
+            <p>That ends with two things: add <strong>one customer</strong>
+            you already clean for, and book their next clean. You are already
+            on the team as the first cleaner, so give it to yourself and watch
+            it show up with the address, the time and the checklist.</p>
             <p>About two minutes. Your {billing.TRIAL_DAYS} days are already
             running, so the sooner you see it work the better.</p>
             {funnel_videos.email_block('team_and_customer')}''',
-            'Add my first cleaner', f'{url}/staff/new'))
+            'Add my first customer', f'{url}/bookings/clients/new'))
 
     if kind == 'day2':
         return (f'{name}: the jobs you lose while you are cleaning',
@@ -394,13 +438,14 @@ def compose(org, kind, next_step=None):
             the week gets away from them, which is the exact problem this is
             meant to fix. A few things we hear a lot:</p>
             <p><strong>&ldquo;I need to set everything up first.&rdquo;</strong><br>
-            You do not. One cleaner and one customer is enough to see it work.
+            You do not. One customer and one job is enough to see it work.
             Do the rest when you have a quiet evening.</p>
             <p><strong>&ldquo;My prices are different.&rdquo;</strong><br>
             Change them under Settings, Prices. Your booking page and quotes
             follow, so the price you say is the price they book.</p>
             <p><strong>&ldquo;I do not have cleaners yet.&rdquo;</strong><br>
-            Add yourself. That is how most cleaning businesses start.</p>
+            You are already on the team. Give the job to yourself. That is how
+            most cleaning businesses start.</p>
             <p>Stuck on something else? Reply and tell us what. A real person
             reads every one.</p>''',
             'Pick up where I left off'))
@@ -425,14 +470,16 @@ def compose(org, kind, next_step=None):
         return (f'{name}: that is it working',
                 wrap(
             'That is it working',
-            f'''<p>You added a cleaner and a customer, so there is a real
+            f'''<p>You added your first customer, so there is a real
             business in there now. Everything stays switched on until
             <strong>{until}</strong>.</p>
-            <p>Picture next week: jobs land on your cleaners&rsquo; phones,
+            <p>Picture next week: jobs land on your phone and your
+            cleaners&rsquo;,
             customers get their reminders without you, and you are not
             rebuilding the schedule from texts at night.</p>
-            <p>To see it for real, <strong>book one real job and assign
-            it.</strong> That is the moment it clicks.</p>
+            <p>To see it for real, <strong>book one real clean and assign
+            it,</strong> to yourself if you are still cleaning. That is the
+            moment it clicks.</p>
             {funnel_videos.email_block('book_job')}''',
             'Book my first job', f'{url}/bookings/new'))
 
@@ -442,7 +489,7 @@ def compose(org, kind, next_step=None):
             'Somebody booked you through your own page',
             '''<p>A customer just booked you, and you did not have to answer a
             call, play phone tag or send a quote. It is in your calendar now,
-            ready for a cleaner.</p>
+            ready to assign.</p>
             <p>That is a job that could easily have gone to someone else.
             Every place your link lives is another chance for this to happen
             again. Add it somewhere new today.</p>''',
@@ -477,6 +524,53 @@ def compose(org, kind, next_step=None):
             <p>It comes back the moment you pick a plan. This is the last note
             about it. If something was missing, reply and tell us.</p>''',
             'Turn it back on', f'{url}/billing'))
+
+    # ── Gone quiet ────────────────────────────────────────────────────────
+    # Not a sales note. The ask is to come back or to tell us what got in
+    # the way; the free-plan ones promise only what the free plan includes.
+    if kind == 'quiet':
+        return (f'{name}: did the week get away from you?',
+                wrap(
+            'Did the week get away from you?',
+            f'''<p>You got it set up, and it has been about a week since you
+            were last in. That is most weeks for a cleaning owner: the jobs
+            come first and the admin waits.</p>
+            <p>Everything you added is still there. With your week in it
+            instead of your phone, each cleaner opens their own day and nobody
+            texts you &ldquo;which house again?&rdquo; at 8am.</p>
+            <p>You have <strong>{left} day{plural}</strong> left with
+            everything switched on. If something got in the way, reply and
+            tell us what it was. A person reads every one.</p>''',
+            'Open my schedule', f'{url}/bookings/'))
+
+    if kind == 'free_quiet':
+        return (f'{name}: need a hand with anything?',
+                wrap(
+            'Need a hand with anything?',
+            '''<p>It has been a couple of weeks since you were last in. Your
+            customers, jobs and prices are all still there, and the free plan
+            stays free.</p>
+            <p>If you stopped because something was confusing, missing, or
+            just not worth the time, we would really like to know. Reply and
+            tell us in a line. A person reads it, and it changes what we fix
+            next.</p>''',
+            'Open my account'))
+
+    if kind == 'free_start':
+        return (f'{name}: still here when you are ready',
+                wrap(
+            'Still here when you are ready',
+            '''<p>Your account is still open on the free plan. It never got
+            its first customer and job, so you have not seen it do
+            anything yet.</p>
+            <p>The free plan is enough to try it properly: up to 3 cleaners,
+            every customer you have, and 20 jobs a month. Two things, about two
+            minutes: add <strong>one customer</strong> you already clean for,
+            and give their next clean to yourself. You are already the first
+            cleaner.</p>
+            <p>If something put you off, reply and tell us. This is the last
+            note about getting started.</p>''',
+            'Add a customer', f'{url}/bookings/clients/new'))
 
     raise ValueError(f'unknown nudge: {kind}')
 
@@ -536,6 +630,7 @@ def run(engine=None, now=None, dry_run=False, sent_by='auto'):
 
     import communications
     switch_map = control_plane.switches(engine)
+    off = {k for k in ALL if not communications.is_on(k, switch_map)}
     now = now or datetime.utcnow()
     for org in orgs:
         counts['considered'] += 1
@@ -545,9 +640,12 @@ def run(engine=None, now=None, dry_run=False, sent_by='auto'):
             continue
         if not communications.is_on(kind, switch_map):
             # Switched off in the console. Not recorded as sent, so turning
-            # it back on inside the window still sends it.
+            # it back on inside the window still sends it. Whatever else is
+            # due today and switched on goes instead.
             counts['switched_off'] += 1
-            continue
+            kind = due(org, now, next_step=step, skip=off)
+            if not kind:
+                continue
         if not (org.get('owner_email') or '').strip():
             counts['skipped_no_email'] += 1
             continue

@@ -16,13 +16,18 @@
   <a href="{{ url_for('bookings.index') }}" style="color:var(--info);text-decoration:none;font-size:0.85rem">← All bookings</a>
 </div>
 
-{# Named, because the running total below has to find *this* form. It used to
+{# Written for whoever picks up the phone, not for the owner. Three questions --
+   who, what, when -- and one button. Everything about the money behind the
+   price (the lead fee, what the cleaner earns, what to collect up front) is
+   the owner's, and it lives on the booking page and on Pricing.
+
+   Named, because the running total below has to find *this* form. It used to
    take the first form on the page, which is the brand switcher in the sidebar —
    see the note in the script at the bottom. #}
 <form id="booking-form" method="POST" action="{{ url_for('bookings.new') }}">
   <div class="card" style="max-width:640px">
 
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">👤 Customer</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">1. Who</h2>
     <div class="form-group">
       <label>Name *</label>
       <input type="text" name="name" required placeholder="Jane Smith" value="{{ client.name if client else '' }}" />
@@ -51,12 +56,20 @@
         <input type="text" name="zip_code" placeholder="32801" value="{{ client.zip_code if client else '' }}" />
       </div>
     </div>
+    <div class="form-group">
+      <label for="source">How did they find you?</label>
+      <select id="source" name="source" data-prefill="{{ 'repeat' if client else '' }}">
+        {% for key, label in sources %}
+        <option value="{{ key }}" {{ 'selected' if key == 'other' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
 
     <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">🧹 The Job</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">2. What</h2>
 
     <div class="form-group">
-      <label>Service type</label>
+      <label>Type of cleaning</label>
       <select name="service_type" data-prefill="{{ last.service_type if last else '' }}">
         {% for key, label in service_labels.items() %}
         <option value="{{ key }}">{{ label }}</option>
@@ -77,10 +90,6 @@
         </select>
       </div>
     </div>
-    <div class="form-group">
-      <label>Square footage <span style="font-weight:400;color:var(--softer)">— optional; adds a surcharge for larger-than-average homes</span></label>
-      <input type="number" name="sqft" step="50" placeholder="Leave blank for standard size" />
-    </div>
 
     <div class="form-group">
       <label>Add-ons</label>
@@ -93,52 +102,31 @@
       </div>
     </div>
 
-    <div class="form-group" style="display:flex;align-items:center;gap:9px">
-      <input type="checkbox" id="is_recurring" style="width:auto" onchange="toggleRecurring()" />
-      <label for="is_recurring" style="margin:0;cursor:pointer">🔁 This is a recurring cleaning</label>
-    </div>
     <div class="detail-grid" style="gap:14px">
-      <div class="form-group" id="freq-wrap" style="display:none">
+      <div class="form-group">
         <label>How often</label>
-        {# Disabled, not just hidden -- a disabled field submits nothing at
-           all, so an unchecked box reliably means one_time server-side
-           rather than a value some earlier click left sitting in a hidden
-           select. toggleRecurring() keeps it in sync with the checkbox. #}
-        <select name="frequency" id="frequency-select" disabled>
+        {# One dropdown, starting on One-Time. It replaces a checkbox that
+           opened a second box, which was two steps for one answer. #}
+        <select name="frequency">
           {% for key, label in frequency_labels.items() %}
-          <option value="{{ key }}">{{ label }}</option>
+          <option value="{{ key }}" {{ 'selected' if key == 'one_time' }}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <label>Cleaning price ($)</label>
-        <input type="text" name="cleaning_price" placeholder="Leave blank to auto-calculate" />
+        <label>Price ($)</label>
+        <input type="text" name="cleaning_price" id="cleaning-price" placeholder="" inputmode="decimal" />
+        <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">Leave it to use your price list.</p>
       </div>
-    </div>
-    <div class="form-group" style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:10px;padding:12px">
-      <label style="color:var(--info)">📣 Lead fee ($) <span style="font-weight:400;color:var(--muted)">— your ad cost. Added to the customer total and hidden from them. It never reaches the cleaner.</span></label>
-      <input type="text" name="lead_fee" value="" placeholder="Leave blank if no ad cost" />
-      <p style="font-size:0.78rem;color:var(--muted);margin-top:6px">Optional — only enter an amount if this customer came from a paid ad. Leave blank for referrals, repeat customers, or walk-ins.</p>
     </div>
 
-    <!-- LIVE RUNNING TOTAL -->
-    <div style="background:var(--ink);color:#fff;border-radius:12px;padding:16px 18px;margin:4px 0 4px">
-      <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:rgba(255,255,255,0.7);padding:2px 0">
-        <span>Cleaning price</span><span id="rt-cleaning">$0.00</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:rgba(255,255,255,0.7);padding:2px 0">
-        <span>Lead fee</span><span id="rt-fee">$0.00</span>
-      </div>
-      <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:700">Customer pays</span>
-        <span id="rt-total" style="font-weight:700;font-size:1.5rem;color:var(--amber)">$0.00</span>
-      </div>
-      <p style="font-size:0.72rem;color:rgba(255,255,255,0.45);margin-top:6px">The cleaner's pay is a flat amount set on the job — it doesn't come out of this total, and never out of the lead fee.</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--line-soft);border-radius:10px;padding:12px 15px;margin:2px 0 4px">
+      <span style="font-weight:700">Customer pays</span>
+      <span id="rt-total" style="font-weight:700;font-size:1.35rem">$0.00</span>
     </div>
 
     <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">📅 Schedule</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">3. When</h2>
     <div class="detail-grid" style="gap:14px">
       <div class="form-group">
         <label for="preferred-date">Date</label>
@@ -150,62 +138,35 @@
       </div>
     </div>
     <div class="form-group">
-      <label>Status</label>
-      <select name="status">
-        <option value="confirmed" selected>Confirmed</option>
-        <option value="pending">Pending</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>Access notes <span style="font-weight:400;color:var(--softer)">(gate code, key, parking, pets — the cleaner sees this)</span></label>
+      <label>Notes for the cleaner <span style="font-weight:400;color:var(--softer)">— gate code, key, pets</span></label>
       <textarea name="access_notes" rows="2" placeholder="Gate code 1234, key under mat, friendly dog"></textarea>
     </div>
-    <div class="form-group">
-      <label for="booking-notes">Notes <span style="font-weight:400;color:var(--softer)">(internal)</span></label>
-      <textarea id="booking-notes" name="notes" rows="2"></textarea>
-    </div>
 
-    <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px">💳 Payment</h2>
-    <div class="form-group" style="margin-bottom:10px">
-      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500">
-        <input type="radio" name="payment_option" value="none" checked style="width:auto"> No prepayment — collect later (invoice auto-sends the morning of the job)
-      </label>
-      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500;margin-top:8px">
-        <input type="radio" name="payment_option" value="deposit" style="width:auto"> Send a ${{ ('%.0f'|format(deposit)) if deposit == deposit|int else ('%.2f'|format(deposit)) }} deposit link now
-      </label>
-      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500;margin-top:8px">
-        <input type="radio" name="payment_option" value="full" style="width:auto"> Send a full-payment link now
-      </label>
-    </div>
+    {# The rarely-needed ones, out of the way of the call. #}
+    <details style="margin:4px 0 14px">
+      <summary style="cursor:pointer;font-size:0.85rem;color:var(--softer);font-weight:600">More details</summary>
+      <div style="padding-top:12px">
+        <div class="form-group">
+          <label>Square footage <span style="font-weight:400;color:var(--softer)">— only for a bigger-than-usual home</span></label>
+          <input type="number" name="sqft" step="50" placeholder="Leave blank for standard size" />
+        </div>
+        <div class="form-group">
+          <label for="booking-notes">Private notes <span style="font-weight:400;color:var(--softer)">— only you see these</span></label>
+          <textarea id="booking-notes" name="internal_notes" rows="2"></textarea>
+        </div>
+      </div>
+    </details>
 
     <label style="display:flex;align-items:center;gap:9px;background:var(--good-soft);border:1px solid var(--good-soft);border-radius:10px;padding:12px 14px;margin:6px 0 14px;cursor:pointer;font-weight:600;color:var(--good)">
       <input type="checkbox" name="notify_customer" value="1" checked style="width:auto">
-      📩 Send a booking confirmation — sends whether or not you also ask for payment
+      📩 Text + email the customer their confirmation{% if ask_deposit and deposit %} and the ${{ ('%.0f'|format(deposit)) if deposit == deposit|int else ('%.2f'|format(deposit)) }} deposit link{% endif %}
     </label>
 
-    <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:6px">✅ Create Booking</button>
-    <p style="font-size:0.8rem;color:var(--softer);text-align:center;margin-top:10px">Next you'll be able to assign a cleaner, which texts + emails them the job.</p>
+    <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:6px">✅ Book it</button>
   </div>
 </form>
 
 <script>
-  function toggleRecurring() {
-    var cb = document.getElementById('is_recurring');
-    var wrap = document.getElementById('freq-wrap');
-    var sel = document.getElementById('frequency-select');
-    wrap.style.display = cb.checked ? '' : 'none';
-    sel.disabled = !cb.checked;
-    if (cb.checked) {
-      // Ticking the box with the select still on its default is exactly the
-      // case it exists to skip past -- land on Weekly, not on One-Time.
-      if (sel.value === 'one_time') sel.value = 'weekly';
-    } else {
-      sel.value = 'one_time';
-    }
-    sel.dispatchEvent(new Event('change'));
-  }
-
   document.querySelectorAll('select[data-prefill]').forEach(function (el) {
     var want = el.getAttribute('data-prefill');
     if (want) { el.value = want; }
@@ -216,6 +177,7 @@
     if (!form) return;
     const val = n => (form.querySelector('[name="' + n + '"]') || {}).value || '';
     const money = v => '$' + (Number(v) || 0).toFixed(2);
+    const priceBox = document.getElementById('cleaning-price');
     let timer = null;
 
     async function updateTotal() {
@@ -226,14 +188,17 @@
         sqft: val('sqft'),
         frequency: val('frequency'),
         cleaning_price: val('cleaning_price'),
-        lead_fee: val('lead_fee'),
+        source: val('source'),
         extras: Array.from(form.querySelectorAll('[name="extras"]:checked')).map(e => e.value).join(','),
       });
       try {
         const res = await fetch('{{ url_for("bookings.price_preview") }}?' + params.toString());
         const d = await res.json();
-        document.getElementById('rt-cleaning').textContent = money(d.cleaning);
-        document.getElementById('rt-fee').textContent = money(d.lead_fee);
+        // The price list's figure shows in the empty box, so she can see what
+        // will be charged without having to work it out or type it.
+        if (priceBox && !priceBox.value) {
+          priceBox.placeholder = (Number(d.cleaning) || 0).toFixed(2);
+        }
         document.getElementById('rt-total').textContent = money(d.total);
       } catch (e) { /* leave last value */ }
     }

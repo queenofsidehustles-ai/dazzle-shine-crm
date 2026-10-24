@@ -341,6 +341,10 @@ def portal_session(org, return_url):
 # What Stripe tells us
 # ---------------------------------------------------------------------------
 
+# apply_event's detail for an invoice that belongs to no Akye company.
+NOT_OURS = 'ignored, not an Akye customer:'
+
+
 def apply_event(event):
     """Record what an event says. Idempotent by construction.
 
@@ -360,6 +364,13 @@ def apply_event(event):
         # find nothing. The checkout puts the slug on the subscription, and an
         # invoice carries a copy of it.
         slug = ((obj.get('subscription_details') or {}).get('metadata') or {}).get('slug')
+    if not slug and kind.startswith('invoice.'):
+        # Older API versions put the subscription's metadata on the line items
+        # instead of on subscription_details.
+        for line in ((obj.get('lines') or {}).get('data') or []):
+            slug = (line.get('metadata') or {}).get('slug')
+            if slug:
+                break
     customer = obj.get('customer')
 
     org = None
@@ -374,6 +385,12 @@ def apply_event(event):
         # again later instead of the refund being lost for good, which would
         # let the invoice.paid that follows pay a commission on money returned.
         raise LookupError(f'refund for an unmapped customer ({customer}); retry later')
+    if org is None and not slug and kind.startswith('invoice.'):
+        # Every Akye checkout stamps its slug on the subscription, so an invoice
+        # with no slug, from a customer we never mapped, is not one of ours: the
+        # same Stripe account bills other things. Acknowledged so Stripe stops
+        # retrying, but not an error for the console to nag about.
+        return False, f'{NOT_OURS} {kind} (customer={customer})'
     if org is None:
         # An event for something we do not know about. Acknowledged so Stripe
         # stops retrying; recorded so somebody can look.

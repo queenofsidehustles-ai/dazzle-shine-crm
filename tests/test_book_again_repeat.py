@@ -48,6 +48,10 @@ with app.app_context():
     check(f'/bookings/{done.id}#book-again' in c.get(f'/bookings/clients/{cl.id}').get_data(as_text=True),
           'client page links to the last completed job')
 
+    html = c.get(f'/bookings/{done.id}').get_data(as_text=True)
+    check(html.count('id="book-again"') == 1, 'offered once')
+    check(html.index('id="book-again"') < html.index('>Customer</h3>'), 'at the top of the booking, before the customer details')
+
     print('\n2. Repeating it')
     r = c.post(f'/bookings/{done.id}/book-again',
                data={'repeat_date': '2026-12-05', 'repeat_price': '175', 'same_cleaner': '1'})
@@ -109,4 +113,63 @@ with app.app_context():
                       ('limited', False), ('cleaner', False), ('sales', False)):
         check(rbac.has_permission(role, 'booking.create') is may,
               f'{role}: {"may" if may else "may not"} book again')
+
+    print('\n5. Posting in the background')
+    J = {'X-Requested-With': 'fetch'}
+    r = c.post(f'/bookings/{done.id}/book-again', headers=J,
+               data={'repeat_date': '2026-12-11', 'repeat_price': '180'})
+    d = r.get_json()
+    check(r.status_code == 200 and d['ok'] and not r.headers.get('Location'), 'JSON answer, no redirect')
+    nb = Booking.query.get(d['id'])
+    check(nb.repeat_of_booking_id == done.id and nb.price == 180, 'the booking is created')
+    check(d['can_confirm'] and d['confirm_url'].endswith(f"/{d['id']}/proposal/send")
+          and d['url'].endswith(f"/bookings/{d['id']}"), 'carries what the page needs for the confirm step')
+    n = Booking.query.count()
+    r = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': ''})
+    check(r.status_code == 400 and r.get_json()['ok'] is False and Booking.query.count() == n,
+          'a bad date is a JSON error, nothing created')
+    r = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': '2026-12-12', 'repeat_price': 'abc'})
+    check(r.status_code == 400 and 'not a number' in r.get_json()['error'], 'a bad price says so')
+
+    print('\n6. The confirm step')
+    r = c.post(d['confirm_url'], headers=J, data={
+        'to': 'customer', 'plan_frequency': 'one_time', 'plan_date': d['plan_date'],
+        'plan_time': d['plan_time'], 'plan_price': '180'})
+    j = r.get_json()
+    check(r.status_code == 200 and j['ok'] and 'email' in j['sent'], 'asks the customer, answered in JSON')
+    check(Booking.query.get(d['id']).confirm_sent_at is not None, 'and records that it was sent')
+    nobody = Booking(client_id=cl.id, service_type='standard', name='No Contact', status='pending',
+                     preferred_date='2026-12-20', price=100)
+    db.session.add(nobody); db.session.commit()
+    r = c.post(f'/bookings/{nobody.id}/proposal/send', headers=J, data={'to': 'customer'})
+    check(r.status_code == 502 and r.get_json()['ok'] is False, 'nothing to send to is an error, not a silent success')
+
+    print('\n6b. Review fixes: no double-booking, no double-sending, one-off wording')
+    n = Booking.query.count()
+    r1 = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': '2026-12-14', 'repeat_price': '150'}).get_json()
+    r2 = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': '2026-12-14', 'repeat_price': '150'}).get_json()
+    check(r1['id'] == r2['id'] and Booking.query.count() == n + 1, 'the same repeat sent twice is booked once')
+    r3 = c.post(f'/bookings/{done.id}/book-again', headers=J, data={'repeat_date': '2026-12-14', 'repeat_price': '160'}).get_json()
+    check(r3['id'] != r1['id'], 'a different price is a deliberate new booking')
+    sent_mail = []
+    import blueprints.bookings as bb
+    real = notifications.send_email
+    notifications.send_email = lambda **k: (sent_mail.append(k) or (True, 'ok'))
+    try:
+        body = {'to': 'customer', 'plan_frequency': 'one_time', 'plan_date': r1['plan_date'],
+                'plan_time': r1['plan_time'], 'plan_price': '150'}
+        a1 = c.post(r1['confirm_url'], headers=J, data=body).get_json()
+        a2 = c.post(r1['confirm_url'], headers=J, data=body).get_json()
+    finally:
+        notifications.send_email = real
+    check(a1['sent'] and a2.get('already') and len(sent_mail) == 1, 'a confirmation is not sent twice in a row')
+    html = sent_mail[0]['html']
+    check('regular cleaning' not in html and 'chasing' not in html, 'no regular-cleaning / chasing wording')
+    check('Nothing is booked until you say so' in html, 'the one-off note is what the customer reads')
+    prev = c.get(f"/bookings/{r1['id']}/proposal/preview").get_data(as_text=True)
+    check('chasing' not in prev and 'pencilled in for your next clean' in prev, 'and the preview shows the same')
+
+    print('\n7. Without JavaScript the form still redirects')
+    r = c.post(f'/bookings/{done.id}/book-again', data={'repeat_date': '2026-12-13'})
+    check(r.status_code == 302, 'plain form post redirects as before')
 print('\nAll good')

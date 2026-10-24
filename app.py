@@ -36,6 +36,7 @@ from blueprints.interviews import interviews_bp
 from blueprints.pricing_public import pricing_public_bp
 from blueprints.deposit import deposit_bp
 from blueprints.messages import messages_bp
+from blueprints.voice import voice_bp
 from blueprints.payments import payments_bp
 from blueprints.claims import claims_bp
 from blueprints.places_finder import places_finder_bp
@@ -240,6 +241,7 @@ def create_app():
     app.register_blueprint(pricing_public_bp)
     app.register_blueprint(deposit_bp)
     app.register_blueprint(messages_bp)
+    app.register_blueprint(voice_bp)
     app.register_blueprint(payments_bp)
     app.register_blueprint(claims_bp)
     app.register_blueprint(places_finder_bp)
@@ -986,6 +988,7 @@ def _migrate_db():
         # Staff Stripe Connect (payouts)
         ('staff', 'stripe_account_id',        'VARCHAR(64)'),
         ('staff', 'stripe_payouts_enabled',   'BOOLEAN DEFAULT FALSE'),
+        ('staff', 'is_owner',                 'BOOLEAN DEFAULT FALSE'),
         ('staff', 'stripe_details_submitted', 'BOOLEAN DEFAULT FALSE'),
         ('staff', 'stripe_disabled_reason',   'VARCHAR(120)'),
         ('staff', 'pay_schedule',             "VARCHAR(10) DEFAULT 'daily'"),

@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 CATALOG = [
     ('welcome', 'owner', 'Welcome + your address + confirm code',
      'At signup', 'Everyone'),
+    ('welcome_sms', 'owner', 'Welcome text with your address',
+     'At signup', 'Only people who ticked the box and gave a number'),
     ('day1', 'owner', 'Get the schedule out of your head',
      'Day 1', 'Not set up yet'),
     ('day2', 'owner', 'The jobs you lose while you are cleaning',
@@ -32,7 +34,7 @@ CATALOG = [
     ('start_21', 'owner', 'Days left, and nothing set up yet',
      'Day 21', 'Not set up yet'),
     ('activated', 'owner', 'That is it working',
-     'The moment they add a cleaner and a customer', 'Just set up'),
+     'The moment they add a customer and a job (or a team)', 'Just set up'),
     ('first_booking', 'owner', 'Somebody booked you through your own page',
      'The first online booking', 'On a trial'),
     ('feature', 'owner', 'Before your trial ends, try this',
@@ -43,6 +45,12 @@ CATALOG = [
      'The day it ends', 'Trial just ended'),
     ('winback', 'owner', 'Still doing it the hard way?',
      'A week after it ends', 'Used it, did not upgrade'),
+    ('quiet', 'owner', 'Did the week get away from you?',
+     'Owner away 7 to 13 days', 'On a trial, set up, gone quiet'),
+    ('free_quiet', 'owner', 'Need a hand with anything?',
+     'Owner away 14 to 30 days', 'On the free plan, set up, gone quiet'),
+    ('free_start', 'owner', 'Still here when you are ready',
+     '2 to 3 weeks after the trial ends', 'On the free plan, never set up'),
     ('nurture_1', 'lead', 'What it actually costs to start a cleaning business',
      'Day 1', 'Started signing up, or asked for early access'),
     ('nurture_2', 'lead', 'How to price a cleaning job',
@@ -68,6 +76,11 @@ ALL_LEAD = 'lead_all'
 # a note that money was sent -- so they are not a sequence and have no switch.
 ALWAYS_ON = {'welcome', 'partner_login', 'partner_paid'}
 PARTNER_KEYS = {'partner_login', 'partner_paid'}
+# New emails start switched off. A switch nobody has set means on -- right for
+# the emails that existed before switches did, wrong for one added today,
+# which would start sending on the first run after a deploy, before anybody
+# had read it. These send only once a person turns them on in the console.
+DEFAULT_OFF = {'quiet', 'free_quiet', 'free_start'}
 
 LABELS = {k: label for k, _a, label, _w, _who in CATALOG}
 
@@ -90,9 +103,19 @@ def is_on(key, switch_map=None):
             import provisioning
             switch_map = control_plane.switches(provisioning._engine())
         master = ALL_LEAD if audience(key) == 'lead' else ALL_OWNER
-        return switch_map.get(master, True) and switch_map.get(key, True)
+        return switch_map.get(master, True) and state(key, switch_map)
     except Exception:
+        # Unreadable means on, as before -- except for an email that has never
+        # been switched on, which stays off rather than sending on a guess.
+        return key not in DEFAULT_OFF
+
+
+def state(key, switch_map):
+    """This email's own switch, on or off, as the console shows it: what was
+    set, or else on -- off for the ones in DEFAULT_OFF."""
+    if key in ALWAYS_ON:
         return True
+    return bool(switch_map.get(key, key not in DEFAULT_OFF))
 
 
 def sent_counts(engine, days=30):
@@ -217,6 +240,16 @@ def sample_preview(key):
         return ('Sparkle Cleaning is set up — here is your address',
                 welcome_email.build('Sparkle Cleaning', 'owner@example.com', host,
                                     'Dana', '123456', f'https://{host}/confirm-email/…'))
+    if key == 'welcome_sms':
+        # A text, not an email, so the preview is the message as the phone shows
+        # it: who it is from and how to stop included, set in a plain block.
+        import html as _html
+        host = 'sparkle.' + (__import__('product').domain() or 'akyehq.com')
+        body = lead_outreach.sms_text(lead_outreach.welcome_text_body('Dana', host))
+        return ('Text message: welcome',
+                '<div style="font-family:system-ui,sans-serif;max-width:360px;'
+                'padding:12px 14px;border-radius:14px;background:#e9f7ef;'
+                'white-space:pre-wrap">' + _html.escape(body) + '</div>')
     if key in PARTNER_KEYS:
         import partner_mail
         sample = {'name': 'Dana Lee', 'email': 'dana@example.com'}
@@ -230,7 +263,7 @@ def sample_preview(key):
                 'company': 'Halfway Cleaning', 'source': 'abandoned_signup'}
         subject, body = lead_nurture.compose(lead, step)
         return subject, lead_outreach.email_html(body, lead['email'])
-    if key in ('ended', 'winback'):
+    if key in ('ended', 'winback', 'free_quiet', 'free_start'):
         org['trial_ends_at'] = now - timedelta(days=1)
     step = {'title': 'Share your booking page',
             'why': 'A page where customers pick a service, see your price and book.',
