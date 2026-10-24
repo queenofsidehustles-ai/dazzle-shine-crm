@@ -50,6 +50,10 @@ with app.app_context():
     import integrations
     integrations.set('stripe_secret_key', 'sk_live_testonly')
     BusinessSetting.set('balance_collection', 'ask')
+    # The team is a required step since 2026-10-24 (details, team, prices,
+    # payments), so a cleaner is on it here too.
+    from models import Staff
+    db.session.add(Staff(name='Ama', is_active=True))
     db.session.commit()
 
 
@@ -79,26 +83,26 @@ r = c.get('/settings/booking-page')
 check(b'display:flex' in r.data.split(b'id="nextstep"')[1][:200], 'shown straight away once ticked')
 r = c.get('/settings/getting-started?focus=1')
 last = [m for m in chat() if m['role'] == 'assistant'][-1]
-check(last.get('step') == 'team', 'the chat now asks about adding a cleaner')
+check(last.get('step') == 'client', 'the chat now asks about adding a customer')
 check(last['content'].startswith('That step is done.'), 'and says the last one is done')
 n = len(chat())
 c.get('/settings/getting-started?focus=1')
 check(len(chat()) == n, 'and does not say it twice on another visit')
 
 print('\n3. Skip for now')
-r = c.post('/settings/getting-started/assistant/skip', json={'step': 'team'}, headers=H).get_json()
-check(r['ok'] and 'customer' in r['say'], 'skipping the cleaner step asks for a customer')
+r = c.post('/settings/getting-started/assistant/skip', json={'step': 'client'}, headers=H).get_json()
+check(r['ok'] and 'book a job' in r['say'].lower(), 'skipping the customer step asks for a job')
 with app.app_context():
     keys = {s['key']: s['done'] for s in onboarding.progress()['steps']}
-check(keys['team'] is False, 'the getting-started list still has the cleaner step')
-r = c.post('/settings/getting-started/assistant/skip', json={'step': 'client'}, headers=H).get_json()
+check(keys['client'] is False, 'the getting-started list still has the customer step')
 r = c.post('/settings/getting-started/assistant/skip', json={'step': 'job'}, headers=H).get_json()
-check(r['ok'] and 'cleaner' in r['say'].lower(), 'skipping everything comes back round, not to a dead end')
+r = c.post('/settings/getting-started/assistant/skip', json={'step': 'team'}, headers=H).get_json()
+check(r['ok'] and 'customer' in r['say'].lower(), 'skipping everything comes back round, not to a dead end')
 bad = c.post('/settings/getting-started/assistant/skip', json={'step': 'nope'}, headers=H).get_json()
 check(bad['ok'] is False, 'an unknown step cannot be skipped')
 
 print('\n4. Start over brings skipped steps back')
-c.post('/settings/getting-started/assistant/skip', json={'step': 'team'}, headers=H)
+c.post('/settings/getting-started/assistant/skip', json={'step': 'client'}, headers=H)
 c.post('/settings/getting-started/assistant/reset', headers=H)
 with app.app_context():
     check(setup_assistant.skipped() == [], 'skips cleared')

@@ -135,7 +135,7 @@ for key in ('quiet', 'free_quiet', 'free_start'):
                                        'last chance', 'hours a week')),
           f'{key}: no invented urgency or numbers')
 _, free_start = tn.compose(o, 'free_start')
-check('20 jobs a month' in free_start and 'up to 2 cleaners' in free_start,
+check('20 jobs a month' in free_start and 'up to 3 cleaners' in free_start,
       'free_start promises only what the free plan has')
 _, free_quiet = tn.compose(o, 'free_quiet')
 check('texting' not in free_quiet.lower() and 'reminders' not in free_quiet.lower(),

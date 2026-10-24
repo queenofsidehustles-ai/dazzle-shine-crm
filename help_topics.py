@@ -14,10 +14,9 @@ TOPICS = [
         'keywords': ['getting started', 'setup', 'set up', 'start', 'new account', 'first steps',
                      'onboarding', 'checklist', 'begin', 'where do i start'],
         'answer': ('Open Getting started and work down the list in order: add your business details, '
-                   'check your prices, share your booking page, add a cleaner, add a customer, then '
-                   'schedule a job and assign it. Each step has a button that takes you to the right '
-                   'page, and it ticks itself off once it is done. Add yourself as the cleaner if you '
-                   'are still doing the cleaning. Already have a team or a customer list? You can import '
+                   'check your prices, share your booking page, add a customer, then '
+                   'schedule a job and assign it. You are already on the team as the first cleaner, so you can give the job to yourself; add a team member when you hire. Each step has a button that takes you to the right '
+                   'page, and it ticks itself off once it is done. Already have a team or a customer list? You can import '
                    'them instead of typing them in.'),
         'link': ('Getting started', '/settings/getting-started'),
     },
