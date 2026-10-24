@@ -240,6 +240,11 @@ def sample_preview(key):
         return ('Sparkle Cleaning is set up — here is your address',
                 welcome_email.build('Sparkle Cleaning', 'owner@example.com', host,
                                     'Dana', '123456', f'https://{host}/confirm-email/…'))
+    if key == 'welcome_sms':
+        # A text, not an email: shown as the message would read on a phone.
+        host = 'sparkle.' + (__import__('product').domain() or 'akyehq.com')
+        body = lead_outreach.welcome_text_body('Dana', host)
+        return 'Text message: ' + body[:60], lead_outreach.email_html(body, 'owner@example.com')
     if key in PARTNER_KEYS:
         import partner_mail
         sample = {'name': 'Dana Lee', 'email': 'dana@example.com'}
