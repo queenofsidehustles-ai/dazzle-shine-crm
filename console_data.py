@@ -163,6 +163,109 @@ def dedupe_leads(leads):
     return list(seen.values())
 
 
+# How long without the owner signing in before the console mentions it, and
+# before it is a reason to reach out. A cleaning owner who books a week ahead
+# can go a few days without opening it; a fortnight is somebody drifting off.
+AWAY_WATCH_DAYS = 7
+AWAY_HELP_DAYS = 14
+# New enough that "not set up yet" is just "new". The first-week emails are
+# already talking to them.
+NEW_DAYS = 3
+
+SUPPORT_LABELS = {'help': 'Needs help', 'watch': 'Watch', 'ok': 'Healthy',
+                  'new': 'New', 'none': '—'}
+
+
+def owner_last_seen(org, snap=None):
+    """When the owner last used their CRM, as best we know: the later of the
+    activity the app now records (organizations.owner_active_at) and their
+    last password sign-in. The sign-in alone can be months old for somebody
+    who never signs out, which is why it is only the fallback."""
+    times = [t for t in ((org or {}).get('owner_active_at'),
+                         (snap or {}).get('owner_last_login')) if t]
+    return max(times) if times else None
+
+
+def support_meter(org, snap, trial=None, now=None):
+    """Whether a company needs somebody to reach out, and why, from what the
+    console already reads: {'level', 'label', 'reasons'}.
+
+    level is one of
+      help   reach out now: not set up after the first days, the owner has
+             not been back in a fortnight, or the trial is nearly over unused
+      watch  worth a look: a week away, set up but no jobs, errors or failing
+             automations, a payment past due
+      ok     using it
+      new    signed up in the last few days; the first-week emails have it
+      none   a test or demo account, or not active -- nothing to support
+
+    Pure, like trial_nudges.due(): the snapshot is passed in, so it can be
+    tested by describing a company rather than building one."""
+    now = now or datetime.utcnow()
+    org = org or {}
+
+    def out(level, reasons=()):
+        return {'level': level, 'label': SUPPORT_LABELS[level],
+                'reasons': list(reasons)}
+
+    if org.get('is_test') or org.get('is_demo'):
+        return out('none', ['Test or demo account'])
+    if (org.get('status') or 'active') != 'active':
+        return out('none', [f"Not active ({org.get('status')})"])
+    if not snap or not snap.get('ok'):
+        return out('watch', ["Could not read the company's data"])
+
+    created = org.get('created_at') or now
+    age = (now - created).days
+    activated = bool(org.get('activated_at'))
+    seen = owner_last_seen(org, snap)
+    away = (now - seen).days if seen else None
+    status = (org.get('subscription_status') or '').lower()
+    paying = status == 'active'
+    help_, watch = [], []
+
+    if not activated and age >= NEW_DAYS:
+        help_.append(f'Not set up after {age} days (no cleaner and customer yet)')
+    if trial and trial.get('phase') == 'running' and not activated \
+            and trial.get('days_left', 99) <= 7:
+        left = trial['days_left']
+        help_.append(f"Trial ends in {left} day{'' if left == 1 else 's'}, not set up")
+    if away is None:
+        if age >= NEW_DAYS:
+            help_.append('The owner has not been seen using it')
+    elif away >= AWAY_HELP_DAYS:
+        help_.append(f'{"Paying, but the owner" if paying else "The owner"} '
+                     f'has not been in for {away} days')
+    elif away >= AWAY_WATCH_DAYS:
+        watch.append(f'The owner has not been in for {away} days')
+    # Booked or done: a recurring schedule made two months ago creates no new
+    # bookings, but its visits are still being completed.
+    if activated and age >= 14 and not snap.get('bookings_30d') \
+            and not snap.get('completed_30d'):
+        watch.append('Set up, but no jobs booked or done in 30 days')
+    if snap.get('open_errors'):
+        n = snap['open_errors']
+        watch.append(f"{n} error{'' if n == 1 else 's'} open")
+    # "never" is every automation on a company's first day, before the daily
+    # run has reached it, so it only counts once there has been a day to run.
+    jobs = snap.get('jobs')
+    if jobs is None:
+        n = snap.get('jobs_broken') or 0
+    else:
+        n = sum(1 for j in jobs if j.get('state') in ('stale', 'failing')
+                or (j.get('state') == 'never' and age >= 2))
+    if n:
+        watch.append(f"{n} automation{'' if n == 1 else 's'} not running")
+    if status == 'past_due':
+        watch.append('Payment past due')
+
+    if help_:
+        return out('help', help_ + watch)
+    if watch:
+        return out('watch', watch)
+    return out('new' if age < NEW_DAYS else 'ok')
+
+
 def extended_trial_end(org, days, now=None):
     """Where a trial ends after adding `days`.
 

@@ -70,7 +70,9 @@ with app.app_context():
     disclosure = SRC[SRC.index('How this pay is worked out'):]
     check('name="crew_size"' not in disclosure[:disclosure.index('</details>')],
           'and it is NOT buried in "How this pay is worked out"')
-    assign_form = SRC[SRC.index("url_for('bookings.assign'"):]
+    # The pay card's assign form, not the "Next: who's cleaning" bar on top.
+    who = SRC[SRC.index('data-card-key="who"'):]
+    assign_form = who[who.index("url_for('bookings.assign'"):]
     check('name="crew_size"' in assign_form[:assign_form.index('</form>')],
           'it sits in the same form as "Assign to", where the decision is made')
 

@@ -94,6 +94,10 @@ class Booking(db.Model):
     bathrooms = db.Column(db.String(10))
     sqft = db.Column(db.Integer)        # optional home size — drives the sqft surcharge
     extras = db.Column(db.String(200))  # comma-separated: oven, fridge, laundry
+    # A commercial job: the account it is for, and what is cleaned in place of
+    # bedrooms and bathrooms. See migration 0035.
+    commercial_account_id = db.Column(db.Integer, index=True)
+    scope_of_work = db.Column(db.Text)
 
     # Frequency
     frequency = db.Column(db.String(20), default='one_time')  # one_time, weekly, biweekly, monthly
@@ -275,6 +279,7 @@ class Booking(db.Model):
 
     SERVICE_LABELS = {
         'standard': 'Standard House Cleaning',
+        'commercial': 'Commercial Cleaning',
         'deep': 'Deep Cleaning',
         'moveout': 'Move-Out / Move-In Cleaning',
         'airbnb': 'Airbnb / Vacation Rental',
@@ -316,6 +321,39 @@ class Booking(db.Model):
         return self.status == 'on_hold'
 
     @property
+    def is_commercial(self):
+        return bool(self.commercial_account_id) or self.service_type == 'commercial'
+
+    def home_text(self):
+        """'3 bed / 2 bath' for a house; the size, or 'Commercial', for a business."""
+        if self.is_commercial:
+            return self.size_line() or 'Commercial'
+        return f'{self.bedrooms} bed / {self.bathrooms} bath'
+
+    def scope_items(self):
+        """The scope of work as a list of tasks -- a commercial job's
+        checklist, where a house's comes from its service."""
+        return [l.strip().lstrip('•').strip() for l in (self.scope_of_work or '').splitlines()
+                if l.strip().lstrip('•').strip()]
+
+    def commercial_carry(self):
+        """What a commercial job hands on to the next visit in its series.
+        Bedrooms and bathrooms are copied for a house; for a business these
+        are what say what the job is, and the hours are what the cleaner is
+        paid from."""
+        if not self.is_commercial:
+            return {}
+        return dict(commercial_account_id=self.commercial_account_id,
+                    scope_of_work=self.scope_of_work,
+                    estimated_hours=self.estimated_hours,
+                    labor_rate_applied=self.labor_rate_applied)
+
+    @property
+    def commercial_account(self):
+        return CommercialAccount.query.get(self.commercial_account_id) if self.commercial_account_id else None
+
+
+    @property
     def days_on_hold(self):
         """How long this has been sitting. A deposit taken for work nobody has
         scheduled is somebody's money in limbo, and the only thing that stops it
@@ -332,14 +370,25 @@ class Booking(db.Model):
 
     # ── Labor budget: what the WORK is worth, not what the customer paid ─────
     @property
+    def company_rate(self):
+        """The company's cleaner rate today for this kind of job. A business is
+        paid at the cleaner cost its price was built from (Commercial Pricing),
+        a house at Settings -> Pricing. The price is revenue and can move with
+        the job; the cost a commercial quote assumes is what the cleaner gets."""
+        if self.is_commercial:
+            import commercial_pricing
+            return commercial_pricing.cleaner_rate()
+        from pricing import get_labor_rate
+        return get_labor_rate()
+
+    @property
     def rate_applied(self):
         """The $/hour this job was quoted at. Locked at quote time, so changing
         the company rate tomorrow can never restate what a job from last month
         was worth."""
-        if self.labor_rate_applied:
+        if self.labor_rate_applied is not None:
             return self.labor_rate_applied
-        from pricing import get_labor_rate
-        return get_labor_rate()
+        return self.company_rate
 
     @property
     def payable_hours(self):
@@ -369,12 +418,11 @@ class Booking(db.Model):
     def rate_is_stale(self):
         """True when the company rate has moved since this job was quoted and
         the job hasn't been paid — the only case where re-rating is safe."""
-        from pricing import get_labor_rate
-        if not self.labor_rate_applied or self.cleaner_paid_at:
+        if self.labor_rate_applied is None or self.cleaner_paid_at:
             return False
         if any(c.paid_at for c in self.crew):
             return False
-        return abs(self.labor_rate_applied - get_labor_rate()) > 0.001
+        return abs(self.labor_rate_applied - self.company_rate) > 0.001
 
     @property
     def committed_labor(self):

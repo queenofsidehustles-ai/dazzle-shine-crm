@@ -98,6 +98,8 @@ def booking_checklist(booking):
                 return expanded([str(i) for i in items if str(i).strip()])
         except ValueError:
             pass          # corrupt somehow — better the service list than none
+    if getattr(booking, 'is_commercial', False) and booking.scope_items():
+        return booking.scope_items()
     return service_checklist(booking.service_type)
 
 

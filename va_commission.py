@@ -69,12 +69,14 @@ def commission_for_month(agent, year, month):
     lines = []
 
     # ── Residential: VA bookings paid this month ──
+    # A commercial job carries the account's agent for attribution, but its
+    # visits are paid for by the commercial landing and residual below.
     va_bookings = Booking.query.filter(
         Booking.agent == agent, Booking.paid_at.isnot(None),
         Booking.paid_at >= start, Booking.paid_at <= end).all()
     onetime = recurring = 0
     for b in va_bookings:
-        if not _not_paid_ad(b.source):
+        if not _not_paid_ad(b.source) or b.is_commercial:
             continue
         if (b.frequency or 'one_time') == 'one_time':
             onetime += 1
@@ -136,7 +138,7 @@ def _new_residential_closes(agent, start, end):
         Booking.paid_at >= start, Booking.paid_at <= end).all()
     seen, count = set(), 0
     for b in paid:
-        if not _not_paid_ad(b.source):
+        if not _not_paid_ad(b.source) or b.is_commercial:
             continue
         key = (b.email or '').lower() or f'id{b.id}'
         if key in seen:

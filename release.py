@@ -411,7 +411,7 @@ def show(line):
     say('\nNothing has changed. Run with --go to release.')
 
 
-def go(line):
+def go(line, expect=None, expect_stable=None):
     preflight(line)
     first = not remote_has(line.channel)
     commits = pending(line)
@@ -420,6 +420,18 @@ def go(line):
                  f'{line.source}.')
 
     checked = git('rev-parse', f'{REMOTE}/{line.source}')
+    # The console's Release page shows a diff and asks for exactly that commit.
+    # If anything has landed since, what was reviewed is not what would ship.
+    if expect and not checked.startswith(expect.lower()):
+        sys.exit(f'{line.source} is now at {checked[:7]}, not the {expect[:7]} that '
+                 f'was reviewed. Nothing was released; look at the page again.')
+    # And the other end: if the channel has moved (a rollback, say) since the
+    # page was drawn, fast-forwarding to main would ship what was never shown.
+    if expect_stable:
+        on = git('rev-parse', f'{REMOTE}/{line.channel}', check=False)
+        if not on.startswith(expect_stable.lower()):
+            sys.exit(f'{line.channel} is now at {on[:7]}, not the {expect_stable[:7]} '
+                     f'that was reviewed. Nothing was released; look at the page again.')
     evidence = require_green(line, checked)
 
     say(f'Releasing {line.product} to {line.audience}:\n')
@@ -459,7 +471,7 @@ def go(line):
         f'on channel {line.channel}.')
 
 
-def rollback(line):
+def rollback(line, confirm_tag=None):
     preflight(line)
     tags = line_tags(line)
     on = git('rev-parse', f'{REMOTE}/{line.channel}')
@@ -474,7 +486,10 @@ def rollback(line):
         sys.exit(f'There is no {line.product} release before {current} to go back to.')
     say(f'Rolling {line.audience} back from {current} to {previous}.')
     say('Their data is untouched — this only changes which code runs.\n')
-    if input(f'Type {previous} to confirm: ').strip() != previous:
+    # The console's Rollback button names the release it showed; if the channel
+    # has moved since, the one before it is no longer the one that was reviewed.
+    typed = confirm_tag if confirm_tag is not None else input(f'Type {previous} to confirm: ')
+    if typed.strip() != previous:
         sys.exit('Cancelled — nothing changed.')
     git('branch', '-f', line.channel, previous)
     git('push', REMOTE, '--force-with-lease', f'{line.channel}:{line.channel}')
@@ -488,13 +503,23 @@ if __name__ == '__main__':
     ap.add_argument('--akye', action='store_true',
                     help="release Akye rather than this business's own CRM")
     ap.add_argument('--go', action='store_true', help='test, tag and release')
+    ap.add_argument('--expect', metavar='SHA',
+                    help='release only if the source branch is at this commit')
+    ap.add_argument('--expect-stable', metavar='SHA',
+                    help='release only if the release channel is at this commit')
+    ap.add_argument('--confirm-tag', metavar='TAG',
+                    help='with --rollback: the release to go back to, instead of asking')
     ap.add_argument('--rollback', action='store_true',
                     help='put them back on the previous release')
     args = ap.parse_args()
     chosen = LINES['akye' if args.akye else 'dazzle']
     if args.rollback:
-        rollback(chosen)
+        rollback(chosen, args.confirm_tag)
     elif args.go:
-        go(chosen)
+        if args.expect and not re.fullmatch(r'[0-9a-fA-F]{7,40}', args.expect):
+            sys.exit('--expect needs a commit id.')
+        if args.expect_stable and not re.fullmatch(r'[0-9a-fA-F]{7,40}', args.expect_stable):
+            sys.exit('--expect-stable needs a commit id.')
+        go(chosen, args.expect, args.expect_stable)
     else:
         show(chosen)

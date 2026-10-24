@@ -1,0 +1,121 @@
+{% extends "base_admin.html" %}
+{% block title %}Book a job — {{ a.business_name }}{% endblock %}
+{% block page_title %}Book a job — {{ a.business_name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:14px">
+  <a href="{{ url_for('commercial.detail', account_id=a.id) }}" style="color:var(--info);text-decoration:none;font-size:0.85rem">← Back to {{ a.business_name }}</a>
+</div>
+
+<form id="comm-book-form" method="POST" action="{{ url_for('commercial.book', account_id=a.id) }}">
+  <div class="card" style="max-width:640px">
+
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px">🏢 {{ a.business_name }}</h2>
+    <p style="font-size:0.82rem;color:var(--softer);margin:0 0 14px">{{ a.category_label }} · filled in from the account. Changes here are for this job only.</p>
+    <div class="detail-grid" style="gap:14px">
+      <div class="form-group"><label>Contact person</label><input type="text" name="contact_name" value="{{ a.contact_name or '' }}"></div>
+      <div class="form-group"><label>Phone</label><input type="tel" name="phone" value="{{ a.phone or '' }}"></div>
+    </div>
+    <div class="form-group"><label>Email <span style="font-weight:400;color:var(--softer)">— the confirmation, pay link and invoice go here</span></label>
+      <input type="email" name="email" value="{{ a.email or '' }}"></div>
+    <div class="form-group"><label>Address</label><input type="text" name="address" value="{{ a.address or '' }}"></div>
+    <div class="detail-grid" style="gap:14px">
+      <div class="form-group"><label>City</label><input type="text" name="city" value="{{ a.city or '' }}"></div>
+      <div class="form-group"><label>Zip</label><input type="text" name="zip_code" value=""></div>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">🧹 The Job</h2>
+    <div class="detail-grid" style="gap:14px">
+      <div class="form-group"><label>Square footage</label>
+        <input type="number" name="square_footage" id="cb-sqft" step="50" value="{{ (agreed.sqft if agreed and agreed.sqft) or a.square_footage or '' }}"></div>
+      <div class="form-group"><label>How often</label>
+        <select name="frequency" id="cb-freq">
+          {% for k, lbl in job_frequencies.items() %}<option value="{{ k }}" {{ 'selected' if k == default_frequency }}>{{ lbl }}</option>{% endfor %}
+        </select></div>
+    </div>
+
+    <div class="form-group">
+      <label>Scope of work <span style="font-weight:400;color:var(--softer)">— the customer and the cleaner both see this</span></label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 16px;margin-top:4px">
+        {% for item in scope_items %}
+        <label style="display:flex;align-items:center;gap:7px;font-weight:500;cursor:pointer">
+          <input type="checkbox" name="scope" value="{{ item }}" {{ 'checked' if item in scope_default }} style="width:auto"> {{ item }}
+        </label>
+        {% endfor %}
+      </div>
+      <textarea name="scope_notes" rows="{{ 6 if agreed and agreed.scope else 2 }}" placeholder="Anything else — e.g. 2 restrooms, 6 offices, conference room, no kitchen" style="margin-top:8px">{{ agreed.scope if agreed else '' }}</textarea>
+      {% if agreed and agreed.scope %}<p style="font-size:0.8rem;color:var(--softer);margin:4px 0 0">From the signed agreement{% if agreed.effective_on %} in force since {{ agreed.effective_on }}{% endif %}. Change it here for this job only.</p>{% endif %}
+    </div>
+
+    <div class="detail-grid" style="gap:14px">
+      <div class="form-group"><label>Price per visit ($) *</label>
+        <input type="text" name="price" id="cb-price" required value="{{ '%.2f' % default_price if default_price else '' }}">
+        {% if agreed and agreed.price %}<span style="font-size:0.78rem;color:var(--softer)">The agreed price per visit{% if agreed.first_visit %}, plus the ${{ '%.2f' % agreed.first_visit }} first-visit charge{% endif %}.</span>{% endif %}</div>
+      <div class="form-group"><label>Estimated hours <span style="font-weight:400;color:var(--softer)">— cleaner pay is built from this</span></label>
+        <input type="text" name="estimated_hours" id="cb-hours" placeholder="e.g. 3"></div>
+    </div>
+    <p style="margin:-4px 0 14px">
+      <button type="button" class="btn btn-outline" style="padding:6px 14px;font-size:0.82rem" onclick="suggestPrice()">💡 Suggest a price from the square footage</button>
+      <span id="cb-suggest" style="font-size:0.82rem;color:var(--softer);margin-left:6px"></span>
+    </p>
+
+    <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">📅 Schedule</h2>
+    <div class="detail-grid" style="gap:14px">
+      <div class="form-group"><label>Date</label><input type="date" name="preferred_date"></div>
+      <div class="form-group"><label>Time</label><input type="text" name="preferred_time" placeholder="6:00 PM"></div>
+    </div>
+    <div class="form-group"><label>Status</label>
+      <select name="status"><option value="confirmed" selected>Confirmed</option><option value="pending">Pending</option></select></div>
+    <div class="form-group"><label>Access notes <span style="font-weight:400;color:var(--softer)">(alarm code, keys, who lets you in — the cleaner sees this)</span></label>
+      <textarea name="access_notes" rows="2"></textarea></div>
+    <div class="form-group"><label>Notes <span style="font-weight:400;color:var(--softer)">(internal)</span></label>
+      <textarea name="notes" rows="2"></textarea></div>
+
+    <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px">💳 Payment</h2>
+    <p style="font-size:0.82rem;color:var(--softer);margin:0 0 10px">Card or invoice — whichever this customer prefers. Either way they can pay by card from the link.</p>
+    <div class="form-group" style="margin-bottom:10px">
+      <label class="cb-opt"><input type="radio" name="payment_option" value="deposit" style="width:auto"> Card — send a ${{ '%.0f'|format(deposit) }} deposit link now</label>
+      <label class="cb-opt"><input type="radio" name="payment_option" value="full" style="width:auto"> Card — send a full-payment link now</label>
+      <label class="cb-opt"><input type="radio" name="payment_option" value="invoice_now" checked style="width:auto"> Invoice — send it now, due in
+        <input type="number" name="net_days" value="{{ net_days }}" min="0" style="width:64px;padding:4px 6px"> days</label>
+      <label class="cb-opt"><input type="radio" name="payment_option" value="none" style="width:auto"> Invoice — sends automatically the morning of the job (net {{ net_days }})</label>
+    </div>
+    <label style="display:flex;align-items:center;gap:9px;background:var(--good-soft);border-radius:10px;padding:12px 14px;margin:6px 0 14px;cursor:pointer;font-weight:600;color:var(--good)">
+      <input type="checkbox" name="notify_customer" value="1" checked style="width:auto">
+      📩 Send a booking confirmation
+    </label>
+
+    <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">✅ Book this job</button>
+    <p style="font-size:0.8rem;color:var(--softer);text-align:center;margin-top:10px">Next you'll assign a cleaner, which texts + emails them the job.</p>
+  </div>
+</form>
+
+{% if jobs %}
+<div class="card" style="max-width:640px;margin-top:18px">
+  <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);margin:0 0 10px">Recent jobs</h3>
+  {% for j in jobs %}
+  <p style="font-size:0.88rem;margin:0 0 6px"><a href="{{ url_for('bookings.detail', booking_id=j.id) }}">#{{ j.id }}</a> · {{ j.preferred_date or 'no date' }} · ${{ '%.2f' % (j.price or 0) }} · {{ j.status_label }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<style>.cb-opt{display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500;margin-top:8px}</style>
+<script>
+function suggestPrice() {
+  var out = document.getElementById('cb-suggest');
+  var sqft = document.getElementById('cb-sqft').value;
+  if (!sqft) { out.textContent = 'Enter the square footage first.'; return; }
+  var p = new URLSearchParams({sqft: sqft, category: {{ (a.category or 'office')|tojson }},
+    frequency: document.getElementById('cb-freq').value === 'one_time' ? 'monthly' : document.getElementById('cb-freq').value,
+    drive_minutes: {{ (a.drive_minutes or '')|tojson }}});
+  fetch({{ url_for('commercial.quote_json')|tojson }} + '?' + p).then(function (r) { return r.json(); }).then(function (q) {
+    document.getElementById('cb-price').value = Number(q.per_visit).toFixed(2);
+    if (!document.getElementById('cb-hours').value) document.getElementById('cb-hours').value = q.hours;
+    out.textContent = 'Range $' + q.low + '–$' + q.premium + ', about ' + q.hours + ' hrs. Yours to change.';
+  }).catch(function () { out.textContent = 'Could not work out a price.'; });
+}
+</script>
+{% endblock %}
