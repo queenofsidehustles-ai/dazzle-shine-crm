@@ -520,17 +520,17 @@ def team_card():
     One card, not one per cleaner. The owner's own row arrives filled in from
     her login and the details she just saved, with "I clean jobs myself"
     ticked -- a solo owner taps Save and is done. Unticked, the same card is
-    a company adding the team it already has. Nothing here emails anybody:
-    adding a person and inviting her are two decisions, and owners often
-    add people before they have told them.
+    a company adding the team it already has, typed or uploaded. Nothing
+    here emails anybody: inviting is done from each cleaner's page on the
+    Team tab, when the owner has told them (decided 2026-10-24 -- an invite
+    card in the middle of setup read as out of place).
     """
     me = {'name': _owner_name(), 'phone': _setting('phone'),
           'email': _setting('email'), 'cleans': True}
     card = {'kind': 'team', 'step': 'team', 'title': 'Your team',
-            'note': 'Add everyone who cleans for you. Nobody is emailed until '
-                    'you choose to invite them.',
-            'me': me, 'label': 'Save my team',
-            'paste_hint': 'One per line: name, email, phone'}
+            'note': 'Add everyone who cleans for you — type them in, or upload '
+                    'a spreadsheet. Nobody is emailed.',
+            'me': me, 'label': 'Save my team'}
     card['prefilled'] = bool(me['name'])
     return [card]
 
@@ -563,6 +563,82 @@ def _parse_team_paste(text):
                 name_bits.append(part)
         rows.append({'name': ' '.join(name_bits), 'email': email, 'phone': phone})
     return rows
+
+
+# Column headings people actually use, lowercased with the spaces taken out.
+_TEAM_COLUMNS = {
+    'name': ('name', 'fullname', 'cleaner', 'cleanername', 'employee',
+             'employeename', 'teammember', 'staff', 'contractor'),
+    'first': ('first', 'firstname', 'givenname'),
+    'last': ('last', 'lastname', 'surname', 'familyname'),
+    'email': ('email', 'e-mail', 'emailaddress', 'mail'),
+    'phone': ('phone', 'cell', 'mobile', 'phonenumber', 'cellphone', 'cellnumber',
+              'mobilenumber', 'tel', 'telephone'),
+}
+TEAM_FILE_MAX_ROWS = 50
+
+
+def read_team_file(filename, data):
+    """Cleaners out of an uploaded CSV or Excel file. (rows, error).
+
+    Saves nothing: the rows go back onto the team card for the owner to see,
+    and the card's Save checks them like any typed row. With a heading row
+    the columns are matched by name (Name, or First + Last; Email; Phone,
+    Cell or Mobile). Without one, each row is read the way a pasted line is.
+    """
+    import csv
+    import io
+    name = (filename or '').lower()
+    if len(data or b'') > 2_000_000:
+        return None, 'That file is too big. Keep it under 2 MB.'
+    if name.endswith('.xls'):
+        return None, ('That is an old Excel file. Open it and save it as .xlsx '
+                      'or CSV, then upload it again.')
+    table = []
+    try:
+        if name.endswith(('.xlsx', '.xlsm')):
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            for row in wb.worksheets[0].iter_rows(values_only=True):
+                table.append(['' if v is None else str(v).strip() for v in row])
+                if len(table) > 1000:
+                    break
+        elif name.endswith(('.csv', '.txt')):
+            text = data.decode('utf-8-sig', errors='replace')
+            table = [[c.strip() for c in r] for r in csv.reader(io.StringIO(text))][:1001]
+        else:
+            return None, 'Upload an Excel (.xlsx) or CSV file.'
+    except Exception:
+        return None, ('That file could not be read. Save it as .xlsx or CSV and '
+                      'try again.')
+    table = [r for r in table if any(r)]
+    if not table:
+        return None, 'That file is empty.'
+    head = [re.sub(r'[\s_]+', '', c.lower()) for c in table[0]]
+    cols = {}
+    for key, names in _TEAM_COLUMNS.items():
+        for i, h in enumerate(head):
+            if h in names and key not in cols:
+                cols[key] = i
+    rows = []
+    if 'email' in cols or 'name' in cols or 'first' in cols:
+        def cell(r, k):
+            i = cols.get(k)
+            return r[i].strip() if i is not None and i < len(r) else ''
+        for r in table[1:]:
+            nm = cell(r, 'name') or ' '.join(x for x in (cell(r, 'first'), cell(r, 'last')) if x)
+            row = {'name': nm, 'email': cell(r, 'email'), 'phone': cell(r, 'phone')}
+            if any(row.values()):
+                rows.append(row)
+    else:
+        rows = _parse_team_paste('\n'.join(', '.join(c for c in r if c) for r in table))
+    if not rows:
+        return None, 'No cleaners found in that file — it needs a name on each row.'
+    if len(rows) > TEAM_FILE_MAX_ROWS:
+        return None, (f'That file has {len(rows)} people. Upload up to '
+                      f'{TEAM_FILE_MAX_ROWS} here, or use the full importer on '
+                      f'the Team page for more.')
+    return rows, None
 
 
 def _team_rows(fields):
@@ -641,53 +717,10 @@ def save_team(fields):
         db.session.add(s)
         added.append(r['name'] + (' (you)' if r.get('me') else ''))
     db.session.commit()
-    return True, f'Your team: {", ".join(added)}.'
-
-
-def invite_card():
-    """After the team is saved: invite the people who can be invited.
-
-    A separate card with its own token, so emailing is a decision the owner
-    makes on purpose -- and the token carries the exact list, so pressing it
-    invites the people it named and nobody added later."""
-    from models import Staff
-    people = (Staff.query.filter(Staff.is_active.is_(True), Staff.user_id.is_(None),
-                                 Staff.agreement_token.is_(None))
-              .order_by(Staff.id).all())
-    people = [p for p in people if (p.email or '').strip()]
-    if not people:
-        return None
-    names = [p.name for p in people]
-    card = _offer('setup_send_invites', {'ids': [p.id for p in people]},
-                  'Invite them to sign in?',
-                  ['Each gets an email to set up a sign-in and see their jobs:',
-                   ', '.join(names)],
-                  'Send invites now')
-    card['later'] = 'Not yet — I’ll tell them first'
-    return card
-
-
-def send_invites(payload):
-    from blueprints.migration import send_join_invite
-    from extensions import db
-    from models import Staff
-    ids = [i for i in (payload.get('ids') or []) if isinstance(i, int)]
-    sent, failed = [], []
-    for s in Staff.query.filter(Staff.id.in_(ids)).all() if ids else []:
-        # Re-checked: somebody may have joined, or been invited, since.
-        if s.user_id or not (s.email or '').strip() or s.agreement_token:
-            continue
-        ok, _detail = send_join_invite(s)
-        (sent if ok else failed).append(s.name)
-    db.session.commit()
-    if not sent and not failed:
-        return True, 'Everyone on that list has already been invited.'
-    said = f'Invites sent to {", ".join(sent)}.' if sent else ''
-    if failed:
-        said += (' ' if said else '') + (
-            f'Could not email {", ".join(failed)} just now — you can resend '
-            f'from their page on your team list.')
-    return bool(sent), said
+    said = f'Your team: {", ".join(added)}.'
+    if any(not r.get('me') for r in rows):
+        said += ' Nobody was emailed — invite them from the Team tab when you’re ready.'
+    return True, said
 
 
 def terms_card():
@@ -1386,7 +1419,6 @@ ACTIONS = {
     'setup_set_prices': set_prices,
     'setup_add_cleaner': add_cleaner,
     'setup_add_customer': add_customer,
-    'setup_send_invites': send_invites,
 }
 
 

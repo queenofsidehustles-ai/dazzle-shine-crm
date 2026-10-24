@@ -36,9 +36,12 @@
   .sa-person[hidden]{display:none}
   .sa-person input{width:100%;border:0;outline:0;padding:10px 11px;font:inherit;font-size:16px;background:transparent;color:inherit}
   .sa-check{display:flex;align-items:center;gap:6px;margin:6px 0 2px;font-size:0.92rem;color:inherit}
-  .sa-paste{margin-top:8px;font-size:0.88rem;color:var(--muted)}
-  .sa-paste summary{cursor:pointer;color:var(--gold-deep, var(--gold));font-weight:600}
-  .sa-paste textarea{width:100%;margin-top:6px;padding:10px 11px;border:1px solid var(--line, var(--border));border-radius:10px;font:inherit;font-size:16px;box-sizing:border-box}
+  /* Not .sa-skip: the page prunes old skip buttons, and these are not skips. */
+  .sa-textbtn{align-self:flex-start;background:none;border:0;padding:2px 4px;color:var(--gold-deep, var(--gold));
+              font:inherit;font-size:0.88rem;font-weight:600;cursor:pointer}
+  .sa-upload{margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .sa-upnote{font-size:0.86rem;color:var(--muted)}
+  .sa-tick{align-self:flex-start;color:var(--good, #1f8a4c);font-weight:600;font-size:0.92rem;padding:2px 4px}
   @media (max-width:520px){.sa-person{grid-template-columns:1fr}}
   .sa-link{align-self:flex-start}
   .sa-skip{align-self:flex-start;background:none;border:0;padding:2px 4px;color:var(--muted);
@@ -103,6 +106,7 @@
     save: '{{ url_for("setup_assistant.save") }}',
     reset: '{{ url_for("setup_assistant.reset") }}',
     skip: '{{ url_for("setup_assistant.skip") }}',
+    teamFile: '{{ url_for("setup_assistant.team_file") }}',
   };
   const past = {{ chat | tojson }};
 
@@ -381,29 +385,13 @@
     });
     box.appendChild(btn);
     if (sec) box.appendChild(sec);
-    // "Not yet": a card that is fine to leave. Nothing is posted -- the token
-    // simply goes unused, and the card says so.
-    if (c.later) {
-      const later = document.createElement('button');
-      later.type = 'button';
-      later.className = 'sa-skip';
-      later.textContent = c.later;
-      later.addEventListener('click', function () {
-        btn.remove();
-        later.remove();
-        const note = document.createElement('div');
-        note.className = 'sa-note';
-        note.textContent = 'Nobody was emailed. You can invite them any time from your team list.';
-        box.appendChild(note);
-      });
-      box.appendChild(later);
-    }
     log.appendChild(box);
   }
 
   // Step 2, the team: the owner's own row already filled in, then a row per
-  // cleaner, then a box to paste a whole list. One Save writes everyone, or
-  // nobody if a box is wrong -- the server checks every row first.
+  // cleaner, typed or read in from an uploaded spreadsheet. Uploading only
+  // fills in rows to check; one Save writes everyone, or nobody if a box is
+  // wrong -- the server checks every row first.
   function teamCard(c) {
     const box = document.createElement('div');
     box.className = 'sa-box sa-formcard sa-team';
@@ -456,29 +444,68 @@
     const others = [];
     const list = document.createElement('div');
     box.appendChild(list);
-    function addRow() {
-      const r = personRow({}, '');
+    function addRow(p, quiet) {
+      const r = personRow(p || {}, '');
       list.appendChild(r[0]);
       others.push(r[1]);
-      r[1].name.focus();
+      if (!quiet) r[1].name.focus();
     }
     const more = document.createElement('button');
     more.type = 'button';
-    more.className = 'sa-skip';
+    more.className = 'sa-textbtn';
     more.textContent = '+ Add a cleaner';
-    more.addEventListener('click', addRow);
+    more.addEventListener('click', function () { addRow(); });
     box.appendChild(more);
 
-    const pasteWrap = document.createElement('details');
-    pasteWrap.className = 'sa-paste';
-    const sum = document.createElement('summary');
-    sum.textContent = 'Have a list? Paste it';
-    pasteWrap.appendChild(sum);
-    const paste = document.createElement('textarea');
-    paste.rows = 4;
-    paste.placeholder = c.paste_hint || 'One per line: name, email, phone';
-    pasteWrap.appendChild(paste);
-    box.appendChild(pasteWrap);
+    // A spreadsheet they already have -- Excel or CSV, columns like Name,
+    // Email, Phone. Read on the server, put back here as rows to check.
+    const up = document.createElement('div');
+    up.className = 'sa-upload';
+    const file = document.createElement('input');
+    file.type = 'file';
+    file.accept = '.xlsx,.xlsm,.csv';
+    file.hidden = true;
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'sa-textbtn';
+    pick.textContent = '⬆ Upload a spreadsheet (Excel or CSV)';
+    pick.addEventListener('click', function () { file.click(); });
+    const upNote = document.createElement('span');
+    upNote.className = 'sa-upnote';
+    file.addEventListener('change', async function () {
+      if (!file.files.length) return;
+      upNote.textContent = 'Reading ' + file.files[0].name + '…';
+      const fd = new FormData();
+      fd.append('file', file.files[0]);
+      let data;
+      try {
+        const r = await fetch(URLS.teamFile, { method: 'POST', body: fd });
+        data = (r.headers.get('Content-Type') || '').indexOf('application/json') !== -1
+          ? await r.json()
+          : { ok: false, say: 'Your login may have timed out. Refresh the page and sign in again.' };
+      } catch (e) {
+        data = { ok: false, say: 'Could not upload that just now. Try again.' };
+      }
+      file.value = '';
+      if (data.ok) {
+        // Fill empty rows first, then add more -- an upload after typing one
+        // name must not leave a blank row sitting in the middle.
+        (data.rows || []).forEach(function (p) {
+          const blank = others.find(function (o) {
+            return !o.name.value && !o.email.value && !o.phone.value;
+          });
+          if (blank) { blank.name.value = p.name || ''; blank.email.value = p.email || '';
+                       blank.phone.value = p.phone || ''; }
+          else addRow(p, true);
+        });
+      }
+      upNote.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
+      scroll();
+    });
+    up.appendChild(pick);
+    up.appendChild(file);
+    up.appendChild(upNote);
+    box.appendChild(up);
 
     const note = document.createElement('div');
     note.className = 'sa-note';
@@ -498,7 +525,6 @@
           return { name: o.name.value.trim(), email: o.email.value.trim(),
                    phone: o.phone.value.trim() };
         }),
-        paste: paste.value,
       };
       let data;
       try {
@@ -662,6 +688,14 @@
 
   past.forEach(function (m) {
     if (m.hidden) return;
+    // A finished step, as one line -- not its old card back on screen.
+    if (m.tick) {
+      const d = document.createElement('div');
+      d.className = 'sa-tick';
+      d.textContent = m.tick;
+      log.appendChild(d);
+      return;
+    }
     if (m.content) bubble(m.content, m.role);
     (m.cards || []).forEach(render);
   });
