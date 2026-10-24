@@ -3,7 +3,9 @@
 `setup_complete` is written once and read on every page after, so an
 established business is not recomputing its onboarding forever. That is the
 right trade until the list changes -- and it changed: the timezone, the terms,
-payments and how balances are collected were all added to it.
+payments and how balances are collected were all added to it. It changed
+again on 2026-10-24 (SETUP_VERSION 3): the required four became details,
+team, prices and payments, with terms and balances straight after.
 
 Every company already carrying the old flag would have gone on being told it
 had finished a list it was never shown. No banner, no meter, no Nana: the
@@ -61,7 +63,8 @@ with app.app_context():
     db.session.commit()
 
 print('\n1. The old flag is not the current list')
-check(onboarding.SETUP_VERSION != '1', 'the list has moved on from the old flag')
+check(onboarding.SETUP_VERSION not in ('1', '2'),
+      f'the list has moved on from the old flags (now {onboarding.SETUP_VERSION})')
 c = owner()
 r = c.get('/settings/getting-started')
 check(r.status_code == 200, 'the getting-started page loads')
@@ -69,8 +72,12 @@ with app.app_context():
     p = onboarding.progress()
 check(p['complete'] is False, 'they are not finished after all')
 missing = [s['key'] for s in p['steps'] if s.get('required') and not s['done']]
-check(set(missing) == {'terms', 'balance'},
-      f'and the questions they were never asked are open: {missing}')
+check(missing == ['team', 'payments'],
+      f'and the required steps they never finished are open: {missing}')
+open_after = [s['key'] for s in p['steps']
+              if not s.get('required') and not s['done'] and s['key'] in ('terms', 'balance')]
+check(open_after == ['terms', 'balance'],
+      f'with terms and balances still asked about straight after: {open_after}')
 
 print('\n2. They are actually prompted, not silently incomplete')
 body = r.data.decode()
@@ -108,10 +115,14 @@ check(setup_assistant.set_balance_mode({'mode': 'whenever'})[0] is False,
       'a mode that is not one of the three is refused')
 
 print('\n5. Being able to trade does not latch the flag')
+from models import Staff, Client, Booking, BookingCrew
 with app.app_context():
     BusinessSetting.set('terms_reviewed', '1')
     integrations.set('stripe_secret_key', 'sk_live_reprompt')
+    ama = Staff(name='Ama', is_active=True)
+    db.session.add(ama)
     db.session.commit()
+    ama_id = ama.id
     check(onboarding.progress()['complete'] is True, 'every required step is done')
 c.get('/')
 with app.app_context():
@@ -121,15 +132,13 @@ with app.app_context():
           'because there is still something to offer')
 
 print('\n6. Nothing left at all latches it')
-from models import Staff, Client, Booking, BookingCrew
 with app.app_context():
-    db.session.add(Staff(name='Ama', is_active=True))
     db.session.add(Client(name='Rita', email='r@x.test'))
     b = Booking(service_type='standard', name='First job',
                 status='confirmed', price=180.0)
     db.session.add(b)
     db.session.commit()
-    db.session.add(BookingCrew(booking_id=b.id, staff_id=1, pay_amount=90.0))
+    db.session.add(BookingCrew(booking_id=b.id, staff_id=ama_id, pay_amount=90.0))
     db.session.commit()
     check(onboarding.progress()['next'] is None, 'every step is done')
 c.get('/')
