@@ -74,10 +74,21 @@ def fake_call(method, path, **kw):
         return 200, {'commit': {'sha': STABLE}}
     if path == 'contents/RELEASE':
         return 200, 'akye-v2026.10.23\n2026-10-23\n'
-    if path.endswith('/check-runs'):
-        return 200, {'check_runs': [
-            {'id': i, 'name': n, 'status': 'completed', 'conclusion': state['checks'],
-             'html_url': 'http://x/run'} for i, n in enumerate(NAMES)]}
+    if path == 'actions/runs':
+        event = kw.get('params', {}).get('event')
+        if event == 'push':
+            return 200, {'workflow_runs': [{'id': 900 + i} for i in range(2)]}
+        if event == 'workflow_dispatch':
+            return 200, {'workflow_runs': []}
+        # Anything else would include the hourly scheduled runs, which are
+        # many and not the required ones.
+        return 200, {'workflow_runs': [{'id': 5000 + i} for i in range(40)]}
+    if path.startswith('actions/runs/') and path.endswith('/jobs'):
+        run = int(path.split('/')[2]) - 900
+        mine = NAMES[run * 2:run * 2 + 2]
+        return 200, {'jobs': [
+            {'id': i + 10 * run, 'name': n, 'status': 'completed', 'conclusion': state['checks'],
+             'html_url': 'http://x/run'} for i, n in enumerate(mine)]}
     if path.startswith('actions/workflows/') and path.endswith('/runs'):
         return 200, {'workflow_runs': [{'id': 1, 'status': 'in_progress' if state['running'] else 'completed',
                                         'conclusion': None if state['running'] else 'success',
@@ -121,6 +132,8 @@ with app.app_context():
     check('Sign-in, roles and tenancy' in body and 'Money' in body and 'Dependencies' in body,
           'sign-in, billing and lock-file changes are called out too')
     check('compare/' + STABLE + '...' + HEAD in ' '.join(seen), 'the diff is of two fixed commits, not branch names')
+
+    check(all(not p.startswith('actions/runs/50') for p in seen), 'scheduled runs are never fetched')
 
     print('\n2. Only the owner may press it')
     r = c.post('/console/release/go', data=good, follow_redirects=True)
