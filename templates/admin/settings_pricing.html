@@ -98,17 +98,12 @@
     <p style="font-size:0.85rem;color:var(--softer);margin-top:-8px">This amount is charged at booking and goes toward the total.</p>
   </div>
 
-  {# Two questions the New Booking form used to put to whoever took the call.
-     They are the owner's, and they have the same answer every time. #}
+  {# A question the New Booking form used to put to whoever took the call. It
+     is the owner's, and it has the same answer every time. #}
   <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Phone bookings</h2>
-    <div class="form-group" style="max-width:260px">
-      <label>Lead fee for ad customers ($)</label>
-      <input type="number" name="lead_fee" step="0.01" min="0" value="{{ '%.2f' % current.lead_fee }}" />
-    </div>
-    <p style="font-size:0.85rem;color:var(--softer);margin-top:-8px">Added to the price when a booking says they found you on Google or Facebook. It covers your ad cost and never goes to the cleaner.</p>
     <input type="hidden" name="phone_booking_deposit_shown" value="1" />
-    <label style="display:flex;align-items:center;gap:9px;margin-top:14px;cursor:pointer;font-weight:500">
+    <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:500">
       <input type="checkbox" name="phone_booking_deposit" value="1" style="width:auto" {{ 'checked' if current.phone_booking_deposit }} />
       Ask for the ${{ '%.0f' % current.deposit_amount|float }} deposit in the booking confirmation
     </label>

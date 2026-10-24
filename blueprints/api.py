@@ -309,7 +309,6 @@ def capture_quote():
         resp = jsonify({'ok': False, 'error': 'Name and email required'})
         return add_cors(resp, origin), 400
 
-    from pricing import get_lead_fee
     total = calculate_price(
         service_type=data.get('service_type', ''),
         bedrooms=data.get('bedrooms', 1),
@@ -317,7 +316,7 @@ def capture_quote():
         extras=data.get('extras', ''),
         frequency=data.get('frequency', 'one_time'),
         sqft=data.get('sqft'),
-    ) + get_lead_fee()   # bake in the (invisible) lead fee
+    )   # no lead fee: retired, see bookings._lead_fee_for
 
     from models import Lead
     lead = Lead(
@@ -1234,7 +1233,6 @@ def get_price():
         return add_cors(jsonify({}), origin), 200
 
     data = request.get_json(silent=True) or {}
-    from pricing import get_lead_fee
     total = calculate_price(
         service_type=data.get('service_type', ''),
         bedrooms=data.get('bedrooms', 1),
@@ -1242,7 +1240,7 @@ def get_price():
         extras=data.get('extras', ''),
         frequency=data.get('frequency', 'one_time'),
         sqft=data.get('sqft'),
-    ) + get_lead_fee()   # bake in the (invisible) lead fee
+    )   # no lead fee: retired, see bookings._lead_fee_for
     resp = jsonify({
         'total': total,
         'deposit': get_deposit(),

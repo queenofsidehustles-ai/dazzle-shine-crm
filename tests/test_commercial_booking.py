@@ -79,6 +79,25 @@ with app.app_context():
     check(b.is_commercial and b.service_type == 'commercial', 'a commercial booking')
     check(b.name == 'Sunrise Daycare' and b.bedrooms is None, 'named for the business, no bedrooms')
     check(b.price == 275 and b.estimated_hours == 4, 'priced per visit, hours for the cleaner')
+    # $25/hr is what a cleaner costs (Commercial Pricing); the $43 in Settings
+    # -> Pricing is the residential rate. The price is revenue and moves with
+    # the job; the cost does not.
+    import commercial_pricing
+    from pricing import get_labor_rate
+    check(b.labor_rate_applied == commercial_pricing.cleaner_rate() == 25,
+          f'the cleaner is paid the commercial cost, $25/hr (not ${get_labor_rate():.0f})')
+    check(b.labor_budget == 100, '4 hours x $25 = $100 of cleaner pay on a $275 visit')
+    # The $100 is the job's pot, not one person's pay: it splits across the crew.
+    check(b.default_crew_pay(None, size=1) == 100 and b.hours_each(size=1) == 4,
+          'one cleaner: $100 for 4 hours')
+    check(b.default_crew_pay(None, size=2) == 50 and b.hours_each(size=2) == 2,
+          'two cleaners: $50 each for 2 hours each, still $100 in all')
+    check(not b.rate_is_stale, 'and it is not offered a "re-rate" to the residential rate')
+    b.labor_rate_applied = 0
+    check(b.rate_applied == 0 and b.labor_budget == 0,
+          'a rate locked at $0 stays $0, not "unset" and read from today\'s setting')
+    check(b.rate_is_stale, 'and moving it is offered, not done silently')
+    b.labor_rate_applied = 25; db.session.commit()
     check(b.scope_items() == ['Empty trash & replace liners', 'Vacuum carpets', '2 classrooms, 1 office'],
           'the scope is kept as a list')
     check(b.invoice_number and b.invoice_due_date == (date.today() + timedelta(days=14)).isoformat(),
